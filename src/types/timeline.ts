@@ -53,7 +53,7 @@ export interface TimelineTrack {
   locked: boolean;
   muted: boolean;
   solo: boolean;
-  color: string;
+  color?: string; // Optional - tracks are generic containers, items have colors
   order: number;
   items: TimelineItem[];
 }

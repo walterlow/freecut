@@ -37,7 +37,7 @@ export function Editor({ projectId, project }: EditorProps) {
 
   // Initialize timeline with sample data (only runs when projectId changes)
   useEffect(() => {
-    // Create sample tracks
+    // Create sample tracks (generic containers - items have colors)
     const sampleTracks: TimelineTrack[] = [
       {
         id: 'track-1',
@@ -46,7 +46,6 @@ export function Editor({ projectId, project }: EditorProps) {
         locked: false,
         muted: false,
         solo: false,
-        color: '#3b82f6',
         order: 0,
         items: [],
       },
@@ -57,7 +56,6 @@ export function Editor({ projectId, project }: EditorProps) {
         locked: false,
         muted: false,
         solo: false,
-        color: '#10b981',
         order: 1,
         items: [],
       },
@@ -68,7 +66,6 @@ export function Editor({ projectId, project }: EditorProps) {
         locked: false,
         muted: false,
         solo: false,
-        color: '#8b5cf6',
         order: 2,
         items: [],
       },

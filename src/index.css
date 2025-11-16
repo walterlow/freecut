@@ -2,6 +2,9 @@
 
 @plugin "tailwindcss-animate";
 
+/* Feature-specific theme extensions */
+@import "./features/timeline/theme.css";
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
@@ -44,12 +47,6 @@
     --border: oklch(0.25 0 0);                  /* #404040 - Borders */
     --input: oklch(0.24 0 0);                   /* #3d3d3d - Input borders */
     --ring: oklch(0.68 0.19 45);                /* Orange focus ring */
-
-    /* Video Editor Specific - Track colors */
-    --video-track: oklch(0.62 0.17 250);        /* #5B9EF8 - Blue for video */
-    --audio-track: oklch(0.65 0.18 155);        /* #3ECF8E - Green for audio */
-    --text-track: oklch(0.70 0.15 200);         /* #67C3F3 - Cyan for text */
-    --playhead: oklch(0.68 0.19 45);            /* Orange playhead */
 
     /* Panel system - Layered depth */
     --panel-bg: oklch(0.18 0 0);                /* #2e2e2e - Panels */
@@ -156,10 +153,6 @@
   --color-ring: var(--ring);
 
   /* Video editor custom colors */
-  --color-video-track: var(--video-track);
-  --color-audio-track: var(--audio-track);
-  --color-text-track: var(--text-track);
-  --color-playhead: var(--playhead);
   --color-panel-bg: var(--panel-bg);
   --color-panel-header: var(--panel-header);
   --color-timeline-bg: var(--timeline-bg);
@@ -187,29 +180,6 @@
 
   .timeline-bg {
     background-color: oklch(var(--timeline-bg));
-  }
-
-  .video-track {
-    color: oklch(var(--video-track));
-    background-color: oklch(var(--video-track) / 0.12);
-    border-left: 2px solid oklch(var(--video-track) / 0.5);
-  }
-
-  .audio-track {
-    color: oklch(var(--audio-track));
-    background-color: oklch(var(--audio-track) / 0.12);
-    border-left: 2px solid oklch(var(--audio-track) / 0.5);
-  }
-
-  .text-track {
-    color: oklch(var(--text-track));
-    background-color: oklch(var(--text-track) / 0.12);
-    border-left: 2px solid oklch(var(--text-track) / 0.5);
-  }
-
-  .playhead {
-    background-color: oklch(var(--playhead));
-    box-shadow: 0 0 8px oklch(var(--playhead) / 0.5);
   }
 
   /* Smooth panel transitions */

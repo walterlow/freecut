@@ -33,21 +33,21 @@ export function TimelineItem({ item }: TimelineItemProps) {
   const left = timeToPixels(item.from);
   const width = timeToPixels(item.durationInFrames);
 
-  // Get color based on item type
+  // Get color based on item type (using timeline theme colors)
   const getItemColor = () => {
     switch (item.type) {
       case 'video':
-        return 'bg-primary/30 border-primary';
+        return 'bg-timeline-video/30 border-timeline-video';
       case 'audio':
-        return 'bg-green-500/30 border-green-500';
+        return 'bg-timeline-audio/30 border-timeline-audio';
       case 'image':
-        return 'bg-blue-500/30 border-blue-500';
+        return 'bg-timeline-image/30 border-timeline-image';
       case 'text':
-        return `bg-purple-500/30 border-purple-500`;
+        return 'bg-timeline-text/30 border-timeline-text';
       case 'shape':
-        return 'bg-orange-500/30 border-orange-500';
+        return 'bg-timeline-shape/30 border-timeline-shape';
       default:
-        return 'bg-primary/30 border-primary';
+        return 'bg-timeline-video/30 border-timeline-video';
     }
   };
 
@@ -85,9 +85,6 @@ export function TimelineItem({ item }: TimelineItemProps) {
       <div className="px-2 py-1 text-xs font-medium text-primary-foreground truncate">
         {item.label}
       </div>
-
-      {/* Gradient overlay for depth */}
-      <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent pointer-events-none" />
 
       {/* Resize handles (placeholder for future implementation) */}
       {isSelected && (

@@ -1,0 +1,23 @@
+/**
+ * Timeline Feature Theme Extension
+ *
+ * Extends Tailwind's color palette with timeline-specific colors.
+ * Colocated with timeline feature for better organization.
+ *
+ * These colors can be used with all Tailwind utilities:
+ * - bg-timeline-video/30 (with opacity)
+ * - hover:bg-timeline-audio
+ * - border-timeline-playhead
+ */
+
+@theme {
+  /* Timeline item type colors - OKLCH format */
+  --color-timeline-video: oklch(0.62 0.17 250);      /* Blue */
+  --color-timeline-audio: oklch(0.65 0.18 155);      /* Green */
+  --color-timeline-image: oklch(0.62 0.17 250);      /* Blue (same as video) */
+  --color-timeline-text: oklch(0.65 0.15 290);       /* Purple */
+  --color-timeline-shape: oklch(0.68 0.19 45);       /* Orange */
+
+  /* Playhead color */
+  --color-timeline-playhead: oklch(0.68 0.19 45);    /* Orange (matches primary) */
+}

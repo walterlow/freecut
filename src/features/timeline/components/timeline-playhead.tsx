@@ -116,11 +116,9 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
 
       {/* Playhead line - visible and prominent */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 bg-timeline-playhead pointer-events-none"
         style={{
-          backgroundColor: 'oklch(0.68 0.19 45)', // Orange from theme
           boxShadow: '0 0 8px oklch(0.68 0.19 45 / 0.5)',
-          pointerEvents: 'none', // Let the hit area handle events
         }}
       />
 
@@ -144,17 +142,15 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
           />
           {/* Visible diamond */}
           <div
-            className="absolute"
+            className="absolute bg-timeline-playhead pointer-events-none"
             style={{
               top: '-6px',
               left: '50%',
               width: '10px',
               height: '10px',
-              backgroundColor: 'oklch(0.68 0.19 45)', // Orange from theme
               boxShadow: '0 0 8px oklch(0.68 0.19 45 / 0.5)',
               transform: 'translateX(-50%) rotate(45deg)',
               transformOrigin: 'center',
-              pointerEvents: 'none', // Let the hit area handle events
             }}
           />
         </>
