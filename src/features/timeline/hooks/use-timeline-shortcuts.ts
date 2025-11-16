@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 export interface TimelineShortcutCallbacks {
   onPlay?: () => void;
@@ -15,9 +16,9 @@ export interface TimelineShortcutCallbacks {
 /**
  * Timeline keyboard shortcuts hook
  *
- * Handles all timeline-specific keyboard shortcuts:
- * - Space: Play/Pause
- * - Arrow Left/Right: Previous/Next frame
+ * Handles all timeline-specific keyboard shortcuts using react-hotkeys-hook:
+ * - Space/K: Play/Pause
+ * - Arrow Left/Right (J/L): Previous/Next frame
  * - Home/End: Go to start/end
  * - Delete/Backspace: Delete selected items
  * - C: Split item at playhead
@@ -25,7 +26,7 @@ export interface TimelineShortcutCallbacks {
  * - Cmd/Ctrl+Shift+Z: Redo
  */
 export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) {
-  // Access stores
+  // Access stores with granular selectors (performance optimization)
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
@@ -33,138 +34,160 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
 
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const removeItems = useTimelineStore((s) => s.removeItems);
-  const fps = useTimelineStore((s) => s.fps);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in input/textarea
-      const target = event.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
+  // Playback: Space - Play/Pause
+  useHotkeys(
+    HOTKEYS.PLAY_PAUSE,
+    (event) => {
+      event.preventDefault();
+      togglePlayPause();
+      if (isPlaying && callbacks.onPause) {
+        callbacks.onPause();
+      } else if (!isPlaying && callbacks.onPlay) {
+        callbacks.onPlay();
       }
+    },
+    HOTKEY_OPTIONS,
+    [togglePlayPause, isPlaying, callbacks]
+  );
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      const modifier = isMac ? event.metaKey : event.ctrlKey;
+  // Navigation: Arrow Left - Previous frame
+  useHotkeys(
+    HOTKEYS.PREVIOUS_FRAME,
+    (event) => {
+      event.preventDefault();
+      setCurrentFrame(Math.max(0, currentFrame - 1));
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame, currentFrame]
+  );
 
-      switch (event.key) {
-        case ' ': // Space - Play/Pause
-          event.preventDefault();
-          togglePlayPause();
-          if (isPlaying && callbacks.onPause) {
-            callbacks.onPause();
-          } else if (!isPlaying && callbacks.onPlay) {
-            callbacks.onPlay();
-          }
-          break;
+  // Navigation: J - Previous frame (alternative)
+  useHotkeys(
+    HOTKEYS.PREVIOUS_FRAME_ALT,
+    (event) => {
+      event.preventDefault();
+      setCurrentFrame(Math.max(0, currentFrame - 1));
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame, currentFrame]
+  );
 
-        case 'ArrowLeft': // Previous frame
-          event.preventDefault();
-          setCurrentFrame(Math.max(0, currentFrame - 1));
-          break;
+  // Navigation: Arrow Right - Next frame
+  useHotkeys(
+    HOTKEYS.NEXT_FRAME,
+    (event) => {
+      event.preventDefault();
+      setCurrentFrame(currentFrame + 1);
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame, currentFrame]
+  );
 
-        case 'ArrowRight': // Next frame
-          event.preventDefault();
-          setCurrentFrame(currentFrame + 1);
-          break;
+  // Navigation: L - Next frame (alternative)
+  useHotkeys(
+    HOTKEYS.NEXT_FRAME_ALT,
+    (event) => {
+      event.preventDefault();
+      setCurrentFrame(currentFrame + 1);
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame, currentFrame]
+  );
 
-        case 'Home': // Go to start
-          event.preventDefault();
-          setCurrentFrame(0);
-          break;
+  // Navigation: Home - Go to start
+  useHotkeys(
+    HOTKEYS.GO_TO_START,
+    (event) => {
+      event.preventDefault();
+      setCurrentFrame(0);
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame]
+  );
 
-        case 'End': // Go to end (placeholder - would need total duration)
-          event.preventDefault();
-          // TODO: Calculate total timeline duration
-          setCurrentFrame(900); // Placeholder
-          break;
+  // Navigation: End - Go to end
+  useHotkeys(
+    HOTKEYS.GO_TO_END,
+    (event) => {
+      event.preventDefault();
+      // TODO: Calculate total timeline duration
+      setCurrentFrame(900); // Placeholder
+    },
+    HOTKEY_OPTIONS,
+    [setCurrentFrame]
+  );
 
-        case 'Delete':
-        case 'Backspace':
-          // Delete selected items
-          if (selectedItemIds.length > 0) {
-            event.preventDefault();
-            removeItems(selectedItemIds);
-            if (callbacks.onDelete) {
-              callbacks.onDelete();
-            }
-          }
-          break;
-
-        case 'c':
-        case 'C':
-          // Split item at playhead
-          if (!modifier) {
-            event.preventDefault();
-            if (callbacks.onSplit) {
-              callbacks.onSplit();
-            }
-          }
-          break;
-
-        case 'z':
-        case 'Z':
-          // Undo/Redo
-          if (modifier) {
-            event.preventDefault();
-            if (event.shiftKey) {
-              // Redo
-              useTimelineStore.temporal.getState().redo();
-              if (callbacks.onRedo) {
-                callbacks.onRedo();
-              }
-            } else {
-              // Undo
-              useTimelineStore.temporal.getState().undo();
-              if (callbacks.onUndo) {
-                callbacks.onUndo();
-              }
-            }
-          }
-          break;
-
-        case 'k':
-        case 'K':
-          // K - Play/Pause (alternative, common in video editors)
-          event.preventDefault();
-          togglePlayPause();
-          break;
-
-        case 'j':
-        case 'J':
-          // J - Previous frame (alternative)
-          event.preventDefault();
-          setCurrentFrame(Math.max(0, currentFrame - 1));
-          break;
-
-        case 'l':
-        case 'L':
-          // L - Next frame (alternative)
-          event.preventDefault();
-          setCurrentFrame(currentFrame + 1);
-          break;
-
-        default:
-          break;
+  // Editing: Delete - Delete selected items
+  useHotkeys(
+    HOTKEYS.DELETE_SELECTED,
+    (event) => {
+      if (selectedItemIds.length > 0) {
+        event.preventDefault();
+        removeItems(selectedItemIds);
+        if (callbacks.onDelete) {
+          callbacks.onDelete();
+        }
       }
-    };
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, removeItems, callbacks]
+  );
 
-    window.addEventListener('keydown', handleKeyDown);
+  // Editing: Backspace - Delete selected items (alternative)
+  useHotkeys(
+    HOTKEYS.DELETE_SELECTED_ALT,
+    (event) => {
+      if (selectedItemIds.length > 0) {
+        event.preventDefault();
+        removeItems(selectedItemIds);
+        if (callbacks.onDelete) {
+          callbacks.onDelete();
+        }
+      }
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, removeItems, callbacks]
+  );
 
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [
-    togglePlayPause,
-    currentFrame,
-    setCurrentFrame,
-    isPlaying,
-    selectedItemIds,
-    removeItems,
-    fps,
-    callbacks,
-  ]);
+  // Editing: C - Split item at playhead
+  useHotkeys(
+    HOTKEYS.SPLIT_ITEM,
+    (event) => {
+      event.preventDefault();
+      if (callbacks.onSplit) {
+        callbacks.onSplit();
+      }
+    },
+    HOTKEY_OPTIONS,
+    [callbacks]
+  );
+
+  // History: Cmd/Ctrl+Z - Undo
+  useHotkeys(
+    HOTKEYS.UNDO,
+    (event) => {
+      event.preventDefault();
+      useTimelineStore.temporal.getState().undo();
+      if (callbacks.onUndo) {
+        callbacks.onUndo();
+      }
+    },
+    HOTKEY_OPTIONS,
+    [callbacks]
+  );
+
+  // History: Cmd/Ctrl+Shift+Z - Redo
+  useHotkeys(
+    HOTKEYS.REDO,
+    (event) => {
+      event.preventDefault();
+      useTimelineStore.temporal.getState().redo();
+      if (callbacks.onRedo) {
+        callbacks.onRedo();
+      }
+    },
+    HOTKEY_OPTIONS,
+    [callbacks]
+  );
 }

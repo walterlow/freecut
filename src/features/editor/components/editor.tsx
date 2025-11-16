@@ -6,6 +6,7 @@ import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
 import { Timeline } from '@/features/timeline/components/timeline';
 import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
+import { useEditorHotkeys } from '@/hooks/use-editor-hotkeys';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import type { TimelineTrack, TimelineItem } from '@/types/timeline';
 
@@ -114,6 +115,7 @@ export function Editor({ projectId, project }: EditorProps) {
   }, [projectId]); // Only re-initialize when projectId changes
 
   // Enable keyboard shortcuts
+  useEditorHotkeys(); // Global editor shortcuts (save, export, etc.)
   useTimelineShortcuts({
     onPlay: () => console.log('Playing'),
     onPause: () => console.log('Paused'),
