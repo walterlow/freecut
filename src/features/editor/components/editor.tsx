@@ -1,5 +1,10 @@
 import { useEffect } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
 import { Toolbar } from './toolbar';
 import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
@@ -140,20 +145,29 @@ export function Editor({ projectId, project }: EditorProps) {
           onExport={handleExport}
         />
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar - Media Library */}
-          <MediaSidebar />
+        {/* Resizable Layout: Main Content + Timeline */}
+        <ResizablePanelGroup direction="vertical" className="flex-1">
+          {/* Main Content Area */}
+          <ResizablePanel defaultSize={70} minSize={50} maxSize={85}>
+            <div className="h-full flex overflow-hidden">
+              {/* Left Sidebar - Media Library */}
+              <MediaSidebar />
 
-          {/* Center - Preview */}
-          <PreviewArea project={project} />
+              {/* Center - Preview */}
+              <PreviewArea project={project} />
 
-          {/* Right Sidebar - Properties */}
-          <PropertiesSidebar />
-        </div>
+              {/* Right Sidebar - Properties */}
+              <PropertiesSidebar />
+            </div>
+          </ResizablePanel>
 
-        {/* Bottom - Timeline */}
-        <Timeline duration={timelineDuration} />
+          <ResizableHandle withHandle />
+
+          {/* Bottom - Timeline */}
+          <ResizablePanel defaultSize={30} minSize={15} maxSize={50}>
+            <Timeline duration={timelineDuration} />
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </TooltipProvider>
   );

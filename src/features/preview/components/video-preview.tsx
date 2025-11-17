@@ -38,15 +38,15 @@ export function VideoPreview({ project }: VideoPreviewProps) {
     : 900; // Default to 900 frames (30s at 30fps) if no items
 
   return (
-    <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-background to-secondary/20">
+    <div className="flex-1 min-h-0 flex items-center justify-center p-6 bg-gradient-to-br from-background to-secondary/20">
       <div
-        className="relative w-full max-w-6xl"
+        className="relative w-full max-w-6xl max-h-full"
         style={{
           aspectRatio: `${project.width || 16}/${project.height || 9}`,
         }}
       >
         {/* Video Preview Canvas */}
-        <div className="absolute inset-0 rounded-lg overflow-hidden bg-black border-2 border-border shadow-2xl">
+        <div className="w-full h-full rounded-lg overflow-hidden bg-black border-2 border-border shadow-2xl">
           {/* Placeholder */}
           <div className="w-full h-full bg-gradient-to-br from-secondary/40 to-background/60 flex items-center justify-center relative">
             {/* Grid overlay */}
