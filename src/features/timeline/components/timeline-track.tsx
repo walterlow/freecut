@@ -5,7 +5,7 @@ import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import { getMediaType } from '@/features/media-library/utils/validation';
+import { findNearestAvailableSpace } from '../utils/collision-utils';
 
 export interface TimelineTrackProps {
   track: TimelineTrack;
@@ -30,6 +30,7 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
   // Store selectors
   const addItem = useTimelineStore((s) => s.addItem);
   const fps = useTimelineStore((s) => s.fps);
+  const allItems = useTimelineStore((s) => s.items);
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
 
   // Zoom utilities for position calculation
@@ -110,6 +111,27 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
       const offsetX = (e.clientX - containerRect.left) + scrollLeft;
       const dropFrame = pixelsToFrame(offsetX);
 
+      // Calculate duration in frames first (needed for collision detection)
+      const durationInFrames = Math.round(media.duration * fps);
+      const itemDuration = durationInFrames > 0 ? durationInFrames : (mediaType === 'image' ? fps * 3 : fps);
+
+      // Calculate proposed drop position (ensure non-negative)
+      const proposedPosition = Math.max(0, dropFrame);
+
+      // Find nearest available space (snaps forward if collision)
+      const finalPosition = findNearestAvailableSpace(
+        proposedPosition,
+        itemDuration,
+        track.id,
+        allItems
+      );
+
+      // If no available space found, cancel the drop
+      if (finalPosition === null) {
+        console.warn('Cannot drop item: no available space on track');
+        return;
+      }
+
       // Debug logging
       console.log('Drop Debug:', {
         clientX: e.clientX,
@@ -117,7 +139,10 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
         scrollLeft,
         offsetX,
         dropFrame,
-        calculatedSeconds: offsetX / 100, // assuming 100 pixels per second zoom
+        proposedPosition,
+        finalPosition,
+        snapped: finalPosition !== proposedPosition,
+        calculatedSeconds: offsetX / 100,
       });
 
       // Get media blob URL for playback
@@ -133,16 +158,13 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
       // Get thumbnail URL if available
       const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(mediaId);
 
-      // Calculate duration in frames
-      const durationInFrames = Math.round(media.duration * fps);
-
-      // Create timeline item based on media type
+      // Create timeline item at the collision-free position
       let timelineItem: TimelineItemType;
       const baseItem = {
         id: crypto.randomUUID(),
         trackId: track.id,
-        from: Math.max(0, dropFrame), // Ensure non-negative
-        durationInFrames: durationInFrames > 0 ? durationInFrames : fps, // Default to 1 second for images
+        from: finalPosition,
+        durationInFrames: itemDuration,
         label: fileName,
         mediaId: mediaId,
       };
@@ -166,14 +188,13 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
           type: 'image',
           src: blobUrl,
           thumbnailUrl: thumbnailUrl || undefined,
-          durationInFrames: fps * 3, // Default 3 seconds for images
         } as ImageItem;
       } else {
         console.warn('Unsupported media type:', mediaType);
         return;
       }
 
-      // Add item to timeline
+      // Add the new item to timeline
       console.log('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
       addItem(timelineItem);
     } catch (error) {

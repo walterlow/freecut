@@ -221,3 +221,53 @@ export function wouldCauseOverlap(
   );
   return overlapping.length > 0;
 }
+
+/**
+ * Find the nearest available space for an item on a track
+ * Snaps FORWARD to after any colliding items (never backward/swap)
+ *
+ * @param proposedFrom - Desired start position
+ * @param durationInFrames - Duration of item to place
+ * @param trackId - Target track ID
+ * @param allItems - All timeline items
+ * @returns Available position (snapped forward if collision) or null if no space
+ */
+export function findNearestAvailableSpace(
+  proposedFrom: number,
+  durationInFrames: number,
+  trackId: string,
+  allItems: TimelineItem[]
+): number | null {
+  // Get all items on this track, sorted by start frame
+  const trackItems = allItems
+    .filter(item => item.trackId === trackId)
+    .sort((a, b) => a.from - b.from);
+
+  // Start from proposed position and keep moving forward until we find space
+  let testPosition = proposedFrom;
+  const MAX_ITERATIONS = 1000; // Prevent infinite loops
+  let iterations = 0;
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+
+    // Check if current position would collide
+    const collision = trackItems.find(item => {
+      const itemEnd = item.from + item.durationInFrames;
+      const testEnd = testPosition + durationInFrames;
+      return rangesOverlap(testPosition, testEnd, item.from, itemEnd);
+    });
+
+    if (!collision) {
+      // No collision - this position is available
+      return testPosition;
+    }
+
+    // Collision found - snap to end of the colliding item
+    testPosition = collision.from + collision.durationInFrames;
+  }
+
+  // If we've iterated too many times, something is wrong
+  console.error('findNearestAvailableSpace: too many iterations, aborting');
+  return null;
+}

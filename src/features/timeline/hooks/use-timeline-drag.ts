@@ -5,7 +5,7 @@ import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
-import { useCollisionDetector } from './use-collision-detector';
+import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
 
 // Shared ref for drag offset (avoids re-renders from store updates)
@@ -53,7 +53,9 @@ export function useTimelineDrag(
     timelineDuration,
     isDragging ? item.id : null
   );
-  const { checkCollision, resolveMultiItemCollisions } = useCollisionDetector();
+
+  // Get all items for collision detection
+  const allItems = useTimelineStore((s) => s.items);
 
   // Create stable refs to avoid stale closures in event listeners
   const pixelsToFrameRef = useRef(pixelsToFrame);
@@ -61,6 +63,7 @@ export function useTimelineDrag(
   const moveItemsRef = useRef(moveItems);
   const tracksRef = useRef(tracks);
   const itemsRef = useRef(items);
+  const allItemsRef = useRef(allItems);
   const selectedItemIdsRef = useRef(selectedItemIds);
 
   // Update refs when dependencies change
@@ -70,8 +73,9 @@ export function useTimelineDrag(
     moveItemsRef.current = moveItems;
     tracksRef.current = tracks;
     itemsRef.current = items;
+    allItemsRef.current = allItems;
     selectedItemIdsRef.current = selectedItemIds;
-  }, [pixelsToFrame, moveItem, moveItems, tracks, items, selectedItemIds]);
+  }, [pixelsToFrame, moveItem, moveItems, tracks, items, allItems, selectedItemIds]);
 
   /**
    * Calculate which track the mouse is over based on Y position
@@ -285,45 +289,68 @@ export function useTimelineDrag(
             durationInFrames: number;
           }>;
 
-          // Check for collisions and get push updates
-          const pushUpdates = resolveMultiItemCollisions(movedItems);
+          // For multi-item drag: check if ANY item would collide, and if so, snap the whole group forward
+          // Find the earliest collision among all moved items
+          const draggedItemIds = movedItems.map((m) => m.id);
+          const itemsExcludingDragged = allItemsRef.current.filter((i) => !draggedItemIds.includes(i.id));
 
-          // Combine moved items + pushed items
-          const allUpdates = [
-            ...movedItems.map((m) => ({
-              id: m.id,
-              from: m.newFrom,
-              trackId: m.newTrackId !== itemsRef.current.find((i) => i.id === m.id)?.trackId
-                ? m.newTrackId
-                : undefined,
-            })),
-            ...pushUpdates.map((p) => ({ id: p.id, from: p.from })),
-          ];
+          let maxSnapForward = 0; // How many frames we need to move the whole group forward
+
+          for (const movedItem of movedItems) {
+            const finalPosition = findNearestAvailableSpace(
+              movedItem.newFrom,
+              movedItem.durationInFrames,
+              movedItem.newTrackId,
+              itemsExcludingDragged
+            );
+
+            if (finalPosition === null) {
+              console.warn('Cannot move items: no available space');
+              return; // Cancel the entire multi-drag
+            }
+
+            // Calculate how much this item needs to move forward
+            const snapAmount = finalPosition - movedItem.newFrom;
+            if (snapAmount > maxSnapForward) {
+              maxSnapForward = snapAmount;
+            }
+          }
+
+          // Apply the snap to ALL items in the group
+          const allUpdates = movedItems.map((m) => ({
+            id: m.id,
+            from: m.newFrom + maxSnapForward,
+            trackId: m.newTrackId !== itemsRef.current.find((i) => i.id === m.id)?.trackId
+              ? m.newTrackId
+              : undefined,
+          }));
 
           // Apply batch update (single undo snapshot)
           moveItemsRef.current(allUpdates);
         } else {
           // Single item drag
-          let newFrame = Math.max(0, dragState.startFrame + deltaFrames);
+          let proposedFrame = Math.max(0, dragState.startFrame + deltaFrames);
 
           // Apply snapping
-          const snapResult = calculateSnap(newFrame);
-          newFrame = snapResult.snappedFrame;
+          const snapResult = calculateSnap(proposedFrame);
+          proposedFrame = snapResult.snappedFrame;
 
-          // Check for collisions
-          const collision = checkCollision(item.id, newFrame, newTrackId, []);
+          // Find nearest available space (snaps forward if collision)
+          // Exclude the item being dragged from collision detection
+          const itemsExcludingDragged = allItemsRef.current.filter((i) => i.id !== item.id);
+          const finalFrame = findNearestAvailableSpace(
+            proposedFrame,
+            item.durationInFrames,
+            newTrackId,
+            itemsExcludingDragged
+          );
 
-          if (collision.hasCollision) {
-            // Apply push updates
-            const allUpdates = [
-              { id: item.id, from: newFrame, trackId: newTrackId !== item.trackId ? newTrackId : undefined },
-              ...collision.pushedItems.map((p) => ({ id: p.id, from: p.from })),
-            ];
-            moveItemsRef.current(allUpdates);
-          } else {
-            // No collision, simple move
+          if (finalFrame !== null) {
             const trackChanged = newTrackId !== dragState.startTrackId;
-            moveItemRef.current(item.id, newFrame, trackChanged ? newTrackId : undefined);
+            moveItemRef.current(item.id, finalFrame, trackChanged ? newTrackId : undefined);
+          } else {
+            // No space available - cancel drag (keep at original position)
+            console.warn('Cannot move item: no available space');
           }
         }
       }
@@ -347,7 +374,7 @@ export function useTimelineDrag(
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, item.id, getTrackIdFromMouseY, calculateSnap, checkCollision, resolveMultiItemCollisions]);
+  }, [isDragging, item.id, getTrackIdFromMouseY, calculateSnap]);
 
   return {
     isDragging,
