@@ -105,7 +105,7 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
     };
   }
 
-  // Very low zoom (2-6 pps): Show 30-second intervals
+  // Very low zoom (4-6 pps): Show 30-second intervals
   if (pixelsPerSecond >= 4) {
     return {
       type: 'multi-second',
@@ -114,10 +114,46 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
     };
   }
 
-  // Extremely low zoom (<2 pps): Show minute intervals
+  // Extremely low zoom (2-4 pps): Show minute intervals
+  if (pixelsPerSecond >= 2) {
+    return {
+      type: 'minute',
+      intervalInSeconds: 60,
+      minorTicks: 6,
+    };
+  }
+
+  // Ultra low zoom (1-2 pps): Show 2-minute intervals
+  if (pixelsPerSecond >= 1) {
+    return {
+      type: 'minute',
+      intervalInSeconds: 120,
+      minorTicks: 4,
+    };
+  }
+
+  // Ultra low zoom (0.5-1 pps): Show 5-minute intervals
+  if (pixelsPerSecond >= 0.5) {
+    return {
+      type: 'minute',
+      intervalInSeconds: 300,
+      minorTicks: 5,
+    };
+  }
+
+  // Ultra low zoom (0.2-0.5 pps): Show 10-minute intervals
+  if (pixelsPerSecond >= 0.2) {
+    return {
+      type: 'minute',
+      intervalInSeconds: 600,
+      minorTicks: 10,
+    };
+  }
+
+  // Ultra low zoom (<0.2 pps): Show 30-minute intervals
   return {
     type: 'minute',
-    intervalInSeconds: 60,
+    intervalInSeconds: 1800,
     minorTicks: 6,
   };
 }
