@@ -30,7 +30,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
 
   // Actions
   setTracks: (tracks) => set({ tracks }),
-  addItem: (item) => set((state) => ({ items: [...state.items, item] })),
+  addItem: (item) => set((state) => ({ items: [...state.items, item as any] })),
   updateItem: (id, updates) => set((state) => ({
     items: state.items.map((i) => (i.id === id ? { ...i, ...updates } : i)),
   })),
@@ -57,6 +57,89 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     };
   }),
 
+  // Trim item from start: increases trimStart and sourceStart, adjusts from position
+  trimItemStart: (id, trimAmount) => set((state) => ({
+    items: state.items.map((item) => {
+      if (item.id !== id) return item;
+
+      const currentTrimStart = item.trimStart || 0;
+      const currentSourceStart = item.sourceStart || 0;
+      const sourceDuration = item.sourceDuration || item.durationInFrames;
+
+      // Calculate new values with boundary checks
+      let actualTrimAmount = trimAmount;
+
+      // Prevent extending before source start (sourceStart + trimAmount < 0)
+      if (trimAmount < 0 && currentSourceStart + trimAmount < 0) {
+        actualTrimAmount = -currentSourceStart;
+      }
+
+      // Prevent trimming more than available duration
+      if (trimAmount > 0 && item.durationInFrames - trimAmount < 1) {
+        actualTrimAmount = item.durationInFrames - 1;
+      }
+
+      // Ensure we don't exceed source duration when extending
+      // (This shouldn't happen with proper initialization, but keep as safeguard)
+      const _ = sourceDuration; // Mark as used
+
+      const newTrimStart = Math.max(0, currentTrimStart + actualTrimAmount);
+      const newSourceStart = currentSourceStart + actualTrimAmount;
+      const newDuration = Math.max(1, item.durationInFrames - actualTrimAmount);
+      const newFrom = item.from + actualTrimAmount;
+
+      // Update offset for Remotion compatibility (offset = trimStart)
+      const updates: Partial<typeof item> = {
+        trimStart: newTrimStart,
+        sourceStart: newSourceStart,
+        durationInFrames: newDuration,
+        from: newFrom,
+      };
+
+      // Add offset for video/audio items (Remotion compatibility)
+      if (item.type === 'video' || item.type === 'audio') {
+        (updates as any).offset = newTrimStart;
+      }
+
+      return { ...item, ...updates };
+    }),
+  })),
+
+  // Trim item from end: increases trimEnd and adjusts duration
+  trimItemEnd: (id, trimAmount) => set((state) => ({
+    items: state.items.map((item) => {
+      if (item.id !== id) return item;
+
+      const currentTrimEnd = item.trimEnd || 0;
+      const sourceDuration = item.sourceDuration || item.durationInFrames;
+      const currentSourceEnd = item.sourceEnd || sourceDuration;
+
+      // Calculate new values with boundary checks
+      let actualTrimAmount = trimAmount;
+
+      // Prevent extending beyond source duration (sourceEnd + trimAmount > sourceDuration)
+      if (trimAmount < 0 && currentSourceEnd - trimAmount > sourceDuration) {
+        actualTrimAmount = -(sourceDuration - currentSourceEnd);
+      }
+
+      // Prevent trimming more than available duration
+      if (trimAmount > 0 && item.durationInFrames - trimAmount < 1) {
+        actualTrimAmount = item.durationInFrames - 1;
+      }
+
+      const newTrimEnd = Math.max(0, currentTrimEnd + actualTrimAmount);
+      const newSourceEnd = currentSourceEnd - actualTrimAmount;
+      const newDuration = Math.max(1, item.durationInFrames - actualTrimAmount);
+
+      return {
+        ...item,
+        trimEnd: newTrimEnd,
+        sourceEnd: newSourceEnd,
+        durationInFrames: newDuration,
+      };
+    }),
+  })),
+
   // Save timeline to project in IndexedDB
   saveTimeline: async (projectId) => {
     const state = useTimelineStore.getState();
@@ -81,39 +164,38 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
           color: track.color,
           order: track.order,
         })),
-        items: state.items.map(item => ({
-          id: item.id,
-          trackId: item.trackId,
-          from: item.from,
-          durationInFrames: item.durationInFrames,
-          label: item.label,
-          mediaId: item.mediaId,
-          type: item.type,
-          ...(item.type === 'video' && {
-            src: item.src,
-            thumbnailUrl: item.thumbnailUrl,
-            offset: item.offset,
-          }),
-          ...(item.type === 'audio' && {
-            src: item.src,
-            waveformData: item.waveformData,
-            offset: item.offset,
-          }),
-          ...(item.type === 'text' && {
-            text: item.text,
-            fontSize: item.fontSize,
-            fontFamily: item.fontFamily,
-            color: item.color,
-          }),
-          ...(item.type === 'image' && {
-            src: item.src,
-            thumbnailUrl: item.thumbnailUrl,
-          }),
-          ...(item.type === 'shape' && {
-            shapeType: item.shapeType,
-            fillColor: item.fillColor,
-          }),
-        })),
+        items: state.items.map(item => {
+          // Base properties common to all items
+          const baseItem = {
+            id: item.id,
+            trackId: item.trackId,
+            from: item.from,
+            durationInFrames: item.durationInFrames,
+            label: item.label,
+            mediaId: item.mediaId,
+            type: item.type,
+            // Save trim properties for all items
+            ...(item.trimStart !== undefined && { trimStart: item.trimStart }),
+            ...(item.trimEnd !== undefined && { trimEnd: item.trimEnd }),
+            ...(item.sourceStart !== undefined && { sourceStart: item.sourceStart }),
+            ...(item.sourceEnd !== undefined && { sourceEnd: item.sourceEnd }),
+            ...(item.sourceDuration !== undefined && { sourceDuration: item.sourceDuration }),
+          };
+
+          // Add type-specific properties
+          if (item.type === 'video') {
+            return { ...baseItem, src: item.src, thumbnailUrl: item.thumbnailUrl, offset: item.offset };
+          } else if (item.type === 'audio') {
+            return { ...baseItem, src: item.src, waveformData: item.waveformData, offset: item.offset };
+          } else if (item.type === 'text') {
+            return { ...baseItem, text: item.text, fontSize: item.fontSize, fontFamily: item.fontFamily, color: item.color };
+          } else if (item.type === 'image') {
+            return { ...baseItem, src: item.src, thumbnailUrl: item.thumbnailUrl };
+          } else if (item.type === 'shape') {
+            return { ...baseItem, shapeType: item.shapeType, fillColor: item.fillColor };
+          }
+          return baseItem as any;
+        }),
       };
 
       // Update project with timeline data

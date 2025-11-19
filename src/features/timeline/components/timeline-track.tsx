@@ -167,6 +167,12 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
         durationInFrames: itemDuration,
         label: fileName,
         mediaId: mediaId,
+        // Initialize trim/source properties for new items
+        sourceStart: 0,
+        sourceEnd: itemDuration,
+        sourceDuration: itemDuration,
+        trimStart: 0,
+        trimEnd: 0,
       };
 
       if (mediaType === 'video') {

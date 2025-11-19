@@ -11,12 +11,13 @@ export interface ItemProps {
  * Remotion Item Component
  *
  * Renders different item types following Remotion best practices:
- * - Video: Uses OffthreadVideo for better performance
- * - Audio: Uses Audio component
+ * - Video: Uses OffthreadVideo for better performance with trim support
+ * - Audio: Uses Audio component with trim support
  * - Image: Uses img tag
  * - Text: Renders text with styling
  * - Shape: Renders solid colors or shapes
  * - Respects mute state for audio/video items
+ * - Supports trimStart/trimEnd for media trimming (uses trimStart as trimBefore)
  */
 export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
   if (item.type === 'video') {
@@ -28,10 +29,12 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
         </AbsoluteFill>
       );
     }
+    // Use trimStart if available, fallback to offset for backward compatibility
+    const trimBefore = item.trimStart ?? item.offset ?? 0;
     return (
       <OffthreadVideo
         src={item.src}
-        trimBefore={item.offset || 0}
+        trimBefore={trimBefore}
         volume={muted ? 0 : 1}
       />
     );
@@ -42,10 +45,12 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
     if (!item.src) {
       return null; // Audio can fail silently
     }
+    // Use trimStart if available, fallback to offset for backward compatibility
+    const trimBefore = item.trimStart ?? item.offset ?? 0;
     return (
       <Audio
         src={item.src}
-        trimBefore={item.offset || 0}
+        trimBefore={trimBefore}
         volume={muted ? 0 : 1}
       />
     );

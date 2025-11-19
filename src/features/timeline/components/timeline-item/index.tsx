@@ -4,6 +4,7 @@ import { useTimelineZoom } from '../../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
+import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { DRAG_OPACITY } from '../../constants';
 
 export interface TimelineItemProps {
@@ -15,19 +16,20 @@ export interface TimelineItemProps {
 /**
  * Timeline Item Component
  *
- * Renders an individual item on the timeline with drag-and-drop support:
+ * Renders an individual item on the timeline with full interaction support:
  * - Positioned based on start frame (from)
  * - Width based on duration in frames
  * - Visual styling based on item type
  * - Selection state
  * - Click to select
  * - Drag to move (horizontal and vertical)
+ * - Trim handles (start/end) for media trimming
  * - Grid snapping support
  *
- * Future enhancements:
- * - Resize handles
- * - Trim indicators
- * - Thumbnail preview
+ * Trim functionality:
+ * - Start handle: trims from beginning, adjusts position and duration
+ * - End handle: trims from end, adjusts duration only
+ * - Stores trimStart, trimEnd, sourceStart, sourceEnd for each item
  */
 export function TimelineItem({ item, timelineDuration = 30, trackLocked = false }: TimelineItemProps) {
   const { timeToPixels } = useTimelineZoom();
@@ -39,6 +41,9 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
 
   // Drag-and-drop functionality (local state for anchor item) - disabled if track is locked
   const { isDragging, dragOffset, handleDragStart } = useTimelineDrag(item, timelineDuration, trackLocked);
+
+  // Trim functionality - disabled if track is locked
+  const { isTrimming, trimHandle, trimDelta, handleTrimStart } = useTimelineTrim(item, trackLocked);
 
   // Check if this item is part of a multi-drag (but not the anchor)
   const isPartOfDrag = dragState?.isDragging && dragState.draggedItemIds.includes(item.id) && !isDragging;
@@ -106,6 +111,56 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
   const left = timeToPixels(item.from / fps);
   const width = timeToPixels(item.durationInFrames / fps);
 
+  // Calculate trim visual feedback (convert frames to pixels for preview)
+  const minWidthPixels = timeToPixels(1 / fps); // Minimum 1 frame width
+  const trimDeltaPixels = isTrimming ? timeToPixels(trimDelta / fps) : 0;
+
+  // Get source boundaries for clamping
+  const currentSourceStart = item.sourceStart || 0;
+  const sourceDuration = item.sourceDuration || item.durationInFrames;
+  const currentSourceEnd = item.sourceEnd || sourceDuration;
+
+  // Clamp visual feedback to prevent showing invalid states
+  let trimVisualLeft = left;
+  let trimVisualWidth = width;
+
+  if (isTrimming) {
+    if (trimHandle === 'start') {
+      // Start handle: adjust both position and width
+      // Prevent extending before source start (currentSourceStart + trimDelta < 0)
+      const maxExtendFrames = currentSourceStart; // Can extend up to frame 0
+      const maxExtendPixels = timeToPixels(maxExtendFrames / fps);
+
+      // Prevent trimming more than available
+      const maxTrimPixels = width - minWidthPixels;
+
+      // Clamp delta considering both constraints
+      const clampedDelta = Math.max(
+        -maxExtendPixels, // Don't extend past source start
+        Math.min(maxTrimPixels, trimDeltaPixels) // Don't trim too much
+      );
+
+      trimVisualLeft = left + clampedDelta;
+      trimVisualWidth = width - clampedDelta;
+    } else {
+      // End handle: adjust width only
+      // Prevent extending beyond source duration (currentSourceEnd - trimDelta > sourceDuration)
+      const maxExtendFrames = sourceDuration - currentSourceEnd; // Can extend up to source duration
+      const maxExtendPixels = timeToPixels(maxExtendFrames / fps);
+
+      // Prevent trimming more than available
+      const maxTrimPixels = width - minWidthPixels;
+
+      // Clamp delta considering both constraints
+      const clampedDelta = Math.max(
+        -maxExtendPixels, // Don't extend past source end
+        Math.min(maxTrimPixels, -trimDeltaPixels) // Don't trim too much (note: trimDelta is negative for extending)
+      );
+
+      trimVisualWidth = width - clampedDelta;
+    }
+  }
+
   // Get color based on item type (using timeline theme colors)
   const getItemColor = () => {
     switch (item.type) {
@@ -157,29 +212,35 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
         ${!isBeingDragged && !trackLocked && 'hover:brightness-110'}
       `}
       style={{
-        left: `${left}px`,
-        width: `${width}px`,
+        left: isTrimming ? `${trimVisualLeft}px` : `${left}px`,
+        width: isTrimming ? `${trimVisualWidth}px` : `${width}px`,
         // Anchor item uses its own dragOffset, followers get updated via RAF
         transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
         opacity: isDragging ? DRAG_OPACITY : trackLocked ? 0.6 : 1,
-        transition: isDragging ? 'none' : 'all 0.2s',
+        transition: isDragging || isTrimming ? 'none' : 'all 0.2s',
         pointerEvents: isDragging ? 'none' : 'auto',
       }}
       onClick={handleClick}
-      onMouseDown={trackLocked ? undefined : handleDragStart}
+      onMouseDown={trackLocked || isTrimming ? undefined : handleDragStart}
     >
       {/* Item label */}
       <div className="px-2 py-1 text-xs font-medium text-primary-foreground truncate">
         {item.label}
       </div>
 
-      {/* Resize handles (placeholder for future implementation) - disabled on locked tracks */}
+      {/* Trim handles - disabled on locked tracks */}
       {isSelected && !trackLocked && (
         <>
-          {/* Left handle */}
-          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary cursor-ew-resize" />
-          {/* Right handle */}
-          <div className="absolute right-0 top-0 bottom-0 w-1 bg-primary cursor-ew-resize" />
+          {/* Left trim handle */}
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 bg-primary cursor-ew-resize"
+            onMouseDown={(e) => handleTrimStart(e, 'start')}
+          />
+          {/* Right trim handle */}
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1 bg-primary cursor-ew-resize"
+            onMouseDown={(e) => handleTrimStart(e, 'end')}
+          />
         </>
       )}
     </div>

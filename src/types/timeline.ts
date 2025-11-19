@@ -6,6 +6,12 @@ type BaseTimelineItem = {
   durationInFrames: number; // Duration in frames (Remotion convention)
   label: string;
   mediaId?: string;
+  // Trim properties for media items
+  trimStart?: number; // Frames trimmed from start of source media
+  trimEnd?: number; // Frames trimmed from end of source media
+  sourceStart?: number; // Original start frame in source media (default 0)
+  sourceEnd?: number; // Original end frame in source media (default sourceDuration)
+  sourceDuration?: number; // Total duration of source media in frames (for boundary checks)
 };
 
 // Discriminated union types for different item types

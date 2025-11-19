@@ -16,6 +16,8 @@ export interface TimelineActions {
   toggleSnap: () => void;
   moveItem: (id: string, newFrom: number, newTrackId?: string) => void;
   moveItems: (updates: Array<{ id: string; from: number; trackId?: string }>) => void;
+  trimItemStart: (id: string, trimAmount: number) => void;
+  trimItemEnd: (id: string, trimAmount: number) => void;
   saveTimeline: (projectId: string) => Promise<void>;
   loadTimeline: (projectId: string) => Promise<void>;
   clearTimeline: () => void;
