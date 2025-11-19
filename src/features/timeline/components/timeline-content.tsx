@@ -37,7 +37,7 @@ export function TimelineContent({ duration, scrollRef }: TimelineContentProps) {
   const items = useTimelineStore((s) => s.items);
   const fps = useTimelineStore((s) => s.fps);
   const { timeToPixels, pixelsToTime, frameToPixels, setZoom, zoomLevel } = useTimelineZoom({
-    minZoom: 0.1,
+    minZoom: 0.01,
     maxZoom: 2, // Match slider range
   });
   const currentFrame = usePlaybackStore((s) => s.currentFrame);

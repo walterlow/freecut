@@ -15,7 +15,7 @@ export interface UseTimelineZoomOptions {
  */
 export function useTimelineZoom(options: UseTimelineZoomOptions = {}) {
   const {
-    minZoom = 0.1,
+    minZoom = 0.01,
     maxZoom = 10,
   } = options;
 

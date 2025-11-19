@@ -32,7 +32,7 @@ export const useZoomStore = create<ZoomState & ZoomActions>((set) => ({
     }),
   zoomOut: () =>
     set((state) => {
-      const newLevel = Math.max(state.level / 1.2, 0.1);
+      const newLevel = Math.max(state.level / 1.2, 0.01);
       return { level: newLevel, pixelsPerSecond: newLevel * 100 };
     }),
 }));

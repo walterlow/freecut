@@ -57,9 +57,9 @@ export function TimelineHeader(_props: TimelineHeaderProps) {
           <Slider
             value={[zoomLevel]}
             onValueChange={(values) => setZoom(values[0] ?? 1)}
-            min={0.1}
+            min={0.01}
             max={2}
-            step={0.1}
+            step={0.01}
             className="w-24"
           />
 
