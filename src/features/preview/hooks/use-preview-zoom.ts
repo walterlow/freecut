@@ -5,10 +5,10 @@ import { usePlaybackStore } from '../stores/playback-store';
  * Zoom presets for preview
  */
 const ZOOM_PRESETS = [
-  { label: 'Fit', value: 'fit' as const },
+  { label: 'Auto', value: 'fit' as const },
+  { label: '25%', value: 0.25 },
   { label: '50%', value: 0.5 },
   { label: '100%', value: 1 },
-  { label: '200%', value: 2 },
 ] as const;
 
 export type ZoomPreset = (typeof ZOOM_PRESETS)[number];
@@ -41,22 +41,14 @@ export function usePreviewZoom(options?: UsePreviewZoomOptions) {
    */
   const handlePresetZoom = useCallback(
     (preset: ZoomPreset) => {
-      if (preset.value === 'fit' && options) {
-        // Calculate fit zoom based on container size
-        const { containerWidth, containerHeight, projectWidth, projectHeight } = options;
-
-        if (containerWidth && containerHeight) {
-          const scaleX = containerWidth / projectWidth;
-          const scaleY = containerHeight / projectHeight;
-          // Use the smaller scale to ensure the entire composition fits
-          const fitZoom = Math.min(scaleX, scaleY);
-          setZoom(Number(fitZoom.toFixed(2))); // Round to 2 decimals
-        }
-      } else if (preset.value !== 'fit') {
+      if (preset.value === 'fit') {
+        // Set to -1 to enable auto-fit mode
+        setZoom(-1);
+      } else {
         setZoom(preset.value);
       }
     },
-    [options, setZoom]
+    [setZoom]
   );
 
   /**

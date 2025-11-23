@@ -1,22 +1,18 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { Player, PlayerRef } from '@remotion/player';
-import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { Maximize2 } from 'lucide-react';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { MainComposition } from '@/lib/remotion/compositions/main-composition';
 import { useRemotionPlayer } from '../hooks/use-remotion-player';
 import { resolveMediaUrls, cleanupBlobUrls } from '../utils/media-resolver';
-import { PreviewZoomControls } from './preview-zoom-controls';
 import type { TimelineTrack } from '@/types/timeline';
 
 interface VideoPreviewProps {
   project: {
+    width: number;
+    height: number;
+  };
+  containerSize: {
     width: number;
     height: number;
   };
@@ -28,11 +24,11 @@ interface VideoPreviewProps {
  * Displays the Remotion Player with:
  * - Real-time video rendering
  * - Bidirectional sync with timeline
- * - User-controlled zoom
+ * - Responsive sizing based on zoom and container
  * - Frame counter
  * - Fullscreen toggle
  */
-export function VideoPreview({ project }: VideoPreviewProps) {
+export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   const playerRef = useRef<PlayerRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -139,65 +135,94 @@ export function VideoPreview({ project }: VideoPreviewProps) {
     tracks: resolvedTracks,
   }), [fps, resolvedTracks]);
 
-  return (
-    <div className="flex-1 min-h-0 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-background to-secondary/20 relative">
-      {/* Zoom Controls */}
-      <div className="absolute top-4 right-4 z-10">
-        <PreviewZoomControls
-          containerWidth={containerRef.current?.clientWidth}
-          containerHeight={containerRef.current?.clientHeight}
-          projectWidth={project.width}
-          projectHeight={project.height}
-        />
-      </div>
+  // Calculate player size based on zoom mode
+  const playerSize = useMemo(() => {
+    const aspectRatio = project.width / project.height;
 
-      <div
-        ref={containerRef}
-        className="relative w-full max-w-6xl max-h-full"
-        style={{
-          aspectRatio: `${project.width || 16}/${project.height || 9}`,
-        }}
-      >
-        {/* Remotion Player with Zoom */}
+    // Auto-fit mode (zoom = -1)
+    if (zoom === -1) {
+      if (containerSize.width > 0 && containerSize.height > 0) {
+        const containerAspectRatio = containerSize.width / containerSize.height;
+
+        let width: number;
+        let height: number;
+
+        // Compare aspect ratios to determine limiting dimension
+        if (containerAspectRatio > aspectRatio) {
+          // Container is wider - height is the limiting factor
+          height = containerSize.height;
+          width = height * aspectRatio;
+        } else {
+          // Container is taller - width is the limiting factor
+          width = containerSize.width;
+          height = width / aspectRatio;
+        }
+
+        return { width, height };
+      }
+      // Fallback while measuring
+      return { width: project.width, height: project.height };
+    }
+
+    // Specific zoom level - show at exact size, no constraining
+    const targetWidth = project.width * zoom;
+    const targetHeight = project.height * zoom;
+    return { width: targetWidth, height: targetHeight };
+  }, [project.width, project.height, zoom, containerSize]);
+
+  // Check if overflow is needed (video larger than container)
+  const needsOverflow = useMemo(() => {
+    if (zoom === -1) return false; // Auto-fit never needs overflow
+    if (containerSize.width === 0 || containerSize.height === 0) return false;
+    return playerSize.width > containerSize.width || playerSize.height > containerSize.height;
+  }, [zoom, playerSize, containerSize]);
+
+  return (
+    <div
+      className="w-full h-full bg-gradient-to-br from-background to-secondary/20 relative"
+      style={{ overflow: needsOverflow ? 'auto' : 'hidden' }}
+    >
+      <div className="min-w-full min-h-full grid place-items-center p-6">
         <div
-          className="w-full h-full rounded-lg overflow-hidden bg-black border-2 border-border shadow-2xl"
+          ref={containerRef}
+          className="relative overflow-hidden border-2 border-border shadow-2xl"
           style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'center center',
+            width: `${playerSize.width}px`,
+            height: `${playerSize.height}px`,
+            transition: 'none',
           }}
         >
-          {isResolving && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
-              <p className="text-white text-sm">Loading media...</p>
+        {isResolving && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
+            <p className="text-white text-sm">Loading media...</p>
+          </div>
+        )}
+
+        <Player
+          key="remotion-player"
+          ref={playerRef}
+          component={MainComposition}
+          inputProps={inputProps}
+          durationInFrames={totalFrames}
+          compositionWidth={project.width}
+          compositionHeight={project.height}
+          bufferStateDelayInMilliseconds={0}
+          acknowledgeRemotionLicense={true}
+          fps={fps}
+          style={{
+            width: '100%',
+            height: '100%',
+          }}
+          controls={false}
+          loop={false}
+          clickToPlay={false}
+          spaceKeyToPlayOrPause={false}
+          errorFallback={({ error }) => (
+            <div className="flex items-center justify-center h-full bg-red-500/10">
+              <p className="text-red-500">Player Error: {error.message}</p>
             </div>
           )}
-
-          <Player
-            key="remotion-player"
-            ref={playerRef}
-            component={MainComposition}
-            inputProps={inputProps}
-            durationInFrames={totalFrames}
-            compositionWidth={project.width}
-            compositionHeight={project.height}
-            bufferStateDelayInMilliseconds={0}
-            acknowledgeRemotionLicense={true}
-            fps={fps}
-            style={{
-              width: '100%',
-              height: '100%',
-            }}
-            controls={false}
-            loop={false}
-            clickToPlay={false}
-            spaceKeyToPlayOrPause={false}
-            errorFallback={({ error }) => (
-              <div className="flex items-center justify-center h-full bg-red-500/10">
-                <p className="text-red-500">Player Error: {error.message}</p>
-              </div>
-            )}
-          />
-        </div>
+        />
 
         {/* Frame Counter */}
         <div className="absolute -bottom-7 right-0 font-mono text-xs text-primary tabular-nums flex items-center gap-2">
@@ -207,20 +232,7 @@ export function VideoPreview({ project }: VideoPreviewProps) {
             {String(totalFrames).padStart(5, '0')}
           </span>
         </div>
-
-        {/* Fullscreen toggle - handler pending implementation */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute -top-3 -right-3 h-8 w-8 rounded-full shadow-lg"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Fullscreen Preview</TooltipContent>
-        </Tooltip>
+      </div>
       </div>
     </div>
   );

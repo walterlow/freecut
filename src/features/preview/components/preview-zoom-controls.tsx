@@ -1,12 +1,11 @@
-import { Button } from '@/components/ui/button';
-import { Slider } from '@/components/ui/slider';
-import { ZoomIn, ZoomOut, Maximize, RotateCcw } from 'lucide-react';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { usePreviewZoom, type ZoomPreset } from '../hooks/use-preview-zoom';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { usePreviewZoom } from '../hooks/use-preview-zoom';
 
 interface PreviewZoomControlsProps {
   containerWidth?: number;
@@ -18,12 +17,7 @@ interface PreviewZoomControlsProps {
 /**
  * Preview Zoom Controls Component
  *
- * Provides UI for controlling preview zoom:
- * - Preset buttons (Fit, 50%, 100%, 200%)
- * - Zoom in/out buttons
- * - Reset to 100% button
- * - Fine-tune slider (10% - 200%)
- * - Current zoom percentage display
+ * Compact dropdown for zoom presets: Auto (fit), 25%, 50%, 100%
  */
 export function PreviewZoomControls({
   containerWidth,
@@ -31,103 +25,37 @@ export function PreviewZoomControls({
   projectWidth,
   projectHeight,
 }: PreviewZoomControlsProps) {
-  const {
-    zoom,
-    setZoom,
-    zoomPresets,
-    handlePresetZoom,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-  } = usePreviewZoom({
+  const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom({
     containerWidth,
     containerHeight,
     projectWidth,
     projectHeight,
   });
 
+  // Get current zoom label
+  const currentLabel = zoom === -1
+    ? 'Auto'
+    : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
+
+  const handleValueChange = (value: string) => {
+    const preset = zoomPresets.find((p) => p.label === value);
+    if (preset) {
+      handlePresetZoom(preset);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-3 bg-background/95 backdrop-blur-sm p-3 rounded-lg border border-border shadow-lg">
-      {/* Preset Buttons */}
-      <div className="flex items-center gap-2">
+    <Select value={currentLabel} onValueChange={handleValueChange}>
+      <SelectTrigger className="w-20 h-7 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
         {zoomPresets.map((preset) => (
-          <Button
-            key={preset.label}
-            variant={zoom === preset.value ? 'default' : 'outline'}
-            size="sm"
-            className="h-7 px-2 text-xs font-medium"
-            onClick={() => handlePresetZoom(preset)}
-          >
+          <SelectItem key={preset.label} value={preset.label} className="text-xs">
             {preset.label}
-          </Button>
+          </SelectItem>
         ))}
-      </div>
-
-      {/* Zoom Controls */}
-      <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={zoomOut}
-              disabled={zoom <= 0.1}
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Zoom Out</TooltipContent>
-        </Tooltip>
-
-        {/* Zoom Percentage Display */}
-        <span className="text-xs font-mono font-medium w-12 text-center tabular-nums">
-          {Math.round(zoom * 100)}%
-        </span>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={zoomIn}
-              disabled={zoom >= 2}
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Zoom In</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={resetZoom}
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Reset to 100%</TooltipContent>
-        </Tooltip>
-      </div>
-
-      {/* Fine-tune Slider */}
-      <div className="flex items-center gap-2 px-1">
-        <span className="text-xs text-muted-foreground">10%</span>
-        <Slider
-          value={[zoom * 100]}
-          onValueChange={([value]) => setZoom(value / 100)}
-          min={10}
-          max={200}
-          step={5}
-          className="flex-1"
-        />
-        <span className="text-xs text-muted-foreground">200%</span>
-      </div>
-    </div>
+      </SelectContent>
+    </Select>
   );
 }
