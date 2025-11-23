@@ -21,7 +21,8 @@
       "Bash(fi)",
       "Bash(taskkill //F //PID 2896)",
       "mcp__ide__getDiagnostics",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:www.remotion.dev)"
     ],
     "deny": [],
     "ask": []

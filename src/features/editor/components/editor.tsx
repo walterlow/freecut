@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   ResizablePanelGroup,
@@ -10,6 +10,7 @@ import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
 import { Timeline } from '@/features/timeline/components/timeline';
+import { ExportDialog } from '@/features/export/components/export-dialog';
 import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
 import { useEditorHotkeys } from '@/hooks/use-editor-hotkeys';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -40,6 +41,8 @@ export interface EditorProps {
  * - Comprehensive keyboard shortcuts
  */
 export function Editor({ projectId, project }: EditorProps) {
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
   // Initialize timeline from project data (or create default tracks for new projects)
   useEffect(() => {
     const { setTracks } = useTimelineStore.getState();
@@ -130,8 +133,7 @@ export function Editor({ projectId, project }: EditorProps) {
   };
 
   const handleExport = () => {
-    // TODO: Implement export functionality
-    console.log('Export video for project:', projectId);
+    setExportDialogOpen(true);
   };
 
   // Enable keyboard shortcuts
@@ -186,6 +188,9 @@ export function Editor({ projectId, project }: EditorProps) {
             <Timeline duration={timelineDuration} />
           </ResizablePanel>
         </ResizablePanelGroup>
+
+        {/* Export Dialog */}
+        <ExportDialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} />
       </div>
     </TooltipProvider>
   );
