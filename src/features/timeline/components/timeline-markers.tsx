@@ -172,6 +172,7 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
   const { timeToPixels, pixelsPerSecond, pixelsToFrame } = useTimelineZoom();
   const fps = useTimelineStore((s) => s.fps);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const pause = usePlaybackStore((s) => s.pause);
   const rulerRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -180,12 +181,14 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
   // Use refs to avoid stale closures in drag handler
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
+  const pauseRef = useRef(pause);
 
   // Update refs when functions change
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
-  }, [pixelsToFrame, setCurrentFrame]);
+    pauseRef.current = pause;
+  }, [pixelsToFrame, setCurrentFrame, pause]);
 
   // Track viewport width and scroll position
   useEffect(() => {
@@ -261,6 +264,9 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
 
     const rect = rulerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
+
+    // Pause playback when clicking on ruler
+    pauseRef.current();
 
     // Convert pixel position to frame number and update immediately
     const frame = Math.max(0, pixelsToFrameRef.current(x));
