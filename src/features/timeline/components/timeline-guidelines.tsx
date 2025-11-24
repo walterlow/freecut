@@ -2,8 +2,6 @@ import type { SnapTarget } from '../types/drag';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 
 export interface TimelineGuidelinesProps {
-  /** Snap targets to display as guidelines */
-  snapTargets: SnapTarget[];
   /** Currently snapped target (highlighted) */
   activeSnapTarget: SnapTarget | null;
 }
@@ -11,41 +9,39 @@ export interface TimelineGuidelinesProps {
 /**
  * Timeline Guidelines Component
  *
- * Renders vertical snap lines during drag operations
- * - Blue lines for grid snap points
- * - Green lines for magnetic snap (item edges)
- * - Highlighted line for active snap
+ * Renders vertical snap line for the active snap target during drag operations
+ * - Green line for magnetic snap (item edges)
+ * - Primary color for playhead snap
  *
- * Phase 2 enhancement for visual feedback
+ * Only shows when actively snapping to magnetic or playhead targets
  */
-export function TimelineGuidelines({ snapTargets, activeSnapTarget }: TimelineGuidelinesProps) {
+export function TimelineGuidelines({ activeSnapTarget }: TimelineGuidelinesProps) {
   const { frameToPixels } = useTimelineZoom();
 
-  if (snapTargets.length === 0) {
+  // Only show when there's an active snap target
+  if (!activeSnapTarget) {
     return null;
   }
 
+  // Only show magnetic (item edges) and playhead snaps
+  const isMagnetic = activeSnapTarget.type === 'item-start' || activeSnapTarget.type === 'item-end';
+  const isPlayhead = activeSnapTarget.type === 'playhead';
+
+  // Don't show grid snaps
+  if (!isMagnetic && !isPlayhead) {
+    return null;
+  }
+
+  const left = frameToPixels(activeSnapTarget.frame);
+
   return (
     <div className="absolute inset-0 pointer-events-none z-10">
-      {snapTargets.map((target, index) => {
-        const left = frameToPixels(target.frame);
-        const isActive = activeSnapTarget?.frame === target.frame;
-        const isMagnetic = target.type === 'item-start' || target.type === 'item-end';
-
-        return (
-          <div
-            key={`${target.type}-${target.frame}-${index}`}
-            className={`absolute top-0 bottom-0 w-px transition-opacity ${
-              isActive
-                ? 'bg-primary opacity-90'
-                : isMagnetic
-                ? 'bg-green-500 opacity-40'
-                : 'bg-blue-500 opacity-30'
-            }`}
-            style={{ left: `${left}px` }}
-          />
-        );
-      })}
+      <div
+        className={`absolute top-0 bottom-0 w-px transition-opacity ${
+          isPlayhead ? 'bg-primary opacity-90' : 'bg-green-500 opacity-60'
+        }`}
+        style={{ left: `${left}px` }}
+      />
     </div>
   );
 }

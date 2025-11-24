@@ -31,6 +31,7 @@ export interface SelectionState {
     draggedItemIds: string[];
     draggedTrackIds?: string[]; // For track dragging
     offset: { x: number; y: number };
+    activeSnapTarget?: { frame: number; type: 'grid' | 'item-start' | 'item-end' | 'playhead'; itemId?: string } | null;
   } | null;
 }
 

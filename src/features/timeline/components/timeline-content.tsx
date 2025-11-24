@@ -13,6 +13,7 @@ import { useMarqueeSelection } from '@/hooks/use-marquee-selection';
 import { TimelineMarkers } from './timeline-markers';
 import { TimelinePlayhead } from './timeline-playhead';
 import { TimelineTrack } from './timeline-track';
+import { TimelineGuidelines } from './timeline-guidelines';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 export interface TimelineContentProps {
@@ -48,6 +49,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const selectItems = useSelectionStore((s) => s.selectItems);
   const clearItemSelection = useSelectionStore((s) => s.clearItemSelection);
+  const dragState = useSelectionStore((s) => s.dragState);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -306,6 +308,13 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
         {tracks.map((track) => (
           <TimelineTrack key={track.id} track={track} items={items} timelineWidth={timelineWidth} />
         ))}
+
+        {/* Snap guidelines (shown during drag) */}
+        {dragState?.isDragging && (
+          <TimelineGuidelines
+            activeSnapTarget={dragState.activeSnapTarget ?? null}
+          />
+        )}
 
         {/* Playhead line through all tracks */}
         <TimelinePlayhead />

@@ -62,4 +62,6 @@ export interface UseTimelineDragReturn {
   dragOffset: { x: number; y: number };
   /** Handler to start dragging */
   handleDragStart: (e: React.MouseEvent) => void;
+  /** Currently active snap target (for visual indicators) */
+  activeSnapTarget: SnapTarget | null;
 }

@@ -44,6 +44,7 @@ export function useTimelineDrag(
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectItems = useSelectionStore((s) => s.selectItems);
   const setDragState = useSelectionStore((s) => s.setDragState);
+  const dragState = useSelectionStore((s) => s.dragState);
 
   // Get zoom utilities
   const { pixelsToFrame } = useTimelineZoom();
@@ -229,6 +230,25 @@ export function useTimelineDrag(
 
       dragStateRef.current.currentMouseX = e.clientX;
       dragStateRef.current.currentMouseY = e.clientY;
+
+      // Calculate proposed position and snap for visual feedback
+      const deltaFrames = pixelsToFrameRef.current(deltaX);
+      const proposedFrame = Math.max(0, dragStateRef.current.startFrame + deltaFrames);
+
+      // Get the dragged item to get its duration
+      const draggedItem = itemsRef.current.find((i) => i.id === dragStateRef.current?.itemId);
+      const itemDuration = draggedItem?.durationInFrames || 0;
+
+      const snapResult = calculateSnap(proposedFrame, itemDuration);
+
+      // Update drag state with active snap target for visual indicators
+      const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
+      setDragState({
+        isDragging: true,
+        draggedItemIds: draggedIds,
+        offset: { x: deltaX, y: deltaY },
+        activeSnapTarget: snapResult.snapTarget,
+      });
     };
 
     const handleMouseUp = () => {
@@ -272,7 +292,7 @@ export function useTimelineDrag(
 
             // Apply snapping (only to anchor item, others follow)
             if (draggedItem.id === item.id) {
-              const snapResult = calculateSnap(newFrom);
+              const snapResult = calculateSnap(newFrom, sourceItem.durationInFrames);
               newFrom = snapResult.snappedFrame;
             }
 
@@ -332,7 +352,7 @@ export function useTimelineDrag(
           let proposedFrame = Math.max(0, dragState.startFrame + deltaFrames);
 
           // Apply snapping
-          const snapResult = calculateSnap(proposedFrame);
+          const snapResult = calculateSnap(proposedFrame, item.durationInFrames);
           proposedFrame = snapResult.snappedFrame;
 
           // Find nearest available space (snaps forward if collision)
@@ -358,7 +378,7 @@ export function useTimelineDrag(
       // Clean up
       setIsDragging(false);
       setDragOffset({ x: 0, y: 0 });
-      setDragState(null); // Clear drag state
+      setDragState(null); // Clear drag state (including activeSnapTarget)
       dragOffsetRef.current = { x: 0, y: 0 }; // Reset shared ref
       dragStateRef.current = null;
       document.body.style.cursor = '';
@@ -380,5 +400,6 @@ export function useTimelineDrag(
     isDragging,
     dragOffset,
     handleDragStart,
+    activeSnapTarget: dragState?.activeSnapTarget ?? null,
   };
 }

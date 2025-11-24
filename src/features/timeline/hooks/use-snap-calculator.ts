@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import type { TimelineItem } from '@/types/timeline';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useZoomStore } from '../stores/zoom-store';
@@ -79,34 +78,69 @@ export function useSnapCalculator(
 
   /**
    * Calculate snap for a given position
+   * Checks both start and end positions of the item
    * Returns snapped position and snap information
+   *
+   * @param targetStartFrame - The proposed start frame of the item
+   * @param itemDurationInFrames - Duration of the item in frames
    */
-  const calculateSnap = (targetFrame: number) => {
+  const calculateSnap = (targetStartFrame: number, itemDurationInFrames: number) => {
     if (!snapEnabled) {
       return {
-        snappedFrame: targetFrame,
+        snappedFrame: targetStartFrame,
         snapTarget: null,
         didSnap: false,
       };
     }
 
-    // Find nearest snap target
-    const nearestTarget = findNearestSnapTarget(
-      targetFrame,
+    // Calculate end frame
+    const targetEndFrame = targetStartFrame + itemDurationInFrames;
+
+    // Find nearest snap target for start position
+    const nearestStartTarget = findNearestSnapTarget(
+      targetStartFrame,
       snapTargets,
       snapThresholdFrames
     );
 
-    if (nearestTarget) {
-      return {
-        snappedFrame: nearestTarget.frame,
-        snapTarget: nearestTarget,
-        didSnap: true,
-      };
+    // Find nearest snap target for end position
+    const nearestEndTarget = findNearestSnapTarget(
+      targetEndFrame,
+      snapTargets,
+      snapThresholdFrames
+    );
+
+    // Determine which snap is stronger (closer)
+    const startDistance = nearestStartTarget
+      ? Math.abs(targetStartFrame - nearestStartTarget.frame)
+      : Infinity;
+    const endDistance = nearestEndTarget
+      ? Math.abs(targetEndFrame - nearestEndTarget.frame)
+      : Infinity;
+
+    // Use the closest snap (prioritize magnetic snaps over grid snaps if distances are equal)
+    if (startDistance < endDistance) {
+      if (nearestStartTarget) {
+        return {
+          snappedFrame: nearestStartTarget.frame,
+          snapTarget: nearestStartTarget,
+          didSnap: true,
+        };
+      }
+    } else if (endDistance < Infinity) {
+      if (nearestEndTarget) {
+        // Snap the end, so adjust start position accordingly
+        const adjustedStartFrame = nearestEndTarget.frame - itemDurationInFrames;
+        return {
+          snappedFrame: adjustedStartFrame,
+          snapTarget: nearestEndTarget,
+          didSnap: true,
+        };
+      }
     }
 
     return {
-      snappedFrame: targetFrame,
+      snappedFrame: targetStartFrame,
       snapTarget: null,
       didSnap: false,
     };
