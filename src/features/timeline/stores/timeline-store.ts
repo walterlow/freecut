@@ -207,20 +207,30 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
 
   // In/Out point actions with validation
   setInPoint: (frame) => set((state) => {
-    // If out-point exists and in-point would exceed it, move out-point to last frame
-    if (state.outPoint !== null && frame >= state.outPoint) {
-      // Calculate last frame from rightmost item
-      const maxEndFrame = state.items.length > 0
-        ? Math.max(...state.items.map(item => item.from + item.durationInFrames))
-        : state.fps * 10; // Default to 10 seconds if no items
+    // Calculate last frame from rightmost item
+    const maxEndFrame = state.items.length > 0
+      ? Math.max(...state.items.map(item => item.from + item.durationInFrames))
+      : state.fps * 10; // Default to 10 seconds if no items
 
+    // If out-point doesn't exist, set it to the last frame
+    if (state.outPoint === null) {
+      return { inPoint: frame, outPoint: Math.max(maxEndFrame, frame + 1) };
+    }
+
+    // If out-point exists and in-point would exceed it, move out-point to last frame
+    if (frame >= state.outPoint) {
       return { inPoint: frame, outPoint: Math.max(maxEndFrame, frame + 1) };
     }
     return { inPoint: frame };
   }),
   setOutPoint: (frame) => set((state) => {
+    // If in-point doesn't exist, set it to frame 0
+    if (state.inPoint === null) {
+      return { inPoint: 0, outPoint: frame };
+    }
+
     // If in-point exists and out-point would go before it, move in-point to frame 0
-    if (state.inPoint !== null && frame <= state.inPoint) {
+    if (frame <= state.inPoint) {
       return { inPoint: 0, outPoint: frame };
     }
     return { outPoint: frame };
