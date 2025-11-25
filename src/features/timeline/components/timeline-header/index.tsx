@@ -11,6 +11,7 @@ import {
   ZoomOut,
   Magnet,
   Scissors,
+  Gauge,
   CornerRightDown,
   CornerRightUp,
   X,
@@ -101,6 +102,22 @@ export function TimelineHeader({ onZoomChange, onZoomIn, onZoomOut }: TimelineHe
               </Button>
             </TooltipTrigger>
             <TooltipContent>Razor Tool (C)</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${
+                  activeTool === 'rate-stretch' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                }`}
+                onClick={() => setActiveTool(activeTool === 'rate-stretch' ? 'select' : 'rate-stretch')}
+              >
+                <Gauge className="w-3.5 h-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Rate Stretch Tool (R)</TooltipContent>
           </Tooltip>
         </div>
 

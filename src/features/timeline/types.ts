@@ -22,6 +22,7 @@ export interface TimelineActions {
   trimItemStart: (id: string, trimAmount: number) => void;
   trimItemEnd: (id: string, trimAmount: number) => void;
   splitItem: (id: string, splitFrame: number) => void;
+  rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
   setInPoint: (frame: number) => void;
   setOutPoint: (frame: number) => void;
   clearInOutPoints: () => void;

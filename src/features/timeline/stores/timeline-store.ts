@@ -74,29 +74,32 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
 
       const currentTrimStart = item.trimStart || 0;
       const currentSourceStart = item.sourceStart || 0;
-      const sourceDuration = item.sourceDuration || item.durationInFrames;
+
+      // Account for speed: timeline frames * speed = source frames
+      const speed = item.speed || 1;
 
       // Calculate new values with boundary checks
-      let actualTrimAmount = trimAmount;
+      let actualTrimAmount = trimAmount; // Timeline frames
 
-      // Prevent extending before source start (sourceStart + trimAmount < 0)
-      if (trimAmount < 0 && currentSourceStart + trimAmount < 0) {
-        actualTrimAmount = -currentSourceStart;
+      // Prevent extending before source start
+      // sourceStart + (trimAmount * speed) < 0
+      if (trimAmount < 0 && currentSourceStart + (trimAmount * speed) < 0) {
+        actualTrimAmount = Math.round(-currentSourceStart / speed);
       }
 
-      // Prevent trimming more than available duration
+      // Prevent trimming more than available duration (keep at least 1 timeline frame)
       if (trimAmount > 0 && item.durationInFrames - trimAmount < 1) {
         actualTrimAmount = item.durationInFrames - 1;
       }
 
-      // Ensure we don't exceed source duration when extending
-      // (This shouldn't happen with proper initialization, but keep as safeguard)
-      const _ = sourceDuration; // Mark as used
+      // Convert to source frames for source properties
+      const sourceTrimAmount = Math.round(actualTrimAmount * speed);
 
-      const newTrimStart = Math.max(0, currentTrimStart + actualTrimAmount);
-      const newSourceStart = currentSourceStart + actualTrimAmount;
-      const newDuration = Math.max(1, item.durationInFrames - actualTrimAmount);
-      const newFrom = item.from + actualTrimAmount;
+      const newTrimStart = Math.max(0, currentTrimStart + sourceTrimAmount);
+      const newSourceStart = Math.max(0, currentSourceStart + sourceTrimAmount);
+      // Ensure frame values are integers (Remotion requirement)
+      const newDuration = Math.max(1, Math.round(item.durationInFrames - actualTrimAmount));
+      const newFrom = Math.round(item.from + actualTrimAmount);
 
       // Update offset for Remotion compatibility (offset = trimStart)
       const updates: Partial<typeof item> = {
@@ -104,6 +107,8 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
         sourceStart: newSourceStart,
         durationInFrames: newDuration,
         from: newFrom,
+        // Explicitly preserve speed (important for rate-stretched clips)
+        speed: item.speed,
       };
 
       // Add offset for video/audio items (Remotion compatibility)
@@ -122,31 +127,40 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       if (item.id !== id) return item;
 
       const currentTrimEnd = item.trimEnd || 0;
-      const sourceDuration = item.sourceDuration || item.durationInFrames;
+      // Account for speed: timeline frames * speed = source frames
+      const speed = item.speed || 1;
+      const sourceDuration = item.sourceDuration || (item.durationInFrames * speed);
       const currentSourceEnd = item.sourceEnd || sourceDuration;
 
       // Calculate new values with boundary checks
-      let actualTrimAmount = trimAmount;
+      let actualTrimAmount = trimAmount; // Timeline frames
 
-      // Prevent extending beyond source duration (sourceEnd + trimAmount > sourceDuration)
-      if (trimAmount < 0 && currentSourceEnd - trimAmount > sourceDuration) {
-        actualTrimAmount = -(sourceDuration - currentSourceEnd);
+      // Prevent extending beyond source duration
+      // sourceEnd - (trimAmount * speed) > sourceDuration (extending = negative trim)
+      if (trimAmount < 0 && currentSourceEnd - (trimAmount * speed) > sourceDuration) {
+        actualTrimAmount = Math.round(-(sourceDuration - currentSourceEnd) / speed);
       }
 
-      // Prevent trimming more than available duration
+      // Prevent trimming more than available duration (keep at least 1 timeline frame)
       if (trimAmount > 0 && item.durationInFrames - trimAmount < 1) {
         actualTrimAmount = item.durationInFrames - 1;
       }
 
-      const newTrimEnd = Math.max(0, currentTrimEnd + actualTrimAmount);
-      const newSourceEnd = currentSourceEnd - actualTrimAmount;
-      const newDuration = Math.max(1, item.durationInFrames - actualTrimAmount);
+      // Convert to source frames for source properties
+      const sourceTrimAmount = Math.round(actualTrimAmount * speed);
+
+      const newTrimEnd = Math.max(0, currentTrimEnd + sourceTrimAmount);
+      const newSourceEnd = currentSourceEnd - sourceTrimAmount;
+      // Ensure frame values are integers (Remotion requirement)
+      const newDuration = Math.max(1, Math.round(item.durationInFrames - actualTrimAmount));
 
       return {
         ...item,
         trimEnd: newTrimEnd,
         sourceEnd: newSourceEnd,
         durationInFrames: newDuration,
+        // Explicitly preserve speed (important for rate-stretched clips)
+        speed: item.speed,
       };
     }),
     isDirty: true,
@@ -178,14 +192,21 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     const currentSourceStart = item.sourceStart || 0;
     const currentTrimEnd = item.trimEnd || 0;
 
+    // Account for speed when calculating source frames
+    // Timeline frames * speed = source frames
+    // e.g., 50 timeline frames at 2x speed = 100 source frames
+    const speed = item.speed || 1;
+    const leftSourceFrames = Math.round(leftDuration * speed);
+    const rightSourceFrames = Math.round(rightDuration * speed);
+
     // Left item: keeps original from, new duration, updated end trim
     const leftItem: typeof item = {
       ...item,
       id: crypto.randomUUID(),
       durationInFrames: leftDuration,
-      // Update sourceEnd and trimEnd for left item
-      sourceEnd: currentSourceStart + leftDuration,
-      trimEnd: currentTrimEnd + rightDuration,
+      // Update sourceEnd and trimEnd for left item (in source frames)
+      sourceEnd: currentSourceStart + leftSourceFrames,
+      trimEnd: currentTrimEnd + rightSourceFrames,
     };
 
     // Right item: new from, new duration, adjusted trim properties
@@ -194,9 +215,9 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       id: crypto.randomUUID(),
       from: splitFrame,
       durationInFrames: rightDuration,
-      // Adjust trim/source properties to account for split
-      trimStart: currentTrimStart + leftDuration,
-      sourceStart: currentSourceStart + leftDuration,
+      // Adjust trim/source properties to account for split (in source frames)
+      trimStart: currentTrimStart + leftSourceFrames,
+      sourceStart: currentSourceStart + leftSourceFrames,
     };
 
     // Update offset for video/audio items (Remotion compatibility)
@@ -213,6 +234,41 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       isDirty: true,
     };
   }),
+
+  // Rate stretch item: change duration and speed while preserving all content
+  rateStretchItem: (id, newFrom, newDuration, newSpeed) => set((state) => ({
+    items: state.items.map((item) => {
+      if (item.id !== id) return item;
+
+      // Only apply to video/audio items
+      if (item.type !== 'video' && item.type !== 'audio') return item;
+
+      // Clamp speed to valid range (0.1x to 10x)
+      const clampedSpeed = Math.max(0.1, Math.min(10, newSpeed));
+
+      // Calculate sourceDuration if not already set
+      // sourceDuration = timeline duration * current speed (the total source frames)
+      const currentSpeed = item.speed || 1;
+      const sourceDuration = item.sourceDuration || Math.round(item.durationInFrames * currentSpeed);
+
+      // Initialize sourceStart/sourceEnd if not set
+      const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+      const sourceEnd = item.sourceEnd ?? sourceDuration;
+
+      // Ensure frame values are integers (Remotion requirement)
+      return {
+        ...item,
+        from: Math.round(newFrom),
+        durationInFrames: Math.round(newDuration),
+        speed: clampedSpeed,
+        // Preserve source properties for proper playback bounds
+        sourceDuration,
+        sourceStart,
+        sourceEnd,
+      };
+    }),
+    isDirty: true,
+  })),
 
   // In/Out point actions with validation
   setInPoint: (frame) => set((state) => {
@@ -293,9 +349,9 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
 
           // Add type-specific properties
           if (item.type === 'video') {
-            return { ...baseItem, src: item.src, thumbnailUrl: item.thumbnailUrl, offset: item.offset };
+            return { ...baseItem, src: item.src, thumbnailUrl: item.thumbnailUrl, offset: item.offset, ...(item.speed !== undefined && item.speed !== 1 && { speed: item.speed }) };
           } else if (item.type === 'audio') {
-            return { ...baseItem, src: item.src, waveformData: item.waveformData, offset: item.offset };
+            return { ...baseItem, src: item.src, waveformData: item.waveformData, offset: item.offset, ...(item.speed !== undefined && item.speed !== 1 && { speed: item.speed }) };
           } else if (item.type === 'text') {
             return { ...baseItem, text: item.text, fontSize: item.fontSize, fontFamily: item.fontFamily, color: item.color };
           } else if (item.type === 'image') {

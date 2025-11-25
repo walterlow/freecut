@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, Sequence, useVideoConfig } from 'remotion';
+import { AbsoluteFill, Sequence, useVideoConfig, useCurrentFrame } from 'remotion';
 import type { RemotionInputProps } from '@/types/export';
 import { Item } from '../components/item';
 import { generateStableKey } from '../utils/generate-stable-key';
@@ -17,6 +17,7 @@ import { generateStableKey } from '../utils/generate-stable-key';
  */
 export const MainComposition: React.FC<RemotionInputProps> = ({ tracks }) => {
   const { fps } = useVideoConfig();
+  const currentFrame = useCurrentFrame();
   const hasSoloTracks = tracks.some((track) => track.solo);
 
   // Filter visible tracks
@@ -44,9 +45,22 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks }) => {
     ),
   }));
 
+  // Check if any VIDEO items (not audio) are active at current frame
+  // Used to render a clearing layer when no videos are visible
+  const hasActiveVideo = mediaItems.some(
+    (item) =>
+      item.type === 'video' &&
+      currentFrame >= item.from &&
+      currentFrame < item.from + item.durationInFrames
+  );
+
   return (
     <AbsoluteFill>
+      {/* BACKGROUND LAYER - Ensures empty areas show black instead of last frame */}
+      <AbsoluteFill style={{ backgroundColor: '#000000', zIndex: -1 }} />
+
       {/* MEDIA LAYER - All video/audio at composition level (prevents cross-track remounts) */}
+      {/* z-index: 0-999 range for media items */}
       {mediaItems.map((item) => {
         const premountFrames = Math.round(fps * 2);
         return (
@@ -63,11 +77,18 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks }) => {
         );
       })}
 
+      {/* CLEARING LAYER - Paints black over stale video frames when no videos are active */}
+      {/* z-index: 1000 - above media (0-999), below non-media (1001+) */}
+      {!hasActiveVideo && (
+        <AbsoluteFill style={{ backgroundColor: '#000000', zIndex: 1000 }} />
+      )}
+
       {/* NON-MEDIA LAYERS - Track-based rendering for text/shapes/images */}
+      {/* z-index: 1001+ range so they appear above clearing layer */}
       {nonMediaByTrack
         .filter((track) => track.items.length > 0)
         .map((track) => (
-          <AbsoluteFill key={track.id} style={{ zIndex: track.order }}>
+          <AbsoluteFill key={track.id} style={{ zIndex: 1001 + track.order }}>
             {track.items.map((item) => (
               <Sequence
                 key={item.id}

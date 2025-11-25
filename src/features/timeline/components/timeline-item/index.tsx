@@ -5,6 +5,7 @@ import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
+import { useRateStretch } from '../../hooks/use-rate-stretch';
 import { DRAG_OPACITY } from '../../constants';
 
 export interface TimelineItemProps {
@@ -45,6 +46,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Trim functionality - disabled if track is locked
   const { isTrimming, trimHandle, trimDelta, handleTrimStart } = useTimelineTrim(item, trackLocked);
+
+  // Rate stretch functionality - disabled if track is locked
+  const { isStretching, handleStretchStart, getVisualFeedback } = useRateStretch(item, trackLocked);
 
   // Granular selector: only re-render when THIS item's drag participation changes
   const isPartOfMultiDrag = useSelectionStore(
@@ -113,6 +117,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Determine if this item is being dragged (anchor or follower)
   const isBeingDragged = isDragging || isPartOfDrag;
 
+  // Get visual feedback for rate stretch
+  const stretchFeedback = isStretching ? getVisualFeedback() : null;
+
+  // Check if this is a media item (video/audio) that supports rate stretch
+  const isMediaItem = item.type === 'video' || item.type === 'audio';
+
+  // Current speed for badge display
+  const currentSpeed = item.speed || 1;
+
   // Get FPS for frame-to-time conversion
   const fps = useTimelineStore((s) => s.fps);
 
@@ -124,9 +137,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const minWidthPixels = timeToPixels(1 / fps); // Minimum 1 frame width
   const trimDeltaPixels = isTrimming ? timeToPixels(trimDelta / fps) : 0;
 
-  // Get source boundaries for clamping
+  // Get source boundaries for clamping (in source frames)
   const currentSourceStart = item.sourceStart || 0;
-  const sourceDuration = item.sourceDuration || item.durationInFrames;
+  const sourceDuration = item.sourceDuration || (item.durationInFrames * currentSpeed);
   const currentSourceEnd = item.sourceEnd || sourceDuration;
 
   // Clamp visual feedback to prevent showing invalid states
@@ -136,11 +149,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   if (isTrimming) {
     if (trimHandle === 'start') {
       // Start handle: adjust both position and width
-      // Prevent extending before source start (currentSourceStart + trimDelta < 0)
-      const maxExtendFrames = currentSourceStart; // Can extend up to frame 0
-      const maxExtendPixels = timeToPixels(maxExtendFrames / fps);
+      // Convert source frames to timeline frames (source / speed = timeline)
+      const maxExtendTimelineFrames = currentSourceStart / currentSpeed;
+      const maxExtendPixels = timeToPixels(maxExtendTimelineFrames / fps);
 
-      // Prevent trimming more than available
+      // Prevent trimming more than available (keep at least 1 timeline frame)
       const maxTrimPixels = width - minWidthPixels;
 
       // Clamp delta considering both constraints
@@ -153,11 +166,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       trimVisualWidth = width - clampedDelta;
     } else {
       // End handle: adjust width only
-      // Prevent extending beyond source duration (currentSourceEnd - trimDelta > sourceDuration)
-      const maxExtendFrames = sourceDuration - currentSourceEnd; // Can extend up to source duration
-      const maxExtendPixels = timeToPixels(maxExtendFrames / fps);
+      // Convert source frames to timeline frames (source / speed = timeline)
+      const maxExtendSourceFrames = sourceDuration - currentSourceEnd;
+      const maxExtendTimelineFrames = maxExtendSourceFrames / currentSpeed;
+      const maxExtendPixels = timeToPixels(maxExtendTimelineFrames / fps);
 
-      // Prevent trimming more than available
+      // Prevent trimming more than available (keep at least 1 timeline frame)
       const maxTrimPixels = width - minWidthPixels;
 
       // Clamp delta considering both constraints
@@ -168,6 +182,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
       trimVisualWidth = width - clampedDelta;
     }
+  }
+
+  // Calculate stretch visual feedback
+  let stretchVisualLeft = trimVisualLeft;
+  let stretchVisualWidth = trimVisualWidth;
+
+  if (isStretching && stretchFeedback) {
+    stretchVisualLeft = timeToPixels(stretchFeedback.from / fps);
+    stretchVisualWidth = timeToPixels(stretchFeedback.duration / fps);
   }
 
   // Get color based on item type (using timeline theme colors) - memoized
@@ -222,6 +245,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   };
 
+  // Determine cursor class based on tool and state
+  const cursorClass = trackLocked
+    ? 'cursor-not-allowed opacity-60'
+    : activeTool === 'razor'
+    ? 'cursor-scissors'
+    : activeTool === 'rate-stretch'
+    ? 'cursor-ew-resize'
+    : isBeingDragged
+    ? 'cursor-grabbing'
+    : 'cursor-grab';
+
   return (
     <div
       ref={transformRef}
@@ -230,28 +264,44 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         absolute top-2 h-12 rounded overflow-hidden transition-all
         ${itemColorClasses}
         ${isSelected && !trackLocked ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}
-        ${trackLocked ? 'cursor-not-allowed opacity-60' : activeTool === 'razor' ? 'cursor-scissors' : isBeingDragged ? 'cursor-grabbing' : 'cursor-grab'}
-        ${!isBeingDragged && !trackLocked && 'hover:brightness-110'}
+        ${cursorClass}
+        ${!isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'}
       `}
       style={{
-        left: isTrimming ? `${trimVisualLeft}px` : `${left}px`,
-        width: isTrimming ? `${trimVisualWidth}px` : `${width}px`,
+        left: isStretching ? `${stretchVisualLeft}px` : isTrimming ? `${trimVisualLeft}px` : `${left}px`,
+        width: isStretching ? `${stretchVisualWidth}px` : isTrimming ? `${trimVisualWidth}px` : `${width}px`,
         // Anchor item uses its own dragOffset, followers get updated via RAF
         transform: isDragging ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
         opacity: isDragging ? DRAG_OPACITY : trackLocked ? 0.6 : 1,
-        transition: isDragging || isTrimming ? 'none' : 'all 0.2s',
+        transition: isDragging || isTrimming || isStretching ? 'none' : 'all 0.2s',
         pointerEvents: isDragging ? 'none' : 'auto',
       }}
       onClick={handleClick}
-      onMouseDown={trackLocked || isTrimming || activeTool === 'razor' ? undefined : handleDragStart}
+      onMouseDown={trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' ? undefined : handleDragStart}
     >
       {/* Item label */}
       <div className="px-2 py-1 text-xs font-medium text-primary-foreground truncate">
         {item.label}
       </div>
 
-      {/* Trim handles - disabled on locked tracks and in razor mode */}
-      {isSelected && !trackLocked && activeTool !== 'razor' && (
+      {/* Speed badge - show when speed is not 1x */}
+      {currentSpeed !== 1 && !isStretching && (
+        <div className="absolute top-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono">
+          {currentSpeed >= 1 ? `${currentSpeed.toFixed(1)}x` : `${currentSpeed.toFixed(2)}x`}
+        </div>
+      )}
+
+      {/* Preview speed overlay during stretch */}
+      {isStretching && stretchFeedback && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10">
+          <span className="text-white font-mono text-sm font-bold">
+            {stretchFeedback.speed.toFixed(2)}x
+          </span>
+        </div>
+      )}
+
+      {/* Trim handles - disabled on locked tracks and when in razor/rate-stretch mode */}
+      {isSelected && !trackLocked && activeTool === 'select' && (
         <>
           {/* Left trim handle */}
           <div
@@ -262,6 +312,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           <div
             className="absolute right-0 top-0 bottom-0 w-1 bg-primary cursor-ew-resize"
             onMouseDown={(e) => handleTrimStart(e, 'end')}
+          />
+        </>
+      )}
+
+      {/* Rate stretch handles - only for video/audio items in rate-stretch mode */}
+      {isSelected && !trackLocked && activeTool === 'rate-stretch' && isMediaItem && (
+        <>
+          {/* Left stretch handle */}
+          <div
+            className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 cursor-ew-resize"
+            onMouseDown={(e) => handleStretchStart(e, 'start')}
+          />
+          {/* Right stretch handle */}
+          <div
+            className="absolute right-0 top-0 bottom-0 w-1 bg-orange-500 cursor-ew-resize"
+            onMouseDown={(e) => handleStretchStart(e, 'end')}
           />
         </>
       )}
@@ -279,6 +345,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevProps.item.sourceStart === nextProps.item.sourceStart &&
     prevProps.item.sourceEnd === nextProps.item.sourceEnd &&
     prevProps.item.sourceDuration === nextProps.item.sourceDuration &&
+    prevProps.item.speed === nextProps.item.speed &&
     prevProps.timelineDuration === nextProps.timelineDuration &&
     prevProps.trackLocked === nextProps.trackLocked
   );

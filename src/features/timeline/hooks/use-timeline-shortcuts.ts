@@ -200,6 +200,18 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     [activeTool, setActiveTool, callbacks]
   );
 
+  // Tool: R - Toggle Rate Stretch Tool
+  useHotkeys(
+    HOTKEYS.RATE_STRETCH_TOOL,
+    (event) => {
+      event.preventDefault();
+      // Toggle rate stretch tool
+      setActiveTool(activeTool === 'rate-stretch' ? 'select' : 'rate-stretch');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
+
   // History: Cmd/Ctrl+Z - Undo
   useHotkeys(
     HOTKEYS.UNDO,

@@ -39,8 +39,8 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const zoom = usePlaybackStore((s) => s.zoom);
 
-  // Remotion Player integration
-  const { isPlaying } = useRemotionPlayer(playerRef);
+  // Remotion Player integration (hook handles bidirectional sync)
+  useRemotionPlayer(playerRef);
 
   // State for resolved tracks (with blob URLs)
   const [resolvedTracks, setResolvedTracks] = useState<TimelineTrack[]>([]);
@@ -58,10 +58,14 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   }, [tracks, items]);
 
   // Calculate total frames from items
+  // Keep at least currentFrame + 1 so playhead position is always valid
+  // This allows empty areas to exist past the last item
   const totalFrames = useMemo(() => {
     if (items.length === 0) return 900; // Default 30s at 30fps
-    return Math.max(...items.map((item) => item.from + item.durationInFrames));
-  }, [items]);
+    const itemsEnd = Math.max(...items.map((item) => item.from + item.durationInFrames));
+    // Ensure composition is at least as long as current playhead position + buffer
+    return Math.max(itemsEnd, currentFrame + 30); // 30 frame buffer (1 second at 30fps)
+  }, [items, currentFrame]);
 
   // Cleanup on mount to clear any stale blob URLs from previous sessions
   // Add small delay to allow garbage collection of old Blob objects
@@ -199,7 +203,6 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
         )}
 
         <Player
-          key="remotion-player"
           ref={playerRef}
           component={MainComposition}
           inputProps={inputProps}

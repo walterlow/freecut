@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill, OffthreadVideo, Audio } from 'remotion';
+import { AbsoluteFill, OffthreadVideo, Video, Audio } from 'remotion';
 import type { TimelineItem } from '@/types/timeline';
 
 export interface ItemProps {
@@ -29,15 +29,26 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
         </AbsoluteFill>
       );
     }
-    // Use trimStart if available, fallback to offset for backward compatibility
-    const trimBefore = item.trimStart ?? item.offset ?? 0;
+    // Use sourceStart for trimBefore (absolute position in source)
+    // Fall back to trimStart or offset for backward compatibility
+    const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+    // Get playback rate from speed property (default 1x)
+    const playbackRate = item.speed ?? 1;
+
+    // Use regular Video for custom speed clips (OffthreadVideo has caching issues with playbackRate)
+    // Use OffthreadVideo for normal speed (better performance)
+    const VideoComponent = playbackRate !== 1 ? Video : OffthreadVideo;
+
     return (
-      <OffthreadVideo
-        src={item.src}
-        trimBefore={trimBefore}
-        volume={muted ? 0 : 1}
-        pauseWhenBuffering
-      />
+      <AbsoluteFill style={{ backgroundColor: '#000' }}>
+        <VideoComponent
+          src={item.src}
+          trimBefore={trimBefore > 0 ? trimBefore : undefined}
+          volume={muted ? 0 : 1}
+          playbackRate={playbackRate}
+          pauseWhenBuffering
+        />
+      </AbsoluteFill>
     );
   }
 
@@ -46,13 +57,17 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
     if (!item.src) {
       return null; // Audio can fail silently
     }
-    // Use trimStart if available, fallback to offset for backward compatibility
-    const trimBefore = item.trimStart ?? item.offset ?? 0;
+    // Use sourceStart for trimBefore (absolute position in source)
+    const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+    // Get playback rate from speed property (default 1x)
+    const playbackRate = item.speed ?? 1;
+
     return (
       <Audio
         src={item.src}
-        trimBefore={trimBefore}
+        trimBefore={trimBefore > 0 ? trimBefore : undefined}
         volume={muted ? 0 : 1}
+        playbackRate={playbackRate}
       />
     );
   }

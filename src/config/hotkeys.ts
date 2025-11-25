@@ -43,6 +43,7 @@ export const HOTKEYS = {
   // Tools
   SELECTION_TOOL: 'v',
   RAZOR_TOOL: 'c',
+  RATE_STRETCH_TOOL: 'r',
   TEXT_TOOL: 't',
 
   // Project
@@ -100,6 +101,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   // Tools
   SELECTION_TOOL: 'Selection tool',
   RAZOR_TOOL: 'Razor/Cut tool',
+  RATE_STRETCH_TOOL: 'Rate stretch tool',
   TEXT_TOOL: 'Text tool',
 
   // Project

@@ -43,6 +43,7 @@ export interface ProjectTimeline {
     color?: string;
     shapeType?: 'rectangle' | 'circle' | 'triangle' | 'solid';
     fillColor?: string;
+    speed?: number; // Playback speed multiplier (default 1.0)
   }>;
   // Playback and view state
   currentFrame?: number;
