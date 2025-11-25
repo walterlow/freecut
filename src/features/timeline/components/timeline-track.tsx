@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import type { TimelineTrack, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
+import { useState, useRef, memo } from 'react';
+import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import { TimelineItem } from './timeline-item';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
@@ -8,7 +8,7 @@ import { mediaLibraryService } from '@/features/media-library/services/media-lib
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 
 export interface TimelineTrackProps {
-  track: TimelineTrack;
+  track: TimelineTrackType;
   items: TimelineItemType[];
   timelineWidth?: number;
 }
@@ -22,7 +22,7 @@ export interface TimelineTrackProps {
  * - Generic container that accepts any item types
  * - Drag-and-drop support for media from library
  */
-export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProps) {
+export const TimelineTrack = memo(function TimelineTrack({ track, items }: TimelineTrackProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropPreviewX, setDropPreviewX] = useState<number | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -218,8 +218,9 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
       }`}
       style={{
         height: `${track.height}px`,
-        width: timelineWidth ? `${timelineWidth}px` : '100%',
-        minWidth: timelineWidth ? `${timelineWidth}px` : '100%',
+        // CSS containment tells browser this element's layout is independent
+        // This significantly improves scroll/paint performance for large timelines
+        contain: 'layout style',
       }}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -252,4 +253,4 @@ export function TimelineTrack({ track, items, timelineWidth }: TimelineTrackProp
       )}
     </div>
   );
-}
+});

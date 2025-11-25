@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react';
-import type { TimelineItem } from '@/types/timeline';
+import { useRef, useEffect, useMemo, memo, useCallback } from 'react';
+import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoom } from '../../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
@@ -8,7 +8,7 @@ import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { DRAG_OPACITY } from '../../constants';
 
 export interface TimelineItemProps {
-  item: TimelineItem;
+  item: TimelineItemType;
   timelineDuration?: number;
   trackLocked?: boolean;
 }
@@ -31,11 +31,10 @@ export interface TimelineItemProps {
  * - End handle: trims from end, adjusts duration only
  * - Stores trimStart, trimEnd, sourceStart, sourceEnd for each item
  */
-export function TimelineItem({ item, timelineDuration = 30, trackLocked = false }: TimelineItemProps) {
+export const TimelineItem = memo(function TimelineItem({ item, timelineDuration = 30, trackLocked = false }: TimelineItemProps) {
   const { timeToPixels, pixelsToFrame } = useTimelineZoom();
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectItems = useSelectionStore((s) => s.selectItems);
-  const dragState = useSelectionStore((s) => s.dragState);
   const activeTool = useSelectionStore((s) => s.activeTool);
   const splitItem = useTimelineStore((s) => s.splitItem);
 
@@ -47,8 +46,16 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
   // Trim functionality - disabled if track is locked
   const { isTrimming, trimHandle, trimDelta, handleTrimStart } = useTimelineTrim(item, trackLocked);
 
+  // Granular selector: only re-render when THIS item's drag participation changes
+  const isPartOfMultiDrag = useSelectionStore(
+    useCallback(
+      (s) => s.dragState?.isDragging && s.dragState.draggedItemIds.includes(item.id),
+      [item.id]
+    )
+  );
+
   // Check if this item is part of a multi-drag (but not the anchor)
-  const isPartOfDrag = dragState?.isDragging && dragState.draggedItemIds.includes(item.id) && !isDragging;
+  const isPartOfDrag = isPartOfMultiDrag && !isDragging;
 
   // Ref for transform style (updated via RAF for smooth dragging without re-renders)
   const transformRef = useRef<HTMLDivElement>(null);
@@ -163,8 +170,8 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
     }
   }
 
-  // Get color based on item type (using timeline theme colors)
-  const getItemColor = () => {
+  // Get color based on item type (using timeline theme colors) - memoized
+  const itemColorClasses = useMemo(() => {
     switch (item.type) {
       case 'video':
         return 'bg-timeline-video/30 border-timeline-video';
@@ -179,7 +186,7 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
       default:
         return 'bg-timeline-video/30 border-timeline-video';
     }
-  };
+  }, [item.type]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -221,7 +228,7 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
       data-item-id={item.id}
       className={`
         absolute top-2 h-12 rounded overflow-hidden transition-all
-        ${getItemColor()}
+        ${itemColorClasses}
         ${isSelected && !trackLocked ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : ''}
         ${trackLocked ? 'cursor-not-allowed opacity-60' : activeTool === 'razor' ? 'cursor-scissors' : isBeingDragged ? 'cursor-grabbing' : 'cursor-grab'}
         ${!isBeingDragged && !trackLocked && 'hover:brightness-110'}
@@ -260,4 +267,19 @@ export function TimelineItem({ item, timelineDuration = 30, trackLocked = false 
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom equality check - only re-render when relevant props change
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.from === nextProps.item.from &&
+    prevProps.item.durationInFrames === nextProps.item.durationInFrames &&
+    prevProps.item.trackId === nextProps.item.trackId &&
+    prevProps.item.type === nextProps.item.type &&
+    prevProps.item.label === nextProps.item.label &&
+    prevProps.item.sourceStart === nextProps.item.sourceStart &&
+    prevProps.item.sourceEnd === nextProps.item.sourceEnd &&
+    prevProps.item.sourceDuration === nextProps.item.sourceDuration &&
+    prevProps.timelineDuration === nextProps.timelineDuration &&
+    prevProps.trackLocked === nextProps.trackLocked
+  );
+});

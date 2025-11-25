@@ -34,6 +34,10 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
 
+  // RAF throttling refs for smooth scrubbing without excessive state updates
+  const pendingFrameRef = useRef<number | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
   // Update refs when functions change
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
@@ -72,7 +76,18 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
 
       // Convert pixel position to frame number using ref to avoid stale closure
       const frame = Math.max(0, pixelsToFrameRef.current(x));
-      setCurrentFrameRef.current(frame);
+
+      // RAF throttling: batch frame updates to max 60fps to reduce state updates
+      pendingFrameRef.current = frame;
+
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (pendingFrameRef.current !== null) {
+            setCurrentFrameRef.current(pendingFrameRef.current);
+          }
+        });
+      }
     };
 
     const handleMouseUp = () => {
@@ -87,6 +102,11 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
       document.removeEventListener('mouseup', handleMouseUp);
       // Restore original cursor
       document.body.style.cursor = originalCursor;
+      // Cancel any pending RAF to prevent memory leaks
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
   }, [isDragging, inRuler]); // Stable dependencies - no stale closures
 

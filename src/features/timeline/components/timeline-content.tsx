@@ -59,6 +59,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const marqueeWasActiveRef = useRef(false);
 
   // Use refs to avoid callback recreation on every frame/zoom change
@@ -114,6 +115,37 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
       }
     }
   }, [items, containerWidth]);
+
+  // Track scroll position with coalesced updates for viewport culling
+  // Only update state every 150ms to reduce re-render frequency during rapid scrolling
+  const scrollLeftRef = useRef(0);
+  const scrollUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      scrollLeftRef.current = container.scrollLeft;
+
+      // Coalesce scroll updates - only update state every 150ms
+      if (scrollUpdateTimeoutRef.current === null) {
+        scrollUpdateTimeoutRef.current = setTimeout(() => {
+          scrollUpdateTimeoutRef.current = null;
+          setScrollLeft(scrollLeftRef.current);
+        }, 150);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (scrollUpdateTimeoutRef.current !== null) {
+        clearTimeout(scrollUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Marquee selection - create items array for getBoundingRect lookups
   const marqueeItems = useMemo(
@@ -230,6 +262,21 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     return { actualDuration: totalDuration, timelineWidth: width };
   }, [items, duration, fps, timeToPixels, pixelsToTime, containerWidth]);
 
+  // Viewport culling: only render items that are visible in the viewport + buffer
+  // This significantly improves performance with 50+ items
+  const visibleItems = useMemo(() => {
+    const buffer = 500; // Extra pixels outside viewport to render (prevents pop-in during scroll)
+    const viewportStart = scrollLeft - buffer;
+    const viewportEnd = scrollLeft + containerWidth + buffer;
+
+    return items.filter((item) => {
+      const itemLeft = timeToPixels(item.from / fps);
+      const itemRight = itemLeft + timeToPixels(item.durationInFrames / fps);
+      // Item is visible if any part of it overlaps with the viewport
+      return itemRight >= viewportStart && itemLeft <= viewportEnd;
+    });
+  }, [items, scrollLeft, containerWidth, timeToPixels, fps]);
+
   /**
    * Adjusts scroll position to center the playhead when zoom changes
    * @param newZoomLevel - The new zoom level to apply
@@ -339,12 +386,17 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
       {/* Track lanes */}
       <div
         className="relative timeline-tracks"
-        style={{ width: `${timelineWidth}px` }}
+        style={{
+          width: `${timelineWidth}px`,
+          // CSS containment and will-change hints for scroll/paint optimization
+          contain: 'layout style paint',
+          willChange: 'contents',
+        }}
         onMouseMove={handleMouseMoveForRazor}
         onMouseLeave={handleMouseLeaveForRazor}
       >
         {tracks.map((track) => (
-          <TimelineTrack key={track.id} track={track} items={items} timelineWidth={timelineWidth} />
+          <TimelineTrack key={track.id} track={track} items={visibleItems} timelineWidth={timelineWidth} />
         ))}
 
         {/* Snap guidelines (shown during drag) */}

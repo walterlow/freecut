@@ -34,6 +34,9 @@ export function useTimelineDrag(
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const dragStateRef = useRef<DragState | null>(null);
 
+  // Track previous snap target to avoid unnecessary store updates
+  const prevSnapTargetRef = useRef<{ frame: number; type: string } | null>(null);
+
   // Get store actions and state with granular selectors
   const moveItem = useTimelineStore((s) => s.moveItem);
   const moveItems = useTimelineStore((s) => s.moveItems);
@@ -241,14 +244,24 @@ export function useTimelineDrag(
 
       const snapResult = calculateSnap(proposedFrame, itemDuration);
 
-      // Update drag state with active snap target for visual indicators
-      const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
-      setDragState({
-        isDragging: true,
-        draggedItemIds: draggedIds,
-        offset: { x: deltaX, y: deltaY },
-        activeSnapTarget: snapResult.snapTarget,
-      });
+      // Only update store when snap target actually changes to reduce re-renders
+      const prevSnap = prevSnapTargetRef.current;
+      const newSnap = snapResult.snapTarget;
+      const snapChanged =
+        (prevSnap === null && newSnap !== null) ||
+        (prevSnap !== null && newSnap === null) ||
+        (prevSnap !== null && newSnap !== null && (prevSnap.frame !== newSnap.frame || prevSnap.type !== newSnap.type));
+
+      if (snapChanged) {
+        prevSnapTargetRef.current = newSnap ? { frame: newSnap.frame, type: newSnap.type } : null;
+        const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
+        setDragState({
+          isDragging: true,
+          draggedItemIds: draggedIds,
+          offset: { x: deltaX, y: deltaY },
+          activeSnapTarget: snapResult.snapTarget,
+        });
+      }
     };
 
     const handleMouseUp = () => {
@@ -380,6 +393,7 @@ export function useTimelineDrag(
       setDragOffset({ x: 0, y: 0 });
       setDragState(null); // Clear drag state (including activeSnapTarget)
       dragOffsetRef.current = { x: 0, y: 0 }; // Reset shared ref
+      prevSnapTargetRef.current = null; // Reset snap target tracking
       dragStateRef.current = null;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';

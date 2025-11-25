@@ -57,9 +57,10 @@ export function Timeline({ duration }: TimelineProps) {
   // State for drop indicator (updated via RAF from drag hook)
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState(-1);
 
-  // Check if tracks are being dragged
-  const dragState = useSelectionStore((s) => s.dragState);
-  const isTrackDragging = dragState?.isDragging && dragState.draggedTrackIds && dragState.draggedTrackIds.length > 0;
+  // Granular selector: only re-render when track dragging state actually changes
+  const isTrackDragging = useSelectionStore(
+    (s) => (s.dragState?.isDragging && s.dragState.draggedTrackIds && s.dragState.draggedTrackIds.length > 0) ?? false
+  );
 
   // Set first track as active on mount
   useEffect(() => {

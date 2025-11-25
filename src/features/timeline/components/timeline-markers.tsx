@@ -1,5 +1,5 @@
 // React and external libraries
-import { useMemo, useCallback, useRef, useState, useEffect } from 'react';
+import { useMemo, useCallback, useRef, useState, useEffect, memo } from 'react';
 
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
@@ -29,12 +29,6 @@ interface MarkerInterval {
  * Dynamically adjusts to ensure timecode labels never overlap
  */
 function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
-  // Minimum spacing between markers (in pixels) to prevent label overlap
-  const MIN_MARKER_SPACING_PX = 120;
-
-  // Calculate minimum interval in seconds needed for proper spacing
-  const minIntervalSeconds = MIN_MARKER_SPACING_PX / pixelsPerSecond;
-
   // At very high zoom (>= 3000 pps): Show individual frames
   // Only when each frame is at least 120px apart (3000 * 1/30 = 100px, close enough)
   if (pixelsPerSecond >= 3000) {
@@ -171,7 +165,7 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
  * - Viewport-aware rendering (extends to full width)
  * - Responsive to zoom changes
  */
-export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
+export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
   const { timeToPixels, pixelsPerSecond, pixelsToFrame } = useTimelineZoom();
   const fps = useTimelineStore((s) => s.fps);
   const inPoint = useTimelineStore((s) => s.inPoint);
@@ -195,7 +189,10 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
     pauseRef.current = pause;
   }, [pixelsToFrame, setCurrentFrame, pause]);
 
-  // Track viewport width and scroll position
+  // Track viewport width and scroll position with coalesced updates
+  const scrollLeftRef = useRef(0);
+  const scrollUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!rulerRef.current) return;
 
@@ -210,24 +207,35 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
 
     const updateScroll = () => {
       if (container) {
-        setScrollLeft(container.scrollLeft);
+        scrollLeftRef.current = container.scrollLeft;
+
+        // Coalesce scroll updates to reduce re-renders
+        if (scrollUpdateTimeoutRef.current === null) {
+          scrollUpdateTimeoutRef.current = setTimeout(() => {
+            scrollUpdateTimeoutRef.current = null;
+            setScrollLeft(scrollLeftRef.current);
+          }, 100);
+        }
       }
     };
 
     // Initial measurements
     updateViewport();
-    updateScroll();
+    setScrollLeft(container.scrollLeft);
 
     // Setup ResizeObserver for viewport changes
     const resizeObserver = new ResizeObserver(updateViewport);
     resizeObserver.observe(rulerRef.current);
 
     // Track scroll position
-    container.addEventListener('scroll', updateScroll);
+    container.addEventListener('scroll', updateScroll, { passive: true });
 
     return () => {
       resizeObserver.disconnect();
       container.removeEventListener('scroll', updateScroll);
+      if (scrollUpdateTimeoutRef.current !== null) {
+        clearTimeout(scrollUpdateTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -252,14 +260,19 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
   const numMarkers = Math.ceil(displayDuration / intervalInSeconds) + 1;
   const markerWidthPx = timeToPixels(intervalInSeconds);
 
-  // Viewport culling with overscan (2x viewport width on each side)
-  const overscan = viewportWidth * 2;
+  // Viewport culling with minimal overscan (0.5x viewport width on each side)
+  // Reduced from 2x to improve performance at high zoom
+  const overscan = viewportWidth * 0.5;
   const visibleStart = scrollLeft - overscan;
   const visibleEnd = scrollLeft + viewportWidth + overscan;
 
   // Calculate which marker indices are visible
   const startMarkerIndex = Math.max(0, Math.floor(visibleStart / markerWidthPx));
   const endMarkerIndex = Math.min(numMarkers - 1, Math.ceil(visibleEnd / markerWidthPx));
+
+  // Performance optimization: skip minor ticks when many markers are visible
+  const visibleMarkerCount = endMarkerIndex - startMarkerIndex + 1;
+  const showMinorTicks = visibleMarkerCount < 50; // Only show minor ticks when < 50 markers visible
 
   // Handle scrubbing - mousedown to start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -331,6 +344,7 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
         className="absolute inset-0"
         style={{
           pointerEvents: isDragging ? 'none' : 'auto', // Disable pointer events on children during drag
+          contain: 'layout style', // CSS containment for better rendering performance
         }}
       >
         {Array.from({ length: endMarkerIndex - startMarkerIndex + 1 }).map((_, index) => {
@@ -365,8 +379,8 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
                 {formatTimecode(frameNumber, fps)}
               </span>
 
-              {/* Minor tick marks */}
-              {markerConfig.minorTicks > 0 && (
+              {/* Minor tick marks - only rendered when few markers visible for performance */}
+              {showMinorTicks && markerConfig.minorTicks > 0 && (
                 <div className="absolute top-7 left-0 flex" style={{ width: `${markerWidthPx}px` }}>
                   {Array.from({ length: markerConfig.minorTicks }).map((_, j) => {
                     if (j === 0) return null; // Skip first tick (overlaps with major marker)
@@ -424,4 +438,4 @@ export function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
       <TimelineInOutMarkers />
     </div>
   );
-}
+});
