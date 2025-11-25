@@ -1,4 +1,4 @@
-export const DEFAULT_TRACK_HEIGHT = 80;
+export const DEFAULT_TRACK_HEIGHT = 64;
 export const MIN_TRACK_HEIGHT = 40;
 export const MAX_TRACK_HEIGHT = 200;
 

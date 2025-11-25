@@ -17,6 +17,7 @@ import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from '@/features/timeline/stores/zoom-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { DEFAULT_TRACK_HEIGHT } from '@/constants/timeline';
 import type { ProjectTimeline } from '@/types/project';
 
 export interface EditorProps {
@@ -87,34 +88,12 @@ export function Editor({ projectId, project }: EditorProps) {
           {
             id: 'track-1',
             name: 'Track 1',
-            height: 64,
+            height: DEFAULT_TRACK_HEIGHT,
             locked: false,
             visible: true,
             muted: false,
             solo: false,
             order: 0,
-            items: [],
-          },
-          {
-            id: 'track-2',
-            name: 'Track 2',
-            height: 64,
-            locked: false,
-            visible: true,
-            muted: false,
-            solo: false,
-            order: 1,
-            items: [],
-          },
-          {
-            id: 'track-3',
-            name: 'Track 3',
-            height: 56,
-            locked: false,
-            visible: true,
-            muted: false,
-            solo: false,
-            order: 2,
             items: [],
           },
         ],
