@@ -60,6 +60,13 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
       return; // Already in sync, no need to seek
     }
 
+    // During playback, ignore single-frame increments (normal playback progression)
+    // Only seek if user jumped more than 1 frame (actual seek/scrub)
+    if (isPlaying && frameDiff === 1) {
+      lastSyncedFrameRef.current = currentFrame;
+      return;
+    }
+
     // Update lastSyncedFrame IMMEDIATELY to prevent pause handler from
     // overwriting user-initiated seeks (e.g., clicking on ruler while playing)
     lastSyncedFrameRef.current = currentFrame;
@@ -73,8 +80,6 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
         const actualFrame = playerRef.current?.getCurrentFrame();
         if (actualFrame !== undefined) {
           lastSyncedFrameRef.current = actualFrame;
-          // Don't sync back to timeline - this creates loops
-          // The timeupdate event will handle updates during playback
         }
 
         // Re-enable Player updates
@@ -91,16 +96,20 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
       console.error('Failed to seek Remotion Player:', error);
       ignorePlayerUpdatesRef.current = false;
     }
-  }, [currentFrame, playerRef, isPlaying, setCurrentFrame]);
+  }, [currentFrame, playerRef, isPlaying]);
 
   /**
-   * Player → Timeline: Listen to timeupdate events
+   * Player → Timeline: Listen to frameupdate events
    * Updates timeline scrubber as video plays
+   *
+   * Note: Using 'frameupdate' instead of 'timeupdate' for real-time updates.
+   * - timeupdate: fires every ~250ms (roughly 7-8 frames at 30fps)
+   * - frameupdate: fires for every single frame during playback and seeking
    */
   useEffect(() => {
     if (!playerRef.current) return;
 
-    const handleTimeUpdate = (e: { detail: { frame: number } }) => {
+    const handleFrameUpdate = (e: { detail: { frame: number } }) => {
       // Ignore updates right after we seeked
       if (ignorePlayerUpdatesRef.current) {
         return;
@@ -115,10 +124,10 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
       }
     };
 
-    playerRef.current.addEventListener('timeupdate', handleTimeUpdate);
+    playerRef.current.addEventListener('frameupdate', handleFrameUpdate);
 
     return () => {
-      playerRef.current?.removeEventListener('timeupdate', handleTimeUpdate);
+      playerRef.current?.removeEventListener('frameupdate', handleFrameUpdate);
     };
   }, [setCurrentFrame, playerRef]);
 
