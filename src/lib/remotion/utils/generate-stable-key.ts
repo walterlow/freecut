@@ -17,7 +17,9 @@ export function generateStableKey(item: TimelineItem): string {
   ) {
     const sourceStart = item.sourceStart ?? 0;
     const origin = item.originId ?? item.id;
-    return `${item.mediaId}-${origin}-${sourceStart}`;
+    // Include speed in key to force remount when playback rate changes
+    const speed = item.speed ?? 1;
+    return `${item.mediaId}-${origin}-${sourceStart}-${speed}`;
   }
   return item.id;
 }

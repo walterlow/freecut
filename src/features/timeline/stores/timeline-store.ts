@@ -107,8 +107,9 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
         sourceStart: newSourceStart,
         durationInFrames: newDuration,
         from: newFrom,
-        // Explicitly preserve speed (important for rate-stretched clips)
+        // Explicitly preserve speed and sourceDuration (important for rate-stretched clips)
         speed: item.speed,
+        sourceDuration: item.sourceDuration,
       };
 
       // Add offset for video/audio items (Remotion compatibility)
@@ -125,6 +126,15 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
   trimItemEnd: (id, trimAmount) => set((state) => ({
     items: state.items.map((item) => {
       if (item.id !== id) return item;
+
+      // DEBUG: Log input state
+      console.log('[trimItemEnd] Input:', {
+        trimAmount,
+        'item.speed': item.speed,
+        'item.sourceDuration': item.sourceDuration,
+        'item.sourceEnd': item.sourceEnd,
+        'item.durationInFrames': item.durationInFrames,
+      });
 
       const currentTrimEnd = item.trimEnd || 0;
       // Account for speed: timeline frames * speed = source frames
@@ -154,13 +164,24 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       // Ensure frame values are integers (Remotion requirement)
       const newDuration = Math.max(1, Math.round(item.durationInFrames - actualTrimAmount));
 
+      // DEBUG: Log output state
+      console.log('[trimItemEnd] Output:', {
+        'item.speed': item.speed,
+        'preserving speed': item.speed,
+        newSourceEnd,
+        newTrimEnd,
+        newDuration,
+        actualTrimAmount,
+      });
+
       return {
         ...item,
         trimEnd: newTrimEnd,
         sourceEnd: newSourceEnd,
         durationInFrames: newDuration,
-        // Explicitly preserve speed (important for rate-stretched clips)
+        // Explicitly preserve speed and sourceDuration (important for rate-stretched clips)
         speed: item.speed,
+        sourceDuration: item.sourceDuration,
       };
     }),
     isDirty: true,
@@ -251,9 +272,11 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       const currentSpeed = item.speed || 1;
       const sourceDuration = item.sourceDuration || Math.round(item.durationInFrames * currentSpeed);
 
-      // Initialize sourceStart/sourceEnd if not set
-      const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-      const sourceEnd = item.sourceEnd ?? sourceDuration;
+      // When rate-stretching, we show ALL source content at the new speed
+      // So sourceStart=0, sourceEnd=sourceDuration, and trims are reset
+      // This ensures the user can later trim within the full source bounds
+      const sourceStart = 0;
+      const sourceEnd = sourceDuration;
 
       // Ensure frame values are integers (Remotion requirement)
       return {
@@ -261,10 +284,13 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
         from: Math.round(newFrom),
         durationInFrames: Math.round(newDuration),
         speed: clampedSpeed,
-        // Preserve source properties for proper playback bounds
+        // Set source properties to full content range
         sourceDuration,
         sourceStart,
         sourceEnd,
+        // Reset trim values since we're showing full content at new speed
+        trimStart: 0,
+        trimEnd: 0,
       };
     }),
     isDirty: true,

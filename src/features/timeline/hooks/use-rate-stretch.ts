@@ -153,8 +153,9 @@ export function useRateStretch(item: TimelineItem, trackLocked: boolean = false)
 
       // Calculate the "at normal speed" source duration
       // This is the content duration that will be preserved regardless of speed
+      // Use stored sourceDuration if available (important for clips that have been trimmed/stretched before)
       const currentSpeed = item.speed || 1;
-      const sourceDuration = item.durationInFrames * currentSpeed;
+      const sourceDuration = item.sourceDuration ?? (item.durationInFrames * currentSpeed);
 
       setStretchState({
         isStretching: true,
