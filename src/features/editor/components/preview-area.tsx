@@ -6,6 +6,7 @@ import {
   TimecodeDisplay,
   PreviewZoomControls,
 } from '@/features/preview';
+import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 
 interface PreviewAreaProps {
   project: {
@@ -30,9 +31,11 @@ export function PreviewArea({ project }: PreviewAreaProps) {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
-  // TODO: Get from timeline store
-  const totalFrames = 900; // 30 seconds at 30fps
-  const duration = totalFrames / project.fps;
+  // Calculate total frames from timeline items
+  const items = useTimelineStore((s) => s.items);
+  const totalFrames = items.length > 0
+    ? Math.max(...items.map(item => item.from + item.durationInFrames))
+    : project.fps * 10; // Default 10 seconds if no items
 
   // Measure preview container size for zoom calculations
   useEffect(() => {
@@ -74,7 +77,7 @@ export function PreviewArea({ project }: PreviewAreaProps) {
       <div className="h-16 border-t border-border panel-header flex items-center justify-center px-6 flex-shrink-0 relative">
         {/* Left: Timecode Display */}
         <div className="absolute left-6">
-          <TimecodeDisplay fps={project.fps} totalDuration={duration} />
+          <TimecodeDisplay fps={project.fps} totalFrames={totalFrames} />
         </div>
 
         {/* Center: Playback Controls */}
