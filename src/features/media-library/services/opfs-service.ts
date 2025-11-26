@@ -13,6 +13,12 @@ export class OPFSService {
   private worker: Worker | null = null;
 
   /**
+   * Pending read requests - prevents concurrent sync access handles on the same file
+   * Maps file path to pending Promise
+   */
+  private pendingReads = new Map<string, Promise<ArrayBuffer>>();
+
+  /**
    * Initialize the OPFS worker
    */
   private getWorker(): Worker {
@@ -58,14 +64,30 @@ export class OPFSService {
 
   /**
    * Get a file from OPFS
+   *
+   * Deduplicates concurrent requests to the same path to prevent
+   * "Access Handles cannot be created" errors from the sync access API.
    */
   async getFile(path: string): Promise<ArrayBuffer> {
-    const data = await this.sendMessage<ArrayBuffer>({
+    // Check if there's already a pending read for this path
+    const pending = this.pendingReads.get(path);
+    if (pending) {
+      return pending;
+    }
+
+    // Create the read request
+    const readPromise = this.sendMessage<ArrayBuffer>({
       type: 'get',
       payload: { path },
+    }).finally(() => {
+      // Clean up pending request when done (success or failure)
+      this.pendingReads.delete(path);
     });
 
-    return data;
+    // Store the pending request
+    this.pendingReads.set(path, readPromise);
+
+    return readPromise;
   }
 
   /**

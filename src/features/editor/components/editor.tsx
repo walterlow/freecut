@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   ResizablePanelGroup,
@@ -44,6 +44,9 @@ export interface EditorProps {
  */
 export function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  // Guard against concurrent saves (e.g., spamming Ctrl+S)
+  const isSavingRef = useRef(false);
 
   // Initialize timeline from project data (or create default tracks for new projects)
   useEffect(() => {
@@ -114,9 +117,10 @@ export function Editor({ projectId, project }: EditorProps) {
       setZoomLevel(1);
     }
 
-    // Cleanup: clear project context when leaving editor
+    // Cleanup: clear project context and stop playback when leaving editor
     return () => {
       useMediaLibraryStore.getState().setCurrentProject(null);
+      usePlaybackStore.getState().pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, project.timeline]); // Re-initialize when projectId or timeline data changes
@@ -124,9 +128,16 @@ export function Editor({ projectId, project }: EditorProps) {
   // Track unsaved changes
   const isDirty = useTimelineStore((s) => s.isDirty);
 
-  // Save timeline to project
-  const handleSave = async () => {
+  // Save timeline to project (with guard against concurrent saves)
+  const handleSave = useCallback(async () => {
+    // Prevent concurrent saves (e.g., spamming Ctrl+S)
+    if (isSavingRef.current) {
+      return;
+    }
+
+    isSavingRef.current = true;
     const { saveTimeline } = useTimelineStore.getState();
+
     try {
       await saveTimeline(projectId);
       console.log('Project saved successfully');
@@ -135,8 +146,10 @@ export function Editor({ projectId, project }: EditorProps) {
       console.error('Failed to save project:', error);
       // TODO: Show error toast notification
       throw error; // Re-throw so callers know save failed
+    } finally {
+      isSavingRef.current = false;
     }
-  };
+  }, [projectId]);
 
   const handleExport = () => {
     setExportDialogOpen(true);
