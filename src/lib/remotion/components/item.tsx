@@ -40,13 +40,16 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
     const playbackRate = item.speed ?? 1;
 
     // Calculate source frames needed for playback
-    const sourceFramesNeeded = Math.ceil(item.durationInFrames * playbackRate);
+    // Use Math.round to minimize rounding errors (ceil can exceed by 1 frame)
+    const sourceFramesNeeded = Math.round(item.durationInFrames * playbackRate);
     const sourceEndPosition = trimBefore + sourceFramesNeeded;
     const sourceDuration = item.sourceDuration || 0;
 
     // Validate sourceStart doesn't exceed source duration
+    // Use small tolerance (2 frames) for floating point rounding errors
+    const tolerance = 2;
     const isInvalidSeek = sourceDuration > 0 && trimBefore >= sourceDuration;
-    const exceedsSource = sourceDuration > 0 && sourceEndPosition > sourceDuration;
+    const exceedsSource = sourceDuration > 0 && sourceEndPosition > sourceDuration + tolerance;
 
     // Clamp trimBefore to valid range if source duration is known
     let safeTrimBefore = trimBefore;

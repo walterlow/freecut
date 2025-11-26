@@ -191,9 +191,16 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       const sourceTrimAmount = Math.round(actualTrimAmount * speed);
 
       const newTrimEnd = Math.max(0, currentTrimEnd + sourceTrimAmount);
-      const newSourceEnd = currentSourceEnd - sourceTrimAmount;
+      // Clamp sourceEnd to not exceed sourceDuration (prevents playback rewind issues)
+      const newSourceEnd = Math.min(sourceDuration, currentSourceEnd - sourceTrimAmount);
+
+      // Calculate duration, but also ensure we don't exceed available source frames
+      const currentSourceStart = item.sourceStart || 0;
+      const availableSourceFrames = newSourceEnd - currentSourceStart;
+      const maxTimelineDuration = Math.floor(availableSourceFrames / speed);
+
       // Ensure frame values are integers (Remotion requirement)
-      const newDuration = Math.max(1, Math.round(item.durationInFrames - actualTrimAmount));
+      const newDuration = Math.max(1, Math.min(maxTimelineDuration, Math.round(item.durationInFrames - actualTrimAmount)));
 
       return {
         ...item,
