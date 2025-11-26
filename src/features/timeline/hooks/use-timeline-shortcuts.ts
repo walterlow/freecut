@@ -45,15 +45,19 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
   const markers = useTimelineStore((s) => s.markers);
   const addMarker = useTimelineStore((s) => s.addMarker);
 
-  // Calculate all unique clip edges (start and end frames) sorted ascending
+  // Calculate all unique clip edges and marker positions (start and end frames) sorted ascending
   const clipEdges = useMemo(() => {
     const edges = new Set<number>();
     for (const item of items) {
       edges.add(item.from);
       edges.add(item.from + item.durationInFrames);
     }
+    // Include marker positions
+    for (const marker of markers) {
+      edges.add(marker.frame);
+    }
     return Array.from(edges).sort((a, b) => a - b);
-  }, [items]);
+  }, [items, markers]);
 
   // Playback: Space - Play/Pause (global shortcut)
   useHotkeys(
