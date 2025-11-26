@@ -422,14 +422,27 @@ export function useTimelineDrag(
           snapDelta = snapResult.snappedFrame - groupStartFrame;
         }
 
+        // Calculate how much we need to clamp the group to prevent any item going below frame 0
+        // Find the minimum proposed start frame across all items
+        let minProposedFrame = Infinity;
+        for (const draggedItem of dragState.draggedItems) {
+          const proposedStart = draggedItem.initialFrame + deltaFrames + snapDelta;
+          if (proposedStart < minProposedFrame) {
+            minProposedFrame = proposedStart;
+          }
+        }
+
+        // Calculate group clamp offset - if any item would go below 0, shift the whole group
+        const groupClampOffset = minProposedFrame < 0 ? -minProposedFrame : 0;
+
         // Multi-item drag: calculate new positions for all items
         const movedItems = dragState.draggedItems.map((draggedItem) => {
           const sourceItem = itemsRef.current.find((i) => i.id === draggedItem.id);
           if (!sourceItem) return null;
 
           // Calculate new frame (maintain relative offset from anchor)
-          // Apply both the frame delta AND the snap adjustment to all items
-          const newFrom = Math.max(0, draggedItem.initialFrame + deltaFrames + snapDelta);
+          // Apply frame delta, snap adjustment, AND group clamp offset to all items uniformly
+          const newFrom = draggedItem.initialFrame + deltaFrames + snapDelta + groupClampOffset;
 
           // Calculate new track (maintain relative offset)
           const anchorTrackIndex = tracksRef.current.findIndex(
@@ -528,7 +541,8 @@ export function useTimelineDrag(
 
         // Apply snapping
         const snapResult = calculateMagneticSnap(proposedFrame, item.durationInFrames);
-        proposedFrame = snapResult.snappedFrame;
+        // Clamp after snapping to ensure we don't go below frame 0
+        proposedFrame = Math.max(0, snapResult.snappedFrame);
 
         // Find nearest available space (snaps forward if collision)
         // For alt-drag, include the original item in collision check since it stays in place

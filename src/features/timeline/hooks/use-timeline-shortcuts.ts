@@ -39,6 +39,7 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
   const activeTool = useSelectionStore((s) => s.activeTool);
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const removeItems = useTimelineStore((s) => s.removeItems);
+  const toggleSnap = useTimelineStore((s) => s.toggleSnap);
 
   // Playback: Space - Play/Pause (global shortcut)
   useHotkeys(
@@ -238,5 +239,16 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     },
     HOTKEY_OPTIONS,
     [callbacks]
+  );
+
+  // UI: S - Toggle Snap
+  useHotkeys(
+    HOTKEYS.TOGGLE_SNAP,
+    (event) => {
+      event.preventDefault();
+      toggleSnap();
+    },
+    HOTKEY_OPTIONS,
+    [toggleSnap]
   );
 }

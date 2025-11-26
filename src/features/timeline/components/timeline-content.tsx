@@ -59,12 +59,6 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // DEBUG: Log track order for timeline content
-  console.log('[Timeline Content] Track order:', tracks.map(t => ({
-    name: t.name,
-    order: t.order,
-    id: t.id,
-  })));
   const tracksContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);

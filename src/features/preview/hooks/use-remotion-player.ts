@@ -39,18 +39,13 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
         playerRef.current.play();
       } else if (!isPlaying && wasPlaying) {
         playerRef.current.pause();
-
-        // Sync final frame back to timeline
-        const finalFrame = playerRef.current.getCurrentFrame();
-        if (finalFrame !== lastSyncedFrameRef.current) {
-          lastSyncedFrameRef.current = finalFrame;
-          setCurrentFrame(finalFrame);
-        }
+        // Don't sync frame on pause - the timeline state is authoritative
+        // The currentFrame effect will handle seeking the player to the correct position
       }
     } catch (error) {
       console.error('Failed to control Remotion Player playback:', error);
     }
-  }, [isPlaying, playerRef, setCurrentFrame]);
+  }, [isPlaying, playerRef]);
 
   /**
    * Timeline → Player: Sync frame position (scrubbing and seeking)
@@ -64,6 +59,10 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
     if (frameDiff === 0) {
       return; // Already in sync, no need to seek
     }
+
+    // Update lastSyncedFrame IMMEDIATELY to prevent pause handler from
+    // overwriting user-initiated seeks (e.g., clicking on ruler while playing)
+    lastSyncedFrameRef.current = currentFrame;
 
     // Ignore Player updates during seek
     ignorePlayerUpdatesRef.current = true;

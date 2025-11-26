@@ -55,6 +55,7 @@ export const HOTKEYS = {
   TOGGLE_SIDEBAR: 'tab',
   FULLSCREEN_PREVIEW: 'f',
   TOGGLE_TIMELINE_ZOOM: '`',
+  TOGGLE_SNAP: 's',
 } as const;
 
 export type HotkeyKey = keyof typeof HOTKEYS;
@@ -113,6 +114,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   TOGGLE_SIDEBAR: 'Toggle sidebar',
   FULLSCREEN_PREVIEW: 'Fullscreen preview',
   TOGGLE_TIMELINE_ZOOM: 'Toggle timeline zoom',
+  TOGGLE_SNAP: 'Toggle snap',
 };
 
 /**

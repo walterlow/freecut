@@ -70,12 +70,6 @@ export function Timeline({ duration }: TimelineProps) {
     }
   }, [tracks, activeTrackId, setActiveTrack]);
 
-  // DEBUG: Log track order for track headers
-  console.log('[Track Headers] Track order:', tracks.map(t => ({
-    name: t.name,
-    order: t.order,
-    id: t.id,
-  })));
 
   // Sync vertical scroll between track headers and timeline content using transform
   useEffect(() => {

@@ -23,14 +23,6 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks }) => {
   // Calculate max order for z-index inversion (top track should have highest z-index)
   const maxOrder = Math.max(...tracks.map((t) => t.order ?? 0), 0);
 
-  // DEBUG: Log track order for Remotion
-  console.log('[Remotion] Track order:', tracks.map(t => ({
-    name: t.name,
-    order: t.order,
-    zIndex: maxOrder - (t.order ?? 0),
-    itemCount: t.items.length,
-  })));
-
   // Filter visible tracks (tracks are already sorted by store)
   const visibleTracks = tracks.filter((track) => {
     if (hasSoloTracks) return track.solo;
