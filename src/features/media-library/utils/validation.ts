@@ -14,6 +14,7 @@ export const SUPPORTED_AUDIO_TYPES = [
   'audio/mpeg', // MP3 also uses audio/mpeg
   'audio/wav',
   'audio/aac',
+  'audio/ogg', // Opus codec in Ogg container
 ];
 
 export const SUPPORTED_IMAGE_TYPES = [
@@ -59,7 +60,7 @@ export function validateMediaFile(file: File): ValidationResult {
   if (!allSupportedTypes.includes(file.type)) {
     return {
       valid: false,
-      error: `Unsupported file type: ${file.type}. Supported types: video (mp4, webm, mov), audio (mp3, wav, aac), image (jpg, png, gif)`,
+      error: `Unsupported file type: ${file.type}. Supported types: video (mp4, webm, mov), audio (mp3, wav, aac, ogg/opus), image (jpg, png, gif)`,
     };
   }
 

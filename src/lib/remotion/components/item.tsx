@@ -1,6 +1,8 @@
 import React from 'react';
-import { AbsoluteFill, OffthreadVideo, Audio } from 'remotion';
+import { AbsoluteFill, OffthreadVideo } from 'remotion';
+import { Audio } from '@remotion/media';
 import type { TimelineItem } from '@/types/timeline';
+import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { DebugOverlay } from './debug-overlay';
 
 // Set to true to show debug overlay on video items during rendering
@@ -20,10 +22,18 @@ export interface ItemProps {
  * - Image: Uses img tag
  * - Text: Renders text with styling
  * - Shape: Renders solid colors or shapes
- * - Respects mute state for audio/video items
+ * - Respects mute state for audio/video items (reads directly from store for reactivity)
  * - Supports trimStart/trimEnd for media trimming (uses trimStart as trimBefore)
  */
-export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
+export const Item: React.FC<ItemProps> = ({ item, muted: mutedProp = false }) => {
+  // Read muted state directly from store for immediate reactivity
+  // This bypasses the async prop resolution pipeline
+  const trackMuted = useTimelineStore((s) =>
+    s.tracks.find((t) => t.id === item.trackId)?.muted ?? false
+  );
+
+  // Use store value for audio/video, fall back to prop for other cases
+  const muted = (item.type === 'video' || item.type === 'audio') ? trackMuted : mutedProp;
   if (item.type === 'video') {
     // Guard against missing src (media resolution failed)
     if (!item.src) {
@@ -72,7 +82,7 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
         <OffthreadVideo
           src={item.src}
           trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
-          volume={() => (muted ? 0 : 1)}
+          volume={muted ? 0 : 1}
           playbackRate={playbackRate}
           pauseWhenBuffering
         />
@@ -100,6 +110,7 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
     if (!item.src) {
       return null; // Audio can fail silently
     }
+
     // Use sourceStart for trimBefore (absolute position in source)
     const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
     // Get playback rate from speed property (default 1x)
