@@ -26,7 +26,9 @@
       "Bash(cat:*)",
       "Bash(git log:*)",
       "Bash(E:)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:mediabunny.dev)",
+      "Bash(node -e:*)"
     ],
     "deny": [],
     "ask": []

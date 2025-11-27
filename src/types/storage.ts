@@ -52,3 +52,29 @@ export interface ThumbnailData {
   width: number;
   height: number;
 }
+
+// Density tier for filmstrip thumbnails
+export type FilmstripDensity = 'low' | 'medium' | 'high';
+
+// Filmstrip data for timeline video clip thumbnails
+export interface FilmstripData {
+  id: string; // Format: `${mediaId}:${density}`
+  mediaId: string;
+  density: FilmstripDensity;
+  frames: Blob[]; // JPEG blobs for each frame
+  timestamps: number[]; // Frame timestamps in seconds
+  width: number; // Thumbnail width in pixels
+  height: number; // Thumbnail height in pixels
+  createdAt: number;
+}
+
+// Waveform data for timeline audio clip visualization
+export interface WaveformData {
+  id: string; // Same as mediaId
+  mediaId: string;
+  peaks: ArrayBuffer; // Float32Array as ArrayBuffer (normalized 0-1)
+  duration: number; // Audio duration in seconds
+  sampleRate: number; // Samples per second in peaks data
+  channels: number; // Number of audio channels
+  createdAt: number;
+}

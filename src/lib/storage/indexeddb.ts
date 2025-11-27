@@ -5,6 +5,8 @@ import type {
   ThumbnailData,
   ContentRecord,
   ProjectMediaAssociation,
+  FilmstripData,
+  WaveformData,
 } from '@/types/storage';
 
 // Database schema
@@ -53,10 +55,28 @@ interface VideoEditorDB extends DBSchema {
       mediaId: string;
     };
   };
+  // v4: Filmstrip thumbnails for timeline video clips
+  filmstrips: {
+    key: string; // Format: `${mediaId}:${density}`
+    value: FilmstripData;
+    indexes: {
+      mediaId: string;
+      createdAt: number;
+    };
+  };
+  // v4: Waveform data for timeline audio clips
+  waveforms: {
+    key: string; // mediaId
+    value: WaveformData;
+    indexes: {
+      mediaId: string;
+      createdAt: number;
+    };
+  };
 }
 
 const DB_NAME = 'video-editor-db';
-const DB_VERSION = 3; // v3: Content-addressable storage with project-media associations
+const DB_VERSION = 5; // v5: Ensure filmstrip/waveform stores exist (fixes v4 upgrade issue)
 
 let dbPromise: Promise<IDBPDatabase<VideoEditorDB>> | null = null;
 
@@ -137,6 +157,32 @@ export async function getDB(): Promise<IDBPDatabase<VideoEditorDB>> {
             });
           }
         }
+
+        // v4/v5: Filmstrip thumbnails and waveforms for timeline clips
+        // Note: Using < 5 to ensure stores are created even if v4 upgrade failed
+        if (oldVersion < 5) {
+          // Create filmstrips store for video clip thumbnails
+          if (!db.objectStoreNames.contains('filmstrips')) {
+            const filmstripStore = db.createObjectStore('filmstrips', {
+              keyPath: 'id',
+            });
+            filmstripStore.createIndex('mediaId', 'mediaId', { unique: false });
+            filmstripStore.createIndex('createdAt', 'createdAt', {
+              unique: false,
+            });
+          }
+
+          // Create waveforms store for audio clip visualization
+          if (!db.objectStoreNames.contains('waveforms')) {
+            const waveformStore = db.createObjectStore('waveforms', {
+              keyPath: 'id',
+            });
+            waveformStore.createIndex('mediaId', 'mediaId', { unique: false });
+            waveformStore.createIndex('createdAt', 'createdAt', {
+              unique: false,
+            });
+          }
+        }
       },
       blocked() {
         console.warn(
@@ -152,6 +198,43 @@ export async function getDB(): Promise<IDBPDatabase<VideoEditorDB>> {
   }
 
   return dbPromise;
+}
+
+/**
+ * Close the database connection and clear the cached promise.
+ * This allows the database to be reopened and triggers upgrade if version changed.
+ */
+export async function closeDB(): Promise<void> {
+  if (dbPromise) {
+    try {
+      const db = await dbPromise;
+      db.close();
+    } catch {
+      // Ignore errors when closing
+    }
+    dbPromise = null;
+  }
+}
+
+/**
+ * Force database reconnection - closes and reopens to trigger upgrades
+ */
+export async function reconnectDB(): Promise<IDBPDatabase<VideoEditorDB>> {
+  await closeDB();
+  return getDB();
+}
+
+/**
+ * Check if database has required stores (for detecting outdated schema)
+ */
+export async function hasRequiredStores(): Promise<boolean> {
+  try {
+    const db = await getDB();
+    const requiredStores = ['projects', 'media', 'thumbnails', 'content', 'projectMedia', 'filmstrips', 'waveforms'] as const;
+    return requiredStores.every(store => db.objectStoreNames.contains(store));
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -872,5 +955,225 @@ export async function isMediaInProject(
       error
     );
     return false;
+  }
+}
+
+// ============================================
+// Filmstrip CRUD Operations (v4)
+// ============================================
+
+/**
+ * Save filmstrip data to IndexedDB
+ */
+export async function saveFilmstrip(filmstrip: FilmstripData): Promise<void> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      console.warn('filmstrips store not found, attempting reconnection...');
+      db = await reconnectDB();
+    }
+    await db.put('filmstrips', filmstrip);
+  } catch (error) {
+    console.error('Failed to save filmstrip:', error);
+    throw new Error('Failed to save filmstrip');
+  }
+}
+
+/**
+ * Get filmstrip by ID (mediaId:density)
+ */
+export async function getFilmstrip(
+  id: string
+): Promise<FilmstripData | undefined> {
+  try {
+    const db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      console.warn('filmstrips store not found, attempting reconnection...');
+      const newDb = await reconnectDB();
+      if (!newDb.objectStoreNames.contains('filmstrips')) {
+        throw new Error('filmstrips store not found after reconnection');
+      }
+      return await newDb.get('filmstrips', id);
+    }
+    return await db.get('filmstrips', id);
+  } catch (error) {
+    console.error(`Failed to get filmstrip ${id}:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Get filmstrip by media ID and density
+ */
+export async function getFilmstripByMediaAndDensity(
+  mediaId: string,
+  density: string
+): Promise<FilmstripData | undefined> {
+  const id = `${mediaId}:${density}`;
+  return getFilmstrip(id);
+}
+
+/**
+ * Get filmstrip by media ID (returns first/only filmstrip for the media)
+ */
+export async function getFilmstripByMediaId(
+  mediaId: string
+): Promise<FilmstripData | undefined> {
+  try {
+    let db = await getDB();
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      db = await reconnectDB();
+      if (!db.objectStoreNames.contains('filmstrips')) {
+        return undefined;
+      }
+    }
+    const tx = db.transaction('filmstrips', 'readonly');
+    const index = tx.store.index('mediaId');
+    const results = await index.getAll(mediaId);
+    return results[0];
+  } catch (error) {
+    console.error(`Failed to get filmstrip for media ${mediaId}:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Get all filmstrips for a media item
+ */
+export async function getFilmstripsByMediaId(
+  mediaId: string
+): Promise<FilmstripData[]> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      console.warn('filmstrips store not found, attempting reconnection...');
+      db = await reconnectDB();
+      if (!db.objectStoreNames.contains('filmstrips')) {
+        return [];
+      }
+    }
+    const tx = db.transaction('filmstrips', 'readonly');
+    const index = tx.store.index('mediaId');
+    return await index.getAll(mediaId);
+  } catch (error) {
+    console.error(`Failed to get filmstrips for media ${mediaId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Delete filmstrip by ID
+ */
+export async function deleteFilmstrip(id: string): Promise<void> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      db = await reconnectDB();
+      if (!db.objectStoreNames.contains('filmstrips')) {
+        return; // Store doesn't exist, nothing to delete
+      }
+    }
+    await db.delete('filmstrips', id);
+  } catch (error) {
+    console.error(`Failed to delete filmstrip ${id}:`, error);
+    throw new Error(`Failed to delete filmstrip: ${id}`);
+  }
+}
+
+/**
+ * Delete all filmstrips for a media item
+ */
+export async function deleteFilmstripsByMediaId(mediaId: string): Promise<void> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('filmstrips')) {
+      db = await reconnectDB();
+      if (!db.objectStoreNames.contains('filmstrips')) {
+        return; // Store doesn't exist, nothing to delete
+      }
+    }
+    const tx = db.transaction('filmstrips', 'readwrite');
+    const index = tx.store.index('mediaId');
+    const filmstrips = await index.getAll(mediaId);
+
+    for (const filmstrip of filmstrips) {
+      await tx.store.delete(filmstrip.id);
+    }
+
+    await tx.done;
+  } catch (error) {
+    console.error(`Failed to delete filmstrips for media ${mediaId}:`, error);
+    throw new Error('Failed to delete filmstrips');
+  }
+}
+
+// ============================================
+// Waveform CRUD Operations (v4)
+// ============================================
+
+/**
+ * Save waveform data to IndexedDB
+ */
+export async function saveWaveform(waveform: WaveformData): Promise<void> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('waveforms')) {
+      console.warn('waveforms store not found, attempting reconnection...');
+      db = await reconnectDB();
+    }
+    await db.put('waveforms', waveform);
+  } catch (error) {
+    console.error('Failed to save waveform:', error);
+    throw new Error('Failed to save waveform');
+  }
+}
+
+/**
+ * Get waveform by ID (mediaId)
+ */
+export async function getWaveform(
+  id: string
+): Promise<WaveformData | undefined> {
+  try {
+    const db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('waveforms')) {
+      console.warn('waveforms store not found, attempting reconnection...');
+      const newDb = await reconnectDB();
+      if (!newDb.objectStoreNames.contains('waveforms')) {
+        throw new Error('waveforms store not found after reconnection');
+      }
+      return await newDb.get('waveforms', id);
+    }
+    return await db.get('waveforms', id);
+  } catch (error) {
+    console.error(`Failed to get waveform ${id}:`, error);
+    return undefined;
+  }
+}
+
+/**
+ * Delete waveform by ID
+ */
+export async function deleteWaveform(id: string): Promise<void> {
+  try {
+    let db = await getDB();
+    // Check if store exists (database might need upgrade)
+    if (!db.objectStoreNames.contains('waveforms')) {
+      db = await reconnectDB();
+      if (!db.objectStoreNames.contains('waveforms')) {
+        return; // Store doesn't exist, nothing to delete
+      }
+    }
+    await db.delete('waveforms', id);
+  } catch (error) {
+    console.error(`Failed to delete waveform ${id}:`, error);
+    throw new Error(`Failed to delete waveform: ${id}`);
   }
 }

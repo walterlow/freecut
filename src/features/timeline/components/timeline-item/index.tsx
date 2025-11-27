@@ -6,6 +6,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
+import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
 import {
   ContextMenu,
@@ -16,6 +17,8 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
+import { ClipFilmstrip } from '../clip-filmstrip';
+import { ClipWaveform } from '../clip-waveform';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -97,6 +100,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const transformRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null); // Ghost element for alt-drag followers
   const wasDraggingRef = useRef(false);
+
+  // Visibility detection for lazy filmstrip loading
+  const isClipVisible = useClipVisibility(transformRef);
 
   // Disable transition when anchor item drag ends to avoid animation
   useEffect(() => {
@@ -474,6 +480,34 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         />
       )}
 
+      {/* Filmstrip thumbnails for video clips */}
+      {item.type === 'video' && item.mediaId && (
+        <ClipFilmstrip
+          mediaId={item.mediaId}
+          clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
+          sourceStart={(item.sourceStart ?? 0) / fps}
+          sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
+          trimStart={(item.trimStart ?? 0) / fps}
+          speed={item.speed ?? 1}
+          fps={fps}
+          isVisible={isClipVisible}
+        />
+      )}
+
+      {/* Waveform visualization for audio clips */}
+      {item.type === 'audio' && item.mediaId && (
+        <ClipWaveform
+          mediaId={item.mediaId}
+          clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
+          sourceStart={(item.sourceStart ?? 0) / fps}
+          sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
+          trimStart={(item.trimStart ?? 0) / fps}
+          speed={item.speed ?? 1}
+          fps={fps}
+          isVisible={isClipVisible}
+        />
+      )}
+
       {/* Item label */}
       <div className="px-2 py-1 text-xs font-medium text-primary-foreground truncate">
         {item.label}
@@ -636,9 +670,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevProps.item.trackId === nextProps.item.trackId &&
     prevProps.item.type === nextProps.item.type &&
     prevProps.item.label === nextProps.item.label &&
+    prevProps.item.mediaId === nextProps.item.mediaId &&
     prevProps.item.sourceStart === nextProps.item.sourceStart &&
     prevProps.item.sourceEnd === nextProps.item.sourceEnd &&
     prevProps.item.sourceDuration === nextProps.item.sourceDuration &&
+    prevProps.item.trimStart === nextProps.item.trimStart &&
     prevProps.item.speed === nextProps.item.speed &&
     prevProps.timelineDuration === nextProps.timelineDuration &&
     prevProps.trackLocked === nextProps.trackLocked
