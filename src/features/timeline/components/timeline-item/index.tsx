@@ -425,7 +425,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ref={transformRef}
       data-item-id={item.id}
       className={`
-        absolute top-2 h-12 rounded overflow-hidden transition-all
+        absolute top-2 h-12 rounded overflow-hidden
         ${itemColorClasses}
         ${cursorClass}
         ${!isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'}
@@ -437,7 +437,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         // During alt-drag, original stays in place (no transform) - only show ghost
         transform: isDragging && !isAltDrag ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
         opacity: isDragging && !isAltDrag ? DRAG_OPACITY : trackLocked ? 0.6 : 1,
-        transition: isDragging || isTrimming || isStretching ? 'none' : 'all 0.2s',
         pointerEvents: isDragging ? 'none' : 'auto',
       }}
       onClick={handleClick}
