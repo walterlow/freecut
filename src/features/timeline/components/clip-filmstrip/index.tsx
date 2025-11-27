@@ -4,10 +4,7 @@ import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip } from '../../hooks/use-filmstrip';
 import { useZoomStore } from '../../stores/zoom-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-
-// Thumbnail dimensions (matching filmstrip-cache defaults)
-const THUMBNAIL_WIDTH = 71;
-const THUMBNAIL_HEIGHT = 40;
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '../../services/filmstrip-cache';
 
 export interface ClipFilmstripProps {
   /** Media ID from the timeline item */
@@ -33,6 +30,7 @@ export interface ClipFilmstripProps {
  *
  * Renders video frame thumbnails as a filmstrip background for timeline clips.
  * Uses tiled canvas for large clips and shows skeleton while loading.
+ * Matches extracted frames to display slots by timestamp for correct visual mapping.
  */
 export const ClipFilmstrip = memo(function ClipFilmstrip({
   mediaId,
@@ -50,11 +48,10 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   // Load blob URL for the media
   useEffect(() => {
     let mounted = true;
-    let url: string | null = null;
 
     const loadBlobUrl = async () => {
       try {
-        url = await mediaLibraryService.getMediaBlobUrl(mediaId);
+        const url = await mediaLibraryService.getMediaBlobUrl(mediaId);
         if (mounted && url) {
           setBlobUrl(url);
         }
@@ -72,17 +69,16 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     };
   }, [mediaId, isVisible]);
 
-  // Use filmstrip hook
+  // Use filmstrip hook - extracts frames for full source duration
   const { frames, timestamps, error } = useFilmstrip({
     mediaId,
     blobUrl,
     duration: sourceDuration,
-    clipWidth,
     isVisible,
     enabled: isVisible && !!blobUrl && sourceDuration > 0,
   });
 
-  // Render function for tiled canvas - draws frames edge-to-edge (no gaps)
+  // Render function for tiled canvas - matches frames to slots by timestamp
   const renderTile = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -94,33 +90,53 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
         return;
       }
 
-      // Account for trim and speed
-      const effectiveStart = sourceStart + trimStart;
-
-      // Calculate how many thumbnail slots fit in the clip
+      // Calculate which slots are visible in this tile
       const startSlot = Math.floor(tileOffset / THUMBNAIL_WIDTH);
       const endSlot = Math.ceil((tileOffset + tileWidth) / THUMBNAIL_WIDTH);
+
+      // The effective start in source video (accounting for trim)
+      const effectiveStart = sourceStart + trimStart;
 
       for (let slot = startSlot; slot <= endSlot; slot++) {
         const slotX = slot * THUMBNAIL_WIDTH - tileOffset;
 
         if (slotX + THUMBNAIL_WIDTH < 0 || slotX > tileWidth) continue;
 
-        const slotCenterPixel = slot * THUMBNAIL_WIDTH + THUMBNAIL_WIDTH / 2;
-        const timelinePosition = slotCenterPixel / pixelsPerSecond;
-        const sourceTime = effectiveStart + timelinePosition * speed;
+        // Calculate the source time for the LEFT edge of this slot
+        // IMPORTANT: Using left edge (not center) because when users look at a thumbnail
+        // at position X, they expect to see what's AT that position, not what's at
+        // position X + half a thumbnail width. This provides more accurate visual mapping
+        // especially at lower zoom levels where each thumbnail covers several seconds.
+        const slotLeftPixel = slot * THUMBNAIL_WIDTH;
+        const timelineSeconds = slotLeftPixel / pixelsPerSecond;
+        const sourceTime = effectiveStart + timelineSeconds * speed;
 
-        // Find the closest frame to this source time
+        // Find the closest frame by timestamp using binary search
         let bestFrameIndex = 0;
-        let bestTimeDiff = Infinity;
+        let left = 0;
+        let right = timestamps.length - 1;
 
-        for (let i = 0; i < timestamps.length; i++) {
-          const timestamp = timestamps[i];
-          if (timestamp === undefined) continue;
-          const timeDiff = Math.abs(timestamp - sourceTime);
-          if (timeDiff < bestTimeDiff) {
-            bestTimeDiff = timeDiff;
-            bestFrameIndex = i;
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          const midTime = timestamps[mid] ?? 0;
+
+          if (midTime === sourceTime) {
+            bestFrameIndex = mid;
+            break;
+          } else if (midTime < sourceTime) {
+            bestFrameIndex = mid;
+            left = mid + 1;
+          } else {
+            right = mid - 1;
+          }
+        }
+
+        // Check if the next frame is actually closer
+        if (bestFrameIndex < timestamps.length - 1) {
+          const currentDiff = Math.abs((timestamps[bestFrameIndex] ?? 0) - sourceTime);
+          const nextDiff = Math.abs((timestamps[bestFrameIndex + 1] ?? 0) - sourceTime);
+          if (nextDiff < currentDiff) {
+            bestFrameIndex++;
           }
         }
 
@@ -135,7 +151,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
             THUMBNAIL_WIDTH,
             THUMBNAIL_HEIGHT
           );
-        } catch (err) {
+        } catch {
           // ImageBitmap may have been closed
         }
       }

@@ -6,10 +6,8 @@ export interface UseFilmstripOptions {
   mediaId: string;
   /** Blob URL for the video file */
   blobUrl: string | null;
-  /** Video duration in seconds */
+  /** Total source duration in seconds */
   duration: number;
-  /** Width of the clip in pixels (determines frame count) */
-  clipWidth: number;
   /** Whether the clip is currently visible in viewport */
   isVisible: boolean;
   /** Whether to enable filmstrip (allows conditional disabling) */
@@ -32,16 +30,15 @@ export interface UseFilmstripResult {
 /**
  * Hook for managing filmstrip thumbnails for a video clip
  *
- * - Calculates frame count based on clip width (one frame per 71px slot)
- * - Only generates when visible and has valid blobUrl
- * - Caches results in memory and IndexedDB
+ * - Extracts frames across the full source duration
+ * - Rendering component matches frames to slots by timestamp
+ * - Caches results in memory for reuse across zoom/scroll
  * - Progressive loading: updates as frames become available
  */
 export function useFilmstrip({
   mediaId,
   blobUrl,
   duration,
-  clipWidth,
   isVisible,
   enabled = true,
 }: UseFilmstripOptions): UseFilmstripResult {
@@ -80,7 +77,7 @@ export function useFilmstrip({
   // Load filmstrip when visible and conditions are met
   useEffect(() => {
     // Skip if not enabled or missing required data
-    if (!enabled || !blobUrl || !duration || duration <= 0 || clipWidth <= 0) {
+    if (!enabled || !blobUrl || !duration || duration <= 0) {
       return;
     }
 
@@ -102,7 +99,7 @@ export function useFilmstrip({
 
     // Request filmstrip from cache (which will generate if needed)
     filmstripCache
-      .getFilmstrip(mediaId, blobUrl, duration, clipWidth, handleProgress)
+      .getFilmstrip(mediaId, blobUrl, duration, handleProgress)
       .then((result) => {
         setFilmstrip(result);
         setIsLoading(false);
@@ -119,18 +116,9 @@ export function useFilmstrip({
         isGeneratingRef.current = false;
       });
 
-    return () => {
-      // Abort pending generation on cleanup
-      filmstripCache.abort(mediaId);
-    };
-  }, [mediaId, blobUrl, duration, clipWidth, isVisible, enabled, filmstrip?.isComplete, handleProgress]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      filmstripCache.abort(mediaId);
-    };
-  }, [mediaId]);
+    // Don't abort on effect re-runs - let generation continue in background
+    // The cache will hold the result for when we need it
+  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, handleProgress]);
 
   return {
     frames: filmstrip?.frames || null,

@@ -3,36 +3,30 @@
  *
  * Manages filmstrip thumbnail caching with:
  * - In-memory LRU cache for fast access
- * - IndexedDB persistence across sessions
  * - Hardware-accelerated frame extraction via mediabunny (WebCodecs)
- * - Calculates exact frame count based on visible thumbnail slots
+ * - Fixed frame density for consistent quality
+ * - Rendering matches frames to display slots by timestamp
  */
 
-import type { FilmstripData } from '@/types/storage';
-import {
-  getFilmstripByMediaId,
-  saveFilmstrip,
-  deleteFilmstripsByMediaId,
-  reconnectDB,
-} from '@/lib/storage/indexeddb';
+import { deleteFilmstripsByMediaId } from '@/lib/storage/indexeddb';
 
 // Dynamically import mediabunny (heavy library)
 const mediabunnyModule = () => import('mediabunny');
 
-// Thumbnail dimensions
-const THUMBNAIL_WIDTH = 71;
-const THUMBNAIL_HEIGHT = 40;
+// Thumbnail dimensions (16:9 aspect ratio, compact for waveform space)
+export const THUMBNAIL_WIDTH = 36;
+export const THUMBNAIL_HEIGHT = 20;
 const JPEG_QUALITY = 0.7;
 
-// Performance guards
-const MIN_FRAME_INTERVAL = 0.05; // Don't extract more than 20 frames per second
-const MAX_FRAMES = 500; // Cap total frames for very long videos
+// Target frame interval for filmstrip (pick one frame per this many seconds)
+// ~0.042s = keep ~24 frames per second for frame-accurate scrubbing
+const TARGET_FRAME_INTERVAL = 1 / 24;
 
 // Memory cache configuration
 const MAX_CACHE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 
 // Progressive loading: frames per update batch
-const FRAMES_PER_BATCH = 5;
+const FRAMES_PER_BATCH = 10;
 
 export interface CachedFilmstrip {
   frames: ImageBitmap[];
@@ -87,25 +81,6 @@ class FilmstripCacheService {
         callback(filmstrip);
       }
     }
-  }
-
-  /**
-   * Calculate the number of frames needed for a given clip width and duration
-   * One frame per thumbnail slot (71px)
-   */
-  calculateFrameCount(clipWidth: number, duration: number): number {
-    // Number of thumbnail slots that fit in the clip
-    const slotCount = Math.ceil(clipWidth / THUMBNAIL_WIDTH);
-
-    // Calculate interval between frames
-    const interval = duration / slotCount;
-
-    // If interval is too small, limit frames for performance
-    if (interval < MIN_FRAME_INTERVAL) {
-      return Math.min(Math.ceil(duration / MIN_FRAME_INTERVAL), MAX_FRAMES);
-    }
-
-    return Math.min(slotCount, MAX_FRAMES);
   }
 
   /**
@@ -171,112 +146,13 @@ class FilmstripCacheService {
   }
 
   /**
-   * Load filmstrip from IndexedDB and convert to memory cache format
-   */
-  private async loadFromIndexedDB(mediaId: string): Promise<CachedFilmstrip | null> {
-    try {
-      const stored = await getFilmstripByMediaId(mediaId);
-
-      if (!stored || stored.frames.length === 0) {
-        return null;
-      }
-
-      // Convert Blobs to ImageBitmaps
-      const frames: ImageBitmap[] = [];
-      let sizeBytes = 0;
-
-      for (const blob of stored.frames) {
-        const bitmap = await createImageBitmap(blob);
-        frames.push(bitmap);
-        sizeBytes += blob.size;
-      }
-
-      const cached: CachedFilmstrip = {
-        frames,
-        timestamps: stored.timestamps,
-        width: stored.width,
-        height: stored.height,
-        sizeBytes,
-        lastAccessed: Date.now(),
-        isComplete: true,
-      };
-
-      // Add to memory cache
-      this.addToMemoryCache(mediaId, cached);
-
-      return cached;
-    } catch (error) {
-      // Check if this is a missing object store error (database needs upgrade)
-      if (error instanceof Error && error.message.includes('object store')) {
-        console.warn('IndexedDB schema outdated, attempting reconnection...');
-        try {
-          await reconnectDB();
-          // Retry once after reconnection
-          const stored = await getFilmstripByMediaId(mediaId);
-          if (stored && stored.frames.length > 0) {
-            const frames: ImageBitmap[] = [];
-            let sizeBytes = 0;
-            for (const blob of stored.frames) {
-              const bitmap = await createImageBitmap(blob);
-              frames.push(bitmap);
-              sizeBytes += blob.size;
-            }
-            const cached: CachedFilmstrip = {
-              frames,
-              timestamps: stored.timestamps,
-              width: stored.width,
-              height: stored.height,
-              sizeBytes,
-              lastAccessed: Date.now(),
-              isComplete: true,
-            };
-            this.addToMemoryCache(mediaId, cached);
-            return cached;
-          }
-        } catch (retryError) {
-          console.error('Failed to load filmstrip after reconnection:', retryError);
-        }
-      } else {
-        console.error(`Failed to load filmstrip from IndexedDB: ${mediaId}`, error);
-      }
-      return null;
-    }
-  }
-
-  /**
-   * Calculate frame timestamps evenly distributed across the duration
-   */
-  private calculateTimestamps(duration: number, frameCount: number): number[] {
-    const timestamps: number[] = [];
-
-    if (frameCount <= 0) return timestamps;
-
-    // For single frame, use middle of video
-    if (frameCount === 1) {
-      timestamps.push(Math.min(0.1, duration / 2));
-      return timestamps;
-    }
-
-    // Distribute frames evenly, with slight offset from start to avoid black frames
-    const interval = duration / frameCount;
-    for (let i = 0; i < frameCount; i++) {
-      // Start at half-interval offset to center frames in their slots
-      const time = (i + 0.5) * interval;
-      // Clamp to valid range with small offset from edges
-      timestamps.push(Math.max(0.05, Math.min(time, duration - 0.05)));
-    }
-
-    return timestamps;
-  }
-
-  /**
    * Generate filmstrip using mediabunny (hardware-accelerated WebCodecs)
+   * Uses samples() to iterate through actual video frames for proper distribution
    */
   private async generateFilmstrip(
     mediaId: string,
     blobUrl: string,
     duration: number,
-    frameCount: number,
     onProgress?: (progress: number) => void
   ): Promise<CachedFilmstrip> {
     const extractionState = { aborted: false };
@@ -289,10 +165,6 @@ class FilmstripCacheService {
     let input: InstanceType<typeof Input> | null = null;
 
     try {
-      // Calculate timestamps
-      const timestamps = this.calculateTimestamps(duration, frameCount);
-      const frames: Blob[] = [];
-
       onProgress?.(5);
 
       // Create input from blob URL with common video formats
@@ -322,87 +194,91 @@ class FilmstripCacheService {
         throw new Error('Failed to get 2D context');
       }
 
-      // Extract frames at timestamps with progressive updates
-      let frameIndex = 0;
-      let lastUpdateCount = 0;
+      // Sample frames at regular intervals from actual video frames
       const imageBitmaps: ImageBitmap[] = [];
+      const timestamps: number[] = [];
       let sizeBytes = 0;
+      let lastUpdateCount = 0;
+      let nextTargetTime = 0; // Next time we want to capture a frame
+      let framesSampled = 0;
 
-      for await (const sample of sink.samplesAtTimestamps(timestamps)) {
-        // Check for abort
-        if (extractionState.aborted) {
-          sample?.close();
-          throw new Error('Aborted');
+      // Iterate through ALL actual video frames and pick at intervals
+      try {
+        for await (const sample of sink.samples()) {
+          // Check for abort
+          if (extractionState.aborted) {
+            sample.close();
+            throw new Error('Aborted');
+          }
+
+          // Get the actual timestamp of this frame (already in seconds)
+          const frameTime = sample.timestamp;
+
+          // Check if this frame is at or past our target time
+          if (frameTime >= nextTargetTime) {
+            // Capture this frame
+            sample.drawWithFit(ctx, { fit: 'cover' });
+
+            // Convert to JPEG blob
+            const blob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(
+                (b) => {
+                  if (b) resolve(b);
+                  else reject(new Error('Failed to create blob'));
+                },
+                'image/jpeg',
+                JPEG_QUALITY
+              );
+            });
+
+            // Create ImageBitmap for display
+            const bitmap = await createImageBitmap(blob);
+            imageBitmaps.push(bitmap);
+            timestamps.push(frameTime);
+            sizeBytes += blob.size;
+            framesSampled++;
+
+            // Set next target time
+            nextTargetTime = frameTime + TARGET_FRAME_INTERVAL;
+
+            // Update progress based on time through video
+            const progress = 10 + Math.round((frameTime / duration) * 80);
+            onProgress?.(Math.min(progress, 90));
+
+            // Progressive update: notify subscribers every FRAMES_PER_BATCH frames
+            if (framesSampled - lastUpdateCount >= FRAMES_PER_BATCH) {
+              lastUpdateCount = framesSampled;
+
+              const intermediate: CachedFilmstrip = {
+                frames: [...imageBitmaps],
+                timestamps: [...timestamps],
+                width: THUMBNAIL_WIDTH,
+                height: THUMBNAIL_HEIGHT,
+                sizeBytes,
+                lastAccessed: Date.now(),
+                isComplete: false,
+              };
+
+              // Update memory cache
+              this.addToMemoryCache(mediaId, intermediate);
+              // Notify subscribers
+              this.notifyUpdate(mediaId, intermediate);
+            }
+          }
+
+          // Release VideoFrame resources
+          sample.close();
         }
-
-        if (sample) {
-          // Draw sample to canvas with fit behavior
-          sample.drawWithFit(ctx, { fit: 'cover' });
-          sample.close(); // Release VideoFrame resources
-
-          // Convert to JPEG blob
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob(
-              (b) => {
-                if (b) resolve(b);
-                else reject(new Error('Failed to create blob'));
-              },
-              'image/jpeg',
-              JPEG_QUALITY
-            );
-          });
-
-          frames.push(blob);
-
-          // Create ImageBitmap immediately for progressive display
-          const bitmap = await createImageBitmap(blob);
-          imageBitmaps.push(bitmap);
-          sizeBytes += blob.size;
-        }
-
-        frameIndex++;
-        const progress = 10 + Math.round((frameIndex / timestamps.length) * 80);
-        onProgress?.(progress);
-
-        // Progressive update: notify subscribers every FRAMES_PER_BATCH frames
-        if (frameIndex - lastUpdateCount >= FRAMES_PER_BATCH || frameIndex === timestamps.length) {
-          lastUpdateCount = frameIndex;
-
-          const intermediate: CachedFilmstrip = {
-            frames: [...imageBitmaps],
-            timestamps: timestamps.slice(0, imageBitmaps.length),
-            width: THUMBNAIL_WIDTH,
-            height: THUMBNAIL_HEIGHT,
-            sizeBytes,
-            lastAccessed: Date.now(),
-            isComplete: frameIndex === timestamps.length,
-          };
-
-          // Update memory cache
-          this.addToMemoryCache(mediaId, intermediate);
-          // Notify subscribers
-          this.notifyUpdate(mediaId, intermediate);
-        }
+      } catch (loopError) {
+        // Re-throw errors (aborts are handled by caller)
+        throw loopError;
       }
 
       onProgress?.(95);
 
-      // Save to IndexedDB
-      const filmstripData: FilmstripData = {
-        id: mediaId,
-        mediaId,
-        density: 'high', // Legacy field, keeping for compatibility
-        frames,
-        timestamps: timestamps.slice(0, frames.length),
-        width: THUMBNAIL_WIDTH,
-        height: THUMBNAIL_HEIGHT,
-        createdAt: Date.now(),
-      };
-      await saveFilmstrip(filmstripData);
-
       const cached: CachedFilmstrip = {
         frames: imageBitmaps,
-        timestamps: timestamps.slice(0, frames.length),
+        timestamps,
         width: THUMBNAIL_WIDTH,
         height: THUMBNAIL_HEIGHT,
         sizeBytes,
@@ -426,13 +302,12 @@ class FilmstripCacheService {
 
   /**
    * Get filmstrip for a media item
-   * Checks memory cache, then IndexedDB, then generates if needed
+   * Extracts frames at fixed intervals across the full duration
    */
   async getFilmstrip(
     mediaId: string,
     blobUrl: string,
     duration: number,
-    clipWidth: number,
     onProgress?: (progress: number) => void
   ): Promise<CachedFilmstrip> {
     // Check memory cache first
@@ -447,18 +322,9 @@ class FilmstripCacheService {
       return pending.promise;
     }
 
-    // Check IndexedDB
-    const dbCached = await this.loadFromIndexedDB(mediaId);
-    if (dbCached) {
-      return dbCached;
-    }
-
-    // Calculate frame count based on clip width
-    const frameCount = this.calculateFrameCount(clipWidth, duration);
-
     // Generate new filmstrip
     const abortController = new AbortController();
-    const promise = this.generateFilmstrip(mediaId, blobUrl, duration, frameCount, onProgress);
+    const promise = this.generateFilmstrip(mediaId, blobUrl, duration, onProgress);
 
     this.pendingRequests.set(mediaId, { promise, abortController });
 
