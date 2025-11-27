@@ -1,4 +1,4 @@
-import { useState, useRef, memo } from 'react';
+import { useState, useRef, memo, useCallback } from 'react';
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import { TimelineItem } from './timeline-item';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -7,6 +7,12 @@ import { useMediaLibraryStore } from '@/features/media-library/stores/media-libr
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getMediaDragData } from '@/features/media-library/utils/drag-data-cache';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 export interface TimelineTrackProps {
   track: TimelineTrackType;
@@ -35,12 +41,15 @@ interface GhostPreviewItem {
 export const TimelineTrack = memo(function TimelineTrack({ track, items }: TimelineTrackProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [ghostPreviews, setGhostPreviews] = useState<GhostPreviewItem[]>([]);
+  const [contextMenuFrame, setContextMenuFrame] = useState<number | null>(null);
+  const [menuKey, setMenuKey] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
 
   // Store selectors
   const addItem = useTimelineStore((s) => s.addItem);
   const fps = useTimelineStore((s) => s.fps);
   const allItems = useTimelineStore((s) => s.items);
+  const closeGapAtPosition = useTimelineStore((s) => s.closeGapAtPosition);
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
 
   // Zoom utilities for position calculation
@@ -48,6 +57,68 @@ export const TimelineTrack = memo(function TimelineTrack({ track, items }: Timel
 
   // Filter items for this track
   const trackItems = items.filter((item) => item.trackId === track.id);
+
+  // Check if a frame position is inside a real gap (between clips, not after the last clip)
+  const isFrameInGap = useCallback((frame: number) => {
+    if (trackItems.length === 0) return false;
+
+    const sortedItems = [...trackItems].sort((a, b) => a.from - b.from);
+
+    // Check if frame is inside any clip
+    for (const item of sortedItems) {
+      if (frame >= item.from && frame < item.from + item.durationInFrames) {
+        return false; // Inside a clip
+      }
+    }
+
+    // Check if there's a clip AFTER this frame (otherwise it's just empty space, not a gap)
+    const hasClipAfter = sortedItems.some((item) => item.from > frame);
+    return hasClipAfter;
+  }, [trackItems]);
+
+  // Handle context menu on track (for empty space)
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    // Check if clicking on a clip (has data-item-id ancestor)
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-item-id]')) {
+      // Let the clip's context menu handle it
+      return;
+    }
+
+    // Calculate clicked frame position
+    if (!trackRef.current) return;
+    const timelineContainer = trackRef.current.closest('.timeline-container') as HTMLElement;
+    if (!timelineContainer) return;
+
+    const scrollLeft = timelineContainer.scrollLeft || 0;
+    const containerRect = timelineContainer.getBoundingClientRect();
+    const offsetX = (e.clientX - containerRect.left) + scrollLeft;
+    const clickedFrame = pixelsToFrame(offsetX);
+
+    // Check if this frame is in a gap - just track the frame, let Radix handle menu
+    if (isFrameInGap(clickedFrame)) {
+      setContextMenuFrame(clickedFrame);
+    } else {
+      // Clicked on a clip area, prevent track menu so clip menu can show
+      e.preventDefault();
+      setContextMenuFrame(null);
+    }
+  }, [pixelsToFrame, isFrameInGap]);
+
+  // Handle closing the gap
+  const handleCloseGap = useCallback(() => {
+    if (contextMenuFrame !== null) {
+      closeGapAtPosition(track.id, contextMenuFrame);
+      setContextMenuFrame(null);
+    }
+  }, [contextMenuFrame, closeGapAtPosition, track.id]);
+
+  // Force menu remount on right-click to fix positioning
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 2) { // Right click
+      setMenuKey((k) => k + 1);
+    }
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     // Don't allow drops on locked tracks
@@ -386,59 +457,72 @@ export const TimelineTrack = memo(function TimelineTrack({ track, items }: Timel
   };
 
   return (
-    <div
-      ref={trackRef}
-      data-track-id={track.id}
-      className={`border-b border-border relative transition-colors ${
-        isDragOver ? 'bg-primary/5 border-primary' : ''
-      }`}
-      style={{
-        height: `${track.height}px`,
-        // CSS containment tells browser this element's layout is independent
-        // This significantly improves scroll/paint performance for large timelines
-        contain: 'layout style',
-      }}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {/* Drop indicator */}
-      {isDragOver && !track.locked && (
-        <>
-          <div className="absolute inset-0 border-2 border-dashed border-primary pointer-events-none rounded" />
-          {/* Ghost preview clips */}
-          {ghostPreviews.map((ghost, index) => (
-            <div
-              key={index}
-              className={`absolute top-2 h-12 rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${
-                ghost.type === 'video'
-                  ? 'border-timeline-video bg-timeline-video/20'
-                  : ghost.type === 'audio'
-                  ? 'border-timeline-audio bg-timeline-audio/20'
-                  : 'border-timeline-image bg-timeline-image/20'
-              }`}
-              style={{
-                left: `${ghost.left}px`,
-                width: `${ghost.width}px`,
-              }}
-            >
-              <span className="text-xs text-foreground/70 truncate">{ghost.label}</span>
-            </div>
+    <ContextMenu key={menuKey} modal={false}>
+      <ContextMenuTrigger asChild disabled={track.locked}>
+        <div
+          ref={trackRef}
+          data-track-id={track.id}
+          className={`border-b border-border relative transition-colors ${
+            isDragOver ? 'bg-primary/5 border-primary' : ''
+          }`}
+          style={{
+            height: `${track.height}px`,
+            // CSS containment tells browser this element's layout is independent
+            // This significantly improves scroll/paint performance for large timelines
+            contain: 'layout style',
+          }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onMouseDown={handleMouseDown}
+          onContextMenu={handleContextMenu}
+        >
+          {/* Drop indicator */}
+          {isDragOver && !track.locked && (
+            <>
+              <div className="absolute inset-0 border-2 border-dashed border-primary pointer-events-none rounded" />
+              {/* Ghost preview clips */}
+              {ghostPreviews.map((ghost, index) => (
+                <div
+                  key={index}
+                  className={`absolute top-2 h-12 rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${
+                    ghost.type === 'video'
+                      ? 'border-timeline-video bg-timeline-video/20'
+                      : ghost.type === 'audio'
+                      ? 'border-timeline-audio bg-timeline-audio/20'
+                      : 'border-timeline-image bg-timeline-image/20'
+                  }`}
+                  style={{
+                    left: `${ghost.left}px`,
+                    width: `${ghost.width}px`,
+                  }}
+                >
+                  <span className="text-xs text-foreground/70 truncate">{ghost.label}</span>
+                </div>
+              ))}
+            </>
+          )}
+
+          {/* Render all items for this track - always visible in timeline UI */}
+          {trackItems.map((item) => (
+            <TimelineItem key={item.id} item={item} timelineDuration={30} trackLocked={track.locked} />
           ))}
-        </>
-      )}
 
-      {/* Render all items for this track - always visible in timeline UI */}
-      {trackItems.map((item) => (
-        <TimelineItem key={item.id} item={item} timelineDuration={30} trackLocked={track.locked} />
-      ))}
-
-      {/* Locked track overlay indicator */}
-      {track.locked && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="text-xs text-muted-foreground/50 font-mono">LOCKED</div>
+          {/* Locked track overlay indicator */}
+          {track.locked && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+              <div className="text-xs text-muted-foreground/50 font-mono">LOCKED</div>
+            </div>
+          )}
         </div>
+      </ContextMenuTrigger>
+      {trackItems.length > 0 && contextMenuFrame !== null && (
+        <ContextMenuContent>
+          <ContextMenuItem onClick={handleCloseGap}>
+            Ripple Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
       )}
-    </div>
+    </ContextMenu>
   );
 });

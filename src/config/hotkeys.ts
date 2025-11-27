@@ -20,6 +20,8 @@ export const HOTKEYS = {
   JOIN_ITEMS: 'j',
   DELETE_SELECTED: 'delete',
   DELETE_SELECTED_ALT: 'backspace',
+  RIPPLE_DELETE: 'mod+delete',
+  RIPPLE_DELETE_ALT: 'mod+backspace',
 
   // History
   UNDO: 'mod+z',
@@ -85,6 +87,8 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   JOIN_ITEMS: 'Join selected clips',
   DELETE_SELECTED: 'Delete selected items',
   DELETE_SELECTED_ALT: 'Delete selected items (alternative)',
+  RIPPLE_DELETE: 'Ripple delete selected items',
+  RIPPLE_DELETE_ALT: 'Ripple delete selected items (alternative)',
 
   // History
   UNDO: 'Undo',

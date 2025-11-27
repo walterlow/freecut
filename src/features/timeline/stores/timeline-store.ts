@@ -54,6 +54,64 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     items: state.items.filter((i) => !ids.includes(i.id)),
     isDirty: true,
   })),
+  // Ripple delete: remove items AND shift subsequent items on same track to close gaps
+  rippleDeleteItems: (ids) => set((state) => {
+    const idsToDelete = new Set(ids);
+    const itemsToDelete = state.items.filter((i) => idsToDelete.has(i.id));
+
+    if (itemsToDelete.length === 0) return state;
+
+    // Shift each remaining item by the sum of deleted durations before it on same track
+    const newItems = state.items
+      .filter((i) => !idsToDelete.has(i.id))
+      .map((item) => {
+        const shiftAmount = itemsToDelete
+          .filter((d) => d.trackId === item.trackId && d.from + d.durationInFrames <= item.from)
+          .reduce((sum, d) => sum + d.durationInFrames, 0);
+
+        return shiftAmount > 0 ? { ...item, from: item.from - shiftAmount } : item;
+      });
+
+    return { items: newItems, isDirty: true };
+  }),
+  // Close gap at a specific position on a track (shift items left)
+  closeGapAtPosition: (trackId, frame) => set((state) => {
+    // Find all items on this track, sorted by position
+    const trackItems = state.items
+      .filter((i) => i.trackId === trackId)
+      .sort((a, b) => a.from - b.from);
+
+    if (trackItems.length === 0) return state;
+
+    // Find the gap that contains this frame
+    // A gap exists between items or before the first item
+    let gapStart = 0;
+    let gapEnd = 0;
+
+    for (const item of trackItems) {
+      if (frame >= gapStart && frame < item.from) {
+        // Found the gap - it's between gapStart and item.from
+        gapEnd = item.from;
+        break;
+      }
+      // Move gapStart to the end of this item
+      gapStart = item.from + item.durationInFrames;
+    }
+
+    // If we didn't find a gap containing the frame, nothing to close
+    const gapDuration = gapEnd - gapStart;
+    if (gapDuration <= 0) return state;
+
+    // Shift all items on this track that start at or after gapEnd
+    const newItems = state.items.map((item) => {
+      if (item.trackId === trackId && item.from >= gapEnd) {
+        return { ...item, from: item.from - gapDuration };
+      }
+      return item;
+    });
+
+    return { items: newItems, isDirty: true };
+  }),
   toggleSnap: () => set((state) => ({ snapEnabled: !state.snapEnabled })),
   moveItem: (id, newFrom, newTrackId) => set((state) => ({
     items: state.items.map((i) =>

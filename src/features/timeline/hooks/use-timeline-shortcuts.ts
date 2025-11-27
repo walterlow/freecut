@@ -41,6 +41,7 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
   const activeTool = useSelectionStore((s) => s.activeTool);
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const removeItems = useTimelineStore((s) => s.removeItems);
+  const rippleDeleteItems = useTimelineStore((s) => s.rippleDeleteItems);
   const joinItems = useTimelineStore((s) => s.joinItems);
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
   const items = useTimelineStore((s) => s.items);
@@ -197,6 +198,40 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, removeItems, callbacks]
+  );
+
+  // Editing: Ctrl+Delete - Ripple delete selected items (delete + close gap)
+  useHotkeys(
+    HOTKEYS.RIPPLE_DELETE,
+    (event) => {
+      if (selectedItemIds.length > 0) {
+        event.preventDefault();
+        rippleDeleteItems(selectedItemIds);
+        clearSelection();
+        if (callbacks.onDelete) {
+          callbacks.onDelete();
+        }
+      }
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, rippleDeleteItems, clearSelection, callbacks]
+  );
+
+  // Editing: Ctrl+Backspace - Ripple delete selected items (alternative)
+  useHotkeys(
+    HOTKEYS.RIPPLE_DELETE_ALT,
+    (event) => {
+      if (selectedItemIds.length > 0) {
+        event.preventDefault();
+        rippleDeleteItems(selectedItemIds);
+        clearSelection();
+        if (callbacks.onDelete) {
+          callbacks.onDelete();
+        }
+      }
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, rippleDeleteItems, clearSelection, callbacks]
   );
 
   // Editing: J - Join selected clips (if they form a contiguous joinable chain)

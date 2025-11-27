@@ -52,6 +52,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const splitItem = useTimelineStore((s) => s.splitItem);
   const joinItems = useTimelineStore((s) => s.joinItems);
   const removeItems = useTimelineStore((s) => s.removeItems);
+  const rippleDeleteItems = useTimelineStore((s) => s.rippleDeleteItems);
   const items = useTimelineStore((s) => s.items);
 
   const isSelected = selectedItemIds.includes(item.id);
@@ -409,6 +410,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [selectedItemIds, removeItems]);
 
+  // Handle ripple delete action (delete + close gap)
+  const handleRippleDelete = useCallback(() => {
+    if (selectedItemIds.length > 0) {
+      rippleDeleteItems(selectedItemIds);
+    }
+  }, [selectedItemIds, rippleDeleteItems]);
+
   return (
     <>
     <ContextMenu>
@@ -542,6 +550,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           </ContextMenuItem>
         )}
         {(canJoinSelected || canJoinFromContextMenu) && <ContextMenuSeparator />}
+        <ContextMenuItem
+          onClick={handleRippleDelete}
+          disabled={selectedItemIds.length === 0}
+          className="text-destructive focus:text-destructive"
+        >
+          Ripple Delete
+          <ContextMenuShortcut>Ctrl+Del</ContextMenuShortcut>
+        </ContextMenuItem>
         <ContextMenuItem
           onClick={handleDelete}
           disabled={selectedItemIds.length === 0}
