@@ -23,6 +23,10 @@ export interface ClipFilmstripProps {
   fps: number;
   /** Whether the clip is visible (from IntersectionObserver) */
   isVisible: boolean;
+  /** Optional height override */
+  height?: number;
+  /** Optional className for positioning */
+  className?: string;
 }
 
 /**
@@ -41,6 +45,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   speed,
   fps: _fps,
   isVisible,
+  height = THUMBNAIL_HEIGHT,
+  className = 'top-1',
 }: ClipFilmstripProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
@@ -161,7 +167,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
   // Show skeleton only if no frames yet
   if (!frames || frames.length === 0) {
-    return <FilmstripSkeleton clipWidth={clipWidth} height={THUMBNAIL_HEIGHT} />;
+    return <FilmstripSkeleton clipWidth={clipWidth} height={height} className={className} />;
   }
 
   if (error) {
@@ -175,10 +181,10 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   return (
     <TiledCanvas
       width={clipWidth}
-      height={THUMBNAIL_HEIGHT}
+      height={height}
       renderTile={renderTile}
       version={renderVersion}
-      className="top-1"
+      className={className}
     />
   );
 });

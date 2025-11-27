@@ -6,7 +6,7 @@ import { useZoomStore } from '../../stores/zoom-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 
 // Waveform dimensions
-const WAVEFORM_HEIGHT = 32;
+const DEFAULT_WAVEFORM_HEIGHT = 32;
 const BAR_WIDTH = 2;
 const BAR_GAP = 1;
 
@@ -31,6 +31,10 @@ export interface ClipWaveformProps {
   fps: number;
   /** Whether the clip is visible (from IntersectionObserver) */
   isVisible: boolean;
+  /** Optional height override (default 32px) */
+  height?: number;
+  /** Optional className for positioning override */
+  className?: string;
 }
 
 /**
@@ -48,6 +52,8 @@ export const ClipWaveform = memo(function ClipWaveform({
   speed,
   fps: _fps,
   isVisible,
+  height = DEFAULT_WAVEFORM_HEIGHT,
+  className = 'top-2',
 }: ClipWaveformProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const hasStartedLoadingRef = useRef(false);
@@ -115,8 +121,8 @@ export const ClipWaveform = memo(function ClipWaveform({
 
       // Calculate bar positions
       const barSpacing = BAR_WIDTH + BAR_GAP;
-      const centerY = WAVEFORM_HEIGHT / 2;
-      const maxBarHeight = (WAVEFORM_HEIGHT / 2) - 2; // Leave some padding
+      const centerY = height / 2;
+      const maxBarHeight = (height / 2) - 2; // Leave some padding
 
       // Iterate through bars that should be in this tile
       for (let x = 0; x < tileWidth; x += barSpacing) {
@@ -156,12 +162,12 @@ export const ClipWaveform = memo(function ClipWaveform({
         // ctx.strokeRect(barX, barY, BAR_WIDTH, fullBarHeight);
       }
     },
-    [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration]
+    [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height]
   );
 
   // Show skeleton while loading or if no peaks yet
   if (isLoading || !peaks || peaks.length === 0) {
-    return <WaveformSkeleton clipWidth={clipWidth} height={WAVEFORM_HEIGHT} />;
+    return <WaveformSkeleton clipWidth={clipWidth} height={height} />;
   }
 
   // Show nothing on error (clip color will show through)
@@ -176,10 +182,10 @@ export const ClipWaveform = memo(function ClipWaveform({
   return (
     <TiledCanvas
       width={clipWidth}
-      height={WAVEFORM_HEIGHT}
+      height={height}
       renderTile={renderTile}
       version={renderVersion}
-      className="top-2" // Offset from clip top to leave room for label
+      className={className}
     />
   );
 });

@@ -19,6 +19,13 @@ import {
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
+import {
+  CLIP_HEIGHT,
+  CLIP_LABEL_HEIGHT,
+  VIDEO_FILMSTRIP_HEIGHT,
+  VIDEO_WAVEFORM_HEIGHT,
+  AUDIO_WAVEFORM_HEIGHT,
+} from '@/constants/timeline';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -447,7 +454,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ref={transformRef}
       data-item-id={item.id}
       className={`
-        absolute top-2 h-12 rounded overflow-hidden
+        absolute inset-y-0 rounded overflow-hidden
         ${itemColorClasses}
         ${cursorClass}
         ${!isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'}
@@ -462,7 +469,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         pointerEvents: isDragging ? 'none' : 'auto',
         // Browser-native virtualization - skip rendering off-screen items without removing from DOM
         contentVisibility: 'auto',
-        containIntrinsicSize: '0 48px', // Reserve height (h-12 = 48px) for off-screen items
+        containIntrinsicSize: `0 ${CLIP_HEIGHT}px`,
       }}
       onClick={handleClick}
       onMouseDown={trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || hoveredEdge !== null ? undefined : handleDragStart}
@@ -476,38 +483,83 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         />
       )}
 
-      {/* Filmstrip thumbnails for video clips */}
+      {/* Video clip 3-row layout: label | filmstrip | waveform */}
       {item.type === 'video' && item.mediaId && (
-        <ClipFilmstrip
-          mediaId={item.mediaId}
-          clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
-          sourceStart={(item.sourceStart ?? 0) / fps}
-          sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
-          trimStart={(item.trimStart ?? 0) / fps}
-          speed={item.speed ?? 1}
-          fps={fps}
-          isVisible={isClipVisible}
-        />
+        <div className="absolute inset-0 flex flex-col">
+          {/* Row 1: Label */}
+          <div
+            className="px-2 text-[11px] font-medium truncate"
+            style={{ height: CLIP_LABEL_HEIGHT, lineHeight: `${CLIP_LABEL_HEIGHT}px` }}
+          >
+            {item.label}
+          </div>
+          {/* Row 2: Filmstrip */}
+          <div className="relative overflow-hidden" style={{ height: VIDEO_FILMSTRIP_HEIGHT }}>
+            <ClipFilmstrip
+              mediaId={item.mediaId}
+              clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
+              sourceStart={(item.sourceStart ?? 0) / fps}
+              sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
+              trimStart={(item.trimStart ?? 0) / fps}
+              speed={item.speed ?? 1}
+              fps={fps}
+              isVisible={isClipVisible}
+              height={VIDEO_FILMSTRIP_HEIGHT}
+              className="top-0"
+            />
+          </div>
+          {/* Row 3: Waveform */}
+          <div className="relative overflow-hidden" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
+            <ClipWaveform
+              mediaId={item.mediaId}
+              clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
+              sourceStart={(item.sourceStart ?? 0) / fps}
+              sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
+              trimStart={(item.trimStart ?? 0) / fps}
+              speed={item.speed ?? 1}
+              fps={fps}
+              isVisible={isClipVisible}
+              height={VIDEO_WAVEFORM_HEIGHT}
+              className="top-0"
+            />
+          </div>
+        </div>
       )}
 
-      {/* Waveform visualization for audio clips */}
+      {/* Audio clip 2-row layout: label | waveform */}
       {item.type === 'audio' && item.mediaId && (
-        <ClipWaveform
-          mediaId={item.mediaId}
-          clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
-          sourceStart={(item.sourceStart ?? 0) / fps}
-          sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
-          trimStart={(item.trimStart ?? 0) / fps}
-          speed={item.speed ?? 1}
-          fps={fps}
-          isVisible={isClipVisible}
-        />
+        <div className="absolute inset-0 flex flex-col">
+          {/* Row 1: Label */}
+          <div
+            className="px-2 text-[11px] font-medium truncate"
+            style={{ height: CLIP_LABEL_HEIGHT, lineHeight: `${CLIP_LABEL_HEIGHT}px` }}
+          >
+            {item.label}
+          </div>
+          {/* Row 2: Waveform */}
+          <div className="relative overflow-hidden" style={{ height: AUDIO_WAVEFORM_HEIGHT }}>
+            <ClipWaveform
+              mediaId={item.mediaId}
+              clipWidth={isStretching ? stretchVisualWidth : isTrimming ? trimVisualWidth : width}
+              sourceStart={(item.sourceStart ?? 0) / fps}
+              sourceDuration={(item.sourceDuration ?? item.durationInFrames) / fps}
+              trimStart={(item.trimStart ?? 0) / fps}
+              speed={item.speed ?? 1}
+              fps={fps}
+              isVisible={isClipVisible}
+              height={AUDIO_WAVEFORM_HEIGHT}
+              className="top-0"
+            />
+          </div>
+        </div>
       )}
 
-      {/* Item label */}
-      <div className="px-2 py-1 text-xs font-medium text-primary-foreground truncate">
-        {item.label}
-      </div>
+      {/* Item label - only for non-media items (video/audio have labels in flex layout) */}
+      {item.type !== 'video' && item.type !== 'audio' && (
+        <div className="px-2 py-1 text-xs font-medium truncate">
+          {item.label}
+        </div>
+      )}
 
       {/* Speed badge - show when speed is not 1x */}
       {currentSpeed !== 1 && !isStretching && (
@@ -624,11 +676,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       {/* Alt-drag ghost for anchor item: rendered outside clipped container */}
       {isAltDrag && isDragging && (
         <div
-          className="absolute top-2 h-12 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50"
+          className="absolute inset-y-0 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50"
           style={{
             left: `${left + dragOffset.x}px`,
             width: `${width}px`,
-            top: `calc(0.5rem + ${dragOffset.y}px)`,
+            transform: `translateY(${dragOffset.y}px)`,
           }}
         >
           {/* Duplication indicator on ghost */}
@@ -642,7 +694,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       {isPartOfDrag && (
         <div
           ref={ghostRef}
-          className="absolute top-2 h-12 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50"
+          className="absolute inset-y-0 rounded border-2 border-dashed border-primary bg-primary/20 pointer-events-none z-50"
           style={{
             left: `${left}px`,
             width: `${width}px`,

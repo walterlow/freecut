@@ -14,13 +14,13 @@ import {
   saveFilmstrip,
 } from '@/lib/storage/indexeddb';
 import type { FilmstripData } from '@/types/storage';
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/constants/timeline';
 
 // Dynamically import mediabunny (heavy library)
 const mediabunnyModule = () => import('mediabunny');
 
-// Thumbnail dimensions (16:9 aspect ratio, compact for waveform space)
-export const THUMBNAIL_WIDTH = 36;
-export const THUMBNAIL_HEIGHT = 20;
+// Re-export for consumers that import from this file
+export { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT };
 const JPEG_QUALITY = 0.7;
 
 // Target frame interval for filmstrip (pick one frame per this many seconds)
@@ -334,6 +334,13 @@ class FilmstripCacheService {
     try {
       const stored = await getFilmstripByMediaId(mediaId);
       if (!stored || !stored.frames || stored.frames.length === 0) {
+        return null;
+      }
+
+      // Validate dimensions match current constants (invalidate if size changed)
+      if (stored.width !== THUMBNAIL_WIDTH || stored.height !== THUMBNAIL_HEIGHT) {
+        console.log(`Filmstrip cache invalidated for ${mediaId}: dimensions changed from ${stored.width}x${stored.height} to ${THUMBNAIL_WIDTH}x${THUMBNAIL_HEIGHT}`);
+        await deleteFilmstripsByMediaId(mediaId);
         return null;
       }
 
