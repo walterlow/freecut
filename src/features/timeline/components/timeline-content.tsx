@@ -79,6 +79,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     });
   }, []);
 
+
   const frameToPixelsRef = useRef(frameToPixels);
   frameToPixelsRef.current = frameToPixels;
 
@@ -326,6 +327,10 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     // setZoom will clamp it, so we need to use the same clamped value for scroll calculations
     const clampedZoom = Math.max(0.01, Math.min(2, newZoomLevel));
 
+    // Early return if zoom hasn't changed (already at min/max limit)
+    // This prevents scroll position from jumping when Ctrl+scrolling at limits
+    if (clampedZoom === zoomLevelRef.current) return;
+
     // Calculate playhead position AFTER zoom (using CLAMPED zoom level)
     const timeInSeconds = currentFrame / fps;
     const pixelsPerSecondAfter = 100 * clampedZoom;
@@ -389,9 +394,9 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     // Calculate zoom delta with medium sensitivity
     // Negative deltaY = scroll up = zoom in, Positive deltaY = scroll down = zoom out
     const zoomFactor = 1 - event.deltaY * 0.001;
-    const newZoomLevel = zoomLevel * zoomFactor;
+    const newZoomLevel = zoomLevelRef.current * zoomFactor;
 
-    // Apply zoom with playhead centering
+    // Apply zoom immediately
     applyZoomWithPlayheadCentering(newZoomLevel);
   };
 

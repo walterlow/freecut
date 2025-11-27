@@ -122,6 +122,33 @@ These are acceptable because:
 
 ## Other Optimizations Applied
 
+### Canvas-Based Timeline Markers
+
+The TimelineMarkers component uses Canvas rendering instead of DOM elements to eliminate React reconciliation overhead during zoom:
+
+```typescript
+// timeline-markers.tsx - Canvas drawing instead of Array.map
+useEffect(() => {
+  const ctx = canvas.getContext('2d');
+  // Draw tick lines and labels directly on canvas
+  for (let i = startMarkerIndex; i <= endMarkerIndex; i++) {
+    const x = timeToPixels(i * intervalInSeconds);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvasHeight);
+    ctx.stroke();
+    // Draw label...
+  }
+}, [displayWidth, pixelsPerSecond, scrollLeft, viewportWidth]);
+```
+
+Benefits:
+- ~1-2ms canvas redraw vs ~200ms DOM reconciliation
+- No React diffing overhead
+- Smooth zoom even during audio playback
+- In/Out markers and Project markers remain as DOM (minimal elements)
+
 ### Context Provider Placement
 
 `TooltipProvider` was moved from `Editor` to `App` level to prevent re-render cascades:
