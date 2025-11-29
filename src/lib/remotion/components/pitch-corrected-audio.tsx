@@ -1,12 +1,20 @@
 import React, { useEffect, useRef } from 'react';
-import { useCurrentFrame, useVideoConfig, Internals, getRemotionEnvironment, Audio } from 'remotion';
+import { useCurrentFrame, useVideoConfig, Internals, getRemotionEnvironment, Audio, interpolate } from 'remotion';
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 
 interface PitchCorrectedAudioProps {
   src: string;
+  itemId: string;
   volume?: number;
   playbackRate?: number;
   trimBefore?: number;
   muted?: boolean;
+  /** Duration of this audio clip in frames */
+  durationInFrames: number;
+  /** Fade in duration in seconds */
+  audioFadeIn?: number;
+  /** Fade out duration in seconds */
+  audioFadeOut?: number;
 }
 
 /**
@@ -22,10 +30,14 @@ interface PitchCorrectedAudioProps {
  */
 export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
   src,
-  volume = 1,
+  itemId,
+  volume = 0,
   playbackRate = 1,
   trimBefore = 0,
   muted = false,
+  durationInFrames,
+  audioFadeIn = 0,
+  audioFadeOut = 0,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -35,6 +47,67 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastSyncTimeRef = useRef<number>(0);
 
+  // Read preview values from gizmo store
+  const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);
+  const preview = itemPropertiesPreview?.[itemId];
+
+  // Use preview values if available
+  // Volume is stored in dB (0 = unity gain)
+  const effectiveVolumeDb = preview?.volume ?? volume;
+  const effectiveFadeIn = preview?.audioFadeIn ?? audioFadeIn;
+  const effectiveFadeOut = preview?.audioFadeOut ?? audioFadeOut;
+
+  // Calculate fade multiplier
+  const fadeInFrames = Math.min(effectiveFadeIn * fps, durationInFrames);
+  const fadeOutFrames = Math.min(effectiveFadeOut * fps, durationInFrames);
+
+  let fadeMultiplier = 1;
+  const hasFadeIn = fadeInFrames > 0;
+  const hasFadeOut = fadeOutFrames > 0;
+
+  if (hasFadeIn || hasFadeOut) {
+    const fadeOutStart = durationInFrames - fadeOutFrames;
+
+    if (hasFadeIn && hasFadeOut) {
+      if (fadeInFrames >= fadeOutStart) {
+        // Overlapping fades
+        const midPoint = durationInFrames / 2;
+        const peakVolume = Math.min(1, midPoint / Math.max(fadeInFrames, 1));
+        fadeMultiplier = interpolate(
+          frame,
+          [0, midPoint, durationInFrames],
+          [0, peakVolume, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      } else {
+        fadeMultiplier = interpolate(
+          frame,
+          [0, fadeInFrames, fadeOutStart, durationInFrames],
+          [0, 1, 1, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      }
+    } else if (hasFadeIn) {
+      fadeMultiplier = interpolate(
+        frame,
+        [0, fadeInFrames],
+        [0, 1],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    } else {
+      fadeMultiplier = interpolate(
+        frame,
+        [fadeOutStart, durationInFrames],
+        [1, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    }
+  }
+
+  // Convert dB to linear (0 dB = unity gain = 1.0)
+  const linearVolume = Math.pow(10, effectiveVolumeDb / 20);
+  const finalVolume = muted ? 0 : Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+
   // During rendering, use Remotion's Audio component
   // Remotion's playbackRate uses FFmpeg's atempo filter which already preserves pitch
   // So we don't need to apply toneFrequency for pitch correction
@@ -42,7 +115,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
     return (
       <Audio
         src={src}
-        volume={muted ? 0 : volume}
+        volume={finalVolume}
         playbackRate={playbackRate}
         trimBefore={trimBefore > 0 ? trimBefore : undefined}
       />
@@ -76,13 +149,14 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
     }
   }, [playbackRate]);
 
-  // Update volume and mute
+  // Update volume (with fades applied)
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = muted ? 0 : Math.max(0, Math.min(1, volume));
+      // Clamp to 0-1 range for HTML5 audio
+      audioRef.current.volume = Math.max(0, Math.min(1, finalVolume));
       audioRef.current.muted = muted;
     }
-  }, [volume, muted]);
+  }, [finalVolume, muted]);
 
   // Sync playback with Remotion timeline
   useEffect(() => {

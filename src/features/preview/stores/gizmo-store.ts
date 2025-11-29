@@ -12,6 +12,16 @@ import { applySnapping, applyScaleSnapping, type SnapLine } from '../utils/snap-
 // ❌ WRONG: Don't destructure the entire store
 // const { activeGizmo, startTranslate } = useGizmoStore();
 
+/** Item properties that can be previewed (non-transform) */
+export interface ItemPropertiesPreview {
+  fadeIn?: number;
+  fadeOut?: number;
+  // Audio properties
+  volume?: number;
+  audioFadeIn?: number;
+  audioFadeOut?: number;
+}
+
 interface GizmoStoreState {
   /** Current gizmo interaction state (null when not interacting) */
   activeGizmo: GizmoState | null;
@@ -23,6 +33,10 @@ interface GizmoStoreState {
   snapLines: SnapLine[];
   /** Whether snapping is enabled */
   snappingEnabled: boolean;
+  /** Properties panel preview transforms (itemId -> partial transform) */
+  propertiesPreview: Record<string, Partial<Transform>> | null;
+  /** Properties panel preview for item properties like fades (itemId -> partial properties) */
+  itemPropertiesPreview: Record<string, ItemPropertiesPreview> | null;
 }
 
 interface GizmoStoreActions {
@@ -65,6 +79,18 @@ interface GizmoStoreActions {
 
   /** Cancel interaction without committing changes */
   cancelInteraction: () => void;
+
+  /** Set properties panel preview for multiple items */
+  setPropertiesPreview: (previews: Record<string, Partial<Transform>>) => void;
+
+  /** Clear properties panel preview */
+  clearPropertiesPreview: () => void;
+
+  /** Set item properties preview (fades, etc.) for multiple items */
+  setItemPropertiesPreview: (previews: Record<string, ItemPropertiesPreview>) => void;
+
+  /** Clear item properties preview */
+  clearItemPropertiesPreview: () => void;
 }
 
 export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
@@ -75,6 +101,8 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
     canvasSize: { width: 1920, height: 1080 },
     snapLines: [],
     snappingEnabled: true,
+    propertiesPreview: null,
+    itemPropertiesPreview: null,
 
     // Actions
     setCanvasSize: (width, height) =>
@@ -171,5 +199,17 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
 
     cancelInteraction: () =>
       set({ activeGizmo: null, previewTransform: null, snapLines: [] }),
+
+    setPropertiesPreview: (previews) =>
+      set({ propertiesPreview: previews }),
+
+    clearPropertiesPreview: () =>
+      set({ propertiesPreview: null }),
+
+    setItemPropertiesPreview: (previews) =>
+      set({ itemPropertiesPreview: previews }),
+
+    clearItemPropertiesPreview: () =>
+      set({ itemPropertiesPreview: null }),
   })
 );

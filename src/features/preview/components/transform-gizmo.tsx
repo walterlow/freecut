@@ -37,6 +37,7 @@ export function TransformGizmo({
   // Gizmo store
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
+  const propertiesPreview = useGizmoStore((s) => s.propertiesPreview);
   const startTranslate = useGizmoStore((s) => s.startTranslate);
   const startScale = useGizmoStore((s) => s.startScale);
   const startRotate = useGizmoStore((s) => s.startRotate);
@@ -47,13 +48,14 @@ export function TransformGizmo({
 
   const isInteracting = activeGizmo?.itemId === item.id;
 
-  // Get current transform (use preview during interaction)
+  // Get current transform (use preview during interaction, or properties panel preview)
   const currentTransform = useMemo((): Transform => {
+    // If gizmo is being dragged, use its preview
     if (isInteracting && previewTransform) {
       return previewTransform;
     }
 
-    // Resolve from item
+    // Resolve base transform from item
     const sourceDimensions = getSourceDimensions(item);
     const resolved = resolveTransform(
       item,
@@ -61,7 +63,7 @@ export function TransformGizmo({
       sourceDimensions
     );
 
-    return {
+    const baseTransform: Transform = {
       x: resolved.x,
       y: resolved.y,
       width: resolved.width,
@@ -70,7 +72,15 @@ export function TransformGizmo({
       opacity: resolved.opacity,
       cornerRadius: resolved.cornerRadius,
     };
-  }, [item, coordParams, isInteracting, previewTransform]);
+
+    // If properties panel is previewing this item, merge its values
+    const itemPropertiesPreview = propertiesPreview?.[item.id];
+    if (itemPropertiesPreview) {
+      return { ...baseTransform, ...itemPropertiesPreview };
+    }
+
+    return baseTransform;
+  }, [item, coordParams, isInteracting, previewTransform, propertiesPreview]);
 
   // Convert to screen bounds
   const screenBounds = useMemo(() => {

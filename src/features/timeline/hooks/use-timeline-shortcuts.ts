@@ -311,7 +311,7 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     [activeTool, setActiveTool]
   );
 
-  // History: Cmd/Ctrl+Z - Undo
+  // History: Cmd/Ctrl+Z - Undo (enabled even on form elements like sliders)
   useHotkeys(
     HOTKEYS.UNDO,
     (event) => {
@@ -321,11 +321,14 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         callbacks.onUndo();
       }
     },
-    HOTKEY_OPTIONS,
+    {
+      ...HOTKEY_OPTIONS,
+      enableOnFormTags: true, // Allow undo even when focused on sliders/inputs
+    },
     [callbacks]
   );
 
-  // History: Cmd/Ctrl+Shift+Z - Redo
+  // History: Cmd/Ctrl+Shift+Z - Redo (enabled even on form elements like sliders)
   useHotkeys(
     HOTKEYS.REDO,
     (event) => {
@@ -335,7 +338,10 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         callbacks.onRedo();
       }
     },
-    HOTKEY_OPTIONS,
+    {
+      ...HOTKEY_OPTIONS,
+      enableOnFormTags: true, // Allow redo even when focused on sliders/inputs
+    },
     [callbacks]
   );
 

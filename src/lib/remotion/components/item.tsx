@@ -1,7 +1,7 @@
 import React from 'react';
-import { AbsoluteFill, OffthreadVideo, useVideoConfig } from 'remotion';
+import { AbsoluteFill, OffthreadVideo, useVideoConfig, useCurrentFrame, interpolate } from 'remotion';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem, VideoItem } from '@/types/timeline';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { GifPlayer } from './gif-player';
@@ -12,6 +12,78 @@ import {
 } from '../utils/transform-resolver';
 
 /**
+ * Hook to calculate video audio volume with fades and preview support.
+ * Returns the final volume (0-1) to apply to OffthreadVideo.
+ */
+function useVideoAudioVolume(item: VideoItem, muted: boolean): number {
+  const { fps } = useVideoConfig();
+  const frame = useCurrentFrame();
+
+  // Read preview values from gizmo store
+  const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);
+  const preview = itemPropertiesPreview?.[item.id];
+
+  // Use preview values if available, otherwise use item's stored values
+  // Volume is stored in dB (0 = unity gain)
+  const volumeDb = preview?.volume ?? item.volume ?? 0;
+  const audioFadeIn = preview?.audioFadeIn ?? item.audioFadeIn ?? 0;
+  const audioFadeOut = preview?.audioFadeOut ?? item.audioFadeOut ?? 0;
+
+  if (muted) return 0;
+
+  // Calculate fade multiplier
+  const fadeInFrames = Math.min(audioFadeIn * fps, item.durationInFrames);
+  const fadeOutFrames = Math.min(audioFadeOut * fps, item.durationInFrames);
+
+  let fadeMultiplier = 1;
+  const hasFadeIn = fadeInFrames > 0;
+  const hasFadeOut = fadeOutFrames > 0;
+
+  if (hasFadeIn || hasFadeOut) {
+    const fadeOutStart = item.durationInFrames - fadeOutFrames;
+
+    if (hasFadeIn && hasFadeOut) {
+      if (fadeInFrames >= fadeOutStart) {
+        // Overlapping fades
+        const midPoint = item.durationInFrames / 2;
+        const peakVolume = Math.min(1, midPoint / Math.max(fadeInFrames, 1));
+        fadeMultiplier = interpolate(
+          frame,
+          [0, midPoint, item.durationInFrames],
+          [0, peakVolume, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      } else {
+        fadeMultiplier = interpolate(
+          frame,
+          [0, fadeInFrames, fadeOutStart, item.durationInFrames],
+          [0, 1, 1, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      }
+    } else if (hasFadeIn) {
+      fadeMultiplier = interpolate(
+        frame,
+        [0, fadeInFrames],
+        [0, 1],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    } else {
+      fadeMultiplier = interpolate(
+        frame,
+        [fadeOutStart, item.durationInFrames],
+        [1, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    }
+  }
+
+  // Convert dB to linear (0 dB = unity gain = 1.0)
+  const linearVolume = Math.pow(10, volumeDb / 20);
+  return Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+}
+
+/**
  * Check if a URL points to a GIF file
  */
 function isGifUrl(url: string): boolean {
@@ -19,6 +91,30 @@ function isGifUrl(url: string): boolean {
   const lowerUrl = url.toLowerCase();
   return lowerUrl.endsWith('.gif') || lowerUrl.includes('.gif');
 }
+
+/**
+ * Video content with audio volume/fades support.
+ * Separate component so we can use hooks for audio calculation.
+ */
+const VideoContent: React.FC<{
+  item: VideoItem;
+  muted: boolean;
+  safeTrimBefore: number;
+  playbackRate: number;
+}> = ({ item, muted, safeTrimBefore, playbackRate }) => {
+  const audioVolume = useVideoAudioVolume(item, muted);
+
+  return (
+    <OffthreadVideo
+      src={item.src!}
+      trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
+      volume={audioVolume}
+      playbackRate={playbackRate}
+      pauseWhenBuffering={false}
+      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+    />
+  );
+};
 
 // Set to true to show debug overlay on video items during rendering
 const DEBUG_VIDEO_OVERLAY = false;
@@ -39,22 +135,96 @@ const TransformWrapper: React.FC<{
   children: React.ReactNode;
 }> = ({ item, children }) => {
   const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
+  const frame = useCurrentFrame();
   const canvas = { width: canvasWidth, height: canvasHeight, fps };
 
   // Read preview transform directly from store - only re-renders this component
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
+  const propertiesPreview = useGizmoStore((s) => s.propertiesPreview);
+  const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);
 
-  // Check if this item has an active preview transform
-  const isPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null;
+  // Check if this item has an active gizmo preview transform
+  const isGizmoPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null;
 
-  // Use preview transform if active, otherwise resolve from item
-  const resolved = isPreviewActive
-    ? { ...previewTransform, cornerRadius: previewTransform.cornerRadius ?? 0 }
-    : resolveTransform(item, canvas, getSourceDimensions(item));
+  // Check if this item has a properties panel preview
+  const propertiesPreviewForItem = propertiesPreview?.[item.id];
 
-  // Get CSS styles for positioning
-  const style = toTransformStyle(resolved, canvas);
+  // Check if this item has an item properties preview (fades, etc.)
+  const itemPreviewForItem = itemPropertiesPreview?.[item.id];
+
+  // Resolve base transform from item
+  const baseResolved = resolveTransform(item, canvas, getSourceDimensions(item));
+
+  // Use gizmo preview if active, otherwise merge properties preview if available
+  let resolved = baseResolved;
+  if (isGizmoPreviewActive) {
+    resolved = { ...previewTransform, cornerRadius: previewTransform.cornerRadius ?? 0 };
+  } else if (propertiesPreviewForItem) {
+    // Merge properties preview on top of base resolved
+    resolved = { ...baseResolved, ...propertiesPreviewForItem };
+  }
+
+  // Calculate fade opacity based on fadeIn/fadeOut (in seconds)
+  // Use preview values if available, otherwise use item's stored values
+  // frame is relative to this item's sequence (0 = start of item)
+  const fadeInSeconds = itemPreviewForItem?.fadeIn ?? item.fadeIn ?? 0;
+  const fadeOutSeconds = itemPreviewForItem?.fadeOut ?? item.fadeOut ?? 0;
+  const fadeInFrames = Math.min(fadeInSeconds * fps, item.durationInFrames);
+  const fadeOutFrames = Math.min(fadeOutSeconds * fps, item.durationInFrames);
+
+  let fadeOpacity = 1;
+  const hasFadeIn = fadeInFrames > 0;
+  const hasFadeOut = fadeOutFrames > 0;
+
+  if (hasFadeIn || hasFadeOut) {
+    const fadeOutStart = item.durationInFrames - fadeOutFrames;
+
+    if (hasFadeIn && hasFadeOut) {
+      // Both fades present
+      if (fadeInFrames >= fadeOutStart) {
+        // Fades overlap - crossfade: fade in then immediately fade out
+        const midPoint = item.durationInFrames / 2;
+        const peakOpacity = Math.min(1, midPoint / Math.max(fadeInFrames, 1));
+        fadeOpacity = interpolate(
+          frame,
+          [0, midPoint, item.durationInFrames],
+          [0, peakOpacity, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      } else {
+        // Normal case - distinct fade in/out regions
+        fadeOpacity = interpolate(
+          frame,
+          [0, fadeInFrames, fadeOutStart, item.durationInFrames],
+          [0, 1, 1, 0],
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+      }
+    } else if (hasFadeIn) {
+      // Only fade in
+      fadeOpacity = interpolate(
+        frame,
+        [0, fadeInFrames],
+        [0, 1],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    } else {
+      // Only fade out
+      fadeOpacity = interpolate(
+        frame,
+        [fadeOutStart, item.durationInFrames],
+        [1, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+      );
+    }
+  }
+
+  // Combine transform opacity with fade opacity
+  const finalOpacity = resolved.opacity * fadeOpacity;
+
+  // Get CSS styles for positioning, with combined opacity
+  const style = toTransformStyle({ ...resolved, opacity: finalOpacity }, canvas);
 
   return <div style={style}>{children}</div>;
 };
@@ -158,13 +328,11 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
 
     const videoContent = (
       <>
-        <OffthreadVideo
-          src={item.src}
-          trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
-          volume={muted ? 0 : 1}
+        <VideoContent
+          item={item}
+          muted={muted}
+          safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
-          pauseWhenBuffering={false}
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
         {DEBUG_VIDEO_OVERLAY && (
           <DebugOverlay
@@ -205,10 +373,14 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false }) => {
     return (
       <PitchCorrectedAudio
         src={item.src}
+        itemId={item.id}
         trimBefore={trimBefore}
-        volume={muted ? 0 : 1}
+        volume={item.volume ?? 0}
         playbackRate={playbackRate}
         muted={muted}
+        durationInFrames={item.durationInFrames}
+        audioFadeIn={item.audioFadeIn}
+        audioFadeOut={item.audioFadeOut}
       />
     );
   }

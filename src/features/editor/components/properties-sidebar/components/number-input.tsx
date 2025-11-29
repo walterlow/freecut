@@ -5,7 +5,10 @@ type MixedValue = number | 'mixed';
 
 interface NumberInputProps {
   value: MixedValue;
+  /** Called on final commit (blur, enter, mouseup). Updates the actual value. */
   onChange: (value: number) => void;
+  /** Called during scrub/drag for live preview. If not provided, onChange is used. */
+  onLiveChange?: (value: number) => void;
   label?: string;
   unit?: string;
   min?: number;
@@ -28,6 +31,7 @@ interface NumberInputProps {
 export function NumberInput({
   value,
   onChange,
+  onLiveChange,
   label,
   unit,
   min,
@@ -44,6 +48,7 @@ export function NumberInput({
   );
   const [isScrubbing, setIsScrubbing] = useState(false);
   const scrubStartRef = useRef<{ x: number; startValue: number } | null>(null);
+  const scrubValueRef = useRef<number | null>(null);
 
   // Sync local value with prop value
   useEffect(() => {
@@ -91,13 +96,14 @@ export function NumberInput({
     }
   };
 
-  // Scrub handling
+  // Scrub handling - uses onLiveChange during drag, onChange on commit
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!scrubEnabled || disabled) return;
     if (e.target === inputRef.current) return; // Don't scrub when clicking input
 
     const startValue = value === 'mixed' ? 0 : value;
     scrubStartRef.current = { x: e.clientX, startValue };
+    scrubValueRef.current = startValue;
     setIsScrubbing(true);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -106,14 +112,29 @@ export function NumberInput({
       const sensitivity = moveEvent.shiftKey ? 0.1 : 1;
       const delta = Math.round(dx * sensitivity * step);
       const newValue = clamp(scrubStartRef.current.startValue + delta);
-      onChange(newValue);
+      scrubValueRef.current = newValue;
+      // Update displayed value during scrub
+      setLocalValue(String(newValue));
+      // Use live change for preview (doesn't trigger video re-render)
+      if (onLiveChange) {
+        onLiveChange(newValue);
+      }
     };
 
     const handleMouseUp = () => {
+      // Commit final value on mouseup
+      if (scrubValueRef.current !== null) {
+        onChange(scrubValueRef.current);
+      }
       setIsScrubbing(false);
+      scrubValueRef.current = null;
       scrubStartRef.current = null;
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      // Blur to release focus for keyboard shortcuts
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);

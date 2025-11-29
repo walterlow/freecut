@@ -75,7 +75,7 @@ export function getSourceDimensions(
 
 /**
  * Convert resolved transform to CSS properties for Remotion rendering.
- * Positions relative to canvas center.
+ * Positions relative to canvas center, rotates around item center.
  */
 export function toTransformStyle(
   resolved: ResolvedTransform,
@@ -85,28 +85,22 @@ export function toTransformStyle(
   const centerY = canvas.height / 2;
 
   // Position from center: resolved.x/y is offset from center
+  // This gives the top-left corner position
   const left = centerX + resolved.x - resolved.width / 2;
   const top = centerY + resolved.y - resolved.height / 2;
 
   // Round rotation to avoid floating point precision issues
   const rotation = Math.abs(resolved.rotation) < 0.01 ? 0 : Math.round(resolved.rotation * 100) / 100;
 
-  // Build transform string for GPU-accelerated rendering
-  // Using translate3d and rotate3d for better performance
-  const transforms: string[] = [];
-  transforms.push(`translate3d(${left}px, ${top}px, 0)`);
-  if (rotation !== 0) {
-    transforms.push(`rotate(${rotation}deg)`);
-  }
-
   return {
     position: 'absolute',
-    left: 0,
-    top: 0,
+    left,
+    top,
     width: resolved.width,
     height: resolved.height,
-    transform: transforms.join(' '),
-    transformOrigin: 'top left',
+    // Rotate around center (matches gizmo behavior)
+    transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
+    transformOrigin: 'center center',
     opacity: resolved.opacity,
     borderRadius: resolved.cornerRadius > 0 ? resolved.cornerRadius : undefined,
     overflow: resolved.cornerRadius > 0 ? 'hidden' : undefined,

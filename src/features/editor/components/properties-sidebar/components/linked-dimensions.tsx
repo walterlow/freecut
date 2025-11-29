@@ -12,6 +12,10 @@ interface LinkedDimensionsProps {
   aspectLocked: boolean;
   onWidthChange: (value: number) => void;
   onHeightChange: (value: number) => void;
+  /** Called during scrub for live preview */
+  onWidthLiveChange?: (value: number) => void;
+  /** Called during scrub for live preview */
+  onHeightLiveChange?: (value: number) => void;
   onAspectLockToggle: () => void;
   disabled?: boolean;
   minWidth?: number;
@@ -31,6 +35,8 @@ export function LinkedDimensions({
   aspectLocked,
   onWidthChange,
   onHeightChange,
+  onWidthLiveChange,
+  onHeightLiveChange,
   onAspectLockToggle,
   disabled = false,
   minWidth = 1,
@@ -50,26 +56,34 @@ export function LinkedDimensions({
     }
   }, [width, height]);
 
+  // Commit handlers call both onChange callbacks
   const handleWidthChange = useCallback(
     (newWidth: number) => {
       onWidthChange(newWidth);
-      if (aspectLocked && aspectRatioRef.current > 0) {
-        const newHeight = Math.round(newWidth / aspectRatioRef.current);
-        onHeightChange(Math.max(minHeight, Math.min(maxHeight, newHeight)));
-      }
     },
-    [aspectLocked, onWidthChange, onHeightChange, minHeight, maxHeight]
+    [onWidthChange]
   );
 
   const handleHeightChange = useCallback(
     (newHeight: number) => {
       onHeightChange(newHeight);
-      if (aspectLocked && aspectRatioRef.current > 0) {
-        const newWidth = Math.round(newHeight * aspectRatioRef.current);
-        onWidthChange(Math.max(minWidth, Math.min(maxWidth, newWidth)));
-      }
     },
-    [aspectLocked, onWidthChange, onHeightChange, minWidth, maxWidth]
+    [onHeightChange]
+  );
+
+  // Live handlers for preview during scrub
+  const handleWidthLiveChange = useCallback(
+    (newWidth: number) => {
+      onWidthLiveChange?.(newWidth);
+    },
+    [onWidthLiveChange]
+  );
+
+  const handleHeightLiveChange = useCallback(
+    (newHeight: number) => {
+      onHeightLiveChange?.(newHeight);
+    },
+    [onHeightLiveChange]
   );
 
   return (
@@ -77,6 +91,7 @@ export function LinkedDimensions({
       <NumberInput
         value={width}
         onChange={handleWidthChange}
+        onLiveChange={handleWidthLiveChange}
         label="W"
         unit="px"
         min={minWidth}
@@ -106,6 +121,7 @@ export function LinkedDimensions({
       <NumberInput
         value={height}
         onChange={handleHeightChange}
+        onLiveChange={handleHeightLiveChange}
         label="H"
         unit="px"
         min={minHeight}

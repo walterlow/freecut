@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Droplet } from 'lucide-react';
 import type { TimelineItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -9,7 +10,6 @@ import {
 import {
   PropertySection,
   PropertyRow,
-  NumberInput,
   SliderInput,
 } from '../components';
 
@@ -51,22 +51,55 @@ export function FillSection({
 }: FillSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
 
+  // Gizmo store for live preview
+  const setPropertiesPreview = useGizmoStore((s) => s.setPropertiesPreview);
+  const clearPropertiesPreview = useGizmoStore((s) => s.clearPropertiesPreview);
+
   // Get current values (opacity is 0-1, display as 0-100%)
   const opacityRaw = getMixedValue(items, canvas, (r) => r.opacity);
   const opacity = opacityRaw === 'mixed' ? 'mixed' : Math.round(opacityRaw * 100);
   const cornerRadius = getMixedValue(items, canvas, (r) => r.cornerRadius);
 
-  const handleOpacityChange = useCallback(
+  // Live preview for opacity (during drag)
+  const handleOpacityLiveChange = useCallback(
     (value: number) => {
-      // Convert from 0-100 to 0-1
-      onTransformChange(itemIds, { opacity: value / 100 });
+      const previews: Record<string, { opacity: number }> = {};
+      items.forEach((item) => {
+        previews[item.id] = { opacity: value / 100 };
+      });
+      setPropertiesPreview(previews);
     },
-    [itemIds, onTransformChange]
+    [items, setPropertiesPreview]
   );
 
+  // Commit opacity (on mouse up)
+  const handleOpacityChange = useCallback(
+    (value: number) => {
+      clearPropertiesPreview();
+      onTransformChange(itemIds, { opacity: value / 100 });
+    },
+    [itemIds, onTransformChange, clearPropertiesPreview]
+  );
+
+  // Live preview for corner radius (during drag)
+  const handleCornerRadiusLiveChange = useCallback(
+    (value: number) => {
+      const previews: Record<string, { cornerRadius: number }> = {};
+      items.forEach((item) => {
+        previews[item.id] = { cornerRadius: value };
+      });
+      setPropertiesPreview(previews);
+    },
+    [items, setPropertiesPreview]
+  );
+
+  // Commit corner radius (on mouse up)
   const handleCornerRadiusChange = useCallback(
-    (value: number) => onTransformChange(itemIds, { cornerRadius: value }),
-    [itemIds, onTransformChange]
+    (value: number) => {
+      clearPropertiesPreview();
+      onTransformChange(itemIds, { cornerRadius: value });
+    },
+    [itemIds, onTransformChange, clearPropertiesPreview]
   );
 
   return (
@@ -76,6 +109,7 @@ export function FillSection({
         <SliderInput
           value={opacity}
           onChange={handleOpacityChange}
+          onLiveChange={handleOpacityLiveChange}
           min={0}
           max={100}
           step={1}
@@ -85,13 +119,14 @@ export function FillSection({
 
       {/* Corner Radius */}
       <PropertyRow label="Radius">
-        <NumberInput
+        <SliderInput
           value={cornerRadius}
           onChange={handleCornerRadiusChange}
-          unit="px"
+          onLiveChange={handleCornerRadiusLiveChange}
           min={0}
-          max={500}
+          max={1000}
           step={1}
+          unit="px"
         />
       </PropertyRow>
     </PropertySection>

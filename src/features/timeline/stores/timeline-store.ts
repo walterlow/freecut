@@ -437,8 +437,8 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     items: state.items.map((item) => {
       if (item.id !== id) return item;
 
-      // Clamp speed to valid range (0.1x to 10x)
-      const clampedSpeed = Math.max(0.1, Math.min(10, newSpeed));
+      // Clamp speed to valid range (0.1x to 10x) and round to 2 decimals to avoid floating point drift
+      const clampedSpeed = Math.round(Math.max(0.1, Math.min(10, newSpeed)) * 100) / 100;
 
       // For images/GIFs: simpler handling - just update speed and duration
       // GIFs loop infinitely, so no source position tracking needed
