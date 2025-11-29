@@ -45,6 +45,7 @@ export function GizmoOverlay({
 
   // Timeline state and actions
   const items = useTimelineStore((s) => s.items);
+  const tracks = useTimelineStore((s) => s.tracks);
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
 
@@ -230,16 +231,30 @@ export function GizmoOverlay({
     []
   );
 
-  // Handle clicking an unselected item to select it
-  const handleItemSelect = useCallback(
+  // Handle clicking an item to select it
+  // For unselected items: select that item (or add to selection with shift)
+  // For selected items in a group: select just that item (break group selection)
+  const handleItemClick = useCallback(
     (itemId: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      // Shift+click for multi-select, otherwise replace selection
+      const isSelected = selectedItemIds.includes(itemId);
+      const isGroupSelection = selectedItemIds.length > 1;
+
       if (e.shiftKey) {
-        selectItems([...selectedItemIds, itemId]);
-      } else {
+        // Shift+click: toggle in selection
+        if (isSelected) {
+          selectItems(selectedItemIds.filter((id) => id !== itemId));
+        } else {
+          selectItems([...selectedItemIds, itemId]);
+        }
+      } else if (isSelected && isGroupSelection) {
+        // Clicking on a selected item in a group: select just that item
+        selectItems([itemId]);
+      } else if (!isSelected) {
+        // Clicking on an unselected item: select it
         selectItems([itemId]);
       }
+      // If single selected item is clicked again, do nothing (keeps selection)
     },
     [selectItems, selectedItemIds]
   );
@@ -340,13 +355,14 @@ export function GizmoOverlay({
         }}
         onClick={handleBackgroundClick}
       >
-        {/* Clickable areas for unselected items (behind selected gizmos) */}
+        {/* Clickable areas for UNSELECTED visible items */}
+        {/* Selected items are handled by their respective gizmos (TransformGizmo or GroupGizmo) */}
         {unselectedItems.map((item) => (
           <SelectableItem
             key={item.id}
             item={item}
             coordParams={coordParams}
-            onSelect={(e) => handleItemSelect(item.id, e)}
+            onSelect={(e) => handleItemClick(item.id, e)}
             onDragStart={(e, transform) => handleItemDragStart(item.id, e, transform)}
           />
         ))}
@@ -365,6 +381,7 @@ export function GizmoOverlay({
             coordParams={coordParams}
             onTransformStart={handleTransformStart}
             onTransformEnd={handleGroupTransformEnd}
+            onItemClick={(itemId) => selectItems([itemId])}
           />
         ) : null}
 

@@ -10,6 +10,7 @@ import { transformToScreenBounds } from '../utils/coordinate-transform';
 interface SelectableItemProps {
   item: TimelineItem;
   coordParams: CoordinateParams;
+  isSelected?: boolean;
   onSelect: (e: React.MouseEvent) => void;
   /** Called on mousedown to start dragging immediately */
   onDragStart?: (e: React.MouseEvent, transform: Transform) => void;
@@ -23,6 +24,7 @@ interface SelectableItemProps {
 export function SelectableItem({
   item,
   coordParams,
+  isSelected = false,
   onSelect,
   onDragStart,
 }: SelectableItemProps) {
@@ -67,6 +69,9 @@ export function SelectableItem({
     }
   }, [onSelect, onDragStart, currentTransform]);
 
+  // Only show hover state for unselected items (selected items have gizmo)
+  const showHover = isHovered && !isSelected;
+
   return (
     <div
       className="absolute cursor-move"
@@ -77,9 +82,11 @@ export function SelectableItem({
         height: screenBounds.height,
         transform: `rotate(${currentTransform.rotation}deg)`,
         transformOrigin: 'center center',
-        // Subtle hover indicator
-        backgroundColor: isHovered ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-        border: isHovered ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid transparent',
+        // Z-index to render above GroupGizmo border but below handles
+        zIndex: 5,
+        // Subtle hover indicator (only for unselected items)
+        backgroundColor: showHover ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+        border: showHover ? '1px solid rgba(59, 130, 246, 0.4)' : '1px solid transparent',
       }}
       data-gizmo="selectable-item"
       onMouseDown={handleMouseDown}

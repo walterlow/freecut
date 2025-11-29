@@ -31,6 +31,8 @@ interface GroupGizmoProps {
   coordParams: CoordinateParams;
   onTransformStart: () => void;
   onTransformEnd: (transforms: Map<string, Transform>) => void;
+  /** Called when clicking (not dragging) on a specific item to select just that item */
+  onItemClick?: (itemId: string) => void;
 }
 
 type InteractionMode = 'idle' | 'translate' | 'scale' | 'rotate';
@@ -45,6 +47,7 @@ export function GroupGizmo({
   coordParams,
   onTransformStart,
   onTransformEnd,
+  onItemClick,
 }: GroupGizmoProps) {
   // Local interaction state
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('idle');
@@ -167,6 +170,43 @@ export function GroupGizmo({
     []
   );
 
+  // Helper to find which item (if any) contains a canvas point
+  const findItemAtPoint = useCallback(
+    (canvasPoint: Point): string | null => {
+      // Canvas center for coordinate conversion (transform.x/y are offsets from center)
+      const canvasCenterX = projectSize.width / 2;
+      const canvasCenterY = projectSize.height / 2;
+
+      // Check items in reverse order (top items first, assuming later items render on top)
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        const transform = itemTransforms.get(item.id);
+        if (!transform) continue;
+
+        // Convert transform position (offset from center) to absolute canvas coordinates
+        const itemCenterX = canvasCenterX + transform.x;
+        const itemCenterY = canvasCenterY + transform.y;
+
+        // Simple AABB check (doesn't account for rotation, but good enough for click detection)
+        const left = itemCenterX - transform.width / 2;
+        const right = itemCenterX + transform.width / 2;
+        const top = itemCenterY - transform.height / 2;
+        const bottom = itemCenterY + transform.height / 2;
+
+        if (
+          canvasPoint.x >= left &&
+          canvasPoint.x <= right &&
+          canvasPoint.y >= top &&
+          canvasPoint.y <= bottom
+        ) {
+          return item.id;
+        }
+      }
+      return null;
+    },
+    [items, itemTransforms, projectSize]
+  );
+
   // Start translate interaction
   const handleTranslateStart = useCallback(
     (e: React.MouseEvent) => {
@@ -188,7 +228,22 @@ export function GroupGizmo({
       onTransformStart();
       document.body.style.cursor = 'move';
 
+      // Track if actual dragging happened (movement beyond threshold in screen space)
+      let hasDragged = false;
+      const dragThreshold = 5; // pixels in screen space
+      const startScreenX = e.clientX;
+      const startScreenY = e.clientY;
+
       const handleMouseMove = (moveEvent: MouseEvent) => {
+        // Check if we've exceeded drag threshold (in screen space for consistency)
+        if (!hasDragged) {
+          const screenDeltaX = Math.abs(moveEvent.clientX - startScreenX);
+          const screenDeltaY = Math.abs(moveEvent.clientY - startScreenY);
+          if (screenDeltaX > dragThreshold || screenDeltaY > dragThreshold) {
+            hasDragged = true;
+          }
+        }
+
         const movePoint = toCanvasPoint(moveEvent);
         const deltaX = movePoint.x - point.x;
         const deltaY = movePoint.y - point.y;
@@ -202,6 +257,22 @@ export function GroupGizmo({
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
         document.body.style.cursor = '';
+
+        // If no drag happened (just a click), check if clicking on a specific item
+        if (!hasDragged && onItemClick) {
+          const clickedItemId = findItemAtPoint(point);
+          if (clickedItemId) {
+            // Clean up without committing transform
+            setInteractionMode('idle');
+            setPreviewTransforms(null);
+            setGroupPreviewTransforms(null);
+            groupStateRef.current = null;
+            startPointRef.current = null;
+            // Select just the clicked item
+            onItemClick(clickedItemId);
+            return;
+          }
+        }
 
         // Use ref to get latest preview transforms (avoids closure issues)
         const finalTransforms = previewTransformsRef.current ?? itemTransforms;
@@ -219,7 +290,7 @@ export function GroupGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setGroupPreviewTransforms, setPreviewTransforms]
+    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setGroupPreviewTransforms, setPreviewTransforms, onItemClick, findItemAtPoint]
   );
 
   // Start scale interaction
@@ -392,18 +463,18 @@ export function GroupGizmo({
         onDoubleClick={(e) => e.stopPropagation()}
       />
 
-      {/* Scale handles */}
+      {/* Scale handles - z-index 10 to stay above SelectableItem (z-index 5) */}
       {SCALE_HANDLES.map((handle) => (
         <div
           key={handle}
           className="bg-white border border-orange-500 pointer-events-auto"
-          style={getHandleStyle(handle)}
+          style={{ ...getHandleStyle(handle), zIndex: 10 }}
           data-gizmo={`scale-${handle}`}
           onMouseDown={(e) => handleScaleStart(handle, e)}
         />
       ))}
 
-      {/* Rotation handle */}
+      {/* Rotation handle - z-index 10 to stay above SelectableItem (z-index 5) */}
       <div
         className="absolute bg-white border border-orange-500 rounded-full pointer-events-auto cursor-crosshair"
         style={{
@@ -412,6 +483,7 @@ export function GroupGizmo({
           left: '50%',
           top: -ROTATION_HANDLE_OFFSET,
           marginLeft: -5,
+          zIndex: 10,
         }}
         data-gizmo="rotate"
         onMouseDown={handleRotateStart}

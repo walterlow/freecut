@@ -282,18 +282,18 @@ export function TransformGizmo({
         onDoubleClick={(e) => e.stopPropagation()}
       />
 
-      {/* Scale handles */}
+      {/* Scale handles - z-index 10 to stay above SelectableItem (z-index 5) */}
       {SCALE_HANDLES.map((handle) => (
         <div
           key={handle}
           className="bg-white border border-orange-500 pointer-events-auto"
-          style={getHandleStyle(handle)}
+          style={{ ...getHandleStyle(handle), zIndex: 10 }}
           data-gizmo={`scale-${handle}`}
           onMouseDown={(e) => handleScaleStart(handle, e)}
         />
       ))}
 
-      {/* Rotation handle */}
+      {/* Rotation handle - z-index 10 to stay above SelectableItem (z-index 5) */}
       <div
         className="absolute bg-white border border-orange-500 rounded-full pointer-events-auto cursor-crosshair"
         style={{
@@ -302,6 +302,7 @@ export function TransformGizmo({
           left: '50%',
           top: -ROTATION_HANDLE_OFFSET,
           marginLeft: -5,
+          zIndex: 10,
         }}
         data-gizmo="rotate"
         onMouseDown={handleRotateStart}
