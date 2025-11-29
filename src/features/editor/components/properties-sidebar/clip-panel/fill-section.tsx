@@ -76,8 +76,8 @@ export function FillSection({
   // Commit opacity (on mouse up)
   const handleOpacityChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       onTransformChange(itemIds, { opacity: value / 100 });
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview]
   );
@@ -97,8 +97,8 @@ export function FillSection({
   // Commit corner radius (on mouse up)
   const handleCornerRadiusChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       onTransformChange(itemIds, { cornerRadius: value });
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview]
   );

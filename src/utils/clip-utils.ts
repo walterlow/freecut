@@ -33,9 +33,11 @@ export function splitItem(item: TimelineItem, splitFrame: number): [TimelineItem
 
   // Account for playback speed when calculating source positions
   // Timeline frames * speed = source frames consumed
+  // IMPORTANT: Calculate second part as remainder to avoid rounding gaps
   const speed = item.speed || 1;
+  const totalSourceFrames = Math.round(item.durationInFrames * speed);
   const firstPartSourceFrames = Math.round(firstPartDuration * speed);
-  const secondPartSourceFrames = Math.round(secondPartDuration * speed);
+  const secondPartSourceFrames = totalSourceFrames - firstPartSourceFrames;
 
   const firstPart: TimelineItem = {
     ...item,

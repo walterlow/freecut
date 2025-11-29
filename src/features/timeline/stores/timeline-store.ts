@@ -387,9 +387,12 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     // Account for speed when calculating source frames
     // Timeline frames * speed = source frames
     // e.g., 50 timeline frames at 2x speed = 100 source frames
+    // IMPORTANT: Calculate right source frames as remainder to avoid rounding gaps
+    // If both are rounded independently, their sum may not equal the original total
     const speed = item.speed || 1;
+    const totalSourceFrames = Math.round(item.durationInFrames * speed);
     const leftSourceFrames = Math.round(leftDuration * speed);
-    const rightSourceFrames = Math.round(rightDuration * speed);
+    const rightSourceFrames = totalSourceFrames - leftSourceFrames;
 
     // Left item: keeps original from, new duration, updated end trim
     const leftItem: typeof item = {

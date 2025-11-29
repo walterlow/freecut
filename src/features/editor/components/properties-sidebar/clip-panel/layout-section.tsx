@@ -122,8 +122,8 @@ export function LayoutSection({
   // Commit X position
   const handleXChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       onTransformChange(itemIds, { x: value });
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview]
   );
@@ -143,8 +143,8 @@ export function LayoutSection({
   // Commit Y position
   const handleYChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       onTransformChange(itemIds, { y: value });
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview]
   );
@@ -169,13 +169,13 @@ export function LayoutSection({
   // Commit width
   const handleWidthChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       if (aspectLocked && height !== 'mixed') {
         const newHeight = Math.round(value / currentAspectRatio);
         onTransformChange(itemIds, { width: value, height: newHeight });
       } else {
         onTransformChange(itemIds, { width: value });
       }
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview, aspectLocked, height, currentAspectRatio]
   );
@@ -200,13 +200,13 @@ export function LayoutSection({
   // Commit height
   const handleHeightChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       if (aspectLocked && width !== 'mixed') {
         const newWidth = Math.round(value * currentAspectRatio);
         onTransformChange(itemIds, { width: newWidth, height: value });
       } else {
         onTransformChange(itemIds, { height: value });
       }
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview, aspectLocked, width, currentAspectRatio]
   );
@@ -226,8 +226,8 @@ export function LayoutSection({
   // Commit rotation (on mouse up)
   const handleRotationChange = useCallback(
     (value: number) => {
-      clearPropertiesPreview();
       onTransformChange(itemIds, { rotation: value });
+      queueMicrotask(() => clearPropertiesPreview());
     },
     [itemIds, onTransformChange, clearPropertiesPreview]
   );

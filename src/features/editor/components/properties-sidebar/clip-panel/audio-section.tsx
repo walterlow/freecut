@@ -77,10 +77,12 @@ export function AudioSection({ items }: AudioSectionProps) {
   );
 
   // Commit volume (on mouse up)
+  // Update store first, then clear preview to avoid flicker
   const handleVolumeChange = useCallback(
     (value: number) => {
-      clearItemPropertiesPreview();
       itemIds.forEach((id) => updateItem(id, { volume: value }));
+      // Defer preview clear to next microtask so store update propagates first
+      queueMicrotask(() => clearItemPropertiesPreview());
     },
     [itemIds, updateItem, clearItemPropertiesPreview]
   );
@@ -100,8 +102,8 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Commit audio fade in (on mouse up)
   const handleFadeInChange = useCallback(
     (value: number) => {
-      clearItemPropertiesPreview();
       itemIds.forEach((id) => updateItem(id, { audioFadeIn: value }));
+      queueMicrotask(() => clearItemPropertiesPreview());
     },
     [itemIds, updateItem, clearItemPropertiesPreview]
   );
@@ -121,38 +123,48 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Commit audio fade out (on mouse up)
   const handleFadeOutChange = useCallback(
     (value: number) => {
-      clearItemPropertiesPreview();
       itemIds.forEach((id) => updateItem(id, { audioFadeOut: value }));
+      queueMicrotask(() => clearItemPropertiesPreview());
     },
     [itemIds, updateItem, clearItemPropertiesPreview]
   );
 
   // Reset volume to 0 dB
+  // Read current values from store to avoid depending on audioItems (prevents callback recreation)
   const handleResetVolume = useCallback(() => {
     const tolerance = 0.1;
-    const needsUpdate = audioItems.some((item) => Math.abs(item.volume ?? 0) > tolerance);
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && Math.abs(item.volume ?? 0) > tolerance
+    );
     if (needsUpdate) {
       itemIds.forEach((id) => updateItem(id, { volume: 0 }));
     }
-  }, [audioItems, itemIds, updateItem]);
+  }, [itemIds, updateItem]);
 
   // Reset audio fade in to 0
   const handleResetFadeIn = useCallback(() => {
     const tolerance = 0.01;
-    const needsUpdate = audioItems.some((item) => (item.audioFadeIn ?? 0) > tolerance);
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.audioFadeIn ?? 0) > tolerance
+    );
     if (needsUpdate) {
       itemIds.forEach((id) => updateItem(id, { audioFadeIn: 0 }));
     }
-  }, [audioItems, itemIds, updateItem]);
+  }, [itemIds, updateItem]);
 
   // Reset audio fade out to 0
   const handleResetFadeOut = useCallback(() => {
     const tolerance = 0.01;
-    const needsUpdate = audioItems.some((item) => (item.audioFadeOut ?? 0) > tolerance);
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.audioFadeOut ?? 0) > tolerance
+    );
     if (needsUpdate) {
       itemIds.forEach((id) => updateItem(id, { audioFadeOut: 0 }));
     }
-  }, [audioItems, itemIds, updateItem]);
+  }, [itemIds, updateItem]);
 
   if (audioItems.length === 0) return null;
 

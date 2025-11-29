@@ -92,6 +92,9 @@ export function VideoSection({ items }: VideoSectionProps) {
     [items]
   );
 
+  // Memoize item IDs for stable callback dependencies
+  const itemIds = useMemo(() => videoItems.map((item) => item.id), [videoItems]);
+
   // Get current values (speed defaults to 1, fades default to 0)
   const speed = getMixedVideoValue(videoItems, (item) => item.speed, 1);
   const fadeIn = getMixedVideoValue(videoItems, (item) => item.fadeIn, 0);
@@ -101,6 +104,7 @@ export function VideoSection({ items }: VideoSectionProps) {
   const sliderValue = speed === 'mixed' ? 'mixed' : speedToSlider(speed);
 
   // Handle speed change from slider - uses rate stretch to adjust duration
+  // Read current values from store to avoid depending on videoItems
   const handleSliderChange = useCallback(
     (newSliderValue: number) => {
       const newSpeed = sliderToSpeed(newSliderValue);
@@ -109,20 +113,23 @@ export function VideoSection({ items }: VideoSectionProps) {
       // Clamp speed to valid range
       const clampedSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, roundedSpeed));
 
-      videoItems.forEach((item) => {
-        const currentSpeed = item.speed || 1;
-        // Use stored sourceDuration if available, otherwise calculate from current state
-        // This prevents accumulated rounding errors from multiple speed changes
-        const sourceDuration = item.sourceDuration
-          ? Math.round(item.durationInFrames * currentSpeed) // Current visible frames
-          : Math.round(item.durationInFrames * currentSpeed);
-        // Calculate new duration based on new speed
-        const newDuration = Math.max(1, Math.round(sourceDuration / clampedSpeed));
-        // Keep start position the same (stretch from end)
-        rateStretchItem(item.id, item.from, newDuration, clampedSpeed);
-      });
+      const currentItems = useTimelineStore.getState().items;
+      currentItems
+        .filter((item): item is VideoItem => item.type === 'video' && itemIds.includes(item.id))
+        .forEach((item) => {
+          const currentSpeed = item.speed || 1;
+          // Use stored sourceDuration if available, otherwise calculate from current state
+          // This prevents accumulated rounding errors from multiple speed changes
+          const sourceDuration = item.sourceDuration
+            ? Math.round(item.durationInFrames * currentSpeed) // Current visible frames
+            : Math.round(item.durationInFrames * currentSpeed);
+          // Calculate new duration based on new speed
+          const newDuration = Math.max(1, Math.round(sourceDuration / clampedSpeed));
+          // Keep start position the same (stretch from end)
+          rateStretchItem(item.id, item.from, newDuration, clampedSpeed);
+        });
     },
-    [videoItems, rateStretchItem]
+    [itemIds, rateStretchItem]
   );
 
   // Format slider value to display actual speed (2 decimal places to match clip label)
@@ -137,76 +144,86 @@ export function VideoSection({ items }: VideoSectionProps) {
   const handleFadeInLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { fadeIn: number }> = {};
-      videoItems.forEach((item) => {
-        previews[item.id] = { fadeIn: value };
+      itemIds.forEach((id) => {
+        previews[id] = { fadeIn: value };
       });
       setItemPropertiesPreview(previews);
     },
-    [videoItems, setItemPropertiesPreview]
+    [itemIds, setItemPropertiesPreview]
   );
 
   // Commit fade in (on mouse up)
   const handleFadeInChange = useCallback(
     (value: number) => {
-      clearItemPropertiesPreview();
-      videoItems.forEach((item) => updateItem(item.id, { fadeIn: value }));
+      itemIds.forEach((id) => updateItem(id, { fadeIn: value }));
+      queueMicrotask(() => clearItemPropertiesPreview());
     },
-    [videoItems, updateItem, clearItemPropertiesPreview]
+    [itemIds, updateItem, clearItemPropertiesPreview]
   );
 
   // Live preview for fade out (during drag)
   const handleFadeOutLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { fadeOut: number }> = {};
-      videoItems.forEach((item) => {
-        previews[item.id] = { fadeOut: value };
+      itemIds.forEach((id) => {
+        previews[id] = { fadeOut: value };
       });
       setItemPropertiesPreview(previews);
     },
-    [videoItems, setItemPropertiesPreview]
+    [itemIds, setItemPropertiesPreview]
   );
 
   // Commit fade out (on mouse up)
   const handleFadeOutChange = useCallback(
     (value: number) => {
-      clearItemPropertiesPreview();
-      videoItems.forEach((item) => updateItem(item.id, { fadeOut: value }));
+      itemIds.forEach((id) => updateItem(id, { fadeOut: value }));
+      queueMicrotask(() => clearItemPropertiesPreview());
     },
-    [videoItems, updateItem, clearItemPropertiesPreview]
+    [itemIds, updateItem, clearItemPropertiesPreview]
   );
 
   // Reset speed to 1x
+  // Read current values from store to avoid depending on videoItems (prevents callback recreation)
   const handleResetSpeed = useCallback(() => {
     const tolerance = 0.01;
-    videoItems.forEach((item) => {
-      const currentSpeed = item.speed || 1;
-      if (Math.abs(currentSpeed - 1) <= tolerance) return;
+    const currentItems = useTimelineStore.getState().items;
+    currentItems
+      .filter((item): item is VideoItem => item.type === 'video' && itemIds.includes(item.id))
+      .forEach((item) => {
+        const currentSpeed = item.speed || 1;
+        if (Math.abs(currentSpeed - 1) <= tolerance) return;
 
-      const sourceDuration = item.sourceDuration
-        ? Math.round(item.durationInFrames * currentSpeed)
-        : Math.round(item.durationInFrames * currentSpeed);
-      const newDuration = Math.max(1, sourceDuration);
-      rateStretchItem(item.id, item.from, newDuration, 1);
-    });
-  }, [videoItems, rateStretchItem]);
+        const sourceDuration = item.sourceDuration
+          ? Math.round(item.durationInFrames * currentSpeed)
+          : Math.round(item.durationInFrames * currentSpeed);
+        const newDuration = Math.max(1, sourceDuration);
+        rateStretchItem(item.id, item.from, newDuration, 1);
+      });
+  }, [itemIds, rateStretchItem]);
 
   // Reset fade in to 0
   const handleResetFadeIn = useCallback(() => {
     const tolerance = 0.01;
-    const needsUpdate = videoItems.some((item) => (item.fadeIn ?? 0) > tolerance);
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.fadeIn ?? 0) > tolerance
+    );
     if (needsUpdate) {
-      videoItems.forEach((item) => updateItem(item.id, { fadeIn: 0 }));
+      itemIds.forEach((id) => updateItem(id, { fadeIn: 0 }));
     }
-  }, [videoItems, updateItem]);
+  }, [itemIds, updateItem]);
 
   // Reset fade out to 0
   const handleResetFadeOut = useCallback(() => {
     const tolerance = 0.01;
-    const needsUpdate = videoItems.some((item) => (item.fadeOut ?? 0) > tolerance);
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.fadeOut ?? 0) > tolerance
+    );
     if (needsUpdate) {
-      videoItems.forEach((item) => updateItem(item.id, { fadeOut: 0 }));
+      itemIds.forEach((id) => updateItem(id, { fadeOut: 0 }));
     }
-  }, [videoItems, updateItem]);
+  }, [itemIds, updateItem]);
 
   if (videoItems.length === 0) return null;
 
