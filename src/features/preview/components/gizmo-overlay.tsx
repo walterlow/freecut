@@ -76,14 +76,16 @@ export function GizmoOverlay({
     setCanvasSize(projectSize.width, projectSize.height);
   }, [projectSize.width, projectSize.height, setCanvasSize]);
 
-  // Get visual items visible at current frame (excluding audio and items on hidden tracks)
+  // Get visual items visible at current frame (excluding audio, hidden tracks, and locked tracks)
   // Sorted by track order: items on top tracks (lower order) come LAST for proper stacking/click priority
   const visibleItems = useMemo(() => {
-    // Create maps for track visibility and order
-    const trackVisibility = new Map<string, boolean>();
+    // Create maps for track properties
+    const trackVisible = new Map<string, boolean>();
+    const trackLocked = new Map<string, boolean>();
     const trackOrder = new Map<string, number>();
     for (const track of tracks) {
-      trackVisibility.set(track.id, track.visible);
+      trackVisible.set(track.id, track.visible);
+      trackLocked.set(track.id, track.locked);
       trackOrder.set(track.id, track.order);
     }
 
@@ -92,7 +94,9 @@ export function GizmoOverlay({
         // Only visual items (not audio)
         if (item.type === 'audio') return false;
         // Check if item's track is visible
-        if (!trackVisibility.get(item.trackId)) return false;
+        if (!trackVisible.get(item.trackId)) return false;
+        // Check if item's track is locked (locked items can't be selected)
+        if (trackLocked.get(item.trackId)) return false;
         // Check if item is visible at current frame
         const itemEnd = item.from + item.durationInFrames;
         return currentFrame >= item.from && currentFrame < itemEnd;
