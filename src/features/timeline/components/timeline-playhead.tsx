@@ -146,22 +146,6 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
         zIndex: 9999,
       }}
     >
-      {/* Invisible wider hit area for easier grabbing - only in tracks view */}
-      {!inRuler && (
-        <div
-          className="absolute top-0 bottom-0"
-          data-playhead-handle
-          style={{
-            left: '-6px', // Center the 14px wide area on the 2px line
-            width: '14px',
-            cursor: activeToolRef.current === 'razor' ? 'default' : isDragging ? 'grabbing' : 'grab',
-            // Pass through pointer events in razor mode or during external drag operations
-            pointerEvents: activeToolRef.current === 'razor' || isExternalDrag ? 'none' : 'auto',
-            backgroundColor: 'transparent',
-          }}
-          onMouseDown={handleMouseDown}
-        />
-      )}
 
       {/* Playhead line - visible and prominent */}
       <div
