@@ -23,8 +23,6 @@ import { generatePlayheadThumbnail } from '@/features/projects/utils/thumbnail-g
 // const redo = useTimelineStore.temporal.getState().redo;
 // const canUndo = useTimelineStore((state) => state.pastStates.length > 0);
 
-// Default marker color (blue)
-const DEFAULT_MARKER_COLOR = 'oklch(0.65 0.20 250)';
 
 export const useTimelineStore = create<TimelineState & TimelineActions>()(
   temporal((set) => ({
@@ -567,7 +565,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
   clearInOutPoints: () => set({ inPoint: null, outPoint: null, isDirty: true }),
 
   // Marker actions
-  addMarker: (frame, color = DEFAULT_MARKER_COLOR, label) => set((state) => ({
+  addMarker: (frame, color = 'var(--color-timeline-marker)', label) => set((state) => ({
     markers: [...state.markers, {
       id: crypto.randomUUID(),
       frame,

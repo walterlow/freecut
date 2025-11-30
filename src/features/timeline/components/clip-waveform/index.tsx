@@ -3,15 +3,12 @@ import { TiledCanvas } from '../clip-filmstrip/tiled-canvas';
 import { WaveformSkeleton } from './waveform-skeleton';
 import { useWaveform } from '../../hooks/use-waveform';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
+import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
 // Waveform dimensions
 const DEFAULT_WAVEFORM_HEIGHT = 32;
 const BAR_WIDTH = 2;
 const BAR_GAP = 1;
-
-// Waveform colors (matching theme.css --color-timeline-audio)
-const WAVEFORM_FILL_COLOR = 'rgba(168, 85, 247, 0.6)'; // oklch(0.7 0.1209 301.76) approximation
-const WAVEFORM_STROKE_COLOR = 'rgba(168, 85, 247, 1)';
 
 export interface ClipWaveformProps {
   /** Media ID from the timeline item */

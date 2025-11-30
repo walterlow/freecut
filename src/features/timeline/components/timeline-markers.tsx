@@ -566,8 +566,8 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
             left: `${timeToPixels(inPoint / fps)}px`,
             width: `${timeToPixels((outPoint - inPoint) / fps)}px`,
             backgroundColor: 'oklch(0.5 0.1 220 / 0.15)',
-            borderLeft: '1px solid oklch(0.65 0.18 142 / 0.5)',
-            borderRight: '1px solid oklch(0.61 0.22 29 / 0.5)',
+            borderLeft: '1px solid color-mix(in oklch, var(--color-timeline-in) 50%, transparent)',
+            borderRight: '1px solid color-mix(in oklch, var(--color-timeline-out) 50%, transparent)',
             zIndex: 10,
           }}
         />

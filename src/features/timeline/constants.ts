@@ -9,3 +9,8 @@ export const MAGNETIC_SNAP_DISTANCE = 10;
 export const BASE_SNAP_THRESHOLD_PIXELS = 8; // Base threshold in pixels at 1x zoom
 export const DRAG_THRESHOLD_PIXELS = 3; // Minimum movement to start drag (prevents accidental drags)
 export const DRAG_OPACITY = 0.8; // Opacity of item during drag
+
+// Waveform colors (rgba approximation of audio color for canvas rendering)
+// Note: Canvas API doesn't support CSS variables, so actual color values are needed
+export const WAVEFORM_FILL_COLOR = 'rgba(158, 107, 214, 0.5)';
+export const WAVEFORM_STROKE_COLOR = 'rgba(158, 107, 214, 0.8)';

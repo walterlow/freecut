@@ -667,13 +667,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       {/* Hidden when hovering edge, during trim/stretch, or during any drag */}
       {hasJoinableLeft && !trackLocked && !isAnyDragActive && hoveredEdge !== 'start' && !isTrimming && !isStretching && (
         <div
-          className="absolute left-0 top-0 bottom-0 w-px bg-green-400 shadow-[0_0_6px_1px_rgba(74,222,128,0.7)] pointer-events-none"
+          className="absolute left-0 top-0 bottom-0 w-px pointer-events-none"
+          style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
           title="Can join with previous clip (J)"
         />
       )}
       {hasJoinableRight && !trackLocked && !isAnyDragActive && hoveredEdge !== 'end' && !isTrimming && !isStretching && (
         <div
-          className="absolute right-0 top-0 bottom-0 w-px bg-green-400 shadow-[0_0_6px_1px_rgba(74,222,128,0.7)] pointer-events-none"
+          className="absolute right-0 top-0 bottom-0 w-px pointer-events-none"
+          style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
           title="Can join with next clip (J)"
         />
       )}

@@ -138,8 +138,8 @@ export function TimelineInOutMarkers() {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              backgroundColor: 'oklch(0.65 0.18 142)', // Green
-              boxShadow: '0 0 4px oklch(0.65 0.18 142 / 0.4)',
+              backgroundColor: 'var(--color-timeline-in)',
+              boxShadow: '0 0 4px color-mix(in oklch, var(--color-timeline-in) 40%, transparent)',
             }}
           />
 
@@ -164,8 +164,8 @@ export function TimelineInOutMarkers() {
               left: 0,
               width: '10px',
               height: '12px',
-              borderTop: '2px solid oklch(0.65 0.18 142)',
-              borderLeft: '2px solid oklch(0.65 0.18 142)',
+              borderTop: '2px solid var(--color-timeline-in)',
+              borderLeft: '2px solid var(--color-timeline-in)',
               cursor: isDraggingIn ? 'grabbing' : 'grab',
             }}
             onMouseDown={handleInMouseDown}
@@ -178,7 +178,7 @@ export function TimelineInOutMarkers() {
                 left: '-2px',
                 width: '4px',
                 height: '4px',
-                backgroundColor: 'oklch(0.65 0.18 142)',
+                backgroundColor: 'var(--color-timeline-in)',
               }}
             />
           </div>
@@ -191,8 +191,8 @@ export function TimelineInOutMarkers() {
               left: 0,
               width: '10px',
               height: '12px',
-              borderBottom: '2px solid oklch(0.65 0.18 142)',
-              borderLeft: '2px solid oklch(0.65 0.18 142)',
+              borderBottom: '2px solid var(--color-timeline-in)',
+              borderLeft: '2px solid var(--color-timeline-in)',
             }}
           >
             {/* Filled corner square */}
@@ -203,7 +203,7 @@ export function TimelineInOutMarkers() {
                 left: '-2px',
                 width: '4px',
                 height: '4px',
-                backgroundColor: 'oklch(0.65 0.18 142)',
+                backgroundColor: 'var(--color-timeline-in)',
               }}
             />
           </div>
@@ -227,8 +227,8 @@ export function TimelineInOutMarkers() {
           <div
             className="absolute inset-0 pointer-events-none"
             style={{
-              backgroundColor: 'oklch(0.61 0.22 29)', // Red
-              boxShadow: '0 0 4px oklch(0.61 0.22 29 / 0.4)',
+              backgroundColor: 'var(--color-timeline-out)',
+              boxShadow: '0 0 4px color-mix(in oklch, var(--color-timeline-out) 40%, transparent)',
             }}
           />
 
@@ -253,8 +253,8 @@ export function TimelineInOutMarkers() {
               right: 0,
               width: '10px',
               height: '12px',
-              borderTop: '2px solid oklch(0.61 0.22 29)',
-              borderRight: '2px solid oklch(0.61 0.22 29)',
+              borderTop: '2px solid var(--color-timeline-out)',
+              borderRight: '2px solid var(--color-timeline-out)',
               cursor: isDraggingOut ? 'grabbing' : 'grab',
             }}
             onMouseDown={handleOutMouseDown}
@@ -267,7 +267,7 @@ export function TimelineInOutMarkers() {
                 right: '-2px',
                 width: '4px',
                 height: '4px',
-                backgroundColor: 'oklch(0.61 0.22 29)',
+                backgroundColor: 'var(--color-timeline-out)',
               }}
             />
           </div>
@@ -280,8 +280,8 @@ export function TimelineInOutMarkers() {
               right: 0,
               width: '10px',
               height: '12px',
-              borderBottom: '2px solid oklch(0.61 0.22 29)',
-              borderRight: '2px solid oklch(0.61 0.22 29)',
+              borderBottom: '2px solid var(--color-timeline-out)',
+              borderRight: '2px solid var(--color-timeline-out)',
             }}
           >
             {/* Filled corner square */}
@@ -292,7 +292,7 @@ export function TimelineInOutMarkers() {
                 right: '-2px',
                 width: '4px',
                 height: '4px',
-                backgroundColor: 'oklch(0.61 0.22 29)',
+                backgroundColor: 'var(--color-timeline-out)',
               }}
             />
           </div>

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(xargs ls:*)",
       "Bash(cd:*)",
-      "Skill(frontend-design:frontend-design)"
+      "Skill(frontend-design:frontend-design)",
+      "Bash(git grep:*)"
     ],
     "deny": [],
     "ask": []

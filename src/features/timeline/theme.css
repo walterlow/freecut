@@ -12,14 +12,26 @@
 
 @theme {
   /* Timeline item type colors - OKLCH format */
+  --color-timeline-baseclip: oklch(0.42 0 0);
   --color-timeline-video: oklch(0.7 0.0765 276.35);
   --color-timeline-audio: oklch(0.7 0.1209 301.76);
   --color-timeline-image: oklch(0.62 0.17 250);      /* Blue (same as video) */
-  --color-timeline-text: oklch(0.65 0.15 290);       /* Purple */
+  --color-timeline-text: oklch(0.671 0 290);       
   --color-timeline-shape: oklch(0.68 0.19 45);       /* Orange */
 
   /* Playhead color */
   --color-timeline-playhead: oklch(0.68 0.19 45);    /* Orange (matches primary) */
+
+  /* In/Out marker colors */
+  --color-timeline-in: oklch(0.65 0.18 142);         /* Green - in point */
+  --color-timeline-out: oklch(0.61 0.22 29);         /* Red - out point */
+
+  /* Marker color */
+  --color-timeline-marker: oklch(0.65 0.20 250);     /* Blue - timeline markers */
+
+  /* Snap/Join indicator colors */
+  --color-timeline-snap: #f97316;                    /* orange-500 - snap indicator */
+  --color-timeline-join: #fb923c;                    /* orange-400 - join indicator */
 }
 
 /* Scissors cursor for razor/cut tool - uses Lucide scissors icon */

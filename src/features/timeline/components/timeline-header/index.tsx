@@ -243,7 +243,7 @@ export function TimelineHeader({ onZoomChange, onZoomIn, onZoomOut, onZoomToFit 
             onClick={() => setInPoint(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Set In Point (I)"
           >
-            <span className="text-sm font-bold" style={{ color: 'oklch(0.65 0.18 142)' }}>[</span>
+            <span className="text-sm font-bold" style={{ color: 'var(--color-timeline-in)' }}>[</span>
           </Button>
 
           <Button
@@ -253,7 +253,7 @@ export function TimelineHeader({ onZoomChange, onZoomIn, onZoomOut, onZoomToFit 
             onClick={() => setOutPoint(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Set Out Point (O)"
           >
-            <span className="text-sm font-bold" style={{ color: 'oklch(0.61 0.22 29)' }}>]</span>
+            <span className="text-sm font-bold" style={{ color: 'var(--color-timeline-out)' }}>]</span>
           </Button>
 
           <Button
@@ -279,7 +279,7 @@ export function TimelineHeader({ onZoomChange, onZoomIn, onZoomOut, onZoomToFit 
             onClick={() => addMarker(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Add Marker (M)"
           >
-            <Flag className="w-3.5 h-3.5" style={{ color: 'oklch(0.65 0.20 250)' }} />
+            <Flag className="w-3.5 h-3.5" style={{ color: 'var(--color-timeline-marker)' }} />
           </Button>
 
           <Button

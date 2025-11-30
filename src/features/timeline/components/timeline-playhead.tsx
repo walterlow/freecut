@@ -151,7 +151,7 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
       <div
         className="absolute inset-0 bg-timeline-playhead pointer-events-none"
         style={{
-          boxShadow: '0 0 8px oklch(0.68 0.19 45 / 0.5)',
+          boxShadow: '0 0 8px color-mix(in oklch, var(--color-timeline-playhead) 50%, transparent)',
         }}
       />
 
@@ -182,7 +182,7 @@ export function TimelinePlayhead({ inRuler = false }: TimelinePlayheadProps) {
               left: '50%',
               width: '10px',
               height: '10px',
-              boxShadow: '0 0 8px oklch(0.68 0.19 45 / 0.5)',
+              boxShadow: '0 0 8px color-mix(in oklch, var(--color-timeline-playhead) 50%, transparent)',
               transform: 'translateX(-50%) rotate(45deg)',
               transformOrigin: 'center',
             }}

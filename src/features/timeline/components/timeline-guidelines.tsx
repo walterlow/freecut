@@ -42,9 +42,9 @@ export function TimelineGuidelines({ activeSnapTarget }: TimelineGuidelinesProps
         className="absolute top-0 bottom-0 w-0.5"
         style={{
           left: `${left}px`,
-          backgroundColor: isPlayhead ? '#22c55e' : '#22c55e', // Green for both - visible against playhead
+          backgroundColor: 'var(--color-timeline-snap)',
           opacity: 0.9,
-          boxShadow: '0 0 4px rgba(34, 197, 94, 0.8)',
+          boxShadow: '0 0 4px var(--color-timeline-snap)',
         }}
       />
     </div>
