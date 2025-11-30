@@ -2,11 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -60,19 +55,15 @@ export function Toolbar({ project, isDirty = false, onSave, onExport, onExportBu
     <div className="panel-header h-14 border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
       {/* Project Info */}
       <div className="flex items-center gap-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={handleBackClick}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Back to Projects</TooltipContent>
-        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9"
+          onClick={handleBackClick}
+          data-tooltip="Back to Projects"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
 
         {/* Unsaved Changes Dialog */}
         <UnsavedChangesDialog

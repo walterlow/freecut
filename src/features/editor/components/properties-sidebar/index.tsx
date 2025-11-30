@@ -1,10 +1,5 @@
 import { Activity } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
 import { useEditorStore } from '../../stores/editor-store';
 import { useSelectionStore } from '../../stores/selection-store';
@@ -69,17 +64,14 @@ export function PropertiesSidebar() {
 
       {/* Right Sidebar Toggle */}
       {!rightSidebarOpen && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleRightSidebar}
-              className="absolute right-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
-            >
-              <ChevronLeft className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="left">Show Properties Panel</TooltipContent>
-        </Tooltip>
+        <button
+          onClick={toggleRightSidebar}
+          className="absolute right-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
+          data-tooltip="Show Properties Panel"
+          data-tooltip-side="left"
+        >
+          <ChevronLeft className="w-3 h-3 text-muted-foreground" />
+        </button>
       )}
     </>
   );

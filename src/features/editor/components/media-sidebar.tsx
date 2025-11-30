@@ -1,11 +1,6 @@
 import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   ChevronLeft,
   ChevronRight,
   Film,
@@ -207,17 +202,14 @@ export function MediaSidebar() {
 
       {/* Left Sidebar Toggle */}
       {!leftSidebarOpen && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={toggleLeftSidebar}
-              className="absolute left-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-r-md flex items-center justify-center transition-all hover:w-7"
-            >
-              <ChevronRight className="w-3 h-3 text-muted-foreground" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Show Media Panel</TooltipContent>
-        </Tooltip>
+        <button
+          onClick={toggleLeftSidebar}
+          className="absolute left-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-r-md flex items-center justify-center transition-all hover:w-7"
+          data-tooltip="Show Media Panel"
+          data-tooltip-side="right"
+        >
+          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+        </button>
       )}
     </>
   );

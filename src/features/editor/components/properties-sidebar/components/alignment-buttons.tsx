@@ -1,10 +1,5 @@
 import { Button } from '@/components/ui/button';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
-import {
   AlignStartHorizontal,
   AlignCenterHorizontal,
   AlignEndHorizontal,
@@ -62,40 +57,36 @@ export function AlignmentButtons({
       {/* Horizontal alignment */}
       <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
         {horizontalAlignments.map(({ type, icon: Icon, label }) => (
-          <Tooltip key={type}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onAlign(type)}
-                disabled={disabled}
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{label}</TooltipContent>
-          </Tooltip>
+          <Button
+            key={type}
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => onAlign(type)}
+            disabled={disabled}
+            data-tooltip={label}
+            data-tooltip-side="bottom"
+          >
+            <Icon className="w-3.5 h-3.5" />
+          </Button>
         ))}
       </div>
 
       {/* Vertical alignment */}
       <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
         {verticalAlignments.map(({ type, icon: Icon, label }) => (
-          <Tooltip key={type}>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => onAlign(type)}
-                disabled={disabled}
-              >
-                <Icon className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">{label}</TooltipContent>
-          </Tooltip>
+          <Button
+            key={type}
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => onAlign(type)}
+            disabled={disabled}
+            data-tooltip={label}
+            data-tooltip-side="bottom"
+          >
+            <Icon className="w-3.5 h-3.5" />
+          </Button>
         ))}
       </div>
     </div>
