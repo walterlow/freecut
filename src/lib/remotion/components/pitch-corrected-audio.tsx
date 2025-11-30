@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useCurrentFrame, useVideoConfig, Internals, getRemotionEnvironment, Audio, interpolate } from 'remotion';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 
 interface PitchCorrectedAudioProps {
   src: string;
@@ -50,6 +51,11 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
   // Read preview values from gizmo store
   const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);
   const preview = itemPropertiesPreview?.[itemId];
+
+  // Read master preview volume from playback store (only used during preview, not render)
+  // These are granular selectors to avoid unnecessary re-renders
+  const previewMasterVolume = usePlaybackStore((s) => s.volume);
+  const previewMasterMuted = usePlaybackStore((s) => s.muted);
 
   // Use preview values if available
   // Volume is stored in dB (0 = unity gain)
@@ -106,7 +112,14 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = ({
 
   // Convert dB to linear (0 dB = unity gain = 1.0)
   const linearVolume = Math.pow(10, effectiveVolumeDb / 20);
-  const finalVolume = muted ? 0 : Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+  // Item volume with fades (used for both render and preview)
+  const itemVolume = muted ? 0 : Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+
+  // During render, use only item volume
+  // During preview, apply master preview volume from playback controls
+  const isPreview = !environment.isRendering;
+  const effectiveMasterVolume = isPreview ? (previewMasterMuted ? 0 : previewMasterVolume) : 1;
+  const finalVolume = itemVolume * effectiveMasterVolume;
 
   // During rendering, use Remotion's Audio component
   // Remotion's playbackRate uses FFmpeg's atempo filter which already preserves pitch

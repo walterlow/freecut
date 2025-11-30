@@ -2,6 +2,7 @@ import React from 'react';
 import { AbsoluteFill, OffthreadVideo, useVideoConfig, useCurrentFrame, interpolate, useRemotionEnvironment } from 'remotion';
 import { Video } from '@remotion/media';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import type { TimelineItem, VideoItem, TextItem } from '@/types/timeline';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
@@ -16,14 +17,20 @@ import { loadFont, FONT_WEIGHT_MAP } from '../utils/fonts';
 /**
  * Hook to calculate video audio volume with fades and preview support.
  * Returns the final volume (0-1) to apply to the video component.
+ * During preview, also applies master preview volume from playback controls.
  */
 function useVideoAudioVolume(item: VideoItem, muted: boolean): number {
   const { fps } = useVideoConfig();
   const frame = useCurrentFrame();
+  const env = useRemotionEnvironment();
 
   // Read preview values from gizmo store
   const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);
   const preview = itemPropertiesPreview?.[item.id];
+
+  // Read master preview volume from playback store (only used during preview, not render)
+  const previewMasterVolume = usePlaybackStore((s) => s.volume);
+  const previewMasterMuted = usePlaybackStore((s) => s.muted);
 
   // Use preview values if available, otherwise use item's stored values
   // Volume is stored in dB (0 = unity gain)
@@ -82,7 +89,15 @@ function useVideoAudioVolume(item: VideoItem, muted: boolean): number {
 
   // Convert dB to linear (0 dB = unity gain = 1.0)
   const linearVolume = Math.pow(10, volumeDb / 20);
-  return Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+  // Item volume with fades
+  const itemVolume = Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+
+  // During render, use only item volume
+  // During preview, apply master preview volume from playback controls
+  const isPreview = env.isPlayer || env.isStudio;
+  const effectiveMasterVolume = isPreview ? (previewMasterMuted ? 0 : previewMasterVolume) : 1;
+
+  return itemVolume * effectiveMasterVolume;
 }
 
 /**
