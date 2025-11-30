@@ -100,6 +100,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     )
   );
 
+  // Check if ANY drag is happening globally (to hide handles on all clips during drag)
+  const isAnyDragActive = useSelectionStore((s) => !!s.dragState?.isDragging);
+
   // Check if this item is part of a multi-drag (but not the anchor)
   const isPartOfDrag = isPartOfMultiDrag && !isDragging;
 
@@ -152,6 +155,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           transformRef.current.style.opacity = String(DRAG_OPACITY);
           transformRef.current.style.transition = 'none';
           transformRef.current.style.pointerEvents = 'none';
+          // Elevate follower clips above other clips during drag
+          transformRef.current.style.zIndex = '50';
 
           // Hide ghost during normal drag
           if (ghostRef.current) {
@@ -171,6 +176,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         transformRef.current.style.transform = '';
         transformRef.current.style.opacity = '';
         transformRef.current.style.pointerEvents = '';
+        transformRef.current.style.zIndex = '';
         // Re-enable transitions after position updates (next frame)
         requestAnimationFrame(() => {
           if (transformRef.current) {
@@ -187,6 +193,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Determine if this item is being dragged (anchor or follower)
   const isBeingDragged = isDragging || isPartOfDrag;
+
+  // Ref for drag state to avoid callback recreation (prevents playback lag)
+  const isBeingDraggedRef = useRef(isBeingDragged);
+  isBeingDraggedRef.current = isBeingDragged;
+
+  // Ref for global drag state to prevent handles on ALL clips during any drag
+  const isAnyDragActiveRef = useRef(isAnyDragActive);
+  isAnyDragActiveRef.current = isAnyDragActive;
 
   // Get visual feedback for rate stretch
   const stretchFeedback = isStretching ? getVisualFeedback() : null;
@@ -335,7 +349,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Handle mouse move to detect edge hover for trim/rate-stretch handles
   // Use ref for activeTool to prevent callback recreation on mode changes (prevents playback lag)
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (trackLocked || activeToolRef.current === 'razor') {
+    // Don't show trim handles while any clip is being dragged
+    if (trackLocked || activeToolRef.current === 'razor' || isAnyDragActiveRef.current) {
       setHoveredEdge(null);
       return;
     }
@@ -351,7 +366,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     } else {
       setHoveredEdge(null);
     }
-  }, [trackLocked]); // Stable - reads activeTool from ref
+  }, [trackLocked]); // Stable - reads activeTool and isBeingDragged from refs
 
   // Determine cursor class based on tool, state, and edge hover
   const cursorClass = trackLocked
@@ -483,6 +498,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         transform: isDragging && !isAltDrag ? `translate(${dragOffset.x}px, ${dragOffset.y}px)` : undefined,
         opacity: isDragging && !isAltDrag ? DRAG_OPACITY : trackLocked ? 0.6 : 1,
         pointerEvents: isDragging ? 'none' : 'auto',
+        // Elevate dragged clips above other clips in the timeline
+        zIndex: isBeingDragged ? 50 : undefined,
         // Browser-native virtualization - skip rendering off-screen items without removing from DOM
         contentVisibility: 'auto',
         containIntrinsicSize: `0 ${CLIP_HEIGHT}px`,
@@ -606,8 +623,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         </div>
       )}
 
-      {/* Trim handles - show on edge hover or while actively trimming */}
-      {!trackLocked && activeTool === 'select' && (
+      {/* Trim handles - show on edge hover or while actively trimming (hidden during drag, but not during trim's own snap state) */}
+      {!trackLocked && (!isAnyDragActive || isTrimming) && activeTool === 'select' && (
         <>
           {/* Left trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
           {(hoveredEdge === 'start' || (isTrimming && trimHandle === 'start')) && (
@@ -626,8 +643,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         </>
       )}
 
-      {/* Rate stretch handles - show on edge hover or while actively stretching */}
-      {!trackLocked && activeTool === 'rate-stretch' && isMediaItem && (
+      {/* Rate stretch handles - show on edge hover or while actively stretching (hidden during drag, but not during stretch's own snap state) */}
+      {!trackLocked && (!isAnyDragActive || isStretching) && activeTool === 'rate-stretch' && isMediaItem && (
         <>
           {/* Left stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
           {(hoveredEdge === 'start' || (isStretching && stretchHandle === 'start')) && (
@@ -647,14 +664,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       )}
 
       {/* Join indicator - glowing edge when clip can be joined with neighbor */}
-      {/* Hidden when hovering edge (to not interfere with trim/stretch handles) */}
-      {hasJoinableLeft && !trackLocked && hoveredEdge !== 'start' && !isTrimming && !isStretching && (
+      {/* Hidden when hovering edge, during trim/stretch, or during any drag */}
+      {hasJoinableLeft && !trackLocked && !isAnyDragActive && hoveredEdge !== 'start' && !isTrimming && !isStretching && (
         <div
           className="absolute left-0 top-0 bottom-0 w-px bg-green-400 shadow-[0_0_6px_1px_rgba(74,222,128,0.7)] pointer-events-none"
           title="Can join with previous clip (J)"
         />
       )}
-      {hasJoinableRight && !trackLocked && hoveredEdge !== 'end' && !isTrimming && !isStretching && (
+      {hasJoinableRight && !trackLocked && !isAnyDragActive && hoveredEdge !== 'end' && !isTrimming && !isStretching && (
         <div
           className="absolute right-0 top-0 bottom-0 w-px bg-green-400 shadow-[0_0_6px_1px_rgba(74,222,128,0.7)] pointer-events-none"
           title="Can join with next clip (J)"

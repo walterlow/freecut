@@ -1,8 +1,9 @@
-import { useState, useRef, memo, useCallback } from 'react';
+import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { TimelineItem } from './timeline-item';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
@@ -120,6 +121,17 @@ export const TimelineTrack = memo(function TimelineTrack({ track, items }: Timel
 
   // Items are pre-filtered by TimelineContent - use directly
   const trackItems = items;
+
+  // Get item IDs for this track to check drag state
+  const trackItemIds = useMemo(() => items.map(item => item.id), [items]);
+
+  // Check if any item on this track is being dragged (granular selector)
+  const hasItemBeingDragged = useSelectionStore(
+    useCallback(
+      (s) => s.dragState?.isDragging && s.dragState.draggedItemIds.some(id => trackItemIds.includes(id)),
+      [trackItemIds]
+    )
+  );
 
   // Check if a frame position is inside a real gap (between clips, not after the last clip)
   const isFrameInGap = useCallback((frame: number) => {
@@ -558,6 +570,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track, items }: Timel
             // CSS containment tells browser this element's layout is independent
             // This significantly improves scroll/paint performance for large timelines
             contain: 'layout style',
+            // Elevate track above others when it contains a dragging clip
+            zIndex: hasItemBeingDragged ? 100 : undefined,
           }}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
