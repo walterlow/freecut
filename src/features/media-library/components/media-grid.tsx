@@ -35,9 +35,11 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
   const filteredItems = useFilteredMediaItems();
   const isLoading = useMediaLibraryStore((s) => s.isLoading);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
+  const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
   const toggleMediaSelection = useMediaLibraryStore((s) => s.toggleMediaSelection);
   const selectMedia = useMediaLibraryStore((s) => s.selectMedia);
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
+  const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
 
   // Timeline store for checking references - don't subscribe to items to avoid re-renders
   const removeTimelineItems = useTimelineStore((s) => s.removeItems);
@@ -140,6 +142,36 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
   const handleCancelDelete = () => {
     setShowDeleteDialog(false);
     setMediaIdToDelete(null);
+  };
+
+  // Handle relinking a broken media file
+  const handleRelink = async (mediaId: string) => {
+    try {
+      // Open file picker for a single file
+      const handles = await window.showOpenFilePicker({
+        multiple: false,
+        types: [
+          {
+            description: 'Media files',
+            accept: {
+              'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
+              'audio/*': ['.mp3', '.wav', '.ogg', '.m4a', '.aac'],
+              'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
+            },
+          },
+        ],
+      });
+
+      const handle = handles[0];
+      if (!handle) return;
+
+      await relinkMedia(mediaId, handle);
+    } catch (error) {
+      // User cancelled - ignore AbortError
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Failed to relink media:', error);
+      }
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -359,8 +391,10 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
               <MediaCard
                 media={media}
                 selected={selectedMediaIds.includes(media.id)}
+                isBroken={brokenMediaIds.includes(media.id)}
                 onSelect={(event) => handleCardSelect(media.id, event)}
                 onDelete={() => handleCardDelete(media.id)}
+                onRelink={() => handleRelink(media.id)}
                 viewMode={viewMode}
               />
             </div>

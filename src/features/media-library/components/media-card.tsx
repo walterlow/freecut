@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2 } from 'lucide-react';
+import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,12 +16,14 @@ import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 export interface MediaCardProps {
   media: MediaMetadata;
   selected?: boolean;
+  isBroken?: boolean;
   onSelect?: (event: React.MouseEvent) => void;
   onDelete?: () => void;
+  onRelink?: () => void;
   viewMode?: 'grid' | 'list';
 }
 
-export function MediaCard({ media, selected = false, onSelect, onDelete, viewMode = 'grid' }: MediaCardProps) {
+export function MediaCard({ media, selected = false, isBroken = false, onSelect, onDelete, onRelink, viewMode = 'grid' }: MediaCardProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
@@ -157,6 +159,12 @@ export function MediaCard({ media, selected = false, onSelect, onDelete, viewMod
               <Loader2 className="w-4 h-4 text-white animate-spin" />
             </div>
           )}
+          {/* Broken indicator for list view */}
+          {isBroken && !isImporting && (
+            <div className="absolute top-0.5 right-0.5 p-0.5 rounded bg-destructive/90 text-destructive-foreground">
+              <Link2Off className="w-2.5 h-2.5" />
+            </div>
+          )}
         </div>
 
         {/* Info */}
@@ -201,6 +209,12 @@ export function MediaCard({ media, selected = false, onSelect, onDelete, viewMod
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+              {isBroken && onRelink && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
+                  <RefreshCw className="w-3 h-3 mr-2" />
+                  Relink File...
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                 <Trash2 className="w-3 h-3 mr-2" />
                 Delete
@@ -263,6 +277,13 @@ export function MediaCard({ media, selected = false, onSelect, onDelete, viewMod
           </div>
         )}
 
+        {/* Broken file indicator */}
+        {isBroken && !isImporting && (
+          <div className="absolute top-1 right-1 p-1 rounded bg-destructive/90 text-destructive-foreground">
+            <Link2Off className="w-3 h-3" />
+          </div>
+        )}
+
         {/* Overlaid badges - hidden during upload */}
         {!isImporting && (
           <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between gap-1 pointer-events-none">
@@ -305,6 +326,12 @@ export function MediaCard({ media, selected = false, onSelect, onDelete, viewMod
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                {isBroken && onRelink && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
+                    <RefreshCw className="w-3 h-3 mr-2" />
+                    Relink File...
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                   <Trash2 className="w-3 h-3 mr-2" />
                   Delete

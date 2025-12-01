@@ -1,5 +1,6 @@
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import type { TimelineTrack, TimelineItem } from '@/types/timeline';
+import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
+import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import type { TimelineTrack } from '@/types/timeline';
 
 /**
  * Cache to prevent creating duplicate blob URLs for the same media
@@ -57,6 +58,17 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       return blobUrl;
     } catch (error) {
       console.error(`Failed to resolve media ${mediaId}:`, error);
+
+      // Mark media as broken if it's a file access error
+      if (error instanceof FileAccessError) {
+        const media = await mediaLibraryService.getMedia(mediaId);
+        useMediaLibraryStore.getState().markMediaBroken(mediaId, {
+          mediaId,
+          fileName: media?.fileName ?? 'Unknown file',
+          errorType: error.type === 'permission_denied' ? 'permission_denied' : 'file_missing',
+        });
+      }
+
       return ''; // Fallback: empty string
     } finally {
       // Clean up pending request

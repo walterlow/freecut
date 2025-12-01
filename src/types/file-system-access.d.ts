@@ -79,6 +79,31 @@ interface Window {
 }
 
 /**
+ * Extends FileSystemDirectoryHandle with async iterable methods
+ */
+interface FileSystemDirectoryHandle {
+  /**
+   * Returns an async iterator of [name, handle] pairs
+   */
+  entries(): AsyncIterableIterator<[string, FileSystemHandle]>;
+
+  /**
+   * Returns an async iterator of file/directory names
+   */
+  keys(): AsyncIterableIterator<string>;
+
+  /**
+   * Returns an async iterator of file/directory handles
+   */
+  values(): AsyncIterableIterator<FileSystemHandle>;
+
+  /**
+   * Makes FileSystemDirectoryHandle async iterable
+   */
+  [Symbol.asyncIterator](): AsyncIterableIterator<[string, FileSystemHandle]>;
+}
+
+/**
  * Extends DataTransferItem to support getAsFileSystemHandle()
  * Only supported in Chrome/Edge 86+
  */

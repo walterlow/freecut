@@ -3,6 +3,7 @@ import {
   getAllMedia as getAllMediaDB,
   getMedia as getMediaDB,
   createMedia as createMediaDB,
+  updateMedia as updateMediaDB,
   deleteMedia as deleteMediaDB,
   saveThumbnail as saveThumbnailDB,
   getThumbnailByMediaId,
@@ -588,6 +589,51 @@ export class MediaLibraryService {
     }
 
     return needsPermission;
+  }
+
+  /**
+   * Relink a media item with a new file handle
+   *
+   * Updates the file handle for a media item that has become inaccessible
+   * (file moved, renamed, or deleted). Only updates the handle and basic
+   * file info - does not re-extract metadata or regenerate thumbnails.
+   *
+   * @param mediaId - The media ID to relink
+   * @param newHandle - The new FileSystemFileHandle
+   * @returns Updated MediaMetadata
+   * @throws FileAccessError if permission denied or file inaccessible
+   */
+  async relinkMediaHandle(
+    mediaId: string,
+    newHandle: FileSystemFileHandle
+  ): Promise<MediaMetadata> {
+    // Get existing media
+    const media = await getMediaDB(mediaId);
+    if (!media) {
+      throw new Error(`Media not found: ${mediaId}`);
+    }
+
+    // Verify we have permission to access the new file
+    const hasPermission = await ensureFileHandlePermission(newHandle);
+    if (!hasPermission) {
+      throw new FileAccessError(
+        'Permission denied for the selected file',
+        'permission_denied'
+      );
+    }
+
+    // Verify file exists and get basic info
+    const file = await newHandle.getFile();
+
+    // Update metadata with new handle and file info
+    const updated = await updateMediaDB(mediaId, {
+      fileHandle: newHandle,
+      fileName: file.name,
+      fileSize: file.size,
+      updatedAt: Date.now(),
+    });
+
+    return updated;
   }
 
   /**

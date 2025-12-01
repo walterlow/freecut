@@ -3,6 +3,7 @@ import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoom } from '../../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
@@ -19,6 +20,7 @@ import {
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
+import { Link2Off } from 'lucide-react';
 import {
   CLIP_HEIGHT,
   CLIP_LABEL_HEIGHT,
@@ -60,6 +62,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Granular selector: only re-render when THIS item's selection state changes
   const isSelected = useSelectionStore(
     useCallback((s) => s.selectedItemIds.includes(item.id), [item.id])
+  );
+
+  // Granular selector: check if this item's media is broken (missing/permission denied)
+  const isBroken = useMediaLibraryStore(
+    useCallback(
+      (s) => (item.mediaId ? s.brokenMediaIds.includes(item.mediaId) : false),
+      [item.mediaId]
+    )
   );
 
   // Use refs for actions to avoid selector re-renders - read from store in callbacks
@@ -630,6 +640,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       {Math.abs(currentSpeed - 1) > 0.005 && !isStretching && (
         <div className="absolute top-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono">
           {currentSpeed.toFixed(2)}x
+        </div>
+      )}
+
+      {/* Missing media indicator - show when media file is broken */}
+      {isBroken && item.mediaId && (
+        <div
+          className="absolute bottom-1 left-1 p-0.5 rounded bg-destructive/90 text-destructive-foreground"
+          title="Media file missing - relink in Media Library"
+        >
+          <Link2Off className="w-3 h-3" />
         </div>
       )}
 

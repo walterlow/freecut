@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification } from '../types';
+import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, BrokenMediaInfo } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 
@@ -30,6 +30,11 @@ export const useMediaLibraryStore = create<
       filterByType: null,
       sortBy: 'date',
       viewMode: 'grid',
+
+      // Broken media tracking (lazy detection)
+      brokenMediaIds: [],
+      brokenMediaInfo: new Map<string, BrokenMediaInfo>(),
+      showMissingMediaDialog: false,
 
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
@@ -202,6 +207,7 @@ export const useMediaLibraryStore = create<
 
         for (let i = 0; i < handles.length; i++) {
           const handle = handles[i];
+          if (!handle) continue;
           console.log(`[importHandles] Processing handle ${i + 1}/${handles.length}:`, handle.name);
           const tempId = crypto.randomUUID();
           const file = await handle.getFile();
@@ -381,6 +387,106 @@ export const useMediaLibraryStore = create<
       },
 
       clearNotification: () => set({ notification: null }),
+
+      // Broken media / Relinking actions
+      markMediaBroken: (id: string, info: BrokenMediaInfo) => {
+        set((state) => {
+          // Don't add if already marked
+          if (state.brokenMediaIds.includes(id)) {
+            return state;
+          }
+          const newInfo = new Map(state.brokenMediaInfo);
+          newInfo.set(id, info);
+          return {
+            brokenMediaIds: [...state.brokenMediaIds, id],
+            brokenMediaInfo: newInfo,
+          };
+        });
+      },
+
+      markMediaHealthy: (id: string) => {
+        set((state) => {
+          const newInfo = new Map(state.brokenMediaInfo);
+          newInfo.delete(id);
+          return {
+            brokenMediaIds: state.brokenMediaIds.filter((bid) => bid !== id),
+            brokenMediaInfo: newInfo,
+          };
+        });
+      },
+
+      relinkMedia: async (mediaId: string, newHandle: FileSystemFileHandle) => {
+        try {
+          // Update in service/DB
+          const updated = await mediaLibraryService.relinkMediaHandle(mediaId, newHandle);
+
+          // Update local state
+          set((state) => ({
+            mediaItems: state.mediaItems.map((item) =>
+              item.id === mediaId ? updated : item
+            ),
+          }));
+
+          // Clear broken status
+          get().markMediaHealthy(mediaId);
+          get().showNotification({
+            type: 'success',
+            message: `"${updated.fileName}" relinked successfully`,
+          });
+
+          return true;
+        } catch (error) {
+          console.error(`[MediaLibraryStore] relinkMedia error:`, error);
+          get().showNotification({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Failed to relink file',
+          });
+          return false;
+        }
+      },
+
+      relinkMediaBatch: async (relinks) => {
+        const success: string[] = [];
+        const failed: string[] = [];
+
+        for (const { mediaId, handle } of relinks) {
+          try {
+            const updated = await mediaLibraryService.relinkMediaHandle(mediaId, handle);
+
+            // Update local state
+            set((state) => ({
+              mediaItems: state.mediaItems.map((item) =>
+                item.id === mediaId ? updated : item
+              ),
+            }));
+
+            // Clear broken status
+            get().markMediaHealthy(mediaId);
+            success.push(mediaId);
+          } catch (error) {
+            console.error(`[MediaLibraryStore] relinkMediaBatch error for ${mediaId}:`, error);
+            failed.push(mediaId);
+          }
+        }
+
+        // Show summary notification
+        if (success.length > 0) {
+          get().showNotification({
+            type: failed.length > 0 ? 'warning' : 'success',
+            message: `Relinked ${success.length} file${success.length !== 1 ? 's' : ''}${failed.length > 0 ? `, ${failed.length} failed` : ''}`,
+          });
+        } else if (failed.length > 0) {
+          get().showNotification({
+            type: 'error',
+            message: `Failed to relink ${failed.length} file${failed.length !== 1 ? 's' : ''}`,
+          });
+        }
+
+        return { success, failed };
+      },
+
+      openMissingMediaDialog: () => set({ showMissingMediaDialog: true }),
+      closeMissingMediaDialog: () => set({ showMissingMediaDialog: false }),
     }),
     {
       name: 'MediaLibraryStore',

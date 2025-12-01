@@ -5,6 +5,15 @@ export interface MediaLibraryNotification {
   message: string;
 }
 
+/**
+ * Information about a media file with a broken/invalid file handle
+ */
+export interface BrokenMediaInfo {
+  mediaId: string;
+  fileName: string;
+  errorType: 'permission_denied' | 'file_missing';
+}
+
 export interface MediaLibraryState {
   currentProjectId: string | null; // v3: Project context for scoped operations
   mediaItems: MediaMetadata[];
@@ -17,6 +26,11 @@ export interface MediaLibraryState {
   filterByType: 'video' | 'audio' | 'image' | null;
   sortBy: 'name' | 'date' | 'size';
   viewMode: 'grid' | 'list';
+
+  // Broken media tracking (lazy detection)
+  brokenMediaIds: string[];
+  brokenMediaInfo: Map<string, BrokenMediaInfo>;
+  showMissingMediaDialog: boolean;
 }
 
 export interface MediaLibraryActions {
@@ -53,4 +67,14 @@ export interface MediaLibraryActions {
   clearError: () => void;
   showNotification: (notification: MediaLibraryNotification) => void;
   clearNotification: () => void;
+
+  // Broken media / Relinking
+  markMediaBroken: (id: string, info: BrokenMediaInfo) => void;
+  markMediaHealthy: (id: string) => void;
+  relinkMedia: (mediaId: string, newHandle: FileSystemFileHandle) => Promise<boolean>;
+  relinkMediaBatch: (
+    relinks: Array<{ mediaId: string; handle: FileSystemFileHandle }>
+  ) => Promise<{ success: string[]; failed: string[] }>;
+  openMissingMediaDialog: () => void;
+  closeMissingMediaDialog: () => void;
 }

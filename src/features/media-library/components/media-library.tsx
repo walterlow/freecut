@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { MediaGrid } from './media-grid';
+import { MissingMediaDialog } from './missing-media-dialog';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 
@@ -57,6 +58,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const clearError = useMediaLibraryStore((s) => s.clearError);
   const notification = useMediaLibraryStore((s) => s.notification);
   const clearNotification = useMediaLibraryStore((s) => s.clearNotification);
+  const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
+  const openMissingMediaDialog = useMediaLibraryStore((s) => s.openMissingMediaDialog);
 
   // Load media items when project changes
   useEffect(() => {
@@ -154,6 +157,21 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             <FolderOpen className="w-3.5 h-3.5" />
             <span>Import</span>
           </button>
+
+          {/* Missing media indicator */}
+          {brokenMediaIds.length > 0 && (
+            <button
+              onClick={openMissingMediaDialog}
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
+                bg-destructive/10 border border-destructive/25 text-destructive
+                hover:bg-destructive/20 hover:border-destructive/40
+                transition-colors duration-150"
+              title="View missing media files"
+            >
+              <Link2Off className="w-3.5 h-3.5" />
+              <span>{brokenMediaIds.length} Missing</span>
+            </button>
+          )}
 
           {/* Selection indicator & actions */}
           {selectedMediaIds.length > 0 && (
@@ -426,6 +444,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Missing Media Dialog */}
+      <MissingMediaDialog />
     </div>
   );
 });
