@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Upload } from 'lucide-react';
+import { Plus, Upload, FolderOpen, File } from 'lucide-react';
 import { ProjectList } from '@/features/projects/components/project-list';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import {
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { useProjectStore } from '@/features/projects/stores/project-store';
@@ -19,6 +20,7 @@ import { cleanupBlobUrls } from '@/features/preview/utils/media-resolver';
 import type { Project } from '@/types/project';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
+import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsIndex,
@@ -36,11 +38,18 @@ function ProjectsIndex() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Import state
+  // Import state - two-step flow
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [destinationDir, setDestinationDir] = useState<FileSystemDirectoryHandle | null>(null);
+  const [destinationName, setDestinationName] = useState<string | null>(null);
+  const [useProjectsFolder, setUseProjectsFolder] = useState(true); // Create FreeCutProjects subfolder
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const PROJECTS_FOLDER_NAME = 'FreeCutProjects';
 
   const isLoading = useProjectsLoading();
   const error = useProjectsError();
@@ -56,46 +65,124 @@ function ProjectsIndex() {
     fileInputRef.current?.click();
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Step 1: File selected - show destination selection dialog
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Reset file input for next selection
     event.target.value = '';
 
-    // Validate file extension
-    if (!file.name.endsWith('.vedproj')) {
-      setImportError('Please select a valid .vedproj file');
+    // Validate file extension (support both new and legacy formats)
+    const validExtensions = [BUNDLE_EXTENSION];
+    const hasValidExtension = validExtensions.some((ext) => file.name.endsWith(ext));
+    if (!hasValidExtension) {
+      setImportError(`Please select a valid ${BUNDLE_EXTENSION} file`);
       setImportDialogOpen(true);
       return;
     }
 
+    // Store file and show destination selection dialog
+    setPendingImportFile(file);
+    setDestinationDir(null);
+    setDestinationName(null);
     setImportError(null);
-    setImportProgress({ percent: 0, stage: 'validating' });
+    setImportProgress(null);
+    setIsImporting(false);
     setImportDialogOpen(true);
+  };
+
+  // Step 2: User clicks to select destination folder (fresh user gesture!)
+  const handleSelectDestination = async () => {
+    try {
+      const dirHandle = await window.showDirectoryPicker({
+        id: 'freecut-import',
+        mode: 'readwrite',
+        startIn: 'documents',
+      });
+      setDestinationDir(dirHandle);
+      setDestinationName(dirHandle.name);
+      setImportError(null);
+    } catch (err) {
+      // User cancelled - ignore
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
+      // Handle "contains system files" or permission errors
+      if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        setImportError(
+          'Cannot select system folders directly. Use "New Folder" in the picker to create a folder first, then select it.'
+        );
+        return;
+      }
+      console.error('Failed to select directory:', err);
+      setImportError('Failed to select destination folder. Please try a different location.');
+    }
+  };
+
+  // Step 3: User clicks "Start Import" - begin actual import
+  const handleStartImport = async () => {
+    if (!pendingImportFile || !destinationDir) return;
+
+    setIsImporting(true);
+    setImportProgress({ percent: 0, stage: 'validating' });
 
     try {
+      // If useProjectsFolder is enabled, create/get the FreeCutProjects subfolder first
+      let finalDestination = destinationDir;
+      if (useProjectsFolder) {
+        try {
+          finalDestination = await destinationDir.getDirectoryHandle(PROJECTS_FOLDER_NAME, { create: true });
+        } catch (err) {
+          console.error('Failed to create FreeCutProjects folder:', err);
+          throw new Error(`Failed to create ${PROJECTS_FOLDER_NAME} folder. Try selecting a different location.`);
+        }
+      }
+
       const { importProjectBundle } = await import(
         '@/features/project-bundle/services/bundle-import-service'
       );
 
-      const result = await importProjectBundle(file, {}, (progress) => {
-        setImportProgress(progress);
-      });
+      const result = await importProjectBundle(
+        pendingImportFile,
+        finalDestination,
+        {},
+        (progress) => {
+          setImportProgress(progress);
+        }
+      );
 
       // Reload projects list
       await loadProjects();
 
       // Close dialog and navigate to the imported project
-      setImportDialogOpen(false);
-      setImportProgress(null);
-
+      handleCloseImportDialog();
       navigate({ to: '/editor/$projectId', params: { projectId: result.project.id } });
     } catch (err) {
       console.error('Import failed:', err);
       setImportError(err instanceof Error ? err.message : 'Import failed');
       setImportProgress(null);
+      setIsImporting(false);
     }
+  };
+
+  // Reset import dialog state
+  const handleCloseImportDialog = () => {
+    if (isImporting) return; // Don't close while importing
+    setImportDialogOpen(false);
+    setPendingImportFile(null);
+    setDestinationDir(null);
+    setDestinationName(null);
+    setImportError(null);
+    setImportProgress(null);
+    setIsImporting(false);
+  };
+
+  // Format file size for display
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleEditProject = (project: Project) => {
@@ -148,7 +235,7 @@ function ProjectsIndex() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".vedproj"
+              accept=".freecut.zip"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -205,48 +292,118 @@ function ProjectsIndex() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Project Dialog */}
+      {/* Import Project Dialog - Two Step Flow */}
       <Dialog open={importDialogOpen} onOpenChange={(open) => {
-        if (!open && !importProgress) {
-          setImportDialogOpen(false);
-          setImportError(null);
-        }
+        if (!open) handleCloseImportDialog();
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {importError ? 'Import Failed' : 'Importing Project'}
+              {importError ? 'Import Failed' : isImporting ? 'Importing Project' : 'Import Project'}
             </DialogTitle>
-            {!importError && importProgress && (
+            {!importError && !isImporting && pendingImportFile && (
+              <DialogDescription>
+                Select where to extract media files
+              </DialogDescription>
+            )}
+            {!importError && isImporting && importProgress && (
               <DialogDescription>
                 {importProgress.stage === 'validating' && 'Validating bundle...'}
-                {importProgress.stage === 'importing' && `Importing media${importProgress.currentFile ? `: ${importProgress.currentFile}` : '...'}`}
+                {importProgress.stage === 'extracting' && `Extracting${importProgress.currentFile ? `: ${importProgress.currentFile}` : '...'}`}
+                {importProgress.stage === 'importing_media' && `Importing${importProgress.currentFile ? `: ${importProgress.currentFile}` : '...'}`}
                 {importProgress.stage === 'linking' && 'Creating project...'}
                 {importProgress.stage === 'complete' && 'Import complete!'}
               </DialogDescription>
             )}
           </DialogHeader>
 
-          {importError ? (
+          {importError && !pendingImportFile ? (
+            /* Fatal error state - no file */
             <div className="space-y-4">
               <p className="text-sm text-destructive">{importError}</p>
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => {
-                  setImportDialogOpen(false);
-                  setImportError(null);
-                }}
+                onClick={handleCloseImportDialog}
               >
                 Close
               </Button>
             </div>
-          ) : importProgress ? (
+          ) : isImporting && importProgress ? (
+            /* Importing state - show progress */
             <div className="space-y-4">
               <Progress value={importProgress.percent} className="h-2" />
               <p className="text-sm text-muted-foreground text-center">
                 {Math.round(importProgress.percent)}%
               </p>
+            </div>
+          ) : pendingImportFile ? (
+            /* Destination selection state */
+            <div className="space-y-4">
+              {/* File info */}
+              <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                <File className="w-8 h-8 text-muted-foreground flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{pendingImportFile.name}</p>
+                  <p className="text-xs text-muted-foreground">{formatFileSize(pendingImportFile.size)}</p>
+                </div>
+              </div>
+
+              {/* Destination selection */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Destination Folder</p>
+                  {!destinationDir && (
+                    <p className="text-xs text-muted-foreground">Use "New Folder" in picker if needed</p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-2"
+                  onClick={handleSelectDestination}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                  {destinationName ? (
+                    <span className="truncate">{destinationName}</span>
+                  ) : (
+                    <span className="text-muted-foreground">Select or create folder...</span>
+                  )}
+                </Button>
+
+                {/* FreeCutProjects subfolder option */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useProjectsFolder}
+                    onChange={(e) => setUseProjectsFolder(e.target.checked)}
+                    className="w-4 h-4 rounded border-border accent-primary"
+                  />
+                  <span className="text-sm">
+                    Create in <code className="text-xs bg-muted px-1 py-0.5 rounded">{PROJECTS_FOLDER_NAME}</code> subfolder
+                  </span>
+                </label>
+
+                {importError && (
+                  <p className="text-xs text-destructive">{importError}</p>
+                )}
+                {destinationDir && !importError && (
+                  <p className="text-xs text-muted-foreground">
+                    Media will be saved to: {destinationName}/{useProjectsFolder ? `${PROJECTS_FOLDER_NAME}/` : ''}[project name]
+                  </p>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={handleCloseImportDialog}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleStartImport}
+                  disabled={!destinationDir}
+                >
+                  Start Import
+                </Button>
+              </DialogFooter>
             </div>
           ) : null}
         </DialogContent>

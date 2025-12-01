@@ -1,13 +1,16 @@
 /**
  * Project Bundle Types
  *
- * Defines the format for exportable/importable project bundles (.vedproj)
+ * Defines the format for exportable/importable project bundles (.freecut.zip)
  */
 
 import type { Project, ProjectTimeline } from '@/types/project';
 
 // Bundle format version
 export const BUNDLE_VERSION = '1.0';
+
+// Bundle file extension
+export const BUNDLE_EXTENSION = '.freecut.zip';
 
 /**
  * Manifest file structure (manifest.json in bundle)
@@ -19,7 +22,6 @@ export interface BundleManifest {
   projectId: string;
   projectName: string;
   media: BundleMediaEntry[];
-  thumbnails: BundleThumbnailEntry[];
   checksum: string; // SHA-256 of manifest (excluding this field)
 }
 
@@ -41,15 +43,6 @@ export interface BundleMediaEntry {
     codec: string;
     bitrate: number;
   };
-}
-
-/**
- * Thumbnail entry in manifest
- */
-export interface BundleThumbnailEntry {
-  mediaHash: string; // Links to media entry's sha256
-  relativePath: string; // Path within bundle: thumbnails/{hash}.jpg
-  timestamp: number;
 }
 
 /**
@@ -91,7 +84,13 @@ export interface ExportProgress {
  */
 export interface ImportProgress {
   percent: number;
-  stage: 'validating' | 'importing' | 'linking' | 'complete';
+  stage:
+    | 'validating'
+    | 'selecting_directory'
+    | 'extracting'
+    | 'importing_media'
+    | 'linking'
+    | 'complete';
   currentFile?: string;
 }
 
@@ -112,6 +111,7 @@ export interface ImportConflict {
 export interface ImportOptions {
   newProjectName?: string; // Override project name
   skipDuplicateMedia?: boolean; // Skip importing media that already exists
+  destinationDirectory?: FileSystemDirectoryHandle; // Where to extract media files
 }
 
 /**

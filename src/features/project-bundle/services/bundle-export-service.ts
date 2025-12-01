@@ -1,7 +1,7 @@
 /**
  * Project Bundle Export Service
  *
- * Exports a project with all its media as a .vedproj bundle (ZIP archive)
+ * Exports a project with all its media as a .freecut.zip bundle
  */
 
 import { Zip, ZipPassThrough, ZipDeflate } from 'fflate';
@@ -12,6 +12,7 @@ import {
   ExportProgress,
   ExportResult,
   BUNDLE_VERSION,
+  BUNDLE_EXTENSION,
 } from '../types/bundle';
 import { getProject, getProjectMediaIds } from '@/lib/storage/indexeddb';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
@@ -65,7 +66,6 @@ export async function exportProjectBundle(
     projectId: project.id,
     projectName: project.name,
     media: [],
-    thumbnails: [],
     checksum: '', // Computed at end
   };
 
@@ -139,23 +139,6 @@ export async function exportProjectBundle(
     const mediaFile = new ZipPassThrough(relativePath);
     zip.add(mediaFile);
     mediaFile.push(new Uint8Array(buffer), true);
-
-    // Get and add thumbnail if exists
-    const thumbnail = await mediaLibraryService.getThumbnail(media.id);
-    if (thumbnail) {
-      const thumbPath = `thumbnails/${hash}.jpg`;
-      const thumbBuffer = await thumbnail.blob.arrayBuffer();
-
-      manifest.thumbnails.push({
-        mediaHash: hash,
-        relativePath: thumbPath,
-        timestamp: thumbnail.timestamp,
-      });
-
-      const thumbFile = new ZipDeflate(thumbPath);
-      zip.add(thumbFile);
-      thumbFile.push(new Uint8Array(thumbBuffer), true);
-    }
   }
 
   onProgress?.({ percent: 85, stage: 'packaging' });
@@ -216,7 +199,7 @@ export async function exportProjectBundle(
   }
 
   const blob = new Blob([result], { type: 'application/zip' });
-  const filename = sanitizeFilename(project.name) + '.vedproj';
+  const filename = sanitizeFilename(project.name) + BUNDLE_EXTENSION;
 
   return {
     blob,

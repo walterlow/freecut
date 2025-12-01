@@ -1,41 +1,243 @@
 /**
  * Project Bundle Import Service
  *
- * Imports a .vedproj bundle (ZIP archive) and creates a project with media
- *
- * TODO: Refactor to use file handles instead of OPFS storage
- * - Extract media to user's chosen directory
- * - Create file handles pointing to extracted files
- * - This will align with the local-first file handle approach
+ * Imports a .freecut.zip bundle (ZIP archive) and creates a project with media.
+ * Media files are extracted to a user-selected directory and referenced via
+ * FileSystemFileHandle for local-first storage.
  */
 
 import { unzip } from 'fflate';
+import type { Project } from '@/types/project';
+import type { MediaMetadata, ThumbnailData } from '@/types/storage';
 import type {
   BundleManifest,
+  BundleProject,
   ImportProgress,
   ImportResult,
   ImportOptions,
+  ImportConflict,
 } from '../types/bundle';
+import {
+  createProject,
+  createMedia,
+  saveThumbnail,
+  associateMediaWithProject,
+} from '@/lib/storage/indexeddb';
+import { generateThumbnail } from '@/features/media-library/utils/thumbnail-generator';
+import { fileSystemService } from './file-system-service';
 
 /**
  * Import a project bundle
  *
- * @throws Error - Bundle import is not yet implemented with file handle approach
+ * @param file - The .freecut.zip bundle file to import
+ * @param destinationDirectory - Directory where media files will be extracted (must be provided by caller)
+ * @param options - Import options (new name, etc.)
+ * @param onProgress - Progress callback
+ * @returns Import result with project and media counts
  */
 export async function importProjectBundle(
-  _file: File,
-  _options: ImportOptions = {},
-  _onProgress?: (progress: ImportProgress) => void
+  file: File,
+  destinationDirectory: FileSystemDirectoryHandle,
+  options: Omit<ImportOptions, 'destinationDirectory'> = {},
+  onProgress?: (progress: ImportProgress) => void
 ): Promise<ImportResult> {
-  // TODO: Implement with file handle approach
-  // 1. Let user pick a directory to extract media to
-  // 2. Extract media files from bundle to that directory
-  // 3. Create file handles pointing to extracted files
-  // 4. Import using importMediaWithHandle
-  throw new Error(
-    'Bundle import is not yet implemented. ' +
-    'This feature will be refactored to use file handles in a future update.'
+  const conflicts: ImportConflict[] = [];
+
+  // Step 1: Validate bundle
+  onProgress?.({ percent: 0, stage: 'validating' });
+  const validation = await validateBundle(file);
+  if (!validation.valid || !validation.manifest) {
+    throw new Error(`Invalid bundle: ${validation.errors.join(', ')}`);
+  }
+
+  const manifest = validation.manifest;
+  onProgress?.({ percent: 10, stage: 'validating' });
+
+  // Step 2: Unzip bundle to memory
+  const files = await unzipBundle(file);
+  const bundleProject = JSON.parse(
+    new TextDecoder().decode(files['project.json'])
+  ) as BundleProject;
+
+  // Step 3: Create project subdirectory in destination
+  const projectName = options.newProjectName ?? bundleProject.name;
+  const projectDir = await fileSystemService.getOrCreateSubdirectory(
+    destinationDirectory,
+    projectName
   );
+
+  // Step 5: Extract and import media files
+  onProgress?.({ percent: 20, stage: 'extracting' });
+  const mediaIdMap = new Map<string, string>(); // originalId -> newId
+  const totalMedia = manifest.media.length;
+  let imported = 0;
+  let skipped = 0;
+
+  for (const entry of manifest.media) {
+    const percent = 20 + ((manifest.media.indexOf(entry) + 1) / totalMedia) * 50;
+
+    onProgress?.({
+      percent,
+      stage: 'extracting',
+      currentFile: entry.fileName,
+    });
+
+    try {
+      // Get the file data from the unzipped bundle
+      const fileData = files[entry.relativePath];
+      if (!fileData) {
+        console.warn(`Missing file in bundle: ${entry.relativePath}`);
+        skipped++;
+        continue;
+      }
+
+      // Generate unique filename if needed
+      const uniqueFileName = await fileSystemService.getUniqueFileName(
+        projectDir,
+        entry.fileName
+      );
+
+      // Write file to destination directory
+      const fileHandle = await fileSystemService.writeFile(
+        projectDir,
+        uniqueFileName,
+        fileData
+      );
+
+      // Create new media ID
+      const newMediaId = crypto.randomUUID();
+      mediaIdMap.set(entry.originalId, newMediaId);
+
+      // Generate thumbnail from the extracted file
+      onProgress?.({
+        percent,
+        stage: 'importing_media',
+        currentFile: entry.fileName,
+      });
+
+      let thumbnailId: string | undefined;
+      try {
+        const extractedFile = await fileHandle.getFile();
+        const thumbnailBlob = await generateThumbnail(extractedFile);
+        thumbnailId = crypto.randomUUID();
+
+        const thumbnailData: ThumbnailData = {
+          id: thumbnailId,
+          mediaId: newMediaId,
+          blob: thumbnailBlob,
+          timestamp: 1,
+          width: 320,
+          height: 180,
+        };
+        await saveThumbnail(thumbnailData);
+      } catch (thumbnailError) {
+        console.warn(
+          `Failed to generate thumbnail for ${entry.fileName}:`,
+          thumbnailError
+        );
+        // Continue without thumbnail - not critical
+      }
+
+      // Create media metadata entry
+      const mediaMetadata: MediaMetadata = {
+        id: newMediaId,
+        storageType: 'handle',
+        fileHandle,
+        fileName: uniqueFileName,
+        fileSize: entry.fileSize,
+        mimeType: entry.mimeType,
+        contentHash: entry.sha256,
+        duration: entry.metadata.duration,
+        width: entry.metadata.width,
+        height: entry.metadata.height,
+        fps: entry.metadata.fps,
+        codec: entry.metadata.codec,
+        bitrate: entry.metadata.bitrate,
+        thumbnailId,
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      await createMedia(mediaMetadata);
+      imported++;
+    } catch (error) {
+      console.error(`Failed to import media ${entry.fileName}:`, error);
+      conflicts.push({
+        type: 'media_duplicate',
+        description: `Failed to import: ${entry.fileName}`,
+        resolution: 'skip',
+        originalValue: entry.fileName,
+      });
+      skipped++;
+    }
+  }
+
+  // Step 6: Create project with remapped timeline
+  onProgress?.({ percent: 85, stage: 'linking' });
+
+  const newProjectId = crypto.randomUUID();
+  const project: Project = {
+    id: newProjectId,
+    name: projectName,
+    description: bundleProject.description,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    duration: bundleProject.duration,
+    thumbnail: bundleProject.thumbnail,
+    metadata: bundleProject.metadata,
+    timeline: bundleProject.timeline
+      ? {
+          tracks: bundleProject.timeline.tracks,
+          items: bundleProject.timeline.items.map((item) => {
+            // Remap mediaRef to mediaId
+            const { mediaRef, ...rest } = item;
+            return {
+              ...rest,
+              mediaId: mediaRef ? mediaIdMap.get(mediaRef) : undefined,
+              // Clear src/thumbnailUrl since they'll be regenerated from mediaId
+              src: undefined,
+              thumbnailUrl: undefined,
+            };
+          }),
+          currentFrame: bundleProject.timeline.currentFrame,
+          zoomLevel: bundleProject.timeline.zoomLevel,
+          inPoint: bundleProject.timeline.inPoint,
+          outPoint: bundleProject.timeline.outPoint,
+        }
+      : undefined,
+  };
+
+  await createProject(project);
+
+  // Step 7: Associate all imported media with the project
+  onProgress?.({ percent: 95, stage: 'linking' });
+
+  for (const [_originalId, newMediaId] of mediaIdMap) {
+    await associateMediaWithProject(newProjectId, newMediaId);
+  }
+
+  onProgress?.({ percent: 100, stage: 'complete' });
+
+  return {
+    project,
+    mediaImported: imported,
+    mediaSkipped: skipped,
+    conflicts,
+  };
+}
+
+/**
+ * Unzip a bundle file to memory
+ */
+async function unzipBundle(file: File): Promise<Record<string, Uint8Array>> {
+  const buffer = await file.arrayBuffer();
+  return new Promise((resolve, reject) => {
+    unzip(new Uint8Array(buffer), (err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+  });
 }
 
 /**
@@ -49,15 +251,7 @@ export async function validateBundle(file: File): Promise<{
   const errors: string[] = [];
 
   try {
-    const buffer = await file.arrayBuffer();
-    const files = await new Promise<Record<string, Uint8Array>>(
-      (resolve, reject) => {
-        unzip(new Uint8Array(buffer), (err, result) => {
-          if (err) reject(err);
-          else resolve(result);
-        });
-      }
-    );
+    const files = await unzipBundle(file);
 
     // Check manifest
     if (!files['manifest.json']) {

@@ -115,7 +115,7 @@ export function Toolbar({ project, isDirty = false, onSave, onExport, onExportBu
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onExportBundle} className="gap-2">
               <FolderArchive className="w-4 h-4" />
-              Download Project (.vedproj)
+              Download Project (.zip)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
