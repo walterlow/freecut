@@ -32,9 +32,8 @@ interface MarkerInterval {
   minorTicks: number;
 }
 
-// Tile configuration
-const TILE_WIDTH = 2000; // Safe width well under browser canvas limits
-const LABEL_OVERSCAN = 100; // Extra pixels to draw for labels extending into adjacent tiles
+// Tile configuration - 1000px tiles for faster individual renders and better cache granularity
+const TILE_WIDTH = 1000;
 
 /**
  * Calculate optimal marker interval based on zoom level
@@ -83,7 +82,7 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
 }
 
 /**
- * Draw markers on a single tile canvas
+ * Draw tick lines on a single tile canvas (labels are rendered in DOM)
  */
 function drawTile(
   canvas: HTMLCanvasElement,
@@ -119,59 +118,33 @@ function drawTile(
 
   if (markerWidthPx <= 0) return;
 
-  // Calculate which markers fall within this tile (with overscan for labels)
-  const tileStartPx = tileOffset - LABEL_OVERSCAN;
-  const tileEndPx = tileOffset + actualTileWidth;
-
-  const startMarkerIndex = Math.max(0, Math.floor(tileStartPx / markerWidthPx));
-  const endMarkerIndex = Math.ceil(tileEndPx / markerWidthPx);
+  // Calculate which markers fall within this tile
+  const startMarkerIndex = Math.max(0, Math.floor(tileOffset / markerWidthPx));
+  const endMarkerIndex = Math.ceil((tileOffset + actualTileWidth) / markerWidthPx);
 
   // Performance: skip minor ticks when many markers
   const visibleMarkerCount = endMarkerIndex - startMarkerIndex + 1;
   const showMinorTicks = visibleMarkerCount < 100;
-
-  // Setup text rendering for sharp fonts
-  ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
-  ctx.textBaseline = 'top';
 
   for (let i = startMarkerIndex; i <= endMarkerIndex; i++) {
     const timeInSeconds = i * intervalInSeconds;
     const absoluteX = timeToPixels(timeInSeconds);
     const x = absoluteX - tileOffset; // Convert to tile-relative coordinate
 
-    // Skip if marker line is outside tile (but label might extend in)
-    if (x < -LABEL_OVERSCAN || x > actualTileWidth) continue;
+    // Skip if outside tile
+    if (x < 0 || x > actualTileWidth) continue;
 
     // Major tick line - use integer position for sharp rendering
     const lineX = Math.round(x) + 0.5;
-    if (lineX >= 0 && lineX <= actualTileWidth) {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(lineX, 0);
-      ctx.lineTo(lineX, canvasHeight);
-      ctx.stroke();
-    }
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(lineX, 0);
+    ctx.lineTo(lineX, canvasHeight);
+    ctx.stroke();
 
-    // Timecode label - use integer positions for sharp text
-    const labelX = Math.round(x + 6);
-    const labelY = 6;
-
-    if (labelX >= -LABEL_OVERSCAN && labelX <= actualTileWidth + LABEL_OVERSCAN) {
-      const frameNumber = secondsToFrames(timeInSeconds, fps);
-      const label = formatTimecode(frameNumber, fps);
-
-      // Text shadow
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillText(label, labelX + 1, labelY + 1);
-      // Main text
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText(label, labelX, labelY);
-    }
-
-    // Minor ticks - check if any tick might be visible (x + markerWidthPx > 0)
-    // The inner loop has its own bounds check for individual ticks
-    if (showMinorTicks && markerConfig.minorTicks > 0 && x + markerWidthPx > 0) {
+    // Minor ticks
+    if (showMinorTicks && markerConfig.minorTicks > 0) {
       const tickSpacing = markerWidthPx / markerConfig.minorTicks;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
       ctx.lineWidth = 1;
@@ -188,6 +161,75 @@ function drawTile(
     }
   }
 }
+
+/**
+ * Virtualized DOM labels for timeline ruler
+ * Renders only visible labels with buffer for smooth scrolling
+ */
+interface TimelineMarkerLabelsProps {
+  scrollLeft: number;
+  viewportWidth: number;
+  pixelsPerSecond: number;
+  fps: number;
+  timeToPixels: (time: number) => number;
+}
+
+const LABEL_BUFFER = 100; // Extra pixels to render labels outside viewport
+
+const TimelineMarkerLabels = memo(function TimelineMarkerLabels({
+  scrollLeft,
+  viewportWidth,
+  pixelsPerSecond,
+  fps,
+  timeToPixels,
+}: TimelineMarkerLabelsProps) {
+  const markerConfig = calculateMarkerInterval(pixelsPerSecond);
+  const intervalInSeconds = markerConfig.type === 'frame' ? 1 / fps : markerConfig.intervalInSeconds;
+  const markerWidthPx = timeToPixels(intervalInSeconds);
+
+  if (markerWidthPx <= 0) return null;
+
+  // Calculate visible range with buffer
+  const startPx = Math.max(0, scrollLeft - LABEL_BUFFER);
+  const endPx = scrollLeft + viewportWidth + LABEL_BUFFER;
+
+  const startIndex = Math.floor(startPx / markerWidthPx);
+  const endIndex = Math.ceil(endPx / markerWidthPx);
+
+  const labels: { time: number; x: number; label: string }[] = [];
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    const timeInSeconds = i * intervalInSeconds;
+    const x = timeToPixels(timeInSeconds);
+    const frameNumber = secondsToFrames(timeInSeconds, fps);
+    const label = formatTimecode(frameNumber, fps);
+    labels.push({ time: timeInSeconds, x, label });
+  }
+
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      style={{ contain: 'layout style paint' }}
+    >
+      {labels.map(({ time, x, label }) => (
+        <span
+          key={time}
+          className="absolute text-[13px] text-white/60 select-none whitespace-nowrap"
+          style={{
+            left: `${x + 6}px`,
+            top: '6px',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontFeatureSettings: '"tnum"',
+            textShadow: '1px 1px 0 rgba(0, 0, 0, 0.5)',
+            transform: 'translateZ(0)', // Force GPU layer for smoother scrolling
+          }}
+        >
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+});
 
 /**
  * Timeline Markers Component (Tiled Canvas)
@@ -207,6 +249,9 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const containerRef = useRef<HTMLDivElement>(null);
   const tilesContainerRef = useRef<HTMLDivElement>(null);
   const canvasPoolRef = useRef<Map<number, HTMLCanvasElement>>(new Map());
+  // Bitmap cache keyed by "tileIndex-pps-fps-displayWidth" for instant reuse
+  const tileCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
+  const tileCacheVersionRef = useRef(0);
   const [viewportWidth, setViewportWidth] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -293,13 +338,25 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     Math.ceil((scrollLeft + viewportWidth) / TILE_WIDTH)
   );
 
-  // Tiled canvas rendering effect
+  // Invalidate cache when render parameters change
+  const cacheKey = `${pixelsPerSecond}-${fps}-${displayWidth}`;
+  useEffect(() => {
+    // Clear cache when zoom/fps/width changes
+    tileCacheVersionRef.current++;
+    const cache = tileCacheRef.current;
+    cache.forEach((bitmap) => bitmap.close());
+    cache.clear();
+  }, [cacheKey]);
+
+  // Tiled canvas rendering effect with caching
   useEffect(() => {
     if (!tilesContainerRef.current) return;
 
     const tilesContainer = tilesContainerRef.current;
     const canvasPool = canvasPoolRef.current;
+    const tileCache = tileCacheRef.current;
     const visibleTileIndices = new Set<number>();
+    const dpr = window.devicePixelRatio || 1;
 
     // Render visible tiles
     for (let tileIndex = startTile; tileIndex <= endTile; tileIndex++) {
@@ -311,25 +368,57 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         canvas = document.createElement('canvas');
         canvas.style.position = 'absolute';
         canvas.style.top = '0';
+        canvas.style.left = '0';
         canvas.style.pointerEvents = 'none';
+        canvas.style.willChange = 'transform';
         canvasPool.set(tileIndex, canvas);
         tilesContainer.appendChild(canvas);
       }
 
-      // Position tile
-      canvas.style.left = `${tileIndex * TILE_WIDTH}px`;
+      // Position tile using transform (compositor-only, avoids layout recalculation)
+      canvas.style.transform = `translateX(${tileIndex * TILE_WIDTH}px)`;
 
-      // Draw tile content
-      drawTile(
-        canvas,
-        tileIndex,
-        TILE_WIDTH,
-        canvasHeight,
-        pixelsPerSecond,
-        fps,
-        timeToPixels,
-        displayWidth
-      );
+      // Check cache for pre-rendered bitmap
+      const tileCacheKey = `${tileIndex}-${cacheKey}`;
+      const cachedBitmap = tileCache.get(tileCacheKey);
+
+      if (cachedBitmap) {
+        // Use cached bitmap - much faster than redrawing
+        const tileOffset = tileIndex * TILE_WIDTH;
+        const actualTileWidth = Math.min(TILE_WIDTH, displayWidth - tileOffset);
+        canvas.width = Math.ceil(actualTileWidth * dpr);
+        canvas.height = Math.ceil(canvasHeight * dpr);
+        canvas.style.width = `${actualTileWidth}px`;
+        canvas.style.height = `${canvasHeight}px`;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(cachedBitmap, 0, 0);
+        }
+      } else {
+        // Draw and cache the tile
+        drawTile(
+          canvas,
+          tileIndex,
+          TILE_WIDTH,
+          canvasHeight,
+          pixelsPerSecond,
+          fps,
+          timeToPixels,
+          displayWidth
+        );
+
+        // Cache the rendered tile as ImageBitmap (async, non-blocking)
+        createImageBitmap(canvas).then((bitmap) => {
+          // Only cache if parameters haven't changed
+          if (tileCacheRef.current === tileCache) {
+            tileCache.set(tileCacheKey, bitmap);
+          } else {
+            bitmap.close();
+          }
+        }).catch(() => {
+          // Ignore errors (e.g., if canvas is empty or too small)
+        });
+      }
     }
 
     // Remove tiles that are no longer visible
@@ -339,13 +428,64 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         canvasPool.delete(tileIndex);
       }
     });
-  }, [startTile, endTile, pixelsPerSecond, fps, timeToPixels, displayWidth, canvasHeight]);
+
+    // Pre-render adjacent tiles during idle time for smoother scrolling
+    const maxTile = Math.ceil(displayWidth / TILE_WIDTH) - 1;
+    const adjacentTiles = [startTile - 1, endTile + 1].filter(
+      (t) => t >= 0 && t <= maxTile && !tileCache.has(`${t}-${cacheKey}`)
+    );
+
+    if (adjacentTiles.length > 0) {
+      const idleCallback = requestIdleCallback(
+        (deadline) => {
+          for (const tileIndex of adjacentTiles) {
+            // Check if we still have time and cache hasn't changed
+            if (deadline.timeRemaining() < 10) break;
+            if (tileCacheRef.current !== tileCache) break;
+
+            const tileCacheKey = `${tileIndex}-${cacheKey}`;
+            if (tileCache.has(tileCacheKey)) continue;
+
+            // Create offscreen canvas for pre-rendering
+            const offscreen = document.createElement('canvas');
+            drawTile(
+              offscreen,
+              tileIndex,
+              TILE_WIDTH,
+              canvasHeight,
+              pixelsPerSecond,
+              fps,
+              timeToPixels,
+              displayWidth
+            );
+
+            // Cache the pre-rendered tile
+            createImageBitmap(offscreen)
+              .then((bitmap) => {
+                if (tileCacheRef.current === tileCache) {
+                  tileCache.set(tileCacheKey, bitmap);
+                } else {
+                  bitmap.close();
+                }
+              })
+              .catch(() => {});
+          }
+        },
+        { timeout: 500 }
+      );
+
+      return () => cancelIdleCallback(idleCallback);
+    }
+  }, [startTile, endTile, pixelsPerSecond, fps, timeToPixels, displayWidth, canvasHeight, cacheKey]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       canvasPoolRef.current.forEach((canvas) => canvas.remove());
       canvasPoolRef.current.clear();
+      // Clean up cached bitmaps
+      tileCacheRef.current.forEach((bitmap) => bitmap.close());
+      tileCacheRef.current.clear();
     };
   }, []);
 
@@ -541,11 +681,20 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         minWidth: width ? `${width}px` : undefined,
       }}
     >
-      {/* Tiled canvas container */}
+      {/* Tiled canvas container (tick lines only) */}
       <div
         ref={tilesContainerRef}
         className="absolute inset-0"
         style={{ pointerEvents: 'none' }}
+      />
+
+      {/* DOM labels layer (virtualized, crisp text rendering) */}
+      <TimelineMarkerLabels
+        scrollLeft={scrollLeft}
+        viewportWidth={viewportWidth}
+        pixelsPerSecond={pixelsPerSecond}
+        fps={fps}
+        timeToPixels={timeToPixels}
       />
 
       {/* Vignette effects */}

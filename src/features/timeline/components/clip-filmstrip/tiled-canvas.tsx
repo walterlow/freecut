@@ -1,7 +1,7 @@
 import { useRef, useEffect, memo, useCallback } from 'react';
 
-// Safe canvas width under browser limits
-const TILE_WIDTH = 2000;
+// Tile width - 1000px for faster individual renders and better cache granularity
+const TILE_WIDTH = 1000;
 
 export interface TiledCanvasProps {
   /** Total width of the content in pixels */
@@ -56,7 +56,9 @@ export const TiledCanvas = memo(function TiledCanvas({
         canvas = document.createElement('canvas');
         canvas.style.position = 'absolute';
         canvas.style.top = '0';
+        canvas.style.left = '0';
         canvas.style.pointerEvents = 'none';
+        canvas.style.willChange = 'transform';
         canvasPool.set(tileIndex, canvas);
         container.appendChild(canvas);
       }
@@ -65,8 +67,8 @@ export const TiledCanvas = memo(function TiledCanvas({
       const tileOffset = tileIndex * TILE_WIDTH;
       const actualTileWidth = Math.min(TILE_WIDTH, width - tileOffset);
 
-      // Position tile
-      canvas.style.left = `${tileOffset}px`;
+      // Position tile using transform (compositor-only, avoids layout recalculation)
+      canvas.style.transform = `translateX(${tileOffset}px)`;
 
       // Set canvas size with DPI scaling
       canvas.width = Math.ceil(actualTileWidth * dpr);
