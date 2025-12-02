@@ -33,6 +33,16 @@ interface MarkerInterval {
 // Tile configuration - 1000px tiles for faster individual renders and better cache granularity
 const TILE_WIDTH = 1000;
 
+// Quantize pixelsPerSecond for cache keys to avoid redrawing on every minor zoom change
+// Uses logarithmic steps for perceptually uniform quantization across zoom range
+function quantizePPSForCache(pps: number): number {
+  // Use log2 steps of ~5% (factor of 1.05) for smooth visual transitions
+  // This gives ~14 cache levels per octave of zoom
+  const logStep = Math.log2(1.05);
+  const quantizedLog = Math.round(Math.log2(pps) / logStep) * logStep;
+  return Math.pow(2, quantizedLog);
+}
+
 /**
  * Calculate optimal marker interval based on zoom level
  */
@@ -81,13 +91,14 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
 
 /**
  * Draw tick lines on a single tile canvas (labels are rendered in DOM)
+ * Takes pre-computed markerConfig to avoid redundant calculations across tiles
  */
 function drawTile(
   canvas: HTMLCanvasElement,
   tileIndex: number,
   tileWidth: number,
   canvasHeight: number,
-  pixelsPerSecond: number,
+  markerConfig: MarkerInterval,
   fps: number,
   timeToPixels: (time: number) => number,
   totalWidth: number
@@ -109,8 +120,7 @@ function drawTile(
   // Clear
   ctx.clearRect(0, 0, actualTileWidth, canvasHeight);
 
-  // Calculate marker interval
-  const markerConfig = calculateMarkerInterval(pixelsPerSecond);
+  // Use pre-computed marker interval
   const intervalInSeconds = markerConfig.type === 'frame' ? 1 / fps : markerConfig.intervalInSeconds;
   const markerWidthPx = timeToPixels(intervalInSeconds);
 
@@ -339,15 +349,42 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     Math.ceil((scrollLeft + viewportWidth) / TILE_WIDTH)
   );
 
-  // Invalidate cache when render parameters change
-  const cacheKey = `${pixelsPerSecond}-${fps}-${displayWidth}`;
+  // Quantize PPS for cache keys - allows cache reuse across similar zoom levels
+  // This dramatically reduces redraws during continuous zoom
+  const quantizedPPS = quantizePPSForCache(pixelsPerSecond);
+
+  // Cache key uses quantized PPS for better hit rate during zoom
+  const cacheKey = `${quantizedPPS.toFixed(4)}-${fps}`;
+
+  // Only clear cache when fps changes (rare) - not on zoom changes
+  // Individual tiles are keyed by quantized PPS so old tiles naturally become unused
+  const prevFpsRef = useRef(fps);
   useEffect(() => {
-    // Clear cache when zoom/fps/width changes
-    tileCacheVersionRef.current++;
+    if (prevFpsRef.current !== fps) {
+      prevFpsRef.current = fps;
+      tileCacheVersionRef.current++;
+      const cache = tileCacheRef.current;
+      cache.forEach((bitmap) => bitmap.close());
+      cache.clear();
+    }
+  }, [fps]);
+
+  // Limit cache size to prevent memory bloat (LRU-style: clear oldest when over limit)
+  const MAX_CACHED_TILES = 100;
+  useEffect(() => {
     const cache = tileCacheRef.current;
-    cache.forEach((bitmap) => bitmap.close());
-    cache.clear();
-  }, [cacheKey]);
+    if (cache.size > MAX_CACHED_TILES) {
+      // Remove oldest entries (first in map iteration order)
+      const entriesToRemove = cache.size - MAX_CACHED_TILES;
+      let removed = 0;
+      for (const [key, bitmap] of cache) {
+        if (removed >= entriesToRemove) break;
+        bitmap.close();
+        cache.delete(key);
+        removed++;
+      }
+    }
+  });
 
   // Tiled canvas rendering effect with caching
   useEffect(() => {
@@ -358,6 +395,13 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     const tileCache = tileCacheRef.current;
     const visibleTileIndices = new Set<number>();
     const dpr = window.devicePixelRatio || 1;
+
+    // Use quantized values for rendering so tiles match cache keys
+    const renderPPS = quantizedPPS;
+    const renderTimeToPixels = (time: number) => time * renderPPS;
+
+    // Pre-compute marker config once for all tiles (avoids redundant calculations)
+    const markerConfig = calculateMarkerInterval(renderPPS);
 
     // Render visible tiles
     for (let tileIndex = startTile; tileIndex <= endTile; tileIndex++) {
@@ -396,15 +440,15 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
           ctx.drawImage(cachedBitmap, 0, 0);
         }
       } else {
-        // Draw and cache the tile
+        // Draw and cache the tile using quantized PPS for cache consistency
         drawTile(
           canvas,
           tileIndex,
           TILE_WIDTH,
           canvasHeight,
-          pixelsPerSecond,
+          markerConfig,
           fps,
-          timeToPixels,
+          renderTimeToPixels,
           displayWidth
         );
 
@@ -447,16 +491,16 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
             const tileCacheKey = `${tileIndex}-${cacheKey}`;
             if (tileCache.has(tileCacheKey)) continue;
 
-            // Create offscreen canvas for pre-rendering
+            // Create offscreen canvas for pre-rendering (use quantized values)
             const offscreen = document.createElement('canvas');
             drawTile(
               offscreen,
               tileIndex,
               TILE_WIDTH,
               canvasHeight,
-              pixelsPerSecond,
+              markerConfig,
               fps,
-              timeToPixels,
+              renderTimeToPixels,
               displayWidth
             );
 
@@ -477,7 +521,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
 
       return () => cancelIdleCallback(idleCallback);
     }
-  }, [startTile, endTile, pixelsPerSecond, fps, timeToPixels, displayWidth, canvasHeight, cacheKey]);
+  }, [startTile, endTile, quantizedPPS, fps, displayWidth, canvasHeight, cacheKey]);
 
   // Cleanup on unmount
   useEffect(() => {

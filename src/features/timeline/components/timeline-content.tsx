@@ -203,9 +203,10 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
   }, [items, containerWidth]);
 
   // Track scroll position with coalesced updates for viewport culling
-  // Only update state every 150ms to reduce re-render frequency during rapid scrolling
+  // Throttle at 50ms to match zoom throttle rate - prevents width jitter during zoom+scroll
   const scrollLeftRef = useRef(0);
   const scrollUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SCROLL_THROTTLE_MS = 50; // Match zoom throttle for synchronized updates
 
   useEffect(() => {
     const container = containerRef.current;
@@ -214,12 +215,12 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     const handleScroll = () => {
       scrollLeftRef.current = container.scrollLeft;
 
-      // Coalesce scroll updates - only update state every 150ms
+      // Coalesce scroll updates at same rate as zoom throttle
       if (scrollUpdateTimeoutRef.current === null) {
         scrollUpdateTimeoutRef.current = setTimeout(() => {
           scrollUpdateTimeoutRef.current = null;
           setScrollLeft(scrollLeftRef.current);
-        }, 150);
+        }, SCROLL_THROTTLE_MS);
       }
     };
 
@@ -473,16 +474,6 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
 
     // Only clamp to prevent negative scroll (left boundary)
     const clampedScrollLeft = Math.max(0, newScrollLeft);
-
-    console.log('Zoom:', {
-      cursorScreenX: cursorScreenX.toFixed(0),
-      cursorContentX: cursorContentX.toFixed(0),
-      cursorTime: cursorTime.toFixed(2) + 's',
-      newCursorContentX: newCursorContentX.toFixed(0),
-      scrollBefore: container.scrollLeft.toFixed(0),
-      scrollTarget: clampedScrollLeft.toFixed(0),
-      zoom: `${currentZoom.toFixed(3)} → ${clampedZoom.toFixed(3)}`,
-    });
 
     // Queue scroll to be applied AFTER render (so DOM has correct width)
     // Update ref immediately so timelineWidth calculation can use it
