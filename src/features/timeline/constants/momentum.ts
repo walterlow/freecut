@@ -6,7 +6,7 @@ export const SCROLL_SMOOTHING = 0.15; // Input smoothing (0-1, lower = smoother)
 export const SCROLL_GESTURE_TIMEOUT = 100; // ms before resetting velocity
 
 // Zoom momentum config (shared between ctrl+scroll and slider)
-export const ZOOM_SENSITIVITY = 0.01; // Zoom speed multiplier
+export const ZOOM_SENSITIVITY = 0.005; // Zoom speed multiplier
 export const ZOOM_FRICTION = 0.15; // Deceleration for zoom
 export const ZOOM_MIN_VELOCITY = 0.001; // Stop threshold for zoom
 export const ZOOM_SMOOTHING = 0.25; // Input smoothing for zoom
