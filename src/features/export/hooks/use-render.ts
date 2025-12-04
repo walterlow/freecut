@@ -24,6 +24,7 @@ interface UseRenderReturn {
   startExport: (settings: ExportSettings) => Promise<void>;
   cancelExport: () => void;
   downloadVideo: () => Promise<void>;
+  resetState: () => void;
 }
 
 const SOCKET_URL = 'http://localhost:3001';
@@ -39,11 +40,6 @@ export function useRender(): UseRenderReturn {
   const [jobId, setJobId] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
-  const tracks = useTimelineStore((state) => state.tracks);
-  const items = useTimelineStore((state) => state.items);
-  const fps = useTimelineStore((state) => state.fps);
-  const inPoint = useTimelineStore((state) => state.inPoint);
-  const outPoint = useTimelineStore((state) => state.outPoint);
 
   // Initialize Socket.IO connection
   useEffect(() => {
@@ -116,6 +112,12 @@ export function useRender(): UseRenderReturn {
         const newJobId = crypto.randomUUID();
         setJobId(newJobId);
 
+        // Read current state directly from store to avoid stale closure issues
+        const state = useTimelineStore.getState();
+        const { tracks, items, fps, inPoint, outPoint } = state;
+
+        console.log('[useRender] Export with IO points:', { inPoint, outPoint, fps });
+
         // Convert timeline to Remotion format with export settings
         // Use project FPS from timeline store
         // Pass in/out points to export only the selected range
@@ -128,6 +130,8 @@ export function useRender(): UseRenderReturn {
           inPoint,
           outPoint
         );
+
+        console.log('[useRender] Composition duration:', composition.durationInFrames, 'frames');
 
         // Get all unique media IDs from timeline
         const mediaIds = new Set<string>();
@@ -185,7 +189,7 @@ export function useRender(): UseRenderReturn {
         setStatus('failed');
       }
     },
-    [tracks, items, fps, inPoint, outPoint]
+    [] // Dependencies empty - we read from store directly inside callback
   );
 
   /**

@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState, useRef, useEffect, memo } from 'react';
 import { Sparkles, Plus, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { HexColorPicker } from 'react-colorful';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,8 +16,9 @@ import type {
   CSSFilterEffect,
   GlitchEffect,
   GlitchVariant,
+  HalftoneEffect,
 } from '@/types/effects';
-import { CSS_FILTER_CONFIGS, GLITCH_CONFIGS, EFFECT_PRESETS } from '@/types/effects';
+import { CSS_FILTER_CONFIGS, GLITCH_CONFIGS, EFFECT_PRESETS, HALFTONE_CONFIG, CANVAS_EFFECT_CONFIGS } from '@/types/effects';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
@@ -24,6 +26,79 @@ import {
   PropertyRow,
   SliderInput,
 } from '@/features/editor/components/properties-sidebar/components';
+
+/**
+ * Color picker for effect colors (halftone dot/background color).
+ */
+const EffectColorPicker = memo(function EffectColorPicker({
+  label,
+  color,
+  onChange,
+  onLiveChange,
+  disabled,
+}: {
+  label: string;
+  color: string;
+  onChange: (color: string) => void;
+  onLiveChange?: (color: string) => void;
+  disabled?: boolean;
+}) {
+  const [localColor, setLocalColor] = useState(color);
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalColor(color);
+  }, [color]);
+
+  const handleColorChange = useCallback((newColor: string) => {
+    setLocalColor(newColor);
+    onLiveChange?.(newColor);
+  }, [onLiveChange]);
+
+  const handleCommit = useCallback(() => {
+    onChange(localColor);
+    setIsOpen(false);
+  }, [localColor, onChange]);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        handleCommit();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen, handleCommit]);
+
+  return (
+    <div ref={containerRef} className="relative flex items-center gap-2">
+      <span className="text-xs text-muted-foreground min-w-[24px]">{label}</span>
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className="w-6 h-6 rounded border border-input flex-shrink-0"
+        style={{ backgroundColor: localColor }}
+        disabled={disabled}
+        aria-label={`Select ${label.toLowerCase()} color`}
+      />
+      {isOpen && (
+        <div className="absolute left-0 top-8 z-50 bg-popover border rounded-md shadow-lg p-2">
+          <HexColorPicker color={localColor} onChange={handleColorChange} />
+          <Button
+            size="sm"
+            className="w-full mt-2"
+            onClick={handleCommit}
+          >
+            Apply
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+});
 
 interface EffectsSectionProps {
   items: TimelineItem[];
@@ -87,6 +162,22 @@ export function EffectsSection({ items }: EffectsSectionProps) {
     [itemIds, addEffect]
   );
 
+  // Add a halftone effect
+  const handleAddHalftone = useCallback(() => {
+    itemIds.forEach((id) => {
+      addEffect(id, {
+        type: 'canvas-effect',
+        variant: 'halftone',
+        dotSize: HALFTONE_CONFIG.dotSize.default,
+        spacing: HALFTONE_CONFIG.spacing.default,
+        angle: HALFTONE_CONFIG.angle.default,
+        intensity: HALFTONE_CONFIG.intensity.default,
+        backgroundColor: '#ffffff',
+        dotColor: '#000000',
+      } as HalftoneEffect);
+    });
+  }, [itemIds, addEffect]);
+
   // Apply a preset (adds multiple effects)
   const handleApplyPreset = useCallback(
     (presetId: string) => {
@@ -124,6 +215,22 @@ export function EffectsSection({ items }: EffectsSectionProps) {
     [effects, itemIds, updateEffect, clearEffectsPreview]
   );
 
+  // Update halftone effect property
+  const handleHalftoneChange = useCallback(
+    (effectId: string, property: keyof HalftoneEffect, newValue: number | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'canvas-effect') return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...effect.effect, [property]: newValue } as HalftoneEffect,
+        });
+      });
+      queueMicrotask(() => clearEffectsPreview());
+    },
+    [effects, itemIds, updateEffect, clearEffectsPreview]
+  );
+
   // Live preview during drag
   const handleEffectLiveChange = useCallback(
     (effectId: string, newValue: number) => {
@@ -140,6 +247,30 @@ export function EffectsSection({ items }: EffectsSectionProps) {
               return { ...e, effect: { ...e.effect, value: newValue } as CSSFilterEffect };
             } else if (e.effect.type === 'glitch') {
               return { ...e, effect: { ...e.effect, intensity: newValue } as GlitchEffect };
+            }
+            return e;
+          });
+        }
+      });
+      setEffectsPreview(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreview]
+  );
+
+  // Live preview for halftone properties
+  const handleHalftoneLiveChange = useCallback(
+    (effectId: string, property: keyof HalftoneEffect, newValue: number | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'canvas-effect') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (item) {
+          previews[id] = (item.effects ?? []).map((e) => {
+            if (e.id !== effectId) return e;
+            if (e.effect.type === 'canvas-effect') {
+              return { ...e, effect: { ...e.effect, [property]: newValue } as HalftoneEffect };
             }
             return e;
           });
@@ -226,6 +357,16 @@ export function EffectsSection({ items }: EffectsSectionProps) {
                 {config.label}
               </DropdownMenuItem>
             ))}
+
+            <DropdownMenuSeparator />
+
+            {/* Stylized Effects */}
+            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+              Stylized Effects
+            </div>
+            <DropdownMenuItem onClick={handleAddHalftone}>
+              {CANVAS_EFFECT_CONFIGS.halftone.label}
+            </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
@@ -343,6 +484,117 @@ export function EffectsSection({ items }: EffectsSectionProps) {
                 </Button>
               </div>
             </PropertyRow>
+          );
+        }
+
+        if (effect.effect.type === 'canvas-effect' && effect.effect.variant === 'halftone') {
+          const halftone = effect.effect as HalftoneEffect;
+          return (
+            <div key={effect.id} className="border-b border-border/50 pb-2 mb-2">
+              {/* Header row with toggle and delete */}
+              <PropertyRow label={CANVAS_EFFECT_CONFIGS.halftone.label}>
+                <div className="flex items-center gap-1 flex-1 justify-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => handleToggle(effect.id)}
+                    title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+                  >
+                    {effect.enabled ? (
+                      <Eye className="w-3 h-3" />
+                    ) : (
+                      <EyeOff className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => handleRemove(effect.id)}
+                    title="Remove effect"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </PropertyRow>
+
+              {/* Dot Size */}
+              <PropertyRow label={HALFTONE_CONFIG.dotSize.label}>
+                <SliderInput
+                  value={halftone.dotSize}
+                  onChange={(v) => handleHalftoneChange(effect.id, 'dotSize', v)}
+                  onLiveChange={(v) => handleHalftoneLiveChange(effect.id, 'dotSize', v)}
+                  min={HALFTONE_CONFIG.dotSize.min}
+                  max={HALFTONE_CONFIG.dotSize.max}
+                  step={HALFTONE_CONFIG.dotSize.step}
+                  unit={HALFTONE_CONFIG.dotSize.unit}
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Spacing */}
+              <PropertyRow label={HALFTONE_CONFIG.spacing.label}>
+                <SliderInput
+                  value={halftone.spacing}
+                  onChange={(v) => handleHalftoneChange(effect.id, 'spacing', v)}
+                  onLiveChange={(v) => handleHalftoneLiveChange(effect.id, 'spacing', v)}
+                  min={HALFTONE_CONFIG.spacing.min}
+                  max={HALFTONE_CONFIG.spacing.max}
+                  step={HALFTONE_CONFIG.spacing.step}
+                  unit={HALFTONE_CONFIG.spacing.unit}
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Angle */}
+              <PropertyRow label={HALFTONE_CONFIG.angle.label}>
+                <SliderInput
+                  value={halftone.angle}
+                  onChange={(v) => handleHalftoneChange(effect.id, 'angle', v)}
+                  onLiveChange={(v) => handleHalftoneLiveChange(effect.id, 'angle', v)}
+                  min={HALFTONE_CONFIG.angle.min}
+                  max={HALFTONE_CONFIG.angle.max}
+                  step={HALFTONE_CONFIG.angle.step}
+                  unit={HALFTONE_CONFIG.angle.unit}
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Intensity */}
+              <PropertyRow label={HALFTONE_CONFIG.intensity.label}>
+                <SliderInput
+                  value={halftone.intensity}
+                  onChange={(v) => handleHalftoneChange(effect.id, 'intensity', v)}
+                  onLiveChange={(v) => handleHalftoneLiveChange(effect.id, 'intensity', v)}
+                  min={HALFTONE_CONFIG.intensity.min}
+                  max={HALFTONE_CONFIG.intensity.max}
+                  step={HALFTONE_CONFIG.intensity.step}
+                  formatValue={(v) => `${Math.round(v * 100)}%`}
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Colors */}
+              <PropertyRow label="Colors">
+                <div className="flex items-center gap-3">
+                  <EffectColorPicker
+                    label="Dot"
+                    color={halftone.dotColor}
+                    onChange={(c) => handleHalftoneChange(effect.id, 'dotColor', c)}
+                    onLiveChange={(c) => handleHalftoneLiveChange(effect.id, 'dotColor', c)}
+                    disabled={!effect.enabled}
+                  />
+                  <EffectColorPicker
+                    label="Bg"
+                    color={halftone.backgroundColor}
+                    onChange={(c) => handleHalftoneChange(effect.id, 'backgroundColor', c)}
+                    onLiveChange={(c) => handleHalftoneLiveChange(effect.id, 'backgroundColor', c)}
+                    disabled={!effect.enabled}
+                  />
+                </div>
+              </PropertyRow>
+            </div>
           );
         }
 

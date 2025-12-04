@@ -12,6 +12,9 @@ export type CSSFilterType =
 // Glitch effect variants (implemented via CSS transforms and layers)
 export type GlitchVariant = 'rgb-split' | 'scanlines' | 'color-glitch';
 
+// Canvas-based effect variants (require pixel-level processing)
+export type CanvasEffectVariant = 'halftone';
+
 // CSS filter effect configuration
 export interface CSSFilterEffect {
   type: 'css-filter';
@@ -28,8 +31,20 @@ export interface GlitchEffect {
   seed: number; // Random seed for deterministic rendering during export
 }
 
+// Halftone effect configuration (canvas-based luminance dot pattern)
+export interface HalftoneEffect {
+  type: 'canvas-effect';
+  variant: 'halftone';
+  dotSize: number; // Base dot size in pixels (2-20)
+  spacing: number; // Dot spacing in pixels (4-40)
+  angle: number; // Grid rotation in degrees (0-90)
+  intensity: number; // Effect strength 0-1
+  backgroundColor: string; // Background color hex
+  dotColor: string; // Dot color hex
+}
+
 // Union of all visual effects
-export type VisualEffect = CSSFilterEffect | GlitchEffect;
+export type VisualEffect = CSSFilterEffect | GlitchEffect | HalftoneEffect;
 
 // Effect instance applied to a timeline item
 export interface ItemEffect {
@@ -65,6 +80,19 @@ export const GLITCH_CONFIGS: Record<GlitchVariant, { label: string; description:
   'rgb-split': { label: 'RGB Split', description: 'Chromatic aberration effect' },
   scanlines: { label: 'Scanlines', description: 'CRT monitor scanline overlay' },
   'color-glitch': { label: 'Color Glitch', description: 'Random hue shifts' },
+};
+
+// Halftone effect configuration metadata
+export const HALFTONE_CONFIG = {
+  dotSize: { label: 'Dot Size', min: 2, max: 20, default: 6, step: 1, unit: 'px' },
+  spacing: { label: 'Spacing', min: 4, max: 40, default: 8, step: 1, unit: 'px' },
+  angle: { label: 'Angle', min: 0, max: 90, default: 45, step: 1, unit: '°' },
+  intensity: { label: 'Intensity', min: 0, max: 1, default: 1, step: 0.01, unit: '' },
+};
+
+// Canvas effect configuration metadata
+export const CANVAS_EFFECT_CONFIGS: Record<CanvasEffectVariant, { label: string; description: string }> = {
+  halftone: { label: 'Halftone', description: 'Classic print-style dot pattern based on luminance' },
 };
 
 // Effect presets (combinations of multiple effects)

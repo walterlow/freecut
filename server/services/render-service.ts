@@ -111,20 +111,37 @@ export class RenderService {
 
       // Resolve media paths - replace blob URLs with HTTP URLs served by our server
       // Include file extension in URL so Remotion can detect the container format
+      // Also strip out thumbnailUrl which contains blob URLs that don't work on server
       const tracksWithResolvedMedia = composition.tracks.map(track => ({
         ...track,
         items: track.items.map(item => {
+          // Strip thumbnailUrl from all items - it's a blob URL that causes errors in Remotion
+          const { thumbnailUrl, ...itemWithoutThumbnail } = item as any;
+
           if (item.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
             const ext = mediaExtensions.get(item.mediaId) || '';
             // Use HTTP URL to access uploaded media via our server
-            return {
-              ...item,
+            const resolvedItem = {
+              ...itemWithoutThumbnail,
               src: `http://localhost:3001/api/media/${jobId}/${item.mediaId}${ext}`,
             };
+            // Debug: log to find any remaining blob URLs
+            const itemStr = JSON.stringify(resolvedItem);
+            if (itemStr.includes('blob:')) {
+              console.log('[RenderService] WARNING: Item still contains blob URL:', itemStr.substring(0, 500));
+            }
+            return resolvedItem;
           }
-          return item;
+          return itemWithoutThumbnail;
         }),
       }));
+
+      // Verify no blob URLs remain in tracks data
+      const tracksStr = JSON.stringify(tracksWithResolvedMedia);
+      const blobMatches = tracksStr.match(/blob:[^"]+/g);
+      if (blobMatches) {
+        console.warn('[RenderService] WARNING: Found blob URLs in tracks:', blobMatches);
+      }
 
       // Select composition with all properties from export settings
       const compositionData = await selectComposition({

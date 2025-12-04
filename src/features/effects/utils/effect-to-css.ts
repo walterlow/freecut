@@ -1,4 +1,4 @@
-import type { ItemEffect, CSSFilterEffect, CSSFilterType } from '@/types/effects';
+import type { ItemEffect, CSSFilterEffect, CSSFilterType, HalftoneEffect } from '@/types/effects';
 
 /**
  * Convert a CSS filter effect to its CSS filter string representation.
@@ -79,4 +79,24 @@ export function getGlitchEffects(effects: ItemEffect[]) {
   return effects
     .filter((e) => e.enabled && e.effect.type === 'glitch')
     .map((e) => ({ id: e.id, ...e.effect }));
+}
+
+/**
+ * Check if any effects require canvas-based rendering (e.g., halftone).
+ */
+export function hasCanvasEffects(effects: ItemEffect[]): boolean {
+  return effects.some((e) => e.enabled && e.effect.type === 'canvas-effect');
+}
+
+/**
+ * Get the halftone effect from an array of effects, if present and enabled.
+ */
+export function getHalftoneEffect(
+  effects: ItemEffect[]
+): (HalftoneEffect & { id: string }) | null {
+  const effect = effects.find(
+    (e) => e.enabled && e.effect.type === 'canvas-effect' && e.effect.variant === 'halftone'
+  );
+  if (!effect) return null;
+  return { id: effect.id, ...(effect.effect as HalftoneEffect) };
 }

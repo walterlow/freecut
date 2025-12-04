@@ -11,7 +11,9 @@
       "Bash(curl:*)",
       "WebFetch(domain:mediabunny.dev)",
       "Bash(npx tsc:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:www.remotion.dev)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

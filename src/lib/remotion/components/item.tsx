@@ -1,12 +1,12 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { AbsoluteFill, OffthreadVideo, useVideoConfig, useCurrentFrame, interpolate, useRemotionEnvironment } from 'remotion';
+import { AbsoluteFill, OffthreadVideo, Img, useVideoConfig, useCurrentFrame, interpolate, useRemotionEnvironment } from 'remotion';
 import { Video } from '@remotion/media';
 import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@remotion/shapes';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import type { TimelineItem, VideoItem, TextItem, ShapeItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
-import type { ItemEffect, GlitchEffect } from '@/types/effects';
+import type { ItemEffect, GlitchEffect, HalftoneEffect } from '@/types/effects';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { GifPlayer } from './gif-player';
@@ -17,8 +17,9 @@ import {
 } from '../utils/transform-resolver';
 import { loadFont, FONT_WEIGHT_MAP } from '../utils/fonts';
 import { getShapePath, rotatePath } from '../utils/shape-path';
-import { effectsToCSSFilter, getGlitchEffects } from '@/features/effects/utils/effect-to-css';
+import { effectsToCSSFilter, getGlitchEffects, getHalftoneEffect } from '@/features/effects/utils/effect-to-css';
 import { getRGBSplitStyles, getScanlinesStyle, getGlitchFilterString } from '@/features/effects/utils/glitch-algorithms';
+import { HalftoneWrapper } from '@/features/effects/components/halftone-wrapper';
 
 /** Mask information passed from composition to items */
 export interface MaskInfo {
@@ -180,15 +181,20 @@ const VideoContent: React.FC<{
     );
   }
 
-  // Note: @remotion/media Video doesn't have onError prop, but it's only used
-  // for server-side rendering where blob URLs are not used (mediabunny handles files)
+  // Use OffthreadVideo for server-side rendering as well
+  // @remotion/media Video was falling back to OffthreadVideo anyway due to "Unknown container format"
+  // Using OffthreadVideo directly ensures consistent behavior and proper trimBefore handling
   return (
-    <Video
+    <OffthreadVideo
       src={item.src!}
       trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
       volume={audioVolume}
       playbackRate={playbackRate}
       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      onError={(err) => {
+        // Log but don't crash - Remotion will retry failed frames
+        console.warn('[VideoContent] Frame extraction warning:', err.message);
+      }}
     />
   );
 };
@@ -835,14 +841,15 @@ const TransformWrapper: React.FC<{
 };
 
 /**
- * EffectWrapper applies CSS filter effects and glitch animations to content.
+ * EffectWrapper applies CSS filter effects, glitch animations, and canvas-based effects to content.
  * Reads effects from item and generates appropriate styles per frame.
  * Works in both browser preview and Remotion server-side export.
  */
 const EffectWrapper: React.FC<{
   item: TimelineItem;
   children: React.ReactNode;
-}> = ({ item, children }) => {
+  muted?: boolean;
+}> = ({ item, children, muted = false }) => {
   const frame = useCurrentFrame();
 
   // Read effect preview from gizmo store (for live slider updates)
@@ -865,6 +872,12 @@ const EffectWrapper: React.FC<{
     return getGlitchEffects(effects) as Array<GlitchEffect & { id: string }>;
   }, [effects]);
 
+  // Get halftone effect for canvas-based rendering
+  const halftoneEffect = useMemo(() => {
+    if (effects.length === 0) return null;
+    return getHalftoneEffect(effects);
+  }, [effects]);
+
   // Calculate glitch-based filters (color glitch adds hue-rotate)
   const glitchFilterString = useMemo(() => {
     if (glitchEffects.length === 0) return '';
@@ -882,6 +895,41 @@ const EffectWrapper: React.FC<{
   // Check for scanlines effect
   const scanlinesEffect = glitchEffects.find((e) => e.variant === 'scanlines');
 
+  // Helper to wrap content with halftone effect if present
+  const wrapWithHalftone = (content: React.ReactNode): React.ReactNode => {
+    if (!halftoneEffect) return content;
+
+    // Get trim and speed info for video items (needed for in/out point export)
+    const videoItem = item.type === 'video' ? (item as { sourceStart?: number; trimStart?: number; offset?: number; speed?: number; volume?: number; audioFadeIn?: number; audioFadeOut?: number }) : null;
+    const trimBefore = videoItem?.sourceStart ?? videoItem?.trimStart ?? videoItem?.offset ?? 0;
+    const playbackRate = videoItem?.speed ?? 1;
+
+    return (
+      <HalftoneWrapper
+        options={{
+          dotSize: halftoneEffect.dotSize,
+          spacing: halftoneEffect.spacing,
+          angle: halftoneEffect.angle,
+          intensity: halftoneEffect.intensity,
+          backgroundColor: halftoneEffect.backgroundColor,
+          dotColor: halftoneEffect.dotColor,
+        }}
+        enabled={true}
+        itemType={item.type}
+        mediaSrc={item.type === 'video' || item.type === 'image' ? (item as { src?: string }).src : undefined}
+        trimBefore={trimBefore}
+        playbackRate={playbackRate}
+        muted={muted}
+        volume={videoItem?.volume ?? 0}
+        audioFadeIn={videoItem?.audioFadeIn ?? 0}
+        audioFadeOut={videoItem?.audioFadeOut ?? 0}
+        durationInFrames={item.durationInFrames}
+      >
+        {content}
+      </HalftoneWrapper>
+    );
+  };
+
   // RGB split requires special multi-layer rendering
   if (rgbSplitEffect) {
     const { redOffset, blueOffset, active } = getRGBSplitStyles(
@@ -892,7 +940,7 @@ const EffectWrapper: React.FC<{
     );
 
     if (active) {
-      return (
+      const rgbContent = (
         <div
           style={{
             position: 'relative',
@@ -961,11 +1009,12 @@ const EffectWrapper: React.FC<{
           )}
         </div>
       );
+      return <>{wrapWithHalftone(rgbContent)}</>;
     }
   }
 
   // Standard rendering with CSS filters + optional scanlines
-  return (
+  const standardContent = (
     <div
       style={{
         width: '100%',
@@ -987,6 +1036,8 @@ const EffectWrapper: React.FC<{
       )}
     </div>
   );
+
+  return <>{wrapWithHalftone(standardContent)}</>;
 };
 
 /**
@@ -1066,12 +1117,6 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false, masks = [] }) =
       // Ensure we don't seek past the source
       const maxTrimBefore = Math.max(0, sourceDuration - sourceFramesNeeded);
       if (trimBefore > maxTrimBefore) {
-        console.warn('[Remotion Item] trimBefore exceeds valid range, clamping:', {
-          original: trimBefore,
-          clamped: maxTrimBefore,
-          sourceDuration,
-          sourceFramesNeeded,
-        });
         safeTrimBefore = maxTrimBefore;
       }
     }
@@ -1123,7 +1168,7 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false, masks = [] }) =
     // resolveTransform handles defaults (fit-to-canvas) when no explicit transform is set
     return wrapWithMask(
       <TransformWrapper item={item}>
-        <EffectWrapper item={item}>{videoContent}</EffectWrapper>
+        <EffectWrapper item={item} muted={muted}>{videoContent}</EffectWrapper>
       </TransformWrapper>
     );
   }
@@ -1193,11 +1238,10 @@ export const Item: React.FC<ItemProps> = ({ item, muted = false, masks = [] }) =
       );
     }
 
-    // Regular static images
+    // Regular static images - use Remotion's Img component for proper loading in render mode
     const imageContent = (
-      <img
+      <Img
         src={item.src}
-        alt=""
         style={{
           width: '100%',
           height: '100%',
