@@ -55,6 +55,8 @@ export const HalftoneWrapper: React.FC<HalftoneWrapperProps> = ({
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  // Cache the video element to avoid DOM query issues during React reconciliation
+  const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const frame = useCurrentFrame();
   const { width, height, fps } = useVideoConfig();
   const env = useRemotionEnvironment();
@@ -250,10 +252,19 @@ export const HalftoneWrapper: React.FC<HalftoneWrapperProps> = ({
 
     // Handle video in preview mode - capture from DOM video element
     if (itemType === 'video' && isPreview && contentRef.current && rendererRef.current && rendererReady) {
-      const videoElement = contentRef.current.querySelector('video');
+      // Try to get video element from cache first, fall back to DOM query
+      let videoElement = videoElementRef.current;
+
+      // Verify cached element is still valid (connected to DOM and has same parent)
+      if (!videoElement || !videoElement.isConnected || !contentRef.current.contains(videoElement)) {
+        videoElement = contentRef.current.querySelector('video');
+        videoElementRef.current = videoElement;
+      }
+
       if (videoElement && videoElement.readyState >= 2) {
         rendererRef.current.render(videoElement, options);
       }
+      // If video not ready, canvas retains previous frame (no clear() call in WebGL renderer)
     }
   }, [frame, enabled, options, itemType, imageReady, rendererReady, isPreview, width, height]);
 

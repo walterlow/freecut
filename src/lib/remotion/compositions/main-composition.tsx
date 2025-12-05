@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useVideoConfig, useCurrentFrame } from 'remotion';
 import type { RemotionInputProps } from '@/types/export';
 import type { TextItem, ShapeItem, AdjustmentItem } from '@/types/timeline';
@@ -413,6 +413,14 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
   const hasActiveMasks = activeMasks.length > 0;
   const hasAdjustmentLayers = allAdjustmentLayers.length > 0;
 
+  // Stable render function for video items - prevents re-renders on every frame
+  // useCallback ensures the function reference stays stable between renders
+  const renderVideoItem = useCallback((item: typeof videoItems[number]) => (
+    <AbsoluteFill style={{ zIndex: item.zIndex }}>
+      <Item item={item} muted={item.muted} masks={[]} />
+    </AbsoluteFill>
+  ), []);
+
   return (
     <AbsoluteFill>
       {/* SVG MASK DEFINITIONS - opacity controls activation, no DOM changes */}
@@ -448,11 +456,7 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
           <StableVideoSequence
             items={videoItems}
             premountFor={Math.round(fps * 2)}
-            renderItem={(item) => (
-              <AbsoluteFill style={{ zIndex: item.zIndex }}>
-                <Item item={item} muted={item.muted} masks={[]} />
-              </AbsoluteFill>
-            )}
+            renderItem={renderVideoItem}
           />
         </StableMaskedGroup>
 

@@ -516,7 +516,7 @@ const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
 };
 
 // Set to true to show debug overlay on video items during rendering
-const DEBUG_VIDEO_OVERLAY = true;
+const DEBUG_VIDEO_OVERLAY = false;
 
 /**
  * MaskWrapper applies clipping to content using CSS clip-path.
@@ -878,6 +878,19 @@ const EffectWrapper: React.FC<{
     return getHalftoneEffect(effects);
   }, [effects]);
 
+  // Memoize halftone options to prevent unnecessary re-renders in HalftoneWrapper
+  const halftoneOptions = useMemo(() => {
+    if (!halftoneEffect) return null;
+    return {
+      dotSize: halftoneEffect.dotSize,
+      spacing: halftoneEffect.spacing,
+      angle: halftoneEffect.angle,
+      intensity: halftoneEffect.intensity,
+      backgroundColor: halftoneEffect.backgroundColor,
+      dotColor: halftoneEffect.dotColor,
+    };
+  }, [halftoneEffect]);
+
   // Calculate glitch-based filters (color glitch adds hue-rotate)
   const glitchFilterString = useMemo(() => {
     if (glitchEffects.length === 0) return '';
@@ -897,7 +910,7 @@ const EffectWrapper: React.FC<{
 
   // Helper to wrap content with halftone effect if present
   const wrapWithHalftone = (content: React.ReactNode): React.ReactNode => {
-    if (!halftoneEffect) return content;
+    if (!halftoneEffect || !halftoneOptions) return content;
 
     // Get trim and speed info for video items (needed for in/out point export)
     const videoItem = item.type === 'video' ? (item as { sourceStart?: number; trimStart?: number; offset?: number; speed?: number; volume?: number; audioFadeIn?: number; audioFadeOut?: number }) : null;
@@ -906,14 +919,7 @@ const EffectWrapper: React.FC<{
 
     return (
       <HalftoneWrapper
-        options={{
-          dotSize: halftoneEffect.dotSize,
-          spacing: halftoneEffect.spacing,
-          angle: halftoneEffect.angle,
-          intensity: halftoneEffect.intensity,
-          backgroundColor: halftoneEffect.backgroundColor,
-          dotColor: halftoneEffect.dotColor,
-        }}
+        options={halftoneOptions}
         enabled={true}
         itemType={item.type}
         mediaSrc={item.type === 'video' || item.type === 'image' ? (item as { src?: string }).src : undefined}

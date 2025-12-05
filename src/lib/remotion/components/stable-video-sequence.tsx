@@ -65,7 +65,12 @@ function groupByOrigin(items: EnrichedVideoItem[]): VideoGroup[] {
 }
 
 /**
- * Renders the active item from a group based on current frame
+ * Renders the active item from a group based on current frame.
+ *
+ * CRITICAL for halftone/canvas effects:
+ * 1. Memoizes adjustedItem so it only changes when crossing split boundaries
+ * 2. Memoizes the RENDERED OUTPUT so renderItem isn't called every frame
+ * This prevents re-renders of canvas-based effects like halftone on every frame.
  */
 const GroupRenderer: React.FC<{
   group: VideoGroup;
@@ -81,27 +86,34 @@ const GroupRenderer: React.FC<{
     (item) => globalFrame >= item.from && globalFrame < item.from + item.durationInFrames
   );
 
-  if (!activeItem) {
-    return null;
-  }
+  // Memoize the adjusted item based on active item's identity.
+  // Only recalculates when crossing split boundaries.
+  const adjustedItem = useMemo(() => {
+    if (!activeItem) return null;
 
-  // CRITICAL: Adjust sourceStart to account for the shared Sequence.
-  // In a shared Sequence, localFrame is relative to group.minFrom, not item.from.
-  // OffthreadVideo calculates: trimBefore + localFrame
-  // We need: sourceStart + (globalFrame - item.from) = sourceStart + localFrame - (item.from - minFrom)
-  // So: adjustedTrimBefore = sourceStart - (item.from - minFrom)
-  // This way: adjustedTrimBefore + localFrame = sourceStart + localFrame - item.from + minFrom
-  //                                            = sourceStart + globalFrame - item.from ✓
-  const itemOffset = activeItem.from - group.minFrom;
-  const adjustedItem = {
-    ...activeItem,
-    sourceStart: (activeItem.sourceStart ?? 0) - itemOffset,
-    // Also adjust trimStart and offset if they exist
-    trimStart: activeItem.trimStart != null ? activeItem.trimStart - itemOffset : undefined,
-    offset: activeItem.offset != null ? activeItem.offset - itemOffset : undefined,
-  };
+    // Adjust sourceStart to account for the shared Sequence.
+    // In a shared Sequence, localFrame is relative to group.minFrom, not item.from.
+    // OffthreadVideo calculates: trimBefore + localFrame
+    // We need: sourceStart + (globalFrame - item.from) = sourceStart + localFrame - (item.from - minFrom)
+    // So: adjustedTrimBefore = sourceStart - (item.from - minFrom)
+    const itemOffset = activeItem.from - group.minFrom;
+    return {
+      ...activeItem,
+      sourceStart: (activeItem.sourceStart ?? 0) - itemOffset,
+      trimStart: activeItem.trimStart != null ? activeItem.trimStart - itemOffset : undefined,
+      offset: activeItem.offset != null ? activeItem.offset - itemOffset : undefined,
+    };
+  }, [activeItem?.id, activeItem, group.minFrom]);
 
-  return <>{renderItem(adjustedItem)}</>;
+  // CRITICAL: Also memoize the RENDERED OUTPUT.
+  // This prevents calling renderItem (which creates new React elements) every frame.
+  // Without this, canvas-based effects like halftone would re-render on every frame.
+  const renderedContent = useMemo(() => {
+    if (!adjustedItem) return null;
+    return renderItem(adjustedItem);
+  }, [adjustedItem, renderItem]);
+
+  return <>{renderedContent}</>;
 });
 
 GroupRenderer.displayName = 'GroupRenderer';
