@@ -17,8 +17,9 @@ import type {
   GlitchEffect,
   GlitchVariant,
   HalftoneEffect,
+  VignetteEffect,
 } from '@/types/effects';
-import { CSS_FILTER_CONFIGS, GLITCH_CONFIGS, EFFECT_PRESETS, HALFTONE_CONFIG, CANVAS_EFFECT_CONFIGS } from '@/types/effects';
+import { CSS_FILTER_CONFIGS, GLITCH_CONFIGS, EFFECT_PRESETS, HALFTONE_CONFIG, CANVAS_EFFECT_CONFIGS, VIGNETTE_CONFIG, OVERLAY_EFFECT_CONFIGS } from '@/types/effects';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
@@ -179,6 +180,21 @@ export function EffectsSection({ items }: EffectsSectionProps) {
     });
   }, [itemIds, addEffect]);
 
+  // Add a vignette effect
+  const handleAddVignette = useCallback(() => {
+    itemIds.forEach((id) => {
+      addEffect(id, {
+        type: 'overlay-effect',
+        variant: 'vignette',
+        intensity: VIGNETTE_CONFIG.intensity.default,
+        size: VIGNETTE_CONFIG.size.default,
+        softness: VIGNETTE_CONFIG.softness.default,
+        color: '#000000',
+        shape: 'elliptical',
+      } as VignetteEffect);
+    });
+  }, [itemIds, addEffect]);
+
   // Apply a preset (adds multiple effects as single undo/redo action)
   const handleApplyPreset = useCallback(
     (presetId: string) => {
@@ -317,6 +333,63 @@ export function EffectsSection({ items }: EffectsSectionProps) {
     [handleHalftoneLiveChange]
   );
 
+  // Update vignette effect property
+  const handleVignetteChange = useCallback(
+    (effectId: string, property: keyof VignetteEffect, newValue: number | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'overlay-effect') return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...effect.effect, [property]: newValue } as VignetteEffect,
+        });
+      });
+      queueMicrotask(() => clearEffectsPreview());
+    },
+    [effects, itemIds, updateEffect, clearEffectsPreview]
+  );
+
+  // Live preview for vignette properties
+  const handleVignetteLiveChange = useCallback(
+    (effectId: string, property: keyof VignetteEffect, newValue: number | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'overlay-effect') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (item) {
+          previews[id] = (item.effects ?? []).map((e) => {
+            if (e.id !== effectId) return e;
+            if (e.effect.type === 'overlay-effect') {
+              return { ...e, effect: { ...e.effect, [property]: newValue } as VignetteEffect };
+            }
+            return e;
+          });
+        }
+      });
+      setEffectsPreview(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreview]
+  );
+
+  // Vignette property handlers (convert from percentage 0-100 to internal 0-1)
+  const handleVignettePercentChange = useCallback(
+    (effectId: string, property: 'intensity' | 'size' | 'softness', percentValue: number) => {
+      const normalizedValue = percentValue / 100;
+      handleVignetteChange(effectId, property, normalizedValue);
+    },
+    [handleVignetteChange]
+  );
+
+  const handleVignettePercentLiveChange = useCallback(
+    (effectId: string, property: 'intensity' | 'size' | 'softness', percentValue: number) => {
+      const normalizedValue = percentValue / 100;
+      handleVignetteLiveChange(effectId, property, normalizedValue);
+    },
+    [handleVignetteLiveChange]
+  );
+
   // Toggle effect visibility
   const handleToggle = useCallback(
     (effectId: string) => {
@@ -402,6 +475,9 @@ export function EffectsSection({ items }: EffectsSectionProps) {
             </div>
             <DropdownMenuItem onClick={handleAddHalftone}>
               {CANVAS_EFFECT_CONFIGS.halftone.label}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleAddVignette}>
+              {OVERLAY_EFFECT_CONFIGS.vignette.label}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
@@ -629,6 +705,94 @@ export function EffectsSection({ items }: EffectsSectionProps) {
                     disabled={!effect.enabled}
                   />
                 </div>
+              </PropertyRow>
+            </div>
+          );
+        }
+
+        if (effect.effect.type === 'overlay-effect' && effect.effect.variant === 'vignette') {
+          const vignette = effect.effect as VignetteEffect;
+          return (
+            <div key={effect.id} className="border-b border-border/50 pb-2 mb-2">
+              {/* Header row with toggle and delete */}
+              <PropertyRow label={OVERLAY_EFFECT_CONFIGS.vignette.label}>
+                <div className="flex items-center gap-1 flex-1 justify-end">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => handleToggle(effect.id)}
+                    title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+                  >
+                    {effect.enabled ? (
+                      <Eye className="w-3 h-3" />
+                    ) : (
+                      <EyeOff className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0"
+                    onClick={() => handleRemove(effect.id)}
+                    title="Remove effect"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </PropertyRow>
+
+              {/* Intensity */}
+              <PropertyRow label={VIGNETTE_CONFIG.intensity.label}>
+                <NumberInput
+                  value={Math.round(vignette.intensity * 100)}
+                  onChange={(v) => handleVignettePercentChange(effect.id, 'intensity', v)}
+                  onLiveChange={(v) => handleVignettePercentLiveChange(effect.id, 'intensity', v)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Size */}
+              <PropertyRow label={VIGNETTE_CONFIG.size.label}>
+                <NumberInput
+                  value={Math.round(vignette.size * 100)}
+                  onChange={(v) => handleVignettePercentChange(effect.id, 'size', v)}
+                  onLiveChange={(v) => handleVignettePercentLiveChange(effect.id, 'size', v)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Softness */}
+              <PropertyRow label={VIGNETTE_CONFIG.softness.label}>
+                <NumberInput
+                  value={Math.round(vignette.softness * 100)}
+                  onChange={(v) => handleVignettePercentChange(effect.id, 'softness', v)}
+                  onLiveChange={(v) => handleVignettePercentLiveChange(effect.id, 'softness', v)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  unit="%"
+                  disabled={!effect.enabled}
+                />
+              </PropertyRow>
+
+              {/* Color */}
+              <PropertyRow label="Color">
+                <EffectColorPicker
+                  label=""
+                  color={vignette.color}
+                  onChange={(c) => handleVignetteChange(effect.id, 'color', c)}
+                  onLiveChange={(c) => handleVignetteLiveChange(effect.id, 'color', c)}
+                  disabled={!effect.enabled}
+                />
               </PropertyRow>
             </div>
           );

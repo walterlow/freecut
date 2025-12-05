@@ -39,6 +39,7 @@ import {
   GLITCH_CONFIGS,
   EFFECT_PRESETS,
   HALFTONE_CONFIG,
+  VIGNETTE_CONFIG,
 } from '@/types/effects';
 
 export const MediaSidebar = memo(function MediaSidebar() {
@@ -323,6 +324,22 @@ export const MediaSidebar = memo(function MediaSidebar() {
     );
   }, [handleAddAdjustmentLayer]);
 
+  // Create adjustment layer with vignette effect
+  const handleAddVignetteEffect = useCallback(() => {
+    handleAddAdjustmentLayer(
+      [{
+        type: 'overlay-effect',
+        variant: 'vignette',
+        intensity: VIGNETTE_CONFIG.intensity.default,
+        size: VIGNETTE_CONFIG.size.default,
+        softness: VIGNETTE_CONFIG.softness.default,
+        color: '#000000',
+        shape: 'elliptical',
+      }],
+      'Vignette'
+    );
+  }, [handleAddAdjustmentLayer]);
+
   // Create adjustment layer with preset effects
   const handleAddPreset = useCallback((presetId: string) => {
     const preset = EFFECT_PRESETS.find((p) => p.id === presetId);
@@ -596,6 +613,17 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                       Halftone
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleAddVignetteEffect}
+                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                  >
+                    <div className="w-7 h-7 rounded bg-amber-500/20 border border-amber-500/50 flex items-center justify-center group-hover:bg-amber-500/30">
+                      <CircleDot className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
+                    <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
+                      Vignette
                     </span>
                   </button>
                 </div>

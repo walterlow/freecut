@@ -6,7 +6,7 @@ import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import type { TimelineItem, VideoItem, TextItem, ShapeItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
-import type { ItemEffect, GlitchEffect, HalftoneEffect } from '@/types/effects';
+import type { ItemEffect, GlitchEffect } from '@/types/effects';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { GifPlayer } from './gif-player';
@@ -17,7 +17,7 @@ import {
 } from '../utils/transform-resolver';
 import { loadFont, FONT_WEIGHT_MAP } from '../utils/fonts';
 import { getShapePath, rotatePath } from '../utils/shape-path';
-import { effectsToCSSFilter, getGlitchEffects, getHalftoneEffect } from '@/features/effects/utils/effect-to-css';
+import { effectsToCSSFilter, getGlitchEffects, getHalftoneEffect, getVignetteEffect, getVignetteStyle } from '@/features/effects/utils/effect-to-css';
 import { getScanlinesStyle, getGlitchFilterString } from '@/features/effects/utils/glitch-algorithms';
 import { HalftoneWrapper } from '@/features/effects/components/halftone-wrapper';
 
@@ -896,6 +896,12 @@ const EffectWrapper: React.FC<{
     };
   }, [halftoneEffect]);
 
+  // Get vignette effect for overlay rendering
+  const vignetteEffect = useMemo(() => {
+    if (effects.length === 0) return null;
+    return getVignetteEffect(effects);
+  }, [effects]);
+
   // Calculate glitch-based filters (color glitch adds hue-rotate)
   const glitchFilterString = useMemo(() => {
     if (glitchEffects.length === 0) return '';
@@ -961,7 +967,16 @@ const EffectWrapper: React.FC<{
     </div>
   );
 
-  return <>{wrapWithHalftone(standardContent)}</>;
+  // Vignette renders OUTSIDE halftone so it overlays everything (including halftone canvas)
+  return (
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {wrapWithHalftone(standardContent)}
+      {/* Vignette overlay - renders on top of all other effects */}
+      {vignetteEffect && (
+        <div style={getVignetteStyle(vignetteEffect)} />
+      )}
+    </div>
+  );
 };
 
 /**

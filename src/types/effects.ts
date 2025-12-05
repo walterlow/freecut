@@ -15,6 +15,9 @@ export type GlitchVariant = 'rgb-split' | 'scanlines' | 'color-glitch';
 // Canvas-based effect variants (require pixel-level processing)
 export type CanvasEffectVariant = 'halftone';
 
+// Overlay effect variants (CSS-based overlays)
+export type OverlayEffectVariant = 'vignette';
+
 // CSS filter effect configuration
 export interface CSSFilterEffect {
   type: 'css-filter';
@@ -43,8 +46,19 @@ export interface HalftoneEffect {
   dotColor: string; // Dot color hex
 }
 
+// Vignette effect configuration (CSS radial gradient overlay)
+export interface VignetteEffect {
+  type: 'overlay-effect';
+  variant: 'vignette';
+  intensity: number; // Darkness of vignette edges 0-1
+  size: number; // How far clear area extends from center 0-1 (0.5 = 50%)
+  softness: number; // Edge feathering/softness 0-1
+  color: string; // Vignette color (usually black)
+  shape: 'circular' | 'elliptical'; // Circular or match aspect ratio
+}
+
 // Union of all visual effects
-export type VisualEffect = CSSFilterEffect | GlitchEffect | HalftoneEffect;
+export type VisualEffect = CSSFilterEffect | GlitchEffect | HalftoneEffect | VignetteEffect;
 
 // Effect instance applied to a timeline item
 export interface ItemEffect {
@@ -93,6 +107,18 @@ export const HALFTONE_CONFIG = {
 // Canvas effect configuration metadata
 export const CANVAS_EFFECT_CONFIGS: Record<CanvasEffectVariant, { label: string; description: string }> = {
   halftone: { label: 'Halftone', description: 'Classic print-style dot pattern based on luminance' },
+};
+
+// Vignette effect configuration metadata
+export const VIGNETTE_CONFIG = {
+  intensity: { label: 'Intensity', min: 0, max: 1, default: 0.5, step: 0.01, unit: '' },
+  size: { label: 'Size', min: 0, max: 1, default: 0.5, step: 0.01, unit: '' },
+  softness: { label: 'Softness', min: 0, max: 1, default: 0.5, step: 0.01, unit: '' },
+};
+
+// Overlay effect configuration metadata
+export const OVERLAY_EFFECT_CONFIGS: Record<OverlayEffectVariant, { label: string; description: string }> = {
+  vignette: { label: 'Vignette', description: 'Darkened edges for cinematic focus' },
 };
 
 // Effect presets (combinations of multiple effects)

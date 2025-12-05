@@ -1,4 +1,5 @@
-import type { ItemEffect, CSSFilterEffect, CSSFilterType, HalftoneEffect } from '@/types/effects';
+import type React from 'react';
+import type { ItemEffect, CSSFilterEffect, CSSFilterType, HalftoneEffect, VignetteEffect } from '@/types/effects';
 
 /**
  * Convert a CSS filter effect to its CSS filter string representation.
@@ -99,4 +100,76 @@ export function getHalftoneEffect(
   );
   if (!effect) return null;
   return { id: effect.id, ...(effect.effect as HalftoneEffect) };
+}
+
+/**
+ * Check if any effects require overlay rendering (e.g., vignette).
+ */
+export function hasOverlayEffects(effects: ItemEffect[]): boolean {
+  return effects.some((e) => e.enabled && e.effect.type === 'overlay-effect');
+}
+
+/**
+ * Get the vignette effect from an array of effects, if present and enabled.
+ */
+export function getVignetteEffect(
+  effects: ItemEffect[]
+): (VignetteEffect & { id: string }) | null {
+  const effect = effects.find(
+    (e) => e.enabled && e.effect.type === 'overlay-effect' && e.effect.variant === 'vignette'
+  );
+  if (!effect) return null;
+  return { id: effect.id, ...(effect.effect as VignetteEffect) };
+}
+
+/**
+ * Generate CSS style for vignette effect overlay.
+ * Uses radial gradient to create darkened edges.
+ */
+export function getVignetteStyle(effect: VignetteEffect): React.CSSProperties {
+  const { intensity, size, softness, color, shape } = effect;
+
+  // Calculate gradient stops based on size and softness
+  // size: how far the clear center extends (0 = edges dark, 1 = mostly clear)
+  // softness: how gradual the transition is (0 = hard edge, 1 = very gradual)
+  //
+  // For a natural vignette look:
+  // - fadeStart: where we start fading from transparent
+  // - fadeEnd: where we reach full vignette color
+  const fadeStart = size * 70; // Clear area extends up to 70% at max size
+  const fadeRange = 30 + softness * 40; // Soft gradient range (30-70%)
+  const fadeEnd = Math.min(100, fadeStart + fadeRange);
+
+  // Parse color and apply intensity as alpha
+  const rgba = hexToRgba(color, intensity);
+
+  // Shape determines gradient shape - farthest-corner ensures coverage
+  const gradientShape = shape === 'circular' ? 'circle farthest-corner' : 'ellipse farthest-corner';
+
+  return {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    pointerEvents: 'none',
+    background: `radial-gradient(${gradientShape} at center, transparent ${fadeStart}%, ${rgba} ${fadeEnd}%)`,
+  };
+}
+
+/**
+ * Convert hex color to rgba string with specified alpha.
+ */
+function hexToRgba(hex: string, alpha: number): string {
+  // Remove # if present
+  const cleanHex = hex.replace('#', '');
+
+  // Parse hex values
+  const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
+  const g = parseInt(cleanHex.substring(2, 4), 16) || 0;
+  const b = parseInt(cleanHex.substring(4, 6), 16) || 0;
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
