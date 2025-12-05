@@ -266,12 +266,14 @@ const FrameAwareMaskDefinitions: React.FC<{
  * from the parent MainComposition.
  */
 const ClearingLayer: React.FC<{
-  videoItems: Array<{ from: number; durationInFrames: number }>;
+  videoItems: Array<{ from: number; durationInFrames: number; trackVisible: boolean }>;
   backgroundColor: string;
 }> = ({ videoItems, backgroundColor }) => {
   const currentFrame = useCurrentFrame();
+  // Only consider VISIBLE videos for clearing layer logic
   const hasActiveVideo = videoItems.some(
     (item) =>
+      item.trackVisible &&
       currentFrame >= item.from &&
       currentFrame < item.from + item.durationInFrames
   );
@@ -328,10 +330,14 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
     [tracks, hasSoloTracks]
   );
 
+  // Shared visibility lookup - used by videoItems and nonMediaByTrack for stable DOM structure
+  const visibleTrackIds = useMemo(() => new Set(visibleTracks.map((t) => t.id)), [visibleTracks]);
+
   // Separate video and audio items - audio doesn't need masking and should be isolated
   // from visual layer changes to prevent unnecessary re-renders
+  // Use ALL tracks (not just visible) to keep DOM structure stable when toggling visibility
   const videoItems = useMemo(() =>
-    visibleTracks.flatMap((track) =>
+    tracks.flatMap((track) =>
       track.items
         .filter((item) => item.type === 'video')
         .map((item) => ({
@@ -339,23 +345,26 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
           zIndex: maxOrder - (track.order ?? 0),
           muted: track.muted,
           trackOrder: track.order ?? 0,
+          trackVisible: visibleTrackIds.has(track.id),
         }))
     ),
-    [visibleTracks, maxOrder]
+    [tracks, visibleTrackIds, maxOrder]
   );
 
   // Audio items are memoized separately and rendered outside mask groups
   // This prevents audio from being affected by visual layer changes (mask add/delete, item moves)
+  // Use ALL tracks for stable DOM structure, with trackVisible for conditional playback
   const audioItems = useMemo(() =>
-    visibleTracks.flatMap((track) =>
+    tracks.flatMap((track) =>
       track.items
         .filter((item) => item.type === 'audio')
         .map((item) => ({
           ...item,
           muted: track.muted,
+          trackVisible: visibleTrackIds.has(track.id),
         }))
     ),
-    [visibleTracks]
+    [tracks, visibleTrackIds]
   );
 
   // Active masks: shapes with isMask: true
@@ -371,8 +380,8 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
     return masks;
   }, [visibleTracks]);
 
-  // Collect adjustment layers with their track orders
-  const allAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = useMemo(() => {
+  // Collect adjustment layers from VISIBLE tracks (for effect application)
+  const visibleAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = useMemo(() => {
     const layers: AdjustmentLayerWithTrackOrder[] = [];
     visibleTracks.forEach((track) => {
       track.items.forEach((item) => {
@@ -384,16 +393,35 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
     return layers;
   }, [visibleTracks]);
 
-  const nonMediaByTrack = visibleTracks.map((track) => ({
-    ...track,
-    items: track.items.filter(
-      (item) =>
-        item.type !== 'video' &&
-        item.type !== 'audio' &&
-        !(item.type === 'shape' && item.isMask) &&
-        item.type !== 'adjustment' // Filter out adjustment items
-    ),
-  }));
+  // Collect adjustment layers from ALL tracks (for stable DOM structure)
+  // This ensures toggling track visibility doesn't change DOM structure
+  const allAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = useMemo(() => {
+    const layers: AdjustmentLayerWithTrackOrder[] = [];
+    tracks.forEach((track) => {
+      track.items.forEach((item) => {
+        if (item.type === 'adjustment') {
+          layers.push({ layer: item as AdjustmentItem, trackOrder: track.order ?? 0 });
+        }
+      });
+    });
+    return layers;
+  }, [tracks]);
+
+  // Use ALL tracks for stable DOM structure, with visibility flag for CSS-based hiding
+  const nonMediaByTrack = useMemo(() =>
+    tracks.map((track) => ({
+      ...track,
+      trackVisible: visibleTrackIds.has(track.id),
+      items: track.items.filter(
+        (item) =>
+          item.type !== 'video' &&
+          item.type !== 'audio' &&
+          !(item.type === 'shape' && item.isMask) &&
+          item.type !== 'adjustment' // Filter out adjustment items
+      ),
+    })),
+    [tracks, visibleTrackIds]
+  );
 
   // Find the HIGHEST track order among adjustment layers
   // Higher track order = lower zIndex = visually behind
@@ -452,13 +480,19 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
 
   // hasActiveMasks: shapes with isMask: true (for actual mask rendering)
   const hasActiveMasks = activeMasks.length > 0;
-  const hasAdjustmentLayers = allAdjustmentLayers.length > 0;
 
   // Stable render function for video items - prevents re-renders on every frame
   // useCallback ensures the function reference stays stable between renders
+  // Uses CSS visibility for hidden tracks to avoid DOM changes
   const renderVideoItem = useCallback((item: typeof videoItems[number]) => (
-    <AbsoluteFill style={{ zIndex: item.zIndex }}>
-      <Item item={item} muted={item.muted} masks={[]} />
+    <AbsoluteFill
+      style={{
+        zIndex: item.zIndex,
+        // Use visibility: hidden for invisible tracks - keeps DOM stable, no re-render
+        visibility: item.trackVisible ? 'visible' : 'hidden',
+      }}
+    >
+      <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
     </AbsoluteFill>
   ), []);
 
@@ -479,19 +513,22 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
 
       {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
       {/* Audio uses item.id as key (not generateStableKey) to prevent remounts on speed changes */}
+      {/* Hidden tracks are muted but stay in DOM for stable structure */}
       {audioItems.map((item) => (
         <Sequence
           key={item.id}
           from={item.from}
           durationInFrames={item.durationInFrames}
         >
-          <Item item={item} muted={item.muted} masks={[]} />
+          <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
         </Sequence>
       ))}
 
       {/* ADJUSTMENT WRAPPER - applies effects from adjustment layers to visual content */}
       {/* Only wraps items on tracks BELOW the adjustment layer(s) */}
-      <AdjustmentWrapper adjustmentLayers={hasAdjustmentLayers ? allAdjustmentLayers : []}>
+      {/* Uses visibleAdjustmentLayers so hidden tracks don't apply effects */}
+      {/* DOM structure based on allAdjustmentLayers to prevent re-renders on visibility toggle */}
+      <AdjustmentWrapper adjustmentLayers={visibleAdjustmentLayers}>
         {/* VIDEO LAYER BELOW ADJUSTMENT - affected by adjustment layer effects */}
         {/* StableMaskedGroup always renders same div; mask effect controlled via SVG opacity */}
         <StableMaskedGroup hasMasks={hasActiveMasks}>
@@ -512,7 +549,13 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
             .map((track) => {
               const trackOrder = track.order ?? 0;
               return (
-                <AbsoluteFill key={track.id} style={{ zIndex: 1001 + (maxOrder - trackOrder) }}>
+                <AbsoluteFill
+                  key={track.id}
+                  style={{
+                    zIndex: 1001 + (maxOrder - trackOrder),
+                    visibility: track.trackVisible ? 'visible' : 'hidden',
+                  }}
+                >
                   {track.items.map((item) => (
                     <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
                       <Item item={item} muted={false} masks={[]} />
@@ -540,7 +583,13 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
           .map((track) => {
             const trackOrder = track.order ?? 0;
             return (
-              <AbsoluteFill key={track.id} style={{ zIndex: 1001 + (maxOrder - trackOrder) }}>
+              <AbsoluteFill
+                key={track.id}
+                style={{
+                  zIndex: 1001 + (maxOrder - trackOrder),
+                  visibility: track.trackVisible ? 'visible' : 'hidden',
+                }}
+              >
                 {track.items.map((item) => (
                   <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
                     <Item item={item} muted={false} masks={[]} />

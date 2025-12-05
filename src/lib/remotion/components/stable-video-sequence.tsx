@@ -18,6 +18,8 @@ import type { VideoItem } from '@/types/timeline';
 type EnrichedVideoItem = VideoItem & {
   zIndex: number;
   muted: boolean;
+  trackOrder: number;
+  trackVisible: boolean;
 };
 
 interface StableVideoSequenceProps {
