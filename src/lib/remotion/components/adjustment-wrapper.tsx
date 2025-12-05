@@ -200,19 +200,16 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
         </div>
       );
 
-      // Wrap with halftone post-processor if halftone effect is also present
-      if (postProcessingEffect) {
-        return (
-          <AdjustmentPostProcessor
-            effect={postProcessingEffect}
-            enabled={true}
-          >
-            {rgbSplitContent}
-          </AdjustmentPostProcessor>
-        );
-      }
-
-      return rgbSplitContent;
+      // Always wrap with post-processor to maintain consistent DOM structure
+      // (prevents stutter when entering/exiting halftone adjustment layer regions)
+      return (
+        <AdjustmentPostProcessor
+          effect={postProcessingEffect}
+          enabled={!!postProcessingEffect}
+        >
+          {rgbSplitContent}
+        </AdjustmentPostProcessor>
+      );
     }
   }
 
@@ -240,19 +237,16 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
     </div>
   );
 
-  // Wrap with halftone post-processor if halftone effect is present
-  if (postProcessingEffect) {
-    return (
-      <AdjustmentPostProcessor
-        effect={postProcessingEffect}
-        enabled={true}
-      >
-        {standardContent}
-      </AdjustmentPostProcessor>
-    );
-  }
-
-  return standardContent;
+  // Always wrap with post-processor to maintain consistent DOM structure
+  // (prevents stutter when entering/exiting halftone adjustment layer regions)
+  return (
+    <AdjustmentPostProcessor
+      effect={postProcessingEffect}
+      enabled={!!postProcessingEffect}
+    >
+      {standardContent}
+    </AdjustmentPostProcessor>
+  );
 });
 
 /**

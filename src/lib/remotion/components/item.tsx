@@ -32,10 +32,15 @@ export interface MaskInfo {
  * Returns the final volume (0-1) to apply to the video component.
  * During preview, also applies master preview volume from playback controls.
  */
-function useVideoAudioVolume(item: VideoItem, muted: boolean): number {
+function useVideoAudioVolume(item: VideoItem & { _sequenceFrameOffset?: number }, muted: boolean): number {
   const { fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+  const sequenceFrame = useCurrentFrame();
   const env = useRemotionEnvironment();
+
+  // Adjust frame for shared Sequences (split clips)
+  // In a shared Sequence, useCurrentFrame() returns frame relative to the shared Sequence start,
+  // not relative to this specific item. _sequenceFrameOffset corrects this.
+  const frame = sequenceFrame - (item._sequenceFrameOffset ?? 0);
 
   // Read preview values from gizmo store
   const itemPropertiesPreview = useGizmoStore((s) => s.itemPropertiesPreview);

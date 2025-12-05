@@ -444,6 +444,14 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     // If original item has originId, use it; otherwise use original item's id
     const sharedOriginId = item.originId || item.id;
 
+    // Handle fade properties for split clips
+    // Left clip keeps fade in (starts at original beginning), loses fade out
+    // Right clip loses fade in, keeps fade out (ends at original end)
+    // Clamp fade durations to not exceed new clip durations
+    const fps = state.fps || 30;
+    const leftDurationSec = leftDuration / fps;
+    const rightDurationSec = rightDuration / fps;
+
     // Left item: keeps original from, new duration, updated end trim
     const leftItem: typeof item = {
       ...item,
@@ -453,6 +461,11 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       // Update sourceEnd and trimEnd for left item (in source frames)
       sourceEnd: currentSourceStart + leftSourceFrames,
       trimEnd: currentTrimEnd + rightSourceFrames,
+      // Left clip keeps fade in (clamped to duration), loses fade out
+      audioFadeIn: item.audioFadeIn ? Math.min(item.audioFadeIn, leftDurationSec) : undefined,
+      audioFadeOut: 0,
+      fadeIn: item.fadeIn ? Math.min(item.fadeIn, leftDurationSec) : undefined,
+      fadeOut: 0,
     };
 
     // Right item: new from, new duration, adjusted source start
@@ -467,6 +480,11 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       // Move source start forward by left clip's source frames
       sourceStart: currentSourceStart + leftSourceFrames,
       // trimStart stays the same - we're not "trimming", we're moving the source window
+      // Right clip loses fade in, keeps fade out (clamped to duration)
+      audioFadeIn: 0,
+      audioFadeOut: item.audioFadeOut ? Math.min(item.audioFadeOut, rightDurationSec) : undefined,
+      fadeIn: 0,
+      fadeOut: item.fadeOut ? Math.min(item.fadeOut, rightDurationSec) : undefined,
     };
 
     // Update offset for video/audio items (Remotion compatibility)

@@ -15,9 +15,22 @@ import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from
 import { useCurrentFrame, useVideoConfig } from 'remotion';
 import { adjustmentPostProcessingManager, type PostProcessingEffect } from '../utils/post-processing-pipeline';
 
+// Default effect for when post-processing is disabled (values won't be used but prevent null checks)
+const DEFAULT_EFFECT: PostProcessingEffect = {
+  type: 'halftone',
+  options: {
+    dotSize: 8,
+    spacing: 10,
+    angle: 45,
+    intensity: 1,
+    backgroundColor: '#ffffff',
+    dotColor: '#000000',
+  },
+};
+
 interface AdjustmentPostProcessorProps {
   children: React.ReactNode;
-  effect: PostProcessingEffect;
+  effect: PostProcessingEffect | null;
   enabled: boolean;
 }
 
@@ -36,6 +49,9 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
   effect,
   enabled,
 }) => {
+  // Resolve effect with fallback to defaults (effect may be null when disabled)
+  const resolvedEffect = effect ?? DEFAULT_EFFECT;
+
   const containerRef = useRef<HTMLDivElement>(null);
   const outputCanvasRef = useRef<HTMLCanvasElement>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -189,7 +205,7 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
 
     // Apply post-processing
     const pipeline = adjustmentPostProcessingManager.getPipeline(width, height);
-    const processedCanvas = pipeline.process(captureCanvas, effect);
+    const processedCanvas = pipeline.process(captureCanvas, resolvedEffect);
 
     if (processedCanvas && outputCanvasRef.current) {
       const outputCtx = outputCanvasRef.current.getContext('2d');
@@ -199,7 +215,7 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
         setIsProcessing(true);
       }
     }
-  }, [enabled, width, height, effect]);
+  }, [enabled, width, height, resolvedEffect]);
 
   // Process on every frame change
   useLayoutEffect(() => {
@@ -233,7 +249,7 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
     if (enabled) {
       captureAndProcess();
     }
-  }, [effect, enabled, captureAndProcess]);
+  }, [resolvedEffect, enabled, captureAndProcess]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

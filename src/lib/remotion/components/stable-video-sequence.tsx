@@ -102,6 +102,10 @@ const GroupRenderer: React.FC<{
       sourceStart: (activeItem.sourceStart ?? 0) - itemOffset,
       trimStart: activeItem.trimStart != null ? activeItem.trimStart - itemOffset : undefined,
       offset: activeItem.offset != null ? activeItem.offset - itemOffset : undefined,
+      // Pass the frame offset so fades can be calculated correctly within shared Sequences
+      // Without this, useCurrentFrame() returns the frame relative to the shared Sequence,
+      // not relative to this specific item, causing fades to misbehave on split clips
+      _sequenceFrameOffset: itemOffset,
     };
   }, [activeItem?.id, activeItem, group.minFrom]);
 
