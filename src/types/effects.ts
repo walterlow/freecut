@@ -70,9 +70,9 @@ export const CSS_FILTER_CONFIGS: Record<CSSFilterType, FilterConfig> = {
   saturate: { label: 'Saturation', min: 0, max: 200, default: 100, step: 1, unit: '%' },
   blur: { label: 'Blur', min: 0, max: 50, default: 0, step: 0.5, unit: 'px' },
   'hue-rotate': { label: 'Hue Rotate', min: 0, max: 360, default: 0, step: 1, unit: '°' },
-  grayscale: { label: 'Grayscale', min: 0, max: 100, default: 0, step: 1, unit: '%' },
-  sepia: { label: 'Sepia', min: 0, max: 100, default: 0, step: 1, unit: '%' },
-  invert: { label: 'Invert', min: 0, max: 100, default: 0, step: 1, unit: '%' },
+  grayscale: { label: 'Grayscale', min: 0, max: 100, default: 100, step: 1, unit: '%' },
+  sepia: { label: 'Sepia', min: 0, max: 100, default: 100, step: 1, unit: '%' },
+  invert: { label: 'Invert', min: 0, max: 100, default: 100, step: 1, unit: '%' },
 };
 
 // Glitch effect configuration metadata
