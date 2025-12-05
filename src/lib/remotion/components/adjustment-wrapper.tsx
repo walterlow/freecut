@@ -2,9 +2,11 @@ import React, { useMemo } from 'react';
 import { useCurrentFrame } from 'remotion';
 import type { AdjustmentItem } from '@/types/timeline';
 import type { ItemEffect, GlitchEffect } from '@/types/effects';
-import { effectsToCSSFilter, getGlitchEffects } from '@/features/effects/utils/effect-to-css';
+import { effectsToCSSFilter, getGlitchEffects, getHalftoneEffect } from '@/features/effects/utils/effect-to-css';
 import { getRGBSplitStyles, getScanlinesStyle, getGlitchFilterString } from '@/features/effects/utils/glitch-algorithms';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { AdjustmentPostProcessor } from '@/features/effects/components/adjustment-post-processor';
+import type { PostProcessingEffect } from '@/features/effects/utils/post-processing-pipeline';
 
 /** Adjustment layer with its track order for scope calculation */
 export interface AdjustmentLayerWithTrackOrder {
@@ -79,6 +81,28 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
     return getGlitchEffects(activeEffects) as Array<GlitchEffect & { id: string }>;
   }, [activeEffects]);
 
+  // Get halftone effect for canvas-based rendering
+  const halftoneEffect = useMemo(() => {
+    if (activeEffects.length === 0) return null;
+    return getHalftoneEffect(activeEffects);
+  }, [activeEffects]);
+
+  // Build post-processing effect config for halftone
+  const postProcessingEffect = useMemo((): PostProcessingEffect | null => {
+    if (!halftoneEffect) return null;
+    return {
+      type: 'halftone',
+      options: {
+        dotSize: halftoneEffect.dotSize,
+        spacing: halftoneEffect.spacing,
+        angle: halftoneEffect.angle,
+        intensity: halftoneEffect.intensity,
+        backgroundColor: halftoneEffect.backgroundColor,
+        dotColor: halftoneEffect.dotColor,
+      },
+    };
+  }, [halftoneEffect]);
+
   // Calculate glitch-based filters (color glitch adds hue-rotate)
   const glitchFilterString = useMemo(() => {
     if (glitchEffects.length === 0) return '';
@@ -106,7 +130,7 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
     );
 
     if (active) {
-      return (
+      const rgbSplitContent = (
         <div
           style={{
             position: 'relative',
@@ -175,11 +199,25 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
           )}
         </div>
       );
+
+      // Wrap with halftone post-processor if halftone effect is also present
+      if (postProcessingEffect) {
+        return (
+          <AdjustmentPostProcessor
+            effect={postProcessingEffect}
+            enabled={true}
+          >
+            {rgbSplitContent}
+          </AdjustmentPostProcessor>
+        );
+      }
+
+      return rgbSplitContent;
     }
   }
 
-  // Standard rendering with CSS filters + optional scanlines
-  return (
+  // Standard rendering with CSS filters + optional scanlines + optional halftone
+  const standardContent = (
     <div
       style={{
         width: '100%',
@@ -201,6 +239,20 @@ const AdjustmentWrapperInternal = React.memo<AdjustmentWrapperInternalProps>(({
       )}
     </div>
   );
+
+  // Wrap with halftone post-processor if halftone effect is present
+  if (postProcessingEffect) {
+    return (
+      <AdjustmentPostProcessor
+        effect={postProcessingEffect}
+        enabled={true}
+      >
+        {standardContent}
+      </AdjustmentPostProcessor>
+    );
+  }
+
+  return standardContent;
 });
 
 /**
