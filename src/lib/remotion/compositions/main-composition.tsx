@@ -325,6 +325,9 @@ const GlobalHalftoneWrapper: React.FC<{
 }> = ({ children, adjustmentLayers }) => {
   const frame = useCurrentFrame();
 
+  // Read effects preview from gizmo store for real-time slider updates
+  const effectsPreview = useGizmoStore((s) => s.effectsPreview);
+
   // Find active halftone effect from any adjustment layer at current frame
   const halftoneEffect = useMemo((): PostProcessingEffect | null => {
     if (adjustmentLayers.length === 0) return null;
@@ -333,8 +336,8 @@ const GlobalHalftoneWrapper: React.FC<{
       // Check if layer is active at current frame
       if (frame < layer.from || frame >= layer.from + layer.durationInFrames) continue;
 
-      // Check for halftone effect in this layer
-      const effects = layer.effects ?? [];
+      // Check for halftone effect - use preview if available for live slider updates
+      const effects = effectsPreview?.[layer.id] ?? layer.effects ?? [];
       const halftone = getHalftoneEffect(effects);
       if (halftone) {
         return {
@@ -351,7 +354,7 @@ const GlobalHalftoneWrapper: React.FC<{
       }
     }
     return null;
-  }, [adjustmentLayers, frame]);
+  }, [adjustmentLayers, frame, effectsPreview]);
 
   // Always render AdjustmentPostProcessor to maintain stable DOM structure
   return (

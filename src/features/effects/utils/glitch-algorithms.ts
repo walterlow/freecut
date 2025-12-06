@@ -13,6 +13,14 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
+ * Cache for RGB split filter strings.
+ * Key: quantized offset value, Value: encoded SVG filter string.
+ * Prevents expensive per-frame SVG re-encoding during playback.
+ */
+const rgbSplitFilterCache = new Map<number, string>();
+const RGB_SPLIT_CACHE_MAX_SIZE = 100;
+
+/**
  * RGB Split effect styles (legacy - returns transform offsets).
  * Creates chromatic aberration by offsetting color channels.
  *
@@ -69,11 +77,21 @@ export function getRGBSplitFilter(
   const jitter = (random() - 0.5) * intensity * 10;
 
   // Smooth oscillation with random jitter
-  const offset = Math.sin(frame * 0.3 * speed) * baseOffset + jitter;
+  const rawOffset = Math.sin(frame * 0.3 * speed) * baseOffset + jitter;
 
   // If offset is negligible, return empty string (no filter needed)
-  if (Math.abs(offset) < 0.5) {
+  if (Math.abs(rawOffset) < 0.5) {
     return '';
+  }
+
+  // Quantize offset to nearest 0.5px to enable caching
+  // This reduces unique filter strings from ~30/sec to ~10-15/sec while maintaining smooth animation
+  const offset = Math.round(rawOffset * 2) / 2;
+
+  // Check cache first
+  const cached = rgbSplitFilterCache.get(offset);
+  if (cached) {
+    return cached;
   }
 
   // SVG filter that separates RGB channels and offsets them
@@ -113,7 +131,19 @@ export function getRGBSplitFilter(
 
   // Encode as data URL
   const encoded = encodeURIComponent(svg);
-  return `url("data:image/svg+xml,${encoded}#rgb-split")`;
+  const filterString = `url("data:image/svg+xml,${encoded}#rgb-split")`;
+
+  // Cache the result (with size limit to prevent memory leak)
+  if (rgbSplitFilterCache.size >= RGB_SPLIT_CACHE_MAX_SIZE) {
+    // Remove oldest entry (first key)
+    const firstKey = rgbSplitFilterCache.keys().next().value;
+    if (firstKey !== undefined) {
+      rgbSplitFilterCache.delete(firstKey);
+    }
+  }
+  rgbSplitFilterCache.set(offset, filterString);
+
+  return filterString;
 }
 
 /**

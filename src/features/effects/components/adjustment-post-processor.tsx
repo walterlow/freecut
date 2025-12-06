@@ -58,6 +58,11 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
   const captureCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const rafIdRef = useRef<number | null>(null);
 
+  // Track latest effect options via ref so RAF loop always uses current values
+  // This fixes live preview during slider drag when video is paused
+  const effectRef = useRef(resolvedEffect);
+  effectRef.current = resolvedEffect;
+
   const [isProcessing, setIsProcessing] = useState(false);
 
   const frame = useCurrentFrame();
@@ -203,9 +208,10 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
       return;
     }
 
-    // Apply post-processing
+    // Apply post-processing - use effectRef.current for latest options during RAF loop
+    // This ensures live preview updates work even when video is paused
     const pipeline = adjustmentPostProcessingManager.getPipeline(width, height);
-    const processedCanvas = pipeline.process(captureCanvas, resolvedEffect);
+    const processedCanvas = pipeline.process(captureCanvas, effectRef.current);
 
     if (processedCanvas && outputCanvasRef.current) {
       const outputCtx = outputCanvasRef.current.getContext('2d');
@@ -215,7 +221,7 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
         setIsProcessing(true);
       }
     }
-  }, [enabled, width, height, resolvedEffect]);
+  }, [enabled, width, height]);
 
   // Process on every frame change
   useLayoutEffect(() => {
@@ -244,12 +250,9 @@ export const AdjustmentPostProcessor: React.FC<AdjustmentPostProcessorProps> = (
     };
   }, [enabled, captureAndProcess, frame]);
 
-  // Re-process when effect options change
-  useEffect(() => {
-    if (enabled) {
-      captureAndProcess();
-    }
-  }, [resolvedEffect, enabled, captureAndProcess]);
+  // NOTE: No separate useEffect for effect option changes needed
+  // The RAF loop reads from effectRef.current which always has latest values
+  // Updates are picked up within ~16ms (one RAF frame)
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>

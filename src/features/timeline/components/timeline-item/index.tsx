@@ -18,6 +18,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
+import { cn } from '@/lib/utils';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
 import { Link2Off } from 'lucide-react';
@@ -361,10 +362,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Handle mouse move to detect edge hover for trim/rate-stretch handles
   // Use ref for activeTool to prevent callback recreation on mode changes (prevents playback lag)
+  // Use ref for hoveredEdge to avoid re-renders when value hasn't changed
+  const hoveredEdgeRef = useRef(hoveredEdge);
+  hoveredEdgeRef.current = hoveredEdge;
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     // Don't show trim handles while any clip is being dragged
     if (trackLocked || activeToolRef.current === 'razor' || isAnyDragActiveRef.current) {
-      setHoveredEdge(null);
+      if (hoveredEdgeRef.current !== null) setHoveredEdge(null);
       return;
     }
 
@@ -373,13 +378,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     const itemWidth = rect.width;
 
     if (x <= EDGE_HOVER_ZONE) {
-      setHoveredEdge('start');
+      if (hoveredEdgeRef.current !== 'start') setHoveredEdge('start');
     } else if (x >= itemWidth - EDGE_HOVER_ZONE) {
-      setHoveredEdge('end');
+      if (hoveredEdgeRef.current !== 'end') setHoveredEdge('end');
     } else {
-      setHoveredEdge(null);
+      if (hoveredEdgeRef.current !== null) setHoveredEdge(null);
     }
-  }, [trackLocked]); // Stable - reads activeTool and isBeingDragged from refs
+  }, [trackLocked]); // Stable - reads activeTool, isBeingDragged, and hoveredEdge from refs
 
   // Determine cursor class based on tool, state, and edge hover
   const cursorClass = trackLocked
@@ -677,71 +682,84 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         </div>
       )}
 
-      {/* Preview speed overlay during stretch */}
-      {isStretching && stretchFeedback && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10">
-          <span className="text-white font-mono text-sm font-bold">
-            {stretchFeedback.speed.toFixed(2)}x
-          </span>
-        </div>
-      )}
+      {/* Preview speed overlay during stretch - always rendered, visibility controlled via CSS */}
+      <div
+        className={cn(
+          "absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10 transition-opacity duration-75",
+          isStretching && stretchFeedback ? "opacity-100" : "opacity-0"
+        )}
+      >
+        <span className="text-white font-mono text-sm font-bold">
+          {stretchFeedback?.speed.toFixed(2) ?? '1.00'}x
+        </span>
+      </div>
 
-      {/* Trim handles - show on edge hover or while actively trimming (hidden during drag, but not during trim's own snap state) */}
-      {!trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (
-        <>
-          {/* Left trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-          {(hoveredEdge === 'start' || (isTrimming && trimHandle === 'start')) && (
-            <div
-              className="absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize"
-              onMouseDown={(e) => handleTrimStart(e, 'start')}
-            />
-          )}
-          {/* Right trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-          {(hoveredEdge === 'end' || (isTrimming && trimHandle === 'end')) && (
-            <div
-              className="absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize"
-              onMouseDown={(e) => handleTrimStart(e, 'end')}
-            />
-          )}
-        </>
-      )}
+      {/* Trim handles - always rendered, visibility controlled via CSS to prevent DOM churn */}
+      {/* Left trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+          !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'start' || (isTrimming && trimHandle === 'start'))
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        )}
+        onMouseDown={(e) => handleTrimStart(e, 'start')}
+      />
+      {/* Right trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <div
+        className={cn(
+          "absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+          !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'end' || (isTrimming && trimHandle === 'end'))
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        )}
+        onMouseDown={(e) => handleTrimStart(e, 'end')}
+      />
 
-      {/* Rate stretch handles - show on edge hover or while actively stretching (hidden during drag, but not during stretch's own snap state) */}
-      {!trackLocked && (!isAnyDragActiveRef.current || isStretching) && activeTool === 'rate-stretch' && isMediaItem && (
-        <>
-          {/* Left stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-          {(hoveredEdge === 'start' || (isStretching && stretchHandle === 'start')) && (
-            <div
-              className="absolute left-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize"
-              onMouseDown={(e) => handleStretchStart(e, 'start')}
-            />
-          )}
-          {/* Right stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-          {(hoveredEdge === 'end' || (isStretching && stretchHandle === 'end')) && (
-            <div
-              className="absolute right-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize"
-              onMouseDown={(e) => handleStretchStart(e, 'end')}
-            />
-          )}
-        </>
-      )}
+      {/* Rate stretch handles - always rendered, visibility controlled via CSS to prevent DOM churn */}
+      {/* Left stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize transition-opacity duration-75",
+          !trackLocked && (!isAnyDragActiveRef.current || isStretching) && activeTool === 'rate-stretch' && isMediaItem && (hoveredEdge === 'start' || (isStretching && stretchHandle === 'start'))
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        )}
+        onMouseDown={(e) => handleStretchStart(e, 'start')}
+      />
+      {/* Right stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <div
+        className={cn(
+          "absolute right-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize transition-opacity duration-75",
+          !trackLocked && (!isAnyDragActiveRef.current || isStretching) && activeTool === 'rate-stretch' && isMediaItem && (hoveredEdge === 'end' || (isStretching && stretchHandle === 'end'))
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        )}
+        onMouseDown={(e) => handleStretchStart(e, 'end')}
+      />
 
       {/* Join indicator - glowing edge when clip can be joined with neighbor */}
-      {/* Hidden when hovering edge, during trim/stretch, or during any drag */}
-      {hasJoinableLeft && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'start' && !isTrimming && !isStretching && (
-        <div
-          className="absolute left-0 top-0 bottom-0 w-px pointer-events-none"
-          style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
-          title="Can join with previous clip (J)"
-        />
-      )}
-      {hasJoinableRight && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'end' && !isTrimming && !isStretching && (
-        <div
-          className="absolute right-0 top-0 bottom-0 w-px pointer-events-none"
-          style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
-          title="Can join with next clip (J)"
-        />
-      )}
+      {/* Always rendered, visibility controlled via CSS to prevent DOM churn */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
+          hasJoinableLeft && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'start' && !isTrimming && !isStretching
+            ? "opacity-100"
+            : "opacity-0"
+        )}
+        style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
+        title="Can join with previous clip (J)"
+      />
+      <div
+        className={cn(
+          "absolute right-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
+          hasJoinableRight && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'end' && !isTrimming && !isStretching
+            ? "opacity-100"
+            : "opacity-0"
+        )}
+        style={{ backgroundColor: 'var(--color-timeline-join)', boxShadow: '0 0 6px 1px var(--color-timeline-join)' }}
+        title="Can join with next clip (J)"
+      />
 
     </div>
       </ContextMenuTrigger>
