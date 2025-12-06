@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
@@ -52,8 +53,14 @@ export function GizmoOverlay({
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectItems = useSelectionStore((s) => s.selectItems);
 
-  // Timeline state and actions
-  const items = useTimelineStore((s) => s.items);
+  // Timeline state and actions - use derived selector for visual items only
+  // This avoids re-renders when audio items change (audio has no gizmo overlay)
+  // useShallow prevents infinite loops from array reference changes
+  const visualItems = useTimelineStore(
+    useShallow((s) =>
+      s.items.filter((item) => item.type !== 'audio' && item.type !== 'adjustment')
+    )
+  );
   const tracks = useTimelineStore((s) => s.tracks);
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
@@ -78,14 +85,8 @@ export function GizmoOverlay({
   }, [isPlaying]);
 
   // Subscribe to frame changes - always update when paused, or at clip boundaries during playback
+  // NOTE: Reads items on-demand inside subscribe callback to avoid re-rendering on items change
   useEffect(() => {
-    // Build set of all clip edges (start and end frames) for boundary detection
-    const clipEdges = new Set<number>();
-    for (const item of items) {
-      clipEdges.add(item.from);
-      clipEdges.add(item.from + item.durationInFrames);
-    }
-
     let prevFrame = usePlaybackStore.getState().currentFrame;
 
     return usePlaybackStore.subscribe((state, prevState) => {
@@ -99,11 +100,16 @@ export function GizmoOverlay({
         }
       } else {
         // During playback, only update when crossing a clip boundary
+        // Read items on-demand for fresh clip edges (avoids re-subscribing on items change)
+        const currentItems = useTimelineStore.getState().items;
         const minFrame = Math.min(prevFrame, currentFrame);
         const maxFrame = Math.max(prevFrame, currentFrame);
 
-        for (const edge of clipEdges) {
-          if (edge > minFrame && edge <= maxFrame) {
+        for (const item of currentItems) {
+          const start = item.from;
+          const end = item.from + item.durationInFrames;
+          // Check if we crossed this item's start or end
+          if ((start > minFrame && start <= maxFrame) || (end > minFrame && end <= maxFrame)) {
             // Crossed a clip boundary - update frozen frame
             frozenFrameRef.current = currentFrame;
             setForceUpdate((n) => n + 1);
@@ -114,7 +120,7 @@ export function GizmoOverlay({
 
       prevFrame = currentFrame;
     });
-  }, [items]);
+  }, []); // No dependencies - reads items on-demand
 
   // Force update state to trigger re-render and useMemo recalculation when frame changes while paused
   const [frameUpdateKey, setForceUpdate] = useState(0);
@@ -132,7 +138,7 @@ export function GizmoOverlay({
     setCanvasSize(projectSize.width, projectSize.height);
   }, [projectSize.width, projectSize.height, setCanvasSize]);
 
-  // Get visual items visible at current frame (excluding audio, hidden tracks, and locked tracks)
+  // Get visual items visible at current frame (excluding hidden tracks and locked tracks)
   // Sorted by track order: items on top tracks (lower order) come LAST for proper stacking/click priority
   // Uses frozenFrameRef to avoid re-renders during playback - only updates when paused
   const visibleItems = useMemo(() => {
@@ -149,10 +155,9 @@ export function GizmoOverlay({
       trackOrder.set(track.id, track.order);
     }
 
-    return items
+    // visualItems already excludes audio and adjustment (filtered in selector)
+    return visualItems
       .filter((item) => {
-        // Only visual items (not audio or adjustment layers)
-        if (item.type === 'audio' || item.type === 'adjustment') return false;
         // Check if item's track is visible
         if (!trackVisible.get(item.trackId)) return false;
         // Check if item's track is locked (locked items can't be selected)
@@ -164,7 +169,7 @@ export function GizmoOverlay({
       // Sort by track order descending: higher order (bottom tracks) first, lower order (top tracks) last
       // This ensures top track items render last (on top) and get click priority
       .sort((a, b) => (trackOrder.get(b.trackId) ?? 0) - (trackOrder.get(a.trackId) ?? 0));
-  }, [items, tracks, isPlaying, frameUpdateKey]);
+  }, [visualItems, tracks, isPlaying, frameUpdateKey]);
 
   // Get selected items
   const selectedItems = useMemo(() => {

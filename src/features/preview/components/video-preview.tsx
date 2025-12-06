@@ -112,24 +112,27 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
     }));
   }, [combinedTracks, resolvedUrls]);
 
-  // Create a stable fingerprint for media resolution
-  // Only changes when media-relevant properties change (not transform/position)
-  const mediaFingerprint = useMemo(() => {
-    return items
+  // Create a stable fingerprint for media resolution using derived selector
+  // Only triggers re-render when media is added/removed, not when items move
+  const mediaFingerprint = useTimelineStore((s) =>
+    s.items
       .filter((item) => item.mediaId)
       .map((item) => item.mediaId!)
       .sort()
-      .join('|');
-  }, [items]);
+      .join('|')
+  );
 
-  // Calculate total frames from items
+  // Calculate total frames using derived selector for furthest item end
+  // This only triggers re-render when the actual timeline end changes, not on every item move
+  const furthestItemEndFrame = useTimelineStore((s) =>
+    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
+  );
   // Add buffer at the end for empty timeline space
   const totalFrames = useMemo(() => {
-    if (items.length === 0) return 900; // Default 30s at 30fps
-    const itemsEnd = Math.max(...items.map((item) => item.from + item.durationInFrames));
+    if (furthestItemEndFrame === 0) return 900; // Default 30s at 30fps
     // Add 5 seconds buffer at the end
-    return itemsEnd + (fps * 5);
-  }, [items, fps]);
+    return furthestItemEndFrame + (fps * 5);
+  }, [furthestItemEndFrame, fps]);
 
   // Note: We intentionally do NOT cleanup blob URLs on mount.
   // Cleanup happens only on unmount (see effect below) to prevent race conditions

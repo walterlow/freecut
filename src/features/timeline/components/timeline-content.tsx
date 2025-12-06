@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
@@ -55,8 +56,16 @@ export interface TimelineContentProps {
 export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: TimelineContentProps) {
   // Use granular selectors - Zustand v5 best practice
   const tracks = useTimelineStore((s) => s.tracks);
-  const items = useTimelineStore((s) => s.items);
   const fps = useTimelineStore((s) => s.fps);
+
+  // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
+  // when ANY item changes. Instead, use derived selectors for specific needs.
+
+  // Derived selector: only returns the furthest item end frame (for timeline width)
+  // This only triggers re-render when the timeline's actual end position changes
+  const furthestItemEndFrame = useTimelineStore((s) =>
+    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
+  );
   const { timeToPixels, pixelsToTime, frameToPixels, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
     minZoom: 0.01,
     maxZoom: 2, // Match slider range
@@ -112,7 +121,8 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
         return;
       }
 
-      // Get the selected items
+      // Get the selected items - read on-demand to avoid subscription
+      const items = useTimelineStore.getState().items;
       const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
       if (selectedItems.length === 0) {
         prevFrame = currentFrame;
@@ -133,7 +143,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
 
       prevFrame = currentFrame;
     });
-  }, [items]);
+  }, []); // No dependencies - reads items on-demand
 
 
   const frameToPixelsRef = useRef(frameToPixels);
@@ -147,9 +157,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
 
   const actualDurationRef = useRef(10); // Initialize with minimum duration
 
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-
+  // NOTE: itemsRef removed - use getState() on-demand or actualDurationRef for duration
 
   // Momentum scrolling state
   const velocityXRef = useRef(0);
@@ -192,7 +200,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     };
   }, []);
 
-  // Also remeasure when items change (timeline might resize)
+  // Also remeasure when timeline content changes (might resize)
   useEffect(() => {
     if (containerRef.current) {
       const width = containerRef.current.clientWidth;
@@ -200,7 +208,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
         setContainerWidth(width);
       }
     }
-  }, [items, containerWidth]);
+  }, [furthestItemEndFrame, containerWidth]); // Depends on content end, not full items array
 
   // Track scroll position with coalesced updates for viewport culling
   // Throttle at 50ms to match zoom throttle rate - prevents width jitter during zoom+scroll
@@ -244,12 +252,16 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
   });
 
   // Marquee selection - create items array for getBoundingRect lookups
+  // Use derived selector for item IDs only (doesn't re-render when positions change)
+  // useShallow prevents infinite loops from array reference changes
+  const itemIds = useTimelineStore(useShallow((s) => s.items.map((item) => item.id)));
+
   const marqueeItems = useMemo(
     () =>
-      items.map((item) => ({
-        id: item.id,
+      itemIds.map((id) => ({
+        id,
         getBoundingRect: () => {
-          const element = document.querySelector(`[data-item-id="${item.id}"]`);
+          const element = document.querySelector(`[data-item-id="${id}"]`);
           if (!element) {
             return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
           }
@@ -264,7 +276,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
           };
         },
       })),
-    [items]
+    [itemIds]
   );
 
   // Marquee selection hook
@@ -383,12 +395,10 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
   }, []);
 
   // Calculate the actual timeline duration and width based on content
+  // Uses derived furthestItemEndFrame selector instead of full items array
   const { actualDuration, timelineWidth } = useMemo(() => {
-    // Find the furthest item end position (actual content end)
-    const furthestItemEnd = items.reduce((max, item) => {
-      const itemEnd = (item.from + item.durationInFrames) / fps; // Convert to seconds
-      return Math.max(max, itemEnd);
-    }, 0);
+    // Convert furthest item end from frames to seconds
+    const furthestItemEnd = furthestItemEndFrame / fps;
 
     // Use actual content end, with minimum of 10 seconds for empty timelines
     const contentDuration = Math.max(furthestItemEnd, 10);
@@ -412,25 +422,12 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     const width = Math.max(baseWidth, currentViewEnd);
 
     return { actualDuration: contentDuration, timelineWidth: width };
-  }, [items, fps, timeToPixels, containerWidth, scrollLeft]);
+  }, [furthestItemEndFrame, fps, timeToPixels, containerWidth, scrollLeft]);
 
   actualDurationRef.current = actualDuration;
 
-  // Pre-filter items by track to avoid passing all items to all tracks
+  // NOTE: itemsByTrack removed - TimelineTrack now fetches its own items
   // This prevents cascade re-renders when only one track's items change
-  const itemsByTrack = useMemo(() => {
-    const map = new Map<string, typeof items>();
-    for (const track of tracks) {
-      map.set(track.id, []);
-    }
-    for (const item of items) {
-      const trackItems = map.get(item.trackId);
-      if (trackItems) {
-        trackItems.push(item);
-      }
-    }
-    return map;
-  }, [items, tracks]);
 
   /**
    * Adjusts scroll position to keep cursor position stable when zoom changes
@@ -511,15 +508,10 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
     if (!container) return;
 
     // Use refs for dynamic values to keep callback stable
-    const fps = fpsRef.current;
-    const items = itemsRef.current;
     const effectiveContainerWidth = containerWidthRef.current > 0 ? containerWidthRef.current : container.clientWidth;
 
-    // Calculate content duration from items (same logic as useMemo above)
-    const contentDuration = Math.max(10, items.reduce((max, item) => {
-      const itemEnd = (item.from + item.durationInFrames) / fps;
-      return Math.max(max, itemEnd);
-    }, 0));
+    // Use actualDurationRef which is kept in sync with timeline content
+    const contentDuration = actualDurationRef.current;
 
     // Calculate zoom level needed to fit content in viewport
     // pixelsPerSecond = zoomLevel * 100
@@ -715,7 +707,7 @@ export function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: Ti
         onMouseLeave={handleMouseLeaveForRazor}
       >
         {tracks.map((track) => (
-          <TimelineTrack key={track.id} track={track} items={itemsByTrack.get(track.id) ?? []} timelineWidth={timelineWidth} />
+          <TimelineTrack key={track.id} track={track} timelineWidth={timelineWidth} />
         ))}
 
         {/* Snap guidelines (shown during drag) */}

@@ -1,4 +1,5 @@
 import { useState, useRef, memo, useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { TimelineItem } from './timeline-item';
@@ -44,7 +45,6 @@ import {
 
 export interface TimelineTrackProps {
   track: TimelineTrackType;
-  items: TimelineItemType[];
   timelineWidth?: number;
 }
 
@@ -57,36 +57,14 @@ interface GhostPreviewItem {
 }
 
 /**
- * Custom equality for TimelineTrack memo - prevents re-renders when items haven't changed
- * Compares items by ID and key properties instead of reference equality
+ * Custom equality for TimelineTrack memo - compares track and width only
+ * Items are fetched from store internally, so we don't compare them here
  */
 function areTrackPropsEqual(
   prev: TimelineTrackProps,
   next: TimelineTrackProps
 ): boolean {
-  // Track reference changed
-  if (prev.track !== next.track) return false;
-  if (prev.timelineWidth !== next.timelineWidth) return false;
-
-  // Items array length changed
-  if (prev.items.length !== next.items.length) return false;
-
-  // Compare items by ID and key render-affecting properties
-  for (let i = 0; i < prev.items.length; i++) {
-    const prevItem = prev.items[i];
-    const nextItem = next.items[i];
-    if (!prevItem || !nextItem) return false;
-    if (
-      prevItem.id !== nextItem.id ||
-      prevItem.from !== nextItem.from ||
-      prevItem.durationInFrames !== nextItem.durationInFrames ||
-      prevItem.label !== nextItem.label
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return prev.track === next.track && prev.timelineWidth === next.timelineWidth;
 }
 
 /**
@@ -99,15 +77,19 @@ function areTrackPropsEqual(
  * - Drag-and-drop support for media from library
  */
 
-export const TimelineTrack = memo(function TimelineTrack({ track, items }: TimelineTrackProps) {
+export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrackProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [ghostPreviews, setGhostPreviews] = useState<GhostPreviewItem[]>([]);
   const [contextMenuFrame, setContextMenuFrame] = useState<number | null>(null);
   const [menuKey, setMenuKey] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
 
-  // Store selectors - avoid subscribing to items array to prevent re-renders
-  // Read items from store directly in callbacks when needed for collision detection
+  // Store selectors - avoid subscribing to full items array to prevent re-renders
+  // Use derived selector: only returns items for THIS track (changes only when track items change)
+  // useShallow prevents infinite loops from array reference changes and enables shallow comparison
+  const trackItems = useTimelineStore(
+    useShallow((s) => s.items.filter((item) => item.trackId === track.id))
+  );
   const addItem = useTimelineStore((s) => s.addItem);
   const fps = useTimelineStore((s) => s.fps);
   const closeGapAtPosition = useTimelineStore((s) => s.closeGapAtPosition);
@@ -119,11 +101,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track, items }: Timel
   // Zoom utilities for position calculation
   const { pixelsToFrame, frameToPixels } = useTimelineZoom();
 
-  // Items are pre-filtered by TimelineContent - use directly
-  const trackItems = items;
-
   // Get item IDs for this track to check drag state
-  const trackItemIds = useMemo(() => items.map(item => item.id), [items]);
+  const trackItemIds = useMemo(() => trackItems.map(item => item.id), [trackItems]);
 
   // Check if any item on this track is being dragged (granular selector)
   const hasItemBeingDragged = useSelectionStore(
