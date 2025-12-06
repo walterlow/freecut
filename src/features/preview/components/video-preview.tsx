@@ -57,6 +57,7 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   const fps = useTimelineStore((s) => s.fps);
   const tracks = useTimelineStore((s) => s.tracks);
   const items = useTimelineStore((s) => s.items);
+  const transitions = useTimelineStore((s) => s.transitions);
   const zoom = usePlaybackStore((s) => s.zoom);
   const canvasBackgroundPreview = useGizmoStore((s) => s.canvasBackgroundPreview);
 
@@ -213,8 +214,9 @@ export function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   const inputProps: RemotionInputProps = useMemo(() => ({
     fps,
     tracks: resolvedTracks as RemotionInputProps['tracks'],
+    transitions,
     backgroundColor: canvasBackgroundPreview ?? project.backgroundColor,
-  }), [fps, resolvedTracks, canvasBackgroundPreview, project.backgroundColor]);
+  }), [fps, resolvedTracks, transitions, canvasBackgroundPreview, project.backgroundColor]);
 
   // Calculate player size based on zoom mode
   const playerSize = useMemo(() => {

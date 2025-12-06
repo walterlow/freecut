@@ -1,11 +1,13 @@
 import type { TimelineTrack, TimelineItem, ProjectMarker } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect } from '@/types/effects';
+import type { Transition, TransitionType } from '@/types/transition';
 
 export interface TimelineState {
   tracks: TimelineTrack[];
   items: TimelineItem[];
   markers: ProjectMarker[];
+  transitions: Transition[];
   fps: number;
   scrollPosition: number;
   snapEnabled: boolean;
@@ -49,6 +51,10 @@ export interface TimelineActions {
   updateEffect: (itemId: string, effectId: string, updates: Partial<{ effect: VisualEffect; enabled: boolean }>) => void;
   removeEffect: (itemId: string, effectId: string) => void;
   toggleEffect: (itemId: string, effectId: string) => void;
+  // Transition actions
+  addTransition: (leftClipId: string, rightClipId: string, type?: TransitionType, durationInFrames?: number) => boolean;
+  updateTransition: (id: string, updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>) => void;
+  removeTransition: (id: string) => void;
   saveTimeline: (projectId: string) => Promise<void>;
   loadTimeline: (projectId: string) => Promise<void>;
   clearTimeline: () => void;

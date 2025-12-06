@@ -16,6 +16,10 @@ interface PitchCorrectedAudioProps {
   audioFadeIn?: number;
   /** Fade out duration in seconds */
   audioFadeOut?: number;
+  /** Crossfade fade in duration in FRAMES (for transitions - overrides audioFadeIn) */
+  crossfadeFadeIn?: number;
+  /** Crossfade fade out duration in FRAMES (for transitions - overrides audioFadeOut) */
+  crossfadeFadeOut?: number;
 }
 
 /**
@@ -42,6 +46,8 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   durationInFrames,
   audioFadeIn = 0,
   audioFadeOut = 0,
+  crossfadeFadeIn,
+  crossfadeFadeOut,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -72,8 +78,14 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   const effectiveFadeOut = preview?.audioFadeOut ?? audioFadeOut;
 
   // Calculate fade multiplier
-  const fadeInFrames = Math.min(effectiveFadeIn * fps, durationInFrames);
-  const fadeOutFrames = Math.min(effectiveFadeOut * fps, durationInFrames);
+  // Crossfade props are in frames and override normal fades when present
+  // Normal fades are in seconds and need conversion
+  const fadeInFrames = crossfadeFadeIn !== undefined
+    ? Math.min(crossfadeFadeIn, durationInFrames)
+    : Math.min(effectiveFadeIn * fps, durationInFrames);
+  const fadeOutFrames = crossfadeFadeOut !== undefined
+    ? Math.min(crossfadeFadeOut, durationInFrames)
+    : Math.min(effectiveFadeOut * fps, durationInFrames);
 
   let fadeMultiplier = 1;
   const hasFadeIn = fadeInFrames > 0;

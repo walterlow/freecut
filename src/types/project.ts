@@ -84,6 +84,15 @@ export interface ProjectTimeline {
     label?: string;
     color: string;
   }>;
+  // Transitions between clips
+  transitions?: Array<{
+    id: string;
+    type: 'crossfade';
+    leftClipId: string;
+    rightClipId: string;
+    trackId: string;
+    durationInFrames: number;
+  }>;
 }
 
 export interface ProjectResolution {

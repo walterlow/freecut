@@ -5,6 +5,9 @@ import { getProject, updateProject } from '@/lib/storage/indexeddb';
 import type { ProjectTimeline } from '@/types/project';
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
+import type { Transition } from '@/types/transition';
+import { TRANSITION_CONFIGS } from '@/types/transition';
+import { canAddTransition } from '../utils/transition-utils';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from './zoom-store';
 import { generatePlayheadThumbnail } from '@/features/projects/utils/thumbnail-generator';
@@ -31,6 +34,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
   tracks: [],
   items: [],
   markers: [],
+  transitions: [],
   fps: 30,
   scrollPosition: 0,
   snapEnabled: true,
@@ -49,10 +53,17 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     items: state.items.map((i) => (i.id === id ? { ...i, ...updates } as typeof i : i)),
     isDirty: true,
   })),
-  removeItems: (ids) => set((state) => ({
-    items: state.items.filter((i) => !ids.includes(i.id)),
-    isDirty: true,
-  })),
+  removeItems: (ids) => set((state) => {
+    const idsSet = new Set(ids);
+    return {
+      items: state.items.filter((i) => !idsSet.has(i.id)),
+      // Remove transitions that involve any of the deleted clips
+      transitions: state.transitions.filter(
+        (t) => !idsSet.has(t.leftClipId) && !idsSet.has(t.rightClipId)
+      ),
+      isDirty: true,
+    };
+  }),
   // Ripple delete: remove items AND shift subsequent items on same track to close gaps
   rippleDeleteItems: (ids) => set((state) => {
     const idsToDelete = new Set(ids);
@@ -405,6 +416,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
   }),
 
   // Split item at the specified frame
+  // Handles clips in transition chains - updates transitions to point to new clips
   splitItem: (id, splitFrame) => set((state) => {
     const item = state.items.find((i) => i.id === id);
     if (!item) return state;
@@ -425,8 +437,30 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       return state;
     }
 
+    // Check for transitions involving this clip
+    const transitionAsLeft = state.transitions.find((t) => t.leftClipId === id);
+    const transitionAsRight = state.transitions.find((t) => t.rightClipId === id);
+
+    // Validate split is not in the transition region
+    // Left clip in transition: transition region is the last N frames
+    if (transitionAsLeft) {
+      const transitionStart = item.from + item.durationInFrames - transitionAsLeft.durationInFrames;
+      if (splitFrame >= transitionStart) {
+        console.warn('Cannot split within the transition region. Split must be before the transition.');
+        return state;
+      }
+    }
+
+    // Right clip in transition: transition region is the first N frames
+    if (transitionAsRight) {
+      const transitionEnd = item.from + transitionAsRight.durationInFrames;
+      if (splitFrame <= transitionEnd) {
+        console.warn('Cannot split within the transition region. Split must be after the transition.');
+        return state;
+      }
+    }
+
     // Create base properties for both items
-    const currentTrimStart = item.trimStart || 0;
     const currentSourceStart = item.sourceStart || 0;
     const currentTrimEnd = item.trimEnd || 0;
 
@@ -452,10 +486,14 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     const leftDurationSec = leftDuration / fps;
     const rightDurationSec = rightDuration / fps;
 
+    // Generate new IDs for split items
+    const leftItemId = crypto.randomUUID();
+    const rightItemId = crypto.randomUUID();
+
     // Left item: keeps original from, new duration, updated end trim
     const leftItem: typeof item = {
       ...item,
-      id: crypto.randomUUID(),
+      id: leftItemId,
       originId: sharedOriginId,
       durationInFrames: leftDuration,
       // Update sourceEnd and trimEnd for left item (in source frames)
@@ -473,7 +511,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     // trimStart represents user trimming, sourceStart represents where in source we begin
     const rightItem: typeof item = {
       ...item,
-      id: crypto.randomUUID(),
+      id: rightItemId,
       originId: sharedOriginId,
       from: splitFrame,
       durationInFrames: rightDuration,
@@ -494,11 +532,31 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       (rightItem as any).offset = (rightItem.sourceStart || 0) + (rightItem.trimStart || 0);
     }
 
+    // Update transitions to point to the new clips
+    let updatedTransitions = state.transitions;
+
+    // If this clip was the LEFT clip in a transition, update to point to the new RIGHT item
+    // (the part that's adjacent to the next clip)
+    if (transitionAsLeft) {
+      updatedTransitions = updatedTransitions.map((t) =>
+        t.id === transitionAsLeft.id ? { ...t, leftClipId: rightItemId } : t
+      );
+    }
+
+    // If this clip was the RIGHT clip in a transition, update to point to the new LEFT item
+    // (the part that's adjacent to the previous clip)
+    if (transitionAsRight) {
+      updatedTransitions = updatedTransitions.map((t) =>
+        t.id === transitionAsRight.id ? { ...t, rightClipId: leftItemId } : t
+      );
+    }
+
     // Replace original item with the two new items
     return {
       items: state.items
         .filter((i) => i.id !== id)
         .concat([leftItem, rightItem]),
+      transitions: updatedTransitions,
       isDirty: true,
     };
   }),
@@ -773,6 +831,74 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     isDirty: true,
   })),
 
+  // Transition actions
+  // Add a transition between two adjacent clips
+  // Clips stay at their original positions - TransitionSeries handles overlap at render time
+  // Returns true if transition was added successfully
+  addTransition: (leftClipId, rightClipId, type = 'crossfade', durationInFrames) => {
+    const state = useTimelineStore.getState();
+    const leftClip = state.items.find((i) => i.id === leftClipId);
+    const rightClip = state.items.find((i) => i.id === rightClipId);
+
+    if (!leftClip || !rightClip) {
+      console.warn('[addTransition] Clips not found');
+      return false;
+    }
+
+    // Use default duration if not provided
+    const duration = durationInFrames ?? TRANSITION_CONFIGS[type].defaultDuration;
+
+    // Validate transition can be added
+    const validation = canAddTransition(leftClip, rightClip, duration);
+    if (!validation.canAdd) {
+      console.warn('[addTransition] Cannot add transition:', validation.reason);
+      return false;
+    }
+
+    // Check if transition already exists between these clips
+    const existingTransition = state.transitions.find(
+      (t) => t.leftClipId === leftClipId && t.rightClipId === rightClipId
+    );
+    if (existingTransition) {
+      console.warn('[addTransition] Transition already exists between these clips');
+      return false;
+    }
+
+    // Create the transition
+    // Clips stay at their original positions - TransitionSeries handles overlap at render time
+    const transition: Transition = {
+      id: crypto.randomUUID(),
+      type,
+      presentation: 'fade', // Default to fade presentation
+      timing: 'linear', // Default to linear timing
+      leftClipId,
+      rightClipId,
+      trackId: leftClip.trackId,
+      durationInFrames: duration,
+    };
+
+    useTimelineStore.setState((state) => ({
+      transitions: [...state.transitions, transition],
+      isDirty: true,
+    }));
+
+    return true;
+  },
+
+  // Update a transition's properties
+  updateTransition: (id, updates) => set((state) => ({
+    transitions: state.transitions.map((t) =>
+      t.id === id ? { ...t, ...updates } : t
+    ),
+    isDirty: true,
+  })),
+
+  // Remove a transition
+  removeTransition: (id) => set((state) => ({
+    transitions: state.transitions.filter((t) => t.id !== id),
+    isDirty: true,
+  })),
+
   // Save timeline to project in IndexedDB
   saveTimeline: async (projectId) => {
     const state = useTimelineStore.getState();
@@ -913,6 +1039,17 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
             ...(m.label && { label: m.label }),
           })),
         }),
+        // Save transitions
+        ...(state.transitions.length > 0 && {
+          transitions: state.transitions.map(t => ({
+            id: t.id,
+            type: t.type,
+            leftClipId: t.leftClipId,
+            rightClipId: t.rightClipId,
+            trackId: t.trackId,
+            durationInFrames: t.durationInFrames,
+          })),
+        }),
       };
 
       // Generate thumbnail from current Player frame (captures the actual rendered output)
@@ -987,6 +1124,8 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
           outPoint: project.timeline.outPoint ?? null,
           // Restore project markers
           markers: project.timeline.markers ?? [],
+          // Restore transitions
+          transitions: (project.timeline.transitions as Transition[]) ?? [],
           isDirty: false, // Fresh load is clean
         });
 
@@ -1003,6 +1142,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
           tracks: [],
           items: [],
           markers: [],
+          transitions: [],
           inPoint: null,
           outPoint: null,
           isDirty: false, // New project starts clean
@@ -1023,6 +1163,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     tracks: [],
     items: [],
     markers: [],
+    transitions: [],
     scrollPosition: 0,
     isDirty: false,
   }),

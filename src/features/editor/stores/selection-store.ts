@@ -14,6 +14,7 @@ export const useSelectionStore = create<SelectionState & SelectionActions>((set)
   // State
   selectedItemIds: [],
   selectedMarkerId: null,
+  selectedTransitionId: null,
   selectedTrackId: null, // Deprecated
   selectedTrackIds: [],
   activeTrackId: null,
@@ -25,14 +26,22 @@ export const useSelectionStore = create<SelectionState & SelectionActions>((set)
   selectItems: (ids) => set((state) => ({
     selectedItemIds: ids,
     selectedMarkerId: null, // Clear marker selection (mutually exclusive)
+    selectedTransitionId: null, // Clear transition selection
     // Preserve track selection when selecting items
     selectionType: ids.length > 0 ? 'item' : (state.selectedTrackIds.length > 0 ? 'track' : null),
   })),
   selectMarker: (id) => set({
     selectedMarkerId: id,
+    selectedTransitionId: null, // Clear transition selection
     selectedItemIds: [], // Clear clip selection (mutually exclusive)
     // Don't clear activeTrackId - it's for track operations, not selection display
     selectionType: id ? 'marker' : null,
+  }),
+  selectTransition: (id) => set({
+    selectedTransitionId: id,
+    selectedMarkerId: null, // Clear marker selection
+    selectedItemIds: [], // Clear clip selection (mutually exclusive)
+    selectionType: id ? 'transition' : null,
   }),
   selectTrack: (id) => set({
     selectedTrackId: id,
@@ -81,6 +90,7 @@ export const useSelectionStore = create<SelectionState & SelectionActions>((set)
   clearSelection: () => set({
     selectedItemIds: [],
     selectedMarkerId: null,
+    selectedTransitionId: null,
     selectedTrackId: null,
     selectedTrackIds: [],
     activeTrackId: null,

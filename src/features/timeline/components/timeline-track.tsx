@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { TimelineItem } from './timeline-item';
+import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
@@ -89,6 +90,10 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   // useShallow prevents infinite loops from array reference changes and enables shallow comparison
   const trackItems = useTimelineStore(
     useShallow((s) => s.items.filter((item) => item.trackId === track.id))
+  );
+  // Get transitions for this track
+  const trackTransitions = useTimelineStore(
+    useShallow((s) => s.transitions.filter((t) => t.trackId === track.id))
   );
   const addItem = useTimelineStore((s) => s.addItem);
   const fps = useTimelineStore((s) => s.fps);
@@ -582,6 +587,11 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           {/* Render all items for this track - always visible in timeline UI */}
           {trackItems.map((item) => (
             <TimelineItem key={item.id} item={item} timelineDuration={30} trackLocked={track.locked} />
+          ))}
+
+          {/* Render transitions for this track */}
+          {trackTransitions.map((transition) => (
+            <TransitionItem key={transition.id} transition={transition} trackHeight={track.height} />
           ))}
 
           {/* Locked track overlay indicator */}

@@ -1,8 +1,18 @@
 import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useVideoConfig, useCurrentFrame } from 'remotion';
+import { TransitionSeries, linearTiming, springTiming } from '@remotion/transitions';
+import { fade } from '@remotion/transitions/fade';
+import { wipe } from '@remotion/transitions/wipe';
+import { slide } from '@remotion/transitions/slide';
+import { flip } from '@remotion/transitions/flip';
+import { clockWipe } from '@remotion/transitions/clock-wipe';
+import { none } from '@remotion/transitions/none';
+import { iris } from '@remotion/transitions/iris';
 import type { RemotionInputProps } from '@/types/export';
-import type { TextItem, ShapeItem, AdjustmentItem } from '@/types/timeline';
+import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, ImageItem } from '@/types/timeline';
+import type { Transition, TransitionPresentation, TransitionTiming, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import { Item } from '../components/item';
+import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { StableVideoSequence } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
@@ -11,6 +21,159 @@ import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 // Note: Halftone is now applied per-item via ItemEffectWrapper, not globally.
 // This ensures adjustment layer effects only affect items BELOW them (higher track order).
+
+/**
+ * Get Remotion transition presentation from our presentation type
+ * eslint-disable-next-line @typescript-eslint/no-explicit-any
+ */
+function getTransitionPresentation(
+  presentation: TransitionPresentation,
+  width: number,
+  height: number,
+  direction?: WipeDirection | SlideDirection | FlipDirection
+): any {
+  switch (presentation) {
+    case 'fade': return fade();
+    case 'wipe': return wipe({ direction: direction as WipeDirection ?? 'from-left' });
+    case 'slide': return slide({ direction: direction as SlideDirection ?? 'from-left' });
+    case 'flip': return flip({ direction: direction as FlipDirection ?? 'from-left' });
+    case 'clockWipe': return clockWipe({ width, height });
+    case 'iris': return iris({ width, height });
+    case 'none': return none();
+    default: return fade();
+  }
+}
+
+/**
+ * Get Remotion transition timing from our timing type
+ */
+function getTransitionTiming(timing: TransitionTiming, durationInFrames: number) {
+  switch (timing) {
+    case 'spring': return springTiming({ config: { damping: 200 }, durationInFrames });
+    case 'linear':
+    default: return linearTiming({ durationInFrames });
+  }
+}
+
+/**
+ * A visual item (video/image) with track rendering metadata
+ */
+type EnrichedVisualItem = (VideoItem | ImageItem) & {
+  zIndex: number;
+  muted: boolean;
+  trackOrder: number;
+  trackVisible: boolean;
+};
+
+/**
+ * A chain of clips connected by transitions on the same track.
+ * Used to render with TransitionSeries.
+ */
+interface ClipChain {
+  clips: EnrichedVisualItem[];
+  transitions: Transition[];
+  trackId: string;
+  /** Start frame of the chain (first clip's from) */
+  startFrame: number;
+  /** End frame in timeline (last clip's from + duration) */
+  endFrame: number;
+  /** Total overlap/compression from all transitions */
+  totalOverlap: number;
+  /** Rendered duration (total clip durations - total overlap) */
+  renderedDuration: number;
+}
+
+/**
+ * Group clips into chains connected by transitions.
+ * Returns: { chains: ClipChain[], standaloneClips: EnrichedVisualItem[] }
+ */
+function groupClipsIntoChains(
+  items: EnrichedVisualItem[],
+  transitions: Transition[]
+): { chains: ClipChain[]; standaloneClips: EnrichedVisualItem[] } {
+  // Build adjacency map: clipId -> { left: Transition, right: Transition }
+  const transitionMap = new Map<string, { left?: Transition; right?: Transition }>();
+
+  transitions.forEach((t) => {
+    if (!transitionMap.has(t.leftClipId)) transitionMap.set(t.leftClipId, {});
+    if (!transitionMap.has(t.rightClipId)) transitionMap.set(t.rightClipId, {});
+    transitionMap.get(t.leftClipId)!.right = t;
+    transitionMap.get(t.rightClipId)!.left = t;
+  });
+
+  const visitedClips = new Set<string>();
+  const chains: ClipChain[] = [];
+  const standaloneClips: EnrichedVisualItem[] = [];
+
+  // Sort items by track and position for consistent processing
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
+    return a.from - b.from;
+  });
+
+  for (const item of sortedItems) {
+    if (visitedClips.has(item.id)) continue;
+
+    const clipTransitions = transitionMap.get(item.id);
+
+    // If this clip has no transitions, it's standalone
+    if (!clipTransitions?.left && !clipTransitions?.right) {
+      standaloneClips.push(item);
+      visitedClips.add(item.id);
+      continue;
+    }
+
+    // Start a new chain from this clip
+    // First, walk left to find the chain start
+    let chainStart = item;
+    while (true) {
+      const leftTrans = transitionMap.get(chainStart.id)?.left;
+      if (!leftTrans) break;
+      const leftClip = sortedItems.find((i) => i.id === leftTrans.leftClipId);
+      if (!leftClip || visitedClips.has(leftClip.id)) break;
+      chainStart = leftClip;
+    }
+
+    // Now walk right to build the chain
+    const chainClips: EnrichedVisualItem[] = [];
+    const chainTransitions: Transition[] = [];
+    let current = chainStart;
+
+    while (current && !visitedClips.has(current.id)) {
+      chainClips.push(current);
+      visitedClips.add(current.id);
+
+      const rightTrans = transitionMap.get(current.id)?.right;
+      if (!rightTrans) break;
+
+      chainTransitions.push(rightTrans);
+      const nextClip = sortedItems.find((i) => i.id === rightTrans.rightClipId);
+      if (!nextClip || visitedClips.has(nextClip.id)) break;
+      current = nextClip;
+    }
+
+    if (chainClips.length > 1) {
+      const lastClip = chainClips[chainClips.length - 1]!;
+      const totalClipDuration = chainClips.reduce((sum, c) => sum + c.durationInFrames, 0);
+      const totalOverlap = chainTransitions.reduce((sum, t) => sum + t.durationInFrames, 0);
+
+      chains.push({
+        clips: chainClips,
+        transitions: chainTransitions,
+        trackId: chainStart.trackId,
+        startFrame: chainStart.from,
+        endFrame: lastClip.from + lastClip.durationInFrames,
+        totalOverlap,
+        renderedDuration: totalClipDuration - totalOverlap,
+      });
+    } else {
+      // Single clip with broken transition reference - treat as standalone
+      standaloneClips.push(chainStart);
+    }
+  }
+
+  return { chains, standaloneClips };
+}
 
 /** Mask shape with its track order for scope calculation */
 interface MaskWithTrackOrder {
@@ -268,20 +431,139 @@ const FrameAwareMaskDefinitions: React.FC<{
  * from the parent MainComposition.
  */
 const ClearingLayer: React.FC<{
-  videoItems: Array<{ from: number; durationInFrames: number; trackVisible: boolean }>;
+  videoItems: EnrichedVisualItem[];
+  chains: ClipChain[];
   backgroundColor: string;
-}> = ({ videoItems, backgroundColor }) => {
+}> = ({ videoItems, chains, backgroundColor }) => {
   const currentFrame = useCurrentFrame();
-  // Only consider VISIBLE videos for clearing layer logic
-  const hasActiveVideo = videoItems.some(
+
+  // Check standalone videos
+  const hasActiveStandaloneVideo = videoItems.some(
     (item) =>
       item.trackVisible &&
       currentFrame >= item.from &&
       currentFrame < item.from + item.durationInFrames
   );
 
-  if (hasActiveVideo) return null;
+  // Check clips in transition chains
+  // A chain is active if the current frame is within any of its clips' range
+  // Note: TransitionSeries handles overlaps, but the visual range is from first clip start to last clip end
+  const hasActiveChainClip = chains.some((chain) => {
+    if (!chain.clips[0]?.trackVisible) return false;
+    const chainStart = chain.startFrame;
+    // Calculate chain end: sum of all clip durations minus transition overlaps
+    const totalTransitionDuration = chain.transitions.reduce((sum, t) => sum + t.durationInFrames, 0);
+    const totalClipDuration = chain.clips.reduce((sum, c) => sum + c.durationInFrames, 0);
+    const chainEnd = chainStart + totalClipDuration - totalTransitionDuration;
+    return currentFrame >= chainStart && currentFrame < chainEnd;
+  });
+
+  if (hasActiveStandaloneVideo || hasActiveChainClip) return null;
   return <AbsoluteFill style={{ backgroundColor, zIndex: 1000 }} />;
+};
+
+/**
+ * Audio renderer for clips in transition chains.
+ * Handles crossfade between clips during transition overlaps.
+ * This is separate from TransitionSeries which only handles video.
+ */
+const ChainAudioRenderer: React.FC<{
+  chains: ClipChain[];
+  tracks: RemotionInputProps['tracks'];
+  visibleTrackIds: Set<string>;
+}> = ({ chains, tracks, visibleTrackIds }) => {
+  // Render audio for each clip in each chain with crossfade
+  return (
+    <>
+      {chains.map((chain) => {
+        const track = tracks.find((t) => t.id === chain.trackId);
+        const trackMuted = track?.muted ?? false;
+        const trackVisible = visibleTrackIds.has(chain.trackId);
+
+        // Calculate running position for each clip in the chain
+        // Each clip starts at its own position, but transitions compress the chain
+        let runningFrame = chain.startFrame;
+
+        return chain.clips.map((clip, clipIndex) => {
+          // Only render audio for video clips (images don't have audio)
+          if (clip.type !== 'video') {
+            runningFrame += clip.durationInFrames - (chain.transitions[clipIndex]?.durationInFrames ?? 0);
+            return null;
+          }
+
+          const clipStart = runningFrame;
+
+          // Get transition before and after this clip
+          const transitionBefore = clipIndex > 0 ? chain.transitions[clipIndex - 1] : null;
+          const transitionAfter = chain.transitions[clipIndex];
+
+          // Calculate fade regions for crossfade
+          const fadeInDuration = transitionBefore?.durationInFrames ?? 0;
+          const fadeOutDuration = transitionAfter?.durationInFrames ?? 0;
+
+          // Update running frame for next clip (account for transition overlap)
+          runningFrame += clip.durationInFrames - (transitionAfter?.durationInFrames ?? 0);
+
+          // Use Sequence for proper lifecycle and ChainClipAudio for crossfade
+          return (
+            <Sequence
+              key={`chain-audio-${clip.id}`}
+              from={clipStart}
+              durationInFrames={clip.durationInFrames}
+            >
+              <ChainClipAudio
+                clip={clip}
+                fadeInDuration={fadeInDuration}
+                fadeOutDuration={fadeOutDuration}
+                muted={trackMuted || !trackVisible}
+              />
+            </Sequence>
+          );
+        });
+      })}
+    </>
+  );
+};
+
+/**
+ * Audio for a single clip in a chain with crossfade support.
+ * Renders audio-only with volume interpolation for smooth transitions.
+ */
+const ChainClipAudio: React.FC<{
+  clip: EnrichedVisualItem;
+  fadeInDuration: number;
+  fadeOutDuration: number;
+  muted: boolean;
+}> = ({ clip, fadeInDuration, fadeOutDuration, muted }) => {
+  // Only video clips have audio
+  if (clip.type !== 'video' || muted) return null;
+
+  // Guard against missing src
+  if (!('src' in clip) || !clip.src) return null;
+
+  const videoClip = clip as VideoItem;
+
+  // Get source position and playback rate
+  const trimBefore = videoClip.sourceStart ?? videoClip.trimStart ?? videoClip.offset ?? 0;
+  const playbackRate = videoClip.speed ?? 1;
+
+  // Render audio with crossfade support via PitchCorrectedAudio
+  return (
+    <PitchCorrectedAudio
+      src={videoClip.src}
+      itemId={videoClip.id}
+      trimBefore={trimBefore}
+      volume={videoClip.volume ?? 0}
+      playbackRate={playbackRate}
+      muted={false}
+      durationInFrames={videoClip.durationInFrames}
+      audioFadeIn={videoClip.audioFadeIn}
+      audioFadeOut={videoClip.audioFadeOut}
+      // Crossfade overrides for transitions
+      crossfadeFadeIn={fadeInDuration}
+      crossfadeFadeOut={fadeOutDuration}
+    />
+  );
 };
 
 /**
@@ -326,7 +608,7 @@ const StableMaskedGroup: React.FC<{
  * 3. Only items BELOW adjustment layer (higher track order) receive effects
  * 4. Adding/removing adjustment layers doesn't change DOM structure
  */
-export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgroundColor = '#000000' }) => {
+export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transitions = [], backgroundColor = '#000000' }) => {
   const { fps, width: canvasWidth, height: canvasHeight } = useVideoConfig();
   // NOTE: useCurrentFrame() removed from here to prevent per-frame re-renders.
   // Frame-dependent logic is now isolated in FrameAwareMaskDefinitions and ClearingLayer.
@@ -344,22 +626,57 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
   // Shared visibility lookup - used by videoItems and nonMediaByTrack for stable DOM structure
   const visibleTrackIds = useMemo(() => new Set(visibleTracks.map((t) => t.id)), [visibleTracks]);
 
-  // Separate video and audio items - audio doesn't need masking and should be isolated
-  // from visual layer changes to prevent unnecessary re-renders
-  // Use ALL tracks (not just visible) to keep DOM structure stable when toggling visibility
-  const videoItems = useMemo(() =>
+  // Get all video and image items that could be in transitions
+  const allVisualItems: EnrichedVisualItem[] = useMemo(() =>
     tracks.flatMap((track) =>
       track.items
-        .filter((item) => item.type === 'video')
+        .filter((item) => item.type === 'video' || item.type === 'image')
         .map((item) => ({
           ...item,
           zIndex: maxOrder - (track.order ?? 0),
-          muted: track.muted,
+          muted: track.muted ?? false,
           trackOrder: track.order ?? 0,
           trackVisible: visibleTrackIds.has(track.id),
         }))
-    ),
+    ) as EnrichedVisualItem[],
     [tracks, visibleTrackIds, maxOrder]
+  );
+
+  // Group clips into chains (connected by transitions) and standalone clips
+  const { chains, standaloneClips } = useMemo(() =>
+    groupClipsIntoChains(allVisualItems, transitions),
+    [allVisualItems, transitions]
+  );
+
+  // Calculate render offset for a clip based on chains that come before it on the same track
+  // Transitions "compress" time, so clips after chains need to shift earlier
+  const getRenderOffset = useCallback((trackId: string, clipFrom: number): number => {
+    let offset = 0;
+    for (const chain of chains) {
+      if (chain.trackId === trackId && chain.endFrame <= clipFrom) {
+        // This chain ends before our clip starts, so its overlap affects our position
+        offset += chain.totalOverlap;
+      }
+    }
+    return offset;
+  }, [chains]);
+
+  // Standalone video items with adjusted render positions
+  const videoItems = useMemo(() =>
+    standaloneClips
+      .filter((item) => item.type === 'video')
+      .map((item) => ({
+        ...item,
+        // Adjust 'from' for rendering (shifted by chain overlaps before this clip)
+        from: item.from - getRenderOffset(item.trackId, item.from),
+      })),
+    [standaloneClips, getRenderOffset]
+  );
+
+  // Standalone image items (not in any transition chain) - rendered in nonMediaByTrack
+  const standaloneImageIds = useMemo(() =>
+    new Set(standaloneClips.filter((item) => item.type === 'image').map((i) => i.id)),
+    [standaloneClips]
   );
 
   // Audio items are memoized separately and rendered outside mask groups
@@ -406,20 +723,26 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
   }, [visibleTracks]);
 
   // Use ALL tracks for stable DOM structure, with visibility flag for CSS-based hiding
-  // No longer split into above/below groups - effects applied per-item via ItemEffectWrapper
+  // Images in transition chains are rendered by TransitionSeries, not here
   const nonMediaByTrack = useMemo(() =>
     tracks.map((track) => ({
       ...track,
       trackVisible: visibleTrackIds.has(track.id),
-      items: track.items.filter(
-        (item) =>
-          item.type !== 'video' &&
-          item.type !== 'audio' &&
-          !(item.type === 'shape' && item.isMask) &&
-          item.type !== 'adjustment' // Filter out adjustment items
-      ),
+      items: track.items.filter((item) => {
+        // Filter out videos (rendered by StableVideoSequence or TransitionSeries)
+        if (item.type === 'video') return false;
+        // Filter out audio (rendered separately)
+        if (item.type === 'audio') return false;
+        // Filter out mask shapes (rendered in SVG defs)
+        if (item.type === 'shape' && item.isMask) return false;
+        // Filter out adjustment items (handled separately)
+        if (item.type === 'adjustment') return false;
+        // Filter out images that are in transition chains (rendered by TransitionSeries)
+        if (item.type === 'image' && !standaloneImageIds.has(item.id)) return false;
+        return true;
+      }),
     })),
-    [tracks, visibleTrackIds]
+    [tracks, visibleTrackIds, standaloneImageIds]
   );
 
   // NOTE: DOM structure is now fully stable regardless of adjustment layer changes.
@@ -486,32 +809,109 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
       {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
       {/* Audio uses item.id as key (not generateStableKey) to prevent remounts on speed changes */}
       {/* Hidden tracks are muted but stay in DOM for stable structure */}
-      {audioItems.map((item) => (
-        <Sequence
-          key={item.id}
-          from={item.from}
-          durationInFrames={item.durationInFrames}
-        >
-          <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
-        </Sequence>
-      ))}
+      {/* Items after transition chains on the same track are shifted earlier */}
+      {audioItems.map((item) => {
+        // Apply render offset for audio that comes after transition chains on the same track
+        const renderOffset = getRenderOffset(item.trackId, item.from);
+        const adjustedFrom = item.from - renderOffset;
+        return (
+          <Sequence
+            key={item.id}
+            from={adjustedFrom}
+            durationInFrames={item.durationInFrames}
+          >
+            <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
+          </Sequence>
+        );
+      })}
+
+      {/* CHAIN AUDIO LAYER - audio from video clips in transition chains with crossfade */}
+      {/* Rendered separately from TransitionSeries (which handles video only) */}
+      {chains.length > 0 && (
+        <ChainAudioRenderer
+          chains={chains}
+          tracks={tracks}
+          visibleTrackIds={visibleTrackIds}
+        />
+      )}
 
       {/* VIDEO LAYER - all videos in single StableVideoSequence for DOM stability */}
       {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
       {/* Only items BELOW adjustment layer (higher track order) receive effects */}
       <StableMaskedGroup hasMasks={hasActiveMasks}>
         <StableVideoSequence
-          items={videoItems}
+          items={videoItems as any}
           premountFor={Math.round(fps * 2)}
-          renderItem={renderVideoItem}
+          renderItem={renderVideoItem as any}
         />
       </StableMaskedGroup>
 
+      {/* TRANSITION CHAINS - render using Remotion TransitionSeries */}
+      {/* Each chain is a sequence of clips connected by transitions */}
+      {chains.length > 0 && (
+        <StableMaskedGroup hasMasks={hasActiveMasks}>
+          {chains.map((chain) => {
+            const track = tracks.find((t) => t.id === chain.trackId);
+            const trackVisible = visibleTrackIds.has(chain.trackId);
+            const trackOrder = track?.order ?? 0;
+            const zIndex = maxOrder - trackOrder;
+
+            return (
+              <Sequence
+                key={`chain-${chain.clips[0]!.id}`}
+                from={chain.startFrame}
+              >
+                <AbsoluteFill
+                  style={{
+                    zIndex,
+                    visibility: trackVisible ? 'visible' : 'hidden',
+                  }}
+                >
+                  <TransitionSeries>
+                    {chain.clips.map((clip, index) => {
+                      // Render the clip
+                      const transition = chain.transitions[index]; // Transition AFTER this clip
+
+                      return (
+                        <React.Fragment key={clip.id}>
+                          <TransitionSeries.Sequence durationInFrames={clip.durationInFrames}>
+                            <ItemEffectWrapper
+                              itemTrackOrder={trackOrder}
+                              adjustmentLayers={visibleAdjustmentLayers}
+                              sequenceFrom={clip.from}
+                            >
+                              <Item
+                                item={clip}
+                                muted={true} // Always mute in TransitionSeries - audio rendered separately with crossfade
+                                masks={[]}
+                              />
+                            </ItemEffectWrapper>
+                          </TransitionSeries.Sequence>
+
+                          {/* Add transition after this clip (if not the last clip) */}
+                          {transition && (
+                            <TransitionSeries.Transition
+                              timing={getTransitionTiming(transition.timing, transition.durationInFrames)}
+                              presentation={getTransitionPresentation(transition.presentation, canvasWidth, canvasHeight, transition.direction)}
+                            />
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </TransitionSeries>
+                </AbsoluteFill>
+              </Sequence>
+            );
+          })}
+        </StableMaskedGroup>
+      )}
+
       {/* CLEARING LAYER - uses its own useCurrentFrame() to isolate per-frame re-renders */}
-      <ClearingLayer videoItems={videoItems} backgroundColor={backgroundColor} />
+      <ClearingLayer videoItems={videoItems} chains={chains} backgroundColor={backgroundColor} />
 
       {/* NON-MEDIA LAYERS - all in single structure, per-item effects via ItemEffectWrapper */}
       {/* No more above/below split - items never move between DOM parents */}
+      {/* Items after transition chains are shifted earlier by chain overlap duration */}
       <StableMaskedGroup hasMasks={hasActiveMasks}>
         {nonMediaByTrack
           .filter((track) => track.items.length > 0)
@@ -525,17 +925,22 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, backgrou
                   visibility: track.trackVisible ? 'visible' : 'hidden',
                 }}
               >
-                {track.items.map((item) => (
-                  <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
-                    <ItemEffectWrapper
-                      itemTrackOrder={trackOrder}
-                      adjustmentLayers={visibleAdjustmentLayers}
-                      sequenceFrom={item.from}
-                    >
-                      <Item item={item} muted={false} masks={[]} />
-                    </ItemEffectWrapper>
-                  </Sequence>
-                ))}
+                {track.items.map((item) => {
+                  // Apply render offset for items that come after transition chains on the same track
+                  const renderOffset = getRenderOffset(track.id, item.from);
+                  const adjustedFrom = item.from - renderOffset;
+                  return (
+                    <Sequence key={item.id} from={adjustedFrom} durationInFrames={item.durationInFrames}>
+                      <ItemEffectWrapper
+                        itemTrackOrder={trackOrder}
+                        adjustmentLayers={visibleAdjustmentLayers}
+                        sequenceFrom={item.from}
+                      >
+                        <Item item={item} muted={false} masks={[]} />
+                      </ItemEffectWrapper>
+                    </Sequence>
+                  );
+                })}
               </AbsoluteFill>
             );
           })}

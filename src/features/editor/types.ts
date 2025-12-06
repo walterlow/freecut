@@ -2,7 +2,7 @@ export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
-  activeTab: 'media' | 'text' | 'shapes' | 'effects';
+  activeTab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions';
   sidebarWidth: number;
   timelineHeight: number;
 }
@@ -13,7 +13,7 @@ export interface EditorActions {
   setRightSidebarOpen: (open: boolean) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
-  setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects') => void;
+  setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions') => void;
   setSidebarWidth: (width: number) => void;
   setTimelineHeight: (height: number) => void;
 }
@@ -21,10 +21,11 @@ export interface EditorActions {
 export interface SelectionState {
   selectedItemIds: string[];
   selectedMarkerId: string | null; // Selected marker ID
+  selectedTransitionId: string | null; // Selected transition ID
   selectedTrackId: string | null; // Deprecated: use activeTrackId
   selectedTrackIds: string[]; // Multi-track selection
   activeTrackId: string | null; // Single active track
-  selectionType: 'item' | 'track' | 'marker' | null;
+  selectionType: 'item' | 'track' | 'marker' | 'transition' | null;
   activeTool: 'select' | 'razor' | 'rate-stretch'; // Active timeline tool
   // Drag state for visual feedback
   dragState: {
@@ -40,6 +41,7 @@ export interface SelectionState {
 export interface SelectionActions {
   selectItems: (ids: string[]) => void;
   selectMarker: (id: string | null) => void; // Select a marker
+  selectTransition: (id: string | null) => void; // Select a transition
   selectTrack: (id: string | null) => void; // Deprecated: use setActiveTrack
   selectTracks: (ids: string[], append?: boolean) => void;
   setActiveTrack: (id: string | null) => void;

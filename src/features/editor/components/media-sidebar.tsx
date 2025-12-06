@@ -24,6 +24,7 @@ import {
   Scan,
   Wand2,
   Grid3X3,
+  Blend,
 } from 'lucide-react';
 import { useEditorStore } from '../stores/editor-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -31,6 +32,7 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useSelectionStore } from '../stores/selection-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { MediaLibrary } from '@/features/media-library/components/media-library';
+import { TransitionsPanel } from './transitions-panel';
 import { findNearestAvailableSpace } from '@/features/timeline/utils/collision-utils';
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline';
 import type { VisualEffect, CSSFilterType, GlitchVariant } from '@/types/effects';
@@ -358,6 +360,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     { id: 'text' as const, icon: Type, label: 'Text' },
     { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
     { id: 'effects' as const, icon: Layers, label: 'Effects' },
+    { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
   ];
 
   return (
@@ -657,6 +660,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Transitions Tab */}
+          <div className={`flex-1 overflow-hidden ${activeTab === 'transitions' ? 'block' : 'hidden'}`}>
+            <TransitionsPanel />
           </div>
         </div>
       </div>

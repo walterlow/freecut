@@ -18,10 +18,12 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
+import { canAddTransition, getTransitionsForClip } from '../../utils/transition-utils';
+import { TRANSITION_CONFIGS } from '@/types/transition';
 import { cn } from '@/lib/utils';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
-import { Link2Off } from 'lucide-react';
+import { Link2Off, X } from 'lucide-react';
 import {
   CLIP_HEIGHT,
   CLIP_LABEL_HEIGHT,
@@ -468,8 +470,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Neighbor calculation for join indicators
   // Re-computes when this item changes OR when track items change OR when neighbor speeds change
-  const { leftNeighbor, rightNeighbor, hasJoinableLeft, hasJoinableRight } = useMemo(() => {
-    const items = useTimelineStore.getState().items;
+  const { leftNeighbor, rightNeighbor, hasJoinableLeft, hasJoinableRight, canTransitionLeft, canTransitionRight } = useMemo(() => {
+    const state = useTimelineStore.getState();
+    const items = state.items;
+    const transitions = state.transitions;
 
     const left = items.find(
       (other) =>
@@ -485,11 +489,23 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         other.from === item.from + item.durationInFrames
     ) ?? null;
 
+    // Check if transitions already exist
+    const clipTransitions = getTransitionsForClip(transitions, item.id);
+    const leftTransition = clipTransitions.find((t) => t.rightClipId === item.id);
+    const rightTransition = clipTransitions.find((t) => t.leftClipId === item.id);
+
+    // Check if transitions can be added (adjacent + handles available)
+    const defaultDuration = TRANSITION_CONFIGS.crossfade.defaultDuration;
+    const leftTransitionResult = left ? canAddTransition(left, item, defaultDuration) : { canAdd: false };
+    const rightTransitionResult = right ? canAddTransition(item, right, defaultDuration) : { canAdd: false };
+
     return {
       leftNeighbor: left,
       rightNeighbor: right,
       hasJoinableLeft: left ? canJoinItems(left, item) : false,
       hasJoinableRight: right ? canJoinItems(item, right) : false,
+      canTransitionLeft: leftTransitionResult.canAdd && !leftTransition,
+      canTransitionRight: rightTransitionResult.canAdd && !rightTransition,
     };
   }, [item, trackItemCount, neighborSpeeds]);
 
@@ -521,6 +537,20 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const handleJoinRight = useCallback(() => {
     if (rightNeighbor) {
       useTimelineStore.getState().joinItems([item.id, rightNeighbor.id]);
+    }
+  }, [rightNeighbor, item.id]);
+
+  // Handle add transition with left neighbor
+  const handleAddTransitionLeft = useCallback(() => {
+    if (leftNeighbor) {
+      useTimelineStore.getState().addTransition(leftNeighbor.id, item.id);
+    }
+  }, [leftNeighbor, item.id]);
+
+  // Handle add transition with right neighbor
+  const handleAddTransitionRight = useCallback(() => {
+    if (rightNeighbor) {
+      useTimelineStore.getState().addTransition(item.id, rightNeighbor.id);
     }
   }, [rightNeighbor, item.id]);
 
@@ -807,6 +837,20 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           </ContextMenuItem>
         )}
         {(getCanJoinSelected() || canJoinFromContextMenu) && <ContextMenuSeparator />}
+        {/* Transition options */}
+        {canTransitionLeft && (
+          <ContextMenuItem onClick={handleAddTransitionLeft}>
+            <X className="w-4 h-4 mr-2" />
+            Add Crossfade with Previous
+          </ContextMenuItem>
+        )}
+        {canTransitionRight && (
+          <ContextMenuItem onClick={handleAddTransitionRight}>
+            <X className="w-4 h-4 mr-2" />
+            Add Crossfade with Next
+          </ContextMenuItem>
+        )}
+        {(canTransitionLeft || canTransitionRight) && <ContextMenuSeparator />}
         <ContextMenuItem
           onClick={handleRippleDelete}
           disabled={!isSelected}

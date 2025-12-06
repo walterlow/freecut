@@ -19,7 +19,8 @@
       "Bash(cat:*)",
       "WebFetch(domain:css-irl.info)",
       "WebFetch(domain:leanrada.com)",
-      "WebFetch(domain:frontendmasters.com)"
+      "WebFetch(domain:frontendmasters.com)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
