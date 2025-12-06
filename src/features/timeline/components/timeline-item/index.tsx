@@ -100,6 +100,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Track drag participation via ref subscription - NO RE-RENDERS on drag state changes
   // This is critical for performance: when dragging 10 items, we don't want 10 re-renders on release
   const isAnyDragActiveRef = useRef(false);
+  const dragWasActiveRef = useRef(false); // Track if drag recently ended - prevents click from clearing group selection
   const dragParticipationRef = useRef(0); // 0 = not participating, 1 = participating, 2 = participating + alt
   const rafIdRef = useRef<number | null>(null);
 
@@ -159,8 +160,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
     };
 
+    let dragWasActiveTimeout: ReturnType<typeof setTimeout> | null = null;
+
     const unsubscribe = useSelectionStore.subscribe((state) => {
-      isAnyDragActiveRef.current = !!state.dragState?.isDragging;
+      const wasDragActive = isAnyDragActiveRef.current;
+      const isDragActive = !!state.dragState?.isDragging;
+      isAnyDragActiveRef.current = isDragActive;
+
+      // Track when drag ends to prevent click from clearing group selection
+      if (wasDragActive && !isDragActive) {
+        dragWasActiveRef.current = true;
+        // Clear after a short delay to allow click event to check
+        if (dragWasActiveTimeout) clearTimeout(dragWasActiveTimeout);
+        dragWasActiveTimeout = setTimeout(() => {
+          dragWasActiveRef.current = false;
+        }, 100);
+      }
 
       const isParticipating = state.dragState?.isDragging && state.dragState.draggedItemIds.includes(item.id);
       const isAlt = isParticipating && state.dragState?.isAltDrag;
@@ -183,6 +198,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     return () => {
       unsubscribe();
       cleanupDragStyles();
+      if (dragWasActiveTimeout) clearTimeout(dragWasActiveTimeout);
     };
   }, [item.id, isDragging]);
 
@@ -333,6 +349,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     // Don't allow interaction on locked tracks
     if (trackLocked) {
+      return;
+    }
+
+    // Skip selection logic if a drag just ended - preserve group selection
+    if (dragWasActiveRef.current) {
       return;
     }
 
