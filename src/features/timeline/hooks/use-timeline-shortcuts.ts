@@ -4,11 +4,13 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useZoomStore } from '../stores/zoom-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useClipboardStore } from '@/features/editor/stores/clipboard-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/utils/clip-utils';
 import { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+import type { Transition } from '@/types/transition';
 
 export interface TimelineShortcutCallbacks {
   onPlay?: () => void;
@@ -43,17 +45,23 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
 
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
+  const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const activeTool = useSelectionStore((s) => s.activeTool);
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const removeItems = useTimelineStore((s) => s.removeItems);
   const removeMarker = useTimelineStore((s) => s.removeMarker);
+  const removeTransition = useTimelineStore((s) => s.removeTransition);
+  const updateTransition = useTimelineStore((s) => s.updateTransition);
   const rippleDeleteItems = useTimelineStore((s) => s.rippleDeleteItems);
   const joinItems = useTimelineStore((s) => s.joinItems);
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
   const items = useTimelineStore((s) => s.items);
+  const transitions = useTimelineStore((s) => s.transitions);
   const markers = useTimelineStore((s) => s.markers);
   const addMarker = useTimelineStore((s) => s.addMarker);
+  const copyTransition = useClipboardStore((s) => s.copyTransition);
+  const transitionClipboard = useClipboardStore((s) => s.transitionClipboard);
 
   // Calculate all unique clip edges and marker positions (start and end frames) sorted ascending
   const clipEdges = useMemo(() => {
@@ -172,10 +180,17 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     [setCurrentFrame, clipEdges]
   );
 
-  // Editing: Delete - Delete selected items or marker
+  // Editing: Delete - Delete selected items, marker, or transition
   useHotkeys(
     HOTKEYS.DELETE_SELECTED,
     (event) => {
+      // Delete selected transition
+      if (selectedTransitionId) {
+        event.preventDefault();
+        removeTransition(selectedTransitionId);
+        clearSelection();
+        return;
+      }
       // Delete selected marker
       if (selectedMarkerId) {
         event.preventDefault();
@@ -193,13 +208,20 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
       }
     },
     HOTKEY_OPTIONS,
-    [selectedItemIds, selectedMarkerId, removeItems, removeMarker, clearSelection, callbacks]
+    [selectedItemIds, selectedMarkerId, selectedTransitionId, removeItems, removeMarker, removeTransition, clearSelection, callbacks]
   );
 
-  // Editing: Backspace - Delete selected items or marker (alternative)
+  // Editing: Backspace - Delete selected items, marker, or transition (alternative)
   useHotkeys(
     HOTKEYS.DELETE_SELECTED_ALT,
     (event) => {
+      // Delete selected transition
+      if (selectedTransitionId) {
+        event.preventDefault();
+        removeTransition(selectedTransitionId);
+        clearSelection();
+        return;
+      }
       // Delete selected marker
       if (selectedMarkerId) {
         event.preventDefault();
@@ -217,7 +239,7 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
       }
     },
     HOTKEY_OPTIONS,
-    [selectedItemIds, selectedMarkerId, removeItems, removeMarker, clearSelection, callbacks]
+    [selectedItemIds, selectedMarkerId, selectedTransitionId, removeItems, removeMarker, removeTransition, clearSelection, callbacks]
   );
 
   // Editing: Ctrl+Delete - Ripple delete selected items (delete + close gap)
@@ -504,5 +526,52 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     },
     HOTKEY_OPTIONS,
     [selectedItemIds]
+  );
+
+  // Clipboard: Ctrl+C - Copy selected transition properties
+  useHotkeys(
+    HOTKEYS.COPY,
+    (event) => {
+      // Copy transition if selected
+      if (selectedTransitionId) {
+        event.preventDefault();
+        const transition = transitions.find(
+          (t: Transition) => t.id === selectedTransitionId
+        );
+        if (transition) {
+          copyTransition({
+            presentation: transition.presentation,
+            direction: transition.direction,
+            timing: transition.timing,
+            durationInFrames: transition.durationInFrames,
+          });
+        }
+        return;
+      }
+      // TODO: Handle clip copy if needed
+    },
+    HOTKEY_OPTIONS,
+    [selectedTransitionId, transitions, copyTransition]
+  );
+
+  // Clipboard: Ctrl+V - Paste transition properties to selected transition
+  useHotkeys(
+    HOTKEYS.PASTE,
+    (event) => {
+      // Paste to transition if selected and clipboard has transition data
+      if (selectedTransitionId && transitionClipboard) {
+        event.preventDefault();
+        updateTransition(selectedTransitionId, {
+          presentation: transitionClipboard.presentation,
+          direction: transitionClipboard.direction,
+          timing: transitionClipboard.timing,
+          durationInFrames: transitionClipboard.durationInFrames,
+        });
+        return;
+      }
+      // TODO: Handle clip paste if needed
+    },
+    HOTKEY_OPTIONS,
+    [selectedTransitionId, transitionClipboard, updateTransition]
   );
 }

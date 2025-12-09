@@ -21,7 +21,8 @@
       "WebFetch(domain:leanrada.com)",
       "WebFetch(domain:frontendmasters.com)",
       "Bash(find:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "WebFetch(domain:docs.re.video)"
     ],
     "deny": [],
     "ask": []

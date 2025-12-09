@@ -57,6 +57,83 @@ export interface Transition {
   durationInFrames: number;
   /** Direction for wipe/slide/flip transitions */
   direction?: WipeDirection | SlideDirection | FlipDirection;
+  /** Custom properties for extensibility */
+  properties?: Record<string, unknown>;
+  /** Timestamp when transition was created */
+  createdAt?: number;
+  /** Timestamp of last modification */
+  lastModifiedAt?: number;
+}
+
+/**
+ * Reason why a transition became invalid
+ */
+export type TransitionBreakageReason =
+  | 'clip_deleted'
+  | 'not_adjacent'
+  | 'cross_track'
+  | 'invalid_duration'
+  | 'invalid_type';
+
+/**
+ * Information about a broken transition for user notification
+ */
+export interface TransitionBreakage {
+  /** ID of the broken transition */
+  transitionId: string;
+  /** The transition that was broken */
+  transition: Transition;
+  /** Why the transition became invalid */
+  reason: TransitionBreakageReason;
+  /** Human-readable message for notifications */
+  message: string;
+  /** IDs of clips that caused the break */
+  affectedClipIds: string[];
+}
+
+/**
+ * Result of transition validation
+ */
+export interface TransitionValidationResult {
+  /** Transitions that are still valid */
+  valid: Transition[];
+  /** Transitions that have become invalid */
+  broken: TransitionBreakage[];
+}
+
+/**
+ * Index structure for O(1) transition lookups by clip
+ */
+export interface ClipTransitionIndex {
+  /** Transition where this clip is on the left (outgoing) */
+  outgoing?: Transition;
+  /** Transition where this clip is on the right (incoming) */
+  incoming?: Transition;
+}
+
+/**
+ * A chain of clips connected by transitions on the same track.
+ * Pre-computed for efficient rendering.
+ */
+export interface TransitionChain {
+  /** Unique identifier for the chain (based on first clip) */
+  id: string;
+  /** Version number for cache invalidation */
+  version: number;
+  /** Ordered clip IDs in the chain (left to right) */
+  clipIds: string[];
+  /** Transition IDs connecting the clips (length = clipIds.length - 1) */
+  transitionIds: string[];
+  /** Track where the chain resides */
+  trackId: string;
+  /** Start frame of the chain (first clip's from) */
+  startFrame: number;
+  /** End frame in original timeline (last clip's from + duration) */
+  endFrame: number;
+  /** Total overlap/compression from all transitions */
+  totalOverlap: number;
+  /** Rendered duration (total clip durations - total overlap) */
+  renderedDuration: number;
 }
 
 /**

@@ -1,8 +1,11 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import type { Transition } from '@/types/transition';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
+import { useTransitionResize } from '../hooks/use-transition-resize';
+import type { TimelineState, TimelineActions } from '../types';
+import type { SelectionState, SelectionActions } from '@/features/editor/types';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,24 +27,29 @@ export interface TransitionItemProps {
  * Shows the transition region spanning both clips (fade out from left, fade in to right).
  * Displays duration and transition type.
  */
+// Width in pixels for edge hover detection (resize handles)
+const EDGE_HOVER_ZONE = 6;
+
 export const TransitionItem = memo(function TransitionItem({
   transition,
   trackHeight,
 }: TransitionItemProps) {
   const { frameToPixels } = useTimelineZoom();
-  const fps = useTimelineStore((s) => s.fps);
-  const removeTransition = useTimelineStore((s) => s.removeTransition);
+  const fps = useTimelineStore((s: TimelineState) => s.fps);
+  const removeTransition = useTimelineStore(
+    (s: TimelineActions) => s.removeTransition
+  );
 
   // Get the clips involved in this transition
   const leftClip = useTimelineStore(
     useCallback(
-      (s) => s.items.find((i) => i.id === transition.leftClipId),
+      (s: TimelineState) => s.items.find((i) => i.id === transition.leftClipId),
       [transition.leftClipId]
     )
   );
   const rightClip = useTimelineStore(
     useCallback(
-      (s) => s.items.find((i) => i.id === transition.rightClipId),
+      (s: TimelineState) => s.items.find((i) => i.id === transition.rightClipId),
       [transition.rightClipId]
     )
   );
@@ -49,15 +57,25 @@ export const TransitionItem = memo(function TransitionItem({
   // Check if transition is selected
   const isSelected = useSelectionStore(
     useCallback(
-      (s) => s.selectedTransitionId === transition.id,
+      (s: SelectionState) => s.selectedTransitionId === transition.id,
       [transition.id]
     )
   );
-  const selectTransition = useSelectionStore((s) => s.selectTransition);
+  const selectTransition = useSelectionStore(
+    (s: SelectionActions) => s.selectTransition
+  );
+
+  // Resize functionality
+  const { isResizing, resizeHandle, handleResizeStart, previewDuration } =
+    useTransitionResize(transition);
+
+  // Track hovered edge for showing resize handles
+  const [hoveredEdge, setHoveredEdge] = useState<'left' | 'right' | null>(null);
 
   // Calculate position and size for the transition region
   // The transition happens BEFORE the junction (last N frames of left clip overlapping first N frames of right clip)
   // So the indicator should END at the junction, not be centered on it
+  // Use previewDuration during resize for visual feedback
   const position = useMemo(() => {
     if (!leftClip || !rightClip) return null;
 
@@ -66,7 +84,11 @@ export const TransitionItem = memo(function TransitionItem({
     const junctionPixel = frameToPixels(junctionFrame);
 
     // Transition region: ends at junction, spans transitionDuration frames before it
-    const transitionStart = Math.max(leftClip.from, junctionFrame - transition.durationInFrames);
+    // Use previewDuration for visual feedback during resize
+    const transitionStart = Math.max(
+      leftClip.from,
+      junctionFrame - previewDuration
+    );
     const startPixel = frameToPixels(transitionStart);
     const naturalWidth = junctionPixel - startPixel;
 
@@ -76,12 +98,38 @@ export const TransitionItem = memo(function TransitionItem({
     const left = junctionPixel - effectiveWidth;
 
     return { left, width: effectiveWidth, junctionPixel };
-  }, [leftClip, rightClip, frameToPixels, transition.durationInFrames]);
+  }, [leftClip, rightClip, frameToPixels, previewDuration]);
 
-  // Duration in seconds for display
+  // Duration in seconds for display (use previewDuration for visual feedback)
   const durationSec = useMemo(() => {
-    return (transition.durationInFrames / fps).toFixed(1);
-  }, [transition.durationInFrames, fps]);
+    return (previewDuration / fps).toFixed(1);
+  }, [previewDuration, fps]);
+
+  // Handle mouse move to detect edge hover
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (isResizing) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+
+      if (x < EDGE_HOVER_ZONE) {
+        setHoveredEdge('left');
+      } else if (x > rect.width - EDGE_HOVER_ZONE) {
+        setHoveredEdge('right');
+      } else {
+        setHoveredEdge(null);
+      }
+    },
+    [isResizing]
+  );
+
+  // Clear hover state when mouse leaves
+  const handleMouseLeave = useCallback(() => {
+    if (!isResizing) {
+      setHoveredEdge(null);
+    }
+  }, [isResizing]);
 
   // Handle click to select
   const handleClick = useCallback(
@@ -108,22 +156,30 @@ export const TransitionItem = memo(function TransitionItem({
   // Get presentation label
   const presentationLabel = transition.presentation?.charAt(0).toUpperCase() + transition.presentation?.slice(1) || 'Fade';
 
+  // Determine cursor based on hover state
+  const cursor = hoveredEdge ? 'ew-resize' : 'pointer';
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
           className={cn(
-            'absolute cursor-pointer transition-all duration-75',
-            isSelected && 'ring-2 ring-primary ring-offset-1 ring-offset-background rounded'
+            'absolute transition-all duration-75',
+            isSelected &&
+              'ring-2 ring-primary ring-offset-1 ring-offset-background rounded',
+            isResizing && 'ring-2 ring-purple-400'
           )}
           style={{
             left: `${position.left}px`,
             width: `${position.width}px`,
             top: `${overlayTop}px`,
             height: `${overlayHeight}px`,
-            zIndex: 10,
+            zIndex: isResizing ? 50 : 10,
+            cursor,
           }}
           onClick={handleClick}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
           title={`${presentationLabel} (${durationSec}s)`}
         >
           {/* CapCut-style transition region overlay - more transparent */}
@@ -154,6 +210,28 @@ export const TransitionItem = memo(function TransitionItem({
               </span>
             )}
           </div>
+
+          {/* Left resize handle */}
+          <div
+            className={cn(
+              'absolute left-0 top-0 bottom-0 w-1.5 bg-purple-400 cursor-ew-resize transition-opacity duration-75 rounded-l',
+              hoveredEdge === 'left' || (isResizing && resizeHandle === 'left')
+                ? 'opacity-100'
+                : 'opacity-0'
+            )}
+            onMouseDown={(e) => handleResizeStart(e, 'left')}
+          />
+
+          {/* Right resize handle */}
+          <div
+            className={cn(
+              'absolute right-0 top-0 bottom-0 w-1.5 bg-purple-400 cursor-ew-resize transition-opacity duration-75 rounded-r',
+              hoveredEdge === 'right' || (isResizing && resizeHandle === 'right')
+                ? 'opacity-100'
+                : 'opacity-0'
+            )}
+            onMouseDown={(e) => handleResizeStart(e, 'right')}
+          />
         </div>
       </ContextMenuTrigger>
 

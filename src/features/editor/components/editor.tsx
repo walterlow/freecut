@@ -12,6 +12,8 @@ import { Timeline } from '@/features/timeline/components/timeline';
 import { ExportDialog } from '@/features/export/components/export-dialog';
 import { useEditorHotkeys } from '@/hooks/use-editor-hotkeys';
 import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
+import { useTransitionBreakageNotifications } from '@/features/timeline/hooks/use-transition-breakage-notifications';
+import { initTransitionChainSubscription } from '@/features/timeline/stores/transition-chain-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from '@/features/timeline/stores/zoom-store';
@@ -48,6 +50,13 @@ export function Editor({ projectId, project }: EditorProps) {
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
+
+  // Initialize transition chain subscription (pre-computes chains from timeline data)
+  // This subscription recomputes chains when items/transitions change
+  useEffect(() => {
+    const unsubscribe = initTransitionChainSubscription();
+    return unsubscribe;
+  }, []);
 
   // Initialize timeline from project data (or create default tracks for new projects)
   useEffect(() => {
@@ -152,7 +161,7 @@ export function Editor({ projectId, project }: EditorProps) {
   }, [projectId, project]); // Re-initialize when projectId or project data changes
 
   // Track unsaved changes
-  const isDirty = useTimelineStore((s) => s.isDirty);
+  const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty);
 
   // Save timeline to project (with guard against concurrent saves)
   const handleSave = useCallback(async () => {
@@ -213,6 +222,9 @@ export function Editor({ projectId, project }: EditorProps) {
 
   // Enable timeline shortcuts (space, cut tool, rate tool, etc.)
   useTimelineShortcuts();
+
+  // Enable transition breakage notifications
+  useTransitionBreakageNotifications();
 
   // TODO: Get actual timeline duration from project/timeline store
   const timelineDuration = 30; // 30 seconds placeholder

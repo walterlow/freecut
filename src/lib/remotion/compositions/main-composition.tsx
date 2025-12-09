@@ -70,6 +70,10 @@ type EnrichedVisualItem = (VideoItem | ImageItem) & {
  * Used to render with TransitionSeries.
  */
 interface ClipChain {
+  /** Unique stable ID for the chain (based on first clip's originId) */
+  id: string;
+  /** Content hash for memo comparison - changes when chain content changes */
+  contentHash: string;
   clips: EnrichedVisualItem[];
   transitions: Transition[];
   trackId: string;
@@ -86,20 +90,27 @@ interface ClipChain {
 /**
  * Group clips into chains connected by transitions.
  * Returns: { chains: ClipChain[], standaloneClips: EnrichedVisualItem[] }
+ *
+ * Optimized with O(1) Map lookups instead of O(n) array scans.
  */
 function groupClipsIntoChains(
   items: EnrichedVisualItem[],
   transitions: Transition[]
 ): { chains: ClipChain[]; standaloneClips: EnrichedVisualItem[] } {
+  // Build item lookup map for O(1) access (replaces O(n) .find() calls)
+  const itemsById = new Map<string, EnrichedVisualItem>();
+  for (const item of items) {
+    itemsById.set(item.id, item);
+  }
+
   // Build adjacency map: clipId -> { left: Transition, right: Transition }
   const transitionMap = new Map<string, { left?: Transition; right?: Transition }>();
-
-  transitions.forEach((t) => {
+  for (const t of transitions) {
     if (!transitionMap.has(t.leftClipId)) transitionMap.set(t.leftClipId, {});
     if (!transitionMap.has(t.rightClipId)) transitionMap.set(t.rightClipId, {});
     transitionMap.get(t.leftClipId)!.right = t;
     transitionMap.get(t.rightClipId)!.left = t;
-  });
+  }
 
   const visitedClips = new Set<string>();
   const chains: ClipChain[] = [];
@@ -129,7 +140,7 @@ function groupClipsIntoChains(
     while (true) {
       const leftTrans = transitionMap.get(chainStart.id)?.left;
       if (!leftTrans) break;
-      const leftClip = sortedItems.find((i) => i.id === leftTrans.leftClipId);
+      const leftClip = itemsById.get(leftTrans.leftClipId); // O(1) instead of O(n)
       if (!leftClip || visitedClips.has(leftClip.id)) break;
       chainStart = leftClip;
     }
@@ -137,7 +148,7 @@ function groupClipsIntoChains(
     // Now walk right to build the chain
     const chainClips: EnrichedVisualItem[] = [];
     const chainTransitions: Transition[] = [];
-    let current = chainStart;
+    let current: EnrichedVisualItem | undefined = chainStart;
 
     while (current && !visitedClips.has(current.id)) {
       chainClips.push(current);
@@ -147,7 +158,7 @@ function groupClipsIntoChains(
       if (!rightTrans) break;
 
       chainTransitions.push(rightTrans);
-      const nextClip = sortedItems.find((i) => i.id === rightTrans.rightClipId);
+      const nextClip = itemsById.get(rightTrans.rightClipId); // O(1) instead of O(n)
       if (!nextClip || visitedClips.has(nextClip.id)) break;
       current = nextClip;
     }
@@ -157,7 +168,19 @@ function groupClipsIntoChains(
       const totalClipDuration = chainClips.reduce((sum, c) => sum + c.durationInFrames, 0);
       const totalOverlap = chainTransitions.reduce((sum, t) => sum + t.durationInFrames, 0);
 
+      // Generate stable chain ID from first clip
+      const chainId = chainStart.originId || chainStart.id;
+
+      // Generate content hash for memo comparison
+      // Includes clip identities, positions, durations, sources, and transition details
+      const contentHash = [
+        chainClips.map(c => `${c.originId || c.id}:${c.from}:${c.durationInFrames}:${c.src}:${c.sourceStart}`).join('|'),
+        chainTransitions.map(t => `${t.id}:${t.durationInFrames}:${t.presentation}:${t.timing}:${t.direction || ''}`).join('|'),
+      ].join('~');
+
       chains.push({
+        id: chainId,
+        contentHash,
         clips: chainClips,
         transitions: chainTransitions,
         trackId: chainStart.trackId,
@@ -630,47 +653,17 @@ const ChainRenderer = React.memo<{
     </Sequence>
   );
 }, (prevProps, nextProps) => {
-  // Compare chain identity using first clip's originId
-  const prevChainId = prevProps.chain.clips[0]!.originId || prevProps.chain.clips[0]!.id;
-  const nextChainId = nextProps.chain.clips[0]!.originId || nextProps.chain.clips[0]!.id;
-  if (prevChainId !== nextChainId) return false;
+  // Fast path: compare chain identity and content hash
+  // This replaces 60+ individual property comparisons with 2 string comparisons
+  if (prevProps.chain.id !== nextProps.chain.id) return false;
+  if (prevProps.chain.contentHash !== nextProps.chain.contentHash) return false;
 
-  // Compare basic chain properties
-  if (prevProps.chain.startFrame !== nextProps.chain.startFrame) return false;
-  if (prevProps.chain.renderedDuration !== nextProps.chain.renderedDuration) return false;
-  if (prevProps.chain.clips.length !== nextProps.chain.clips.length) return false;
-  if (prevProps.chain.transitions.length !== nextProps.chain.transitions.length) return false;
-
-  // Compare track properties
+  // Compare track properties (these aren't in the content hash)
   if (prevProps.trackVisible !== nextProps.trackVisible) return false;
   if (prevProps.trackOrder !== nextProps.trackOrder) return false;
   if (prevProps.zIndex !== nextProps.zIndex) return false;
 
-  // Compare clips by identity and critical properties
-  for (let i = 0; i < prevProps.chain.clips.length; i++) {
-    const prev = prevProps.chain.clips[i]!;
-    const next = nextProps.chain.clips[i]!;
-    const prevId = prev.originId || prev.id;
-    const nextId = next.originId || next.id;
-    if (prevId !== nextId) return false;
-    if (prev.from !== next.from) return false;
-    if (prev.durationInFrames !== next.durationInFrames) return false;
-    if (prev.src !== next.src) return false;
-    if (prev.sourceStart !== next.sourceStart) return false;
-  }
-
-  // Compare transitions
-  for (let i = 0; i < prevProps.chain.transitions.length; i++) {
-    const prev = prevProps.chain.transitions[i]!;
-    const next = nextProps.chain.transitions[i]!;
-    if (prev.id !== next.id) return false;
-    if (prev.durationInFrames !== next.durationInFrames) return false;
-    if (prev.presentation !== next.presentation) return false;
-    if (prev.timing !== next.timing) return false;
-    if (prev.direction !== next.direction) return false;
-  }
-
-  // Compare adjustment layers
+  // Compare adjustment layers (these apply effects from above tracks)
   if (prevProps.adjustmentLayers.length !== nextProps.adjustmentLayers.length) return false;
   for (let i = 0; i < prevProps.adjustmentLayers.length; i++) {
     if (prevProps.adjustmentLayers[i]!.layer.id !== nextProps.adjustmentLayers[i]!.layer.id) return false;

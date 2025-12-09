@@ -6,11 +6,12 @@ import { useSelectionStore } from '../../stores/selection-store';
 import { CanvasPanel } from './canvas-panel';
 import { ClipPanel } from './clip-panel';
 import { MarkerPanel } from './marker-panel';
+import { TransitionPanel } from './transition-panel';
 
 /**
  * Properties sidebar - right panel for editing properties.
- * Shows MarkerPanel when a marker is selected, ClipPanel when clips are selected,
- * CanvasPanel otherwise.
+ * Shows TransitionPanel when a transition is selected, MarkerPanel when a marker
+ * is selected, ClipPanel when clips are selected, CanvasPanel otherwise.
  */
 export function PropertiesSidebar() {
   // Use granular selectors - Zustand v5 best practice
@@ -18,6 +19,7 @@ export function PropertiesSidebar() {
   const toggleRightSidebar = useEditorStore((s) => s.toggleRightSidebar);
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
+  const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
 
   const hasClipSelection = selectedItemIds.length > 0;
 
@@ -50,7 +52,9 @@ export function PropertiesSidebar() {
 
             {/* Properties Panel */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden p-4">
-              {selectedMarkerId ? (
+              {selectedTransitionId ? (
+                <TransitionPanel />
+              ) : selectedMarkerId ? (
                 <MarkerPanel />
               ) : hasClipSelection ? (
                 <ClipPanel />

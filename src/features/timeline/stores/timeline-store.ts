@@ -5,10 +5,11 @@ import { getProject, updateProject } from '@/lib/storage/indexeddb';
 import type { ProjectTimeline } from '@/types/project';
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
-import type { Transition } from '@/types/transition';
+import type { Transition, TransitionBreakage } from '@/types/transition';
 import { TRANSITION_CONFIGS } from '@/types/transition';
 import type { ItemKeyframes } from '@/types/keyframe';
 import { canAddTransition } from '../utils/transition-utils';
+import { validateTransitions } from '../utils/transition-validation';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from './zoom-store';
 import { generatePlayheadThumbnail } from '@/features/projects/utils/thumbnail-generator';
@@ -43,6 +44,7 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
   inPoint: null,
   outPoint: null,
   isDirty: false,
+  pendingBreakages: [],
 
   // Actions
   // Always keep tracks sorted by order property - single source of truth
@@ -67,41 +69,15 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       return { items: newItems, isDirty: true };
     }
 
-    // Get the updated item
-    const updatedItem = newItems.find((i) => i.id === id)!;
-
-    // Find transitions that are now broken
-    const brokenTransitionIds: string[] = [];
-    for (const t of state.transitions) {
-      if (t.leftClipId !== id && t.rightClipId !== id) continue;
-
-      // Get both clips with updated positions
-      const leftClip = t.leftClipId === id
-        ? updatedItem
-        : newItems.find((i) => i.id === t.leftClipId);
-      const rightClip = t.rightClipId === id
-        ? updatedItem
-        : newItems.find((i) => i.id === t.rightClipId);
-
-      if (!leftClip || !rightClip) {
-        brokenTransitionIds.push(t.id);
-        continue;
-      }
-
-      // Check if clips are still adjacent on same track
-      const leftEnd = leftClip.from + leftClip.durationInFrames;
-      const stillAdjacent = leftClip.trackId === rightClip.trackId && leftEnd === rightClip.from;
-
-      if (!stillAdjacent) {
-        brokenTransitionIds.push(t.id);
-      }
-    }
+    // Use centralized validation to find broken transitions
+    const { valid, broken } = validateTransitions([id], newItems, state.transitions);
 
     return {
       items: newItems,
-      transitions: brokenTransitionIds.length > 0
-        ? state.transitions.filter((t) => !brokenTransitionIds.includes(t.id))
-        : state.transitions,
+      transitions: valid,
+      pendingBreakages: broken.length > 0
+        ? [...state.pendingBreakages, ...broken]
+        : state.pendingBreakages,
       isDirty: true,
     };
   }),
@@ -189,45 +165,15 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
         : i
     );
 
-    // Get the moved item's new state
-    const movedItemNew = {
-      ...movedItem,
-      from: newFrom,
-      trackId: newTrackId || movedItem.trackId,
-    };
-
-    // Find transitions that are now broken (clips no longer adjacent on same track)
-    const brokenTransitionIds: string[] = [];
-    for (const t of state.transitions) {
-      if (t.leftClipId !== id && t.rightClipId !== id) continue;
-
-      // Get both clips (with updated position for moved item)
-      const leftClip = t.leftClipId === id
-        ? movedItemNew
-        : newItems.find((i) => i.id === t.leftClipId);
-      const rightClip = t.rightClipId === id
-        ? movedItemNew
-        : newItems.find((i) => i.id === t.rightClipId);
-
-      if (!leftClip || !rightClip) {
-        brokenTransitionIds.push(t.id);
-        continue;
-      }
-
-      // Check if clips are still adjacent on same track
-      const leftEnd = leftClip.from + leftClip.durationInFrames;
-      const stillAdjacent = leftClip.trackId === rightClip.trackId && leftEnd === rightClip.from;
-
-      if (!stillAdjacent) {
-        brokenTransitionIds.push(t.id);
-      }
-    }
+    // Use centralized validation to find broken transitions
+    const { valid, broken } = validateTransitions([id], newItems, state.transitions);
 
     return {
       items: newItems,
-      transitions: brokenTransitionIds.length > 0
-        ? state.transitions.filter((t) => !brokenTransitionIds.includes(t.id))
-        : state.transitions,
+      transitions: valid,
+      pendingBreakages: broken.length > 0
+        ? [...state.pendingBreakages, ...broken]
+        : state.pendingBreakages,
       isDirty: true,
     };
   }),
@@ -242,38 +188,16 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
         : i;
     });
 
-    // Build a map of moved items for quick lookup
-    const movedItemIds = new Set(updates.map((u) => u.id));
-
-    // Find transitions that are now broken
-    const brokenTransitionIds: string[] = [];
-    for (const t of state.transitions) {
-      // Only check transitions where at least one clip was moved
-      if (!movedItemIds.has(t.leftClipId) && !movedItemIds.has(t.rightClipId)) continue;
-
-      // Get both clips with their new positions
-      const leftClip = newItems.find((i) => i.id === t.leftClipId);
-      const rightClip = newItems.find((i) => i.id === t.rightClipId);
-
-      if (!leftClip || !rightClip) {
-        brokenTransitionIds.push(t.id);
-        continue;
-      }
-
-      // Check if clips are still adjacent on same track
-      const leftEnd = leftClip.from + leftClip.durationInFrames;
-      const stillAdjacent = leftClip.trackId === rightClip.trackId && leftEnd === rightClip.from;
-
-      if (!stillAdjacent) {
-        brokenTransitionIds.push(t.id);
-      }
-    }
+    // Use centralized validation to find broken transitions
+    const movedIds = updates.map((u) => u.id);
+    const { valid, broken } = validateTransitions(movedIds, newItems, state.transitions);
 
     return {
       items: newItems,
-      transitions: brokenTransitionIds.length > 0
-        ? state.transitions.filter((t) => !brokenTransitionIds.includes(t.id))
-        : state.transitions,
+      transitions: valid,
+      pendingBreakages: broken.length > 0
+        ? [...state.pendingBreakages, ...broken]
+        : state.pendingBreakages,
       isDirty: true,
     };
   }),
@@ -403,35 +327,15 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       return { ...item, ...updates } as typeof item;
     });
 
-    // Find transitions broken by this trim (trimming start affects left-side transitions)
-    const brokenTransitionIds: string[] = [];
-    const trimmedItem = newItems.find((i) => i.id === id);
-    if (trimmedItem) {
-      for (const t of state.transitions) {
-        if (t.leftClipId !== id && t.rightClipId !== id) continue;
-
-        const leftClip = newItems.find((i) => i.id === t.leftClipId);
-        const rightClip = newItems.find((i) => i.id === t.rightClipId);
-
-        if (!leftClip || !rightClip) {
-          brokenTransitionIds.push(t.id);
-          continue;
-        }
-
-        const leftEnd = leftClip.from + leftClip.durationInFrames;
-        const stillAdjacent = leftClip.trackId === rightClip.trackId && leftEnd === rightClip.from;
-
-        if (!stillAdjacent) {
-          brokenTransitionIds.push(t.id);
-        }
-      }
-    }
+    // Use centralized validation to find broken transitions
+    const { valid, broken } = validateTransitions([id], newItems, state.transitions);
 
     return {
       items: newItems,
-      transitions: brokenTransitionIds.length > 0
-        ? state.transitions.filter((t) => !brokenTransitionIds.includes(t.id))
-        : state.transitions,
+      transitions: valid,
+      pendingBreakages: broken.length > 0
+        ? [...state.pendingBreakages, ...broken]
+        : state.pendingBreakages,
       isDirty: true,
     };
   }),
@@ -516,35 +420,15 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
       } as typeof item;
     });
 
-    // Find transitions broken by this trim (trimming end affects right-side transitions)
-    const brokenTransitionIds: string[] = [];
-    const trimmedItem = newItems.find((i) => i.id === id);
-    if (trimmedItem) {
-      for (const t of state.transitions) {
-        if (t.leftClipId !== id && t.rightClipId !== id) continue;
-
-        const leftClip = newItems.find((i) => i.id === t.leftClipId);
-        const rightClip = newItems.find((i) => i.id === t.rightClipId);
-
-        if (!leftClip || !rightClip) {
-          brokenTransitionIds.push(t.id);
-          continue;
-        }
-
-        const leftEnd = leftClip.from + leftClip.durationInFrames;
-        const stillAdjacent = leftClip.trackId === rightClip.trackId && leftEnd === rightClip.from;
-
-        if (!stillAdjacent) {
-          brokenTransitionIds.push(t.id);
-        }
-      }
-    }
+    // Use centralized validation to find broken transitions
+    const { valid, broken } = validateTransitions([id], newItems, state.transitions);
 
     return {
       items: newItems,
-      transitions: brokenTransitionIds.length > 0
-        ? state.transitions.filter((t) => !brokenTransitionIds.includes(t.id))
-        : state.transitions,
+      transitions: valid,
+      pendingBreakages: broken.length > 0
+        ? [...state.pendingBreakages, ...broken]
+        : state.pendingBreakages,
       isDirty: true,
     };
   }),
@@ -1125,6 +1009,9 @@ export const useTimelineStore = create<TimelineState & TimelineActions>()(
     transitions: state.transitions.filter((t) => t.id !== id),
     isDirty: true,
   })),
+
+  // Clear pending breakages (after user has been notified)
+  clearPendingBreakages: () => set({ pendingBreakages: [] }),
 
   // Keyframe actions
   // Add a keyframe at a specific frame for a property
