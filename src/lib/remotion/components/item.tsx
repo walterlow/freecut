@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { AbsoluteFill, OffthreadVideo, Img, useVideoConfig, useCurrentFrame, interpolate, useRemotionEnvironment } from 'remotion';
 import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@remotion/shapes';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
@@ -16,6 +16,13 @@ export interface MaskInfo {
   shape: ShapeItem;
   transform: TransformProperties;
 }
+
+// Track video elements that have been connected to Web Audio API
+// A video element can only be connected to ONE MediaElementSourceNode ever
+const connectedVideoElements = new WeakSet<HTMLVideoElement>();
+// Store gain nodes by video element for volume updates
+const videoGainNodes = new WeakMap<HTMLVideoElement, GainNode>();
+const videoAudioContexts = new WeakMap<HTMLVideoElement, AudioContext>();
 
 /**
  * Hook to calculate video audio volume with fades and preview support.
@@ -98,9 +105,10 @@ function useVideoAudioVolume(item: VideoItem & { _sequenceFrameOffset?: number }
   }
 
   // Convert dB to linear (0 dB = unity gain = 1.0)
+  // +20dB = 10x, -20dB = 0.1x, -60dB ≈ 0.001x
   const linearVolume = Math.pow(10, volumeDb / 20);
-  // Item volume with fades
-  const itemVolume = Math.max(0, Math.min(1, linearVolume * fadeMultiplier));
+  // Item volume with fades - allow values > 1 for volume boost (Remotion handles via Web Audio API)
+  const itemVolume = Math.max(0, linearVolume * fadeMultiplier);
 
   // During render, use only item volume
   // During preview, apply master preview volume from playback controls
@@ -136,6 +144,85 @@ const VideoContent: React.FC<{
   const env = useRemotionEnvironment();
   const [hasError, setHasError] = useState(false);
 
+  // Web Audio API refs for volume boost > 1 during preview
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const currentVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Set up Web Audio API when video element is available (for volume > 1 boost)
+  // OffthreadVideo renders a <video> element during preview - we find it via DOM
+  useEffect(() => {
+    if (!containerRef.current || !env.isPlayer) return;
+
+    // Find the video element rendered by OffthreadVideo
+    const findAndConnectVideo = () => {
+      const video = containerRef.current?.querySelector('video');
+      if (!video) return;
+
+      currentVideoRef.current = video;
+
+      // Check if this video is already connected (can only connect once ever)
+      if (connectedVideoElements.has(video)) {
+        // Already connected - just update the gain
+        const gainNode = videoGainNodes.get(video);
+        const audioContext = videoAudioContexts.get(video);
+        if (gainNode) {
+          gainNode.gain.value = audioVolume;
+        }
+        if (audioContext?.state === 'suspended') {
+          audioContext.resume();
+        }
+        return;
+      }
+
+      // Set up Web Audio API for this video element
+      try {
+        const audioContext = new AudioContext();
+        const gainNode = audioContext.createGain();
+        gainNode.gain.value = audioVolume;
+        const sourceNode = audioContext.createMediaElementSource(video);
+        sourceNode.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        // Track this video as connected
+        connectedVideoElements.add(video);
+        videoGainNodes.set(video, gainNode);
+        videoAudioContexts.set(video, audioContext);
+
+        // Resume if suspended (browsers require user interaction)
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+      } catch {
+        // Failed to set up Web Audio - volume boost won't work but audio still plays
+      }
+    };
+
+    // Try immediately and also observe for changes
+    findAndConnectVideo();
+    const observer = new MutationObserver(findAndConnectVideo);
+    observer.observe(containerRef.current, { childList: true, subtree: true });
+
+    return () => {
+      observer.disconnect();
+      // Don't disconnect audio - video element might be reused
+    };
+  }, [env.isPlayer, audioVolume]);
+
+  // Update gain node volume (allows > 1 for boost)
+  useEffect(() => {
+    const video = currentVideoRef.current;
+    if (video) {
+      const gainNode = videoGainNodes.get(video);
+      const audioContext = videoAudioContexts.get(video);
+      if (gainNode) {
+        gainNode.gain.value = audioVolume;
+      }
+      if (audioContext?.state === 'suspended') {
+        audioContext.resume();
+      }
+    }
+  }, [audioVolume]);
+
   // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup)
   const handleError = useCallback((error: Error) => {
     console.warn(`[VideoContent] Media error for item ${item.id}:`, error.message);
@@ -166,15 +253,17 @@ const VideoContent: React.FC<{
 
   if (isPreview) {
     return (
-      <OffthreadVideo
-        src={item.src!}
-        trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
-        volume={audioVolume}
-        playbackRate={playbackRate}
-        pauseWhenBuffering={false}
-        onError={handleError}
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-      />
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }}>
+        <OffthreadVideo
+          src={item.src!}
+          trimBefore={safeTrimBefore > 0 ? safeTrimBefore : undefined}
+          volume={1} // Keep at 1 - actual volume controlled via Web Audio API GainNode
+          playbackRate={playbackRate}
+          pauseWhenBuffering={false}
+          onError={handleError}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
     );
   }
 
@@ -194,6 +283,8 @@ const VideoContent: React.FC<{
       }}
     />
   );
+  // Note: Volume > 1 for boost is handled by Remotion internally via Web Audio API
+  // For OffthreadVideo during preview, volume boost works without additional props
 };
 
 /**

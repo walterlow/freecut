@@ -1,8 +1,11 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 
 type MixedValue = number | 'mixed';
+
+// Throttle interval for live changes to prevent overwhelming composition re-renders
+const LIVE_CHANGE_THROTTLE_MS = 16; // ~60fps max
 
 interface SliderInputProps {
   value: MixedValue;
@@ -45,17 +48,26 @@ export function SliderInput({
   const [localValue, setLocalValue] = useState<number | null>(null);
   const displayNumericValue = localValue ?? numericValue;
 
+  // Throttle live change calls
+  const lastLiveChangeRef = useRef<number>(0);
+
   const displayValue = isMixed && localValue === null
     ? 'Mixed'
     : formatValue
       ? formatValue(displayNumericValue)
       : `${displayNumericValue}${unit || ''}`;
 
-  // Handle value change during drag
+  // Handle value change during drag - throttled to prevent overwhelming composition
   const handleValueChange = useCallback((values: number[]) => {
     const newValue = values[0]!;
     setLocalValue(newValue);
-    onLiveChange?.(newValue);
+    if (onLiveChange) {
+      const now = performance.now();
+      if (now - lastLiveChangeRef.current >= LIVE_CHANGE_THROTTLE_MS) {
+        lastLiveChangeRef.current = now;
+        onLiveChange(newValue);
+      }
+    }
   }, [onLiveChange]);
 
   // Handle commit (mouse up) - blur to release focus for keyboard shortcuts

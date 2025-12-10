@@ -52,6 +52,9 @@ export function NumberInput({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const scrubStartRef = useRef<{ x: number; startValue: number } | null>(null);
   const scrubValueRef = useRef<number | null>(null);
+  // Throttle live change calls to prevent overwhelming composition re-renders
+  const lastLiveChangeRef = useRef<number>(0);
+  const LIVE_CHANGE_THROTTLE_MS = 16; // ~60fps max
 
   // Sync local value with prop value
   useEffect(() => {
@@ -122,9 +125,13 @@ export function NumberInput({
       scrubValueRef.current = newValue;
       // Update displayed value during scrub
       setLocalValue(String(newValue));
-      // Use live change for preview (doesn't trigger video re-render)
+      // Use live change for preview - throttled to prevent overwhelming composition
       if (onLiveChange) {
-        onLiveChange(newValue);
+        const now = performance.now();
+        if (now - lastLiveChangeRef.current >= LIVE_CHANGE_THROTTLE_MS) {
+          lastLiveChangeRef.current = now;
+          onLiveChange(newValue);
+        }
       }
     };
 
