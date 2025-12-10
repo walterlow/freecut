@@ -257,32 +257,28 @@ export const MediaSidebar = memo(function MediaSidebar() {
     selectItems([adjustmentItem.id]);
   }, []);
 
-  // Effect card configurations with icons and explicit Tailwind classes
+  // Effect card configurations with icons
   const effectCards: Array<{
     type: CSSFilterType;
     icon: typeof Sun;
-    bgClass: string;
-    iconClass: string;
   }> = [
-    { type: 'brightness', icon: Sun, bgClass: 'bg-amber-500/20 border-amber-500/50 group-hover:bg-amber-500/30', iconClass: 'text-amber-400' },
-    { type: 'contrast', icon: Contrast, bgClass: 'bg-slate-500/20 border-slate-500/50 group-hover:bg-slate-500/30', iconClass: 'text-slate-400' },
-    { type: 'saturate', icon: Droplets, bgClass: 'bg-cyan-500/20 border-cyan-500/50 group-hover:bg-cyan-500/30', iconClass: 'text-cyan-400' },
-    { type: 'blur', icon: Wind, bgClass: 'bg-blue-500/20 border-blue-500/50 group-hover:bg-blue-500/30', iconClass: 'text-blue-400' },
-    { type: 'hue-rotate', icon: Palette, bgClass: 'bg-pink-500/20 border-pink-500/50 group-hover:bg-pink-500/30', iconClass: 'text-pink-400' },
-    { type: 'grayscale', icon: CircleDot, bgClass: 'bg-gray-500/20 border-gray-500/50 group-hover:bg-gray-500/30', iconClass: 'text-gray-400' },
-    { type: 'sepia', icon: ImageOff, bgClass: 'bg-orange-500/20 border-orange-500/50 group-hover:bg-orange-500/30', iconClass: 'text-orange-400' },
-    { type: 'invert', icon: Sparkles, bgClass: 'bg-violet-500/20 border-violet-500/50 group-hover:bg-violet-500/30', iconClass: 'text-violet-400' },
+    { type: 'brightness', icon: Sun },
+    { type: 'contrast', icon: Contrast },
+    { type: 'saturate', icon: Droplets },
+    { type: 'blur', icon: Wind },
+    { type: 'hue-rotate', icon: Palette },
+    { type: 'grayscale', icon: CircleDot },
+    { type: 'sepia', icon: ImageOff },
+    { type: 'invert', icon: Sparkles },
   ];
 
   const glitchCards: Array<{
     type: GlitchVariant;
     icon: typeof Zap;
-    bgClass: string;
-    iconClass: string;
   }> = [
-    { type: 'rgb-split', icon: Zap, bgClass: 'bg-red-500/20 border-red-500/50 group-hover:bg-red-500/30', iconClass: 'text-red-400' },
-    { type: 'scanlines', icon: Scan, bgClass: 'bg-green-500/20 border-green-500/50 group-hover:bg-green-500/30', iconClass: 'text-green-400' },
-    { type: 'color-glitch', icon: Wand2, bgClass: 'bg-fuchsia-500/20 border-fuchsia-500/50 group-hover:bg-fuchsia-500/30', iconClass: 'text-fuchsia-400' },
+    { type: 'rgb-split', icon: Zap },
+    { type: 'scanlines', icon: Scan },
+    { type: 'color-glitch', icon: Wand2 },
   ];
 
   // Create adjustment layer with a CSS filter effect
@@ -455,8 +451,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('rectangle')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Square className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Rectangle
@@ -467,8 +463,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('circle')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Circle className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Circle
@@ -479,8 +475,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('triangle')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Triangle className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Triangle
@@ -491,8 +487,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('ellipse')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Circle className="w-3.5 h-2.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Ellipse
@@ -503,8 +499,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('star')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Star className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Star
@@ -515,8 +511,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('polygon')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Hexagon className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Polygon
@@ -527,8 +523,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={() => handleAddShape('heart')}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-timeline-shape/20 border border-timeline-shape/50 flex items-center justify-center group-hover:bg-timeline-shape/30">
-                      <Heart className="w-3.5 h-3.5 text-timeline-shape" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
                       Heart
@@ -544,10 +540,10 @@ export const MediaSidebar = memo(function MediaSidebar() {
               <div>
                 <button
                   onClick={() => handleAddAdjustmentLayer()}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-purple-500/50 transition-colors group"
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                 >
-                  <div className="w-9 h-9 rounded-md bg-purple-500/20 border border-purple-500/50 flex items-center justify-center group-hover:bg-purple-500/30 flex-shrink-0">
-                    <Layers className="w-4 h-4 text-purple-400" />
+                  <div className="w-9 h-9 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
+                    <Layers className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <div className="text-left">
                     <div className="text-sm text-muted-foreground group-hover:text-foreground">
@@ -566,14 +562,14 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   Color Adjustments
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {effectCards.map(({ type, icon: Icon, bgClass, iconClass }) => (
+                  {effectCards.map(({ type, icon: Icon }) => (
                     <button
                       key={type}
                       onClick={() => handleAddFilterEffect(type)}
                       className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                     >
-                      <div className={`w-7 h-7 rounded border flex items-center justify-center ${bgClass}`}>
-                        <Icon className={`w-3.5 h-3.5 ${iconClass}`} />
+                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                       </div>
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                         {CSS_FILTER_CONFIGS[type].label}
@@ -589,14 +585,14 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   Glitch Effects
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
-                  {glitchCards.map(({ type, icon: Icon, bgClass, iconClass }) => (
+                  {glitchCards.map(({ type, icon: Icon }) => (
                     <button
                       key={type}
                       onClick={() => handleAddGlitchEffect(type)}
                       className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                     >
-                      <div className={`w-7 h-7 rounded border flex items-center justify-center ${bgClass}`}>
-                        <Icon className={`w-3.5 h-3.5 ${iconClass}`} />
+                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                        <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                       </div>
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                         {GLITCH_CONFIGS[type].label}
@@ -616,8 +612,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={handleAddHalftoneEffect}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center group-hover:bg-emerald-500/30">
-                      <Grid3X3 className="w-3.5 h-3.5 text-emerald-400" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <Grid3X3 className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                       Halftone
@@ -627,8 +623,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     onClick={handleAddVignetteEffect}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                   >
-                    <div className="w-7 h-7 rounded bg-amber-500/20 border border-amber-500/50 flex items-center justify-center group-hover:bg-amber-500/30">
-                      <CircleDot className="w-3.5 h-3.5 text-amber-400" />
+                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                      <CircleDot className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                       Vignette
@@ -649,8 +645,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       onClick={() => handleAddPreset(preset.id)}
                       className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                     >
-                      <div className="w-7 h-7 rounded bg-indigo-500/20 border border-indigo-500/50 flex items-center justify-center group-hover:bg-indigo-500/30">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
+                        <Sparkles className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                       </div>
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                         {preset.name}

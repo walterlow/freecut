@@ -49,12 +49,12 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 // Category display info
-const CATEGORY_INFO: Record<string, { title: string; color: string }> = {
-  basic: { title: 'Basic', color: 'text-blue-400' },
-  wipe: { title: 'Wipe', color: 'text-purple-400' },
-  slide: { title: 'Slide', color: 'text-green-400' },
-  flip: { title: 'Flip', color: 'text-orange-400' },
-  special: { title: 'Special', color: 'text-amber-400' },
+const CATEGORY_INFO: Record<string, { title: string }> = {
+  basic: { title: 'Basic' },
+  wipe: { title: 'Wipe' },
+  slide: { title: 'Slide' },
+  flip: { title: 'Flip' },
+  special: { title: 'Special' },
 };
 
 // Pre-computed categories (static data)
@@ -137,11 +137,11 @@ const CategorySection = memo(function CategorySection({
   onApply,
   disabled,
 }: CategorySectionProps) {
-  const info = CATEGORY_INFO[category] || { title: category, color: 'text-muted-foreground' };
+  const info = CATEGORY_INFO[category] || { title: category };
 
   return (
     <div className="space-y-2">
-      <div className={cn('text-[10px] font-medium uppercase tracking-wider', info.color)}>
+      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
         {info.title}
       </div>
       <div className="grid grid-cols-4 gap-1.5">
