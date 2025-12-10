@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AbsoluteFill, useCurrentFrame, Sequence, OffthreadVideo, Img, interpolate, useVideoConfig } from 'remotion';
 import type { VideoItem, ImageItem } from '@/types/timeline';
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import { resolveTransform, toTransformStyle, getSourceDimensions } from '../utils/transform-resolver';
+import {
+  effectsToCSSFilter,
+  getVignetteEffect,
+  getVignetteStyle,
+  getHalftoneEffect,
+  getHalftoneStyles,
+  getGlitchEffects,
+} from '@/features/effects/utils/effect-to-css';
+import { getGlitchFilterString, getScanlinesStyle } from '@/features/effects/utils/glitch-algorithms';
+import type { GlitchEffect } from '@/types/effects';
 
 /**
  * Enriched visual item with track metadata (same as main-composition)
@@ -150,7 +160,11 @@ function getIrisMask(progress: number, isOutgoing: boolean): string {
 /**
  * Render a clip's video/image content using Remotion's proper playback
  * This component plays video continuously rather than seeking per frame
- * Applies the clip's transform to match normal rendering
+ * Applies the clip's transform AND ALL effects to match normal rendering:
+ * - CSS filter effects (brightness, contrast, saturation, etc.)
+ * - Glitch effects (color shift filter + scanlines overlay)
+ * - Halftone effect (pattern overlay)
+ * - Vignette effect (radial gradient overlay)
  */
 const ClipContent: React.FC<{
   clip: EnrichedVisualItem;
@@ -161,11 +175,73 @@ const ClipContent: React.FC<{
   canvasHeight: number;
   fps: number;
 }> = ({ clip, sourceStartOffset = 0, canvasWidth, canvasHeight, fps }) => {
+  const frame = useCurrentFrame();
+
   // Resolve the clip's transform to match normal rendering
   const canvas = { width: canvasWidth, height: canvasHeight, fps };
   const sourceDimensions = getSourceDimensions(clip);
   const resolved = resolveTransform(clip, canvas, sourceDimensions);
   const transformStyle = toTransformStyle(resolved, canvas);
+
+  // Compute all effect types from clip's effects
+  const effects = clip.effects ?? [];
+
+  // CSS filter effects (brightness, contrast, etc.)
+  const cssFilterString = useMemo(() => {
+    if (effects.length === 0) return '';
+    return effectsToCSSFilter(effects);
+  }, [effects]);
+
+  // Glitch effects (for color shift filter + scanlines)
+  const glitchEffects = useMemo(() => {
+    if (effects.length === 0) return [];
+    return getGlitchEffects(effects) as Array<GlitchEffect & { id: string }>;
+  }, [effects]);
+
+  // Glitch filter string (color glitch adds hue-rotate)
+  const glitchFilterString = useMemo(() => {
+    if (glitchEffects.length === 0) return '';
+    return getGlitchFilterString(glitchEffects, frame);
+  }, [glitchEffects, frame]);
+
+  // Combined CSS filter
+  const combinedFilter = [cssFilterString, glitchFilterString].filter(Boolean).join(' ');
+
+  // Scanlines effect (overlay)
+  const scanlinesEffect = glitchEffects.find((e) => e.variant === 'scanlines');
+
+  // Halftone effect (pattern overlay)
+  const halftoneEffect = useMemo(() => {
+    if (effects.length === 0) return null;
+    return getHalftoneEffect(effects);
+  }, [effects]);
+
+  const halftoneStyles = useMemo(() => {
+    if (!halftoneEffect) return null;
+    return getHalftoneStyles(halftoneEffect);
+  }, [halftoneEffect]);
+
+  // Merge halftone container filter with other filters
+  const finalFilter = halftoneStyles
+    ? [combinedFilter, halftoneStyles.containerStyle.filter].filter(Boolean).join(' ')
+    : combinedFilter;
+
+  // Vignette effect (radial gradient overlay)
+  const vignetteEffect = useMemo(() => {
+    if (effects.length === 0) return null;
+    return getVignetteEffect(effects);
+  }, [effects]);
+
+  const vignetteStyle = useMemo(() => {
+    if (!vignetteEffect) return null;
+    return getVignetteStyle(vignetteEffect);
+  }, [vignetteEffect]);
+
+  // Check if any overlay effects are active
+  const hasOverlays = scanlinesEffect || halftoneStyles || vignetteStyle;
+
+  // Render the media content (video or image)
+  let mediaContent: React.ReactNode = null;
 
   if (clip.type === 'video') {
     const videoClip = clip as VideoItem;
@@ -189,7 +265,7 @@ const ClipContent: React.FC<{
       ? `${transformStyle.transform || ''} scaleX(-1)`.trim()
       : transformStyle.transform;
 
-    return (
+    mediaContent = (
       <div
         style={{
           ...transformStyle,
@@ -220,7 +296,7 @@ const ClipContent: React.FC<{
       return null;
     }
 
-    return (
+    mediaContent = (
       <div style={{ ...transformStyle, overflow: 'hidden' }}>
         <Img
           src={imageClip.src}
@@ -233,7 +309,70 @@ const ClipContent: React.FC<{
       </div>
     );
   }
-  return null;
+
+  if (!mediaContent) return null;
+
+  // Wrap media content with effects layer
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        filter: finalFilter || undefined,
+      }}
+    >
+      {mediaContent}
+
+      {/* Overlay effects container */}
+      {hasOverlays && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Scanlines overlay */}
+          {scanlinesEffect && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                pointerEvents: 'none',
+                ...getScanlinesStyle(scanlinesEffect.intensity),
+              }}
+            />
+          )}
+
+          {/* Halftone pattern overlay */}
+          {halftoneStyles && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                overflow: 'hidden',
+                pointerEvents: 'none',
+                mixBlendMode: halftoneStyles.patternStyle.mixBlendMode,
+                opacity: halftoneStyles.patternStyle.opacity,
+              }}
+            >
+              {halftoneStyles.fadeWrapperStyle ? (
+                <div style={halftoneStyles.fadeWrapperStyle}>
+                  <div style={{ ...halftoneStyles.patternStyle, mixBlendMode: undefined, opacity: undefined }} />
+                </div>
+              ) : (
+                <div style={{ ...halftoneStyles.patternStyle, mixBlendMode: undefined, opacity: undefined }} />
+              )}
+            </div>
+          )}
+
+          {/* Vignette overlay - renders on top */}
+          {vignetteStyle && <div style={vignetteStyle} />}
+        </div>
+      )}
+    </div>
+  );
 };
 
 /**
