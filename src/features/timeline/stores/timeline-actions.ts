@@ -20,7 +20,8 @@ import type {
   SlideDirection,
   FlipDirection,
 } from '@/types/transition';
-import type { AnimatableProperty, EasingType } from '@/types/keyframe';
+import type { AnimatableProperty, EasingType, EasingConfig, KeyframeRef } from '@/types/keyframe';
+import type { KeyframeUpdatePayload, KeyframeMovePayload } from './keyframes-store';
 
 import { useTimelineCommandStore } from './timeline-command-store';
 import { useItemsStore } from './items-store';
@@ -573,6 +574,234 @@ export function hasKeyframesAtFrame(
   frame: number
 ): boolean {
   return useKeyframesStore.getState().hasKeyframesAtFrame(itemId, property, frame);
+}
+
+// =============================================================================
+// BATCH KEYFRAME ACTIONS
+// =============================================================================
+
+/**
+ * Move multiple keyframes to new frame positions.
+ */
+export function moveKeyframes(moves: KeyframeMovePayload[]): void {
+  if (moves.length === 0) return;
+
+  execute('MOVE_KEYFRAMES', () => {
+    useKeyframesStore.getState()._moveKeyframes(moves);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: moves.length });
+}
+
+/**
+ * Update multiple keyframes at once.
+ */
+export function updateKeyframes(updates: KeyframeUpdatePayload[]): void {
+  if (updates.length === 0) return;
+
+  execute('UPDATE_KEYFRAMES', () => {
+    useKeyframesStore.getState()._updateKeyframes(updates);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: updates.length });
+}
+
+/**
+ * Remove multiple keyframes at once.
+ */
+export function removeKeyframes(refs: KeyframeRef[]): void {
+  if (refs.length === 0) return;
+
+  execute('REMOVE_KEYFRAMES', () => {
+    useKeyframesStore.getState()._removeKeyframes(refs);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: refs.length });
+}
+
+/**
+ * Duplicate keyframes with an optional frame offset.
+ * Returns the IDs of the new keyframes.
+ */
+export function duplicateKeyframes(
+  refs: KeyframeRef[],
+  frameOffset: number = 0,
+  targetItemId?: string,
+  targetProperty?: AnimatableProperty
+): string[] {
+  if (refs.length === 0) return [];
+
+  return execute('DUPLICATE_KEYFRAMES', () => {
+    const ids = useKeyframesStore.getState()._duplicateKeyframes(
+      refs,
+      frameOffset,
+      targetItemId,
+      targetProperty
+    );
+    useTimelineSettingsStore.getState().markDirty();
+    return ids;
+  }, { count: refs.length, frameOffset }) as string[];
+}
+
+/**
+ * Set the same easing for multiple keyframes.
+ */
+export function batchSetEasing(
+  refs: KeyframeRef[],
+  easing: EasingType,
+  easingConfig?: EasingConfig
+): void {
+  if (refs.length === 0) return;
+
+  const updates: KeyframeUpdatePayload[] = refs.map((ref) => ({
+    itemId: ref.itemId,
+    property: ref.property,
+    keyframeId: ref.keyframeId,
+    updates: { easing, easingConfig },
+  }));
+
+  execute('BATCH_SET_EASING', () => {
+    useKeyframesStore.getState()._updateKeyframes(updates);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: refs.length, easing });
+}
+
+/**
+ * Offset values for multiple keyframes.
+ * Mode 'add' adds the offset, 'multiply' multiplies by the factor.
+ */
+export function batchOffsetValues(
+  refs: KeyframeRef[],
+  offset: number,
+  mode: 'add' | 'multiply' = 'add'
+): void {
+  if (refs.length === 0) return;
+
+  execute('BATCH_OFFSET_VALUES', () => {
+    const store = useKeyframesStore.getState();
+    const updates: KeyframeUpdatePayload[] = [];
+
+    for (const ref of refs) {
+      const kf = store.getKeyframeById(ref.itemId, ref.property, ref.keyframeId);
+      if (!kf) continue;
+
+      const newValue = mode === 'add' ? kf.value + offset : kf.value * offset;
+      updates.push({
+        itemId: ref.itemId,
+        property: ref.property,
+        keyframeId: ref.keyframeId,
+        updates: { value: newValue },
+      });
+    }
+
+    store._updateKeyframes(updates);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: refs.length, offset, mode });
+}
+
+/**
+ * Reverse the frame order of selected keyframes within their property.
+ * Keyframes are redistributed to maintain the same frame positions but with reversed values.
+ */
+export function reverseKeyframes(refs: KeyframeRef[]): void {
+  if (refs.length < 2) return;
+
+  execute('REVERSE_KEYFRAMES', () => {
+    const store = useKeyframesStore.getState();
+
+    // Group refs by item+property
+    const groups = new Map<string, KeyframeRef[]>();
+    for (const ref of refs) {
+      const key = `${ref.itemId}:${ref.property}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(ref);
+    }
+
+    const updates: KeyframeUpdatePayload[] = [];
+
+    // Reverse each group
+    for (const groupRefs of groups.values()) {
+      if (groupRefs.length < 2) continue;
+
+      // Get keyframe data and sort by frame
+      const keyframes = groupRefs
+        .map((ref) => ({
+          ref,
+          kf: store.getKeyframeById(ref.itemId, ref.property, ref.keyframeId),
+        }))
+        .filter((x) => x.kf !== undefined)
+        .sort((a, b) => a.kf!.frame - b.kf!.frame);
+
+      // Reverse the values (keep frame positions, swap values)
+      const values = keyframes.map((x) => x.kf!.value).reverse();
+
+      for (let i = 0; i < keyframes.length; i++) {
+        const kfData = keyframes[i];
+        const newValue = values[i];
+        if (kfData && newValue !== undefined) {
+          updates.push({
+            itemId: kfData.ref.itemId,
+            property: kfData.ref.property,
+            keyframeId: kfData.ref.keyframeId,
+            updates: { value: newValue },
+          });
+        }
+      }
+    }
+
+    store._updateKeyframes(updates);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: refs.length });
+}
+
+/**
+ * Scale/stretch keyframe positions proportionally.
+ * @param refs Keyframes to scale
+ * @param scaleFactor Factor to multiply frame positions by (1.0 = no change)
+ */
+export function stretchKeyframes(refs: KeyframeRef[], scaleFactor: number): void {
+  if (refs.length < 2 || scaleFactor === 1) return;
+
+  execute('STRETCH_KEYFRAMES', () => {
+    const store = useKeyframesStore.getState();
+
+    // Group refs by item+property
+    const groups = new Map<string, KeyframeRef[]>();
+    for (const ref of refs) {
+      const key = `${ref.itemId}:${ref.property}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(ref);
+    }
+
+    const moves: KeyframeMovePayload[] = [];
+
+    // Scale each group
+    for (const groupRefs of groups.values()) {
+      if (groupRefs.length < 2) continue;
+
+      // Get keyframe data and find min frame
+      const keyframes = groupRefs
+        .map((ref) => ({
+          ref,
+          frame: store.getKeyframeById(ref.itemId, ref.property, ref.keyframeId)?.frame ?? 0,
+        }));
+
+      const minFrame = Math.min(...keyframes.map((x) => x.frame));
+
+      // Scale relative to minimum frame
+      for (const kf of keyframes) {
+        const relativeFrame = kf.frame - minFrame;
+        const scaledRelative = Math.round(relativeFrame * scaleFactor);
+        const newFrame = minFrame + scaledRelative;
+
+        if (newFrame !== kf.frame) {
+          moves.push({ ref: kf.ref, newFrame });
+        }
+      }
+    }
+
+    if (moves.length > 0) {
+      store._moveKeyframes(moves);
+    }
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: refs.length, scaleFactor });
 }
 
 // =============================================================================

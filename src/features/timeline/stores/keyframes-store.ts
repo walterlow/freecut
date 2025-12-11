@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType } from '@/types/keyframe';
+import type {
+  ItemKeyframes,
+  AnimatableProperty,
+  Keyframe,
+  EasingType,
+  EasingConfig,
+  KeyframeRef,
+} from '@/types/keyframe';
 
 /**
  * Keyframes state - animation keyframes for timeline items.
@@ -11,12 +18,33 @@ export interface KeyframesState {
   keyframes: ItemKeyframes[];
 }
 
+/** Update payload for batch keyframe updates */
+export interface KeyframeUpdatePayload {
+  itemId: string;
+  property: AnimatableProperty;
+  keyframeId: string;
+  updates: Partial<Omit<Keyframe, 'id'>>;
+}
+
+/** Move payload for repositioning keyframes */
+export interface KeyframeMovePayload {
+  ref: KeyframeRef;
+  newFrame: number;
+}
+
 export interface KeyframesActions {
   // Bulk setter for snapshot restore
   setKeyframes: (keyframes: ItemKeyframes[]) => void;
 
   // Internal mutations (prefixed with _ to indicate called by command system)
-  _addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => string;
+  _addKeyframe: (
+    itemId: string,
+    property: AnimatableProperty,
+    frame: number,
+    value: number,
+    easing?: EasingType,
+    easingConfig?: EasingConfig
+  ) => string;
   _updateKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string, updates: Partial<Omit<Keyframe, 'id'>>) => void;
   _removeKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string) => void;
   _removeKeyframesForItem: (itemId: string) => void;
@@ -24,8 +52,21 @@ export interface KeyframesActions {
   _removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void;
   _scaleKeyframesForItem: (itemId: string, oldDuration: number, newDuration: number) => void;
 
+  // Batch operations for multi-keyframe manipulation
+  _updateKeyframes: (updates: KeyframeUpdatePayload[]) => void;
+  _moveKeyframes: (moves: KeyframeMovePayload[]) => void;
+  _removeKeyframes: (refs: KeyframeRef[]) => void;
+  _duplicateKeyframes: (
+    refs: KeyframeRef[],
+    frameOffset: number,
+    targetItemId?: string,
+    targetProperty?: AnimatableProperty
+  ) => string[];
+
   // Read-only helpers
   getKeyframesForItem: (itemId: string) => ItemKeyframes | undefined;
+  getKeyframeById: (itemId: string, property: AnimatableProperty, keyframeId: string) => Keyframe | undefined;
+  getAllKeyframesForProperty: (itemId: string, property: AnimatableProperty) => Keyframe[];
   hasKeyframesAtFrame: (itemId: string, property: AnimatableProperty, frame: number) => boolean;
 }
 
@@ -38,8 +79,9 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
     setKeyframes: (keyframes) => set({ keyframes }),
 
     // Add keyframe
-    _addKeyframe: (itemId, property, frame, value, easing = 'linear') => {
+    _addKeyframe: (itemId, property, frame, value, easing = 'linear', easingConfig) => {
       const keyframeId = crypto.randomUUID();
+      const newKeyframe: Keyframe = { id: keyframeId, frame, value, easing, easingConfig };
 
       set((state) => {
         const existingItemKeyframes = state.keyframes.find((k) => k.itemId === itemId);
@@ -65,7 +107,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                             ? {
                                 ...pk,
                                 keyframes: pk.keyframes.map((k) =>
-                                  k.frame === frame ? { ...k, value, easing } : k
+                                  k.frame === frame ? { ...k, value, easing, easingConfig } : k
                                 ),
                               }
                             : pk
@@ -86,7 +128,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                         pk.property === property
                           ? {
                               ...pk,
-                              keyframes: [...pk.keyframes, { id: keyframeId, frame, value, easing }]
+                              keyframes: [...pk.keyframes, newKeyframe]
                                 .sort((a, b) => a.frame - b.frame),
                             }
                           : pk
@@ -105,7 +147,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                     ...ik,
                     properties: [
                       ...ik.properties,
-                      { property, keyframes: [{ id: keyframeId, frame, value, easing }] },
+                      { property, keyframes: [newKeyframe] },
                     ],
                   }
                 : ik
@@ -119,7 +161,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
             ...state.keyframes,
             {
               itemId,
-              properties: [{ property, keyframes: [{ id: keyframeId, frame, value, easing }] }],
+              properties: [{ property, keyframes: [newKeyframe] }],
             },
           ],
         };
@@ -263,9 +305,159 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
       });
     },
 
+    // Batch update multiple keyframes at once
+    _updateKeyframes: (updates) => {
+      if (updates.length === 0) return;
+
+      set((state) => {
+        let newKeyframes = [...state.keyframes];
+
+        for (const update of updates) {
+          newKeyframes = newKeyframes.map((ik) =>
+            ik.itemId === update.itemId
+              ? {
+                  ...ik,
+                  properties: ik.properties.map((pk) =>
+                    pk.property === update.property
+                      ? {
+                          ...pk,
+                          keyframes: pk.keyframes
+                            .map((k) =>
+                              k.id === update.keyframeId ? { ...k, ...update.updates } : k
+                            )
+                            .sort((a, b) => a.frame - b.frame),
+                        }
+                      : pk
+                  ),
+                }
+              : ik
+          );
+        }
+
+        return { keyframes: newKeyframes };
+      });
+    },
+
+    // Move keyframes to new frame positions
+    _moveKeyframes: (moves) => {
+      if (moves.length === 0) return;
+
+      // Convert to update payloads
+      const updates: KeyframeUpdatePayload[] = moves.map((move) => ({
+        itemId: move.ref.itemId,
+        property: move.ref.property,
+        keyframeId: move.ref.keyframeId,
+        updates: { frame: Math.max(0, move.newFrame) },
+      }));
+
+      get()._updateKeyframes(updates);
+    },
+
+    // Remove multiple keyframes at once
+    _removeKeyframes: (refs) => {
+      if (refs.length === 0) return;
+
+      // Group refs by item and property for efficient removal
+      const refsByItemAndProp = new Map<string, Set<string>>();
+      for (const ref of refs) {
+        const key = `${ref.itemId}:${ref.property}`;
+        if (!refsByItemAndProp.has(key)) {
+          refsByItemAndProp.set(key, new Set());
+        }
+        refsByItemAndProp.get(key)!.add(ref.keyframeId);
+      }
+
+      set((state) => ({
+        keyframes: state.keyframes.map((ik) => ({
+          ...ik,
+          properties: ik.properties.map((pk) => {
+            const key = `${ik.itemId}:${pk.property}`;
+            const toRemove = refsByItemAndProp.get(key);
+            if (!toRemove) return pk;
+
+            return {
+              ...pk,
+              keyframes: pk.keyframes.filter((k) => !toRemove.has(k.id)),
+            };
+          }),
+        })),
+      }));
+    },
+
+    // Duplicate keyframes with frame offset
+    _duplicateKeyframes: (refs, frameOffset, targetItemId, targetProperty) => {
+      if (refs.length === 0) return [];
+
+      const newIds: string[] = [];
+      const state = get();
+
+      // Gather source keyframe data
+      const toDuplicate: Array<{
+        property: AnimatableProperty;
+        keyframe: Keyframe;
+        targetItemId: string;
+      }> = [];
+
+      for (const ref of refs) {
+        const itemKeyframes = state.keyframes.find((k) => k.itemId === ref.itemId);
+        if (!itemKeyframes) continue;
+
+        const propKeyframes = itemKeyframes.properties.find(
+          (p) => p.property === ref.property
+        );
+        if (!propKeyframes) continue;
+
+        const keyframe = propKeyframes.keyframes.find((k) => k.id === ref.keyframeId);
+        if (!keyframe) continue;
+
+        toDuplicate.push({
+          property: targetProperty ?? ref.property,
+          keyframe,
+          targetItemId: targetItemId ?? ref.itemId,
+        });
+      }
+
+      // Add duplicated keyframes
+      for (const { property, keyframe, targetItemId: destItemId } of toDuplicate) {
+        const newId = state._addKeyframe(
+          destItemId,
+          property,
+          keyframe.frame + frameOffset,
+          keyframe.value,
+          keyframe.easing,
+          keyframe.easingConfig
+        );
+        newIds.push(newId);
+      }
+
+      return newIds;
+    },
+
     // Read-only: Get keyframes for an item
     getKeyframesForItem: (itemId) => {
       return get().keyframes.find((k) => k.itemId === itemId);
+    },
+
+    // Read-only: Get a specific keyframe by ID
+    getKeyframeById: (itemId, property, keyframeId) => {
+      const itemKeyframes = get().keyframes.find((k) => k.itemId === itemId);
+      if (!itemKeyframes) return undefined;
+
+      const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
+      if (!propKeyframes) return undefined;
+
+      return propKeyframes.keyframes.find((k) => k.id === keyframeId);
+    },
+
+    // Read-only: Get all keyframes for a property
+    getAllKeyframesForProperty: (itemId, property) => {
+      const itemKeyframes = get().keyframes.find((k) => k.itemId === itemId);
+      if (!itemKeyframes) return [];
+
+      const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
+      if (!propKeyframes) return [];
+
+      return propKeyframes.keyframes;
     },
 
     // Read-only: Check if keyframe exists at frame

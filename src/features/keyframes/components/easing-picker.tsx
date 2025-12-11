@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { EasingType } from '@/types/keyframe';
-import { EASING_LABELS } from '@/types/keyframe';
+import { EASING_LABELS, BASIC_EASING_TYPES } from '@/types/keyframe';
 
 interface EasingPickerProps {
   /** Current easing value */
@@ -25,9 +25,6 @@ interface EasingPickerProps {
   className?: string;
 }
 
-/** All available easing types */
-const EASING_TYPES: EasingType[] = ['linear', 'ease-in', 'ease-out', 'ease-in-out'];
-
 /**
  * SVG path data for easing curve visualizations.
  * Each curve is drawn in a 24x24 viewBox from (2,20) to (22,4).
@@ -37,6 +34,8 @@ const EASING_CURVES: Record<EasingType, string> = {
   'ease-in': 'M2,20 Q2,4 22,4',
   'ease-out': 'M2,20 Q22,20 22,4',
   'ease-in-out': 'M2,20 C2,12 22,12 22,4',
+  'cubic-bezier': 'M2,20 C6,20 18,4 22,4',
+  'spring': 'M2,20 C4,8 8,2 12,6 C16,10 18,3 22,4',
 };
 
 /**
@@ -99,7 +98,7 @@ export const EasingPicker = memo(function EasingPicker({
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {EASING_TYPES.map((type) => (
+        {BASIC_EASING_TYPES.map((type) => (
           <SelectItem key={type} value={type}>
             <span className="flex items-center gap-2">
               <EasingCurve type={type} />
@@ -133,7 +132,7 @@ export const CompactEasingPicker = memo(function CompactEasingPicker({
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
-        {EASING_TYPES.map((type) => (
+        {BASIC_EASING_TYPES.map((type) => (
           <SelectItem key={type} value={type}>
             <span className="flex items-center gap-2">
               <EasingCurve type={type} />

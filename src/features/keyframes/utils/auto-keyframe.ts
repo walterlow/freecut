@@ -1,4 +1,4 @@
-import type { AnimatableProperty, ItemKeyframes } from '@/types/keyframe';
+import type { AnimatableProperty, ItemKeyframes, EasingType } from '@/types/keyframe';
 import type { TimelineItem } from '@/types/timeline';
 
 /**
@@ -58,7 +58,7 @@ export function autoKeyframeProperty(
   property: AnimatableProperty,
   value: number,
   currentFrame: number,
-  addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing: string) => void,
+  addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => void,
   updateKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string, updates: { value?: number }) => void
 ): boolean {
   const relativeFrame = currentFrame - item.from;

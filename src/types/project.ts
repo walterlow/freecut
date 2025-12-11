@@ -1,3 +1,5 @@
+import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
+
 export interface Project {
   id: string;
   name: string;
@@ -101,12 +103,13 @@ export interface ProjectTimeline {
   keyframes?: Array<{
     itemId: string;
     properties: Array<{
-      property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity';
+      property: AnimatableProperty;
       keyframes: Array<{
         id: string;
         frame: number;
         value: number;
-        easing: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+        easing: EasingType;
+        easingConfig?: EasingConfig;
       }>;
     }>;
   }>;
