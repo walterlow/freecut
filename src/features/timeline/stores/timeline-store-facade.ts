@@ -316,6 +316,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       toggleEffect: timelineActions.toggleEffect,
       addTransition: timelineActions.addTransition,
       updateTransition: timelineActions.updateTransition,
+      updateTransitions: timelineActions.updateTransitions,
       removeTransition: timelineActions.removeTransition,
       clearPendingBreakages: timelineActions.clearPendingBreakages,
       addKeyframe: timelineActions.addKeyframe,

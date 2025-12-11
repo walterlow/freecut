@@ -424,6 +424,7 @@ export function addTransition(
   return execute('ADD_TRANSITION', () => {
     const items = useItemsStore.getState().items;
     const transitions = useTransitionsStore.getState().transitions;
+    const fps = useTimelineSettingsStore.getState().fps;
 
     // Find the clips
     const leftClip = items.find((i) => i.id === leftClipId);
@@ -434,8 +435,8 @@ export function addTransition(
       return false;
     }
 
-    // Use default duration if not provided
-    const duration = durationInFrames ?? 15;
+    // Default duration is 1 second (fps frames)
+    const duration = durationInFrames ?? fps;
 
     // Validate that transition can be added
     const validation = canAddTransition(leftClip, rightClip, duration);
@@ -458,7 +459,7 @@ export function addTransition(
       rightClipId,
       leftClip.trackId,
       type,
-      durationInFrames,
+      duration,
       presentation,
       direction
     );
@@ -476,6 +477,22 @@ export function updateTransition(
     useTransitionsStore.getState()._updateTransition(id, updates);
     useTimelineSettingsStore.getState().markDirty();
   }, { id, updates });
+}
+
+export function updateTransitions(
+  updates: Array<{
+    id: string;
+    updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>;
+  }>
+): void {
+  if (updates.length === 0) return;
+  execute('UPDATE_TRANSITIONS', () => {
+    const store = useTransitionsStore.getState();
+    for (const { id, updates: u } of updates) {
+      store._updateTransition(id, u);
+    }
+    useTimelineSettingsStore.getState().markDirty();
+  }, { updates });
 }
 
 export function removeTransition(id: string): void {

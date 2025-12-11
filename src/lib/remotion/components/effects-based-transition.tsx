@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill, useCurrentFrame, Sequence, OffthreadVideo, Img, interpolate, useVideoConfig } from 'remotion';
+import { AbsoluteFill, useCurrentFrame, Sequence, OffthreadVideo, Img, interpolate, useVideoConfig, spring } from 'remotion';
 import type { VideoItem, ImageItem, AdjustmentItem } from '@/types/timeline';
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import { resolveTransform, toTransformStyle, getSourceDimensions } from '../utils/transform-resolver';
@@ -437,15 +437,41 @@ const TransitionOverlay: React.FC<{
   zIndex: number;
   canvasWidth: number;
   canvasHeight: number;
-}> = ({ transition, isOutgoing, children, zIndex, canvasWidth, canvasHeight }) => {
+  fps: number;
+}> = ({ transition, isOutgoing, children, zIndex, canvasWidth, canvasHeight, fps }) => {
   const frame = useCurrentFrame();
   // frame is already local to the parent Sequence (0 to durationInFrames - 1)
-  // To get full 0-1 range, divide by (duration - 1) so last frame = 1.0
-  const maxFrame = Math.max(1, transition.durationInFrames - 1);
-  const progress = Math.max(0, Math.min(1, frame / maxFrame));
+  // Calculate progress based on timing: linear or spring
+  const rawProgress = useMemo(() => {
+    if (transition.timing === 'spring') {
+      // Use Remotion's spring function for physics-based easing
+      // durationInFrames stretches the spring animation to match transition duration
+      // Allow overshoot for the characteristic "bouncy" spring feel
+      return spring({
+        frame,
+        fps,
+        durationInFrames: transition.durationInFrames,
+        config: {
+          stiffness: 180,
+          damping: 12,
+          mass: 1,
+          overshootClamping: false, // Allow overshoot for springy bounce
+        },
+      });
+    }
+    // Linear timing: divide by (duration - 1) so last frame = 1.0
+    const maxFrame = Math.max(1, transition.durationInFrames - 1);
+    return Math.max(0, Math.min(1, frame / maxFrame));
+  }, [frame, fps, transition.timing, transition.durationInFrames]);
 
   const presentation = transition.presentation;
   const direction = transition.direction;
+
+  // For presentation effects that can't handle values outside 0-1 (like opacity),
+  // we clamp. For transforms (slide, flip), we allow overshoot for bounciness.
+  const needsClamping = presentation === 'fade' || presentation === 'none' ||
+                        presentation === 'wipe' || presentation === 'clockWipe' || presentation === 'iris';
+  const progress = needsClamping ? Math.max(0, Math.min(1, rawProgress)) : rawProgress;
 
   // Calculate styles based on presentation type
   // Prioritize GPU-accelerated properties: opacity, transform
@@ -629,6 +655,7 @@ export const EffectsBasedTransitionRenderer = React.memo<EffectsBasedTransitionP
           zIndex={1}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
+          fps={fps}
         >
           <Sequence
             from={0}
@@ -654,6 +681,7 @@ export const EffectsBasedTransitionRenderer = React.memo<EffectsBasedTransitionP
           zIndex={2}
           canvasWidth={canvasWidth}
           canvasHeight={canvasHeight}
+          fps={fps}
         >
           <Sequence
             from={leftClipContentOffset}

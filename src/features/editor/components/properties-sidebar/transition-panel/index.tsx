@@ -1,13 +1,6 @@
 import { useMemo, useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Blend,
   Scissors,
   ArrowRight,
@@ -25,6 +18,7 @@ import {
   Trash2,
   Zap,
   Copy,
+  RotateCcw,
   type LucideIcon,
 } from 'lucide-react';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -187,6 +181,9 @@ export function TransitionPanel() {
   const updateTransition = useTimelineStore(
     (s: TimelineActions) => s.updateTransition
   );
+  const updateTransitions = useTimelineStore(
+    (s: TimelineActions) => s.updateTransitions
+  );
   const removeTransition = useTimelineStore(
     (s: TimelineActions) => s.removeTransition
   );
@@ -204,6 +201,14 @@ export function TransitionPanel() {
       ? TRANSITION_CONFIGS[selectedTransition.type]
       : null;
 
+  // Presentations that support spring timing (transforms that can overshoot)
+  const supportsSpringTiming = useCallback(
+    (presentation: TransitionPresentation) => {
+      return presentation === 'slide' || presentation === 'flip';
+    },
+    []
+  );
+
   // Handle presentation change
   const handlePresentationChange = useCallback(
     (
@@ -211,10 +216,15 @@ export function TransitionPanel() {
       direction?: WipeDirection | SlideDirection | FlipDirection
     ) => {
       if (selectedTransitionId) {
-        updateTransition(selectedTransitionId, { presentation, direction });
+        // Reset timing to linear if switching to a presentation that doesn't support spring
+        const updates: Partial<Transition> = { presentation, direction };
+        if (!supportsSpringTiming(presentation) && selectedTransition?.timing === 'spring') {
+          updates.timing = 'linear';
+        }
+        updateTransition(selectedTransitionId, updates);
       }
     },
-    [selectedTransitionId, updateTransition]
+    [selectedTransitionId, updateTransition, supportsSpringTiming, selectedTransition?.timing]
   );
 
   // Handle duration change (in frames)
@@ -230,6 +240,20 @@ export function TransitionPanel() {
     },
     [selectedTransitionId, transitionConfig, updateTransition]
   );
+
+  // Default duration is 1 second (fps frames)
+  const defaultDuration = fps;
+
+  // Handle reset duration to default (1 second)
+  const handleResetDuration = useCallback(() => {
+    if (selectedTransitionId && transitionConfig) {
+      const clamped = Math.max(
+        transitionConfig.minDuration,
+        Math.min(transitionConfig.maxDuration, defaultDuration)
+      );
+      updateTransition(selectedTransitionId, { durationInFrames: clamped });
+    }
+  }, [selectedTransitionId, transitionConfig, updateTransition, defaultDuration]);
 
   // Handle timing change
   const handleTimingChange = useCallback(
@@ -249,36 +273,30 @@ export function TransitionPanel() {
     }
   }, [selectedTransitionId, removeTransition, clearSelection]);
 
-  // Handle apply to all similar transitions
-  // Applies current transition's settings to all transitions with same presentation type
-  const handleApplyToAllSimilar = useCallback(() => {
+  // Handle apply duration to all other transitions (single undo)
+  const handleApplyDurationToAll = useCallback(() => {
     if (!selectedTransition) return;
 
-    const similarTransitions = transitions.filter(
-      (t: Transition) =>
-        t.id !== selectedTransition.id &&
-        t.presentation === selectedTransition.presentation
+    const otherTransitions = transitions.filter(
+      (t: Transition) => t.id !== selectedTransition.id
     );
 
-    if (similarTransitions.length === 0) return;
+    if (otherTransitions.length === 0) return;
 
-    // Apply current settings to all similar transitions
-    for (const t of similarTransitions) {
-      updateTransition(t.id, {
-        direction: selectedTransition.direction,
-        timing: selectedTransition.timing,
-        durationInFrames: selectedTransition.durationInFrames,
-      });
-    }
-  }, [selectedTransition, transitions, updateTransition]);
+    // Batch update for single undo
+    updateTransitions(
+      otherTransitions.map((t) => ({
+        id: t.id,
+        updates: { durationInFrames: selectedTransition.durationInFrames },
+      }))
+    );
+  }, [selectedTransition, transitions, updateTransitions]);
 
-  // Count similar transitions for button label
-  const similarCount = useMemo(() => {
+  // Count other transitions for button label
+  const otherTransitionsCount = useMemo(() => {
     if (!selectedTransition) return 0;
     return transitions.filter(
-      (t: Transition) =>
-        t.id !== selectedTransition.id &&
-        t.presentation === selectedTransition.presentation
+      (t: Transition) => t.id !== selectedTransition.id
     ).length;
   }, [selectedTransition, transitions]);
 
@@ -313,47 +331,74 @@ export function TransitionPanel() {
         </div>
 
         {/* Duration slider */}
-        <PropertyRow label="Duration" tooltip="Transition duration in frames">
-          <SliderInput
-            value={selectedTransition.durationInFrames}
-            onChange={handleDurationChange}
-            min={transitionConfig.minDuration}
-            max={transitionConfig.maxDuration}
-            step={1}
-            formatValue={formatDuration}
-          />
+        <PropertyRow label="Duration" tooltip="Transition duration">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={selectedTransition.durationInFrames}
+              onChange={handleDurationChange}
+              min={transitionConfig.minDuration}
+              max={transitionConfig.maxDuration}
+              step={1}
+              formatValue={formatDuration}
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetDuration}
+              title="Reset to 1s"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </PropertyRow>
 
-        {/* Timing selector */}
-        <PropertyRow label="Timing" tooltip="Easing function for the transition">
-          <Select
-            value={selectedTransition.timing}
-            onValueChange={(value) =>
-              handleTimingChange(value as TransitionTiming)
-            }
-          >
-            <SelectTrigger className="h-7 text-xs flex-1">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="linear">Linear</SelectItem>
-              <SelectItem value="spring">Spring</SelectItem>
-            </SelectContent>
-          </Select>
-        </PropertyRow>
+        {/* Timing toggle - only show for slide/flip presentations that support spring */}
+        {supportsSpringTiming(selectedTransition.presentation) && (
+          <PropertyRow label="Timing" tooltip="Easing function for the transition">
+            <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
+              <button
+                type="button"
+                onClick={() => handleTimingChange('linear')}
+                className={cn(
+                  'px-3 py-1 text-xs rounded transition-colors',
+                  selectedTransition.timing === 'linear'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Linear
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTimingChange('spring')}
+                className={cn(
+                  'px-3 py-1 text-xs rounded transition-colors',
+                  selectedTransition.timing === 'spring'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                Spring
+              </button>
+            </div>
+          </PropertyRow>
+        )}
 
         {/* Action buttons */}
         <div className="pt-2 space-y-2">
-          {/* Apply to All Similar button - only show if there are similar transitions */}
-          {similarCount > 0 && (
+          {/* Apply duration to all - only show if there are other transitions */}
+          {otherTransitionsCount > 0 && (
             <Button
               variant="secondary"
               size="sm"
               className="w-full h-7 text-xs"
-              onClick={handleApplyToAllSimilar}
+              onClick={handleApplyDurationToAll}
+              title={`Apply ${formatDuration(selectedTransition.durationInFrames)} duration to ${otherTransitionsCount} other transition${otherTransitionsCount > 1 ? 's' : ''}`}
             >
               <Copy className="w-3 h-3 mr-1.5" />
-              Apply to {similarCount} Similar
+              Apply duration to all ({otherTransitionsCount})
             </Button>
           )}
 
@@ -365,7 +410,7 @@ export function TransitionPanel() {
             onClick={handleDelete}
           >
             <Trash2 className="w-3 h-3 mr-1.5" />
-            Delete Transition
+            Delete
           </Button>
         </div>
       </PropertySection>

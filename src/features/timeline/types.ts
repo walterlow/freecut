@@ -59,6 +59,7 @@ export interface TimelineActions {
   // Transition actions
   addTransition: (leftClipId: string, rightClipId: string, type?: TransitionType, durationInFrames?: number, presentation?: TransitionPresentation, direction?: WipeDirection | SlideDirection | FlipDirection) => boolean;
   updateTransition: (id: string, updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>) => void;
+  updateTransitions: (updates: Array<{ id: string; updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>> }>) => void;
   removeTransition: (id: string) => void;
   /** Clear pending breakages after user has been notified */
   clearPendingBreakages: () => void;
