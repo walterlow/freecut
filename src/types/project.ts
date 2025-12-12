@@ -37,8 +37,12 @@ export interface ProjectTimeline {
     // Type-specific fields stored as optional for flexibility
     src?: string;
     thumbnailUrl?: string;
-    offset?: number;
+    offset?: number; // @deprecated Use sourceStart instead
     waveformData?: number[];
+    // Source boundaries for media items (video/audio)
+    sourceStart?: number; // Start position in source media (frames)
+    sourceEnd?: number; // End position in source media (frames)
+    sourceDuration?: number; // Total duration of source media (frames)
     text?: string;
     fontSize?: number;
     fontFamily?: string;

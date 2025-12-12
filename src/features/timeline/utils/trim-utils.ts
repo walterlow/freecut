@@ -126,7 +126,7 @@ export function calculateTrimSourceUpdate(
 ): TrimSourceUpdate | null {
   if (!isMediaItem(item)) return null;
 
-  const { sourceStart, speed } = getSourceProperties(item);
+  const { sourceStart, sourceDuration, speed } = getSourceProperties(item);
 
   if (handle === 'start') {
     // Trimming start: update sourceStart
@@ -137,8 +137,12 @@ export function calculateTrimSourceUpdate(
   } else {
     // Trimming end: update sourceEnd
     const newSourceEnd = sourceStart + Math.round(newDuration * speed);
+    // Ensure we don't exceed source bounds (can happen with floating-point speed)
+    const clampedSourceEnd = sourceDuration !== undefined
+      ? Math.min(newSourceEnd, sourceDuration)
+      : newSourceEnd;
     return {
-      sourceEnd: newSourceEnd,
+      sourceEnd: clampedSourceEnd,
     };
   }
 }
