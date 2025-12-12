@@ -5,13 +5,20 @@
  * Only visible in development mode.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
   Bug,
@@ -25,7 +32,10 @@ import {
   XCircle,
   ChevronDown,
   X,
+  FlaskConical,
+  Play,
 } from 'lucide-react';
+import type { FixtureType } from '@/features/project-bundle/services/test-fixtures';
 
 interface DebugAction {
   label: string;
@@ -45,6 +55,19 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     type: 'idle' | 'loading' | 'success' | 'error';
     message?: string;
   }>({ type: 'idle' });
+  const [selectedFixture, setSelectedFixture] = useState<FixtureType>('multi-track');
+  const [availableFixtures, setAvailableFixtures] = useState<
+    Array<{ type: FixtureType; name: string; description: string }>
+  >([]);
+
+  // Load available fixtures on mount
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      import('@/features/project-bundle/services/test-fixtures').then(({ getAvailableFixtures }) => {
+        setAvailableFixtures(getAvailableFixtures());
+      });
+    }
+  }, []);
 
   // Only show in development mode
   if (!import.meta.env.DEV) {
@@ -141,6 +164,56 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
       console.table(result.warnings);
     }
   }, [projectId]);
+
+  const handleGenerateFixture = useCallback(async () => {
+    const { generateFixture } = await import(
+      '@/features/project-bundle/services/test-fixtures'
+    );
+    const { createProject } = await import('@/lib/storage/indexeddb');
+
+    const { project, snapshot } = generateFixture(selectedFixture);
+    await createProject(project);
+
+    console.log('[Debug] Generated fixture:', selectedFixture);
+    console.log('[Debug] Project:', project);
+    console.log('[Debug] Snapshot:', snapshot);
+
+    // Navigate to the new project
+    window.location.href = `/editor/${project.id}`;
+  }, [selectedFixture]);
+
+  const handleDownloadFixture = useCallback(async () => {
+    const { generateFixture } = await import(
+      '@/features/project-bundle/services/test-fixtures'
+    );
+    const { downloadSnapshotJson } = await import(
+      '@/features/project-bundle/services/json-export-service'
+    );
+
+    const { snapshot } = generateFixture(selectedFixture);
+    downloadSnapshotJson(snapshot, `fixture-${selectedFixture}`);
+  }, [selectedFixture]);
+
+  const handleLogFixture = useCallback(async () => {
+    const { generateFixture, getAvailableFixtures } = await import(
+      '@/features/project-bundle/services/test-fixtures'
+    );
+
+    const { project, snapshot } = generateFixture(selectedFixture);
+    const fixtureInfo = getAvailableFixtures().find((f) => f.type === selectedFixture);
+
+    console.log('%c FIXTURE: ' + selectedFixture + ' ', 'background: #8b5cf6; color: white; font-weight: bold;');
+    console.log('[Debug] Info:', fixtureInfo);
+    console.log('[Debug] Project:', project);
+    console.log('[Debug] Snapshot:', snapshot);
+    console.log('[Debug] Timeline Stats:', {
+      tracks: project.timeline?.tracks.length ?? 0,
+      items: project.timeline?.items.length ?? 0,
+      transitions: project.timeline?.transitions?.length ?? 0,
+      keyframes: project.timeline?.keyframes?.length ?? 0,
+      markers: project.timeline?.markers?.length ?? 0,
+    });
+  }, [selectedFixture]);
 
   const exportActions: DebugAction[] = [
     {
@@ -314,6 +387,74 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                     {inspectActions.map((action) => (
                       <ActionButton key={action.label} action={action} />
                     ))}
+                  </div>
+                </div>
+
+                {/* Fixtures Section */}
+                <div>
+                  <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1">
+                    <FlaskConical className="h-3 w-3" />
+                    Test Fixtures
+                  </div>
+                  <div className="space-y-2 px-1">
+                    <Select
+                      value={selectedFixture}
+                      onValueChange={(value) => setSelectedFixture(value as FixtureType)}
+                    >
+                      <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700">
+                        <SelectValue placeholder="Select fixture..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-800 border-zinc-700">
+                        {availableFixtures.map((fixture) => (
+                          <SelectItem
+                            key={fixture.type}
+                            value={fixture.type}
+                            className="text-xs"
+                          >
+                            <div className="flex flex-col">
+                              <span>{fixture.name}</span>
+                              <span className="text-[10px] text-zinc-500">
+                                {fixture.description}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-7 text-xs gap-1"
+                        onClick={() => runAction(handleGenerateFixture, 'Fixture created')}
+                        disabled={status.type === 'loading'}
+                        title="Create fixture project and open in editor"
+                      >
+                        <Play className="h-3 w-3" />
+                        Create
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-7 text-xs gap-1"
+                        onClick={() => runAction(handleDownloadFixture, 'Downloaded')}
+                        disabled={status.type === 'loading'}
+                        title="Download fixture as JSON"
+                      >
+                        <Download className="h-3 w-3" />
+                        JSON
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => runAction(handleLogFixture, 'Logged')}
+                        disabled={status.type === 'loading'}
+                        title="Log fixture to console"
+                      >
+                        <FileJson className="h-3 w-3" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
 

@@ -7,6 +7,7 @@
 
 import type { Project } from '@/types/project';
 import type { ProjectSnapshot, SnapshotExportOptions, SnapshotImportOptions } from '@/features/project-bundle/types/snapshot';
+import type { FixtureType, FixtureOptions, FixtureResult } from '@/features/project-bundle/services/test-fixtures';
 import {
   exportProjectJson,
   exportProjectJsonString,
@@ -63,6 +64,11 @@ export interface ProjectDebugAPI {
   // Utility functions
   createSnapshot: (project: Project) => ProjectSnapshot;
   parseJson: (json: string) => unknown;
+
+  // Fixture functions
+  generateFixture: (type: FixtureType, options?: FixtureOptions) => Promise<FixtureResult>;
+  createFixtureProject: (type: FixtureType, options?: FixtureOptions) => Promise<Project>;
+  listFixtures: () => Promise<Array<{ type: FixtureType; name: string; description: string }>>;
 
   // Version info
   version: string;
@@ -192,6 +198,40 @@ function createDebugAPI(): ProjectDebugAPI {
       return JSON.parse(json);
     },
 
+    // Fixture functions
+    generateFixture: async (type, options) => {
+      const { generateFixture } = await import(
+        '@/features/project-bundle/services/test-fixtures'
+      );
+      console.log(`[DEBUG] Generating fixture: ${type}`);
+      const result = generateFixture(type, options);
+      console.log(`[DEBUG] Fixture generated:`, {
+        tracks: result.project.timeline?.tracks.length ?? 0,
+        items: result.project.timeline?.items.length ?? 0,
+      });
+      return result;
+    },
+
+    createFixtureProject: async (type, options) => {
+      const { generateFixture } = await import(
+        '@/features/project-bundle/services/test-fixtures'
+      );
+      const { createProject } = await import('@/lib/storage/indexeddb');
+
+      console.log(`[DEBUG] Creating fixture project: ${type}`);
+      const { project } = generateFixture(type, options);
+      await createProject(project);
+      console.log(`[DEBUG] Fixture project created: ${project.id}`);
+      return project;
+    },
+
+    listFixtures: async () => {
+      const { getAvailableFixtures } = await import(
+        '@/features/project-bundle/services/test-fixtures'
+      );
+      return getAvailableFixtures();
+    },
+
     // Version info
     version: '1.0.0',
   };
@@ -237,6 +277,11 @@ export function initializeDebugUtils(): void {
 
   // Get DB stats
   const stats = await __DEBUG__.getDBStats();
+
+  // Generate test fixtures
+  const fixtures = await __DEBUG__.listFixtures();
+  const { project, snapshot } = await __DEBUG__.generateFixture('complex');
+  const newProject = await __DEBUG__.createFixtureProject('multi-track');
 `
     );
   }
