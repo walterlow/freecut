@@ -147,9 +147,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             onClick={handleImport}
             disabled={!currentProjectId}
             className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-              bg-primary/10 border border-primary/25 text-primary
-              hover:bg-primary/20 hover:border-primary/40
-              active:bg-primary/15
+              bg-primary text-primary-foreground
+              hover:bg-primary/90
               disabled:opacity-40 disabled:cursor-not-allowed
               transition-colors duration-150"
             title="Import media files"

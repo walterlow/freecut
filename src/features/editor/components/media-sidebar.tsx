@@ -395,7 +395,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               className={`
                 w-10 h-10 rounded-lg flex items-center justify-center transition-all
                 ${activeTab === id && leftSidebarOpen
-                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                 }
               `}
