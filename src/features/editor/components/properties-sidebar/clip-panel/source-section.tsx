@@ -62,7 +62,7 @@ export function SourceSection({ items, fps }: SourceSectionProps) {
           </span>
         </PropertyRow>
 
-        {item.type === 'video' || item.type === 'audio' ? (
+        {item.type === 'video' || item.type === 'audio' || (item.type === 'image' && item.label?.toLowerCase().endsWith('.gif')) ? (
           <PropertyRow label="Speed">
             <span className="text-xs text-muted-foreground tabular-nums">
               {((item as { speed?: number }).speed ?? 1).toFixed(2)}x

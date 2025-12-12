@@ -12,6 +12,7 @@ import { SourceSection } from './source-section';
 import { LayoutSection } from './layout-section';
 import { FillSection } from './fill-section';
 import { VideoSection } from './video-section';
+import { GifSection } from './gif-section';
 import { AudioSection } from './audio-section';
 import { TextSection } from './text-section';
 import { ShapeSection } from './shape-section';
@@ -19,15 +20,24 @@ import { KeyframeGraphSection } from './keyframe-graph-section';
 import { EffectsSection } from '@/features/effects/components/effects-section';
 
 /**
+ * Check if an item is a GIF (image with .gif extension)
+ */
+function isGifItem(item: TimelineItem): boolean {
+  return item.type === 'image' && (item.label?.toLowerCase().endsWith('.gif') ?? false);
+}
+
+/**
  * Compute item type information in a single pass for efficiency.
  * Uses Set for O(1) type lookups instead of repeated array iterations.
  */
 function computeItemTypeInfo(items: TimelineItem[]) {
   const types = new Set(items.map(item => item.type));
+  const hasGifItems = items.some(isGifItem);
 
   return {
     hasVisualItems: types.has('video') || types.has('image') || types.has('text') || types.has('shape') || types.has('adjustment'),
     hasVideoItems: types.has('video'),
+    hasGifItems,
     hasAudioItems: types.has('video') || types.has('audio'),
     hasTextItems: types.has('text'),
     hasShapeItems: types.has('shape'),
@@ -78,6 +88,7 @@ export const ClipPanel = memo(function ClipPanel() {
   const {
     hasVisualItems,
     hasVideoItems,
+    hasGifItems,
     hasAudioItems,
     hasTextItems,
     hasShapeItems,
@@ -210,6 +221,14 @@ export const ClipPanel = memo(function ClipPanel() {
       {hasVideoItems && (
         <>
           <VideoSection items={selectedItems} />
+          <Separator />
+        </>
+      )}
+
+      {/* GIF - only for animated GIF items */}
+      {hasGifItems && (
+        <>
+          <GifSection items={selectedItems} />
           <Separator />
         </>
       )}

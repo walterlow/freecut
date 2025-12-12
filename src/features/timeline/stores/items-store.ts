@@ -320,11 +320,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       };
     }),
 
-    // Rate stretch item
+    // Rate stretch item (video, audio, or GIF)
     _rateStretchItem: (id, newFrom, newDuration, newSpeed) => set((state) => ({
       items: state.items.map((item) => {
         if (item.id !== id) return item;
-        if (item.type !== 'video' && item.type !== 'audio') return item;
+        // Allow video, audio, and GIF images (detected by .gif extension)
+        const isGif = item.type === 'image' && item.label?.toLowerCase().endsWith('.gif');
+        if (item.type !== 'video' && item.type !== 'audio' && !isGif) return item;
 
         return {
           ...item,
