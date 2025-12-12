@@ -9,6 +9,8 @@ import {
   createProject as createProjectDB,
   updateProject as updateProjectDB,
   deleteProject as deleteProjectDB,
+  getProjectMediaIds,
+  associateMediaWithProject,
 } from '@/lib/storage/indexeddb';
 import { createProjectObject, duplicateProject } from '../utils/project-helpers';
 // v3: Import media service for cascade operations
@@ -265,7 +267,15 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
           set({ projects: [...previousProjects, newProject] });
 
           try {
+            // Create the new project in DB
             await createProjectDB(newProject);
+
+            // Copy media associations from original to new project
+            const mediaIds = await getProjectMediaIds(id);
+            for (const mediaId of mediaIds) {
+              await associateMediaWithProject(newProject.id, mediaId);
+            }
+
             set({ isLoading: false });
             return newProject;
           } catch (error) {
