@@ -15,7 +15,7 @@ import {
   saveFilmstrip,
 } from '@/lib/storage/indexeddb';
 import type { FilmstripData } from '@/types/storage';
-import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/constants/timeline';
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
 import { filmstripWorkerPool } from './filmstrip-worker-pool';
 
 // Re-export for consumers that import from this file

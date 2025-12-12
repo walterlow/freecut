@@ -12,7 +12,7 @@ import { useProjectStore } from '@/features/projects/stores/project-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getMediaDragData } from '@/features/media-library/utils/drag-data-cache';
-import { CLIP_HEIGHT } from '@/constants/timeline';
+import { CLIP_HEIGHT } from '@/features/timeline/constants';
 
 /**
  * Compute initial fit-to-canvas transform for an item.

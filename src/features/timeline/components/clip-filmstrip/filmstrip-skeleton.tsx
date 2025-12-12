@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
-import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/constants/timeline';
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
 
 export interface FilmstripSkeletonProps {
   /** Width of the clip in pixels */

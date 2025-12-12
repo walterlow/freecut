@@ -26,7 +26,7 @@ import {
   ZOOM_MIN_VELOCITY,
   ZOOM_MIN,
   ZOOM_MAX,
-} from '../constants/momentum';
+} from '../constants';
 
 export interface TimelineHeaderProps {
   onZoomChange?: (newZoom: number) => void;

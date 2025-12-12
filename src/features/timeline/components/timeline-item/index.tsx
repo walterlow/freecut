@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/context-menu';
 import { canJoinItems, canJoinMultipleItems } from '@/utils/clip-utils';
 import { cn } from '@/lib/utils';
-import { CLIP_HEIGHT } from '@/constants/timeline';
+import { CLIP_HEIGHT } from '@/features/timeline/constants';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 

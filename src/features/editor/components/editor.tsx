@@ -19,7 +19,7 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from '@/features/timeline/stores/zoom-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
-import { DEFAULT_TRACK_HEIGHT } from '@/constants/timeline';
+import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import type { ProjectTimeline } from '@/types/project';
 
 export interface EditorProps {

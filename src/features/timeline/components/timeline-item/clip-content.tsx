@@ -7,7 +7,7 @@ import {
   VIDEO_FILMSTRIP_HEIGHT,
   VIDEO_WAVEFORM_HEIGHT,
   AUDIO_WAVEFORM_HEIGHT,
-} from '@/constants/timeline';
+} from '@/features/timeline/constants';
 
 export interface ClipContentProps {
   item: TimelineItem;

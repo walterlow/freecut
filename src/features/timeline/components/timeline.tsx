@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { trackDropIndexRef } from '../hooks/use-track-drag';
-import { DEFAULT_TRACK_HEIGHT } from '@/constants/timeline';
+import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 
 export interface TimelineProps {
   duration: number; // Total timeline duration in seconds

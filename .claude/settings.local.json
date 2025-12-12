@@ -23,7 +23,8 @@
       "Bash(find:*)",
       "Bash(dir:*)",
       "WebFetch(domain:docs.re.video)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(ls -la \"E:\\video-editor-refactor\\src\\constants\"\" 2>/dev/null || echo \"Directory does not exist or is empty \")"
     ],
     "deny": [],
     "ask": []

@@ -21,7 +21,7 @@ import {
   ZOOM_FRICTION,
   ZOOM_MIN_VELOCITY,
   ZOOM_SMOOTHING,
-} from '../constants/momentum';
+} from '../constants';
 
 // Components
 import { TimelineMarkers } from './timeline-markers';

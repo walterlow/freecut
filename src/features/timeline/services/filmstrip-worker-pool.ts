@@ -19,7 +19,7 @@ import type {
   FrameResponse,
   ErrorResponse,
 } from '../workers/filmstrip-extraction-worker';
-import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/constants/timeline';
+import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 
 // Use 2 workers to reduce decoder contention with playback
