@@ -178,6 +178,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           id: crypto.randomUUID(),
           from: position.from,
           trackId: position.trackId,
+          // Give duplicate a new originId so it forms its own group in StableVideoSequence.
+          // Without this, split clips that are duplicated would be grouped with the originals,
+          // causing incorrect sourceStart calculations (can result in negative values).
+          originId: crypto.randomUUID(),
         } as TimelineItem;
 
         newItems.push(duplicate);
@@ -307,8 +311,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         durationInFrames: totalDuration,
       } as TimelineItem;
 
-      // Remove all but first, update first
-      const idsToRemove = new Set(itemIds.slice(1));
+      // Remove all but first (by timeline position), update first
+      const idsToRemove = new Set(itemsToJoin.slice(1).map((i) => i.id));
       return {
         items: state.items
           .filter((i) => !idsToRemove.has(i.id))

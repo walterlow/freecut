@@ -87,6 +87,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Track which edge is being hovered for showing trim/rate-stretch handles
   const [hoveredEdge, setHoveredEdge] = useState<'start' | 'end' | null>(null);
 
+  // Track global drag state for join indicators (needs re-render to hide when other clips drag)
+  const [isAnyDragActive, setIsAnyDragActive] = useState(false);
+
   // Drag-and-drop functionality (local state for anchor item) - disabled if track is locked
   const { isDragging, dragOffset, handleDragStart } = useTimelineDrag(item, timelineDuration, trackLocked);
 
@@ -170,6 +173,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const wasDragActive = isAnyDragActiveRef.current;
       const isDragActive = !!state.dragState?.isDragging;
       isAnyDragActiveRef.current = isDragActive;
+
+      // Update state for join indicators (only on drag start/end to minimize re-renders)
+      if (wasDragActive !== isDragActive) {
+        setIsAnyDragActive(isDragActive);
+      }
 
       // Track when drag ends to prevent click from clearing group selection
       if (wasDragActive && !isDragActive) {
@@ -498,9 +506,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     };
   }, [item, trackItemCount, neighborSpeeds]);
 
-  // For context menu: can join if this clip has any joinable neighbor
-  const canJoinFromContextMenu = hasJoinableLeft || hasJoinableRight;
-
   // Handle join action for multiple selected clips
   const handleJoinSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds;
@@ -606,26 +611,46 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       />
 
       {/* Trim handles - always rendered, visibility controlled via CSS to prevent DOM churn */}
-      {/* Left trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-      <div
-        className={cn(
-          "absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
-          !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'start' || (isTrimming && trimHandle === 'start'))
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        )}
-        onMouseDown={(e) => handleTrimStart(e, 'start')}
-      />
-      {/* Right trim handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
-      <div
-        className={cn(
-          "absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
-          !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'end' || (isTrimming && trimHandle === 'end'))
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        )}
-        onMouseDown={(e) => handleTrimStart(e, 'end')}
-      />
+      {/* Left trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <ContextMenu>
+        <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableLeft}>
+          <div
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+              !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'start' || (isTrimming && trimHandle === 'start'))
+                ? "opacity-100"
+                : "opacity-0 pointer-events-none"
+            )}
+            onMouseDown={(e) => handleTrimStart(e, 'start')}
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={handleJoinLeft}>
+            Join
+            <ContextMenuShortcut>J</ContextMenuShortcut>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {/* Right trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      <ContextMenu>
+        <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableRight}>
+          <div
+            className={cn(
+              "absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+              !trackLocked && (!isAnyDragActiveRef.current || isTrimming) && activeTool === 'select' && (hoveredEdge === 'end' || (isTrimming && trimHandle === 'end'))
+                ? "opacity-100"
+                : "opacity-0 pointer-events-none"
+            )}
+            onMouseDown={(e) => handleTrimStart(e, 'end')}
+          />
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onClick={handleJoinRight}>
+            Join
+            <ContextMenuShortcut>J</ContextMenuShortcut>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Rate stretch handles - always rendered, visibility controlled via CSS to prevent DOM churn */}
       {/* Left stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
@@ -654,7 +679,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       <div
         className={cn(
           "absolute left-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
-          hasJoinableLeft && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'start' && !isTrimming && !isStretching
+          hasJoinableLeft && !trackLocked && !isAnyDragActive && hoveredEdge !== 'start' && !isTrimming && !isStretching
             ? "opacity-100"
             : "opacity-0"
         )}
@@ -664,7 +689,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       <div
         className={cn(
           "absolute right-0 top-0 bottom-0 w-px pointer-events-none transition-opacity duration-75",
-          hasJoinableRight && !trackLocked && !isAnyDragActiveRef.current && hoveredEdge !== 'end' && !isTrimming && !isStretching
+          hasJoinableRight && !trackLocked && !isAnyDragActive && hoveredEdge !== 'end' && !isTrimming && !isStretching
             ? "opacity-100"
             : "opacity-0"
         )}
@@ -677,23 +702,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       <ContextMenuContent>
         {/* Show "Join Selected" when multiple clips are selected and joinable - computed on open */}
         {getCanJoinSelected() && (
-          <ContextMenuItem onClick={handleJoinSelected}>
-            Join Selected
-            <ContextMenuShortcut>J</ContextMenuShortcut>
-          </ContextMenuItem>
+          <>
+            <ContextMenuItem onClick={handleJoinSelected}>
+              Join Selected
+              <ContextMenuShortcut>J</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
         )}
-        {/* Show directional join options for single clip with joinable neighbors */}
-        {!getCanJoinSelected() && hasJoinableLeft && (
-          <ContextMenuItem onClick={handleJoinLeft}>
-            Join with Previous
-          </ContextMenuItem>
-        )}
-        {!getCanJoinSelected() && hasJoinableRight && (
-          <ContextMenuItem onClick={handleJoinRight}>
-            Join with Next
-          </ContextMenuItem>
-        )}
-        {(getCanJoinSelected() || canJoinFromContextMenu) && <ContextMenuSeparator />}
         <ContextMenuItem
           onClick={handleRippleDelete}
           disabled={!isSelected}
