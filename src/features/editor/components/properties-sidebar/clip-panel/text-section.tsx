@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Type, AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd } from 'lucide-react';
+import { Type, AlignLeft, AlignCenter, AlignRight, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -322,7 +322,7 @@ export function TextSection({ items }: TextSectionProps) {
             onClick={() => handleVerticalAlignChange('top')}
             title="Align Top"
           >
-            <AlignVerticalJustifyStart className="w-3.5 h-3.5" />
+            <AlignStartHorizontal className="w-3.5 h-3.5" />
           </Button>
           <Button
             variant={sharedValues.verticalAlign === 'middle' ? 'secondary' : 'ghost'}
@@ -331,7 +331,7 @@ export function TextSection({ items }: TextSectionProps) {
             onClick={() => handleVerticalAlignChange('middle')}
             title="Align Middle"
           >
-            <AlignVerticalJustifyCenter className="w-3.5 h-3.5" />
+            <AlignCenterHorizontal className="w-3.5 h-3.5" />
           </Button>
           <Button
             variant={sharedValues.verticalAlign === 'bottom' ? 'secondary' : 'ghost'}
@@ -340,7 +340,7 @@ export function TextSection({ items }: TextSectionProps) {
             onClick={() => handleVerticalAlignChange('bottom')}
             title="Align Bottom"
           >
-            <AlignVerticalJustifyEnd className="w-3.5 h-3.5" />
+            <AlignEndHorizontal className="w-3.5 h-3.5" />
           </Button>
         </div>
       </PropertyRow>

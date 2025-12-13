@@ -1,5 +1,5 @@
 import { useCallback, useMemo, memo } from 'react';
-import { Move, RotateCcw } from 'lucide-react';
+import { Move, RotateCcw, Link2, Link2Off } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
@@ -18,7 +18,6 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
-  LinkedDimensions,
   AlignmentButtons,
   type AlignmentType,
 } from '../components';
@@ -517,39 +516,68 @@ export const LayoutSection = memo(function LayoutSection({
       {/* Dimensions */}
       <PropertyRow label="Size">
         <div className="flex items-start gap-1 w-full">
-          <div className="flex flex-col gap-0.5 flex-shrink-0">
-            <KeyframeToggle
-              itemIds={itemIds}
-              property="width"
-              currentValue={width === 'mixed' ? 100 : width}
-            />
-            <KeyframeToggle
-              itemIds={itemIds}
-              property="height"
-              currentValue={height === 'mixed' ? 100 : height}
-            />
+          <div className="flex flex-col gap-1 flex-1 min-w-0">
+            <div className="flex items-center gap-0.5">
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="width"
+                currentValue={width === 'mixed' ? 100 : width}
+              />
+              <NumberInput
+                value={width}
+                onChange={handleWidthChange}
+                onLiveChange={handleWidthLiveChange}
+                label="W"
+                unit="px"
+                min={1}
+                max={7680}
+                step={1}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex items-center gap-0.5">
+              <KeyframeToggle
+                itemIds={itemIds}
+                property="height"
+                currentValue={height === 'mixed' ? 100 : height}
+              />
+              <NumberInput
+                value={height}
+                onChange={handleHeightChange}
+                onLiveChange={handleHeightLiveChange}
+                label="H"
+                unit="px"
+                min={1}
+                max={7680}
+                step={1}
+                className="flex-1"
+              />
+            </div>
           </div>
-          <LinkedDimensions
-            width={width}
-            height={height}
-            aspectLocked={aspectLocked}
-            onWidthChange={handleWidthChange}
-            onHeightChange={handleHeightChange}
-            onWidthLiveChange={handleWidthLiveChange}
-            onHeightLiveChange={handleHeightLiveChange}
-            onAspectLockToggle={onAspectLockToggle}
-            minWidth={1}
-            minHeight={1}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetScale}
-            title="Reset to original size"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
+          <div className="flex flex-col gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${aspectLocked ? 'text-primary' : ''}`}
+              onClick={onAspectLockToggle}
+              title={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            >
+              {aspectLocked ? (
+                <Link2 className="w-3.5 h-3.5" />
+              ) : (
+                <Link2Off className="w-3.5 h-3.5" />
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={handleResetScale}
+              title="Reset to original size"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </PropertyRow>
 

@@ -25,22 +25,22 @@ interface AlignmentButtonsProps {
 
 const horizontalAlignments: Array<{
   type: AlignmentType;
-  icon: typeof AlignStartHorizontal;
+  icon: typeof AlignStartVertical;
   label: string;
 }> = [
-  { type: 'left', icon: AlignStartHorizontal, label: 'Align Left' },
-  { type: 'center-h', icon: AlignCenterHorizontal, label: 'Center Horizontally' },
-  { type: 'right', icon: AlignEndHorizontal, label: 'Align Right' },
+  { type: 'left', icon: AlignStartVertical, label: 'Align Left' },
+  { type: 'center-h', icon: AlignCenterVertical, label: 'Center Horizontally' },
+  { type: 'right', icon: AlignEndVertical, label: 'Align Right' },
 ];
 
 const verticalAlignments: Array<{
   type: AlignmentType;
-  icon: typeof AlignStartVertical;
+  icon: typeof AlignStartHorizontal;
   label: string;
 }> = [
-  { type: 'top', icon: AlignStartVertical, label: 'Align Top' },
-  { type: 'center-v', icon: AlignCenterVertical, label: 'Center Vertically' },
-  { type: 'bottom', icon: AlignEndVertical, label: 'Align Bottom' },
+  { type: 'top', icon: AlignStartHorizontal, label: 'Align Top' },
+  { type: 'center-v', icon: AlignCenterHorizontal, label: 'Center Vertically' },
+  { type: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom' },
 ];
 
 /**
