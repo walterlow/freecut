@@ -1,13 +1,12 @@
 /**
  * Filmstrip Cache Service
  *
- * Manages filmstrip thumbnail caching with:
- * - In-memory LRU cache for fast access
- * - Hardware-accelerated frame extraction via 4 parallel workers (WebCodecs)
- * - Off-main-thread image decoding via decode worker (WebP format)
- * - Fixed frame density for consistent quality
- * - Progressive streaming of thumbnails
- * - Rendering matches frames to display slots by timestamp
+ * Simple service that:
+ * 1. Manages extraction worker
+ * 2. Provides object URLs from OPFS storage
+ * 3. Notifies subscribers when new frames are available
+ *
+ * No ImageBitmaps in memory - just URLs for <img> tags.
  */
 
 import { createLogger } from '@/lib/logger';
@@ -15,76 +14,51 @@ import { createLogger } from '@/lib/logger';
 const logger = createLogger('FilmstripCache');
 
 import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
-import { filmstripWorkerPool } from './filmstrip-worker-pool';
-import { filmstripOPFSStorage } from './filmstrip-opfs-storage';
-import type { DecodeProgressResponse } from './filmstrip-decode-worker';
-// Legacy IndexedDB imports for migration
-import {
-  deleteFilmstripsByMediaId as deleteFromIndexedDB,
-  getFilmstripByMediaId as getFromIndexedDB,
-} from '@/lib/storage/indexeddb';
+import { filmstripOPFSStorage, type FilmstripFrame, type LoadedFilmstrip } from './filmstrip-opfs-storage';
+import type { ExtractRequest, WorkerResponse } from '../workers/filmstrip-extraction-worker';
 
-// Re-export for consumers that import from this file
 export { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT };
+export type { FilmstripFrame };
 
-// WebP offers ~30% smaller files than JPEG at similar quality
-const IMAGE_FORMAT = 'image/webp';
-const IMAGE_QUALITY = 0.7;
-
-// Memory cache configuration
-const MAX_CACHE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
-
-// Progressive loading: frames per update batch
-// Lower value = more immediate frame appearance, but more frequent updates
-const FRAMES_PER_BATCH = 3;
-
-export interface CachedFilmstrip {
-  frames: ImageBitmap[];
-  blobs: Blob[]; // Keep blobs for IndexedDB persistence
-  timestamps: number[];
-  width: number;
-  height: number;
-  sizeBytes: number;
-  lastAccessed: number;
+export interface Filmstrip {
+  frames: FilmstripFrame[];
   isComplete: boolean;
+  isExtracting: boolean;
+  progress: number;
 }
 
-interface PendingRequest {
-  promise: Promise<CachedFilmstrip>;
-  requestId: string; // Worker pool request ID for abort
-}
+export type FilmstripUpdateCallback = (filmstrip: Filmstrip) => void;
 
-export type FilmstripUpdateCallback = (filmstrip: CachedFilmstrip) => void;
+interface PendingExtraction {
+  requestId: string;
+  mediaId: string;
+  worker: Worker;
+  onProgress?: (progress: number) => void;
+  // Track frames incrementally during extraction
+  extractedFrames: Map<number, FilmstripFrame>;
+}
 
 class FilmstripCacheService {
-  private memoryCache = new Map<string, CachedFilmstrip>();
-  private currentCacheSize = 0;
-  private pendingRequests = new Map<string, PendingRequest>();
+  private cache = new Map<string, Filmstrip>();
+  private pendingExtractions = new Map<string, PendingExtraction>();
   private updateCallbacks = new Map<string, Set<FilmstripUpdateCallback>>();
-  private decodeWorker: Worker | null = null;
-  private decodeRequestId = 0;
+  private loadingPromises = new Map<string, Promise<Filmstrip>>();
 
   /**
-   * Get or create the decode worker (lazy initialization)
-   */
-  private getDecodeWorker(): Worker {
-    if (!this.decodeWorker) {
-      this.decodeWorker = new Worker(
-        new URL('./filmstrip-decode-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-    }
-    return this.decodeWorker;
-  }
-
-  /**
-   * Subscribe to filmstrip updates for progressive loading
+   * Subscribe to filmstrip updates
    */
   subscribe(mediaId: string, callback: FilmstripUpdateCallback): () => void {
     if (!this.updateCallbacks.has(mediaId)) {
       this.updateCallbacks.set(mediaId, new Set());
     }
     this.updateCallbacks.get(mediaId)!.add(callback);
+
+    // Immediately call with current state if available
+    const current = this.cache.get(mediaId);
+    if (current) {
+      callback(current);
+    }
+
     return () => {
       const callbacks = this.updateCallbacks.get(mediaId);
       if (callbacks) {
@@ -96,10 +70,8 @@ class FilmstripCacheService {
     };
   }
 
-  /**
-   * Notify subscribers of filmstrip updates
-   */
-  private notifyUpdate(mediaId: string, filmstrip: CachedFilmstrip): void {
+  private notifyUpdate(mediaId: string, filmstrip: Filmstrip): void {
+    this.cache.set(mediaId, filmstrip);
     const callbacks = this.updateCallbacks.get(mediaId);
     if (callbacks) {
       for (const callback of callbacks) {
@@ -109,562 +81,229 @@ class FilmstripCacheService {
   }
 
   /**
-   * Get filmstrip from memory cache (private)
-   */
-  private getFromMemoryCache(mediaId: string): CachedFilmstrip | null {
-    const cached = this.memoryCache.get(mediaId);
-
-    if (cached) {
-      // Update last accessed time
-      cached.lastAccessed = Date.now();
-      return cached;
-    }
-
-    return null;
-  }
-
-  /**
-   * Check if filmstrip exists in memory cache (synchronous)
-   * Used to avoid skeleton flash when component remounts
-   */
-  getFromMemoryCacheSync(mediaId: string): CachedFilmstrip | null {
-    return this.getFromMemoryCache(mediaId);
-  }
-
-  /**
-   * Add filmstrip to memory cache with LRU eviction
-   */
-  private addToMemoryCache(mediaId: string, data: CachedFilmstrip): void {
-    // Check if we're updating an existing entry
-    const existing = this.memoryCache.get(mediaId);
-    if (existing) {
-      this.currentCacheSize -= existing.sizeBytes;
-    }
-
-    // Evict old entries if necessary
-    while (this.currentCacheSize + data.sizeBytes > MAX_CACHE_SIZE_BYTES && this.memoryCache.size > 0) {
-      this.evictOldest();
-    }
-
-    // Add to cache
-    this.memoryCache.set(mediaId, data);
-    this.currentCacheSize += data.sizeBytes;
-  }
-
-  /**
-   * Evict the oldest (least recently accessed) entry
-   */
-  private evictOldest(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.memoryCache) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      const entry = this.memoryCache.get(oldestKey);
-      if (entry) {
-        // Close ImageBitmaps to free GPU memory
-        for (const bitmap of entry.frames) {
-          bitmap.close();
-        }
-        this.currentCacheSize -= entry.sizeBytes;
-        this.memoryCache.delete(oldestKey);
-      }
-    }
-  }
-
-  /**
-   * Binary search to find insertion index for sorted timestamp array
-   */
-  private binarySearchInsert(timestamps: number[], timestamp: number): number {
-    let left = 0;
-    let right = timestamps.length;
-
-    while (left < right) {
-      const mid = Math.floor((left + right) / 2);
-      if (timestamps[mid]! < timestamp) {
-        left = mid + 1;
-      } else {
-        right = mid;
-      }
-    }
-
-    return left;
-  }
-
-  /**
-   * Generate filmstrip using 4 parallel workers (hardware-accelerated WebCodecs)
-   * Uses CanvasSink.canvasesAtTimestamps() for sparse extraction (only decodes needed frames)
-   */
-  private generateFilmstrip(
-    mediaId: string,
-    blobUrl: string,
-    duration: number,
-    onProgress?: (progress: number) => void
-  ): { promise: Promise<CachedFilmstrip>; requestId: string } {
-    // Track frames and timestamps (will be inserted in sorted order)
-    const frames: ImageBitmap[] = [];
-    const timestamps: number[] = [];
-
-    // Expected frame count at 24 fps for progress calculation
-    const expectedFrames = Math.ceil(duration * 24);
-    let receivedFrames = 0;
-    let lastUpdateCount = 0;
-
-    const promise = new Promise<CachedFilmstrip>((resolve, reject) => {
-      const requestId = filmstripWorkerPool.extract({
-        mediaId,
-        blobUrl,
-        duration,
-
-        onFrame: (timestamp: number, bitmap: ImageBitmap) => {
-          // Insert in sorted position (frames arrive out of order from parallel workers)
-          const insertIndex = this.binarySearchInsert(timestamps, timestamp);
-          timestamps.splice(insertIndex, 0, timestamp);
-          frames.splice(insertIndex, 0, bitmap);
-
-          receivedFrames++;
-
-          // Update progress
-          const progress = Math.round((receivedFrames / expectedFrames) * 100);
-          onProgress?.(Math.min(progress, 99));
-
-          // Progressive update: immediate on first frame, then every FRAMES_PER_BATCH frames
-          // This gives instant visual feedback while limiting update frequency
-          const shouldUpdate =
-            receivedFrames === 1 || // First frame - immediate feedback
-            receivedFrames - lastUpdateCount >= FRAMES_PER_BATCH;
-
-          if (shouldUpdate) {
-            lastUpdateCount = receivedFrames;
-
-            const intermediate: CachedFilmstrip = {
-              frames: [...frames],
-              blobs: [], // Don't persist intermediate
-              timestamps: [...timestamps],
-              width: THUMBNAIL_WIDTH,
-              height: THUMBNAIL_HEIGHT,
-              sizeBytes: frames.length * 5000, // Estimate ~5KB per frame
-              lastAccessed: Date.now(),
-              isComplete: false,
-            };
-
-            // Update memory cache
-            this.addToMemoryCache(mediaId, intermediate);
-            // Notify subscribers
-            this.notifyUpdate(mediaId, intermediate);
-          }
-        },
-
-        onComplete: async () => {
-          try {
-            onProgress?.(95);
-
-            // Convert ImageBitmaps to Blobs for IndexedDB persistence
-            const blobs: Blob[] = [];
-            let sizeBytes = 0;
-
-            const canvas = new OffscreenCanvas(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
-            const ctx = canvas.getContext('2d');
-
-            if (ctx) {
-              for (const bitmap of frames) {
-                ctx.drawImage(bitmap, 0, 0);
-                const blob = await canvas.convertToBlob({
-                  type: IMAGE_FORMAT,
-                  quality: IMAGE_QUALITY,
-                });
-                blobs.push(blob);
-                sizeBytes += blob.size;
-              }
-            }
-
-            const cached: CachedFilmstrip = {
-              frames,
-              blobs,
-              timestamps,
-              width: THUMBNAIL_WIDTH,
-              height: THUMBNAIL_HEIGHT,
-              sizeBytes,
-              lastAccessed: Date.now(),
-              isComplete: true,
-            };
-
-            // Final update to memory cache
-            this.addToMemoryCache(mediaId, cached);
-            this.notifyUpdate(mediaId, cached);
-
-            // Persist to OPFS for reload persistence (faster than IndexedDB)
-            try {
-              const framesWithTimestamps = blobs.map((blob, i) => ({
-                timestamp: timestamps[i],
-                blob,
-              }));
-              await filmstripOPFSStorage.save(
-                mediaId,
-                framesWithTimestamps,
-                THUMBNAIL_WIDTH,
-                THUMBNAIL_HEIGHT,
-                IMAGE_QUALITY
-              );
-            } catch (err) {
-              logger.warn('Failed to persist filmstrip to OPFS:', err);
-            }
-
-            onProgress?.(100);
-            resolve(cached);
-          } catch (err) {
-            reject(err);
-          }
-        },
-
-        onError: (error: Error) => {
-          reject(error);
-        },
-      });
-
-      // Store requestId for abort support (accessed via closure)
-      (promise as any).__requestId = requestId;
-    });
-
-    // Return both promise and requestId
-    return {
-      promise,
-      requestId: (promise as any).__requestId || '',
-    };
-  }
-
-  /**
-   * Load filmstrip from OPFS progressively with off-main-thread decoding
-   */
-  private async loadFromOPFSProgressive(mediaId: string): Promise<CachedFilmstrip | null> {
-    try {
-      // Read entire file in one shot (fast I/O)
-      const opfsData = await filmstripOPFSStorage.getAllFrames(mediaId);
-      if (!opfsData) return null;
-
-      const { header, frames: frameData } = opfsData;
-
-      // Validate dimensions
-      if (header.width !== THUMBNAIL_WIDTH || header.height !== THUMBNAIL_HEIGHT) {
-        logger.debug(`Filmstrip cache invalidated for ${mediaId}: dimensions changed`);
-        await filmstripOPFSStorage.delete(mediaId);
-        return null;
-      }
-
-      const totalFrames = frameData.length;
-      const imageBitmaps: ImageBitmap[] = new Array(totalFrames);
-      const blobs: Blob[] = new Array(totalFrames);
-      const timestamps: number[] = new Array(totalFrames);
-      let sizeBytes = 0;
-      let loadedCount = 0;
-
-      // Convert blobs to ArrayBuffers for transfer to worker
-      const frameBuffers = await Promise.all(
-        frameData.map(async (frame, index) => ({
-          index,
-          timestamp: frame.timestamp,
-          data: await frame.blob.arrayBuffer(),
-          blob: frame.blob,
-        }))
-      );
-
-      // Store blobs and timestamps immediately (we have them)
-      for (const frame of frameBuffers) {
-        blobs[frame.index] = frame.blob;
-        timestamps[frame.index] = frame.timestamp;
-        sizeBytes += frame.data.byteLength;
-      }
-
-      // Decode using worker (off main thread)
-      const worker = this.getDecodeWorker();
-      const requestId = `decode-${++this.decodeRequestId}`;
-
-      return new Promise((resolve) => {
-        const handleMessage = (event: MessageEvent<DecodeProgressResponse>) => {
-          if (event.data.requestId !== requestId) return;
-          if (event.data.type !== 'progress') return;
-
-          // Store decoded bitmaps
-          for (const result of event.data.results) {
-            imageBitmaps[result.index] = result.bitmap;
-            loadedCount++;
-          }
-
-          // Emit progressive update
-          const intermediate: CachedFilmstrip = {
-            frames: imageBitmaps.slice(0, loadedCount),
-            blobs: blobs.slice(0, loadedCount),
-            timestamps: timestamps.slice(0, loadedCount),
-            width: header.width,
-            height: header.height,
-            sizeBytes,
-            lastAccessed: Date.now(),
-            isComplete: event.data.done,
-          };
-
-          this.addToMemoryCache(mediaId, intermediate);
-          this.notifyUpdate(mediaId, intermediate);
-
-          // Resolve when done
-          if (event.data.done) {
-            worker.removeEventListener('message', handleMessage);
-            resolve({
-              frames: imageBitmaps,
-              blobs,
-              timestamps,
-              width: header.width,
-              height: header.height,
-              sizeBytes,
-              lastAccessed: Date.now(),
-              isComplete: true,
-            });
-          }
-        };
-
-        worker.addEventListener('message', handleMessage);
-
-        // Send frames to worker for decoding (transfer ArrayBuffers)
-        const transferables = frameBuffers.map((f) => f.data);
-        worker.postMessage(
-          {
-            type: 'decode',
-            requestId,
-            frames: frameBuffers.map((f) => ({
-              index: f.index,
-              timestamp: f.timestamp,
-              data: f.data,
-            })),
-          },
-          { transfer: transferables }
-        );
-      });
-    } catch (err) {
-      logger.warn('Failed to load filmstrip from OPFS:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Load filmstrip from OPFS (with IndexedDB migration fallback)
-   */
-  private async loadFromStorage(mediaId: string): Promise<CachedFilmstrip | null> {
-    // Try OPFS first with progressive loading
-    const opfsResult = await this.loadFromOPFSProgressive(mediaId);
-    if (opfsResult) return opfsResult;
-
-    // Fallback: Try legacy IndexedDB and migrate
-    try {
-      const stored = await getFromIndexedDB(mediaId);
-      if (stored && stored.frames && stored.frames.length > 0) {
-        // Validate dimensions
-        if (stored.width !== THUMBNAIL_WIDTH || stored.height !== THUMBNAIL_HEIGHT) {
-          logger.debug(`Legacy filmstrip invalidated for ${mediaId}: dimensions changed`);
-          await deleteFromIndexedDB(mediaId);
-          return null;
-        }
-
-        // Convert blobs to ImageBitmaps progressively
-        const imageBitmaps: ImageBitmap[] = [];
-        let sizeBytes = 0;
-
-        for (let i = 0; i < stored.frames.length; i++) {
-          const blob = stored.frames[i];
-          const bitmap = await createImageBitmap(blob);
-          imageBitmaps.push(bitmap);
-          sizeBytes += blob.size;
-
-          // Emit progressive update every few frames
-          if (i === 0 || (i + 1) % FRAMES_PER_BATCH === 0) {
-            const intermediate: CachedFilmstrip = {
-              frames: [...imageBitmaps],
-              blobs: stored.frames.slice(0, i + 1),
-              timestamps: stored.timestamps.slice(0, i + 1),
-              width: stored.width,
-              height: stored.height,
-              sizeBytes,
-              lastAccessed: Date.now(),
-              isComplete: false,
-            };
-            this.addToMemoryCache(mediaId, intermediate);
-            this.notifyUpdate(mediaId, intermediate);
-          }
-        }
-
-        const cached: CachedFilmstrip = {
-          frames: imageBitmaps,
-          blobs: stored.frames,
-          timestamps: stored.timestamps,
-          width: stored.width,
-          height: stored.height,
-          sizeBytes,
-          lastAccessed: Date.now(),
-          isComplete: true,
-        };
-
-        // Final update
-        this.addToMemoryCache(mediaId, cached);
-        this.notifyUpdate(mediaId, cached);
-
-        // Migrate to OPFS in background
-        this.migrateToOPFS(mediaId, stored.frames, stored.timestamps).catch(() => {});
-
-        return cached;
-      }
-    } catch (err) {
-      logger.warn('Failed to load filmstrip from IndexedDB:', err);
-    }
-
-    return null;
-  }
-
-  /**
-   * Migrate filmstrip from IndexedDB to OPFS
-   */
-  private async migrateToOPFS(
-    mediaId: string,
-    blobs: Blob[],
-    timestamps: number[]
-  ): Promise<void> {
-    try {
-      const framesWithTimestamps = blobs.map((blob, i) => ({
-        timestamp: timestamps[i],
-        blob,
-      }));
-      await filmstripOPFSStorage.save(
-        mediaId,
-        framesWithTimestamps,
-        THUMBNAIL_WIDTH,
-        THUMBNAIL_HEIGHT,
-        IMAGE_QUALITY
-      );
-      // Delete from IndexedDB after successful migration
-      await deleteFromIndexedDB(mediaId);
-      logger.debug(`Migrated filmstrip ${mediaId} from IndexedDB to OPFS`);
-    } catch (err) {
-      logger.warn(`Failed to migrate filmstrip ${mediaId}:`, err);
-    }
-  }
-
-  /**
-   * Get filmstrip for a media item
-   * Extracts frames at fixed intervals across the full duration using 4 parallel workers
+   * Get filmstrip - loads from storage and starts extraction if needed
    */
   async getFilmstrip(
     mediaId: string,
     blobUrl: string,
     duration: number,
     onProgress?: (progress: number) => void
-  ): Promise<CachedFilmstrip> {
-    // Check memory cache first
-    const memoryCached = this.getFromMemoryCache(mediaId);
-    if (memoryCached) {
-      return memoryCached;
+  ): Promise<Filmstrip> {
+    // Return cached if complete
+    const cached = this.cache.get(mediaId);
+    if (cached?.isComplete && !cached.isExtracting) {
+      return cached;
     }
 
-    // Check for pending request
-    const pending = this.pendingRequests.get(mediaId);
-    if (pending) {
-      return pending.promise;
+    // Check for pending load
+    const loading = this.loadingPromises.get(mediaId);
+    if (loading) {
+      return loading;
     }
 
-    // Check OPFS/IndexedDB for persisted filmstrip
-    const stored = await this.loadFromStorage(mediaId);
-    if (stored) {
-      this.addToMemoryCache(mediaId, stored);
-      this.notifyUpdate(mediaId, stored);
-      return stored;
-    }
-
-    // Generate new filmstrip using worker pool
-    const { promise, requestId } = this.generateFilmstrip(mediaId, blobUrl, duration, onProgress);
-
-    this.pendingRequests.set(mediaId, { promise, requestId });
+    const promise = this.loadAndExtract(mediaId, blobUrl, duration, onProgress);
+    this.loadingPromises.set(mediaId, promise);
 
     try {
-      const result = await promise;
-      return result;
+      return await promise;
     } finally {
-      this.pendingRequests.delete(mediaId);
+      this.loadingPromises.delete(mediaId);
+    }
+  }
+
+  private async loadAndExtract(
+    mediaId: string,
+    blobUrl: string,
+    duration: number,
+    onProgress?: (progress: number) => void
+  ): Promise<Filmstrip> {
+    // Try loading from storage
+    const stored = await filmstripOPFSStorage.load(mediaId);
+
+    if (stored?.metadata.isComplete) {
+      // Complete - return immediately
+      const filmstrip: Filmstrip = {
+        frames: stored.frames,
+        isComplete: true,
+        isExtracting: false,
+        progress: 100,
+      };
+      this.notifyUpdate(mediaId, filmstrip);
+      return filmstrip;
+    }
+
+    // Notify with existing frames (if any)
+    const existingFrames = stored?.frames || [];
+    const existingIndices = stored?.existingIndices || [];
+
+    const initialFilmstrip: Filmstrip = {
+      frames: existingFrames,
+      isComplete: false,
+      isExtracting: true,
+      progress: existingFrames.length > 0 ? Math.round((existingFrames.length / Math.ceil(duration * 24)) * 100) : 0,
+    };
+    this.notifyUpdate(mediaId, initialFilmstrip);
+
+    // Start extraction (pass existing frames to avoid reloading)
+    this.startExtraction(mediaId, blobUrl, duration, existingIndices, existingFrames, onProgress);
+
+    return initialFilmstrip;
+  }
+
+  private startExtraction(
+    mediaId: string,
+    blobUrl: string,
+    duration: number,
+    skipIndices: number[],
+    existingFrames: FilmstripFrame[],
+    onProgress?: (progress: number) => void
+  ): void {
+    // Check if already extracting
+    if (this.pendingExtractions.has(mediaId)) {
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    const worker = new Worker(
+      new URL('../workers/filmstrip-extraction-worker.ts', import.meta.url),
+      { type: 'module' }
+    );
+
+    // Initialize with existing frames (passed from loadAndExtract)
+    const extractedFrames = new Map<number, FilmstripFrame>();
+    for (const frame of existingFrames) {
+      extractedFrames.set(frame.index, frame);
+    }
+
+    this.pendingExtractions.set(mediaId, { requestId, mediaId, worker, onProgress, extractedFrames });
+
+    worker.onmessage = async (e: MessageEvent<WorkerResponse>) => {
+      const response = e.data;
+      const pending = this.pendingExtractions.get(mediaId);
+
+      if (response.type === 'progress') {
+        onProgress?.(response.progress);
+
+        // Load only the new frame incrementally instead of reloading all
+        if (pending) {
+          const newFrame = await filmstripOPFSStorage.loadSingleFrame(mediaId, response.frameIndex);
+          if (newFrame) {
+            pending.extractedFrames.set(response.frameIndex, newFrame);
+
+            // Convert map to sorted array
+            const frames = Array.from(pending.extractedFrames.values())
+              .sort((a, b) => a.index - b.index);
+
+            logger.debug(`Incremental update for ${mediaId}: frame ${response.frameIndex}, total: ${frames.length}`);
+
+            this.notifyUpdate(mediaId, {
+              frames,
+              isComplete: false,
+              isExtracting: true,
+              progress: response.progress,
+            });
+          }
+        }
+      } else if (response.type === 'complete') {
+        // Reload final state
+        const final = await filmstripOPFSStorage.load(mediaId);
+        this.notifyUpdate(mediaId, {
+          frames: final?.frames || [],
+          isComplete: true,
+          isExtracting: false,
+          progress: 100,
+        });
+        onProgress?.(100);
+        this.cleanupExtraction(mediaId);
+        logger.debug(`Filmstrip ${mediaId} complete: ${response.frameCount} frames`);
+      } else if (response.type === 'error') {
+        logger.error(`Filmstrip extraction error: ${response.error}`);
+        this.cleanupExtraction(mediaId);
+      }
+    };
+
+    worker.onerror = (e) => {
+      logger.error('Worker error:', e.message);
+      this.cleanupExtraction(mediaId);
+    };
+
+    // Send extraction request
+    const request: ExtractRequest = {
+      type: 'extract',
+      requestId,
+      mediaId,
+      blobUrl,
+      duration,
+      width: THUMBNAIL_WIDTH,
+      height: THUMBNAIL_HEIGHT,
+      skipIndices: skipIndices.length > 0 ? skipIndices : undefined,
+    };
+    worker.postMessage(request);
+
+    logger.debug(`Started extraction for ${mediaId}, skipping ${skipIndices.length} frames`);
+  }
+
+  private cleanupExtraction(mediaId: string): void {
+    const pending = this.pendingExtractions.get(mediaId);
+    if (pending) {
+      pending.worker.terminate();
+      this.pendingExtractions.delete(mediaId);
     }
   }
 
   /**
-   * Abort pending generation for a media item
+   * Abort extraction
    */
   abort(mediaId: string): void {
-    const pending = this.pendingRequests.get(mediaId);
-    if (pending && pending.requestId) {
-      // Abort via worker pool
-      filmstripWorkerPool.abort(pending.requestId);
-      this.pendingRequests.delete(mediaId);
+    const pending = this.pendingExtractions.get(mediaId);
+    if (pending) {
+      pending.worker.postMessage({ type: 'abort', requestId: pending.requestId });
+      this.cleanupExtraction(mediaId);
     }
   }
 
   /**
-   * Clear filmstrips for a media item from all caches
+   * Get synchronously from cache (for avoiding flash on remount)
+   */
+  getFromCacheSync(mediaId: string): Filmstrip | null {
+    return this.cache.get(mediaId) || null;
+  }
+
+  /**
+   * Clear filmstrip for a media item
    */
   async clearMedia(mediaId: string): Promise<void> {
-    // Clear from memory cache
-    const entry = this.memoryCache.get(mediaId);
-    if (entry) {
-      for (const bitmap of entry.frames) {
-        bitmap.close();
-      }
-      this.currentCacheSize -= entry.sizeBytes;
-      this.memoryCache.delete(mediaId);
-    }
-
-    // Clear from OPFS
+    this.abort(mediaId);
+    this.cache.delete(mediaId);
     await filmstripOPFSStorage.delete(mediaId);
-    // Also clear legacy IndexedDB if exists
-    await deleteFromIndexedDB(mediaId).catch(() => {});
   }
 
   /**
-   * Clear all cached filmstrips
+   * Clear all
    */
-  clearAll(): void {
-    // Close all ImageBitmaps
-    for (const entry of this.memoryCache.values()) {
-      for (const bitmap of entry.frames) {
-        bitmap.close();
-      }
+  async clearAll(): Promise<void> {
+    for (const mediaId of this.pendingExtractions.keys()) {
+      this.abort(mediaId);
     }
-
-    this.memoryCache.clear();
-    this.currentCacheSize = 0;
+    this.cache.clear();
+    await filmstripOPFSStorage.clearAll();
   }
 
   /**
-   * Clean up resources
+   * Dispose
    */
   dispose(): void {
-    this.clearAll();
-    // Abort all pending extractions
-    for (const pending of this.pendingRequests.values()) {
-      if (pending.requestId) {
-        filmstripWorkerPool.abort(pending.requestId);
-      }
+    for (const mediaId of this.pendingExtractions.keys()) {
+      this.abort(mediaId);
     }
-    this.pendingRequests.clear();
+    this.cache.clear();
     this.updateCallbacks.clear();
-    // Dispose worker pool
-    filmstripWorkerPool.dispose();
-    // Terminate decode worker
-    if (this.decodeWorker) {
-      this.decodeWorker.terminate();
-      this.decodeWorker = null;
-    }
+    this.loadingPromises.clear();
   }
 }
 
-// Singleton instance
+// Singleton
 export const filmstripCache = new FilmstripCacheService();
-// Expose cache clear for debugging
+
+// Debug access
 (window as any).__filmstripCache = filmstripCache;

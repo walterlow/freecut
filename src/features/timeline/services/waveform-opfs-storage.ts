@@ -28,11 +28,12 @@
  */
 
 import { createLogger } from '@/lib/logger';
+import { getCacheMigration } from '@/lib/storage/cache-version';
 
 const logger = createLogger('WaveformOPFS');
 
 const MAGIC = 'WFORM';
-const VERSION = 1;
+const BINARY_VERSION = 1; // Version stored in file header (for parsing)
 const HEADER_SIZE = 48;
 const LEVEL_INDEX_SIZE = 12;
 const WAVEFORM_DIR = 'waveforms';
@@ -84,19 +85,52 @@ export function chooseLevelForZoom(pixelsPerSecond: number): number {
 class WaveformOPFSStorage {
   private rootHandle: FileSystemDirectoryHandle | null = null;
   private dirHandle: FileSystemDirectoryHandle | null = null;
+  private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
 
   /**
-   * Initialize OPFS directory
+   * Initialize OPFS directory (with migration)
    */
   private async ensureDirectory(): Promise<FileSystemDirectoryHandle> {
+    // Return cached handle if ready
     if (this.dirHandle) return this.dirHandle;
 
+    // Ensure only one initialization runs
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = this.initializeWithMigration();
+    return this.initPromise;
+  }
+
+  /**
+   * Initialize directory and run migration if needed
+   */
+  private async initializeWithMigration(): Promise<FileSystemDirectoryHandle> {
     try {
       this.rootHandle = await navigator.storage.getDirectory();
-      this.dirHandle = await this.rootHandle.getDirectoryHandle(WAVEFORM_DIR, {
+      const dir = await this.rootHandle.getDirectoryHandle(WAVEFORM_DIR, {
         create: true,
       });
-      return this.dirHandle;
+
+      // Run migration BEFORE setting dirHandle (blocks all access until complete)
+      const migration = getCacheMigration('waveform');
+      if (migration.needsMigration) {
+        const entries: string[] = [];
+        for await (const entry of dir.values()) {
+          if (entry.kind === 'file') {
+            entries.push(entry.name);
+          }
+        }
+
+        for (const name of entries) {
+          await dir.removeEntry(name).catch(() => {});
+        }
+
+        migration.markComplete();
+        logger.info(`Waveform cache version updated: v${migration.oldVersion ?? 'none'} → v${migration.newVersion}${entries.length > 0 ? ` (cleared ${entries.length} files)` : ''}`)
+      }
+
+      this.dirHandle = dir;
+      return dir;
     } catch (error) {
       logger.error('Failed to initialize OPFS waveform directory:', error);
       throw error;
@@ -115,7 +149,7 @@ class WaveformOPFSStorage {
     }
 
     // Version
-    view.setUint8(offset++, VERSION);
+    view.setUint8(offset++, BINARY_VERSION);
 
     // Duration (float32)
     view.setFloat32(offset, header.duration, true);
@@ -148,8 +182,8 @@ class WaveformOPFSStorage {
 
     // Check version
     const version = view.getUint8(offset++);
-    if (version !== VERSION) {
-      logger.warn(`Unsupported waveform version: ${version}`);
+    if (version !== BINARY_VERSION) {
+      // Old version - will be auto-cleared by migration
       return null;
     }
 
@@ -359,32 +393,43 @@ class WaveformOPFSStorage {
   ): Promise<{ sampleRate: number; peaks: Float32Array } | null> {
     try {
       const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      let fileHandle;
+      try {
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      } catch {
+        return null;
+      }
+
       const file = await fileHandle.getFile();
 
-      // Read header
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const header = this.readHeader(new DataView(headerBuffer));
-      if (!header || levelIndex >= header.levelCount) return null;
+      // Read entire file at once to avoid OPFS concurrency issues with multiple slice() calls
+      const buffer = await file.arrayBuffer();
+      const view = new DataView(buffer);
 
-      // Read level index for this level
-      const indexOffset = HEADER_SIZE + levelIndex * LEVEL_INDEX_SIZE;
-      const indexBuffer = await file
-        .slice(indexOffset, indexOffset + LEVEL_INDEX_SIZE)
-        .arrayBuffer();
-      const level = this.readLevelIndex(new DataView(indexBuffer), 0);
+      // Parse header
+      const header = this.readHeader(view);
+      if (!header || levelIndex >= header.levelCount) {
+        return null;
+      }
 
-      // Read level data
+      // Read level index and extract data
+      const level = this.readLevelIndex(view, levelIndex);
       const dataSize = level.sampleCount * 4; // Float32 = 4 bytes
-      const dataBuffer = await file
-        .slice(level.offset, level.offset + dataSize)
-        .arrayBuffer();
-
+      const peaks = new Float32Array(buffer.slice(level.offset, level.offset + dataSize));
       return {
         sampleRate: level.sampleRate,
-        peaks: new Float32Array(dataBuffer),
+        peaks,
       };
     } catch (error) {
+      // NotFoundError is expected when cache doesn't exist - return null silently
+      if (error instanceof DOMException && error.name === 'NotFoundError') {
+        return null;
+      }
+      // RangeError means corrupted/old format data - silently delete so it regenerates
+      if (error instanceof RangeError) {
+        await this.delete(mediaId).catch(() => {});
+        return null;
+      }
       logger.error(`Failed to get waveform level ${levelIndex} for ${mediaId}:`, error);
       return null;
     }
@@ -402,20 +447,24 @@ class WaveformOPFSStorage {
   ): Promise<{ sampleRate: number; peaks: Float32Array; startSample: number } | null> {
     try {
       const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      let fileHandle;
+      try {
+        fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      } catch {
+        return null;
+      }
       const file = await fileHandle.getFile();
 
-      // Read header
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const header = this.readHeader(new DataView(headerBuffer));
+      // Read entire file at once to avoid OPFS concurrency issues
+      const buffer = await file.arrayBuffer();
+      const view = new DataView(buffer);
+
+      // Parse header
+      const header = this.readHeader(view);
       if (!header || levelIndex >= header.levelCount) return null;
 
       // Read level index
-      const indexOffset = HEADER_SIZE + levelIndex * LEVEL_INDEX_SIZE;
-      const indexBuffer = await file
-        .slice(indexOffset, indexOffset + LEVEL_INDEX_SIZE)
-        .arrayBuffer();
-      const level = this.readLevelIndex(new DataView(indexBuffer), 0);
+      const level = this.readLevelIndex(view, levelIndex);
 
       // Calculate sample range
       const startSample = Math.max(0, Math.floor(startTime * level.sampleRate));
@@ -427,19 +476,22 @@ class WaveformOPFSStorage {
 
       if (sampleCount <= 0) return null;
 
-      // Read only the needed range
+      // Extract range from buffer
       const rangeOffset = level.offset + startSample * 4;
       const rangeSize = sampleCount * 4;
-      const dataBuffer = await file
-        .slice(rangeOffset, rangeOffset + rangeSize)
-        .arrayBuffer();
+      const peaks = new Float32Array(buffer.slice(rangeOffset, rangeOffset + rangeSize));
 
       return {
         sampleRate: level.sampleRate,
-        peaks: new Float32Array(dataBuffer),
+        peaks,
         startSample,
       };
     } catch (error) {
+      // RangeError means corrupted/old format data - silently delete so it regenerates
+      if (error instanceof RangeError) {
+        await this.delete(mediaId).catch(() => {});
+        return null;
+      }
       logger.error(`Failed to get waveform range for ${mediaId}:`, error);
       return null;
     }
@@ -493,7 +545,6 @@ class WaveformOPFSStorage {
     try {
       const dir = await this.ensureDirectory();
       await dir.removeEntry(`${mediaId}.bin`);
-      logger.debug(`Deleted waveform ${mediaId}`);
     } catch {
       // File may not exist, ignore
     }

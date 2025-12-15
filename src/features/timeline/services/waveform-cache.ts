@@ -4,11 +4,11 @@
  * Manages waveform data caching with:
  * - In-memory LRU cache for fast access
  * - OPFS multi-resolution persistence (faster than IndexedDB)
- * - Mediabunny-based waveform generation (hardware-accelerated)
+ * - Off-main-thread waveform generation via worker
+ * - Progressive streaming from OPFS on reload
  * - Auto-migration from legacy IndexedDB storage
  */
 
-import type { WaveformData } from '@/types/storage';
 import { createLogger } from '@/lib/logger';
 import {
   waveformOPFSStorage,
@@ -16,6 +16,7 @@ import {
   chooseLevelForZoom,
   type MultiResolutionWaveform,
 } from './waveform-opfs-storage';
+import type { WaveformWorkerResponse } from './waveform-worker';
 // Legacy IndexedDB imports for migration
 import {
   getWaveform as getFromIndexedDB,
@@ -23,9 +24,6 @@ import {
 } from '@/lib/storage/indexeddb';
 
 const logger = createLogger('WaveformCache');
-
-// Lazy load mediabunny to avoid blocking initial render
-const mediabunnyModule = () => import('mediabunny');
 
 // Memory cache configuration
 const MAX_CACHE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
@@ -40,6 +38,7 @@ export interface CachedWaveform {
   channels: number;
   sizeBytes: number;
   lastAccessed: number;
+  isComplete: boolean;
 }
 
 interface PendingRequest {
@@ -47,15 +46,59 @@ interface PendingRequest {
   abortController: AbortController;
 }
 
-interface ExtractionState {
-  aborted: boolean;
-}
+export type WaveformUpdateCallback = (waveform: CachedWaveform) => void;
 
 class WaveformCacheService {
   private memoryCache = new Map<string, CachedWaveform>();
   private currentCacheSize = 0;
   private pendingRequests = new Map<string, PendingRequest>();
-  private activeExtractions = new Map<string, ExtractionState>();
+  private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>();
+  private worker: Worker | null = null;
+  private workerRequestId = 0;
+
+  /**
+   * Get or create the waveform worker (lazy initialization)
+   */
+  private getWorker(): Worker {
+    if (!this.worker) {
+      this.worker = new Worker(
+        new URL('./waveform-worker.ts', import.meta.url),
+        { type: 'module' }
+      );
+    }
+    return this.worker;
+  }
+
+  /**
+   * Subscribe to waveform updates for progressive loading
+   */
+  subscribe(mediaId: string, callback: WaveformUpdateCallback): () => void {
+    if (!this.updateCallbacks.has(mediaId)) {
+      this.updateCallbacks.set(mediaId, new Set());
+    }
+    this.updateCallbacks.get(mediaId)!.add(callback);
+    return () => {
+      const callbacks = this.updateCallbacks.get(mediaId);
+      if (callbacks) {
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          this.updateCallbacks.delete(mediaId);
+        }
+      }
+    };
+  }
+
+  /**
+   * Notify subscribers of waveform updates
+   */
+  private notifyUpdate(mediaId: string, waveform: CachedWaveform): void {
+    const callbacks = this.updateCallbacks.get(mediaId);
+    if (callbacks) {
+      for (const callback of callbacks) {
+        callback(waveform);
+      }
+    }
+  }
 
   /**
    * Get waveform from memory cache (private)
@@ -121,25 +164,28 @@ class WaveformCacheService {
    * Load waveform from OPFS (with IndexedDB migration fallback)
    */
   private async loadFromStorage(mediaId: string): Promise<CachedWaveform | null> {
-    // Try OPFS first (new format with multi-resolution)
+    // Try OPFS first
     try {
-      // Load the highest resolution level for now (level 0)
       const level = await waveformOPFSStorage.getLevel(mediaId, 0);
       if (level) {
         const cached: CachedWaveform = {
           peaks: level.peaks,
           duration: level.peaks.length / level.sampleRate,
           sampleRate: level.sampleRate,
-          channels: 1, // Mono after mixdown
+          channels: 1,
           sizeBytes: level.peaks.byteLength,
           lastAccessed: Date.now(),
+          isComplete: true,
         };
 
         this.addToMemoryCache(mediaId, cached);
+        this.notifyUpdate(mediaId, cached);
         return cached;
       }
     } catch (err) {
-      logger.warn('Failed to load waveform from OPFS:', err);
+      logger.warn('Failed to load waveform from OPFS, deleting corrupted data:', err);
+      // Delete corrupted OPFS data so it can be regenerated
+      await waveformOPFSStorage.delete(mediaId).catch(() => {});
     }
 
     // Fallback: Try legacy IndexedDB and migrate
@@ -157,10 +203,12 @@ class WaveformCacheService {
           channels: stored.channels,
           sizeBytes: stored.peaks.byteLength,
           lastAccessed: Date.now(),
+          isComplete: true,
         };
 
         // Add to memory cache
         this.addToMemoryCache(mediaId, cached);
+        this.notifyUpdate(mediaId, cached);
 
         // Migrate to OPFS in background
         this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch(() => {});
@@ -208,172 +256,223 @@ class WaveformCacheService {
   }
 
   /**
-   * Generate waveform using mediabunny (hardware-accelerated WebCodecs)
+   * Generate waveform using worker (off main thread, hardware-accelerated WebCodecs)
+   */
+  private async generateWaveformWithWorker(
+    mediaId: string,
+    blobUrl: string,
+    onProgress?: (progress: number) => void
+  ): Promise<CachedWaveform> {
+    const worker = this.getWorker();
+    const requestId = `waveform-${++this.workerRequestId}`;
+
+    return new Promise((resolve, reject) => {
+      // Add timeout - if worker doesn't respond in 30s, reject
+      const timeout = setTimeout(() => {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        reject(new Error('Worker timeout'));
+      }, 30000);
+
+      const handleMessage = async (event: MessageEvent<WaveformWorkerResponse>) => {
+        if (event.data.requestId !== requestId) return;
+
+        switch (event.data.type) {
+          case 'progress':
+            onProgress?.(event.data.progress);
+            break;
+
+          case 'complete': {
+            clearTimeout(timeout);
+            worker.removeEventListener('message', handleMessage);
+            worker.removeEventListener('error', handleError);
+            const { peaks, duration, channels } = event.data;
+
+            const cached: CachedWaveform = {
+              peaks,
+              duration,
+              sampleRate: SAMPLES_PER_SECOND,
+              channels,
+              sizeBytes: peaks.byteLength,
+              lastAccessed: Date.now(),
+              isComplete: true,
+            };
+
+            // Add to memory cache
+            this.addToMemoryCache(mediaId, cached);
+            this.notifyUpdate(mediaId, cached);
+
+            // Generate multi-resolution levels and persist to OPFS
+            try {
+              const levels = waveformOPFSStorage.generateMultiResolution(
+                peaks,
+                SAMPLES_PER_SECOND,
+                duration
+              );
+
+              const multiRes: MultiResolutionWaveform = {
+                duration,
+                channels,
+                levels,
+              };
+
+              await waveformOPFSStorage.save(mediaId, multiRes);
+            } catch (saveError) {
+              logger.warn('Failed to persist waveform to OPFS:', saveError);
+            }
+
+            onProgress?.(100);
+            resolve(cached);
+            break;
+          }
+
+          case 'error':
+            clearTimeout(timeout);
+            worker.removeEventListener('message', handleMessage);
+            worker.removeEventListener('error', handleError);
+            reject(new Error(event.data.error));
+            break;
+        }
+      };
+
+      const handleError = (event: ErrorEvent) => {
+        clearTimeout(timeout);
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        logger.error('Waveform worker error:', event.message);
+        reject(new Error(event.message || 'Worker error'));
+      };
+
+      worker.addEventListener('message', handleMessage);
+      worker.addEventListener('error', handleError);
+
+      // Send request to worker
+      worker.postMessage({
+        type: 'generate',
+        requestId,
+        blobUrl,
+        samplesPerSecond: SAMPLES_PER_SECOND,
+      });
+    });
+  }
+
+  /**
+   * Fallback: Generate waveform using AudioContext on main thread
+   * Used when worker fails (e.g., mediabunny not available)
+   */
+  private async generateWaveformFallback(
+    mediaId: string,
+    blobUrl: string,
+    onProgress?: (progress: number) => void
+  ): Promise<CachedWaveform> {
+    onProgress?.(10);
+
+    // Fetch the audio file
+    const response = await fetch(blobUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    onProgress?.(30);
+
+    // Decode with AudioContext
+    const audioContext = new AudioContext();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+    onProgress?.(60);
+
+    const duration = audioBuffer.duration;
+    const channels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+
+    // Mix channels to mono
+    const monoSamples = new Float32Array(audioBuffer.length);
+    for (let c = 0; c < channels; c++) {
+      const channelData = audioBuffer.getChannelData(c);
+      for (let i = 0; i < audioBuffer.length; i++) {
+        monoSamples[i] += channelData[i]! / channels;
+      }
+    }
+    onProgress?.(70);
+
+    // Downsample to target samples per second
+    const numOutputSamples = Math.ceil(duration * SAMPLES_PER_SECOND);
+    const samplesPerOutput = Math.floor(monoSamples.length / numOutputSamples);
+    const peaks = new Float32Array(numOutputSamples);
+
+    for (let i = 0; i < numOutputSamples; i++) {
+      const startIdx = i * samplesPerOutput;
+      const endIdx = Math.min(startIdx + samplesPerOutput, monoSamples.length);
+
+      let maxVal = 0;
+      for (let j = startIdx; j < endIdx; j++) {
+        const val = Math.abs(monoSamples[j] ?? 0);
+        if (val > maxVal) maxVal = val;
+      }
+      peaks[i] = maxVal;
+    }
+    onProgress?.(85);
+
+    // Normalize to 0-1 range
+    let maxPeak = 0;
+    for (let i = 0; i < peaks.length; i++) {
+      if (peaks[i]! > maxPeak) maxPeak = peaks[i]!;
+    }
+    if (maxPeak > 0) {
+      for (let i = 0; i < peaks.length; i++) {
+        peaks[i] = peaks[i]! / maxPeak;
+      }
+    }
+
+    // Close audio context
+    await audioContext.close();
+
+    const cached: CachedWaveform = {
+      peaks,
+      duration,
+      sampleRate: SAMPLES_PER_SECOND,
+      channels,
+      sizeBytes: peaks.byteLength,
+      lastAccessed: Date.now(),
+      isComplete: true,
+    };
+
+    // Add to memory cache
+    this.addToMemoryCache(mediaId, cached);
+    this.notifyUpdate(mediaId, cached);
+
+    // Persist to OPFS
+    try {
+      const levels = waveformOPFSStorage.generateMultiResolution(
+        peaks,
+        SAMPLES_PER_SECOND,
+        duration
+      );
+
+      const multiRes: MultiResolutionWaveform = {
+        duration,
+        channels,
+        levels,
+      };
+
+      await waveformOPFSStorage.save(mediaId, multiRes);
+    } catch (saveError) {
+      logger.warn('Failed to persist waveform to OPFS:', saveError);
+    }
+
+    onProgress?.(100);
+    return cached;
+  }
+
+  /**
+   * Generate waveform with worker, falling back to AudioContext if needed
    */
   private async generateWaveform(
     mediaId: string,
     blobUrl: string,
     onProgress?: (progress: number) => void
   ): Promise<CachedWaveform> {
-    const extractionState: ExtractionState = { aborted: false };
-    this.activeExtractions.set(mediaId, extractionState);
-
-    // Load mediabunny
-    const mediabunny = await mediabunnyModule();
-    const { Input, UrlSource, AudioSampleSink, MP4, WEBM, MATROSKA, MP3, WAVE, FLAC, OGG } = mediabunny;
-
     try {
-      onProgress?.(5);
-
-      // Create input from blob URL with common audio/video formats
-      const input = new Input({
-        source: new UrlSource(blobUrl),
-        formats: [MP4, WEBM, MATROSKA, MP3, WAVE, FLAC, OGG],
-      });
-
-      // Get primary audio track
-      const audioTrack = await input.getPrimaryAudioTrack();
-      if (!audioTrack) {
-        throw new Error('No audio track found');
-      }
-
-      onProgress?.(10);
-
-      // Get audio metadata
-      const sampleRate = audioTrack.sampleRate;
-      const channels = audioTrack.numberOfChannels;
-      const duration = await audioTrack.computeDuration();
-
-      // Create audio sample sink for sample extraction
-      const sink = new AudioSampleSink(audioTrack);
-
-      // Collect all audio samples
-      const allSamples: Float32Array[] = [];
-      let totalSamples = 0;
-
-      onProgress?.(20);
-
-      try {
-        for await (const sample of sink.samples()) {
-          if (extractionState.aborted) {
-            sample.close();
-            throw new Error('Aborted');
-          }
-
-          // Convert to AudioBuffer
-          const buffer = sample.toAudioBuffer();
-          sample.close(); // Release sample resources
-
-          // Get samples from all channels and mix to mono
-          const channelData: Float32Array[] = [];
-          for (let c = 0; c < buffer.numberOfChannels; c++) {
-            channelData.push(buffer.getChannelData(c));
-          }
-
-          // Mix to mono by averaging channels
-          const monoSamples = new Float32Array(buffer.length);
-          for (let i = 0; i < buffer.length; i++) {
-            let sum = 0;
-            for (let c = 0; c < channelData.length; c++) {
-              sum += channelData[c]![i] ?? 0;
-            }
-            monoSamples[i] = sum / channelData.length;
-          }
-
-          allSamples.push(monoSamples);
-          totalSamples += buffer.length;
-
-          // Update progress
-          const progress = 20 + Math.min(60, Math.round((totalSamples / (sampleRate * duration)) * 60));
-          onProgress?.(progress);
-        }
-      } catch (loopError) {
-        if (extractionState.aborted) {
-          throw new Error('Aborted');
-        }
-        throw loopError;
-      }
-
-      onProgress?.(80);
-
-      // Combine all samples into one array
-      const combinedSamples = new Float32Array(totalSamples);
-      let offset = 0;
-      for (const samples of allSamples) {
-        combinedSamples.set(samples, offset);
-        offset += samples.length;
-      }
-
-      // Downsample to target samples per second
-      const numOutputSamples = Math.ceil(duration * SAMPLES_PER_SECOND);
-      const samplesPerOutput = Math.floor(totalSamples / numOutputSamples);
-      const peaks = new Float32Array(numOutputSamples);
-
-      // Extract peak values
-      for (let i = 0; i < numOutputSamples; i++) {
-        const startIdx = i * samplesPerOutput;
-        const endIdx = Math.min(startIdx + samplesPerOutput, totalSamples);
-
-        let maxVal = 0;
-        for (let j = startIdx; j < endIdx; j++) {
-          const val = Math.abs(combinedSamples[j] ?? 0);
-          if (val > maxVal) {
-            maxVal = val;
-          }
-        }
-        peaks[i] = maxVal;
-      }
-
-      // Normalize to 0-1 range
-      let maxPeak = 0;
-      for (let i = 0; i < peaks.length; i++) {
-        if (peaks[i]! > maxPeak) {
-          maxPeak = peaks[i]!;
-        }
-      }
-      if (maxPeak > 0) {
-        for (let i = 0; i < peaks.length; i++) {
-          peaks[i] = peaks[i]! / maxPeak;
-        }
-      }
-
-      onProgress?.(90);
-
-      const cached: CachedWaveform = {
-        peaks,
-        duration,
-        sampleRate: SAMPLES_PER_SECOND,
-        channels,
-        sizeBytes: peaks.buffer.byteLength,
-        lastAccessed: Date.now(),
-      };
-
-      // Add to memory cache
-      this.addToMemoryCache(mediaId, cached);
-
-      // Generate multi-resolution levels and persist to OPFS
-      try {
-        const levels = waveformOPFSStorage.generateMultiResolution(
-          peaks,
-          SAMPLES_PER_SECOND,
-          duration
-        );
-
-        const multiRes: MultiResolutionWaveform = {
-          duration,
-          channels,
-          levels,
-        };
-
-        await waveformOPFSStorage.save(mediaId, multiRes);
-      } catch (saveError) {
-        logger.warn('Failed to persist waveform to OPFS:', saveError);
-      }
-
-      onProgress?.(100);
-      return cached;
-    } finally {
-      this.activeExtractions.delete(mediaId);
+      return await this.generateWaveformWithWorker(mediaId, blobUrl, onProgress);
+    } catch {
+      // Worker may fail in some environments - fallback to AudioContext
+      return await this.generateWaveformFallback(mediaId, blobUrl, onProgress);
     }
   }
 
@@ -442,9 +541,13 @@ class WaveformCacheService {
    * Abort pending generation for a media item
    */
   abort(mediaId: string): void {
-    const extraction = this.activeExtractions.get(mediaId);
-    if (extraction) {
-      extraction.aborted = true;
+    const pending = this.pendingRequests.get(mediaId);
+    if (pending && this.worker) {
+      // Send abort message to worker
+      this.worker.postMessage({
+        type: 'abort',
+        requestId: `waveform-${this.workerRequestId}`,
+      });
     }
   }
 
@@ -478,11 +581,13 @@ class WaveformCacheService {
    */
   dispose(): void {
     this.clearAll();
-    // Abort all active extractions
-    for (const extraction of this.activeExtractions.values()) {
-      extraction.aborted = true;
+    this.pendingRequests.clear();
+    this.updateCallbacks.clear();
+    // Terminate worker
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
     }
-    this.activeExtractions.clear();
   }
 
   /**

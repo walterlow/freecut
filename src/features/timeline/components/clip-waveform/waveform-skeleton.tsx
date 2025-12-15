@@ -8,22 +8,37 @@ export interface WaveformSkeletonProps {
   clipWidth: number;
   /** Height of the skeleton (default: 32px) */
   height?: number;
+  /** Optional className for positioning */
+  className?: string;
 }
 
 /**
  * Waveform Skeleton Component
  *
- * Simple static placeholder shown while waveform data is being generated.
+ * Displays a subtle shimmer placeholder while waveform data is loading.
+ * Uses the same animation style as filmstrip skeleton for consistency.
  */
 export const WaveformSkeleton = memo(function WaveformSkeleton({
-  clipWidth: _clipWidth,
+  clipWidth,
   height = WAVEFORM_HEIGHT,
+  className = '',
 }: WaveformSkeletonProps) {
-  // Simple static placeholder - just a subtle background
   return (
     <div
-      className="absolute inset-0 bg-timeline-audio/10"
-      style={{ height }}
+      className={`absolute left-0 right-0 overflow-hidden bg-timeline-audio/10 ${className}`}
+      style={{
+        height,
+        width: clipWidth,
+        // Subtle shimmer effect matching filmstrip
+        backgroundImage: `linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(158, 107, 214, 0.1) 50%,
+          transparent 100%
+        )`,
+        backgroundSize: '120px 100%',
+        animation: 'filmstrip-shimmer 1.5s ease-in-out infinite',
+      }}
     />
   );
 });

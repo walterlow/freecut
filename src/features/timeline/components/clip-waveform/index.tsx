@@ -91,7 +91,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   }, [mediaId, isVisible]);
 
   // Use waveform hook - enabled once we have blobUrl (independent of visibility after that)
-  const { peaks, duration, sampleRate, isLoading, error } = useWaveform({
+  const { peaks, duration, sampleRate, isLoading } = useWaveform({
     mediaId,
     blobUrl,
     isVisible: true, // Always consider visible once we start - prevents re-triggers
@@ -163,14 +163,9 @@ export const ClipWaveform = memo(function ClipWaveform({
     [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height]
   );
 
-  // Show skeleton while loading or if no peaks yet
-  if (isLoading || !peaks || peaks.length === 0) {
-    return <WaveformSkeleton clipWidth={clipWidth} height={height} />;
-  }
-
-  // Show nothing on error (clip color will show through)
-  if (error) {
-    return null;
+  // Show skeleton while loading or on error (better than showing nothing)
+  if (!peaks || peaks.length === 0) {
+    return <WaveformSkeleton clipWidth={clipWidth} height={height} className={className} />;
   }
 
   // Include quantized pixelsPerSecond in version to force re-render on zoom changes
@@ -179,12 +174,18 @@ export const ClipWaveform = memo(function ClipWaveform({
   const renderVersion = peaks.length * 10000 + quantizedPPS;
 
   return (
-    <TiledCanvas
-      width={clipWidth}
-      height={height}
-      renderTile={renderTile}
-      version={renderVersion}
-      className={className}
-    />
+    <>
+      {/* Show shimmer skeleton behind canvas while loading progressively */}
+      {isLoading && (
+        <WaveformSkeleton clipWidth={clipWidth} height={height} className={className} />
+      )}
+      <TiledCanvas
+        width={clipWidth}
+        height={height}
+        renderTile={renderTile}
+        version={renderVersion}
+        className={className}
+      />
+    </>
   );
 });

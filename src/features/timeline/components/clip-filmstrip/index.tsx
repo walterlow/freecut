@@ -1,7 +1,6 @@
-import { memo, useCallback, useEffect, useState } from 'react';
-import { TiledCanvas } from './tiled-canvas';
+import { memo, useEffect, useState, useMemo } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
-import { useFilmstrip } from '../../hooks/use-filmstrip';
+import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '../../services/filmstrip-cache';
 
@@ -31,11 +30,49 @@ export interface ClipFilmstripProps {
 }
 
 /**
+ * Find the closest frame by timestamp using binary search
+ */
+function findClosestFrame(
+  frames: FilmstripFrame[],
+  targetTime: number
+): FilmstripFrame | null {
+  if (frames.length === 0) return null;
+
+  let left = 0;
+  let right = frames.length - 1;
+  let bestIndex = 0;
+
+  while (left <= right) {
+    const mid = Math.floor((left + right) / 2);
+    const midTime = frames[mid]!.timestamp;
+
+    if (midTime === targetTime) {
+      return frames[mid]!;
+    } else if (midTime < targetTime) {
+      bestIndex = mid;
+      left = mid + 1;
+    } else {
+      right = mid - 1;
+    }
+  }
+
+  // Check if next frame is closer
+  if (bestIndex < frames.length - 1) {
+    const currentDiff = Math.abs(frames[bestIndex]!.timestamp - targetTime);
+    const nextDiff = Math.abs(frames[bestIndex + 1]!.timestamp - targetTime);
+    if (nextDiff < currentDiff) {
+      return frames[bestIndex + 1]!;
+    }
+  }
+
+  return frames[bestIndex]!;
+}
+
+/**
  * Clip Filmstrip Component
  *
- * Renders video frame thumbnails as a filmstrip background for timeline clips.
- * Uses tiled canvas for large clips and shows skeleton while loading.
- * Matches extracted frames to display slots by timestamp for correct visual mapping.
+ * Renders video frame thumbnails using img tags with object URLs.
+ * Simple approach: position each thumbnail based on its timestamp.
  */
 export const ClipFilmstrip = memo(function ClipFilmstrip({
   mediaId,
@@ -76,8 +113,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     };
   }, [mediaId, isVisible]);
 
-  // Use filmstrip hook - extracts frames for full source duration
-  const { frames, timestamps, error } = useFilmstrip({
+  // Use filmstrip hook
+  const { frames, isComplete, error } = useFilmstrip({
     mediaId,
     blobUrl,
     duration: sourceDuration,
@@ -85,100 +122,38 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     enabled: isVisible && !!blobUrl && sourceDuration > 0,
   });
 
-  // Render function for tiled canvas - matches frames to slots by timestamp
-  // Uses a proximity threshold to only render slots with nearby frames (progressive fill-in)
-  const renderTile = useCallback(
-    (
-      ctx: CanvasRenderingContext2D,
-      _tileIndex: number,
-      tileOffset: number,
-      tileWidth: number
-    ) => {
-      if (!frames || !timestamps || frames.length === 0) {
-        return;
-      }
+  // Calculate which slots need thumbnails and map frames to slots
+  const visibleFrames = useMemo(() => {
+    if (!frames || frames.length === 0) return [];
 
-      // Calculate which slots are visible in this tile
-      const startSlot = Math.floor(tileOffset / THUMBNAIL_WIDTH);
-      const endSlot = Math.ceil((tileOffset + tileWidth) / THUMBNAIL_WIDTH);
+    const effectiveStart = sourceStart + trimStart;
+    const slotCount = Math.ceil(clipWidth / THUMBNAIL_WIDTH);
+    const slotTimeSpan = (THUMBNAIL_WIDTH / pixelsPerSecond) * speed;
+    const proximityThreshold = slotTimeSpan * 0.6;
 
-      // The effective start in source video (accounting for trim)
-      const effectiveStart = sourceStart + trimStart;
+    const result: { slot: number; frame: FilmstripFrame; x: number }[] = [];
 
-      // Calculate the time span each slot represents for proximity threshold
-      // A slot is only rendered if a frame exists within half a slot's time span
-      const slotTimeSpan = THUMBNAIL_WIDTH / pixelsPerSecond * speed;
-      const proximityThreshold = slotTimeSpan * 0.6; // 60% of slot time span
+    for (let slot = 0; slot < slotCount; slot++) {
+      const slotLeftPixel = slot * THUMBNAIL_WIDTH;
+      const timelineSeconds = slotLeftPixel / pixelsPerSecond;
+      const sourceTime = effectiveStart + timelineSeconds * speed;
 
-      for (let slot = startSlot; slot <= endSlot; slot++) {
-        const slotX = slot * THUMBNAIL_WIDTH - tileOffset;
+      const closestFrame = findClosestFrame(frames, sourceTime);
+      if (!closestFrame) continue;
 
-        if (slotX + THUMBNAIL_WIDTH < 0 || slotX > tileWidth) continue;
+      // Check proximity threshold
+      const timeDiff = Math.abs(closestFrame.timestamp - sourceTime);
+      if (timeDiff > proximityThreshold) continue;
 
-        // Calculate the source time for the LEFT edge of this slot
-        // IMPORTANT: Using left edge (not center) because when users look at a thumbnail
-        // at position X, they expect to see what's AT that position, not what's at
-        // position X + half a thumbnail width. This provides more accurate visual mapping
-        // especially at lower zoom levels where each thumbnail covers several seconds.
-        const slotLeftPixel = slot * THUMBNAIL_WIDTH;
-        const timelineSeconds = slotLeftPixel / pixelsPerSecond;
-        const sourceTime = effectiveStart + timelineSeconds * speed;
+      result.push({
+        slot,
+        frame: closestFrame,
+        x: slotLeftPixel,
+      });
+    }
 
-        // Find the closest frame by timestamp using binary search
-        let bestFrameIndex = 0;
-        let left = 0;
-        let right = timestamps.length - 1;
-
-        while (left <= right) {
-          const mid = Math.floor((left + right) / 2);
-          const midTime = timestamps[mid] ?? 0;
-
-          if (midTime === sourceTime) {
-            bestFrameIndex = mid;
-            break;
-          } else if (midTime < sourceTime) {
-            bestFrameIndex = mid;
-            left = mid + 1;
-          } else {
-            right = mid - 1;
-          }
-        }
-
-        // Check if the next frame is actually closer
-        if (bestFrameIndex < timestamps.length - 1) {
-          const currentDiff = Math.abs((timestamps[bestFrameIndex] ?? 0) - sourceTime);
-          const nextDiff = Math.abs((timestamps[bestFrameIndex + 1] ?? 0) - sourceTime);
-          if (nextDiff < currentDiff) {
-            bestFrameIndex++;
-          }
-        }
-
-        // Only render if the closest frame is within proximity threshold
-        // This creates the progressive fill-in effect as frames arrive
-        const closestTime = timestamps[bestFrameIndex] ?? 0;
-        const timeDiff = Math.abs(closestTime - sourceTime);
-        if (timeDiff > proximityThreshold) {
-          continue; // Skip this slot - no close enough frame yet
-        }
-
-        const frame = frames[bestFrameIndex];
-        if (!frame) continue;
-
-        try {
-          ctx.drawImage(
-            frame,
-            Math.round(slotX),
-            0,
-            THUMBNAIL_WIDTH,
-            THUMBNAIL_HEIGHT
-          );
-        } catch {
-          // ImageBitmap may have been closed
-        }
-      }
-    },
-    [frames, timestamps, pixelsPerSecond, sourceStart, trimStart, speed]
-  );
+    return result;
+  }, [frames, clipWidth, pixelsPerSecond, sourceStart, trimStart, speed]);
 
   if (error) {
     return null;
@@ -189,29 +164,35 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     return <FilmstripSkeleton clipWidth={clipWidth} height={height} className={className} />;
   }
 
-  // Include quantized pixelsPerSecond in version to force re-render on zoom changes
-  // Quantize to steps of 5 to reduce canvas redraws on small zoom changes
-  const quantizedPPS = Math.round(pixelsPerSecond / 5) * 5;
-  const renderVersion = frames.length * 10000 + quantizedPPS;
-
-  // Calculate if filmstrip is complete (all frames loaded)
-  // At 24fps extraction rate, complete when we have ~duration * 24 frames
-  const expectedFrames = Math.ceil(sourceDuration * 24);
-  const isComplete = frames.length >= expectedFrames * 0.95; // 95% threshold
-
   return (
     <>
-      {/* Show shimmer skeleton behind canvas while loading */}
+      {/* Show shimmer skeleton behind while loading */}
       {!isComplete && (
         <FilmstripSkeleton clipWidth={clipWidth} height={height} className={className} />
       )}
-      <TiledCanvas
-        width={clipWidth}
-        height={height}
-        renderTile={renderTile}
-        version={renderVersion}
-        className={className}
-      />
+      <div
+        className={`absolute left-0 ${className} overflow-hidden pointer-events-none`}
+        style={{ width: clipWidth, height }}
+      >
+        {visibleFrames.map(({ slot, frame, x }) => (
+          <img
+            key={slot}
+            src={frame.url}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute top-0 transition-opacity duration-150"
+            style={{
+              left: x,
+              width: THUMBNAIL_WIDTH,
+              height: THUMBNAIL_HEIGHT,
+              objectFit: 'cover',
+            }}
+          />
+        ))}
+      </div>
     </>
   );
 });
+
+export { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT };

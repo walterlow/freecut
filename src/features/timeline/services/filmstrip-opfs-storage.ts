@@ -1,426 +1,251 @@
 /**
  * OPFS Filmstrip Storage
  *
- * Binary format for efficient filmstrip storage with random access:
+ * Simple storage for filmstrip frames. Worker handles saving,
+ * this service handles loading and providing object URLs.
  *
- * Header (32 bytes):
- *   - Magic: "FSTRIP" (6 bytes)
- *   - Version: uint8 (1 byte)
- *   - Width: uint16 (2 bytes)
- *   - Height: uint16 (2 bytes)
- *   - Frame count: uint32 (4 bytes)
- *   - Quality: uint8 (1 byte, image quality * 100)
- *   - Reserved: (16 bytes)
- *
- * Index (12 bytes per frame):
- *   - Timestamp: float32 (4 bytes)
- *   - Offset: uint32 (4 bytes)
- *   - Size: uint32 (4 bytes)
- *
- * Data:
- *   - WebP image bytes concatenated
+ * Storage structure:
+ *   filmstrips/{mediaId}/
+ *     meta.json - { width, height, isComplete, frameCount }
+ *     0.webp, 1.webp, 2.webp, ...
  */
 
 import { createLogger } from '@/lib/logger';
+import { getCacheMigration } from '@/lib/storage/cache-version';
 
 const logger = createLogger('FilmstripOPFS');
 
-const MAGIC = 'FSTRIP';
-const VERSION = 1;
-const HEADER_SIZE = 32;
-const INDEX_ENTRY_SIZE = 12; // timestamp(4) + offset(4) + size(4)
 const FILMSTRIP_DIR = 'filmstrips';
+const FRAME_RATE = 24;
 
-interface FilmstripHeader {
+export interface FilmstripMetadata {
   width: number;
   height: number;
+  isComplete: boolean;
   frameCount: number;
-  quality: number;
 }
 
-interface FrameIndex {
+export interface FilmstripFrame {
+  index: number;
   timestamp: number;
-  offset: number;
-  size: number;
+  url: string; // Object URL for img src
+}
+
+export interface LoadedFilmstrip {
+  metadata: FilmstripMetadata;
+  frames: FilmstripFrame[];
+  existingIndices: number[];
 }
 
 /**
  * OPFS Filmstrip Storage Service
- * Provides efficient binary storage with random frame access
  */
 class FilmstripOPFSStorage {
-  private rootHandle: FileSystemDirectoryHandle | null = null;
   private dirHandle: FileSystemDirectoryHandle | null = null;
+  private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
+  private objectUrls = new Map<string, string[]>(); // mediaId -> urls for cleanup
 
   /**
    * Initialize OPFS directory
    */
   private async ensureDirectory(): Promise<FileSystemDirectoryHandle> {
     if (this.dirHandle) return this.dirHandle;
+    if (this.initPromise) return this.initPromise;
 
+    this.initPromise = this.initialize();
+    return this.initPromise;
+  }
+
+  private async initialize(): Promise<FileSystemDirectoryHandle> {
     try {
-      this.rootHandle = await navigator.storage.getDirectory();
-      this.dirHandle = await this.rootHandle.getDirectoryHandle(FILMSTRIP_DIR, {
-        create: true,
-      });
-      return this.dirHandle;
+      const root = await navigator.storage.getDirectory();
+      const dir = await root.getDirectoryHandle(FILMSTRIP_DIR, { create: true });
+
+      // Run migration if needed
+      const migration = getCacheMigration('filmstrip');
+      if (migration.needsMigration) {
+        const entries: string[] = [];
+        for await (const entry of dir.values()) {
+          entries.push(entry.name);
+        }
+        for (const name of entries) {
+          await dir.removeEntry(name, { recursive: true }).catch(() => {});
+        }
+        migration.markComplete();
+        logger.info(`Filmstrip cache cleared for v${migration.newVersion}`);
+      }
+
+      this.dirHandle = dir;
+      return dir;
     } catch (error) {
-      logger.error('Failed to initialize OPFS directory:', error);
+      logger.error('Failed to initialize OPFS:', error);
       throw error;
     }
   }
 
   /**
-   * Write header to buffer
+   * Get media directory handle
    */
-  private writeHeader(
-    view: DataView,
-    header: FilmstripHeader
-  ): void {
-    let offset = 0;
-
-    // Magic bytes
-    for (let i = 0; i < MAGIC.length; i++) {
-      view.setUint8(offset++, MAGIC.charCodeAt(i));
-    }
-
-    // Version
-    view.setUint8(offset++, VERSION);
-
-    // Width & Height
-    view.setUint16(offset, header.width, true);
-    offset += 2;
-    view.setUint16(offset, header.height, true);
-    offset += 2;
-
-    // Frame count
-    view.setUint32(offset, header.frameCount, true);
-    offset += 4;
-
-    // Quality
-    view.setUint8(offset++, header.quality);
-
-    // Reserved bytes (fill with 0)
-    // Remaining bytes up to HEADER_SIZE are already 0 from ArrayBuffer
-  }
-
-  /**
-   * Read header from buffer
-   */
-  private readHeader(view: DataView): FilmstripHeader | null {
-    let offset = 0;
-
-    // Verify magic
-    let magic = '';
-    for (let i = 0; i < MAGIC.length; i++) {
-      magic += String.fromCharCode(view.getUint8(offset++));
-    }
-    if (magic !== MAGIC) {
-      logger.warn('Invalid filmstrip magic bytes');
-      return null;
-    }
-
-    // Check version
-    const version = view.getUint8(offset++);
-    if (version !== VERSION) {
-      logger.warn(`Unsupported filmstrip version: ${version}`);
-      return null;
-    }
-
-    // Read dimensions
-    const width = view.getUint16(offset, true);
-    offset += 2;
-    const height = view.getUint16(offset, true);
-    offset += 2;
-
-    // Frame count
-    const frameCount = view.getUint32(offset, true);
-    offset += 4;
-
-    // Quality
-    const quality = view.getUint8(offset);
-
-    return { width, height, frameCount, quality };
-  }
-
-  /**
-   * Write index entry
-   */
-  private writeIndexEntry(
-    view: DataView,
-    baseOffset: number,
-    index: number,
-    entry: FrameIndex
-  ): void {
-    const offset = baseOffset + index * INDEX_ENTRY_SIZE;
-    view.setFloat32(offset, entry.timestamp, true);
-    view.setUint32(offset + 4, entry.offset, true);
-    view.setUint32(offset + 8, entry.size, true);
-  }
-
-  /**
-   * Read index entry
-   */
-  private readIndexEntry(
-    view: DataView,
-    baseOffset: number,
-    index: number
-  ): FrameIndex {
-    const offset = baseOffset + index * INDEX_ENTRY_SIZE;
-    return {
-      timestamp: view.getFloat32(offset, true),
-      offset: view.getUint32(offset + 4, true),
-      size: view.getUint32(offset + 8, true),
-    };
-  }
-
-  /**
-   * Save filmstrip to OPFS
-   */
-  async save(
-    mediaId: string,
-    frames: { timestamp: number; blob: Blob }[],
-    width: number,
-    height: number,
-    quality: number = 0.7
-  ): Promise<void> {
+  private async getMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle | null> {
     const dir = await this.ensureDirectory();
-    const fileName = `${mediaId}.bin`;
-
     try {
-      // Calculate sizes
-      const frameCount = frames.length;
-      const indexSize = frameCount * INDEX_ENTRY_SIZE;
-      const headerAndIndexSize = HEADER_SIZE + indexSize;
+      return await dir.getDirectoryHandle(mediaId);
+    } catch {
+      return null;
+    }
+  }
 
-      // Get all blob data
-      const blobData: ArrayBuffer[] = [];
-      let totalDataSize = 0;
-      for (const frame of frames) {
-        const data = await frame.blob.arrayBuffer();
-        blobData.push(data);
-        totalDataSize += data.byteLength;
+  /**
+   * Load filmstrip - returns object URLs for img src
+   */
+  async load(mediaId: string): Promise<LoadedFilmstrip | null> {
+    try {
+      const mediaDir = await this.getMediaDir(mediaId);
+      if (!mediaDir) return null;
+
+      // Load metadata
+      let metadata: FilmstripMetadata;
+      try {
+        const metaHandle = await mediaDir.getFileHandle('meta.json');
+        const metaFile = await metaHandle.getFile();
+        metadata = JSON.parse(await metaFile.text());
+      } catch {
+        return null;
       }
 
-      // Create buffer
-      const totalSize = headerAndIndexSize + totalDataSize;
-      const buffer = new ArrayBuffer(totalSize);
-      const view = new DataView(buffer);
-      const uint8 = new Uint8Array(buffer);
+      // Collect frame files
+      const frameFiles: { index: number; file: File }[] = [];
+      for await (const entry of mediaDir.values()) {
+        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
+          const index = parseInt(entry.name.replace('.webp', ''), 10);
+          if (!isNaN(index)) {
+            try {
+              const fileHandle = await mediaDir.getFileHandle(entry.name);
+              const file = await fileHandle.getFile();
+              if (file.size > 0) {
+                frameFiles.push({ index, file });
+              }
+            } catch {
+              // Skip unreadable files
+            }
+          }
+        }
+      }
 
-      // Write header
-      this.writeHeader(view, {
-        width,
-        height,
-        frameCount,
-        quality: Math.round(quality * 100),
+      // Sort by index
+      frameFiles.sort((a, b) => a.index - b.index);
+
+      // Revoke old object URLs for this media
+      this.revokeUrls(mediaId);
+
+      // Create object URLs
+      const urls: string[] = [];
+      const frames: FilmstripFrame[] = frameFiles.map(({ index, file }) => {
+        const url = URL.createObjectURL(file);
+        urls.push(url);
+        return {
+          index,
+          timestamp: index / FRAME_RATE,
+          url,
+        };
       });
 
-      // Write index and data
-      let dataOffset = headerAndIndexSize;
-      for (let i = 0; i < frames.length; i++) {
-        const frame = frames[i];
-        const data = blobData[i];
+      // Store URLs for cleanup
+      this.objectUrls.set(mediaId, urls);
 
-        // Write index entry
-        this.writeIndexEntry(view, HEADER_SIZE, i, {
-          timestamp: frame.timestamp,
-          offset: dataOffset,
-          size: data.byteLength,
-        });
+      const existingIndices = frameFiles.map(f => f.index);
 
-        // Write frame data
-        uint8.set(new Uint8Array(data), dataOffset);
-        dataOffset += data.byteLength;
+      // Sanity check: if marked complete but no frames, treat as incomplete
+      if (metadata.isComplete && frames.length === 0) {
+        logger.warn(`Filmstrip ${mediaId} marked complete but has 0 frames - resetting`);
+        metadata.isComplete = false;
+        metadata.frameCount = 0;
       }
 
-      // Write to OPFS
-      const fileHandle = await dir.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(buffer);
-      await writable.close();
+      logger.debug(`Loaded filmstrip ${mediaId}: ${frames.length} frames, complete: ${metadata.isComplete}`);
 
-      logger.debug(`Saved filmstrip ${mediaId}: ${frameCount} frames, ${(totalSize / 1024).toFixed(1)}KB`);
+      return { metadata, frames, existingIndices };
     } catch (error) {
-      logger.error(`Failed to save filmstrip ${mediaId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Check if filmstrip exists
-   */
-  async exists(mediaId: string): Promise<boolean> {
-    try {
-      const dir = await this.ensureDirectory();
-      await dir.getFileHandle(`${mediaId}.bin`);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Get filmstrip metadata (header + index) without loading frame data
-   */
-  async getMetadata(
-    mediaId: string
-  ): Promise<{ header: FilmstripHeader; index: FrameIndex[] } | null> {
-    try {
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
-      const file = await fileHandle.getFile();
-
-      // Read header
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const headerView = new DataView(headerBuffer);
-      const header = this.readHeader(headerView);
-
-      if (!header) return null;
-
-      // Read index
-      const indexSize = header.frameCount * INDEX_ENTRY_SIZE;
-      const indexBuffer = await file
-        .slice(HEADER_SIZE, HEADER_SIZE + indexSize)
-        .arrayBuffer();
-      const indexView = new DataView(indexBuffer);
-
-      const index: FrameIndex[] = [];
-      for (let i = 0; i < header.frameCount; i++) {
-        index.push(this.readIndexEntry(indexView, 0, i));
-      }
-
-      return { header, index };
-    } catch {
+      logger.warn('Failed to load filmstrip:', error);
       return null;
     }
   }
 
   /**
-   * Load a single frame by index
+   * Get existing frame indices (for resume)
    */
-  async getFrame(mediaId: string, frameIndex: number): Promise<Blob | null> {
+  async getExistingIndices(mediaId: string): Promise<number[]> {
     try {
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
-      const file = await fileHandle.getFile();
+      const mediaDir = await this.getMediaDir(mediaId);
+      if (!mediaDir) return [];
 
-      // Read header to get frame count
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const header = this.readHeader(new DataView(headerBuffer));
-      if (!header || frameIndex >= header.frameCount) return null;
-
-      // Read index entry for this frame
-      const indexOffset = HEADER_SIZE + frameIndex * INDEX_ENTRY_SIZE;
-      const indexBuffer = await file
-        .slice(indexOffset, indexOffset + INDEX_ENTRY_SIZE)
-        .arrayBuffer();
-      const entry = this.readIndexEntry(new DataView(indexBuffer), 0, 0);
-
-      // Read frame data
-      const frameData = await file
-        .slice(entry.offset, entry.offset + entry.size)
-        .arrayBuffer();
-
-      return new Blob([frameData], { type: 'image/webp' });
-    } catch (error) {
-      logger.error(`Failed to get frame ${frameIndex} for ${mediaId}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Load multiple frames by index range (efficient for sequential access)
-   */
-  async getFrameRange(
-    mediaId: string,
-    startIndex: number,
-    count: number
-  ): Promise<{ timestamp: number; blob: Blob }[]> {
-    try {
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
-      const file = await fileHandle.getFile();
-
-      // Read header
-      const headerBuffer = await file.slice(0, HEADER_SIZE).arrayBuffer();
-      const header = this.readHeader(new DataView(headerBuffer));
-      if (!header) return [];
-
-      const endIndex = Math.min(startIndex + count, header.frameCount);
-      const actualCount = endIndex - startIndex;
-      if (actualCount <= 0) return [];
-
-      // Read index entries for range
-      const indexStart = HEADER_SIZE + startIndex * INDEX_ENTRY_SIZE;
-      const indexEnd = HEADER_SIZE + endIndex * INDEX_ENTRY_SIZE;
-      const indexBuffer = await file.slice(indexStart, indexEnd).arrayBuffer();
-      const indexView = new DataView(indexBuffer);
-
-      // Parse index entries
-      const entries: FrameIndex[] = [];
-      for (let i = 0; i < actualCount; i++) {
-        entries.push(this.readIndexEntry(indexView, 0, i));
+      const indices: number[] = [];
+      for await (const entry of mediaDir.values()) {
+        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
+          const index = parseInt(entry.name.replace('.webp', ''), 10);
+          if (!isNaN(index)) {
+            try {
+              const fileHandle = await mediaDir.getFileHandle(entry.name);
+              const file = await fileHandle.getFile();
+              if (file.size > 0) {
+                indices.push(index);
+              }
+            } catch {
+              // Skip
+            }
+          }
+        }
       }
 
-      // Find data range to read (single read for all frames)
-      const dataStart = entries[0].offset;
-      const lastEntry = entries[entries.length - 1];
-      const dataEnd = lastEntry.offset + lastEntry.size;
-      const dataBuffer = await file.slice(dataStart, dataEnd).arrayBuffer();
-
-      // Extract individual frames
-      const frames: { timestamp: number; blob: Blob }[] = [];
-      for (const entry of entries) {
-        const localOffset = entry.offset - dataStart;
-        const frameData = dataBuffer.slice(localOffset, localOffset + entry.size);
-        frames.push({
-          timestamp: entry.timestamp,
-          blob: new Blob([frameData], { type: 'image/webp' }),
-        });
-      }
-
-      return frames;
-    } catch (error) {
-      logger.error(`Failed to get frame range for ${mediaId}:`, error);
+      return indices.sort((a, b) => a - b);
+    } catch {
       return [];
     }
   }
 
   /**
-   * Load all frames (for full filmstrip load)
+   * Load a single frame by index - for incremental updates during extraction
    */
-  async getAllFrames(
-    mediaId: string
-  ): Promise<{ header: FilmstripHeader; frames: { timestamp: number; blob: Blob }[] } | null> {
+  async loadSingleFrame(mediaId: string, index: number): Promise<FilmstripFrame | null> {
     try {
-      const dir = await this.ensureDirectory();
-      const fileHandle = await dir.getFileHandle(`${mediaId}.bin`);
+      const mediaDir = await this.getMediaDir(mediaId);
+      if (!mediaDir) return null;
+
+      const fileHandle = await mediaDir.getFileHandle(`${index}.webp`);
       const file = await fileHandle.getFile();
+      if (file.size === 0) return null;
 
-      // Read entire file
-      const buffer = await file.arrayBuffer();
-      const view = new DataView(buffer);
-      const uint8 = new Uint8Array(buffer);
+      const url = URL.createObjectURL(file);
 
-      // Parse header
-      const header = this.readHeader(view);
-      if (!header) return null;
+      // Track this URL for cleanup
+      const urls = this.objectUrls.get(mediaId) || [];
+      urls.push(url);
+      this.objectUrls.set(mediaId, urls);
 
-      // Parse frames
-      const frames: { timestamp: number; blob: Blob }[] = [];
-      for (let i = 0; i < header.frameCount; i++) {
-        const entry = this.readIndexEntry(view, HEADER_SIZE, i);
-        const frameData = uint8.slice(entry.offset, entry.offset + entry.size);
-        frames.push({
-          timestamp: entry.timestamp,
-          blob: new Blob([frameData], { type: 'image/webp' }),
-        });
-      }
-
-      return { header, frames };
+      return {
+        index,
+        timestamp: index / FRAME_RATE,
+        url,
+      };
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * Check if filmstrip is complete
+   */
+  async isComplete(mediaId: string): Promise<boolean> {
+    try {
+      const mediaDir = await this.getMediaDir(mediaId);
+      if (!mediaDir) return false;
+
+      const metaHandle = await mediaDir.getFileHandle('meta.json');
+      const metaFile = await metaHandle.getFile();
+      const metadata: FilmstripMetadata = JSON.parse(await metaFile.text());
+      return metadata.isComplete;
+    } catch {
+      return false;
     }
   }
 
@@ -428,12 +253,50 @@ class FilmstripOPFSStorage {
    * Delete filmstrip
    */
   async delete(mediaId: string): Promise<void> {
+    this.revokeUrls(mediaId);
     try {
       const dir = await this.ensureDirectory();
-      await dir.removeEntry(`${mediaId}.bin`);
+      await dir.removeEntry(mediaId, { recursive: true });
       logger.debug(`Deleted filmstrip ${mediaId}`);
     } catch {
-      // File may not exist, ignore
+      // May not exist
+    }
+  }
+
+  /**
+   * Revoke object URLs for a media
+   */
+  revokeUrls(mediaId: string): void {
+    const urls = this.objectUrls.get(mediaId);
+    if (urls) {
+      for (const url of urls) {
+        URL.revokeObjectURL(url);
+      }
+      this.objectUrls.delete(mediaId);
+    }
+  }
+
+  /**
+   * Clear all filmstrips
+   */
+  async clearAll(): Promise<void> {
+    // Revoke all URLs
+    for (const mediaId of this.objectUrls.keys()) {
+      this.revokeUrls(mediaId);
+    }
+
+    try {
+      const dir = await this.ensureDirectory();
+      const entries: string[] = [];
+      for await (const entry of dir.values()) {
+        entries.push(entry.name);
+      }
+      for (const name of entries) {
+        await dir.removeEntry(name, { recursive: true });
+      }
+      logger.debug(`Cleared ${entries.length} filmstrips`);
+    } catch (error) {
+      logger.error('Failed to clear filmstrips:', error);
     }
   }
 
@@ -443,68 +306,18 @@ class FilmstripOPFSStorage {
   async list(): Promise<string[]> {
     try {
       const dir = await this.ensureDirectory();
-      const mediaIds: string[] = [];
-
+      const ids: string[] = [];
       for await (const entry of dir.values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.bin')) {
-          mediaIds.push(entry.name.replace('.bin', ''));
+        if (entry.kind === 'directory') {
+          ids.push(entry.name);
         }
       }
-
-      return mediaIds;
+      return ids;
     } catch {
       return [];
     }
   }
-
-  /**
-   * Get storage usage
-   */
-  async getStorageUsage(): Promise<{ count: number; totalBytes: number }> {
-    try {
-      const dir = await this.ensureDirectory();
-      let count = 0;
-      let totalBytes = 0;
-
-      for await (const entry of dir.values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.bin')) {
-          count++;
-          const fileHandle = await dir.getFileHandle(entry.name);
-          const file = await fileHandle.getFile();
-          totalBytes += file.size;
-        }
-      }
-
-      return { count, totalBytes };
-    } catch {
-      return { count: 0, totalBytes: 0 };
-    }
-  }
-
-  /**
-   * Clear all filmstrips
-   */
-  async clearAll(): Promise<void> {
-    try {
-      const dir = await this.ensureDirectory();
-      const entries: string[] = [];
-
-      for await (const entry of dir.values()) {
-        if (entry.kind === 'file') {
-          entries.push(entry.name);
-        }
-      }
-
-      for (const name of entries) {
-        await dir.removeEntry(name);
-      }
-
-      logger.debug(`Cleared ${entries.length} filmstrips from OPFS`);
-    } catch (error) {
-      logger.error('Failed to clear filmstrips:', error);
-    }
-  }
 }
 
-// Singleton instance
+// Singleton
 export const filmstripOPFSStorage = new FilmstripOPFSStorage();

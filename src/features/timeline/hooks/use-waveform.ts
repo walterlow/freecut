@@ -33,7 +33,8 @@ export interface UseWaveformResult {
  * Hook for managing waveform data for an audio clip
  *
  * - Only generates when visible and has valid blobUrl
- * - Caches results in memory and IndexedDB
+ * - Subscribes to progressive updates for streaming loading
+ * - Caches results in memory and OPFS
  * - Sync cache check on mount to avoid skeleton flash when moving clips
  */
 export function useWaveform({
@@ -51,7 +52,7 @@ export function useWaveform({
   const [progress, setProgress] = useState(() => {
     // If we have cached data, start at 100%
     const cached = waveformCache.getFromMemoryCacheSync(mediaId);
-    return cached ? 100 : 0;
+    return cached?.isComplete ? 100 : 0;
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +63,24 @@ export function useWaveform({
   const onProgress = useEffectEvent((p: number) => {
     setProgress(p);
   });
+
+  // Subscribe to progressive updates
+  useEffect(() => {
+    if (!enabled || !blobUrl) {
+      return;
+    }
+
+    // Subscribe to waveform updates for progressive loading
+    const unsubscribe = waveformCache.subscribe(mediaId, (updated) => {
+      setWaveform(updated);
+      if (updated.isComplete) {
+        setIsLoading(false);
+        setProgress(100);
+      }
+    });
+
+    return unsubscribe;
+  }, [mediaId, enabled, blobUrl]);
 
   // Load waveform when visible and conditions are met
   useEffect(() => {
@@ -75,8 +94,8 @@ export function useWaveform({
       return;
     }
 
-    // Skip if already have waveform
-    if (waveform) {
+    // Skip if already have complete waveform
+    if (waveform?.isComplete) {
       return;
     }
 
@@ -108,7 +127,7 @@ export function useWaveform({
     // Don't abort on effect re-runs - let generation continue in background
     // The cache will hold the result for when we need it
     // Note: onProgress uses useEffectEvent so doesn't need to be in deps
-  }, [mediaId, blobUrl, isVisible, enabled, waveform]);
+  }, [mediaId, blobUrl, isVisible, enabled, waveform?.isComplete]);
 
   // Cleanup on unmount
   useEffect(() => {

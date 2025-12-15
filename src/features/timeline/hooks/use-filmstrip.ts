@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useEffectEvent } from 'react';
-import { filmstripCache, type CachedFilmstrip } from '../services/filmstrip-cache';
+import { filmstripCache, type Filmstrip, type FilmstripFrame } from '../services/filmstrip-cache';
+
+export type { FilmstripFrame };
 
 export interface UseFilmstripOptions {
   /** Media ID from the timeline item */
@@ -15,12 +17,12 @@ export interface UseFilmstripOptions {
 }
 
 export interface UseFilmstripResult {
-  /** Array of ImageBitmap frames (null if loading or not available) */
-  frames: ImageBitmap[] | null;
-  /** Frame timestamps in seconds */
-  timestamps: number[] | null;
-  /** Whether filmstrip is currently loading */
+  /** Array of frames with URLs for img src */
+  frames: FilmstripFrame[] | null;
+  /** Whether filmstrip is currently loading/extracting */
   isLoading: boolean;
+  /** Whether extraction is complete */
+  isComplete: boolean;
   /** Loading progress (0-100) */
   progress: number;
   /** Error message if generation failed */
@@ -30,11 +32,8 @@ export interface UseFilmstripResult {
 /**
  * Hook for managing filmstrip thumbnails for a video clip
  *
- * - Extracts frames across the full source duration
- * - Rendering component matches frames to slots by timestamp
- * - Caches results in memory for reuse across zoom/scroll
- * - Progressive loading: updates as frames become available
- * - Sync cache check on mount to avoid skeleton flash when moving clips
+ * Returns object URLs for use in <img src> tags.
+ * Progressive loading: updates as frames are extracted.
  */
 export function useFilmstrip({
   mediaId,
@@ -43,23 +42,20 @@ export function useFilmstrip({
   isVisible,
   enabled = true,
 }: UseFilmstripOptions): UseFilmstripResult {
-  // State for filmstrip data - initialize from memory cache to avoid skeleton flash
-  // This is important when clips move across tracks (component remounts but cache persists)
-  const [filmstrip, setFilmstrip] = useState<CachedFilmstrip | null>(() => {
-    return filmstripCache.getFromMemoryCacheSync(mediaId);
+  // Initialize from cache to avoid flash on remount
+  const [filmstrip, setFilmstrip] = useState<Filmstrip | null>(() => {
+    return filmstripCache.getFromCacheSync(mediaId);
   });
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(() => {
-    // If we have cached data, start at 100%
-    const cached = filmstripCache.getFromMemoryCacheSync(mediaId);
-    return cached?.isComplete ? 100 : 0;
+    const cached = filmstripCache.getFromCacheSync(mediaId);
+    return cached?.isComplete ? 100 : (cached?.progress ?? 0);
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Ref to track if generation is in progress
   const isGeneratingRef = useRef(false);
 
-  // Progress callback - using useEffectEvent so it doesn't need to be in effect deps
+  // Progress callback
   const onProgress = useEffectEvent((p: number) => {
     setProgress(p);
   });
@@ -70,51 +66,45 @@ export function useFilmstrip({
       return;
     }
 
-    // Subscribe to filmstrip updates for progressive loading
     const unsubscribe = filmstripCache.subscribe(mediaId, (updated) => {
       setFilmstrip(updated);
+      setProgress(updated.progress);
       if (updated.isComplete) {
         setIsLoading(false);
-        setProgress(100);
       }
     });
 
     return unsubscribe;
   }, [mediaId, enabled, blobUrl, duration]);
 
-  // Load filmstrip when visible and conditions are met
+  // Load filmstrip when visible
   useEffect(() => {
-    // Skip if not enabled or missing required data
     if (!enabled || !blobUrl || !duration || duration <= 0) {
       return;
     }
 
-    // Skip if not visible and not already loading
     if (!isVisible && !isGeneratingRef.current) {
       return;
     }
 
-    // Skip if already have complete filmstrip
     if (filmstrip?.isComplete) {
       return;
     }
 
-    // Mark as generating
     isGeneratingRef.current = true;
     setIsLoading(true);
-    setProgress(0);
     setError(null);
 
-    // Request filmstrip from cache (which will generate if needed)
     filmstripCache
       .getFilmstrip(mediaId, blobUrl, duration, onProgress)
       .then((result) => {
         setFilmstrip(result);
-        setIsLoading(false);
-        setProgress(100);
+        setProgress(result.progress);
+        if (result.isComplete) {
+          setIsLoading(false);
+        }
       })
       .catch((err) => {
-        // Don't set error for aborted requests
         if (err.message !== 'Aborted') {
           setError(err.message || 'Failed to generate filmstrip');
         }
@@ -123,16 +113,12 @@ export function useFilmstrip({
       .finally(() => {
         isGeneratingRef.current = false;
       });
-
-    // Don't abort on effect re-runs - let generation continue in background
-    // The cache will hold the result for when we need it
-    // Note: onProgress uses useEffectEvent so doesn't need to be in deps
   }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete]);
 
   return {
     frames: filmstrip?.frames || null,
-    timestamps: filmstrip?.timestamps || null,
-    isLoading,
+    isLoading: isLoading || (filmstrip?.isExtracting ?? false),
+    isComplete: filmstrip?.isComplete ?? false,
     progress,
     error,
   };

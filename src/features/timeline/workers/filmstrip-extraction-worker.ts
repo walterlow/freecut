@@ -1,25 +1,30 @@
 /**
  * Filmstrip Extraction Worker
  *
- * Extracts video frames using mediabunny's CanvasSink for hardware-accelerated
- * WebCodecs decoding. Uses canvasesAtTimestamps() for sparse extraction
- * (only decodes frames at requested timestamps, not all frames).
+ * Extracts video frames using mediabunny's CanvasSink and saves
+ * directly to OPFS as webp files. All heavy work happens in the worker.
  *
- * Features:
- * - OffscreenCanvas rendering (worker-safe)
- * - Canvas pooling for VRAM optimization
- * - Zero-copy ImageBitmap transfer to main thread
- * - Abort support
+ * Storage structure:
+ *   filmstrips/{mediaId}/
+ *     meta.json - { width, height, isComplete, frameCount }
+ *     0.webp, 1.webp, 2.webp, ...
  */
+
+const FILMSTRIP_DIR = 'filmstrips';
+const IMAGE_FORMAT = 'image/webp';
+const IMAGE_QUALITY = 0.7;
+const FRAME_RATE = 24;
 
 // Message types
 export interface ExtractRequest {
   type: 'extract';
   requestId: string;
+  mediaId: string;
   blobUrl: string;
-  timestamps: number[]; // Specific timestamps assigned to this worker
+  duration: number;
   width: number;
   height: number;
+  skipIndices?: number[]; // Indices to skip (already extracted)
 }
 
 export interface AbortRequest {
@@ -27,16 +32,18 @@ export interface AbortRequest {
   requestId: string;
 }
 
-export interface FrameResponse {
-  type: 'frame';
+export interface ProgressResponse {
+  type: 'progress';
   requestId: string;
-  timestamp: number;
-  bitmap: ImageBitmap;
+  frameIndex: number;
+  frameCount: number;
+  progress: number;
 }
 
 export interface CompleteResponse {
   type: 'complete';
   requestId: string;
+  frameCount: number;
 }
 
 export interface ErrorResponse {
@@ -46,28 +53,89 @@ export interface ErrorResponse {
 }
 
 export type WorkerRequest = ExtractRequest | AbortRequest;
-export type WorkerResponse = FrameResponse | CompleteResponse | ErrorResponse;
+export type WorkerResponse = ProgressResponse | CompleteResponse | ErrorResponse;
 
 // Track active requests for abort support
 const activeRequests = new Map<string, { aborted: boolean }>();
 
-// Dynamically import mediabunny (heavy library)
+// Dynamically import mediabunny
 const loadMediabunny = () => import('mediabunny');
 
 /**
- * Extract frames at specified timestamps using CanvasSink
+ * Get or create OPFS directory for filmstrip storage
  */
-async function extractFrames(
+async function getFilmstripDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
+  const root = await navigator.storage.getDirectory();
+  const filmstripRoot = await root.getDirectoryHandle(FILMSTRIP_DIR, { create: true });
+  return filmstripRoot.getDirectoryHandle(mediaId, { create: true });
+}
+
+/**
+ * Save a frame to OPFS
+ */
+async function saveFrame(
+  dir: FileSystemDirectoryHandle,
+  index: number,
+  blob: Blob
+): Promise<void> {
+  const fileHandle = await dir.getFileHandle(`${index}.webp`, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+}
+
+/**
+ * Save metadata to OPFS
+ */
+async function saveMetadata(
+  dir: FileSystemDirectoryHandle,
+  metadata: { width: number; height: number; isComplete: boolean; frameCount: number }
+): Promise<void> {
+  const fileHandle = await dir.getFileHandle('meta.json', { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(JSON.stringify(metadata));
+  await writable.close();
+}
+
+/**
+ * Extract frames and save directly to OPFS
+ */
+async function extractAndSave(
   request: ExtractRequest,
   state: { aborted: boolean }
 ): Promise<void> {
-  const { requestId, blobUrl, timestamps, width, height } = request;
+  const { requestId, mediaId, blobUrl, duration, width, height, skipIndices } = request;
 
-  // Skip if no timestamps assigned
-  if (timestamps.length === 0) {
-    self.postMessage({ type: 'complete', requestId } as CompleteResponse);
+  console.log('[FilmstripWorker] Starting extraction:', { mediaId, duration, width, height });
+
+  // Calculate all frame indices
+  const totalFrames = Math.ceil(duration * FRAME_RATE);
+  const skipSet = new Set(skipIndices || []);
+  console.log('[FilmstripWorker] Total frames:', totalFrames, 'Skip:', skipSet.size);
+
+  // Generate timestamps for frames we need to extract
+  const framesToExtract: { index: number; timestamp: number }[] = [];
+  for (let i = 0; i < totalFrames; i++) {
+    if (!skipSet.has(i)) {
+      framesToExtract.push({ index: i, timestamp: i / FRAME_RATE });
+    }
+  }
+
+  // If nothing to extract, we're done
+  if (framesToExtract.length === 0) {
+    self.postMessage({
+      type: 'complete',
+      requestId,
+      frameCount: skipSet.size,
+    } as CompleteResponse);
     return;
   }
+
+  // Get OPFS directory
+  const dir = await getFilmstripDir(mediaId);
+
+  // Save initial metadata
+  await saveMetadata(dir, { width, height, isComplete: false, frameCount: skipSet.size });
 
   // Load mediabunny
   const { Input, UrlSource, CanvasSink, MP4, WEBM, MATROSKA } = await loadMediabunny();
@@ -86,62 +154,102 @@ async function extractFrames(
     if (!videoTrack) {
       throw new Error('No video track found');
     }
+    console.log('[FilmstripWorker] Got video track');
 
-    // Create CanvasSink with pooling for VRAM optimization
-    // Falls back to OffscreenCanvas in worker context
+    // Create CanvasSink
     const sink = new CanvasSink(videoTrack, {
       width,
       height,
       fit: 'cover',
-      poolSize: 3, // Ring buffer of 3 canvases
+      poolSize: 3,
     });
+    console.log('[FilmstripWorker] Created CanvasSink');
 
-    // Async generator for sparse timestamp extraction
+    // Track extracted frames
+    let extractedCount = skipSet.size;
+    let frameListIndex = 0;
+    let timestampsYielded = 0;
+
+    // Generator for timestamps
     async function* timestampGenerator(): AsyncGenerator<number> {
-      for (const ts of timestamps) {
-        // Check abort before yielding each timestamp
+      for (const frame of framesToExtract) {
         if (state.aborted) return;
-        yield ts;
+        timestampsYielded++;
+        if (timestampsYielded <= 3) {
+          console.log('[FilmstripWorker] Yielding timestamp:', frame.timestamp);
+        }
+        yield frame.timestamp;
       }
+      console.log('[FilmstripWorker] Generator finished, yielded:', timestampsYielded);
     }
 
-    // Small delay between frames to yield to playback decoder
-    const yieldToMainThread = () =>
-      new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-    let frameCount = 0;
-
-    // Sparse extraction - only decodes frames at requested timestamps
+    // Extract and save each frame
+    console.log('[FilmstripWorker] Starting extraction loop...');
     for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
-      if (state.aborted || !wrapped) {
+      if (state.aborted) {
+        console.log('[FilmstripWorker] Aborted');
         break;
       }
 
-      // Convert OffscreenCanvas to ImageBitmap for zero-copy transfer
-      // wrapped.canvas is an OffscreenCanvas in worker context
-      const bitmap = await createImageBitmap(wrapped.canvas as OffscreenCanvas);
+      const frame = framesToExtract[frameListIndex];
+      if (!frame) break;
 
-      // Transfer ownership to main thread (zero-copy)
-      const message: FrameResponse = {
-        type: 'frame',
-        requestId,
-        timestamp: wrapped.timestamp,
-        bitmap,
-      };
-      self.postMessage(message, { transfer: [bitmap] });
-
-      frameCount++;
-      // Yield every 5 frames to reduce decoder contention
-      if (frameCount % 5 === 0) {
-        await yieldToMainThread();
+      // Skip if no frame available for this timestamp (mediabunny returns null)
+      if (!wrapped) {
+        frameListIndex++;
+        continue;
       }
+
+      // Convert canvas to webp blob
+      const canvas = wrapped.canvas as OffscreenCanvas;
+      const blob = await canvas.convertToBlob({
+        type: IMAGE_FORMAT,
+        quality: IMAGE_QUALITY,
+      });
+
+      // Save to OPFS
+      await saveFrame(dir, frame.index, blob);
+      extractedCount++;
+      frameListIndex++;
+
+      // Report progress
+      const progress = Math.round((extractedCount / totalFrames) * 100);
+
+      if (extractedCount <= 5 || extractedCount % 50 === 0) {
+        console.log('[FilmstripWorker] Extracted frame:', frame.index, 'total:', extractedCount, 'progress:', progress);
+      }
+
+      self.postMessage({
+        type: 'progress',
+        requestId,
+        frameIndex: frame.index,
+        frameCount: extractedCount,
+        progress: Math.min(progress, 99),
+      } as ProgressResponse);
     }
 
+    // Save final metadata - only mark complete if we actually have frames
     if (!state.aborted) {
-      self.postMessage({ type: 'complete', requestId } as CompleteResponse);
+      const actuallyComplete = extractedCount > 0;
+
+      if (!actuallyComplete) {
+        console.warn('[FilmstripWorker] Extraction finished but no frames extracted');
+      }
+
+      await saveMetadata(dir, {
+        width,
+        height,
+        isComplete: actuallyComplete,
+        frameCount: extractedCount,
+      });
+
+      self.postMessage({
+        type: 'complete',
+        requestId,
+        frameCount: extractedCount,
+      } as CompleteResponse);
     }
   } finally {
-    // Clean up mediabunny input
     input?.dispose();
   }
 }
@@ -158,12 +266,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const request = event.data as ExtractRequest;
         const { requestId } = request;
 
-        // Track request for abort support
         const state = { aborted: false };
         activeRequests.set(requestId, state);
 
         try {
-          await extractFrames(request, state);
+          await extractAndSave(request, state);
         } finally {
           activeRequests.delete(requestId);
         }
@@ -192,5 +299,4 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   }
 };
 
-// Export for TypeScript module
 export {};
