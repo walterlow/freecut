@@ -30,7 +30,8 @@ const JPEG_QUALITY = 0.7;
 const MAX_CACHE_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
 
 // Progressive loading: frames per update batch
-const FRAMES_PER_BATCH = 10;
+// Lower value = more immediate frame appearance, but more frequent updates
+const FRAMES_PER_BATCH = 3;
 
 export interface CachedFilmstrip {
   frames: ImageBitmap[];
@@ -213,8 +214,13 @@ class FilmstripCacheService {
           const progress = Math.round((receivedFrames / expectedFrames) * 100);
           onProgress?.(Math.min(progress, 99));
 
-          // Progressive update every FRAMES_PER_BATCH frames
-          if (receivedFrames - lastUpdateCount >= FRAMES_PER_BATCH) {
+          // Progressive update: immediate on first frame, then every FRAMES_PER_BATCH frames
+          // This gives instant visual feedback while limiting update frequency
+          const shouldUpdate =
+            receivedFrames === 1 || // First frame - immediate feedback
+            receivedFrames - lastUpdateCount >= FRAMES_PER_BATCH;
+
+          if (shouldUpdate) {
             lastUpdateCount = receivedFrames;
 
             const intermediate: CachedFilmstrip = {
@@ -314,48 +320,91 @@ class FilmstripCacheService {
   }
 
   /**
+   * Load filmstrip from OPFS progressively with parallel decoding
+   */
+  private async loadFromOPFSProgressive(mediaId: string): Promise<CachedFilmstrip | null> {
+    try {
+      // Read entire file in one shot (fast I/O)
+      const opfsData = await filmstripOPFSStorage.getAllFrames(mediaId);
+      if (!opfsData) return null;
+
+      const { header, frames: frameData } = opfsData;
+
+      // Validate dimensions
+      if (header.width !== THUMBNAIL_WIDTH || header.height !== THUMBNAIL_HEIGHT) {
+        logger.debug(`Filmstrip cache invalidated for ${mediaId}: dimensions changed`);
+        await filmstripOPFSStorage.delete(mediaId);
+        return null;
+      }
+
+      const totalFrames = frameData.length;
+      const imageBitmaps: ImageBitmap[] = new Array(totalFrames);
+      const blobs: Blob[] = new Array(totalFrames);
+      const timestamps: number[] = new Array(totalFrames);
+      let sizeBytes = 0;
+      let loadedCount = 0;
+
+      // Decode in parallel batches for speed
+      const DECODE_BATCH_SIZE = 20;
+
+      for (let startIdx = 0; startIdx < totalFrames; startIdx += DECODE_BATCH_SIZE) {
+        const endIdx = Math.min(startIdx + DECODE_BATCH_SIZE, totalFrames);
+        const batchFrames = frameData.slice(startIdx, endIdx);
+
+        // Parallel decode all frames in this batch
+        const bitmapPromises = batchFrames.map((frame) => createImageBitmap(frame.blob));
+        const decodedBitmaps = await Promise.all(bitmapPromises);
+
+        // Store results
+        for (let i = 0; i < decodedBitmaps.length; i++) {
+          const idx = startIdx + i;
+          const frame = batchFrames[i];
+          imageBitmaps[idx] = decodedBitmaps[i];
+          blobs[idx] = frame.blob;
+          timestamps[idx] = frame.timestamp;
+          sizeBytes += frame.blob.size;
+          loadedCount++;
+        }
+
+        // Emit progressive update after each batch
+        const intermediate: CachedFilmstrip = {
+          frames: imageBitmaps.slice(0, loadedCount),
+          blobs: blobs.slice(0, loadedCount),
+          timestamps: timestamps.slice(0, loadedCount),
+          width: header.width,
+          height: header.height,
+          sizeBytes,
+          lastAccessed: Date.now(),
+          isComplete: loadedCount >= totalFrames,
+        };
+
+        this.addToMemoryCache(mediaId, intermediate);
+        this.notifyUpdate(mediaId, intermediate);
+      }
+
+      return {
+        frames: imageBitmaps,
+        blobs,
+        timestamps,
+        width: header.width,
+        height: header.height,
+        sizeBytes,
+        lastAccessed: Date.now(),
+        isComplete: true,
+      };
+    } catch (err) {
+      logger.warn('Failed to load filmstrip from OPFS:', err);
+      return null;
+    }
+  }
+
+  /**
    * Load filmstrip from OPFS (with IndexedDB migration fallback)
    */
   private async loadFromStorage(mediaId: string): Promise<CachedFilmstrip | null> {
-    // Try OPFS first (new format)
-    try {
-      const opfsData = await filmstripOPFSStorage.getAllFrames(mediaId);
-      if (opfsData) {
-        // Validate dimensions
-        if (opfsData.header.width !== THUMBNAIL_WIDTH || opfsData.header.height !== THUMBNAIL_HEIGHT) {
-          logger.debug(`Filmstrip cache invalidated for ${mediaId}: dimensions changed`);
-          await filmstripOPFSStorage.delete(mediaId);
-          return null;
-        }
-
-        // Convert blobs to ImageBitmaps
-        const imageBitmaps: ImageBitmap[] = [];
-        const blobs: Blob[] = [];
-        const timestamps: number[] = [];
-        let sizeBytes = 0;
-
-        for (const frame of opfsData.frames) {
-          const bitmap = await createImageBitmap(frame.blob);
-          imageBitmaps.push(bitmap);
-          blobs.push(frame.blob);
-          timestamps.push(frame.timestamp);
-          sizeBytes += frame.blob.size;
-        }
-
-        return {
-          frames: imageBitmaps,
-          blobs,
-          timestamps,
-          width: opfsData.header.width,
-          height: opfsData.header.height,
-          sizeBytes,
-          lastAccessed: Date.now(),
-          isComplete: true,
-        };
-      }
-    } catch (err) {
-      logger.warn('Failed to load filmstrip from OPFS:', err);
-    }
+    // Try OPFS first with progressive loading
+    const opfsResult = await this.loadFromOPFSProgressive(mediaId);
+    if (opfsResult) return opfsResult;
 
     // Fallback: Try legacy IndexedDB and migrate
     try {
@@ -368,14 +417,31 @@ class FilmstripCacheService {
           return null;
         }
 
-        // Convert blobs to ImageBitmaps
+        // Convert blobs to ImageBitmaps progressively
         const imageBitmaps: ImageBitmap[] = [];
         let sizeBytes = 0;
 
-        for (const blob of stored.frames) {
+        for (let i = 0; i < stored.frames.length; i++) {
+          const blob = stored.frames[i];
           const bitmap = await createImageBitmap(blob);
           imageBitmaps.push(bitmap);
           sizeBytes += blob.size;
+
+          // Emit progressive update every few frames
+          if (i === 0 || (i + 1) % FRAMES_PER_BATCH === 0) {
+            const intermediate: CachedFilmstrip = {
+              frames: [...imageBitmaps],
+              blobs: stored.frames.slice(0, i + 1),
+              timestamps: stored.timestamps.slice(0, i + 1),
+              width: stored.width,
+              height: stored.height,
+              sizeBytes,
+              lastAccessed: Date.now(),
+              isComplete: false,
+            };
+            this.addToMemoryCache(mediaId, intermediate);
+            this.notifyUpdate(mediaId, intermediate);
+          }
         }
 
         const cached: CachedFilmstrip = {
@@ -388,6 +454,10 @@ class FilmstripCacheService {
           lastAccessed: Date.now(),
           isComplete: true,
         };
+
+        // Final update
+        this.addToMemoryCache(mediaId, cached);
+        this.notifyUpdate(mediaId, cached);
 
         // Migrate to OPFS in background
         this.migrateToOPFS(mediaId, stored.frames, stored.timestamps).catch(() => {});

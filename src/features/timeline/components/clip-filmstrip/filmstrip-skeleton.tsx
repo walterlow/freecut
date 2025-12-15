@@ -1,5 +1,4 @@
-import { memo, useMemo } from 'react';
-import { Loader2 } from 'lucide-react';
+import { memo } from 'react';
 import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
 
 export interface FilmstripSkeletonProps {
@@ -14,39 +13,30 @@ export interface FilmstripSkeletonProps {
 /**
  * Filmstrip Skeleton Component
  *
- * Displays spinning loaders for each thumbnail slot while filmstrip thumbnails are being generated.
+ * Displays empty placeholder slots while filmstrip thumbnails are loading.
+ * Uses a subtle gradient to indicate loading without visual noise from spinners.
  */
 export const FilmstripSkeleton = memo(function FilmstripSkeleton({
   clipWidth,
   height = THUMBNAIL_HEIGHT,
   className = '',
 }: FilmstripSkeletonProps) {
-  const placeholderCount = useMemo(() => {
-    return Math.max(1, Math.ceil(clipWidth / THUMBNAIL_WIDTH));
-  }, [clipWidth]);
-
-  const loaderSize = Math.min(20, THUMBNAIL_HEIGHT * 0.4);
-
   return (
     <div
-      className={`absolute left-0 right-0 flex items-start overflow-hidden ${className}`}
-      style={{ height }}
-    >
-      {Array.from({ length: placeholderCount }, (_, index) => (
-        <div
-          key={index}
-          className="flex-shrink-0 flex items-center justify-center bg-zinc-900/50"
-          style={{
-            width: THUMBNAIL_WIDTH,
-            height: THUMBNAIL_HEIGHT,
-          }}
-        >
-          <Loader2
-            className="animate-spin text-zinc-400"
-            style={{ width: loaderSize, height: loaderSize }}
-          />
-        </div>
-      ))}
-    </div>
+      className={`absolute left-0 right-0 overflow-hidden bg-zinc-900/30 ${className}`}
+      style={{
+        height,
+        width: clipWidth,
+        // Subtle shimmer effect using CSS animation
+        backgroundImage: `linear-gradient(
+          90deg,
+          transparent 0%,
+          rgba(255,255,255,0.03) 50%,
+          transparent 100%
+        )`,
+        backgroundSize: `${THUMBNAIL_WIDTH * 2}px 100%`,
+        animation: 'filmstrip-shimmer 1.5s ease-in-out infinite',
+      }}
+    />
   );
 });

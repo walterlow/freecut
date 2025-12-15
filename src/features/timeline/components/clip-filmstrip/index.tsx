@@ -86,6 +86,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   });
 
   // Render function for tiled canvas - matches frames to slots by timestamp
+  // Uses a proximity threshold to only render slots with nearby frames (progressive fill-in)
   const renderTile = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -103,6 +104,11 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
       // The effective start in source video (accounting for trim)
       const effectiveStart = sourceStart + trimStart;
+
+      // Calculate the time span each slot represents for proximity threshold
+      // A slot is only rendered if a frame exists within half a slot's time span
+      const slotTimeSpan = THUMBNAIL_WIDTH / pixelsPerSecond * speed;
+      const proximityThreshold = slotTimeSpan * 0.6; // 60% of slot time span
 
       for (let slot = startSlot; slot <= endSlot; slot++) {
         const slotX = slot * THUMBNAIL_WIDTH - tileOffset;
@@ -147,6 +153,14 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           }
         }
 
+        // Only render if the closest frame is within proximity threshold
+        // This creates the progressive fill-in effect as frames arrive
+        const closestTime = timestamps[bestFrameIndex] ?? 0;
+        const timeDiff = Math.abs(closestTime - sourceTime);
+        if (timeDiff > proximityThreshold) {
+          continue; // Skip this slot - no close enough frame yet
+        }
+
         const frame = frames[bestFrameIndex];
         if (!frame) continue;
 
@@ -166,13 +180,13 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     [frames, timestamps, pixelsPerSecond, sourceStart, trimStart, speed]
   );
 
+  if (error) {
+    return null;
+  }
+
   // Show skeleton only if no frames yet
   if (!frames || frames.length === 0) {
     return <FilmstripSkeleton clipWidth={clipWidth} height={height} className={className} />;
-  }
-
-  if (error) {
-    return null;
   }
 
   // Include quantized pixelsPerSecond in version to force re-render on zoom changes
@@ -180,13 +194,24 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   const quantizedPPS = Math.round(pixelsPerSecond / 5) * 5;
   const renderVersion = frames.length * 10000 + quantizedPPS;
 
+  // Calculate if filmstrip is complete (all frames loaded)
+  // At 24fps extraction rate, complete when we have ~duration * 24 frames
+  const expectedFrames = Math.ceil(sourceDuration * 24);
+  const isComplete = frames.length >= expectedFrames * 0.95; // 95% threshold
+
   return (
-    <TiledCanvas
-      width={clipWidth}
-      height={height}
-      renderTile={renderTile}
-      version={renderVersion}
-      className={className}
-    />
+    <>
+      {/* Show shimmer skeleton behind canvas while loading */}
+      {!isComplete && (
+        <FilmstripSkeleton clipWidth={clipWidth} height={height} className={className} />
+      )}
+      <TiledCanvas
+        width={clipWidth}
+        height={height}
+        renderTile={renderTile}
+        version={renderVersion}
+        className={className}
+      />
+    </>
   );
 });
