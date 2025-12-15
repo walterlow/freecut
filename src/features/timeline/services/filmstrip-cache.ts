@@ -184,17 +184,36 @@ class FilmstripCacheService {
       if (response.type === 'progress') {
         onProgress?.(response.progress);
 
-        // Load only the new frame incrementally instead of reloading all
+        // Load new frames in parallel (worker reports batched updates)
         if (pending) {
-          const newFrame = await filmstripOPFSStorage.loadSingleFrame(mediaId, response.frameIndex);
-          if (newFrame) {
-            pending.extractedFrames.set(response.frameIndex, newFrame);
+          const currentCount = pending.extractedFrames.size;
+          const targetCount = response.frameCount;
+
+          // Load all frames we don't have yet (in parallel)
+          const framesToLoad: number[] = [];
+          for (let i = 0; i < targetCount; i++) {
+            // Frame indices are 0-based sequential during extraction
+            if (!pending.extractedFrames.has(i)) {
+              framesToLoad.push(i);
+            }
+          }
+
+          if (framesToLoad.length > 0) {
+            // Load up to 20 frames in parallel
+            const loadPromises = framesToLoad.slice(0, 20).map(async (index) => {
+              const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, index);
+              if (frame) {
+                pending.extractedFrames.set(index, frame);
+              }
+            });
+
+            await Promise.all(loadPromises);
 
             // Convert map to sorted array
             const frames = Array.from(pending.extractedFrames.values())
               .sort((a, b) => a.index - b.index);
 
-            logger.debug(`Incremental update for ${mediaId}: frame ${response.frameIndex}, total: ${frames.length}`);
+            logger.debug(`Batch update for ${mediaId}: loaded ${loadPromises.length} frames, total: ${frames.length}`);
 
             this.notifyUpdate(mediaId, {
               frames,
@@ -218,12 +237,33 @@ class FilmstripCacheService {
         logger.debug(`Filmstrip ${mediaId} complete: ${response.frameCount} frames`);
       } else if (response.type === 'error') {
         logger.error(`Filmstrip extraction error: ${response.error}`);
+        // Update cache to show extraction stopped (keep any frames we have)
+        const currentFrames = pending?.extractedFrames
+          ? Array.from(pending.extractedFrames.values()).sort((a, b) => a.index - b.index)
+          : [];
+        this.notifyUpdate(mediaId, {
+          frames: currentFrames,
+          isComplete: false,
+          isExtracting: false,
+          progress: 0,
+        });
         this.cleanupExtraction(mediaId);
       }
     };
 
     worker.onerror = (e) => {
       logger.error('Worker error:', e.message);
+      // Update cache to show extraction stopped (keep any frames we have)
+      const pending = this.pendingExtractions.get(mediaId);
+      const currentFrames = pending?.extractedFrames
+        ? Array.from(pending.extractedFrames.values()).sort((a, b) => a.index - b.index)
+        : [];
+      this.notifyUpdate(mediaId, {
+        frames: currentFrames,
+        isComplete: false,
+        isExtracting: false,
+        progress: 0,
+      });
       this.cleanupExtraction(mediaId);
     };
 

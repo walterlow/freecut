@@ -132,6 +132,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     const proximityThreshold = slotTimeSpan * 0.6;
 
     const result: { slot: number; frame: FilmstripFrame; x: number }[] = [];
+    let lastGoodFrame: FilmstripFrame | null = null;
 
     for (let slot = 0; slot < slotCount; slot++) {
       const slotLeftPixel = slot * THUMBNAIL_WIDTH;
@@ -139,17 +140,27 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       const sourceTime = effectiveStart + timelineSeconds * speed;
 
       const closestFrame = findClosestFrame(frames, sourceTime);
-      if (!closestFrame) continue;
 
-      // Check proximity threshold
-      const timeDiff = Math.abs(closestFrame.timestamp - sourceTime);
-      if (timeDiff > proximityThreshold) continue;
+      // Check if we have a good frame for this slot
+      const timeDiff = closestFrame ? Math.abs(closestFrame.timestamp - sourceTime) : Infinity;
+      const hasGoodFrame = closestFrame && timeDiff <= proximityThreshold;
 
-      result.push({
-        slot,
-        frame: closestFrame,
-        x: slotLeftPixel,
-      });
+      if (hasGoodFrame) {
+        lastGoodFrame = closestFrame;
+        result.push({
+          slot,
+          frame: closestFrame,
+          x: slotLeftPixel,
+        });
+      } else if (lastGoodFrame) {
+        // No good frame yet - repeat the last good frame as placeholder
+        result.push({
+          slot,
+          frame: lastGoodFrame,
+          x: slotLeftPixel,
+        });
+      }
+      // If no lastGoodFrame yet, slot stays empty (will be filled by skeleton)
     }
 
     return result;

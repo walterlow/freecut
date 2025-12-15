@@ -16,7 +16,7 @@ import { getCacheMigration } from '@/lib/storage/cache-version';
 const logger = createLogger('FilmstripOPFS');
 
 const FILMSTRIP_DIR = 'filmstrips';
-const FRAME_RATE = 24;
+const FRAME_RATE = 4; // Must match worker - 4fps for filmstrip thumbnails
 
 export interface FilmstripMetadata {
   width: number;

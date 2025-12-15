@@ -12,8 +12,8 @@
 
 const FILMSTRIP_DIR = 'filmstrips';
 const IMAGE_FORMAT = 'image/webp';
-const IMAGE_QUALITY = 0.7;
-const FRAME_RATE = 24;
+const IMAGE_QUALITY = 0.6; // Slightly lower for faster encoding
+const FRAME_RATE = 4; // 4fps is plenty for filmstrip thumbnails (was 24)
 
 // Message types
 export interface ExtractRequest {
@@ -156,14 +156,15 @@ async function extractAndSave(
     }
     console.log('[FilmstripWorker] Got video track');
 
-    // Create CanvasSink
+    // Create CanvasSink with poolSize matching our parallel save capacity
+    // This keeps VRAM constant and prevents allocation/deallocation churn
     const sink = new CanvasSink(videoTrack, {
       width,
       height,
       fit: 'cover',
-      poolSize: 3,
+      poolSize: 8, // Matches our parallel processing - allows pipeline to stay full
     });
-    console.log('[FilmstripWorker] Created CanvasSink');
+    console.log('[FilmstripWorker] Created CanvasSink with poolSize: 8');
 
     // Track extracted frames
     let extractedCount = skipSet.size;
@@ -183,8 +184,12 @@ async function extractAndSave(
       console.log('[FilmstripWorker] Generator finished, yielded:', timestampsYielded);
     }
 
-    // Extract and save each frame
+    // Extract and save each frame with parallel writes
     console.log('[FilmstripWorker] Starting extraction loop...');
+    const pendingSaves: Promise<void>[] = [];
+    const MAX_PARALLEL_SAVES = 10;
+    let lastReportedFrame = -1;
+
     for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
       if (state.aborted) {
         console.log('[FilmstripWorker] Aborted');
@@ -200,32 +205,54 @@ async function extractAndSave(
         continue;
       }
 
-      // Convert canvas to webp blob
+      // Convert canvas to webp blob (must await - need canvas before it's reused)
       const canvas = wrapped.canvas as OffscreenCanvas;
       const blob = await canvas.convertToBlob({
         type: IMAGE_FORMAT,
         quality: IMAGE_QUALITY,
       });
 
-      // Save to OPFS
-      await saveFrame(dir, frame.index, blob);
+      // Save to OPFS in parallel (don't await)
+      const frameIndex = frame.index;
+      const savePromise = saveFrame(dir, frameIndex, blob).then(() => {
+        // Remove from pending when done
+        const idx = pendingSaves.indexOf(savePromise);
+        if (idx > -1) pendingSaves.splice(idx, 1);
+      });
+      pendingSaves.push(savePromise);
+
+      // Throttle parallel saves to prevent overwhelming OPFS
+      if (pendingSaves.length >= MAX_PARALLEL_SAVES) {
+        await Promise.race(pendingSaves);
+      }
+
       extractedCount++;
       frameListIndex++;
 
-      // Report progress
-      const progress = Math.round((extractedCount / totalFrames) * 100);
+      // Batch progress updates - report first 5, then every 10 frames
+      const shouldReport = extractedCount <= 5 || extractedCount % 10 === 0;
+      if (shouldReport) {
+        const progress = Math.round((extractedCount / totalFrames) * 100);
 
-      if (extractedCount <= 5 || extractedCount % 50 === 0) {
-        console.log('[FilmstripWorker] Extracted frame:', frame.index, 'total:', extractedCount, 'progress:', progress);
+        if (extractedCount <= 5 || extractedCount % 50 === 0) {
+          console.log('[FilmstripWorker] Extracted frame:', frameIndex, 'total:', extractedCount, 'progress:', progress);
+        }
+
+        self.postMessage({
+          type: 'progress',
+          requestId,
+          frameIndex,
+          frameCount: extractedCount,
+          progress: Math.min(progress, 99),
+        } as ProgressResponse);
+        lastReportedFrame = frameIndex;
       }
+    }
 
-      self.postMessage({
-        type: 'progress',
-        requestId,
-        frameIndex: frame.index,
-        frameCount: extractedCount,
-        progress: Math.min(progress, 99),
-      } as ProgressResponse);
+    // Wait for all pending saves to complete
+    if (pendingSaves.length > 0) {
+      console.log('[FilmstripWorker] Waiting for', pendingSaves.length, 'pending saves...');
+      await Promise.all(pendingSaves);
     }
 
     // Save final metadata - only mark complete if we actually have frames
