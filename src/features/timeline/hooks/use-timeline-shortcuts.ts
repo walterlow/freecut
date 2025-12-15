@@ -494,10 +494,8 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     HOTKEYS.PREVIOUS_MARKER,
     (event) => {
       event.preventDefault();
-      console.log('[Shortcut] Previous marker triggered');
       // Read markers directly from store to get latest state
       const currentMarkers = useTimelineStore.getState().markers;
-      console.log('[Shortcut] Markers count:', currentMarkers.length);
       if (currentMarkers.length === 0) return;
       const currentFrame = usePlaybackStore.getState().currentFrame;
       // Find the closest marker before current frame (markers may not be sorted)
@@ -510,7 +508,6 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         }
       }
       if (previousFrame !== undefined) {
-        console.log('[Shortcut] Jumping to frame:', previousFrame);
         setCurrentFrame(previousFrame);
       }
     },
@@ -523,10 +520,8 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     HOTKEYS.NEXT_MARKER,
     (event) => {
       event.preventDefault();
-      console.log('[Shortcut] Next marker triggered');
       // Read markers directly from store to get latest state
       const currentMarkers = useTimelineStore.getState().markers;
-      console.log('[Shortcut] Markers count:', currentMarkers.length);
       if (currentMarkers.length === 0) return;
       const currentFrame = usePlaybackStore.getState().currentFrame;
       // Find the closest marker after current frame (markers may not be sorted)
@@ -539,7 +534,6 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         }
       }
       if (nextFrame !== undefined) {
-        console.log('[Shortcut] Jumping to frame:', nextFrame);
         setCurrentFrame(nextFrame);
       }
     },

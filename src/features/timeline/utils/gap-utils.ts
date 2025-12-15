@@ -147,39 +147,7 @@ export function removeLeadingGaps(items: TimelineItem[]): TimelineItem[] {
   });
 }
 
-/**
- * Remove a specific gap at a given frame position on a track.
- *
- * @param items - All timeline items
- * @param frame - Frame position within the gap
- * @param trackId - Track ID where the gap exists
- * @returns Items with the specific gap closed
- */
-export function removeGapAt(
-  items: TimelineItem[],
-  frame: number,
-  trackId: string
-): TimelineItem[] {
-  const gaps = findGaps(items, trackId);
-
-  // Find the gap that contains this frame
-  const targetGap = gaps.find(
-    (gap) => gap.trackId === trackId && frame >= gap.start && frame < gap.end
-  );
-
-  if (!targetGap) return items;
-
-  // Shift all items after the gap by the gap duration
-  return items.map((item) => {
-    if (item.trackId !== trackId) return item;
-    if (item.from < targetGap.end) return item;
-
-    return {
-      ...item,
-      from: item.from - targetGap.duration,
-    };
-  });
-}
+// Note: removeGapAt functionality exists in timeline store as closeGapAtPosition
 
 /**
  * Get total gap duration across all tracks or a specific track.

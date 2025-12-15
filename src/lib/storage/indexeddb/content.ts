@@ -1,5 +1,8 @@
 import type { ContentRecord, MediaMetadata } from '@/types/storage';
 import { getDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Content');
 
 /**
  * Get content record by hash.
@@ -11,7 +14,7 @@ export async function getContentByHash(
     const db = await getDB();
     return await db.get('content', hash);
   } catch (error) {
-    console.error(`Failed to get content ${hash}:`, error);
+    logger.error(`Failed to get content ${hash}:`, error);
     throw new Error(`Failed to load content: ${hash}`);
   }
 }
@@ -26,7 +29,7 @@ export async function hasContentWithSize(fileSize: number): Promise<boolean> {
     const allContent = await db.getAll('content');
     return allContent.some((content) => content.fileSize === fileSize);
   } catch (error) {
-    console.error('Failed to check content by size:', error);
+    logger.error('Failed to check content by size:', error);
     return false;
   }
 }
@@ -60,7 +63,7 @@ export async function createContent(record: ContentRecord): Promise<void> {
         return;
       }
     }
-    console.error('Failed to create content record:', error);
+    logger.error('Failed to create content record:', error);
     throw error;
   }
 }
@@ -86,7 +89,7 @@ export async function incrementContentRef(hash: string): Promise<number> {
     await db.put('content', updated);
     return updated.referenceCount;
   } catch (error) {
-    console.error(`Failed to increment content ref ${hash}:`, error);
+    logger.error(`Failed to increment content ref ${hash}:`, error);
     throw error;
   }
 }
@@ -112,7 +115,7 @@ export async function decrementContentRef(hash: string): Promise<number> {
     await db.put('content', updated);
     return updated.referenceCount;
   } catch (error) {
-    console.error(`Failed to decrement content ref ${hash}:`, error);
+    logger.error(`Failed to decrement content ref ${hash}:`, error);
     throw error;
   }
 }
@@ -125,7 +128,7 @@ export async function deleteContent(hash: string): Promise<void> {
     const db = await getDB();
     await db.delete('content', hash);
   } catch (error) {
-    console.error(`Failed to delete content ${hash}:`, error);
+    logger.error(`Failed to delete content ${hash}:`, error);
     throw new Error(`Failed to delete content: ${hash}`);
   }
 }
@@ -143,7 +146,7 @@ export async function findMediaByContentHash(
     const results = await index.getAll(hash);
     return results[0];
   } catch (error) {
-    console.error(`Failed to find media by hash ${hash}:`, error);
+    logger.error(`Failed to find media by hash ${hash}:`, error);
     return undefined;
   }
 }

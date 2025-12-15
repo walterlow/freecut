@@ -1,5 +1,8 @@
 import type { Project } from '@/types/project';
 import { getDB, checkStorageQuota, hasEnoughSpace } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Projects');
 
 /**
  * Get all projects from IndexedDB.
@@ -9,7 +12,7 @@ export async function getAllProjects(): Promise<Project[]> {
     const db = await getDB();
     return await db.getAll('projects');
   } catch (error) {
-    console.error('Failed to get all projects:', error);
+    logger.error('Failed to get all projects:', error);
     throw new Error('Failed to load projects from database');
   }
 }
@@ -22,7 +25,7 @@ export async function getProject(id: string): Promise<Project | undefined> {
     const db = await getDB();
     return await db.get('projects', id);
   } catch (error) {
-    console.error(`Failed to get project ${id}:`, error);
+    logger.error(`Failed to get project ${id}:`, error);
     throw new Error(`Failed to load project: ${id}`);
   }
 }
@@ -51,7 +54,7 @@ export async function createProject(project: Project): Promise<Project> {
         'Storage quota exceeded. Please delete some projects to free up space.'
       );
     }
-    console.error('Failed to create project:', error);
+    logger.error('Failed to create project:', error);
     throw error;
   }
 }
@@ -81,7 +84,7 @@ export async function updateProject(
     await db.put('projects', updated);
     return updated;
   } catch (error) {
-    console.error(`Failed to update project ${id}:`, error);
+    logger.error(`Failed to update project ${id}:`, error);
     throw error;
   }
 }
@@ -94,7 +97,7 @@ export async function deleteProject(id: string): Promise<void> {
     const db = await getDB();
     await db.delete('projects', id);
   } catch (error) {
-    console.error(`Failed to delete project ${id}:`, error);
+    logger.error(`Failed to delete project ${id}:`, error);
     throw new Error(`Failed to delete project: ${id}`);
   }
 }
@@ -114,7 +117,7 @@ export async function searchProjects(query: string): Promise<Project[]> {
         project.description?.toLowerCase().includes(lowerQuery)
     );
   } catch (error) {
-    console.error('Failed to search projects:', error);
+    logger.error('Failed to search projects:', error);
     throw new Error('Failed to search projects');
   }
 }
@@ -142,7 +145,7 @@ export async function getProjectsSorted(
 
     return projects;
   } catch (error) {
-    console.error('Failed to get sorted projects:', error);
+    logger.error('Failed to get sorted projects:', error);
     throw new Error('Failed to load sorted projects');
   }
 }
@@ -155,7 +158,7 @@ export async function clearAllProjects(): Promise<void> {
     const db = await getDB();
     await db.clear('projects');
   } catch (error) {
-    console.error('Failed to clear projects:', error);
+    logger.error('Failed to clear projects:', error);
     throw new Error('Failed to clear all projects');
   }
 }
@@ -179,7 +182,7 @@ export async function getDBStats(): Promise<{
       storageQuota: quota,
     };
   } catch (error) {
-    console.error('Failed to get DB stats:', error);
+    logger.error('Failed to get DB stats:', error);
     return {
       projectCount: 0,
       storageUsed: 0,

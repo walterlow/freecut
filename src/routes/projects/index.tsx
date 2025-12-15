@@ -1,6 +1,9 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
 import { Plus, Upload, FolderOpen, File, Github } from 'lucide-react';
 import { FreeCutLogo } from '@/components/brand/freecut-logo';
@@ -117,7 +120,7 @@ function ProjectsIndex() {
         );
         return;
       }
-      console.error('Failed to select directory:', err);
+      logger.error('Failed to select directory:', err);
       setImportError('Failed to select destination folder. Please try a different location.');
     }
   };
@@ -136,7 +139,7 @@ function ProjectsIndex() {
         try {
           finalDestination = await destinationDir.getDirectoryHandle(PROJECTS_FOLDER_NAME, { create: true });
         } catch (err) {
-          console.error('Failed to create FreeCutProjects folder:', err);
+          logger.error('Failed to create FreeCutProjects folder:', err);
           throw new Error(`Failed to create ${PROJECTS_FOLDER_NAME} folder. Try selecting a different location.`);
         }
       }
@@ -161,7 +164,7 @@ function ProjectsIndex() {
       handleCloseImportDialog();
       navigate({ to: '/editor/$projectId', params: { projectId: result.project.id } });
     } catch (err) {
-      console.error('Import failed:', err);
+      logger.error('Import failed:', err);
       setImportError(err instanceof Error ? err.message : 'Import failed');
       setImportProgress(null);
       setIsImporting(false);
@@ -199,7 +202,7 @@ function ProjectsIndex() {
       await updateProject(editingProject.id, data);
       setEditingProject(null);
     } catch (error) {
-      console.error('Failed to update project:', error);
+      logger.error('Failed to update project:', error);
       toast.error('Failed to update project', { description: 'Please try again' });
     } finally {
       setIsSubmitting(false);

@@ -1,5 +1,8 @@
 import type { GifFrameData } from '@/types/storage';
 import { getDB, reconnectDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:GifFrames');
 
 /**
  * Save GIF frame data to IndexedDB.
@@ -8,12 +11,12 @@ export async function saveGifFrames(gifFrameData: GifFrameData): Promise<void> {
   try {
     let db = await getDB();
     if (!db.objectStoreNames.contains('gifFrames')) {
-      console.warn('gifFrames store not found, attempting reconnection...');
+      logger.warn('gifFrames store not found, attempting reconnection...');
       db = await reconnectDB();
     }
     await db.put('gifFrames', gifFrameData);
   } catch (error) {
-    console.error('Failed to save GIF frames:', error);
+    logger.error('Failed to save GIF frames:', error);
     throw new Error('Failed to save GIF frames');
   }
 }
@@ -27,7 +30,7 @@ export async function getGifFrames(
   try {
     const db = await getDB();
     if (!db.objectStoreNames.contains('gifFrames')) {
-      console.warn('gifFrames store not found, attempting reconnection...');
+      logger.warn('gifFrames store not found, attempting reconnection...');
       const newDb = await reconnectDB();
       if (!newDb.objectStoreNames.contains('gifFrames')) {
         throw new Error('gifFrames store not found after reconnection');
@@ -36,7 +39,7 @@ export async function getGifFrames(
     }
     return await db.get('gifFrames', id);
   } catch (error) {
-    console.error(`Failed to get GIF frames ${id}:`, error);
+    logger.error(`Failed to get GIF frames ${id}:`, error);
     return undefined;
   }
 }
@@ -55,7 +58,7 @@ export async function deleteGifFrames(id: string): Promise<void> {
     }
     await db.delete('gifFrames', id);
   } catch (error) {
-    console.error(`Failed to delete GIF frames ${id}:`, error);
+    logger.error(`Failed to delete GIF frames ${id}:`, error);
     throw new Error(`Failed to delete GIF frames: ${id}`);
   }
 }
@@ -74,9 +77,9 @@ export async function clearAllGifFrames(): Promise<void> {
       }
     }
     await db.clear('gifFrames');
-    console.log('[IndexedDB] Cleared all GIF frames');
+    logger.debug('[IndexedDB] Cleared all GIF frames');
   } catch (error) {
-    console.error('Failed to clear GIF frames:', error);
+    logger.error('Failed to clear GIF frames:', error);
     throw new Error('Failed to clear GIF frames');
   }
 }

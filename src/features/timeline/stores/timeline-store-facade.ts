@@ -17,6 +17,10 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('TimelineStore');
+
 // Domain stores
 import { useItemsStore } from './items-store';
 import { useTransitionsStore } from './transitions-store';
@@ -127,7 +131,7 @@ async function saveTimeline(projectId: string): Promise<void> {
         }
       } catch (thumbError) {
         // Thumbnail generation failure shouldn't block save
-        console.warn('Failed to generate thumbnail:', thumbError);
+        logger.warn('Failed to generate thumbnail:', thumbError);
       }
     }
 
@@ -141,7 +145,7 @@ async function saveTimeline(projectId: string): Promise<void> {
     // Mark as clean after successful save
     useTimelineSettingsStore.getState().markClean();
   } catch (error) {
-    console.error('Failed to save timeline:', error);
+    logger.error('Failed to save timeline:', error);
     throw error;
   }
 }
@@ -197,7 +201,7 @@ async function loadTimeline(projectId: string): Promise<void> {
       useTimelineCommandStore.getState().clearHistory();
     }
   } catch (error) {
-    console.error('Failed to load timeline:', error);
+    logger.error('Failed to load timeline:', error);
     throw error;
   }
 }

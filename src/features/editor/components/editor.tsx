@@ -1,9 +1,12 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { createLogger } from '@/lib/logger';
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
+
+const logger = createLogger('Editor');
 import { Toolbar } from './toolbar';
 import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
@@ -176,10 +179,10 @@ export function Editor({ projectId, project }: EditorProps) {
 
     try {
       await saveTimeline(projectId);
-      console.log('Project saved successfully');
+      logger.debug('Project saved successfully');
       // TODO: Show success toast notification
     } catch (error) {
-      console.error('Failed to save project:', error);
+      logger.error('Failed to save project:', error);
       // TODO: Show error toast notification
       throw error; // Re-throw so callers know save failed
     } finally {
@@ -201,16 +204,16 @@ export function Editor({ projectId, project }: EditorProps) {
       // Save timeline first to ensure latest changes are included
       await handleSave();
 
-      console.log('Exporting project bundle...');
+      logger.debug('Exporting project bundle...');
       const result = await exportProjectBundle(projectId, (progress) => {
-        console.log(`Export progress: ${progress.percent}% - ${progress.stage}`);
+        logger.debug(`Export progress: ${progress.percent}% - ${progress.stage}`);
       });
 
       // Trigger download
       downloadBundle(result);
-      console.log(`Project bundle exported: ${result.filename} (${result.mediaCount} media files)`);
+      logger.debug(`Project bundle exported: ${result.filename} (${result.mediaCount} media files)`);
     } catch (error) {
-      console.error('Failed to export project bundle:', error);
+      logger.error('Failed to export project bundle:', error);
       // TODO: Show error toast notification
     }
   };

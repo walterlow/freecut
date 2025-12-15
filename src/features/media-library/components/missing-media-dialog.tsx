@@ -1,4 +1,8 @@
 import { useState, useMemo } from 'react';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('MissingMediaDialog');
+
 import {
   Dialog,
   DialogContent,
@@ -69,7 +73,7 @@ export function MissingMediaDialog() {
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Relink failed:', error);
+        logger.error('Relink failed:', error);
       }
     } finally {
       setRelinking(null);
@@ -109,7 +113,7 @@ export function MissingMediaDialog() {
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Folder scan failed:', error);
+        logger.error('Folder scan failed:', error);
       }
     } finally {
       setLocatingFolder(false);

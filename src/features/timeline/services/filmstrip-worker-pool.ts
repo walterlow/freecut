@@ -12,6 +12,9 @@
  * - Playback-aware throttling (reduces workers when video is playing)
  * - Abort support
  */
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('FilmstripWorkerPool');
 
 import type {
   WorkerRequest,
@@ -292,7 +295,7 @@ class FilmstripWorkerPool {
    * Handle worker errors (uncaught exceptions)
    */
   private handleWorkerError(event: ErrorEvent): void {
-    console.error('Filmstrip worker error:', event.message);
+    logger.error('Filmstrip worker error:', event.message);
   }
 
   /**

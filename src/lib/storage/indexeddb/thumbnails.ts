@@ -1,5 +1,8 @@
 import type { ThumbnailData } from '@/types/storage';
 import { getDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Thumbnails');
 
 /**
  * Save a thumbnail to IndexedDB.
@@ -9,7 +12,7 @@ export async function saveThumbnail(thumbnail: ThumbnailData): Promise<void> {
     const db = await getDB();
     await db.put('thumbnails', thumbnail);
   } catch (error) {
-    console.error('Failed to save thumbnail:', error);
+    logger.error('Failed to save thumbnail:', error);
     throw new Error('Failed to save thumbnail');
   }
 }
@@ -24,7 +27,7 @@ export async function getThumbnail(
     const db = await getDB();
     return await db.get('thumbnails', id);
   } catch (error) {
-    console.error(`Failed to get thumbnail ${id}:`, error);
+    logger.error(`Failed to get thumbnail ${id}:`, error);
     throw new Error(`Failed to load thumbnail: ${id}`);
   }
 }
@@ -43,7 +46,7 @@ export async function getThumbnailByMediaId(
 
     return thumbnails[0];
   } catch (error) {
-    console.error(`Failed to get thumbnail for media ${mediaId}:`, error);
+    logger.error(`Failed to get thumbnail for media ${mediaId}:`, error);
     return undefined;
   }
 }
@@ -56,7 +59,7 @@ export async function deleteThumbnail(id: string): Promise<void> {
     const db = await getDB();
     await db.delete('thumbnails', id);
   } catch (error) {
-    console.error(`Failed to delete thumbnail ${id}:`, error);
+    logger.error(`Failed to delete thumbnail ${id}:`, error);
     throw new Error(`Failed to delete thumbnail: ${id}`);
   }
 }
@@ -77,7 +80,7 @@ export async function deleteThumbnailsByMediaId(mediaId: string): Promise<void> 
 
     await tx.done;
   } catch (error) {
-    console.error(`Failed to delete thumbnails for media ${mediaId}:`, error);
+    logger.error(`Failed to delete thumbnails for media ${mediaId}:`, error);
     throw new Error('Failed to delete thumbnails');
   }
 }

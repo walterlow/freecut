@@ -13,6 +13,9 @@ import {
   getGifFrames as getGifFramesFromDB,
   saveGifFrames,
 } from '../../../lib/storage/indexeddb';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('GifFrameCache');
 import type { GifFrameData } from '../../../types/storage';
 import { parseGIF, decompressFrames } from 'gifuct-js';
 
@@ -344,7 +347,7 @@ class GifFrameCacheService {
         };
         await saveGifFrames(gifFrameData);
       } catch (err) {
-        console.warn('Failed to persist GIF frames to IndexedDB:', err);
+        logger.warn('Failed to persist GIF frames to IndexedDB:', err);
       }
 
       onProgress?.(100);
@@ -391,7 +394,7 @@ class GifFrameCacheService {
 
       return cached;
     } catch (err) {
-      console.warn('Failed to load GIF frames from IndexedDB:', err);
+      logger.warn('Failed to load GIF frames from IndexedDB:', err);
       return null;
     }
   }
@@ -513,5 +516,5 @@ export const gifFrameCache = new GifFrameCacheService();
   // Clear IndexedDB gifFrames store
   const { clearAllGifFrames } = await import('../../../lib/storage/indexeddb');
   await clearAllGifFrames();
-  console.log('[GifFrameCache] All caches cleared');
+  logger.debug('[GifFrameCache] All caches cleared');
 };

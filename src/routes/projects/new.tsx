@@ -1,6 +1,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('NewProject');
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
@@ -31,7 +34,7 @@ function NewProject() {
         setIsSubmitting(false);
       }
     } catch (error) {
-      console.error('Failed to create project:', error);
+      logger.error('Failed to create project:', error);
       toast.error('Failed to create project', { description: 'Please try again' });
       setIsSubmitting(false);
     }

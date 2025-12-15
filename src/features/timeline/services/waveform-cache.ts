@@ -9,6 +9,9 @@
 
 import type { WaveformData } from '@/types/storage';
 import { getWaveform, saveWaveform, deleteWaveform, reconnectDB } from '@/lib/storage/indexeddb';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('WaveformCache');
 
 // Lazy load mediabunny to avoid blocking initial render
 const mediabunnyModule = () => import('mediabunny');
@@ -133,7 +136,7 @@ class WaveformCacheService {
     } catch (error) {
       // Check if this is a missing object store error (database needs upgrade)
       if (error instanceof Error && error.message.includes('object store')) {
-        console.warn('IndexedDB schema outdated, attempting reconnection...');
+        logger.warn('IndexedDB schema outdated, attempting reconnection...');
         try {
           await reconnectDB();
           // Retry once after reconnection
@@ -152,10 +155,10 @@ class WaveformCacheService {
             return cached;
           }
         } catch (retryError) {
-          console.error('Failed to load waveform after reconnection:', retryError);
+          logger.error('Failed to load waveform after reconnection:', retryError);
         }
       } else {
-        console.error(`Failed to load waveform from IndexedDB: ${mediaId}`, error);
+        logger.error(`Failed to load waveform from IndexedDB: ${mediaId}`, error);
       }
       return null;
     }
@@ -318,7 +321,7 @@ class WaveformCacheService {
         };
         await saveWaveform(waveformData);
       } catch (saveError) {
-        console.warn('Failed to persist waveform to IndexedDB:', saveError);
+        logger.warn('Failed to persist waveform to IndexedDB:', saveError);
       }
 
       onProgress?.(100);
@@ -383,7 +386,7 @@ class WaveformCacheService {
       if (!cached && !this.pendingRequests.has(mediaId)) {
         // Generate in background (no progress callback)
         this.getWaveform(mediaId, blobUrl).catch((error) => {
-          console.warn('Waveform prefetch failed:', error);
+          logger.warn('Waveform prefetch failed:', error);
         });
       }
     });

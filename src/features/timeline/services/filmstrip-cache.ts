@@ -9,6 +9,10 @@
  * - Rendering matches frames to display slots by timestamp
  */
 
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('FilmstripCache');
+
 import {
   deleteFilmstripsByMediaId,
   getFilmstripByMediaId,
@@ -283,7 +287,7 @@ class FilmstripCacheService {
               };
               await saveFilmstrip(filmstripData);
             } catch (err) {
-              console.warn('Failed to persist filmstrip to IndexedDB:', err);
+              logger.warn('Failed to persist filmstrip to IndexedDB:', err);
             }
 
             onProgress?.(100);
@@ -321,7 +325,7 @@ class FilmstripCacheService {
 
       // Validate dimensions match current constants (invalidate if size changed)
       if (stored.width !== THUMBNAIL_WIDTH || stored.height !== THUMBNAIL_HEIGHT) {
-        console.log(`Filmstrip cache invalidated for ${mediaId}: dimensions changed from ${stored.width}x${stored.height} to ${THUMBNAIL_WIDTH}x${THUMBNAIL_HEIGHT}`);
+        logger.debug(`Filmstrip cache invalidated for ${mediaId}: dimensions changed from ${stored.width}x${stored.height} to ${THUMBNAIL_WIDTH}x${THUMBNAIL_HEIGHT}`);
         await deleteFilmstripsByMediaId(mediaId);
         return null;
       }
@@ -349,7 +353,7 @@ class FilmstripCacheService {
 
       return cached;
     } catch (err) {
-      console.warn('Failed to load filmstrip from IndexedDB:', err);
+      logger.warn('Failed to load filmstrip from IndexedDB:', err);
       return null;
     }
   }

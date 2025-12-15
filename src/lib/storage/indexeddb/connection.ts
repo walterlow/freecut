@@ -5,6 +5,9 @@ import {
   DB_NAME,
   DB_VERSION,
 } from './schema';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Connection');
 
 let dbPromise: Promise<VideoEditorDBInstance> | null = null;
 
@@ -130,12 +133,12 @@ export async function getDB(): Promise<VideoEditorDBInstance> {
         }
       },
       blocked() {
-        console.warn(
+        logger.warn(
           'Database upgrade blocked. Close other tabs with this app open.'
         );
       },
       blocking() {
-        console.warn(
+        logger.warn(
           'This connection is blocking a database upgrade in another tab.'
         );
       },

@@ -1,5 +1,8 @@
 import type { MediaMetadata, ProjectMediaAssociation } from '@/types/storage';
 import { getDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:ProjectMedia');
 
 /**
  * Associate media with a project.
@@ -17,7 +20,7 @@ export async function associateMediaWithProject(
     };
     await db.put('projectMedia', association);
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to associate media ${mediaId} with project ${projectId}:`,
       error
     );
@@ -36,7 +39,7 @@ export async function removeMediaFromProject(
     const db = await getDB();
     await db.delete('projectMedia', [projectId, mediaId]);
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to remove media ${mediaId} from project ${projectId}:`,
       error
     );
@@ -55,7 +58,7 @@ export async function getProjectMediaIds(projectId: string): Promise<string[]> {
     const associations = await index.getAll(projectId);
     return associations.map((a) => a.mediaId);
   } catch (error) {
-    console.error(`Failed to get media for project ${projectId}:`, error);
+    logger.error(`Failed to get media for project ${projectId}:`, error);
     throw new Error(`Failed to get project media: ${projectId}`);
   }
 }
@@ -71,7 +74,7 @@ export async function getProjectsUsingMedia(mediaId: string): Promise<string[]> 
     const associations = await index.getAll(mediaId);
     return associations.map((a) => a.projectId);
   } catch (error) {
-    console.error(`Failed to get projects using media ${mediaId}:`, error);
+    logger.error(`Failed to get projects using media ${mediaId}:`, error);
     throw new Error(`Failed to get projects for media: ${mediaId}`);
   }
 }
@@ -100,14 +103,14 @@ export async function getMediaForProject(
     }
 
     if (orphanedIds.length > 0) {
-      console.warn(
+      logger.warn(
         `Cleaning up ${orphanedIds.length} orphaned projectMedia entries for project ${projectId}`
       );
       for (const mediaId of orphanedIds) {
         try {
           await db.delete('projectMedia', [projectId, mediaId]);
         } catch (error) {
-          console.warn(
+          logger.warn(
             `Failed to clean up orphaned entry for media ${mediaId}:`,
             error
           );
@@ -117,7 +120,7 @@ export async function getMediaForProject(
 
     return media;
   } catch (error) {
-    console.error(`Failed to get media for project ${projectId}:`, error);
+    logger.error(`Failed to get media for project ${projectId}:`, error);
     throw new Error(`Failed to load project media: ${projectId}`);
   }
 }
@@ -140,7 +143,7 @@ export async function removeAllMediaFromProject(
 
     await tx.done;
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to remove all media from project ${projectId}:`,
       error
     );
@@ -160,7 +163,7 @@ export async function isMediaInProject(
     const association = await db.get('projectMedia', [projectId, mediaId]);
     return !!association;
   } catch (error) {
-    console.error(
+    logger.error(
       `Failed to check media ${mediaId} in project ${projectId}:`,
       error
     );

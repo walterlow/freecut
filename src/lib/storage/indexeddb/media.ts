@@ -1,5 +1,8 @@
 import type { MediaMetadata } from '@/types/storage';
 import { getDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Media');
 
 /**
  * Get all media items from IndexedDB.
@@ -9,7 +12,7 @@ export async function getAllMedia(): Promise<MediaMetadata[]> {
     const db = await getDB();
     return await db.getAll('media');
   } catch (error) {
-    console.error('Failed to get all media:', error);
+    logger.error('Failed to get all media:', error);
     throw new Error('Failed to load media from database');
   }
 }
@@ -22,7 +25,7 @@ export async function getMedia(id: string): Promise<MediaMetadata | undefined> {
     const db = await getDB();
     return await db.get('media', id);
   } catch (error) {
-    console.error(`Failed to get media ${id}:`, error);
+    logger.error(`Failed to get media ${id}:`, error);
     throw new Error(`Failed to load media: ${id}`);
   }
 }
@@ -41,7 +44,7 @@ export async function createMedia(media: MediaMetadata): Promise<MediaMetadata> 
         'Storage quota exceeded. Please delete some media to free up space.'
       );
     }
-    console.error('Failed to create media:', error);
+    logger.error('Failed to create media:', error);
     throw error;
   }
 }
@@ -71,7 +74,7 @@ export async function updateMedia(
     await db.put('media', updated);
     return updated;
   } catch (error) {
-    console.error(`Failed to update media ${id}:`, error);
+    logger.error(`Failed to update media ${id}:`, error);
     throw error;
   }
 }
@@ -84,7 +87,7 @@ export async function deleteMedia(id: string): Promise<void> {
     const db = await getDB();
     await db.delete('media', id);
   } catch (error) {
-    console.error(`Failed to delete media ${id}:`, error);
+    logger.error(`Failed to delete media ${id}:`, error);
     throw new Error(`Failed to delete media: ${id}`);
   }
 }
@@ -102,7 +105,7 @@ export async function searchMedia(query: string): Promise<MediaMetadata[]> {
       media.fileName.toLowerCase().includes(lowerQuery)
     );
   } catch (error) {
-    console.error('Failed to search media:', error);
+    logger.error('Failed to search media:', error);
     throw new Error('Failed to search media');
   }
 }
@@ -121,7 +124,7 @@ export async function getMediaByType(
       media.mimeType.startsWith(mimeTypePrefix)
     );
   } catch (error) {
-    console.error('Failed to get media by type:', error);
+    logger.error('Failed to get media by type:', error);
     throw new Error('Failed to load media by type');
   }
 }
@@ -140,7 +143,7 @@ export async function batchDeleteMedia(ids: string[]): Promise<void> {
 
     await tx.done;
   } catch (error) {
-    console.error('Failed to batch delete media:', error);
+    logger.error('Failed to batch delete media:', error);
     throw new Error('Failed to delete media items');
   }
 }

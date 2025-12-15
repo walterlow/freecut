@@ -3,6 +3,9 @@ import { devtools } from 'zustand/middleware';
 import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, BrokenMediaInfo } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('MediaLibraryStore');
 
 // IMPORTANT: Always use granular selectors to prevent unnecessary re-renders!
 //
@@ -69,7 +72,7 @@ export const useMediaLibraryStore = create<
             isLoading: false,
           });
         } catch (error) {
-          console.error('[MediaLibraryStore] loadMediaItems error:', error);
+          logger.error('[MediaLibraryStore] loadMediaItems error:', error);
           const errorMessage =
             error instanceof Error ? error.message : 'Failed to load media';
           set({ error: errorMessage, isLoading: false });
@@ -170,7 +173,7 @@ export const useMediaLibraryStore = create<
                 mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
                 importingIds: state.importingIds.filter((id) => id !== tempId),
               }));
-              console.error(`Failed to import ${file.name}:`, error);
+              logger.error(`Failed to import ${file.name}:`, error);
             }
           }
 
@@ -195,7 +198,7 @@ export const useMediaLibraryStore = create<
       // Import media from file handles (for drag-drop)
       importHandles: async (handles: FileSystemFileHandle[]) => {
         const { currentProjectId } = get();
-        console.log('[importHandles] Starting import for', handles.length, 'handles');
+        logger.debug('[importHandles] Starting import for', handles.length, 'handles');
 
         if (!currentProjectId) {
           set({ error: 'No project selected' });
@@ -208,7 +211,7 @@ export const useMediaLibraryStore = create<
         for (let i = 0; i < handles.length; i++) {
           const handle = handles[i];
           if (!handle) continue;
-          console.log(`[importHandles] Processing handle ${i + 1}/${handles.length}:`, handle.name);
+          logger.debug(`[importHandles] Processing handle ${i + 1}/${handles.length}:`, handle.name);
           const tempId = crypto.randomUUID();
           const file = await handle.getFile();
 
@@ -239,16 +242,16 @@ export const useMediaLibraryStore = create<
           }));
 
           try {
-            console.log(`[importHandles] Calling importMediaWithHandle for ${file.name} (${file.size} bytes)`);
+            logger.debug(`[importHandles] Calling importMediaWithHandle for ${file.name} (${file.size} bytes)`);
             const metadata = await mediaLibraryService.importMediaWithHandle(
               handle,
               currentProjectId
             );
-            console.log(`[importHandles] Result for ${file.name}:`, { isDuplicate: metadata.isDuplicate, id: metadata.id });
+            logger.debug(`[importHandles] Result for ${file.name}:`, { isDuplicate: metadata.isDuplicate, id: metadata.id });
 
             if (metadata.isDuplicate) {
               // File already exists - remove temp item and collect for batch notification
-              console.log(`[importHandles] ${file.name} is duplicate, removing temp item`);
+              logger.debug(`[importHandles] ${file.name} is duplicate, removing temp item`);
               set((state) => ({
                 mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
                 importingIds: state.importingIds.filter((id) => id !== tempId),
@@ -256,7 +259,7 @@ export const useMediaLibraryStore = create<
               duplicateNames.push(file.name);
             } else {
               // Replace temp with actual metadata and clear importing state
-              console.log(`[importHandles] ${file.name} imported successfully with id ${metadata.id}`);
+              logger.debug(`[importHandles] ${file.name} imported successfully with id ${metadata.id}`);
               set((state) => ({
                 mediaItems: state.mediaItems.map((item) =>
                   item.id === tempId ? metadata : item
@@ -267,7 +270,7 @@ export const useMediaLibraryStore = create<
             }
           } catch (error) {
             // Rollback this item
-            console.error(`[importHandles] Failed to import ${file.name}:`, error);
+            logger.error(`[importHandles] Failed to import ${file.name}:`, error);
             set((state) => ({
               mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
               importingIds: state.importingIds.filter((id) => id !== tempId),
@@ -275,7 +278,7 @@ export const useMediaLibraryStore = create<
           }
         }
 
-        console.log(`[importHandles] Import complete. Results: ${results.length}, Duplicates: ${duplicateNames.length}`);
+        logger.debug(`[importHandles] Import complete. Results: ${results.length}, Duplicates: ${duplicateNames.length}`);
 
         // Show batched notification for duplicates
         if (duplicateNames.length > 0) {
@@ -436,7 +439,7 @@ export const useMediaLibraryStore = create<
 
           return true;
         } catch (error) {
-          console.error(`[MediaLibraryStore] relinkMedia error:`, error);
+          logger.error(`[MediaLibraryStore] relinkMedia error:`, error);
           get().showNotification({
             type: 'error',
             message: error instanceof Error ? error.message : 'Failed to relink file',
@@ -464,7 +467,7 @@ export const useMediaLibraryStore = create<
             get().markMediaHealthy(mediaId);
             success.push(mediaId);
           } catch (error) {
-            console.error(`[MediaLibraryStore] relinkMediaBatch error for ${mediaId}:`, error);
+            logger.error(`[MediaLibraryStore] relinkMediaBatch error for ${mediaId}:`, error);
             failed.push(mediaId);
           }
         }

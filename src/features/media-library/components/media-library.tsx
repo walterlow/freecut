@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useMemo, memo } from 'react';
 import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off } from 'lucide-react';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('MediaLibrary');
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -91,7 +94,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     try {
       await importMedia();
     } catch (error) {
-      console.error('Import failed:', error);
+      logger.error('Import failed:', error);
     }
   };
 
@@ -100,7 +103,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     try {
       await importHandles(handles);
     } catch (error) {
-      console.error('Import failed:', error);
+      logger.error('Import failed:', error);
     }
   };
 
@@ -132,7 +135,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       await deleteMediaBatch(idsToDelete);
       setIdsToDelete([]); // Clear after successful delete
     } catch (error) {
-      console.error('Delete failed:', error);
+      logger.error('Delete failed:', error);
       setIdsToDelete([]); // Clear even on error
     }
   };

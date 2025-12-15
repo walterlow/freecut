@@ -1,5 +1,8 @@
 import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { TimelineItem } from './timeline-item';
@@ -319,7 +322,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           // Get media metadata from store for additional info
           const media = getMedia.find((m) => m.id === mediaId);
           if (!media) {
-            console.error('Media not found:', mediaId);
+            logger.error('Media not found:', mediaId);
             continue;
           }
 
@@ -339,14 +342,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           );
 
           if (finalPosition === null) {
-            console.warn('Cannot drop item: no available space on track for', fileName);
+            logger.warn('Cannot drop item: no available space on track for', fileName);
             continue;
           }
 
           // Get media blob URL for playback
           const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId);
           if (!blobUrl) {
-            console.error('Failed to get media blob URL for', fileName);
+            logger.error('Failed to get media blob URL for', fileName);
             continue;
           }
 
@@ -404,7 +407,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
               transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
             } as ImageItem;
           } else {
-            console.warn('Unsupported media type:', mediaType);
+            logger.warn('Unsupported media type:', mediaType);
             continue;
           }
 
@@ -415,7 +418,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           currentPosition = finalPosition + itemDuration;
 
           // Add the item to timeline
-          console.log('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
+          logger.debug('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
           addItem(timelineItem);
         }
         return;
@@ -431,7 +434,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       // Get media metadata from store
       const media = getMedia.find((m) => m.id === mediaId);
       if (!media) {
-        console.error('Media not found:', mediaId);
+        logger.error('Media not found:', mediaId);
         return;
       }
 
@@ -454,12 +457,12 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
       // If no available space found, cancel the drop
       if (finalPosition === null) {
-        console.warn('Cannot drop item: no available space on track');
+        logger.warn('Cannot drop item: no available space on track');
         return;
       }
 
       // Debug logging
-      console.log('Drop Debug:', {
+      logger.debug('Drop Debug:', {
         clientX: e.clientX,
         containerLeft: containerRect.left,
         scrollLeft,
@@ -477,7 +480,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       // for large files. Consider implementing a blob URL manager service.
       const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId);
       if (!blobUrl) {
-        console.error('Failed to get media blob URL');
+        logger.error('Failed to get media blob URL');
         return;
       }
 
@@ -536,15 +539,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
         } as ImageItem;
       } else {
-        console.warn('Unsupported media type:', mediaType);
+        logger.warn('Unsupported media type:', mediaType);
         return;
       }
 
       // Add the new item to timeline
-      console.log('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
+      logger.debug('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
       addItem(timelineItem);
     } catch (error) {
-      console.error('Failed to handle media drop:', error);
+      logger.error('Failed to handle media drop:', error);
     }
   };
 

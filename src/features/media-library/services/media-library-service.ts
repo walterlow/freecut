@@ -1,4 +1,7 @@
 import type { MediaMetadata, ThumbnailData } from '@/types/storage';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('MediaLibraryService');
 import {
   getAllMedia as getAllMediaDB,
   getMedia as getMediaDB,
@@ -41,7 +44,7 @@ async function ensureFileHandlePermission(
     const newPermission = await handle.requestPermission({ mode: 'read' });
     return newPermission === 'granted';
   } catch (error) {
-    console.error('Failed to get file handle permission:', error);
+    logger.error('Failed to get file handle permission:', error);
     return false;
   }
 }
@@ -122,8 +125,6 @@ export class MediaLibraryService {
 
     // Stage 3: Check for duplicates (by fileName + fileSize)
     const projectMedia = await getMediaForProjectDB(projectId);
-    console.log(`[importMediaWithHandle] Checking duplicates for "${file.name}" (${file.size} bytes)`);
-    console.log(`[importMediaWithHandle] Project has ${projectMedia.length} existing media items`);
 
     const existingMedia = projectMedia.find(
       (m) => m.fileName === file.name && m.fileSize === file.size
@@ -131,11 +132,8 @@ export class MediaLibraryService {
 
     if (existingMedia) {
       // File already exists in project - return existing with duplicate flag
-      console.log(`[importMediaWithHandle] Found duplicate: "${existingMedia.fileName}" (${existingMedia.fileSize} bytes) with id ${existingMedia.id}`);
       return { ...existingMedia, isDuplicate: true };
     }
-
-    console.log(`[importMediaWithHandle] No duplicate found, proceeding with import`);
 
     // Stage 4: Extract metadata
     const metadata = await extractMetadata(file);
@@ -159,7 +157,7 @@ export class MediaLibraryService {
 
       await saveThumbnailDB(thumbnailData);
     } catch (error) {
-      console.warn('Failed to generate thumbnail:', error);
+      logger.warn('Failed to generate thumbnail:', error);
     }
 
     // Stage 6: Save metadata to IndexedDB with file handle
@@ -192,7 +190,7 @@ export class MediaLibraryService {
       const blobUrl = URL.createObjectURL(file);
       import('@/features/timeline/services/gif-frame-cache')
         .then(({ gifFrameCache }) => gifFrameCache.getGifFrames(id, blobUrl))
-        .catch((err) => console.warn('Failed to pre-extract GIF frames:', err))
+        .catch((err) => logger.warn('Failed to pre-extract GIF frames:', err))
         .finally(() => URL.revokeObjectURL(blobUrl));
     }
 
@@ -230,7 +228,7 @@ export class MediaLibraryService {
     }
 
     if (errors.length > 0) {
-      console.warn('Some files failed to import:', errors);
+      logger.warn('Some files failed to import:', errors);
     }
 
     return results;
@@ -275,7 +273,7 @@ export class MediaLibraryService {
       try {
         await deleteThumbnailsByMediaId(mediaId);
       } catch (error) {
-        console.warn('Failed to delete thumbnails:', error);
+        logger.warn('Failed to delete thumbnails:', error);
       }
 
       // Delete GIF frame cache if applicable
@@ -285,7 +283,7 @@ export class MediaLibraryService {
         );
         await gifFrameCache.clearMedia(mediaId);
       } catch (error) {
-        console.warn('Failed to delete GIF frame cache:', error);
+        logger.warn('Failed to delete GIF frame cache:', error);
       }
 
       // For OPFS storage, handle content reference counting
@@ -297,14 +295,14 @@ export class MediaLibraryService {
           try {
             await opfsService.deleteFile(media.opfsPath);
           } catch (error) {
-            console.warn('Failed to delete file from OPFS:', error);
+            logger.warn('Failed to delete file from OPFS:', error);
           }
 
           // Delete content record
           try {
             await deleteContent(media.contentHash);
           } catch (error) {
-            console.warn('Failed to delete content record:', error);
+            logger.warn('Failed to delete content record:', error);
           }
         }
       }
@@ -331,7 +329,7 @@ export class MediaLibraryService {
       );
 
     for (const { id, result } of errors) {
-      console.error(`Failed to delete media ${id}:`, result.reason);
+      logger.error(`Failed to delete media ${id}:`, result.reason);
     }
 
     if (errors.length === mediaIds.length) {
@@ -341,7 +339,7 @@ export class MediaLibraryService {
     }
 
     if (errors.length > 0) {
-      console.warn(
+      logger.warn(
         `Partially deleted: ${mediaIds.length - errors.length}/${mediaIds.length} items deleted successfully.`
       );
     }
@@ -360,7 +358,7 @@ export class MediaLibraryService {
 
     results.forEach((result, i) => {
       if (result.status === 'rejected') {
-        console.error(`Failed to delete media ${mediaIds[i]} from project:`, result.reason);
+        logger.error(`Failed to delete media ${mediaIds[i]} from project:`, result.reason);
       }
     });
   }
@@ -369,7 +367,7 @@ export class MediaLibraryService {
    * @deprecated Use deleteMediaFromProject instead for proper reference counting
    */
   async deleteMedia(id: string): Promise<void> {
-    console.warn(
+    logger.warn(
       'deleteMedia is deprecated. Use deleteMediaFromProject for proper reference counting.'
     );
 
@@ -384,7 +382,7 @@ export class MediaLibraryService {
       try {
         await removeMediaFromProjectDB(projectId, id);
       } catch (error) {
-        console.warn(`Failed to remove project association for ${projectId}:`, error);
+        logger.warn(`Failed to remove project association for ${projectId}:`, error);
       }
     }
 
@@ -396,13 +394,13 @@ export class MediaLibraryService {
         try {
           await opfsService.deleteFile(media.opfsPath);
         } catch (error) {
-          console.warn('Failed to delete file from OPFS:', error);
+          logger.warn('Failed to delete file from OPFS:', error);
         }
 
         try {
           await deleteContent(media.contentHash);
         } catch (error) {
-          console.warn('Failed to delete content record:', error);
+          logger.warn('Failed to delete content record:', error);
         }
       }
     }
@@ -412,7 +410,7 @@ export class MediaLibraryService {
     try {
       await deleteThumbnailsByMediaId(id);
     } catch (error) {
-      console.warn('Failed to delete thumbnails:', error);
+      logger.warn('Failed to delete thumbnails:', error);
     }
 
     await deleteMediaDB(id);
@@ -422,7 +420,7 @@ export class MediaLibraryService {
    * @deprecated Use deleteMediaBatchFromProject instead
    */
   async deleteMediaBatch(ids: string[]): Promise<void> {
-    console.warn(
+    logger.warn(
       'deleteMediaBatch is deprecated. Use deleteMediaBatchFromProject for proper reference counting.'
     );
 
@@ -432,7 +430,7 @@ export class MediaLibraryService {
       try {
         await this.deleteMedia(id);
       } catch (error) {
-        console.error(`Failed to delete media ${id}:`, error);
+        logger.error(`Failed to delete media ${id}:`, error);
         errors.push({ id, error });
       }
     }
@@ -444,7 +442,7 @@ export class MediaLibraryService {
     }
 
     if (errors.length > 0) {
-      console.warn(
+      logger.warn(
         `Partially deleted: ${ids.length - errors.length}/${ids.length} items deleted successfully.`
       );
     }
@@ -516,7 +514,7 @@ export class MediaLibraryService {
           throw error;
         }
         // File might have been moved/deleted
-        console.error('Failed to get file from handle:', error);
+        logger.error('Failed to get file from handle:', error);
         throw new FileAccessError(
           `File "${media.fileName}" not found. It may have been moved or deleted.`,
           'file_missing'
@@ -534,12 +532,12 @@ export class MediaLibraryService {
         });
         return blob;
       } catch (error) {
-        console.error('Failed to get media file from OPFS:', error);
+        logger.error('Failed to get media file from OPFS:', error);
         return null;
       }
     }
 
-    console.error('Media has no valid storage path:', id);
+    logger.error('Media has no valid storage path:', id);
     return null;
   }
 
@@ -744,7 +742,7 @@ export class MediaLibraryService {
         await deleteMediaDB(id);
         await deleteThumbnailsByMediaId(id);
       } catch (error) {
-        console.error(`Failed to cleanup orphaned metadata ${id}:`, error);
+        logger.error(`Failed to cleanup orphaned metadata ${id}:`, error);
       }
     }
 

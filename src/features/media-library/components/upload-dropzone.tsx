@@ -1,6 +1,9 @@
 import { useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { Upload } from 'lucide-react';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('UploadDropzone');
 import { Button } from '@/components/ui/button';
 import { validateMediaFile } from '../utils/validation';
 
@@ -66,7 +69,7 @@ export function UploadDropzone({ onUpload, disabled = false }: UploadDropzonePro
 
     // Show errors if any
     if (errors.length > 0) {
-      console.error('File validation errors:', errors);
+      logger.error('File validation errors:', errors);
       toast.error('Some files were rejected', { description: errors.join(', ') });
     }
 

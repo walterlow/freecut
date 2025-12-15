@@ -1,5 +1,8 @@
 import type { FilmstripData } from '@/types/storage';
 import { getDB, reconnectDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Filmstrips');
 
 /**
  * Save filmstrip data to IndexedDB.
@@ -8,12 +11,12 @@ export async function saveFilmstrip(filmstrip: FilmstripData): Promise<void> {
   try {
     let db = await getDB();
     if (!db.objectStoreNames.contains('filmstrips')) {
-      console.warn('filmstrips store not found, attempting reconnection...');
+      logger.warn('filmstrips store not found, attempting reconnection...');
       db = await reconnectDB();
     }
     await db.put('filmstrips', filmstrip);
   } catch (error) {
-    console.error('Failed to save filmstrip:', error);
+    logger.error('Failed to save filmstrip:', error);
     throw new Error('Failed to save filmstrip');
   }
 }
@@ -27,7 +30,7 @@ export async function getFilmstrip(
   try {
     const db = await getDB();
     if (!db.objectStoreNames.contains('filmstrips')) {
-      console.warn('filmstrips store not found, attempting reconnection...');
+      logger.warn('filmstrips store not found, attempting reconnection...');
       const newDb = await reconnectDB();
       if (!newDb.objectStoreNames.contains('filmstrips')) {
         throw new Error('filmstrips store not found after reconnection');
@@ -36,7 +39,7 @@ export async function getFilmstrip(
     }
     return await db.get('filmstrips', id);
   } catch (error) {
-    console.error(`Failed to get filmstrip ${id}:`, error);
+    logger.error(`Failed to get filmstrip ${id}:`, error);
     return undefined;
   }
 }
@@ -71,7 +74,7 @@ export async function getFilmstripByMediaId(
     const results = await index.getAll(mediaId);
     return results[0];
   } catch (error) {
-    console.error(`Failed to get filmstrip for media ${mediaId}:`, error);
+    logger.error(`Failed to get filmstrip for media ${mediaId}:`, error);
     return undefined;
   }
 }
@@ -85,7 +88,7 @@ export async function getFilmstripsByMediaId(
   try {
     let db = await getDB();
     if (!db.objectStoreNames.contains('filmstrips')) {
-      console.warn('filmstrips store not found, attempting reconnection...');
+      logger.warn('filmstrips store not found, attempting reconnection...');
       db = await reconnectDB();
       if (!db.objectStoreNames.contains('filmstrips')) {
         return [];
@@ -95,7 +98,7 @@ export async function getFilmstripsByMediaId(
     const index = tx.store.index('mediaId');
     return await index.getAll(mediaId);
   } catch (error) {
-    console.error(`Failed to get filmstrips for media ${mediaId}:`, error);
+    logger.error(`Failed to get filmstrips for media ${mediaId}:`, error);
     return [];
   }
 }
@@ -114,7 +117,7 @@ export async function deleteFilmstrip(id: string): Promise<void> {
     }
     await db.delete('filmstrips', id);
   } catch (error) {
-    console.error(`Failed to delete filmstrip ${id}:`, error);
+    logger.error(`Failed to delete filmstrip ${id}:`, error);
     throw new Error(`Failed to delete filmstrip: ${id}`);
   }
 }
@@ -141,7 +144,7 @@ export async function deleteFilmstripsByMediaId(mediaId: string): Promise<void> 
 
     await tx.done;
   } catch (error) {
-    console.error(`Failed to delete filmstrips for media ${mediaId}:`, error);
+    logger.error(`Failed to delete filmstrips for media ${mediaId}:`, error);
     throw new Error('Failed to delete filmstrips');
   }
 }

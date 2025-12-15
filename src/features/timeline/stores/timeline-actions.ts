@@ -23,7 +23,10 @@ import type {
 import type { AnimatableProperty, EasingType, EasingConfig, KeyframeRef } from '@/types/keyframe';
 import type { KeyframeUpdatePayload, KeyframeMovePayload, KeyframeAddPayload } from './keyframes-store';
 
+import { createLogger } from '@/lib/logger';
 import { useTimelineCommandStore } from './timeline-command-store';
+
+const logger = createLogger('TimelineActions');
 import { useItemsStore } from './items-store';
 import { useTransitionsStore } from './transitions-store';
 import { useKeyframesStore } from './keyframes-store';
@@ -432,7 +435,7 @@ export function addTransition(
     const rightClip = items.find((i) => i.id === rightClipId);
 
     if (!leftClip || !rightClip) {
-      console.warn('[addTransition] Clips not found');
+      logger.warn('[addTransition] Clips not found');
       return false;
     }
 
@@ -442,7 +445,7 @@ export function addTransition(
     // Validate that transition can be added
     const validation = canAddTransition(leftClip, rightClip, duration);
     if (!validation.canAdd) {
-      console.warn('[addTransition] Cannot add transition:', validation.reason);
+      logger.warn('[addTransition] Cannot add transition:', validation.reason);
       return false;
     }
 
@@ -451,7 +454,7 @@ export function addTransition(
       (t) => t.leftClipId === leftClipId && t.rightClipId === rightClipId
     );
     if (existingTransition) {
-      console.warn('[addTransition] Transition already exists between these clips');
+      logger.warn('[addTransition] Transition already exists between these clips');
       return false;
     }
 

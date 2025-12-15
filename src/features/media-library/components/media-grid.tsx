@@ -1,5 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Loader2, Upload, AlertTriangle } from 'lucide-react';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('MediaGrid');
 import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -132,7 +135,7 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
       // Then delete the media from the library
       await deleteMedia(mediaIdToDelete);
     } catch (error) {
-      console.error('Failed to delete media:', error);
+      logger.error('Failed to delete media:', error);
       // Error is already set in store
     } finally {
       setMediaIdToDelete(null);
@@ -169,7 +172,7 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
     } catch (error) {
       // User cancelled - ignore AbortError
       if (error instanceof Error && error.name !== 'AbortError') {
-        console.error('Failed to relink media:', error);
+        logger.error('Failed to relink media:', error);
       }
     }
   };
@@ -227,12 +230,12 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
     // IMPORTANT: Collect all handle promises SYNCHRONOUSLY first, then await them
     // The DataTransferItemList can become invalid after any async operation
     const items = Array.from(e.dataTransfer.items);
-    console.log(`[handleDrop] Processing ${items.length} dropped items`);
+    logger.debug(`[handleDrop] Processing ${items.length} dropped items`);
 
     // Start all getAsFileSystemHandle calls synchronously before any await
     const handlePromises: Promise<FileSystemHandle | null>[] = [];
     for (const item of items) {
-      console.log(`[handleDrop] Item kind: ${item.kind}, type: ${item.type}`);
+      logger.debug(`[handleDrop] Item kind: ${item.kind}, type: ${item.type}`);
       if ('getAsFileSystemHandle' in item) {
         handlePromises.push(item.getAsFileSystemHandle());
       }
@@ -240,33 +243,33 @@ export function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, 
 
     // Now await all the promises
     const rawHandles = await Promise.all(handlePromises);
-    console.log(`[handleDrop] Got ${rawHandles.length} raw handles`);
+    logger.debug(`[handleDrop] Got ${rawHandles.length} raw handles`);
 
     // Filter and validate
     const handles: FileSystemFileHandle[] = [];
     const errors: string[] = [];
 
     for (const handle of rawHandles) {
-      console.log(`[handleDrop] Handle:`, handle?.kind, handle?.name);
+      logger.debug(`[handleDrop] Handle:`, handle?.kind, handle?.name);
       if (handle?.kind === 'file') {
         try {
           const file = await (handle as FileSystemFileHandle).getFile();
-          console.log(`[handleDrop] File: ${file.name}, size: ${file.size}, type: ${file.type}`);
+          logger.debug(`[handleDrop] File: ${file.name}, size: ${file.size}, type: ${file.type}`);
           const validation = validateMediaFile(file);
           if (validation.valid) {
             handles.push(handle as FileSystemFileHandle);
-            console.log(`[handleDrop] Added handle for ${file.name}`);
+            logger.debug(`[handleDrop] Added handle for ${file.name}`);
           } else {
             errors.push(`${file.name}: ${validation.error}`);
-            console.log(`[handleDrop] Validation failed for ${file.name}: ${validation.error}`);
+            logger.debug(`[handleDrop] Validation failed for ${file.name}: ${validation.error}`);
           }
         } catch (error) {
-          console.warn(`[handleDrop] Failed to get file from handle:`, error);
+          logger.warn(`[handleDrop] Failed to get file from handle:`, error);
         }
       }
     }
 
-    console.log(`[handleDrop] Total valid handles: ${handles.length}, errors: ${errors.length}`);
+    logger.debug(`[handleDrop] Total valid handles: ${handles.length}, errors: ${errors.length}`);
 
     // Show validation errors if any
     if (errors.length > 0) {

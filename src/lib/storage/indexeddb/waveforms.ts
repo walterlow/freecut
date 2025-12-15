@@ -1,5 +1,8 @@
 import type { WaveformData } from '@/types/storage';
 import { getDB, reconnectDB } from './connection';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('IndexedDB:Waveforms');
 
 /**
  * Save waveform data to IndexedDB.
@@ -8,12 +11,12 @@ export async function saveWaveform(waveform: WaveformData): Promise<void> {
   try {
     let db = await getDB();
     if (!db.objectStoreNames.contains('waveforms')) {
-      console.warn('waveforms store not found, attempting reconnection...');
+      logger.warn('waveforms store not found, attempting reconnection...');
       db = await reconnectDB();
     }
     await db.put('waveforms', waveform);
   } catch (error) {
-    console.error('Failed to save waveform:', error);
+    logger.error('Failed to save waveform:', error);
     throw new Error('Failed to save waveform');
   }
 }
@@ -27,7 +30,7 @@ export async function getWaveform(
   try {
     const db = await getDB();
     if (!db.objectStoreNames.contains('waveforms')) {
-      console.warn('waveforms store not found, attempting reconnection...');
+      logger.warn('waveforms store not found, attempting reconnection...');
       const newDb = await reconnectDB();
       if (!newDb.objectStoreNames.contains('waveforms')) {
         throw new Error('waveforms store not found after reconnection');
@@ -36,7 +39,7 @@ export async function getWaveform(
     }
     return await db.get('waveforms', id);
   } catch (error) {
-    console.error(`Failed to get waveform ${id}:`, error);
+    logger.error(`Failed to get waveform ${id}:`, error);
     return undefined;
   }
 }
@@ -55,7 +58,7 @@ export async function deleteWaveform(id: string): Promise<void> {
     }
     await db.delete('waveforms', id);
   } catch (error) {
-    console.error(`Failed to delete waveform ${id}:`, error);
+    logger.error(`Failed to delete waveform ${id}:`, error);
     throw new Error(`Failed to delete waveform: ${id}`);
   }
 }
