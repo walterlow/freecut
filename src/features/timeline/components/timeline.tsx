@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, memo } from 'react';
+import { useEffect, useRef, useState, memo, useCallback } from 'react';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
 import { TrackHeader } from './track-header';
+import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -15,6 +16,8 @@ import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 
 export interface TimelineProps {
   duration: number; // Total timeline duration in seconds
+  /** Callback when graph panel open state changes - used by parent to resize panel */
+  onGraphPanelOpenChange?: (isOpen: boolean) => void;
 }
 
 /**
@@ -27,7 +30,7 @@ export interface TimelineProps {
  *
  * Follows modular architecture with granular Zustand selectors
  */
-export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
+export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChange }: TimelineProps) {
   const {
     tracks,
     addTrack,
@@ -56,6 +59,22 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     handleZoomOut: () => void;
     handleZoomToFit: () => void;
   } | null>(null);
+
+  // Keyframe graph panel state
+  const [isGraphPanelOpen, setIsGraphPanelOpen] = useState(false);
+
+  const handleToggleGraphPanel = useCallback(() => {
+    setIsGraphPanelOpen((prev) => {
+      const newValue = !prev;
+      onGraphPanelOpenChange?.(newValue);
+      return newValue;
+    });
+  }, [onGraphPanelOpenChange]);
+
+  const handleCloseGraphPanel = useCallback(() => {
+    setIsGraphPanelOpen(false);
+    onGraphPanelOpenChange?.(false);
+  }, [onGraphPanelOpenChange]);
 
   // State for drop indicator (updated via RAF from drag hook)
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState(-1);
@@ -238,14 +257,16 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
 
   return (
     <TimelineZoomProvider>
-      <div className="timeline-bg h-full border-t border-border flex flex-col">
+      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden">
         {/* Timeline Header */}
         <TimelineHeader
-        onZoomChange={zoomHandlers?.handleZoomChange}
-        onZoomIn={zoomHandlers?.handleZoomIn}
-        onZoomOut={zoomHandlers?.handleZoomOut}
-        onZoomToFit={zoomHandlers?.handleZoomToFit}
-      />
+          onZoomChange={zoomHandlers?.handleZoomChange}
+          onZoomIn={zoomHandlers?.handleZoomIn}
+          onZoomOut={zoomHandlers?.handleZoomOut}
+          onZoomToFit={zoomHandlers?.handleZoomToFit}
+          isGraphPanelOpen={isGraphPanelOpen}
+          onToggleGraphPanel={handleToggleGraphPanel}
+        />
 
       {/* Timeline Content */}
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -338,6 +359,13 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
           onZoomHandlersReady={setZoomHandlers}
         />
       </div>
+
+      {/* Keyframe Graph Panel */}
+      <KeyframeGraphPanel
+        isOpen={isGraphPanelOpen}
+        onToggle={handleToggleGraphPanel}
+        onClose={handleCloseGraphPanel}
+      />
     </div>
     </TimelineZoomProvider>
   );

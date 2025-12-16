@@ -15,6 +15,7 @@ import {
   Redo2,
   Flag,
   FlagOff,
+  LineChart,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
@@ -33,6 +34,10 @@ export interface TimelineHeaderProps {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onZoomToFit?: () => void;
+  /** Whether the keyframe graph panel is open */
+  isGraphPanelOpen?: boolean;
+  /** Callback to toggle the graph panel */
+  onToggleGraphPanel?: () => void;
 }
 
 /**
@@ -44,7 +49,14 @@ export interface TimelineHeaderProps {
  * - In/Out points, Snap toggle
  * - Zoom controls
  */
-export const TimelineHeader = memo(function TimelineHeader({ onZoomChange, onZoomIn, onZoomOut, onZoomToFit }: TimelineHeaderProps) {
+export const TimelineHeader = memo(function TimelineHeader({
+  onZoomChange,
+  onZoomIn,
+  onZoomOut,
+  onZoomToFit,
+  isGraphPanelOpen,
+  onToggleGraphPanel,
+}: TimelineHeaderProps) {
   const { zoomLevel, zoomIn, zoomOut, setZoom } = useTimelineZoom();
   const snapEnabled = useTimelineStore((s) => s.snapEnabled);
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
@@ -342,6 +354,21 @@ export const TimelineHeader = memo(function TimelineHeader({ onZoomChange, onZoo
           data-tooltip={snapEnabled ? 'Snap Enabled' : 'Snap Disabled'}
         >
           <Magnet className="w-3.5 h-3.5" />
+        </Button>
+
+        <Separator orientation="vertical" className="h-6 mx-2" />
+
+        {/* Keyframe Graph Panel Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${
+            isGraphPanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+          }`}
+          onClick={onToggleGraphPanel}
+          data-tooltip={isGraphPanelOpen ? 'Hide Keyframe Graph' : 'Show Keyframe Graph'}
+        >
+          <LineChart className="w-3.5 h-3.5" />
         </Button>
       </div>
 

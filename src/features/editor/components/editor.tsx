@@ -5,6 +5,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
+import type { ImperativePanelHandle } from 'react-resizable-panels';
 
 const logger = createLogger('Editor');
 import { Toolbar } from './toolbar';
@@ -51,11 +52,18 @@ export interface EditorProps {
  *
  * Memoized to prevent re-renders from route changes cascading to all children.
  */
+/** Extra percentage to add to timeline panel when graph editor is open */
+const GRAPH_PANEL_SIZE_INCREASE = 12; // ~12% extra height
+
 export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
+
+  // Refs for imperative panel resizing
+  const timelinePanelRef = useRef<ImperativePanelHandle>(null);
+  const baseTimelineSizeRef = useRef(30); // Store the user's base timeline size
 
   // Initialize transition chain subscription (pre-computes chains from timeline data)
   // This subscription recomputes chains when items/transitions change
@@ -235,6 +243,28 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   // TODO: Get actual timeline duration from project/timeline store
   const timelineDuration = 30; // 30 seconds placeholder
 
+  // Track whether graph panel is currently open to avoid storing expanded size as base
+  const isGraphOpenRef = useRef(false);
+
+  // Handle graph panel open/close - resize timeline panel accordingly
+  const handleGraphPanelOpenChange = useCallback((isOpen: boolean) => {
+    const panel = timelinePanelRef.current;
+    if (!panel) return;
+
+    if (isOpen && !isGraphOpenRef.current) {
+      // Opening: store current size before expanding (only if not already open)
+      baseTimelineSizeRef.current = panel.getSize();
+      // Expand panel to accommodate graph editor
+      const newSize = Math.min(50, baseTimelineSizeRef.current + GRAPH_PANEL_SIZE_INCREASE);
+      panel.resize(newSize);
+      isGraphOpenRef.current = true;
+    } else if (!isOpen && isGraphOpenRef.current) {
+      // Closing: restore to base size
+      panel.resize(baseTimelineSizeRef.current);
+      isGraphOpenRef.current = false;
+    }
+  }, []);
+
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
         {/* Top Toolbar */}
@@ -266,8 +296,16 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           <ResizableHandle withHandle />
 
           {/* Bottom - Timeline */}
-          <ResizablePanel defaultSize={30} minSize={15} maxSize={50}>
-            <Timeline duration={timelineDuration} />
+          <ResizablePanel
+            ref={timelinePanelRef}
+            defaultSize={30}
+            minSize={15}
+            maxSize={50}
+          >
+            <Timeline
+              duration={timelineDuration}
+              onGraphPanelOpenChange={handleGraphPanelOpenChange}
+            />
           </ResizablePanel>
         </ResizablePanelGroup>
 
