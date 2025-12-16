@@ -1,5 +1,7 @@
 import { useMemo, useCallback, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { Move, Sparkles, Film } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -143,101 +145,136 @@ export const ClipPanel = memo(function ClipPanel() {
     [updateItemsTransform]
   );
 
+  // Determine which tabs should be visible
+  const showTransformTab = hasVisualItems && !isOnlyAdjustmentItems;
+  const showEffectsTab = hasVisualItems;
+  const showMediaTab = hasTextItems || hasShapeItems || hasVideoItems || hasGifItems || hasAudioItems;
+
+  // Determine default tab based on what's available
+  const defaultTab = showTransformTab ? 'transform' : showEffectsTab ? 'effects' : 'media';
+
   if (selectedItems.length === 0) {
     return null;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Source info - always shown */}
+    <div className="space-y-3">
+      {/* Source info - always shown at top */}
       <SourceSection items={selectedItems} fps={fps} />
 
       <Separator />
 
-      {/* Layout - only for visual items that have canvas position (not adjustment layers) */}
-      {hasVisualItems && !isOnlyAdjustmentItems && (
-        <>
-          <LayoutSection
-            items={layoutFillItems}
-            canvas={canvas}
-            onTransformChange={handleTransformChange}
-            aspectLocked={aspectLocked}
-            onAspectLockToggle={handleAspectLockToggle}
-          />
-          <Separator />
-        </>
-      )}
+      {/* Tabbed sections */}
+      <Tabs defaultValue={defaultTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 h-8">
+          <TabsTrigger
+            value="transform"
+            disabled={!showTransformTab}
+            className="text-xs gap-1 px-2"
+          >
+            <Move className="h-3 w-3" />
+            Transform
+          </TabsTrigger>
+          <TabsTrigger
+            value="effects"
+            disabled={!showEffectsTab}
+            className="text-xs gap-1 px-2"
+          >
+            <Sparkles className="h-3 w-3" />
+            Effects
+          </TabsTrigger>
+          <TabsTrigger
+            value="media"
+            disabled={!showMediaTab}
+            className="text-xs gap-1 px-2"
+          >
+            <Film className="h-3 w-3" />
+            Media
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Fill - only for visual items that have canvas position (not adjustment layers) */}
-      {hasVisualItems && !isOnlyAdjustmentItems && (
-        <>
-          <FillSection
-            items={layoutFillItems}
-            canvas={canvas}
-            onTransformChange={handleTransformChange}
-          />
-          <Separator />
-        </>
-      )}
-
-      {/* Effects - for visual items and adjustment layers */}
-      {hasVisualItems && (
-        <>
-          {/* Explanatory text for adjustment layers */}
-          {hasAdjustmentItems && (
-            <div className="px-1 py-2 text-xs text-muted-foreground bg-purple-500/10 rounded border border-purple-500/20 mb-2">
-              Effects on adjustment layers apply to all items on tracks above.
-            </div>
+        {/* Transform Tab - Layout & Fill */}
+        <TabsContent value="transform" className="space-y-4 mt-3">
+          {hasVisualItems && !isOnlyAdjustmentItems && (
+            <>
+              <LayoutSection
+                items={layoutFillItems}
+                canvas={canvas}
+                onTransformChange={handleTransformChange}
+                aspectLocked={aspectLocked}
+                onAspectLockToggle={handleAspectLockToggle}
+              />
+              <Separator />
+              <FillSection
+                items={layoutFillItems}
+                canvas={canvas}
+                onTransformChange={handleTransformChange}
+              />
+            </>
           )}
-          <EffectsSection
-            items={visualItems}
-          />
-          <Separator />
-        </>
-      )}
+        </TabsContent>
 
-      {/* Keyframe Graph - for single item with keyframes */}
-      {selectedItems.length === 1 && (
-        <>
-          <KeyframeGraphSection items={selectedItems} />
-          <Separator />
-        </>
-      )}
+        {/* Effects Tab - Effects & Keyframes */}
+        <TabsContent value="effects" className="space-y-4 mt-3">
+          {hasVisualItems && (
+            <>
+              {/* Explanatory text for adjustment layers */}
+              {hasAdjustmentItems && (
+                <div className="px-2 py-2 text-xs text-muted-foreground bg-purple-500/10 rounded border border-purple-500/20">
+                  Effects on adjustment layers apply to all items on tracks above.
+                </div>
+              )}
+              <EffectsSection items={visualItems} />
+            </>
+          )}
 
-      {/* Text - only for text items */}
-      {hasTextItems && (
-        <>
-          <TextSection items={selectedItems} />
-          <Separator />
-        </>
-      )}
+          {/* Keyframe Graph - for single item with keyframes */}
+          {selectedItems.length === 1 && (
+            <>
+              <Separator />
+              <KeyframeGraphSection items={selectedItems} />
+            </>
+          )}
+        </TabsContent>
 
-      {/* Shape - only for shape items */}
-      {hasShapeItems && (
-        <>
-          <ShapeSection items={selectedItems} />
-          <Separator />
-        </>
-      )}
+        {/* Media Tab - Type-specific sections */}
+        <TabsContent value="media" className="space-y-4 mt-3">
+          {/* Text - only for text items */}
+          {hasTextItems && (
+            <>
+              <TextSection items={selectedItems} />
+              {(hasShapeItems || hasVideoItems || hasGifItems || hasAudioItems) && <Separator />}
+            </>
+          )}
 
-      {/* Video - only for video items */}
-      {hasVideoItems && (
-        <>
-          <VideoSection items={selectedItems} />
-          <Separator />
-        </>
-      )}
+          {/* Shape - only for shape items */}
+          {hasShapeItems && (
+            <>
+              <ShapeSection items={selectedItems} />
+              {(hasVideoItems || hasGifItems || hasAudioItems) && <Separator />}
+            </>
+          )}
 
-      {/* GIF - only for animated GIF items */}
-      {hasGifItems && (
-        <>
-          <GifSection items={selectedItems} />
-          <Separator />
-        </>
-      )}
+          {/* Video - only for video items */}
+          {hasVideoItems && (
+            <>
+              <VideoSection items={selectedItems} />
+              {(hasGifItems || hasAudioItems) && <Separator />}
+            </>
+          )}
 
-      {/* Audio - for video and audio items */}
-      {hasAudioItems && <AudioSection items={selectedItems} />}
+          {/* GIF - only for animated GIF items */}
+          {hasGifItems && (
+            <>
+              <GifSection items={selectedItems} />
+              {hasAudioItems && <Separator />}
+            </>
+          )}
+
+          {/* Audio - for video and audio items */}
+          {hasAudioItems && <AudioSection items={selectedItems} />}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 });

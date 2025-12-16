@@ -496,7 +496,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
             {Object.entries(CSS_FILTER_CONFIGS).map(([key, config]) => (
               <DropdownMenuItem
                 key={key}
-                onClick={() => handleAddFilter(key as CSSFilterType)}
+                onSelect={() => handleAddFilter(key as CSSFilterType)}
               >
                 {config.label}
               </DropdownMenuItem>
@@ -511,7 +511,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
             {Object.entries(GLITCH_CONFIGS).map(([key, config]) => (
               <DropdownMenuItem
                 key={key}
-                onClick={() => handleAddGlitch(key as GlitchVariant)}
+                onSelect={() => handleAddGlitch(key as GlitchVariant)}
               >
                 {config.label}
               </DropdownMenuItem>
@@ -523,10 +523,10 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
               Stylized Effects
             </div>
-            <DropdownMenuItem onClick={handleAddHalftone}>
+            <DropdownMenuItem onSelect={handleAddHalftone}>
               {CANVAS_EFFECT_CONFIGS.halftone.label}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleAddVignette}>
+            <DropdownMenuItem onSelect={handleAddVignette}>
               {OVERLAY_EFFECT_CONFIGS.vignette.label}
             </DropdownMenuItem>
 
@@ -539,7 +539,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
             {EFFECT_PRESETS.map((preset) => (
               <DropdownMenuItem
                 key={preset.id}
-                onClick={() => handleApplyPreset(preset.id)}
+                onSelect={() => handleApplyPreset(preset.id)}
               >
                 {preset.name}
               </DropdownMenuItem>
