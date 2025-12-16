@@ -20,35 +20,43 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks: (id) => {
+          // React must be in its own chunk, loaded first to ensure proper initialization
+          // This prevents "Cannot set properties of undefined" errors with React 19.2 features
+          if (id.includes('node_modules/react-dom')) {
+            return 'react-vendor';
+          }
+          if (id.includes('node_modules/react/')) {
+            return 'react-vendor';
+          }
           // Remotion Player - loaded when preview is needed
-          'remotion-player': ['@remotion/player', '@remotion/media'],
+          if (id.includes('@remotion/player') || id.includes('@remotion/media')) {
+            return 'remotion-player';
+          }
           // Remotion Renderer - only needed for export
-          'remotion-renderer': ['@remotion/renderer'],
+          if (id.includes('@remotion/renderer')) {
+            return 'remotion-renderer';
+          }
           // Remotion core and utilities
-          'remotion-core': [
-            'remotion',
-            '@remotion/transitions',
-            '@remotion/shapes',
-            '@remotion/layout-utils',
-            '@remotion/gif',
-            '@remotion/google-fonts',
-          ],
+          if (
+            id.includes('node_modules/remotion') ||
+            id.includes('@remotion/transitions') ||
+            id.includes('@remotion/shapes') ||
+            id.includes('@remotion/layout-utils') ||
+            id.includes('@remotion/gif') ||
+            id.includes('@remotion/google-fonts')
+          ) {
+            return 'remotion-core';
+          }
           // Media processing - loaded on demand
-          'media-processing': ['mediabunny'],
+          if (id.includes('mediabunny')) {
+            return 'media-processing';
+          }
           // UI framework
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-context-menu',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-select',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-tooltip',
-            '@radix-ui/react-slider',
-            '@radix-ui/react-switch',
-            '@radix-ui/react-scroll-area',
-          ],
+          if (id.includes('@radix-ui/')) {
+            return 'vendor-ui';
+          }
+          return undefined;
         },
       },
     },
