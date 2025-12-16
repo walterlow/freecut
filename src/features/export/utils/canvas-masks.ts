@@ -157,6 +157,10 @@ export function applyClipMask(
  * Apply alpha mask with feathering.
  * Uses globalCompositeOperation for soft-edged masks.
  *
+ * IMPORTANT: Canvas compositing uses ALPHA values, not luminance like SVG masks.
+ * - `destination-in` keeps destination pixels where source ALPHA is non-zero
+ * - We must use transparent (alpha=0) for hidden areas and opaque (alpha=1) for visible areas
+ *
  * @param ctx - Canvas context
  * @param contentCanvas - Canvas containing the content to mask
  * @param path - Path2D for the mask shape
@@ -172,39 +176,43 @@ export function applyAlphaMask(
   feather: number,
   canvas: MaskCanvasSettings
 ): void {
-  // Create mask canvas
+  // Create mask canvas with ALPHA-based masking
+  // Canvas starts transparent (alpha=0), which means "hide" for destination-in
   const maskCanvas = new OffscreenCanvas(canvas.width, canvas.height);
   const maskCtx = maskCanvas.getContext('2d')!;
 
-  // Draw mask shape
-  maskCtx.fillStyle = inverted ? 'black' : 'white';
-  maskCtx.fillRect(0, 0, canvas.width, canvas.height);
+  if (inverted) {
+    // Inverted: show OUTSIDE the shape
+    // Fill everything with opaque color (alpha=1), then cut out the shape (alpha=0)
+    maskCtx.fillStyle = 'white';
+    maskCtx.fillRect(0, 0, canvas.width, canvas.height);
+    // Use destination-out to make the shape area transparent
+    maskCtx.globalCompositeOperation = 'destination-out';
+    maskCtx.fill(path);
+    maskCtx.globalCompositeOperation = 'source-over';
+  } else {
+    // Normal: show INSIDE the shape
+    // Canvas starts transparent, fill only the shape with opaque color
+    maskCtx.fillStyle = 'white';
+    maskCtx.fill(path);
+  }
 
-  maskCtx.fillStyle = inverted ? 'white' : 'black';
-  maskCtx.fill(path);
-
-  // Apply feathering (blur) to mask
+  // Apply feathering (blur) if needed
+  let finalMask: OffscreenCanvas = maskCanvas;
   if (feather > 0) {
-    // Use StackBlur-like algorithm for feathering
-    // Since we can't use ctx.filter on getImageData, we'll use a different approach:
-    // Draw the mask, blur it using filter, then use it for compositing
     const blurredMaskCanvas = new OffscreenCanvas(canvas.width, canvas.height);
     const blurredMaskCtx = blurredMaskCanvas.getContext('2d')!;
     blurredMaskCtx.filter = `blur(${feather}px)`;
     blurredMaskCtx.drawImage(maskCanvas, 0, 0);
-    
-    // Use the blurred mask for compositing
-    ctx.drawImage(contentCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(blurredMaskCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-  } else {
-    // No feathering - use mask directly
-    ctx.drawImage(contentCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(maskCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
+    finalMask = blurredMaskCanvas;
   }
+
+  // Apply mask using destination-in compositing
+  // destination-in: keeps destination (content) only where source (mask) alpha > 0
+  ctx.drawImage(contentCanvas, 0, 0);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(finalMask, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 /**
