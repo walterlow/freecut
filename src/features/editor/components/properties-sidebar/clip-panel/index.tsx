@@ -19,7 +19,6 @@ import { GifSection } from './gif-section';
 import { AudioSection } from './audio-section';
 import { TextSection } from './text-section';
 import { ShapeSection } from './shape-section';
-import { KeyframeGraphSection } from './keyframe-graph-section';
 import { EffectsSection } from '@/features/effects/components/effects-section';
 
 /**
@@ -225,14 +224,6 @@ export const ClipPanel = memo(function ClipPanel() {
                 </div>
               )}
               <EffectsSection items={visualItems} />
-            </>
-          )}
-
-          {/* Keyframe Graph - for single item with keyframes */}
-          {selectedItems.length === 1 && (
-            <>
-              <Separator />
-              <KeyframeGraphSection items={selectedItems} />
             </>
           )}
         </TabsContent>
