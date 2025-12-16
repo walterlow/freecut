@@ -1,0 +1,583 @@
+/**
+ * Canvas Transition Rendering System
+ *
+ * Renders visual transitions between adjacent clips for client-side export.
+ * Supports all presentation types: fade, wipe, slide, flip, clockWipe, iris.
+ */
+
+import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
+import type { TimelineItem } from '@/types/timeline';
+import { springEasing } from '@/features/keyframes/utils/easing';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('CanvasTransitions');
+
+/**
+ * Canvas settings for transition rendering
+ */
+export interface TransitionCanvasSettings {
+  width: number;
+  height: number;
+  fps: number;
+}
+
+/**
+ * Active transition with calculated progress
+ */
+export interface ActiveTransition {
+  transition: Transition;
+  leftClip: TimelineItem;
+  rightClip: TimelineItem;
+  progress: number; // 0 to 1
+  transitionStart: number;
+  cutPoint: number;
+}
+
+/**
+ * Build a map of clip IDs to clips for quick lookup.
+ */
+export function buildClipMap(
+  clips: TimelineItem[]
+): Map<string, TimelineItem> {
+  const map = new Map<string, TimelineItem>();
+  for (const clip of clips) {
+    map.set(clip.id, clip);
+  }
+  return map;
+}
+
+/**
+ * Find active transitions at the current frame.
+ *
+ * @param transitions - All transitions
+ * @param clipMap - Map of clip ID to clip
+ * @param frame - Current frame
+ * @param fps - Frames per second
+ * @returns Array of active transitions with progress
+ */
+export function findActiveTransitions(
+  transitions: Transition[],
+  clipMap: Map<string, TimelineItem>,
+  frame: number,
+  fps: number
+): ActiveTransition[] {
+  const active: ActiveTransition[] = [];
+
+  for (const transition of transitions) {
+    const leftClip = clipMap.get(transition.leftClipId);
+    const rightClip = clipMap.get(transition.rightClipId);
+
+    if (!leftClip || !rightClip) continue;
+
+    // Calculate transition timing
+    const cutPoint = leftClip.from + leftClip.durationInFrames;
+    const halfDuration = Math.floor(transition.durationInFrames / 2);
+    const transitionStart = cutPoint - halfDuration;
+    const transitionEnd = transitionStart + transition.durationInFrames;
+
+    // Check if frame is within transition window
+    if (frame >= transitionStart && frame < transitionEnd) {
+      const localFrame = frame - transitionStart;
+      const progress = calculateProgress(
+        localFrame,
+        transition.durationInFrames,
+        transition.timing,
+        fps
+      );
+
+      active.push({
+        transition,
+        leftClip,
+        rightClip,
+        progress,
+        transitionStart,
+        cutPoint,
+      });
+    }
+  }
+
+  return active;
+}
+
+/**
+ * Calculate transition progress with timing.
+ *
+ * @param localFrame - Frame within transition (0 to duration-1)
+ * @param duration - Total transition duration in frames
+ * @param timing - Timing type ('linear' or 'spring')
+ * @param fps - Frames per second
+ * @returns Progress value (0 to 1, may overshoot for spring)
+ */
+export function calculateProgress(
+  localFrame: number,
+  duration: number,
+  timing: 'linear' | 'spring',
+  _fps: number
+): number {
+  // Linear progress
+  const maxFrame = Math.max(1, duration - 1);
+  const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame));
+
+  if (timing === 'spring') {
+    // Use spring easing for physics-based animation
+    return springEasing(linearProgress, {
+      tension: 180,
+      friction: 12,
+      mass: 1,
+    });
+  }
+
+  return linearProgress;
+}
+
+// ============================================================================
+// Transition Presentation Renderers
+// ============================================================================
+
+/**
+ * Calculate opacity for fade transition using equal-power crossfade.
+ */
+export function getFadeOpacity(progress: number, isOutgoing: boolean): number {
+  if (isOutgoing) {
+    return Math.cos(progress * Math.PI / 2);
+  } else {
+    return Math.sin(progress * Math.PI / 2);
+  }
+}
+
+/**
+ * Render fade transition.
+ */
+export function renderFadeTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number
+): void {
+  // Clamp progress for opacity
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+
+  // Draw incoming clip (right) first
+  ctx.save();
+  ctx.globalAlpha = getFadeOpacity(clampedProgress, false);
+  ctx.drawImage(rightCanvas, 0, 0);
+  ctx.restore();
+
+  // Draw outgoing clip (left) on top
+  ctx.save();
+  ctx.globalAlpha = getFadeOpacity(clampedProgress, true);
+  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Get clip path for wipe transition.
+ */
+function getWipeClipPath(
+  progress: number,
+  direction: WipeDirection,
+  isOutgoing: boolean,
+  canvas: TransitionCanvasSettings
+): Path2D {
+  const effectiveProgress = isOutgoing ? progress : 1 - progress;
+  const path = new Path2D();
+
+  switch (direction) {
+    case 'from-left':
+      if (isOutgoing) {
+        // Outgoing clips from left
+        path.rect(effectiveProgress * canvas.width, 0, canvas.width, canvas.height);
+      } else {
+        // Incoming reveals from left
+        path.rect(0, 0, (1 - effectiveProgress) * canvas.width, canvas.height);
+      }
+      break;
+    case 'from-right':
+      if (isOutgoing) {
+        path.rect(0, 0, (1 - effectiveProgress) * canvas.width, canvas.height);
+      } else {
+        path.rect(effectiveProgress * canvas.width, 0, canvas.width, canvas.height);
+      }
+      break;
+    case 'from-top':
+      if (isOutgoing) {
+        path.rect(0, effectiveProgress * canvas.height, canvas.width, canvas.height);
+      } else {
+        path.rect(0, 0, canvas.width, (1 - effectiveProgress) * canvas.height);
+      }
+      break;
+    case 'from-bottom':
+      if (isOutgoing) {
+        path.rect(0, 0, canvas.width, (1 - effectiveProgress) * canvas.height);
+      } else {
+        path.rect(0, effectiveProgress * canvas.height, canvas.width, canvas.height);
+      }
+      break;
+  }
+
+  return path;
+}
+
+/**
+ * Render wipe transition.
+ */
+export function renderWipeTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  direction: WipeDirection,
+  canvas: TransitionCanvasSettings
+): void {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+
+  // Draw incoming clip (full)
+  ctx.drawImage(rightCanvas, 0, 0);
+
+  // Draw outgoing clip with clip mask
+  ctx.save();
+  const clipPath = getWipeClipPath(clampedProgress, direction, true, canvas);
+  ctx.clip(clipPath);
+  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Get slide offset for slide transition.
+ */
+function getSlideOffset(
+  progress: number,
+  direction: SlideDirection,
+  isOutgoing: boolean,
+  canvas: TransitionCanvasSettings
+): { x: number; y: number } {
+  const slideProgress = isOutgoing ? progress : progress - 1;
+
+  switch (direction) {
+    case 'from-left':
+      return { x: slideProgress * canvas.width, y: 0 };
+    case 'from-right':
+      return { x: -slideProgress * canvas.width, y: 0 };
+    case 'from-top':
+      return { x: 0, y: slideProgress * canvas.height };
+    case 'from-bottom':
+      return { x: 0, y: -slideProgress * canvas.height };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
+/**
+ * Render slide transition.
+ */
+export function renderSlideTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  direction: SlideDirection,
+  canvas: TransitionCanvasSettings
+): void {
+  // Incoming clip slides in
+  const rightOffset = getSlideOffset(progress, direction, false, canvas);
+  ctx.drawImage(rightCanvas, rightOffset.x, rightOffset.y);
+
+  // Outgoing clip slides out
+  const leftOffset = getSlideOffset(progress, direction, true, canvas);
+  ctx.drawImage(leftCanvas, leftOffset.x, leftOffset.y);
+}
+
+/**
+ * Render flip transition.
+ * This is a 2D approximation of a 3D flip effect.
+ */
+export function renderFlipTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  direction: FlipDirection,
+  canvas: TransitionCanvasSettings
+): void {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const isHorizontal = direction === 'from-left' || direction === 'from-right';
+  // Note: isReverse could be used for direction-aware flip but simplified for now
+
+  // First half: outgoing clip flips away
+  // Second half: incoming clip flips in
+  const midpoint = 0.5;
+
+  if (clampedProgress < midpoint) {
+    // First half - outgoing clip
+    const flipProgress = clampedProgress / midpoint; // 0 to 1
+    const scale = Math.cos(flipProgress * Math.PI / 2);
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+
+    if (isHorizontal) {
+      ctx.scale(scale, 1);
+    } else {
+      ctx.scale(1, scale);
+    }
+
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    ctx.drawImage(leftCanvas, 0, 0);
+    ctx.restore();
+  } else {
+    // Second half - incoming clip
+    const flipProgress = (clampedProgress - midpoint) / midpoint; // 0 to 1
+    const scale = Math.sin(flipProgress * Math.PI / 2);
+
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+
+    if (isHorizontal) {
+      ctx.scale(scale, 1);
+    } else {
+      ctx.scale(1, scale);
+    }
+
+    ctx.translate(-canvas.width / 2, -canvas.height / 2);
+    ctx.drawImage(rightCanvas, 0, 0);
+    ctx.restore();
+  }
+}
+
+/**
+ * Render clock wipe transition.
+ * Creates a sweeping reveal like a clock hand.
+ */
+export function renderClockWipeTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas: TransitionCanvasSettings
+): void {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const angle = clampedProgress * Math.PI * 2;
+
+  // Draw incoming clip first
+  ctx.drawImage(rightCanvas, 0, 0);
+
+  // Draw outgoing clip with clock wipe mask
+  ctx.save();
+
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const radius = Math.max(canvas.width, canvas.height);
+
+  // Create wedge path from 12 o'clock clockwise
+  const path = new Path2D();
+  path.moveTo(centerX, centerY);
+  path.lineTo(centerX, centerY - radius); // Start at 12 o'clock
+
+  // Arc from start angle (12 o'clock in canvas coords)
+  const startAngle = -Math.PI / 2;
+
+  // Draw arc for remaining portion (from current angle to full circle)
+  path.arc(centerX, centerY, radius, startAngle + angle, startAngle + Math.PI * 2);
+  path.lineTo(centerX, centerY);
+  path.closePath();
+
+  ctx.clip(path);
+  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Render iris transition.
+ * Creates a circular hole expanding from center.
+ */
+export function renderIrisTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas: TransitionCanvasSettings
+): void {
+  const clampedProgress = Math.max(0, Math.min(1, progress));
+
+  // Maximum radius to cover corners
+  const maxRadius = Math.sqrt(
+    Math.pow(canvas.width / 2, 2) + Math.pow(canvas.height / 2, 2)
+  ) * 1.2; // 20% extra to ensure coverage
+
+  const radius = clampedProgress * maxRadius;
+
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+
+  // Draw incoming clip (visible in the hole)
+  ctx.save();
+  const holePath = new Path2D();
+  holePath.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip(holePath);
+  ctx.drawImage(rightCanvas, 0, 0);
+  ctx.restore();
+
+  // Draw outgoing clip (outside the hole)
+  ctx.save();
+  const outsidePath = new Path2D();
+  outsidePath.rect(0, 0, canvas.width, canvas.height);
+  outsidePath.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip(outsidePath, 'evenodd');
+  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.restore();
+}
+
+/**
+ * Render hard cut (no transition effect).
+ */
+export function renderCutTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number
+): void {
+  // Hard cut at midpoint
+  if (progress < 0.5) {
+    ctx.drawImage(leftCanvas, 0, 0);
+  } else {
+    ctx.drawImage(rightCanvas, 0, 0);
+  }
+}
+
+// ============================================================================
+// Main Transition Renderer
+// ============================================================================
+
+/**
+ * Render a transition between two clips.
+ *
+ * @param ctx - Canvas context for output
+ * @param activeTransition - Active transition with clips and progress
+ * @param leftCanvas - Pre-rendered left (outgoing) clip content
+ * @param rightCanvas - Pre-rendered right (incoming) clip content
+ * @param canvas - Canvas settings
+ */
+export function renderTransition(
+  ctx: OffscreenCanvasRenderingContext2D,
+  activeTransition: ActiveTransition,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  canvas: TransitionCanvasSettings
+): void {
+  const { transition, progress } = activeTransition;
+  const presentation = transition.presentation;
+  const direction = transition.direction;
+
+  log.debug('Rendering transition', {
+    presentation,
+    direction,
+    progress,
+    duration: transition.durationInFrames,
+  });
+
+  switch (presentation) {
+    case 'fade':
+      renderFadeTransition(ctx, leftCanvas, rightCanvas, progress);
+      break;
+
+    case 'wipe':
+      renderWipeTransition(
+        ctx,
+        leftCanvas,
+        rightCanvas,
+        progress,
+        (direction as WipeDirection) || 'from-left',
+        canvas
+      );
+      break;
+
+    case 'slide':
+      renderSlideTransition(
+        ctx,
+        leftCanvas,
+        rightCanvas,
+        progress,
+        (direction as SlideDirection) || 'from-left',
+        canvas
+      );
+      break;
+
+    case 'flip':
+      renderFlipTransition(
+        ctx,
+        leftCanvas,
+        rightCanvas,
+        progress,
+        (direction as FlipDirection) || 'from-left',
+        canvas
+      );
+      break;
+
+    case 'clockWipe':
+      renderClockWipeTransition(ctx, leftCanvas, rightCanvas, progress, canvas);
+      break;
+
+    case 'iris':
+      renderIrisTransition(ctx, leftCanvas, rightCanvas, progress, canvas);
+      break;
+
+    case 'none':
+    default:
+      renderCutTransition(ctx, leftCanvas, rightCanvas, progress);
+      break;
+  }
+}
+
+/**
+ * Check if a frame is within any transition window.
+ */
+export function isInTransition(
+  transitions: Transition[],
+  clipMap: Map<string, TimelineItem>,
+  frame: number
+): boolean {
+  for (const transition of transitions) {
+    const leftClip = clipMap.get(transition.leftClipId);
+    if (!leftClip) continue;
+
+    const cutPoint = leftClip.from + leftClip.durationInFrames;
+    const halfDuration = Math.floor(transition.durationInFrames / 2);
+    const transitionStart = cutPoint - halfDuration;
+    const transitionEnd = transitionStart + transition.durationInFrames;
+
+    if (frame >= transitionStart && frame < transitionEnd) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Get clip IDs involved in transitions at the current frame.
+ * These clips should be rendered via the transition system, not normally.
+ */
+export function getTransitionClipIds(
+  transitions: Transition[],
+  clipMap: Map<string, TimelineItem>,
+  frame: number
+): Set<string> {
+  const clipIds = new Set<string>();
+
+  for (const transition of transitions) {
+    const leftClip = clipMap.get(transition.leftClipId);
+    if (!leftClip) continue;
+
+    const cutPoint = leftClip.from + leftClip.durationInFrames;
+    const halfDuration = Math.floor(transition.durationInFrames / 2);
+    const transitionStart = cutPoint - halfDuration;
+    const transitionEnd = transitionStart + transition.durationInFrames;
+
+    if (frame >= transitionStart && frame < transitionEnd) {
+      clipIds.add(transition.leftClipId);
+      clipIds.add(transition.rightClipId);
+    }
+  }
+
+  return clipIds;
+}
