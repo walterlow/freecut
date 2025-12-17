@@ -868,12 +868,13 @@ export function setInPoint(frame: number): void {
       0
     );
 
-    // Validate: inPoint must be >= 0 and < outPoint (if set)
-    let validatedFrame = Math.max(0, frame);
+    // Validate: inPoint must be >= 0 and <= maxFrame
+    const validatedFrame = Math.max(0, Math.min(frame, maxFrame));
+
+    // If inPoint is placed after outPoint, reset outPoint to the end
     if (outPoint !== null && validatedFrame >= outPoint) {
-      validatedFrame = outPoint - 1;
+      useMarkersStore.getState().setOutPoint(maxFrame);
     }
-    validatedFrame = Math.min(validatedFrame, maxFrame);
 
     useMarkersStore.getState().setInPoint(validatedFrame);
     useTimelineSettingsStore.getState().markDirty();
@@ -891,12 +892,13 @@ export function setOutPoint(frame: number): void {
       0
     );
 
-    // Validate: outPoint must be > inPoint (if set) and <= maxFrame
-    let validatedFrame = Math.min(frame, maxFrame);
+    // Validate: outPoint must be >= 1 and <= maxFrame
+    const validatedFrame = Math.max(1, Math.min(frame, maxFrame));
+
+    // If outPoint is placed before inPoint, reset inPoint to the beginning
     if (inPoint !== null && validatedFrame <= inPoint) {
-      validatedFrame = inPoint + 1;
+      useMarkersStore.getState().setInPoint(0);
     }
-    validatedFrame = Math.max(1, validatedFrame);
 
     useMarkersStore.getState().setOutPoint(validatedFrame);
     useTimelineSettingsStore.getState().markDirty();
