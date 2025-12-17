@@ -161,6 +161,7 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
 
       if (uniqueMediaIds.length === 0) {
         setResolvedUrls(new Map());
+        setIsResolving(false); // Reset in case previous project was still resolving
         return;
       }
 
