@@ -1,27 +1,31 @@
 /**
  * Thumbnail generation utilities for media library
  *
- * Generates thumbnails for video, audio, and image files
+ * Uses mediabunny for video frame extraction with proper aspect ratio preservation.
+ * Images use browser's Image API with aspect ratio preservation.
+ * Audio files get a generated waveform placeholder.
  */
 
 import { getMimeType } from './validation';
 
 export interface ThumbnailOptions {
-  width?: number;
-  height?: number;
+  maxSize?: number; // Max dimension (width or height) - aspect ratio preserved
   quality?: number;
   timestamp?: number; // For video, timestamp in seconds
 }
 
 const DEFAULT_THUMBNAIL_OPTIONS: Required<ThumbnailOptions> = {
-  width: 320,
-  height: 180,
+  maxSize: 320,
   quality: 0.6,
-  timestamp: 1, // Capture at 1 second mark (as specified in requirements)
+  timestamp: 1,
 };
 
+// Dynamically import mediabunny (heavy library)
+const loadMediabunny = () => import('mediabunny');
+
 /**
- * Generate thumbnail for video file at specific timestamp
+ * Generate thumbnail for video file using mediabunny
+ * Preserves aspect ratio - portrait videos stay portrait, landscape stays landscape
  */
 export async function generateVideoThumbnail(
   file: File,
@@ -29,72 +33,54 @@ export async function generateVideoThumbnail(
 ): Promise<Blob> {
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options };
 
+  const { Input, BlobSource, CanvasSink, ALL_FORMATS } = await loadMediabunny();
+
+  const input = new Input({
+    source: new BlobSource(file),
+    formats: ALL_FORMATS,
+  });
+
+  const videoTrack = await input.getPrimaryVideoTrack();
+  if (!videoTrack) {
+    throw new Error('No video track found');
+  }
+
+  // Calculate dimensions preserving aspect ratio - larger dimension = maxSize
+  const width = videoTrack.displayWidth > videoTrack.displayHeight
+    ? opts.maxSize
+    : Math.floor(opts.maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
+  const height = videoTrack.displayHeight > videoTrack.displayWidth
+    ? opts.maxSize
+    : Math.floor(opts.maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
+
+  const sink = new CanvasSink(videoTrack, {
+    width,
+    height,
+    fit: 'fill',
+  });
+
+  // Get timestamp, clamped to valid range
+  const duration = await input.computeDuration();
+  const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1));
+
+  const wrapped = await sink.getCanvas(timestamp);
+  if (!wrapped) {
+    throw new Error('Failed to extract frame from video');
+  }
+
+  const canvas = wrapped.canvas as OffscreenCanvas | HTMLCanvasElement;
+
+  // Convert to blob
+  if ('convertToBlob' in canvas) {
+    return canvas.convertToBlob({ type: 'image/webp', quality: opts.quality });
+  }
+
   return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) {
-      reject(new Error('Failed to get canvas context'));
-      return;
-    }
-
-    canvas.width = opts.width;
-    canvas.height = opts.height;
-
-    video.preload = 'auto'; // Load more data for better seeking
-    video.muted = true;
-    video.playsInline = true;
-
-    const drawFrame = () => {
-      try {
-        // Draw video frame to canvas
-        ctx.drawImage(video, 0, 0, opts.width, opts.height);
-
-        // Convert canvas to blob
-        canvas.toBlob(
-          (blob) => {
-            URL.revokeObjectURL(video.src);
-            if (blob) {
-              resolve(blob);
-            } else {
-              reject(new Error('Failed to create thumbnail blob'));
-            }
-          },
-          'image/jpeg',
-          opts.quality
-        );
-      } catch (error) {
-        URL.revokeObjectURL(video.src);
-        reject(error);
-      }
-    };
-
-    video.onloadedmetadata = () => {
-      // Seek to timestamp (ensure it's within video duration)
-      const seekTime = Math.min(opts.timestamp, video.duration - 0.1);
-      video.currentTime = Math.max(0, seekTime);
-    };
-
-    video.onseeked = () => {
-      // Wait a frame for the video to render the new position
-      requestAnimationFrame(() => {
-        // Double-check video is ready to render
-        if (video.readyState >= 2) {
-          drawFrame();
-        } else {
-          // Wait for enough data to render
-          video.oncanplay = drawFrame;
-        }
-      });
-    };
-
-    video.onerror = () => {
-      URL.revokeObjectURL(video.src);
-      reject(new Error('Failed to load video for thumbnail'));
-    };
-
-    video.src = URL.createObjectURL(file);
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
+      'image/webp',
+      opts.quality
+    );
   });
 }
 
@@ -106,74 +92,57 @@ export async function generateAudioThumbnail(
   options: ThumbnailOptions = {}
 ): Promise<Blob> {
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options };
+  const width = opts.maxSize;
+  const height = Math.round(opts.maxSize * (9 / 16));
 
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-
     if (!ctx) {
       reject(new Error('Failed to get canvas context'));
       return;
     }
 
-    canvas.width = opts.width;
-    canvas.height = opts.height;
+    canvas.width = width;
+    canvas.height = height;
 
-    // Create gradient background
-    const gradient = ctx.createLinearGradient(0, 0, opts.width, opts.height);
+    // Gradient background
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, '#1a1a1a');
     gradient.addColorStop(1, '#0a0a0a');
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, opts.width, opts.height);
+    ctx.fillRect(0, 0, width, height);
 
-    // Draw audio waveform placeholder
-    ctx.strokeStyle = '#00ff88'; // Green for audio
+    // Waveform
+    ctx.strokeStyle = '#00ff88';
     ctx.lineWidth = 2;
     ctx.beginPath();
-
-    // Simple sine wave pattern
-    const amplitude = opts.height * 0.3;
-    const frequency = 0.02;
-    const centerY = opts.height / 2;
-
-    for (let x = 0; x < opts.width; x++) {
-      const y = centerY + Math.sin(x * frequency) * amplitude;
-      if (x === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+    const amplitude = height * 0.3;
+    const centerY = height / 2;
+    for (let x = 0; x < width; x++) {
+      const y = centerY + Math.sin(x * 0.02) * amplitude;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
-
     ctx.stroke();
 
-    // Add audio icon and filename
+    // Filename
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px "IBM Plex Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    const displayName = file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
+    ctx.fillText(displayName, width / 2, height - 20);
 
-    const displayName =
-      file.name.length > 30 ? file.name.substring(0, 27) + '...' : file.name;
-    ctx.fillText(displayName, opts.width / 2, opts.height - 20);
-
-    // Convert canvas to blob
     canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Failed to create audio thumbnail blob'));
-        }
-      },
-      'image/jpeg',
+      (blob) => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
+      'image/webp',
       opts.quality
     );
   });
 }
 
 /**
- * Generate thumbnail for image file (resized version)
+ * Generate thumbnail for image file (resized, preserving aspect ratio)
  */
 export async function generateImageThumbnail(
   file: File,
@@ -185,37 +154,37 @@ export async function generateImageThumbnail(
     const img = new Image();
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-
     if (!ctx) {
       reject(new Error('Failed to get canvas context'));
       return;
     }
 
-    canvas.width = opts.width;
-    canvas.height = opts.height;
-
     img.onload = () => {
-      // Draw image to canvas (resized)
-      ctx.drawImage(img, 0, 0, opts.width, opts.height);
+      // Calculate dimensions - larger dimension = maxSize
+      const width = img.naturalWidth > img.naturalHeight
+        ? opts.maxSize
+        : Math.floor(opts.maxSize * img.naturalWidth / img.naturalHeight);
+      const height = img.naturalHeight > img.naturalWidth
+        ? opts.maxSize
+        : Math.floor(opts.maxSize * img.naturalHeight / img.naturalWidth);
 
-      // Convert canvas to blob
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(img, 0, 0, width, height);
+
       canvas.toBlob(
         (blob) => {
           URL.revokeObjectURL(img.src);
-          if (blob) {
-            resolve(blob);
-          } else {
-            reject(new Error('Failed to create image thumbnail blob'));
-          }
+          blob ? resolve(blob) : reject(new Error('Failed to create blob'));
         },
-        'image/jpeg',
+        'image/webp',
         opts.quality
       );
     };
 
     img.onerror = () => {
       URL.revokeObjectURL(img.src);
-      reject(new Error('Failed to load image for thumbnail'));
+      reject(new Error('Failed to load image'));
     };
 
     img.src = URL.createObjectURL(file);
@@ -238,6 +207,6 @@ export async function generateThumbnail(
   } else if (mimeType.startsWith('image/')) {
     return generateImageThumbnail(file, options);
   } else {
-    throw new Error(`Unsupported file type for thumbnail: ${mimeType}`);
+    throw new Error(`Unsupported file type: ${mimeType}`);
   }
 }

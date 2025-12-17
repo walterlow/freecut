@@ -30,7 +30,22 @@ interface TimelineZoomContextValue {
   fps: number;
 }
 
-const TimelineZoomContext = createContext<TimelineZoomContextValue | null>(null);
+// Default values used during HMR/error boundary recovery
+// These are reasonable defaults that won't cause crashes
+const DEFAULT_FPS = 30;
+const DEFAULT_PPS = 100;
+
+const defaultValue: TimelineZoomContextValue = {
+  zoomLevel: 1,
+  pixelsPerSecond: DEFAULT_PPS,
+  fps: DEFAULT_FPS,
+  timeToPixels: (t: number) => t * DEFAULT_PPS,
+  pixelsToTime: (p: number) => p / DEFAULT_PPS,
+  frameToPixels: (f: number) => (f / DEFAULT_FPS) * DEFAULT_PPS,
+  pixelsToFrame: (p: number) => Math.round((p / DEFAULT_PPS) * DEFAULT_FPS),
+};
+
+const TimelineZoomContext = createContext<TimelineZoomContextValue>(defaultValue);
 
 interface TimelineZoomProviderProps {
   children: ReactNode;
@@ -66,19 +81,8 @@ export function TimelineZoomProvider({ children }: TimelineZoomProviderProps) {
 
 /**
  * Hook to consume timeline zoom context.
- * Must be used within TimelineZoomProvider.
+ * Always returns a value - uses defaults during HMR/error recovery.
  */
 export function useTimelineZoomContext(): TimelineZoomContextValue {
-  const context = useContext(TimelineZoomContext);
-  if (!context) {
-    throw new Error('useTimelineZoomContext must be used within TimelineZoomProvider');
-  }
-  return context;
-}
-
-/**
- * Optional hook that returns null if outside provider (for components that may be used outside timeline)
- */
-export function useTimelineZoomContextOptional(): TimelineZoomContextValue | null {
   return useContext(TimelineZoomContext);
 }
