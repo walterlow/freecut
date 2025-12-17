@@ -44,6 +44,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
   const selectMedia = useMediaLibraryStore((s) => s.selectMedia);
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
+  const importMedia = useMediaLibraryStore((s) => s.importMedia);
 
   // Timeline store for checking references - don't subscribe to items to avoid re-renders
   const removeTimelineItems = useTimelineStore((s) => s.removeItems);
@@ -323,6 +324,15 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
     }
   };
 
+  // Handle click on empty state to open file picker
+  const handleEmptyStateClick = async () => {
+    try {
+      await importMedia();
+    } catch (error) {
+      logger.error('Import failed:', error);
+    }
+  };
+
   // Main container with dropzone functionality
   return (
     <div
@@ -384,9 +394,12 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
           </div>
         </div>
       ) : filteredItems.length === 0 ? (
-        <div className="flex items-center justify-center py-24 cursor-pointer">
+        <div className="flex items-center justify-center py-24">
           <div className="text-center max-w-md">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary hover:border-primary/50 transition-colors">
+            <div
+              className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary hover:border-primary/50 hover:bg-secondary/80 cursor-pointer transition-colors"
+              onClick={handleEmptyStateClick}
+            >
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
             <p className="text-base font-bold text-foreground mb-2 tracking-wide">NO MEDIA FILES</p>
