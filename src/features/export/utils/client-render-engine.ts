@@ -668,6 +668,7 @@ async function createCompositionRenderer(
 
   /**
    * Render a single item to canvas
+   * @param sourceFrameOffset - Optional offset to add to the source frame for video items (in frames)
    */
   async function renderItem(
     ctx: OffscreenCanvasRenderingContext2D,
@@ -676,10 +677,11 @@ async function createCompositionRenderer(
     frame: number,
     canvas: CanvasSettings,
     videoElements: Map<string, HTMLVideoElement>,
-    imageElements: Map<string, HTMLImageElement>
+    imageElements: Map<string, HTMLImageElement>,
+    sourceFrameOffset: number = 0
   ): Promise<void> {
     ctx.save();
-    
+
     // Apply opacity only if it's not the default value (1.0)
     // This prevents inherited/errant keyframe values from making clips transparent
     // while still allowing intentional opacity changes
@@ -698,7 +700,7 @@ async function createCompositionRenderer(
 
     switch (item.type) {
       case 'video':
-        await renderVideoItem(ctx, item as VideoItem, transform, frame, canvas, videoElements);
+        await renderVideoItem(ctx, item as VideoItem, transform, frame, canvas, videoElements, sourceFrameOffset);
         break;
       case 'image':
         renderImageItem(ctx, item as ImageItem, transform, canvas, imageElements);
@@ -716,6 +718,7 @@ async function createCompositionRenderer(
 
   /**
    * Render video item
+   * @param sourceFrameOffset - Optional offset to add to the source frame (in frames, not seconds)
    */
   async function renderVideoItem(
     ctx: OffscreenCanvasRenderingContext2D,
@@ -723,7 +726,8 @@ async function createCompositionRenderer(
     transform: { x: number; y: number; width: number; height: number; rotation: number; opacity: number },
     frame: number,
     canvas: CanvasSettings,
-    videoElements: Map<string, HTMLVideoElement>
+    videoElements: Map<string, HTMLVideoElement>,
+    sourceFrameOffset: number = 0
   ): Promise<void> {
     const video = videoElements.get(item.id);
     if (!video) {
@@ -739,14 +743,36 @@ async function createCompositionRenderer(
     const localTime = localFrame / fps;
     const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
     const speed = item.speed ?? 1;
-    const sourceTime = sourceStart / fps + localTime * speed;
+    // Apply source frame offset (used for transitions to center playback)
+    const adjustedSourceStart = Math.max(0, sourceStart + sourceFrameOffset);
+    const sourceTime = adjustedSourceStart / fps + localTime * speed;
     const clampedTime = Math.max(0, Math.min(sourceTime, video.duration - 0.01));
 
-    // Seek to the correct time and wait for video to be ready
-    if (Math.abs(video.currentTime - clampedTime) > 0.01) {
-      video.currentTime = clampedTime;
+    // Debug: log source time for transition clips
+    if (sourceFrameOffset !== 0) {
+      console.log(`[VIDEO-SOURCE] id=${item.id.substring(0,8)} frame=${frame} localFrame=${localFrame} sourceStart=${sourceStart} offset=${sourceFrameOffset} adjustedStart=${adjustedSourceStart} sourceTime=${sourceTime.toFixed(3)}s clampedTime=${clampedTime.toFixed(3)}s`);
     }
-    
+
+    // Seek to the correct time and wait for seek to complete
+    const needsSeek = Math.abs(video.currentTime - clampedTime) > 0.01;
+    if (needsSeek) {
+      video.currentTime = clampedTime;
+
+      // Always wait for seeked event when we've requested a seek
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        video.addEventListener('seeked', onSeeked);
+        // Timeout fallback
+        setTimeout(() => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        }, 500);
+      });
+    }
+
     // Wait for video to have enough data to draw
     if (video.readyState < 2) {
       await new Promise<void>((resolve) => {
@@ -769,23 +795,6 @@ async function createCompositionRenderer(
         }, 1000);
       });
     }
-    
-    // Wait for seek to complete
-    await new Promise<void>((resolve) => {
-      if (!video.seeking) {
-        resolve();
-        return;
-      }
-      const onSeeked = () => {
-        video.removeEventListener('seeked', onSeeked);
-        resolve();
-      };
-      video.addEventListener('seeked', onSeeked);
-      setTimeout(() => {
-        video.removeEventListener('seeked', onSeeked);
-        resolve();
-      }, 500);
-    });
     
     // Final check - skip if still not ready
     if (video.readyState < 2) {
@@ -905,25 +914,48 @@ async function createCompositionRenderer(
       log.info(`TRANSITION START: frame=${frame} progress=${progress.toFixed(3)} presentation=${transition.presentation} duration=${transition.durationInFrames} leftClip=${leftClip.id.substring(0,8)} rightClip=${rightClip.id.substring(0,8)}`);
     }
 
-    // Render left clip to canvas
+    // Calculate the frame position within the transition (0 to durationInFrames)
+    const transitionLocalFrame = frame - transitionStart;
+    const halfDuration = Math.floor(transition.durationInFrames / 2);
+
+    // For left clip: apply content offset to show ending frames during transition
+    // Matches Remotion's leftClipContentOffset = -(leftClip.durationInFrames - transition.durationInFrames)
+    // This ensures left clip shows its last N frames during transition, ending at its final frame
+    const leftContentOffset = -(leftClip.durationInFrames - transition.durationInFrames);
+    // Convert content offset to source frame offset
+    const leftSourceOffset = leftContentOffset;
+
     const leftCanvas = new OffscreenCanvas(canvas.width, canvas.height);
     const leftCtx = leftCanvas.getContext('2d')!;
     const leftKeyframes = keyframesMap.get(leftClip.id);
     const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, frame, canvas);
-    await renderItem(leftCtx, leftClip, leftTransform, frame, canvas, videoElements, imageElements);
+    await renderItem(leftCtx, leftClip, leftTransform, frame, canvas, videoElements, imageElements, leftSourceOffset);
 
-    // Render right clip to canvas
+    // For right clip: use effective frame for timeline position
+    // Apply -halfDuration offset to source time to prevent rewind at transition end
+    // Matches Remotion's rightClipSourceOffset = -halfDuration
+    const rightEffectiveFrame = rightClip.from + transitionLocalFrame;
+    const rightSourceOffset = -halfDuration;
+
     const rightCanvas = new OffscreenCanvas(canvas.width, canvas.height);
     const rightCtx = rightCanvas.getContext('2d')!;
     const rightKeyframes = keyframesMap.get(rightClip.id);
-    const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, frame, canvas);
-    await renderItem(rightCtx, rightClip, rightTransform, frame, canvas, videoElements, imageElements);
+    const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, rightEffectiveFrame, canvas);
+    await renderItem(rightCtx, rightClip, rightTransform, rightEffectiveFrame, canvas, videoElements, imageElements, rightSourceOffset);
 
-    // Debug: Check if canvases have content
-    if (isFirstFrame) {
-      const leftData = leftCtx.getImageData(Math.floor(canvas.width/2), Math.floor(canvas.height/2), 1, 1).data;
-      const rightData = rightCtx.getImageData(Math.floor(canvas.width/2), Math.floor(canvas.height/2), 1, 1).data;
-      log.info(`TRANSITION CANVASES: leftHasContent=${leftData[3]! > 0} rightHasContent=${rightData[3]! > 0} leftAlpha=${leftData[3]} rightAlpha=${rightData[3]}`);
+    // Debug: Log both clips' timing at key progress points
+    if (isFirstFrame || Math.abs(progress - 0.5) < 0.02 || progress >= 0.99) {
+      const leftLocalFrame = frame - leftClip.from;
+      const leftSourceStart = (leftClip as any).sourceStart ?? (leftClip as any).trimStart ?? 0;
+      const leftAdjustedStart = Math.max(0, leftSourceStart + leftSourceOffset);
+      const leftSourceTime = leftAdjustedStart / fps + leftLocalFrame / fps;
+
+      const rightLocalFrame = rightEffectiveFrame - rightClip.from;
+      const rightSourceStart = (rightClip as any).sourceStart ?? (rightClip as any).trimStart ?? 0;
+      const rightAdjustedStart = Math.max(0, rightSourceStart + rightSourceOffset);
+      const rightSourceTime = rightAdjustedStart / fps + rightLocalFrame / fps;
+
+      console.log(`[TRANSITION-FRAMES] progress=${progress.toFixed(2)} frame=${frame} | LEFT: sourceTime=${leftSourceTime.toFixed(2)}s (offset=${leftSourceOffset}) | RIGHT: sourceTime=${rightSourceTime.toFixed(2)}s (offset=${rightSourceOffset})`);
     }
 
     // Render transition

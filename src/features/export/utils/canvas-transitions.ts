@@ -347,12 +347,10 @@ export function renderFlipTransition(
 /**
  * Render clock wipe transition.
  * Creates a sweeping reveal like a clock hand moving clockwise from 12 o'clock.
- * 
+ *
  * The effect works like a clock hand wiping away the outgoing clip:
  * - At progress=0: outgoing clip fully visible
  * - At progress=1: incoming clip fully visible (outgoing wiped away clockwise)
- * 
- * Implementation uses compositing instead of clipping for better compatibility
  */
 export function renderClockWipeTransition(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -362,19 +360,6 @@ export function renderClockWipeTransition(
   canvas: TransitionCanvasSettings
 ): void {
   const clampedProgress = Math.max(0, Math.min(1, progress));
-
-  // At progress=0: show outgoing (left) fully
-  // At progress=1: show incoming (right) fully
-  
-  if (clampedProgress >= 1) {
-    ctx.drawImage(rightCanvas, 0, 0);
-    return;
-  }
-  
-  if (clampedProgress <= 0) {
-    ctx.drawImage(leftCanvas, 0, 0);
-    return;
-  }
 
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
@@ -388,38 +373,28 @@ export function renderClockWipeTransition(
   const sweepAngle = clampedProgress * Math.PI * 2;
   const currentAngle = startAngle + sweepAngle;
 
-  // Use a temporary canvas and compositing for the wedge mask
-  const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-  const tempCtx = tempCanvas.getContext('2d')!;
-  
-  // Draw a pie wedge for the revealed portion (from 12 o'clock to current angle)
-  tempCtx.fillStyle = '#fff';
-  tempCtx.beginPath();
-  tempCtx.moveTo(centerX, centerY);
-  tempCtx.arc(centerX, centerY, radius, startAngle, currentAngle, false);
-  tempCtx.closePath();
-  tempCtx.fill();
-  
-  // Use 'source-in' to keep only the part of incoming that overlaps with the wedge
-  tempCtx.globalCompositeOperation = 'source-in';
-  tempCtx.drawImage(rightCanvas, 0, 0);
-  
-  // Draw outgoing clip first (full canvas as base)
+  // Draw incoming clip (full) first - sits underneath
+  ctx.drawImage(rightCanvas, 0, 0);
+
+  // Draw outgoing clip clipped to remaining area (inverse of revealed wedge)
+  ctx.save();
+  const clipPath = new Path2D();
+  clipPath.moveTo(centerX, centerY);
+  // Arc from current angle BACK to start (the unrevealed portion)
+  clipPath.arc(centerX, centerY, radius, currentAngle, startAngle + Math.PI * 2, false);
+  clipPath.closePath();
+  ctx.clip(clipPath);
   ctx.drawImage(leftCanvas, 0, 0);
-  
-  // Draw the masked incoming clip on top
-  ctx.drawImage(tempCanvas, 0, 0);
+  ctx.restore();
 }
 
 /**
  * Render iris transition.
  * Creates a circular opening from center, revealing the incoming clip.
- * 
+ *
  * The effect works like a camera iris opening:
  * - At progress=0: outgoing clip fully visible
  * - At progress=1: incoming clip fully visible
- * 
- * Implementation uses compositing instead of clipping for better compatibility
  */
 export function renderIrisTransition(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -439,38 +414,19 @@ export function renderIrisTransition(
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
 
-  // At progress=0: show outgoing (left) fully
-  // At progress=1: show incoming (right) fully
-  
-  if (clampedProgress >= 1) {
-    ctx.drawImage(rightCanvas, 0, 0);
-    return;
-  }
-  
-  if (clampedProgress <= 0) {
-    ctx.drawImage(leftCanvas, 0, 0);
-    return;
-  }
+  // Draw incoming clip (full) first - sits underneath
+  ctx.drawImage(rightCanvas, 0, 0);
 
-  // Use a temporary canvas and compositing for the circular mask
-  const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-  const tempCtx = tempCanvas.getContext('2d')!;
-  
-  // Draw the circle mask (white circle on transparent)
-  tempCtx.fillStyle = '#fff';
-  tempCtx.beginPath();
-  tempCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-  tempCtx.fill();
-  
-  // Use 'source-in' to keep only the part of incoming that overlaps with the circle
-  tempCtx.globalCompositeOperation = 'source-in';
-  tempCtx.drawImage(rightCanvas, 0, 0);
-  
-  // Draw outgoing clip first (full canvas as base)
+  // Draw outgoing clip with inverse circle clip (donut shape - outside the iris)
+  ctx.save();
+  const clipPath = new Path2D();
+  // Full canvas rect
+  clipPath.rect(0, 0, canvas.width, canvas.height);
+  // Cut out the circle (evenodd will invert)
+  clipPath.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip(clipPath, 'evenodd');
   ctx.drawImage(leftCanvas, 0, 0);
-  
-  // Draw the masked incoming clip on top
-  ctx.drawImage(tempCanvas, 0, 0);
+  ctx.restore();
 }
 
 /**
