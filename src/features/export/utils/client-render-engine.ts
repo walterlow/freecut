@@ -611,11 +611,112 @@ async function createCompositionRenderer(
         transitionsByTrackOrder.get(trackOrder)!.push(activeTransition);
       }
 
+      // === OCCLUSION CULLING OPTIMIZATION ===
+      // Find the topmost (lowest order) track with a fully occluding item.
+      // Skip rendering all tracks below it (higher order) since they'll be fully covered.
+      //
+      // An item is fully occluding if:
+      // - Covers entire canvas (after transform/keyframes)
+      // - Opacity = 1 (after keyframe animation)
+      // - No rotation (or 0°/180° that still covers)
+      // - No corner radius
+      // - Is video/image (opaque content)
+      // - Not in a transition
+      // - No transparency effects
+      // - No active masks (masks could reveal content below)
+
+      const isFullyOccluding = (item: TimelineItem, trackOrder: number): boolean => {
+        // Only videos and images can be fully opaque
+        if (item.type !== 'video' && item.type !== 'image') return false;
+
+        // Items in transitions are blended, not fully occluding
+        if (transitionClipIds.has(item.id)) return false;
+
+        // Get animated transform at current frame
+        const itemKeyframes = keyframesMap.get(item.id);
+        const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
+
+        // Check opacity (must be 1.0)
+        if (transform.opacity < 1) return false;
+
+        // Check rotation (only 0° or 180° can fully cover without exposing corners)
+        const rotation = transform.rotation % 360;
+        if (rotation !== 0 && rotation !== 180 && rotation !== -180) return false;
+
+        // Check corner radius (rounded corners expose content)
+        if (transform.cornerRadius > 0) return false;
+
+        // Check if item covers entire canvas
+        const itemLeft = canvas.width / 2 + transform.x - transform.width / 2;
+        const itemTop = canvas.height / 2 + transform.y - transform.height / 2;
+        const itemRight = itemLeft + transform.width;
+        const itemBottom = itemTop + transform.height;
+
+        // Must cover entire canvas (with small tolerance for floating point)
+        const tolerance = 1;
+        if (itemLeft > tolerance || itemTop > tolerance) return false;
+        if (itemRight < canvas.width - tolerance || itemBottom < canvas.height - tolerance) return false;
+
+        // Check for effects that might add transparency
+        const itemEffects = item.effects ?? [];
+        const adjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
+        const allEffects = [...itemEffects, ...adjEffects];
+
+        for (const effectWrapper of allEffects) {
+          if (!effectWrapper.enabled) continue;
+          const effect = effectWrapper.effect;
+          // Effects that could add transparency
+          if (effect.type === 'glitch' ||
+              effect.type === 'canvas-effect' ||
+              (effect as any).opacity !== undefined && (effect as any).opacity < 1) {
+            return false;
+          }
+        }
+
+        return true;
+      };
+
+      // Find occlusion cutoff - the lowest track order with a fully occluding item
+      // If masks are active, disable occlusion culling (masks could reveal content)
+      let occlusionCutoffOrder: number | null = null;
+
+      if (activeMasks.length === 0) {
+        // Scan tracks from top to bottom (lowest order first) to find first occluding item
+        const tracksTopToBottom = [...sortedTracks].reverse();
+
+        for (const track of tracksTopToBottom) {
+          if (track.visible === false) continue;
+          const trackOrder = track.order ?? 0;
+
+          for (const item of track.items ?? []) {
+            if (!shouldRenderItem(item)) continue;
+
+            if (isFullyOccluding(item, trackOrder)) {
+              occlusionCutoffOrder = trackOrder;
+              if (frame % 30 === 0) {
+                log.debug(`Occlusion culling: item ${item.id.substring(0, 8)} on track order ${trackOrder} fully occludes canvas`);
+              }
+              break;
+            }
+          }
+
+          if (occlusionCutoffOrder !== null) break;
+        }
+      }
+
       // Render tracks in order (bottom to top), with transitions at their track position
       // Track order: higher values render first (behind), lower values render last (on top)
+      let skippedTracks = 0;
+
       for (const track of sortedTracks) {
         if (track.visible === false) continue;
         const trackOrder = track.order ?? 0;
+
+        // OCCLUSION CULLING: Skip tracks that are fully occluded by higher tracks
+        if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
+          skippedTracks++;
+          continue;
+        }
 
         // Render all items on this track (respecting track order as primary)
         for (const item of track.items ?? []) {
@@ -645,6 +746,11 @@ async function createCompositionRenderer(
             }
           }
         }
+      }
+
+      // Log occlusion culling stats periodically
+      if (skippedTracks > 0 && frame % 30 === 0) {
+        log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
       // Apply masks to content
