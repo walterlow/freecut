@@ -44,4 +44,4 @@ coverage
 # Note: Some teams commit this, uncomment if you prefer to commit
 # src/routeTree.gen.ts
 nul
-./claude/
+.claude/settings.local.json
