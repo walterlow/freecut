@@ -114,17 +114,31 @@ function getSlideTransform(
 }
 
 /**
- * Calculate transform for flip presentation
+ * Calculate transform for flip presentation (card flip style)
+ *
+ * This creates a card-flip effect where:
+ * - First half (progress 0-0.5): outgoing clip rotates from 0° to 90° (edge-on)
+ * - Second half (progress 0.5-1): incoming clip rotates from -90° (edge-on) to 0°
+ *
+ * Each clip only animates for half the duration, with a midpoint switch.
  */
 function getFlipTransform(progress: number, direction: FlipDirection, isOutgoing: boolean): string {
-  const flipDegrees = isOutgoing
-    ? interpolate(progress, [0, 1], [0, 90])
-    : interpolate(progress, [0, 1], [-90, 0]);
-
   const axis = (direction === 'from-left' || direction === 'from-right') ? 'Y' : 'X';
   const sign = (direction === 'from-right' || direction === 'from-bottom') ? -1 : 1;
 
-  return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`;
+  const midpoint = 0.5;
+
+  if (isOutgoing) {
+    // Outgoing clip: animate from 0° to 90° during first half only
+    const flipProgress = Math.min(progress / midpoint, 1); // 0 to 1 during first half, then stays at 1
+    const flipDegrees = interpolate(flipProgress, [0, 1], [0, 90]);
+    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`;
+  } else {
+    // Incoming clip: animate from -90° to 0° during second half only
+    const flipProgress = Math.max((progress - midpoint) / midpoint, 0); // 0 until midpoint, then 0 to 1
+    const flipDegrees = interpolate(flipProgress, [0, 1], [-90, 0]);
+    return `perspective(1000px) rotate${axis}(${sign * flipDegrees}deg)`;
+  }
 }
 
 /**
@@ -535,10 +549,16 @@ const TransitionOverlay: React.FC<{
         };
 
       case 'flip':
-        // Both clips flip
+        // Card flip: outgoing visible in first half, incoming in second half
+        // Use opacity to hide the clip that shouldn't be visible at this progress
+        const flipMidpoint = 0.5;
+        const flipOpacity = isOutgoing
+          ? (progress < flipMidpoint ? 1 : 0)  // Outgoing visible in first half
+          : (progress >= flipMidpoint ? 1 : 0); // Incoming visible in second half
         return {
           ...baseStyle,
           transform: getFlipTransform(progress, direction as FlipDirection || 'from-left', isOutgoing),
+          opacity: flipOpacity,
         };
 
       case 'none':
