@@ -559,7 +559,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         <div
           ref={trackRef}
           data-track-id={track.id}
-          className="relative"
+          className="relative border-b border-border"
           style={{
             height: `${track.height}px`,
             // CSS containment tells browser this element's layout is independent

@@ -13,7 +13,7 @@ interface ShortcutsDialogProps {
 }
 
 // Group shortcuts by category
-const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[] }[] = [
+const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[]; extra?: { description: string; binding: string }[] }[] = [
   {
     name: 'Playback',
     keys: ['PLAY_PAUSE', 'PREVIOUS_FRAME', 'NEXT_FRAME', 'GO_TO_START', 'GO_TO_END', 'PREVIOUS_SNAP_POINT', 'NEXT_SNAP_POINT'],
@@ -28,15 +28,13 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[] }[] = [
   },
   {
     name: 'Zoom',
-    keys: ['ZOOM_IN', 'ZOOM_OUT', 'ZOOM_RESET', 'ZOOM_TO_FIT'],
-  },
-  {
-    name: 'Selection',
-    keys: ['SELECT_ALL', 'DESELECT_ALL'],
+    keys: ['ZOOM_TO_FIT'],
+    extra: [{ description: 'Zoom in/out', binding: 'Ctrl + Mouse Wheel' }],
   },
   {
     name: 'Clipboard',
-    keys: ['COPY', 'PASTE', 'DUPLICATE'],
+    keys: ['COPY', 'PASTE'],
+    extra: [{ description: 'Duplicate', binding: 'Alt + Drag' }],
   },
   {
     name: 'Tools',
@@ -48,7 +46,7 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[] }[] = [
   },
   {
     name: 'UI',
-    keys: ['TOGGLE_SIDEBAR', 'FULLSCREEN_PREVIEW', 'TOGGLE_TIMELINE_ZOOM', 'TOGGLE_SNAP'],
+    keys: ['TOGGLE_SNAP'],
   },
   {
     name: 'Markers',
@@ -56,7 +54,7 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[] }[] = [
   },
   {
     name: 'Keyframes',
-    keys: ['ADD_KEYFRAME'],
+    keys: ['ADD_KEYFRAME', 'CLEAR_KEYFRAMES', 'TOGGLE_KEYFRAME_EDITOR'],
   },
 ];
 
@@ -109,6 +107,17 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
                       </span>
                       <kbd className="px-2 py-0.5 text-xs font-mono bg-muted rounded border border-border">
                         {formatKeyBinding(HOTKEYS[key])}
+                      </kbd>
+                    </div>
+                  ))}
+                  {category.extra?.map((item) => (
+                    <div
+                      key={item.binding}
+                      className="flex items-center justify-between py-1"
+                    >
+                      <span className="text-sm">{item.description}</span>
+                      <kbd className="px-2 py-0.5 text-xs font-mono bg-muted rounded border border-border">
+                        {item.binding}
                       </kbd>
                     </div>
                   ))}

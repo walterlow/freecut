@@ -194,6 +194,8 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
   // Start trim drag
   const handleTrimStart = useCallback(
     (e: React.MouseEvent, handle: TrimHandle) => {
+      // Only respond to left mouse button
+      if (e.button !== 0) return;
       if (trackLocked) return;
 
       e.stopPropagation();

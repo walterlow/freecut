@@ -320,6 +320,8 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
   // Start stretch drag
   const handleStretchStart = useCallback(
     (e: React.MouseEvent, handle: StretchHandle) => {
+      // Only respond to left mouse button
+      if (e.button !== 0) return;
       if (trackLocked) return;
 
       // Only works on video/audio/gif items

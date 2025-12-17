@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, memo, useCallback } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
 import { TrackHeader } from './track-header';
@@ -7,6 +8,7 @@ import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
@@ -75,6 +77,17 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     setIsGraphPanelOpen(false);
     onGraphPanelOpenChange?.(false);
   }, [onGraphPanelOpenChange]);
+
+  // Keyboard shortcut: Ctrl/Cmd+K to toggle keyframe editor
+  useHotkeys(
+    HOTKEYS.TOGGLE_KEYFRAME_EDITOR,
+    (event) => {
+      event.preventDefault();
+      handleToggleGraphPanel();
+    },
+    HOTKEY_OPTIONS,
+    [handleToggleGraphPanel]
+  );
 
   // State for drop indicator (updated via RAF from drag hook)
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState(-1);

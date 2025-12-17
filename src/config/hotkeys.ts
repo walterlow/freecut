@@ -28,22 +28,12 @@ export const HOTKEYS = {
   REDO: 'mod+y',
 
   // Zoom
-  ZOOM_IN: 'mod+equals',
-  ZOOM_IN_ALT: 'equals',
-  ZOOM_OUT: 'mod+minus',
-  ZOOM_OUT_ALT: 'minus',
-  ZOOM_RESET: 'mod+0',
   ZOOM_TO_FIT: 'z',
-
-  // Selection
-  SELECT_ALL: 'mod+a',
-  DESELECT_ALL: 'escape',
 
   // Clipboard
   COPY: 'mod+c',
   CUT: 'mod+x',
   PASTE: 'mod+v',
-  DUPLICATE: 'mod+d',
 
   // Tools
   SELECTION_TOOL: 'v',
@@ -55,9 +45,6 @@ export const HOTKEYS = {
   EXPORT: 'mod+e',
 
   // UI
-  TOGGLE_SIDEBAR: 'tab',
-  FULLSCREEN_PREVIEW: 'f',
-  TOGGLE_TIMELINE_ZOOM: '`',
   TOGGLE_SNAP: 's',
 
   // Markers
@@ -69,6 +56,7 @@ export const HOTKEYS = {
   // Keyframes
   ADD_KEYFRAME: 'k',
   CLEAR_KEYFRAMES: 'shift+k',
+  TOGGLE_KEYFRAME_EDITOR: 'mod+k',
 } as const;
 
 export type HotkeyKey = keyof typeof HOTKEYS;
@@ -100,22 +88,12 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   REDO: 'Redo',
 
   // Zoom
-  ZOOM_IN: 'Zoom in (or Ctrl+Scroll)',
-  ZOOM_IN_ALT: 'Zoom in (alternative)',
-  ZOOM_OUT: 'Zoom out (or Ctrl+Scroll)',
-  ZOOM_OUT_ALT: 'Zoom out (alternative)',
-  ZOOM_RESET: 'Reset zoom to 100%',
   ZOOM_TO_FIT: 'Zoom to fit all content',
-
-  // Selection
-  SELECT_ALL: 'Select all items',
-  DESELECT_ALL: 'Deselect all',
 
   // Clipboard
   COPY: 'Copy selected items',
   CUT: 'Cut selected items',
   PASTE: 'Paste items',
-  DUPLICATE: 'Duplicate selected items',
 
   // Tools
   SELECTION_TOOL: 'Selection tool',
@@ -127,9 +105,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   EXPORT: 'Export video',
 
   // UI
-  TOGGLE_SIDEBAR: 'Toggle sidebar',
-  FULLSCREEN_PREVIEW: 'Fullscreen preview',
-  TOGGLE_TIMELINE_ZOOM: 'Toggle timeline zoom',
   TOGGLE_SNAP: 'Toggle snap',
 
   // Markers
@@ -141,6 +116,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   // Keyframes
   ADD_KEYFRAME: 'Add keyframe at playhead',
   CLEAR_KEYFRAMES: 'Clear all keyframes from selected items',
+  TOGGLE_KEYFRAME_EDITOR: 'Toggle keyframe editor panel',
 };
 
 /**

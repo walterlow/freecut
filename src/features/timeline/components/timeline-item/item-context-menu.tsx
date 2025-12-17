@@ -18,9 +18,15 @@ interface ItemContextMenuProps {
   trackLocked: boolean;
   isSelected: boolean;
   canJoinSelected: boolean;
+  hasJoinableLeft: boolean;
+  hasJoinableRight: boolean;
+  /** Which edge was closer when context menu was triggered */
+  closerEdge: 'left' | 'right' | null;
   /** Keyframed properties for the item (used to build clear submenu) */
   keyframedProperties?: PropertyKeyframes[];
   onJoinSelected: () => void;
+  onJoinLeft: () => void;
+  onJoinRight: () => void;
   onRippleDelete: () => void;
   onDelete: () => void;
   onClearAllKeyframes?: () => void;
@@ -36,8 +42,13 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   trackLocked,
   isSelected,
   canJoinSelected,
+  hasJoinableLeft,
+  hasJoinableRight,
+  closerEdge,
   keyframedProperties,
   onJoinSelected,
+  onJoinLeft,
+  onJoinRight,
   onRippleDelete,
   onDelete,
   onClearAllKeyframes,
@@ -57,15 +68,39 @@ export const ItemContextMenu = memo(function ItemContextMenu({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {canJoinSelected && (
-          <>
-            <ContextMenuItem onClick={onJoinSelected}>
-              Join Selected
-              <ContextMenuShortcut>J</ContextMenuShortcut>
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        )}
+        {/* Join options - show based on which edge is closer */}
+        {(() => {
+          // Determine which join option to show based on closer edge
+          const showJoinLeft = hasJoinableLeft && (closerEdge === 'left' || !hasJoinableRight);
+          const showJoinRight = hasJoinableRight && (closerEdge === 'right' || !hasJoinableLeft);
+          const hasJoinOption = showJoinLeft || showJoinRight || canJoinSelected;
+
+          if (!hasJoinOption) return null;
+
+          return (
+            <>
+              {showJoinLeft && (
+                <ContextMenuItem onClick={onJoinLeft}>
+                  Join with Previous
+                  <ContextMenuShortcut>J</ContextMenuShortcut>
+                </ContextMenuItem>
+              )}
+              {showJoinRight && (
+                <ContextMenuItem onClick={onJoinRight}>
+                  Join with Next
+                  <ContextMenuShortcut>J</ContextMenuShortcut>
+                </ContextMenuItem>
+              )}
+              {canJoinSelected && (
+                <ContextMenuItem onClick={onJoinSelected}>
+                  Join Selected
+                  <ContextMenuShortcut>J</ContextMenuShortcut>
+                </ContextMenuItem>
+              )}
+              <ContextMenuSeparator />
+            </>
+          );
+        })()}
 
         {/* Clear Keyframes submenu - only show if item has keyframes */}
         {hasKeyframes && (

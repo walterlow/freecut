@@ -95,6 +95,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Track which edge is being hovered for showing trim/rate-stretch handles
   const [hoveredEdge, setHoveredEdge] = useState<'start' | 'end' | null>(null);
 
+  // Track which edge was closer when context menu was triggered
+  const [closerEdge, setCloserEdge] = useState<'left' | 'right' | null>(null);
+
   // Track blocked drag attempt tooltip (shown on mousedown in rate-stretch mode)
   const [dragBlockedTooltip, setDragBlockedTooltip] = useState<{ x: number; y: number } | null>(null);
 
@@ -566,14 +569,27 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleDragStart(e);
   }, [activeTool, trackLocked, isStretching, isTrimming, hoveredEdge, handleDragStart]);
 
+  // Track which edge is closer when right-clicking for context menu
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const midpoint = rect.width / 2;
+    setCloserEdge(x < midpoint ? 'left' : 'right');
+  }, []);
+
   return (
     <>
       <ItemContextMenu
         trackLocked={trackLocked}
         isSelected={isSelected}
         canJoinSelected={getCanJoinSelected()}
+        hasJoinableLeft={hasJoinableLeft}
+        hasJoinableRight={hasJoinableRight}
+        closerEdge={closerEdge}
         keyframedProperties={keyframedProperties}
         onJoinSelected={handleJoinSelected}
+        onJoinLeft={handleJoinLeft}
+        onJoinRight={handleJoinRight}
         onRippleDelete={handleRippleDelete}
         onDelete={handleDelete}
         onClearAllKeyframes={handleClearAllKeyframes}
@@ -602,6 +618,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredEdge(null)}
+          onContextMenu={handleContextMenu}
         >
           {/* Selection indicator */}
           {isSelected && !trackLocked && (

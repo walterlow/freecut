@@ -338,17 +338,6 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
     [items, splitItem]
   );
 
-  // Selection: Escape - Deselect all items
-  useHotkeys(
-    HOTKEYS.DESELECT_ALL,
-    (event) => {
-      event.preventDefault();
-      clearSelection();
-    },
-    HOTKEY_OPTIONS,
-    [clearSelection]
-  );
-
   // Tool: V - Selection Tool
   useHotkeys(
     HOTKEYS.SELECTION_TOOL,
