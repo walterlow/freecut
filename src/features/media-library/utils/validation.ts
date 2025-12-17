@@ -23,6 +23,7 @@ export const SUPPORTED_IMAGE_TYPES = [
   'image/jpg',
   'image/png',
   'image/gif',
+  'image/webp',
 ];
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
@@ -45,6 +46,7 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.gif': 'image/gif',
+  '.webp': 'image/webp',
 };
 
 /**
@@ -94,7 +96,7 @@ export function validateMediaFile(file: File): ValidationResult {
   if (!allSupportedTypes.includes(mimeType)) {
     return {
       valid: false,
-      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv), audio (mp3, wav, aac, ogg/opus), image (jpg, png, gif)`,
+      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv), audio (mp3, wav, aac, ogg/opus), image (jpg, png, gif, webp)`,
     };
   }
 

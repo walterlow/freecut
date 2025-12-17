@@ -7,7 +7,7 @@ import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { TimelineZoomProvider } from '../contexts/timeline-zoom-context';
+
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
@@ -256,7 +256,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   };
 
   return (
-    <TimelineZoomProvider>
+    
       <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden">
         {/* Timeline Header */}
         <TimelineHeader
@@ -367,6 +367,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         onClose={handleCloseGraphPanel}
       />
     </div>
-    </TimelineZoomProvider>
+    
   );
 });

@@ -16,11 +16,11 @@ import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
  * - Synchronized with timeline store
  */
 export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
-  const { frameToPixels, pixelsToFrame } = useTimelineZoomContext();
   const inPoint = useTimelineStore((s) => s.inPoint);
   const outPoint = useTimelineStore((s) => s.outPoint);
   const setInPoint = useTimelineStore((s) => s.setInPoint);
   const setOutPoint = useTimelineStore((s) => s.setOutPoint);
+  const { frameToPixels, pixelsToFrame } = useTimelineZoomContext();
 
   const [isDraggingIn, setIsDraggingIn] = useState(false);
   const [isDraggingOut, setIsDraggingOut] = useState(false);
