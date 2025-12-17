@@ -26,7 +26,8 @@
       "Bash(wc:*)",
       "Bash(ls -la \"E:\\video-editor-refactor\\src\\constants\"\" 2>/dev/null || echo \"Directory does not exist or is empty \")",
       "Bash(npx eslint:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebFetch(domain:vercel.com)"
     ],
     "deny": [],
     "ask": []
