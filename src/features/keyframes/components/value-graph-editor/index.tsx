@@ -653,41 +653,39 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           {/* Separator */}
           <div className="w-px h-4 bg-border mx-1" />
 
-          {/* Precise value inputs (shown when exactly one keyframe is selected) */}
-          {selectedKeyframe && (
-            <>
-              <div className="flex items-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground">F:</span>
-                <Input
-                  type="number"
-                  value={frameInputValue}
-                  onChange={(e) => setFrameInputValue(e.target.value)}
-                  onBlur={commitFrameValue}
-                  onKeyDown={(e) => handleInputKeyDown(e, commitFrameValue)}
-                  className="w-12 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  min={0}
-                  max={totalFrames - 1}
-                  disabled={disabled || !onKeyframeMove}
-                />
-              </div>
-              <div className="flex items-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground">V:</span>
-                <Input
-                  type="number"
-                  value={valueInputValue}
-                  onChange={(e) => setValueInputValue(e.target.value)}
-                  onBlur={commitValueInput}
-                  onKeyDown={(e) => handleInputKeyDown(e, commitValueInput)}
-                  step={0.01}
-                  className="w-14 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  min={propertyRange?.min}
-                  max={propertyRange?.max}
-                  disabled={disabled || !onKeyframeMove}
-                />
-              </div>
-              <div className="w-px h-4 bg-border mx-1" />
-            </>
-          )}
+          {/* Precise value inputs (always reserve space to prevent layout shift) */}
+          <div className="flex items-center gap-0.5">
+            <span className="text-[10px] text-muted-foreground">F:</span>
+            <Input
+              type="number"
+              value={selectedKeyframe ? frameInputValue : ''}
+              onChange={(e) => setFrameInputValue(e.target.value)}
+              onBlur={commitFrameValue}
+              onKeyDown={(e) => handleInputKeyDown(e, commitFrameValue)}
+              placeholder="-"
+              className="w-12 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              min={0}
+              max={totalFrames - 1}
+              disabled={disabled || !onKeyframeMove || !selectedKeyframe}
+            />
+          </div>
+          <div className="flex items-center gap-0.5">
+            <span className="text-[10px] text-muted-foreground">V:</span>
+            <Input
+              type="number"
+              value={selectedKeyframe ? valueInputValue : ''}
+              onChange={(e) => setValueInputValue(e.target.value)}
+              onBlur={commitValueInput}
+              onKeyDown={(e) => handleInputKeyDown(e, commitValueInput)}
+              step={0.01}
+              placeholder="-"
+              className="w-14 h-5 text-[10px] px-1 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              min={propertyRange?.min}
+              max={propertyRange?.max}
+              disabled={disabled || !onKeyframeMove || !selectedKeyframe}
+            />
+          </div>
+          <div className="w-px h-4 bg-border mx-1" />
         </div>
 
         {/* Zoom controls */}
