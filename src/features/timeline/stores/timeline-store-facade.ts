@@ -184,6 +184,9 @@ const DEFAULT_TRACK_HEIGHT = 80;
  * Single source of truth for all timeline loading (project open, refresh, etc.)
  */
 async function loadTimeline(projectId: string): Promise<void> {
+  // Mark loading started - used to coordinate initial player sync
+  useTimelineSettingsStore.getState().setTimelineLoading(true);
+
   try {
     const project = await getProject(projectId);
     if (!project) {
@@ -270,8 +273,13 @@ async function loadTimeline(projectId: string): Promise<void> {
 
     // Clear undo history when loading
     useTimelineCommandStore.getState().clearHistory();
+
+    // Mark loading complete - signals player sync can proceed
+    useTimelineSettingsStore.getState().setTimelineLoading(false);
   } catch (error) {
     logger.error('Failed to load timeline:', error);
+    // Still mark loading complete on error so UI isn't stuck
+    useTimelineSettingsStore.getState().setTimelineLoading(false);
     throw error;
   }
 }

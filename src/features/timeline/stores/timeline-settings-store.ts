@@ -10,6 +10,8 @@ export interface TimelineSettingsState {
   scrollPosition: number;
   snapEnabled: boolean;
   isDirty: boolean;
+  /** True while loadTimeline() is in progress - used to coordinate initial player sync */
+  isTimelineLoading: boolean;
 }
 
 export interface TimelineSettingsActions {
@@ -20,6 +22,7 @@ export interface TimelineSettingsActions {
   setIsDirty: (dirty: boolean) => void;
   markDirty: () => void;
   markClean: () => void;
+  setTimelineLoading: (loading: boolean) => void;
 }
 
 export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineSettingsActions>()(
@@ -29,6 +32,7 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     scrollPosition: 0,
     snapEnabled: true,
     isDirty: false,
+    isTimelineLoading: true, // Start true - set false after loadTimeline completes
 
     // Actions
     setFps: (fps) => set({ fps }),
@@ -38,5 +42,6 @@ export const useTimelineSettingsStore = create<TimelineSettingsState & TimelineS
     setIsDirty: (dirty) => set({ isDirty: dirty }),
     markDirty: () => set({ isDirty: true }),
     markClean: () => set({ isDirty: false }),
+    setTimelineLoading: (loading) => set({ isTimelineLoading: loading }),
   })
 );

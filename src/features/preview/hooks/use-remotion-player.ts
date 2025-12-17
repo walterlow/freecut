@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { PlayerRef } from '@remotion/player';
 import { usePlaybackStore } from '../stores/playback-store';
+import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
 
 /**
  * Hook for integrating Remotion Player with timeline playback state
@@ -19,6 +20,8 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
   // Only subscribe to isPlaying - currentFrame is accessed via ref to prevent re-renders
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  // Subscribe to loading state - used to wait for timeline to load before initial sync
+  const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
   // Buffering state for UI feedback
   const [isBuffering, setIsBuffering] = useState(false);
@@ -83,19 +86,21 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
   /**
    * Timeline → Player: Sync frame position (scrubbing and seeking)
    * Uses store subscription instead of useEffect to avoid re-renders
-   * Depends on playerReady to handle F5 refresh timing
+   * Depends on playerReady AND isTimelineLoading to handle F5 refresh timing
    */
   useEffect(() => {
-    if (!playerReady || !playerRef.current) return;
+    // Wait for both: player ready AND timeline finished loading
+    // This prevents the race condition where player syncs to frame 0
+    // before loadTimeline() has restored the saved frame
+    if (!playerReady || !playerRef.current || isTimelineLoading) return;
 
     // Initial sync: The subscription only fires on changes, so we need to sync
     // the current frame immediately when the Player mounts (e.g., on project load)
     const initialFrame = usePlaybackStore.getState().currentFrame;
-    if (initialFrame !== 0) {
-      lastSyncedFrameRef.current = initialFrame;
-      playerRef.current.seekTo(initialFrame);
-      console.log('[Remotion Sync] Initial sync to frame:', initialFrame);
-    }
+    // Always sync initial frame (even if 0) since we now know timeline is loaded
+    lastSyncedFrameRef.current = initialFrame;
+    playerRef.current.seekTo(initialFrame);
+    console.log('[Remotion Sync] Initial sync to frame:', initialFrame);
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!playerRef.current) return;
@@ -151,7 +156,7 @@ export function useRemotionPlayer(playerRef: RefObject<PlayerRef>) {
     });
 
     return unsubscribe;
-  }, [playerReady, playerRef]);
+  }, [playerReady, playerRef, isTimelineLoading]);
 
   /**
    * Player → Timeline: Listen to frameupdate events
