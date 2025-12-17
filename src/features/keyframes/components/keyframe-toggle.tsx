@@ -3,6 +3,7 @@
  * Diamond-shaped button that appears next to animatable properties.
  * - Hollow diamond: No keyframe at current frame (click to add)
  * - Filled diamond: Keyframe exists at current frame (click to remove)
+ * - Disabled with strikethrough: Frame is in transition region (keyframes not allowed)
  */
 
 import { useCallback, useMemo } from 'react';
@@ -17,6 +18,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import {
+  isFrameInTransitionRegion,
+  getTransitionBlockedMessage,
+} from '../utils/transition-region';
 
 interface KeyframeToggleProps {
   /** The item ID(s) to toggle keyframes for */
@@ -66,11 +71,22 @@ export function KeyframeToggle({
     )
   );
 
+  // Get transitions to check for blocked regions
+  const transitions = useTimelineStore((s) => s.transitions);
+
   // Calculate frame relative to item start
   const relativeFrame = useMemo(() => {
     if (!firstItem) return 0;
     return currentFrame - firstItem.from;
   }, [currentFrame, firstItem]);
+
+  // Check if frame is in a transition region (blocked for keyframes)
+  const transitionBlockedRange = useMemo(() => {
+    if (!firstItem || !firstItemId) return undefined;
+    return isFrameInTransitionRegion(relativeFrame, firstItemId, firstItem, transitions);
+  }, [relativeFrame, firstItemId, firstItem, transitions]);
+
+  const isInTransition = transitionBlockedRange !== undefined;
 
   // Check if keyframe exists at current frame
   const keyframeAtFrame = useMemo(() => {
@@ -91,7 +107,7 @@ export function KeyframeToggle({
 
   // Handle toggle click
   const handleToggle = useCallback(() => {
-    if (disabled || !firstItemId || relativeFrame < 0) return;
+    if (disabled || isInTransition || !firstItemId || relativeFrame < 0) return;
 
     if (hasKeyframe && keyframeAtFrame) {
       // Remove keyframe
@@ -102,6 +118,7 @@ export function KeyframeToggle({
     }
   }, [
     disabled,
+    isInTransition,
     firstItemId,
     relativeFrame,
     hasKeyframe,
@@ -118,34 +135,47 @@ export function KeyframeToggle({
     return null;
   }
 
+  // Compute effective disabled state
+  const effectiveDisabled = disabled || isInTransition;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
           onClick={handleToggle}
-          disabled={disabled}
+          disabled={effectiveDisabled}
           className={cn(
             'flex items-center justify-center w-5 h-5 rounded-sm transition-colors',
             'hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-            disabled && 'opacity-50 cursor-not-allowed',
-            hasKeyframe && 'text-amber-500',
-            !hasKeyframe && hasAnyKeyframes && 'text-amber-500/50',
-            !hasKeyframe && !hasAnyKeyframes && 'text-muted-foreground',
+            effectiveDisabled && 'opacity-50 cursor-not-allowed',
+            isInTransition && 'line-through',
+            hasKeyframe && !isInTransition && 'text-amber-500',
+            !hasKeyframe && hasAnyKeyframes && !isInTransition && 'text-amber-500/50',
+            !hasKeyframe && !hasAnyKeyframes && !isInTransition && 'text-muted-foreground',
+            isInTransition && 'text-muted-foreground/50',
             className
           )}
-          aria-label={hasKeyframe ? 'Remove keyframe' : 'Add keyframe'}
+          aria-label={
+            isInTransition
+              ? 'Keyframes blocked (transition region)'
+              : hasKeyframe
+                ? 'Remove keyframe'
+                : 'Add keyframe'
+          }
         >
           <Diamond
             className={cn(
               'w-3 h-3 rotate-0 transition-transform',
-              hasKeyframe && 'fill-current'
+              hasKeyframe && !isInTransition && 'fill-current'
             )}
           />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top" className="text-xs">
-        {hasKeyframe ? (
+      <TooltipContent side="top" className="text-xs max-w-[200px]">
+        {isInTransition && transitionBlockedRange ? (
+          <>{getTransitionBlockedMessage(transitionBlockedRange)}</>
+        ) : hasKeyframe ? (
           <>Remove keyframe at frame {relativeFrame}</>
         ) : (
           <>Add keyframe at frame {relativeFrame}</>

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
+import { toast } from 'sonner';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useZoomStore } from '../stores/zoom-store';
@@ -10,6 +11,7 @@ import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
 import { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 import type { Transition } from '@/types/transition';
 
 export interface TimelineShortcutCallbacks {
@@ -552,6 +554,7 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
       const addKeyframes = useTimelineStore.getState().addKeyframes;
       const storeItems = useTimelineStore.getState().items;
       const storeKeyframes = useTimelineStore.getState().keyframes;
+      const storeTransitions = useTimelineStore.getState().transitions;
       const currentProject = useProjectStore.getState().currentProject;
       const canvas = {
         width: currentProject?.metadata.width ?? 1920,
@@ -568,6 +571,9 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         easing: 'linear';
       }> = [];
 
+      // Track items blocked by transitions for user feedback
+      let blockedByTransition = false;
+
       // Add keyframes for all transform properties of selected items
       for (const itemId of selectedItemIds) {
         const item = storeItems.find((i) => i.id === itemId);
@@ -578,6 +584,13 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
 
         // Only add keyframes if playhead is within the item
         if (relativeFrame < 0 || relativeFrame >= item.durationInFrames) continue;
+
+        // Check if playhead is in a transition region for this item
+        const transitionBlock = isFrameInTransitionRegion(relativeFrame, itemId, item, storeTransitions);
+        if (transitionBlock) {
+          blockedByTransition = true;
+          continue; // Skip this item, it's in a transition region
+        }
 
         // Get the current animated values (what the user sees in preview)
         const sourceDimensions = getSourceDimensions(item);
@@ -598,9 +611,26 @@ export function useTimelineShortcuts(callbacks: TimelineShortcutCallbacks = {}) 
         );
       }
 
+      // Show feedback if blocked by transition
+      if (blockedByTransition && keyframesToAdd.length === 0) {
+        toast.warning('Cannot add keyframes in transition region', {
+          description: 'Move the playhead outside the transition area to add keyframes.',
+          duration: 3000,
+        });
+        return;
+      }
+
       // Add all keyframes in a single batch (single undo operation)
       if (keyframesToAdd.length > 0) {
         addKeyframes(keyframesToAdd);
+
+        // If some items were blocked but others weren't, show partial feedback
+        if (blockedByTransition) {
+          toast.info('Some keyframes skipped', {
+            description: 'Keyframes were not added to clips in transition regions.',
+            duration: 2000,
+          });
+        }
       }
     },
     HOTKEY_OPTIONS,

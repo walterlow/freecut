@@ -14,6 +14,7 @@ import type {
 } from './types';
 import type { KeyframeRef, BezierControlPoints } from '@/types/keyframe';
 import { updateBezierFromHandle } from './graph-handles';
+import type { BlockedFrameRange } from '../../utils/transition-region';
 
 /** Movement threshold in pixels before committing to drag (vs click) */
 const DRAG_THRESHOLD = 3;
@@ -77,6 +78,8 @@ interface UseGraphInteractionOptions {
   snapFrameTargets?: number[];
   /** Snap targets for values (other keyframe values, 0, min, max, etc.) */
   snapValueTargets?: number[];
+  /** Blocked frame ranges (transition regions where keyframes cannot be placed) */
+  blockedFrameRanges?: BlockedFrameRange[];
   /** Whether interaction is disabled */
   disabled?: boolean;
 }
@@ -134,6 +137,7 @@ export function useGraphInteraction({
   snapEnabled = false,
   snapFrameTargets = [],
   snapValueTargets = [],
+  blockedFrameRanges = [],
   disabled = false,
 }: UseGraphInteractionOptions): UseGraphInteractionReturn {
   const [dragState, setDragState] = useState<GraphDragState | null>(null);
@@ -213,6 +217,35 @@ export function useGraphInteraction({
     const valueThreshold = (SNAP_THRESHOLD_PX / graphHeight) * valueRange;
     return { frameThreshold, valueThreshold };
   }, [graphDimensions]);
+
+  // Check if a frame is in a blocked range and clamp it to stay outside
+  const clampToAvoidBlockedRanges = useCallback(
+    (frame: number, initialFrame: number): number => {
+      if (blockedFrameRanges.length === 0) return frame;
+
+      for (const range of blockedFrameRanges) {
+        // Check if the new frame would be inside a blocked range
+        if (frame >= range.start && frame < range.end) {
+          // Determine which edge to clamp to based on movement direction
+          if (initialFrame < range.start) {
+            // Coming from the left, clamp to left edge
+            return range.start - 1;
+          } else if (initialFrame >= range.end) {
+            // Coming from the right, clamp to right edge
+            return range.end;
+          } else {
+            // Started inside the blocked range (shouldn't happen, but handle it)
+            // Clamp to nearest edge
+            const distToStart = frame - range.start;
+            const distToEnd = range.end - frame;
+            return distToStart < distToEnd ? range.start - 1 : range.end;
+          }
+        }
+      }
+      return frame;
+    },
+    [blockedFrameRanges]
+  );
 
   // Handle keyframe pointer down (start potential drag)
   const handleKeyframePointerDown = useCallback(
@@ -440,6 +473,9 @@ export function useGraphInteraction({
           newValue = valueSnap.snapped;
         }
 
+        // Prevent dragging into blocked (transition) regions
+        newFrame = clampToAvoidBlockedRanges(newFrame, initialFrame);
+
         // Update preview values
         setPreviewValues({ frame: newFrame, value: newValue });
 
@@ -490,7 +526,7 @@ export function useGraphInteraction({
         );
       }
     },
-    [disabled, dragState, isDragging, viewport, padding, maxFrame, clampMinValue, clampMaxValue, graphDimensions, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets]
+    [disabled, dragState, isDragging, viewport, padding, maxFrame, clampMinValue, clampMaxValue, graphDimensions, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets, clampToAvoidBlockedRanges]
   );
 
   // Handle pointer up (SVG level)

@@ -24,7 +24,9 @@ import { GraphGrid } from './graph-grid';
 import { GraphKeyframes } from './graph-keyframe';
 import { GraphCurves, GraphExtensionLines, GraphPlayhead } from './graph-curve';
 import { GraphHandles } from './graph-handles';
+import { GraphTransitionRegions } from './graph-transition-regions';
 import { useGraphInteraction } from './use-graph-interaction';
+import type { BlockedFrameRange } from '../../utils/transition-region';
 
 interface ValueGraphEditorProps {
   /** Item ID to show keyframes for */
@@ -63,6 +65,8 @@ interface ValueGraphEditorProps {
   onRemoveKeyframes?: (refs: KeyframeRef[]) => void;
   /** Callback to navigate to a keyframe (sets playhead to that frame) */
   onNavigateToKeyframe?: (frame: number) => void;
+  /** Transition-blocked frame ranges (keyframes cannot be placed here) */
+  transitionBlockedRanges?: BlockedFrameRange[];
   /** Whether the editor is disabled */
   disabled?: boolean;
   /** Additional class name */
@@ -92,6 +96,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   onAddKeyframe,
   onRemoveKeyframes,
   onNavigateToKeyframe,
+  transitionBlockedRanges = [],
   disabled = false,
   className,
 }: ValueGraphEditorProps) {
@@ -244,6 +249,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     snapEnabled,
     snapFrameTargets: snapTargets.frameTargets,
     snapValueTargets: snapTargets.valueTargets,
+    blockedFrameRanges: transitionBlockedRanges,
     disabled,
   });
 
@@ -773,6 +779,15 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       >
         {/* Grid background */}
         <GraphGrid viewport={viewport} padding={padding} />
+
+        {/* Transition blocked regions (rendered before curves/keyframes) */}
+        {transitionBlockedRanges.length > 0 && (
+          <GraphTransitionRegions
+            viewport={viewport}
+            padding={padding}
+            blockedRanges={transitionBlockedRanges}
+          />
+        )}
 
         {/* Extension lines (before/after keyframes) */}
         <GraphExtensionLines points={pointsWithDragState} viewport={viewport} padding={padding} />

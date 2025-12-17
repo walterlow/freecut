@@ -34,6 +34,7 @@ import { useMarkersStore } from './markers-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { validateTransitions } from '../utils/transition-validation';
 import { canAddTransition } from '../utils/transition-utils';
+import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 
 // Helper to get execute function
 const execute = <T>(type: string, action: () => T, payload?: Record<string, unknown>): T => {
@@ -515,6 +516,20 @@ export function clearPendingBreakages(): void {
 // KEYFRAME ACTIONS
 // =============================================================================
 
+/**
+ * Check if a keyframe can be added at the given frame (not in transition region).
+ * Returns true if allowed, false if blocked by transition.
+ */
+function canAddKeyframeAtFrame(itemId: string, frame: number): boolean {
+  const items = useItemsStore.getState().items;
+  const item = items.find((i) => i.id === itemId);
+  if (!item) return false;
+
+  const transitions = useTransitionsStore.getState().transitions;
+  const blocked = isFrameInTransitionRegion(frame, itemId, item, transitions);
+  return blocked === undefined;
+}
+
 export function addKeyframe(
   itemId: string,
   property: AnimatableProperty,
@@ -522,6 +537,12 @@ export function addKeyframe(
   value: number,
   easing?: EasingType
 ): string {
+  // Validate: keyframes cannot be added in transition regions
+  if (!canAddKeyframeAtFrame(itemId, frame)) {
+    logger.warn('Cannot add keyframe in transition region', { itemId, property, frame });
+    return '';
+  }
+
   return execute('ADD_KEYFRAME', () => {
     const id = useKeyframesStore.getState()._addKeyframe(itemId, property, frame, value, easing);
     useTimelineSettingsStore.getState().markDirty();
@@ -532,15 +553,31 @@ export function addKeyframe(
 /**
  * Add multiple keyframes at once (batched as single undo operation).
  * Used by K hotkey to add keyframes for all properties at once.
+ * Keyframes in transition regions are filtered out.
  */
 export function addKeyframes(payloads: KeyframeAddPayload[]): string[] {
   if (payloads.length === 0) return [];
 
+  // Filter out keyframes that would be placed in transition regions
+  const validPayloads = payloads.filter((p) => canAddKeyframeAtFrame(p.itemId, p.frame));
+
+  if (validPayloads.length === 0) {
+    logger.warn('All keyframes blocked by transition regions', { originalCount: payloads.length });
+    return [];
+  }
+
+  if (validPayloads.length < payloads.length) {
+    logger.warn('Some keyframes blocked by transition regions', {
+      originalCount: payloads.length,
+      validCount: validPayloads.length,
+    });
+  }
+
   return execute('ADD_KEYFRAMES', () => {
-    const ids = useKeyframesStore.getState()._addKeyframes(payloads);
+    const ids = useKeyframesStore.getState()._addKeyframes(validPayloads);
     useTimelineSettingsStore.getState().markDirty();
     return ids;
-  }, { count: payloads.length });
+  }, { count: validPayloads.length });
 }
 
 export function updateKeyframe(
@@ -599,14 +636,30 @@ export function hasKeyframesAtFrame(
 
 /**
  * Move multiple keyframes to new frame positions.
+ * Moves into transition regions are filtered out.
  */
 export function moveKeyframes(moves: KeyframeMovePayload[]): void {
   if (moves.length === 0) return;
 
+  // Filter out moves that would place keyframes in transition regions
+  const validMoves = moves.filter((m) => canAddKeyframeAtFrame(m.ref.itemId, m.newFrame));
+
+  if (validMoves.length === 0) {
+    logger.warn('All keyframe moves blocked by transition regions', { originalCount: moves.length });
+    return;
+  }
+
+  if (validMoves.length < moves.length) {
+    logger.warn('Some keyframe moves blocked by transition regions', {
+      originalCount: moves.length,
+      validCount: validMoves.length,
+    });
+  }
+
   execute('MOVE_KEYFRAMES', () => {
-    useKeyframesStore.getState()._moveKeyframes(moves);
+    useKeyframesStore.getState()._moveKeyframes(validMoves);
     useTimelineSettingsStore.getState().markDirty();
-  }, { count: moves.length });
+  }, { count: validMoves.length });
 }
 
 /**

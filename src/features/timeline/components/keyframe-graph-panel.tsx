@@ -21,6 +21,7 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import type { AnimatableProperty, KeyframeRef } from '@/types/keyframe';
 import * as timelineActions from '../stores/timeline-actions';
+import { getTransitionBlockedRanges } from '@/features/keyframes/utils/transition-region';
 
 /** Height of the panel header bar in pixels */
 export const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -134,6 +135,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   // Timeline state
   const items = useTimelineStore((s) => s.items);
   const keyframes = useKeyframesStore((s) => s.keyframes);
+  const transitions = useTimelineStore((s) => s.transitions);
   // Use _updateKeyframe directly (no undo per call) for dragging
   const _updateKeyframe = useKeyframesStore((s) => s._updateKeyframe);
 
@@ -197,6 +199,16 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     if (!selectedItemWithKeyframes) return 0;
     return Math.max(0, currentFrame - selectedItemWithKeyframes.item.from);
   }, [currentFrame, selectedItemWithKeyframes]);
+
+  // Calculate transition-blocked frame ranges for the selected item
+  const transitionBlockedRanges = useMemo(() => {
+    if (!selectedItemWithKeyframes) return [];
+    return getTransitionBlockedRanges(
+      selectedItemWithKeyframes.item.id,
+      selectedItemWithKeyframes.item,
+      transitions
+    );
+  }, [selectedItemWithKeyframes, transitions]);
 
   // Handle drag start - capture snapshot for undo batching
   const handleDragStart = useCallback(() => {
@@ -430,6 +442,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               onAddKeyframe={handleAddKeyframe}
               onRemoveKeyframes={handleRemoveKeyframes}
               onNavigateToKeyframe={handleNavigateToKeyframe}
+              transitionBlockedRanges={transitionBlockedRanges}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
