@@ -13,7 +13,7 @@ import type { RemotionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
 // Preload media files ahead of the playhead to reduce buffering
-const PRELOAD_AHEAD_SECONDS = 3;
+const PRELOAD_AHEAD_SECONDS = 5;
 
 interface VideoPreviewProps {
   project: {

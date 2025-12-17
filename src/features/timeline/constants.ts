@@ -18,18 +18,18 @@ export const CLIP_HEIGHT = DEFAULT_TRACK_HEIGHT;
 export const CLIP_LABEL_HEIGHT = 16;
 
 // Video clip layout (2 rows: filmstrip with overlayed label | waveform)
-export const VIDEO_WAVEFORM_HEIGHT = 20;
-export const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - VIDEO_WAVEFORM_HEIGHT; // 44px
+export const VIDEO_WAVEFORM_HEIGHT = 24;
+export const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - VIDEO_WAVEFORM_HEIGHT; 
 
 // Audio clip layout (2 rows: label | waveform)
-export const AUDIO_WAVEFORM_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_HEIGHT; // 48px
+export const AUDIO_WAVEFORM_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_HEIGHT; 
 
 // =============================================================================
 // FILMSTRIP / THUMBNAILS
 // =============================================================================
 
 export const THUMBNAIL_HEIGHT = VIDEO_FILMSTRIP_HEIGHT;
-export const THUMBNAIL_WIDTH = Math.round(THUMBNAIL_HEIGHT * (16 / 9)); // ~78px
+export const THUMBNAIL_WIDTH = Math.round(THUMBNAIL_HEIGHT * (16 / 9));
 
 // =============================================================================
 // TIMELINE LAYOUT
