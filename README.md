@@ -1,26 +1,26 @@
 # FreeCut
 
-**Modern browser-based video editor built with React 19 and Remotion**
+**Edit videos. In your browser.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-<!-- TODO: Add screenshot or demo GIF here -->
-<!-- ![FreeCut Editor](./docs/images/screenshot.png) -->
+![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
 
-FreeCut is a professional-grade video editor that runs entirely in your browser. Create stunning videos with multi-track editing, real-time preview, and high-quality exports - no software installation required.
+FreeCut is a professional-grade video editor that runs entirely in your browser. Professional video editing, zero installation. Create stunning videos with multi-track editing, keyframe animations, real-time preview, and high-quality exports.
 
 ## Features
 
 - **Multi-Track Timeline** - Edit video, audio, text, and shapes on separate tracks
+- **Keyframe Animations** - Intuitive keyframe editor for smooth transitions and effects
 - **Real-Time Preview** - See your changes instantly with smooth playback
-- **Professional Effects** - Transitions, fade in/out, opacity, and keyframe animations
+- **Professional Effects** - Transitions, fade in/out, opacity, and animations
 - **Text Overlays** - Add customizable text with fonts, colors, and positioning
 - **Shape Tools** - Create rectangles, circles, polygons, and stars
 - **Audio Editing** - Waveform visualization, volume control, and audio fades
 - **Video Thumbnails** - Filmstrip preview for easy navigation
 - **Undo/Redo** - Full history support for confident editing
 - **High-Performance Storage** - Lightning-fast local storage using OPFS
-- **Server-Side Export** - High-quality video rendering with Remotion
+- **Flexible Export** - Local browser rendering or server-side with Remotion
 
 ## Quick Start
 
@@ -33,11 +33,14 @@ FreeCut is a professional-grade video editor that runs entirely in your browser.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/freecut.git
+git clone https://github.com/walterlow/freecut.git
 cd freecut
 
 # Install dependencies
 npm install
+
+# Copy environment config
+cp .env.example .env
 ```
 
 ### Running FreeCut
@@ -46,7 +49,7 @@ npm install
 # Start the development server
 npm run dev
 
-# In a separate terminal, start the backend server (required for video export)
+# In a separate terminal, start the backend server (required for server-side export)
 npm run server
 
 # Or run both together
@@ -60,26 +63,54 @@ Open your browser to [http://localhost:5173](http://localhost:5173)
 1. **Create a Project** - Click "New Project" from the projects page
 2. **Import Media** - Drag and drop video, audio, or image files into the media library
 3. **Edit** - Drag clips to the timeline, trim, arrange, and add effects
-4. **Preview** - Use the player to review your edits in real-time
-5. **Export** - Render your final video in high quality
+4. **Animate** - Use the keyframe editor to add smooth transitions
+5. **Preview** - Use the player to review your edits in real-time
+6. **Export** - Render your final video locally or via the server
 
 ## Browser Support
 
 | Browser | Minimum Version |
 |---------|-----------------|
 | Chrome  | 102+ |
-| Edge    | 102+ |
-| Safari  | macOS 12.2+ / iOS 15.2+ |
-| Firefox | Latest |
+
 
 > **Note:** FreeCut uses modern browser APIs like OPFS (Origin Private File System) for optimal performance. Some features may not work in older browsers.
 
+## Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+```env
+# Frontend (Vite)
+VITE_API_BASE_URL=http://localhost:3001/api    # Backend API URL
+VITE_ENABLE_SERVER_RENDER=true                  # Enable server-side export
+
+# Backend Server
+PORT=3001                                       # Server port
+CORS_ORIGIN=http://localhost:5173               # Allowed frontend origin
+```
+
+See `.env.example` for complete documentation.
+
+## Deployment
+
+| Component | Platform | Purpose |
+|-----------|----------|---------|
+| Frontend | Vercel | Static hosting, CDN |
+| Render Server | Node.js, Remotion rendering | (Optional)
+
+
 ## Tech Stack
 
-- [React 19](https://react.dev/) - UI framework
+- [React](https://react.dev/) - UI framework with concurrent features
 - [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
-- [Remotion](https://www.remotion.dev/) - Video rendering engine
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
+- [Vite](https://vitejs.dev/) - Fast build tool with HMR
+- [Remotion](https://www.remotion.dev/) - Programmatic video rendering
+- [TanStack Router](https://tanstack.com/router) - Type-safe routing
+- [Zustand](https://github.com/pmndrs/zustand) - State management
+- [Tailwind CSS](https://tailwindcss.com/) - Utility-first styling
+- [Shadcn/ui](https://ui.shadcn.com/) - UI components
+- [Express](https://expressjs.com/) - Backend server with SSE
 
 ## Development
 
@@ -93,33 +124,6 @@ npm run build      # Build for production
 npm run lint       # Run ESLint
 ```
 
-### Project Structure
-
-```
-freecut/
-├── src/
-│   ├── features/       # Core feature modules
-│   │   ├── editor/     # Main editing workspace
-│   │   ├── timeline/   # Multi-track timeline
-│   │   ├── preview/    # Video preview player
-│   │   ├── export/     # Video export functionality
-│   │   └── ...
-│   ├── components/     # Reusable UI components
-│   ├── lib/            # Shared libraries
-│   └── stores/         # State management
-├── server/             # Backend for video rendering
-└── .claude/docs/       # Developer documentation
-```
-
-## Documentation
-
-For developers looking to contribute or extend FreeCut, detailed documentation is available in `.claude/docs/video-editor/`:
-
-- Architecture and component structure
-- State management patterns
-- Storage architecture (OPFS + IndexedDB)
-- Timeline component API
-- Video rendering integration
 
 ## Contributing
 
@@ -129,7 +133,6 @@ Contributions are welcome! Here's how you can help:
 2. **Suggest Features** - Share your ideas in the discussions
 3. **Submit PRs** - Fork the repo, make your changes, and submit a pull request
 
-Please read our contributing guidelines before submitting a PR.
 
 ## License
 
@@ -140,11 +143,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Built with these amazing open source projects:
 
 - [Remotion](https://www.remotion.dev/) - Programmatic video creation
+- [Mediabunny](https://mediabunny.dev/) - Video processing
 - [TanStack Router](https://tanstack.com/router) - Type-safe routing
 - [Zustand](https://github.com/pmndrs/zustand) - State management
 - [Shadcn/ui](https://ui.shadcn.com/) - UI components
 - [Vite](https://vitejs.dev/) - Build tooling
 
 ---
-
-Made with care for creators everywhere.
