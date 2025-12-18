@@ -222,6 +222,43 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* Demo Video Section */}
+      <section className="border-t border-border px-6 py-20">
+        <div className="mx-auto max-w-4xl">
+          <div className="mb-10 text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
+              See it in Action
+            </h2>
+            <p className="mx-auto max-w-2xl text-muted-foreground">
+              Watch a quick demo of FreeCut's editing capabilities.
+            </p>
+          </div>
+
+          {/* YouTube Embed Container */}
+          <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+            <div className="aspect-video w-full">
+              {/* Placeholder - replace with YouTube iframe when ready */}
+              <div className="flex h-full w-full items-center justify-center bg-muted">
+                <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                  <Play className="h-16 w-16" />
+                  <span className="text-sm">Demo video coming soon</span>
+                </div>
+              </div>
+
+              {/* Uncomment when YouTube URL is ready:
+              <iframe
+                className="h-full w-full"
+                src="https://www.youtube.com/embed/VIDEO_ID"
+                title="FreeCut Demo"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+              */}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* FAQ Section */}
       <section className="border-t border-border bg-card/50 px-6 py-20">
         <div className="mx-auto max-w-3xl">

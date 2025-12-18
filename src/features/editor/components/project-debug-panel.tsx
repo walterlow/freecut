@@ -75,8 +75,8 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     }
   }, []);
 
-  // Only show in development mode
-  if (!import.meta.env.DEV) {
+  // Only show in dev mode, can be disabled with VITE_SHOW_DEBUG_PANEL=false
+  if (!import.meta.env.DEV || import.meta.env.VITE_SHOW_DEBUG_PANEL === 'false') {
     return null;
   }
 

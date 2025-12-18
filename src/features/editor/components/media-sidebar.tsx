@@ -77,8 +77,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
       return;
     }
 
-    // Default duration: 5 seconds
-    const durationInFrames = fps * 5;
+    // Default duration: 60 seconds
+    const durationInFrames = fps * 60;
 
     // Find the best position: start at playhead, find nearest available space
     const proposedPosition = usePlaybackStore.getState().currentFrame;
@@ -147,8 +147,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
       return;
     }
 
-    // Default duration: 5 seconds
-    const durationInFrames = fps * 5;
+    // Default duration: 60 seconds
+    const durationInFrames = fps * 60;
 
     // Find the best position: start at playhead, find nearest available space
     const proposedPosition = usePlaybackStore.getState().currentFrame;
@@ -221,8 +221,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
       return;
     }
 
-    // Default duration: 5 seconds
-    const durationInFrames = fps * 5;
+    // Default duration: 60 seconds
+    const durationInFrames = fps * 60;
 
     // Find the best position: start at playhead, find nearest available space
     const proposedPosition = usePlaybackStore.getState().currentFrame;
