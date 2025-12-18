@@ -237,23 +237,13 @@ function LandingPage() {
           {/* YouTube Embed Container */}
           <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-lg">
             <div className="aspect-video w-full">
-              {/* Placeholder - replace with YouTube iframe when ready */}
-              <div className="flex h-full w-full items-center justify-center bg-muted">
-                <div className="flex flex-col items-center gap-4 text-muted-foreground">
-                  <Play className="h-16 w-16" />
-                  <span className="text-sm">Demo video coming soon</span>
-                </div>
-              </div>
-
-              {/* Uncomment when YouTube URL is ready:
               <iframe
                 className="h-full w-full"
-                src="https://www.youtube.com/embed/VIDEO_ID"
+                src="https://www.youtube.com/embed/2EWVUXpNntk"
                 title="FreeCut Demo"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
-              */}
             </div>
           </div>
         </div>
