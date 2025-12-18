@@ -119,6 +119,9 @@ export class RenderService {
       // Resolve media paths - replace blob URLs with HTTP URLs served by our server
       // Include file extension in URL so Remotion can detect the container format
       // Also strip out thumbnailUrl which contains blob URLs that don't work on server
+      const PORT = process.env.PORT || 3001;
+      const SERVER_URL = process.env.SERVER_URL || `http://localhost:${PORT}`;
+
       const tracksWithResolvedMedia = composition.tracks.map(track => ({
         ...track,
         items: track.items.map(item => {
@@ -130,7 +133,7 @@ export class RenderService {
             // Use HTTP URL to access uploaded media via our server
             const resolvedItem = {
               ...itemWithoutThumbnail,
-              src: `http://localhost:3001/api/media/${jobId}/${item.mediaId}${ext}`,
+              src: `${SERVER_URL}/api/media/${jobId}/${item.mediaId}${ext}`,
             };
             // Debug: log to find any remaining blob URLs
             const itemStr = JSON.stringify(resolvedItem);
