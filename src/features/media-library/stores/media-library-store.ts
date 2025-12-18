@@ -4,7 +4,6 @@ import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, 
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { getMimeType } from '../utils/validation';
-import { checkAudioCodecSupport } from '../utils/metadata-extractor';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('MediaLibraryStore');
@@ -92,6 +91,7 @@ export const useMediaLibraryStore = create<
       },
 
       // Import media using file picker (instant, no copy - local-first)
+      // Now runs processing in worker to avoid blocking UI
       importMedia: async () => {
         const { currentProjectId } = get();
 
@@ -122,34 +122,12 @@ export const useMediaLibraryStore = create<
             ],
           });
 
-          // Pre-check audio codecs for video files
-          const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
-          for (const handle of handles) {
-            const file = await handle.getFile();
-            const mimeType = getMimeType(file);
-            if (mimeType.startsWith('video/')) {
-              const codecCheck = await checkAudioCodecSupport(file);
-              if (!codecCheck.isSupported && codecCheck.audioCodec) {
-                unsupportedCodecFiles.push({
-                  fileName: file.name,
-                  audioCodec: codecCheck.audioCodec,
-                  handle,
-                });
-              }
-            }
-          }
-
-          // If unsupported codecs found, ask user for confirmation
-          if (unsupportedCodecFiles.length > 0) {
-            const confirmed = await get().confirmUnsupportedCodecs(unsupportedCodecFiles);
-            if (!confirmed) {
-              // User cancelled - don't import any files
-              return [];
-            }
-          }
-
-          const results: MediaMetadata[] = [];
-          const duplicateNames: string[] = [];
+          // Create optimistic placeholders for all files immediately
+          const importTasks: Array<{
+            handle: FileSystemFileHandle;
+            tempId: string;
+            file: File;
+          }> = [];
 
           for (const handle of handles) {
             const tempId = crypto.randomUUID();
@@ -174,28 +152,45 @@ export const useMediaLibraryStore = create<
               updatedAt: Date.now(),
             };
 
-            // Optimistic add with importing state
+            // Add placeholder immediately
             set((state) => ({
               mediaItems: [tempItem, ...state.mediaItems],
               importingIds: [...state.importingIds, tempId],
               error: null,
             }));
 
-            try {
+            importTasks.push({ handle, tempId, file });
+          }
+
+          // Process all imports in parallel (worker handles heavy lifting off main thread)
+          const results: MediaMetadata[] = [];
+          const duplicateNames: string[] = [];
+          const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+
+          const importResults = await Promise.allSettled(
+            importTasks.map(async ({ handle, tempId, file }) => {
               const metadata = await mediaLibraryService.importMediaWithHandle(
                 handle,
                 currentProjectId
               );
+              return { metadata, tempId, file, handle };
+            })
+          );
+
+          // Process results
+          for (const result of importResults) {
+            if (result.status === 'fulfilled') {
+              const { metadata, tempId, file, handle } = result.value;
 
               if (metadata.isDuplicate) {
-                // File already exists - remove temp item and collect for batch notification
+                // File already exists - remove temp item
                 set((state) => ({
                   mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
                   importingIds: state.importingIds.filter((id) => id !== tempId),
                 }));
                 duplicateNames.push(file.name);
               } else {
-                // Replace temp with actual metadata and clear importing state
+                // Replace temp with actual metadata
                 set((state) => ({
                   mediaItems: state.mediaItems.map((item) =>
                     item.id === tempId ? metadata : item
@@ -203,14 +198,28 @@ export const useMediaLibraryStore = create<
                   importingIds: state.importingIds.filter((id) => id !== tempId),
                 }));
                 results.push(metadata);
+
+                // Track unsupported codec files (check happens in worker now)
+                if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+                  unsupportedCodecFiles.push({
+                    fileName: file.name,
+                    audioCodec: metadata.audioCodec,
+                    handle,
+                  });
+                }
               }
-            } catch (error) {
-              // Rollback this item
-              set((state) => ({
-                mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
-                importingIds: state.importingIds.filter((id) => id !== tempId),
-              }));
-              logger.error(`Failed to import ${file.name}:`, error);
+            } else {
+              // Find the failed task to get tempId
+              const failedTask = importTasks.find(
+                (_, i) => importResults[i] === result
+              );
+              if (failedTask) {
+                set((state) => ({
+                  mediaItems: state.mediaItems.filter((item) => item.id !== failedTask.tempId),
+                  importingIds: state.importingIds.filter((id) => id !== failedTask.tempId),
+                }));
+                logger.error(`Failed to import ${failedTask.file.name}:`, result.reason);
+              }
             }
           }
 
@@ -220,6 +229,15 @@ export const useMediaLibraryStore = create<
               ? `"${duplicateNames[0]}" already exists in library`
               : `${duplicateNames.length} files already exist in library`;
             get().showNotification({ type: 'info', message });
+          }
+
+          // Show notification for unsupported codecs (non-blocking, files are already imported)
+          if (unsupportedCodecFiles.length > 0) {
+            const codecList = [...new Set(unsupportedCodecFiles.map(f => f.audioCodec))].join(', ');
+            get().showNotification({
+              type: 'warning',
+              message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
+            });
           }
 
           return results;
@@ -233,6 +251,7 @@ export const useMediaLibraryStore = create<
       },
 
       // Import media from file handles (for drag-drop)
+      // Now runs processing in worker to avoid blocking UI
       importHandles: async (handles: FileSystemFileHandle[]) => {
         const { currentProjectId } = get();
         logger.debug('[importHandles] Starting import for', handles.length, 'handles');
@@ -242,39 +261,15 @@ export const useMediaLibraryStore = create<
           return [];
         }
 
-        // Pre-check audio codecs for video files
-        const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+        // Create optimistic placeholders for all files immediately
+        const importTasks: Array<{
+          handle: FileSystemFileHandle;
+          tempId: string;
+          file: File;
+        }> = [];
+
         for (const handle of handles) {
-          const file = await handle.getFile();
-          const mimeType = getMimeType(file);
-          if (mimeType.startsWith('video/')) {
-            const codecCheck = await checkAudioCodecSupport(file);
-            if (!codecCheck.isSupported && codecCheck.audioCodec) {
-              unsupportedCodecFiles.push({
-                fileName: file.name,
-                audioCodec: codecCheck.audioCodec,
-                handle,
-              });
-            }
-          }
-        }
-
-        // If unsupported codecs found, ask user for confirmation
-        if (unsupportedCodecFiles.length > 0) {
-          const confirmed = await get().confirmUnsupportedCodecs(unsupportedCodecFiles);
-          if (!confirmed) {
-            // User cancelled - don't import any files
-            return [];
-          }
-        }
-
-        const results: MediaMetadata[] = [];
-        const duplicateNames: string[] = [];
-
-        for (let i = 0; i < handles.length; i++) {
-          const handle = handles[i];
           if (!handle) continue;
-          logger.debug(`[importHandles] Processing handle ${i + 1}/${handles.length}:`, handle.name);
           const tempId = crypto.randomUUID();
           const file = await handle.getFile();
 
@@ -297,23 +292,40 @@ export const useMediaLibraryStore = create<
             updatedAt: Date.now(),
           };
 
-          // Optimistic add with importing state
+          // Add placeholder immediately
           set((state) => ({
             mediaItems: [tempItem, ...state.mediaItems],
             importingIds: [...state.importingIds, tempId],
             error: null,
           }));
 
-          try {
-            logger.debug(`[importHandles] Calling importMediaWithHandle for ${file.name} (${file.size} bytes)`);
+          importTasks.push({ handle, tempId, file });
+        }
+
+        // Process all imports in parallel (worker handles heavy lifting off main thread)
+        const results: MediaMetadata[] = [];
+        const duplicateNames: string[] = [];
+        const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+
+        const importResults = await Promise.allSettled(
+          importTasks.map(async ({ handle, tempId, file }) => {
+            logger.debug(`[importHandles] Processing ${file.name} (${file.size} bytes)`);
             const metadata = await mediaLibraryService.importMediaWithHandle(
               handle,
               currentProjectId
             );
             logger.debug(`[importHandles] Result for ${file.name}:`, { isDuplicate: metadata.isDuplicate, id: metadata.id });
+            return { metadata, tempId, file, handle };
+          })
+        );
+
+        // Process results
+        for (const result of importResults) {
+          if (result.status === 'fulfilled') {
+            const { metadata, tempId, file, handle } = result.value;
 
             if (metadata.isDuplicate) {
-              // File already exists - remove temp item and collect for batch notification
+              // File already exists - remove temp item
               logger.debug(`[importHandles] ${file.name} is duplicate, removing temp item`);
               set((state) => ({
                 mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
@@ -321,7 +333,7 @@ export const useMediaLibraryStore = create<
               }));
               duplicateNames.push(file.name);
             } else {
-              // Replace temp with actual metadata and clear importing state
+              // Replace temp with actual metadata
               logger.debug(`[importHandles] ${file.name} imported successfully with id ${metadata.id}`);
               set((state) => ({
                 mediaItems: state.mediaItems.map((item) =>
@@ -330,14 +342,28 @@ export const useMediaLibraryStore = create<
                 importingIds: state.importingIds.filter((id) => id !== tempId),
               }));
               results.push(metadata);
+
+              // Track unsupported codec files (check happens in worker now)
+              if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+                unsupportedCodecFiles.push({
+                  fileName: file.name,
+                  audioCodec: metadata.audioCodec,
+                  handle,
+                });
+              }
             }
-          } catch (error) {
-            // Rollback this item
-            logger.error(`[importHandles] Failed to import ${file.name}:`, error);
-            set((state) => ({
-              mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
-              importingIds: state.importingIds.filter((id) => id !== tempId),
-            }));
+          } else {
+            // Find the failed task to get tempId
+            const failedTask = importTasks.find(
+              (_, i) => importResults[i] === result
+            );
+            if (failedTask) {
+              set((state) => ({
+                mediaItems: state.mediaItems.filter((item) => item.id !== failedTask.tempId),
+                importingIds: state.importingIds.filter((id) => id !== failedTask.tempId),
+              }));
+              logger.error(`[importHandles] Failed to import ${failedTask.file.name}:`, result.reason);
+            }
           }
         }
 
@@ -349,6 +375,15 @@ export const useMediaLibraryStore = create<
             ? `"${duplicateNames[0]}" already exists in library`
             : `${duplicateNames.length} files already exist in library`;
           get().showNotification({ type: 'info', message });
+        }
+
+        // Show notification for unsupported codecs (non-blocking, files are already imported)
+        if (unsupportedCodecFiles.length > 0) {
+          const codecList = [...new Set(unsupportedCodecFiles.map(f => f.audioCodec))].join(', ');
+          get().showNotification({
+            type: 'warning',
+            message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
+          });
         }
 
         return results;

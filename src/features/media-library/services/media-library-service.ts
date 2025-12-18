@@ -24,8 +24,7 @@ import {
 } from '@/lib/storage/indexeddb';
 import { opfsService } from './opfs-service';
 import { validateMediaFile, getMimeType } from '../utils/validation';
-import { extractMetadata } from '../utils/metadata-extractor';
-import { generateThumbnail } from '../utils/thumbnail-generator';
+import { mediaProcessorService } from './media-processor-service';
 /**
  * Check and request permission for a file handle
  * @returns true if permission granted, false otherwise
@@ -105,7 +104,7 @@ export class MediaLibraryService {
   async importMediaWithHandle(
     handle: FileSystemFileHandle,
     projectId: string
-  ): Promise<MediaMetadata & { isDuplicate?: boolean }> {
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
     // Stage 1: Get file from handle (instant)
     const hasPermission = await ensureFileHandlePermission(handle);
     if (!hasPermission) {
@@ -135,33 +134,40 @@ export class MediaLibraryService {
       return { ...existingMedia, isDuplicate: true };
     }
 
-    // Stage 4: Extract metadata
-    const metadata = await extractMetadata(file);
-
-    // Stage 5: Generate thumbnail
-    let thumbnailId: string | undefined;
+    // Stage 4: Process media in worker (metadata + thumbnail in one pass, off main thread)
+    const resolvedMimeType = getMimeType(file);
     const id = crypto.randomUUID();
+    let thumbnailId: string | undefined;
 
-    try {
-      const thumbnailBlob = await generateThumbnail(file, { timestamp: 1 });
-      thumbnailId = crypto.randomUUID();
+    const { metadata, thumbnail } = await mediaProcessorService.processMedia(
+      file,
+      resolvedMimeType,
+      { thumbnailTimestamp: 1 }
+    );
 
-      const thumbnailData: ThumbnailData = {
-        id: thumbnailId,
-        mediaId: id,
-        blob: thumbnailBlob,
-        timestamp: 1,
-        width: 320,
-        height: 180,
-      };
-
-      await saveThumbnailDB(thumbnailData);
-    } catch (error) {
-      logger.warn('Failed to generate thumbnail:', error);
+    // Stage 5: Save thumbnail if generated
+    if (thumbnail) {
+      try {
+        thumbnailId = crypto.randomUUID();
+        const thumbnailData: ThumbnailData = {
+          id: thumbnailId,
+          mediaId: id,
+          blob: thumbnail,
+          timestamp: 1,
+          width: 320,
+          height: 180,
+        };
+        await saveThumbnailDB(thumbnailData);
+      } catch (error) {
+        logger.warn('Failed to save thumbnail:', error);
+        thumbnailId = undefined;
+      }
     }
 
+    // Check for unsupported audio codec (included in metadata from worker)
+    const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
+
     // Stage 6: Save metadata to IndexedDB with file handle
-    const resolvedMimeType = getMimeType(file);
     const mediaMetadata: MediaMetadata = {
       id,
       storageType: 'handle',
@@ -169,14 +175,14 @@ export class MediaLibraryService {
       fileName: file.name,
       fileSize: file.size,
       mimeType: resolvedMimeType,
-      duration: (metadata as { duration?: number }).duration ?? 0,
-      width: (metadata as { width?: number }).width ?? 0,
-      height: (metadata as { height?: number }).height ?? 0,
-      fps: (metadata as { fps?: number }).fps ?? 30,
-      codec: (metadata as { codec?: string }).codec ?? 'unknown',
-      bitrate: (metadata as { bitrate?: number }).bitrate ?? 0,
-      audioCodec: (metadata as { audioCodec?: string }).audioCodec,
-      audioCodecSupported: (metadata as { audioCodecSupported?: boolean }).audioCodecSupported ?? true,
+      duration: 'duration' in metadata ? metadata.duration : 0,
+      width: 'width' in metadata ? metadata.width : 0,
+      height: 'height' in metadata ? metadata.height : 0,
+      fps: metadata.type === 'video' ? metadata.fps : 30,
+      codec: metadata.type === 'video' ? metadata.codec : 'unknown',
+      bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
+      audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
+      audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,
       thumbnailId,
       tags: [],
       createdAt: Date.now(),
@@ -197,7 +203,10 @@ export class MediaLibraryService {
         .finally(() => URL.revokeObjectURL(blobUrl));
     }
 
-    return mediaMetadata;
+    return {
+      ...mediaMetadata,
+      hasUnsupportedCodec: codecCheck.unsupported,
+    };
   }
 
   /**
