@@ -42,6 +42,9 @@ export interface ExportDialogProps {
 type RenderMode = 'client' | 'server';
 type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled';
 
+// Disable server rendering via env var (e.g., for Vercel deployment without render server)
+const SERVER_RENDER_ENABLED = import.meta.env.VITE_ENABLE_SERVER_RENDER !== 'false';
+
 function formatTime(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;
   const minutes = Math.floor(seconds / 60);
@@ -362,60 +365,69 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
             {exportMode === 'video' && (
               <>
                 {/* Render Mode: Browser or Server */}
-                <Tabs value={renderMode} onValueChange={(v) => handleModeChange(v as RenderMode)}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="client" className="flex items-center gap-2">
-                      <Monitor className="h-4 w-4" />
-                      Browser
-                    </TabsTrigger>
-                    <TabsTrigger value="server" className="flex items-center gap-2">
-                      <Cloud className="h-4 w-4" />
-                      Server
-                    </TabsTrigger>
-                  </TabsList>
+                {SERVER_RENDER_ENABLED ? (
+                  <Tabs value={renderMode} onValueChange={(v) => handleModeChange(v as RenderMode)}>
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="client" className="flex items-center gap-2">
+                        <Monitor className="h-4 w-4" />
+                        Browser
+                      </TabsTrigger>
+                      <TabsTrigger value="server" className="flex items-center gap-2">
+                        <Cloud className="h-4 w-4" />
+                        Server
+                      </TabsTrigger>
+                    </TabsList>
 
-                  <TabsContent value="client" className="mt-4">
-                    <Alert>
-                      <Monitor className="h-4 w-4" />
-                      <AlertDescription>
-                        Renders in your browser using WebCodecs. No upload required.
-                      </AlertDescription>
-                    </Alert>
-                  </TabsContent>
+                    <TabsContent value="client" className="mt-4">
+                      <Alert>
+                        <Monitor className="h-4 w-4" />
+                        <AlertDescription>
+                          Renders in your browser using WebCodecs. No upload required.
+                        </AlertDescription>
+                      </Alert>
+                    </TabsContent>
 
-                  <TabsContent value="server" className="mt-4 space-y-4">
-                    <Alert>
-                      <Cloud className="h-4 w-4" />
-                      <AlertDescription>
-                        Uploads media to server for rendering with FFmpeg.
-                      </AlertDescription>
-                    </Alert>
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="serverApiUrl" className="text-xs">Server URL</Label>
-                        <Input
-                          id="serverApiUrl"
-                          type="url"
-                          placeholder="http://localhost:3001/api"
-                          value={serverApiUrl}
-                          onChange={(e) => setSetting('serverApiUrl', e.target.value)}
-                          className="h-8 text-sm"
-                        />
+                    <TabsContent value="server" className="mt-4 space-y-4">
+                      <Alert>
+                        <Cloud className="h-4 w-4" />
+                        <AlertDescription>
+                          Uploads media to server for rendering with FFmpeg.
+                        </AlertDescription>
+                      </Alert>
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="serverApiUrl" className="text-xs">Server URL</Label>
+                          <Input
+                            id="serverApiUrl"
+                            type="url"
+                            placeholder="http://localhost:3001/api"
+                            value={serverApiUrl}
+                            onChange={(e) => setSetting('serverApiUrl', e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="serverSocketUrl" className="text-xs">WebSocket URL</Label>
+                          <Input
+                            id="serverSocketUrl"
+                            type="url"
+                            placeholder="http://localhost:3001"
+                            value={serverSocketUrl}
+                            onChange={(e) => setSetting('serverSocketUrl', e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="serverSocketUrl" className="text-xs">WebSocket URL</Label>
-                        <Input
-                          id="serverSocketUrl"
-                          type="url"
-                          placeholder="http://localhost:3001"
-                          value={serverSocketUrl}
-                          onChange={(e) => setSetting('serverSocketUrl', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <Alert>
+                    <Monitor className="h-4 w-4" />
+                    <AlertDescription>
+                      Renders in your browser using WebCodecs. No upload required.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 <div className="space-y-4">
                   {/* Container Format (client mode only) */}
