@@ -5,9 +5,12 @@
  * See: https://vite.dev/guide/env-and-mode.html
  *
  * Usage:
- *   import { config } from '@/lib/config';
- *   const url = config.api.baseUrl;
+ *   import { config, getServerConfig } from '@/lib/config';
+ *   const url = config.api.baseUrl; // Static env var value
+ *   const { baseUrl } = getServerConfig(); // Dynamic: settings > env var > default
  */
+
+import { useSettingsStore } from '@/features/settings/stores/settings-store';
 
 interface AppConfig {
   api: {
@@ -18,16 +21,38 @@ interface AppConfig {
   isProd: boolean;
 }
 
+interface ServerConfig {
+  baseUrl: string;
+  socketUrl: string;
+}
+
 function getEnvVar(key: string, defaultValue: string): string {
   const value = import.meta.env[key];
   return typeof value === 'string' ? value : defaultValue;
 }
 
+const ENV_API_BASE_URL = getEnvVar('VITE_API_BASE_URL', 'http://localhost:3001/api');
+const ENV_SOCKET_URL = getEnvVar('VITE_SOCKET_URL', 'http://localhost:3001');
+
 export const config: AppConfig = {
   api: {
-    baseUrl: getEnvVar('VITE_API_BASE_URL', 'http://localhost:3001/api'),
-    socketUrl: getEnvVar('VITE_SOCKET_URL', 'http://localhost:3001'),
+    baseUrl: ENV_API_BASE_URL,
+    socketUrl: ENV_SOCKET_URL,
   },
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,
 };
+
+/**
+ * Get the current server configuration.
+ * Reads from settings store first, falls back to env vars, then defaults.
+ *
+ * This should be called when making API requests to get the latest user-configured URL.
+ */
+export function getServerConfig(): ServerConfig {
+  const state = useSettingsStore.getState();
+  return {
+    baseUrl: state.serverApiUrl || ENV_API_BASE_URL,
+    socketUrl: state.serverSocketUrl || ENV_SOCKET_URL,
+  };
+}

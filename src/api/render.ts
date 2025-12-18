@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { getServerConfig } from '@/lib/config';
 import type { RemotionInputProps, ExportSettings } from '@/types/export';
 
 export interface StartRenderRequest {
@@ -46,7 +47,8 @@ export async function cancelRender(jobId: string): Promise<void> {
 }
 
 export async function downloadRender(jobId: string): Promise<void> {
-  const url = `http://localhost:3001/api/render/${jobId}/download`;
+  const { baseUrl } = getServerConfig();
+  const url = `${baseUrl}/render/${jobId}/download`;
 
   // Create a hidden link and click it to trigger download
   const link = document.createElement('a');

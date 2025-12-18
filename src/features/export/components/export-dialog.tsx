@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -30,6 +31,7 @@ import type { ExportSettings, ExportMode } from '@/types/export';
 import { useRender } from '../hooks/use-render';
 import { useClientRender } from '../hooks/use-client-render';
 import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import type { ClientVideoContainer, ClientAudioContainer } from '../utils/client-renderer';
 
 export interface ExportDialogProps {
@@ -77,6 +79,10 @@ function getResolutionOptions(projectWidth: number, projectHeight: number) {
 export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
   const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
+
+  const serverApiUrl = useSettingsStore((s) => s.serverApiUrl);
+  const serverSocketUrl = useSettingsStore((s) => s.serverSocketUrl);
+  const setSetting = useSettingsStore((s) => s.setSetting);
 
   const [settings, setSettings] = useState<ExportSettings>({
     codec: 'h264',
@@ -377,13 +383,37 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                     </Alert>
                   </TabsContent>
 
-                  <TabsContent value="server" className="mt-4">
+                  <TabsContent value="server" className="mt-4 space-y-4">
                     <Alert>
                       <Cloud className="h-4 w-4" />
                       <AlertDescription>
-                        Uploads media to server for rendering with FFmpeg. More codec options.
+                        Uploads media to server for rendering with FFmpeg.
                       </AlertDescription>
                     </Alert>
+                    <div className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="serverApiUrl" className="text-xs">Server URL</Label>
+                        <Input
+                          id="serverApiUrl"
+                          type="url"
+                          placeholder="http://localhost:3001/api"
+                          value={serverApiUrl}
+                          onChange={(e) => setSetting('serverApiUrl', e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="serverSocketUrl" className="text-xs">WebSocket URL</Label>
+                        <Input
+                          id="serverSocketUrl"
+                          type="url"
+                          placeholder="http://localhost:3001"
+                          value={serverSocketUrl}
+                          onChange={(e) => setSetting('serverSocketUrl', e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </div>
                   </TabsContent>
                 </Tabs>
 

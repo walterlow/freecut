@@ -12,7 +12,7 @@ import { convertTimelineToRemotion } from '../utils/timeline-to-remotion';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import { config } from '@/lib/config';
+import { getServerConfig } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('useRender');
@@ -32,8 +32,6 @@ interface UseRenderReturn {
   resetState: () => void;
 }
 
-const SOCKET_URL = config.api.socketUrl;
-
 export function useRender(): UseRenderReturn {
   const [isExporting, setIsExporting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -48,7 +46,8 @@ export function useRender(): UseRenderReturn {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    socketRef.current = io(SOCKET_URL, {
+    const { socketUrl } = getServerConfig();
+    socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],
       autoConnect: false, // Don't connect until we need it
       reconnection: true,

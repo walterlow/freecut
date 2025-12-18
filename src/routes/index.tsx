@@ -31,12 +31,12 @@ const faqItems = [
     answer: 'FreeCut currently supports Google Chrome version 102+. We use modern browser APIs like WebCodecs and File System Access which have limited cross-browser support.',
   },
   {
-    question: 'Can I export in different formats?',
-    answer: 'Browser rendering is limited to H.264 (MP4) and VP9 (WebM) due to WebCodecs constraints. You can choose from multiple quality settings and resolutions.',
+    question: 'What export formats are supported?',
+    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV. Multiple codecs (H.264, H.265, VP8, VP9) and quality settings available.',
   },
   {
     question: 'Future Improvements',
-    answer: 'Mostly bug fixes. Updates might be slow as I work on this in my free time.',
+    answer: 'Will add features as I see fit and based on feedback. Maybe come up with a roadmap or something.',
   },
   {
     question: 'Special shoutout',
@@ -133,7 +133,7 @@ function LandingPage() {
           </p>
 
           <p className="mb-6 max-w-lg text-sm text-amber-600 dark:text-amber-500">
-            ⚠️ DISCLAIMER: This is very much in beta and might be buggy here and there (but hope you have a good experience!).
+            ⚠️ DISCLAIMER: This is very much in beta and might be buggy. I hope you still enjoy the experience.  
           </p>
 
           <div className="flex flex-col items-center gap-4 sm:flex-row">

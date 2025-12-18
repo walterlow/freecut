@@ -6,6 +6,7 @@ import {
   CLIP_LABEL_HEIGHT,
   VIDEO_WAVEFORM_HEIGHT,
 } from '@/features/timeline/constants';
+import { useSettingsStore } from '@/features/settings/stores/settings-store';
 
 export interface ClipContentProps {
   item: TimelineItem;
@@ -30,6 +31,9 @@ export const ClipContent = memo(function ClipContent({
   isClipVisible,
   pixelsPerSecond,
 }: ClipContentProps) {
+  const showWaveforms = useSettingsStore((s) => s.showWaveforms);
+  const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
+
   const sourceStart = (item.sourceStart ?? 0) / fps;
   const sourceDuration = (item.sourceDuration ?? item.durationInFrames) / fps;
   const trimStart = (item.trimStart ?? 0) / fps;
@@ -41,17 +45,19 @@ export const ClipContent = memo(function ClipContent({
       <div className="absolute inset-0 flex flex-col">
         {/* Row 1: Filmstrip with overlayed label - flex-1 to fill remaining space */}
         <div className="relative overflow-hidden flex-1 min-h-0">
-          <ClipFilmstrip
-            mediaId={item.mediaId}
-            clipWidth={clipWidth}
-            sourceStart={sourceStart}
-            sourceDuration={sourceDuration}
-            trimStart={trimStart}
-            speed={speed}
-            fps={fps}
-            isVisible={isClipVisible}
-            pixelsPerSecond={pixelsPerSecond}
-          />
+          {showFilmstrips && (
+            <ClipFilmstrip
+              mediaId={item.mediaId}
+              clipWidth={clipWidth}
+              sourceStart={sourceStart}
+              sourceDuration={sourceDuration}
+              trimStart={trimStart}
+              speed={speed}
+              fps={fps}
+              isVisible={isClipVisible}
+              pixelsPerSecond={pixelsPerSecond}
+            />
+          )}
           {/* Overlayed label */}
           <div
             className="absolute top-0 left-0 max-w-full px-2 text-[11px] font-medium truncate"
@@ -61,7 +67,30 @@ export const ClipContent = memo(function ClipContent({
           </div>
         </div>
         {/* Row 2: Waveform - fixed height with gradient bg */}
-        <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
+        {showWaveforms && (
+          <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
+            <ClipWaveform
+              mediaId={item.mediaId}
+              clipWidth={clipWidth}
+              sourceStart={sourceStart}
+              sourceDuration={sourceDuration}
+              trimStart={trimStart}
+              speed={speed}
+              fps={fps}
+              isVisible={isClipVisible}
+              pixelsPerSecond={pixelsPerSecond}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Audio clip - waveform fills entire clip with overlayed label
+  if (item.type === 'audio' && item.mediaId) {
+    return (
+      <div className="absolute inset-0 bg-waveform-gradient">
+        {showWaveforms && (
           <ClipWaveform
             mediaId={item.mediaId}
             clipWidth={clipWidth}
@@ -73,26 +102,7 @@ export const ClipContent = memo(function ClipContent({
             isVisible={isClipVisible}
             pixelsPerSecond={pixelsPerSecond}
           />
-        </div>
-      </div>
-    );
-  }
-
-  // Audio clip - waveform fills entire clip with overlayed label
-  if (item.type === 'audio' && item.mediaId) {
-    return (
-      <div className="absolute inset-0 bg-waveform-gradient">
-        <ClipWaveform
-          mediaId={item.mediaId}
-          clipWidth={clipWidth}
-          sourceStart={sourceStart}
-          sourceDuration={sourceDuration}
-          trimStart={trimStart}
-          speed={speed}
-          fps={fps}
-          isVisible={isClipVisible}
-          pixelsPerSecond={pixelsPerSecond}
-        />
+        )}
         {/* Overlayed label */}
         <div
           className="absolute top-0 left-0 max-w-full px-2 text-[11px] font-medium truncate"

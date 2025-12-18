@@ -17,9 +17,11 @@ import {
   ChevronDown,
   Github,
   Keyboard,
+  Settings,
 } from 'lucide-react';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
+import { SettingsDialog } from './settings-dialog';
 
 export interface ToolbarProps {
   projectId: string;
@@ -40,6 +42,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
   const navigate = useNavigate();
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   const handleBackClick = () => {
     if (isDirty) {
@@ -99,8 +102,25 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
         onOpenChange={setShowShortcutsDialog}
       />
 
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={showSettingsDialog}
+        onOpenChange={setShowSettingsDialog}
+      />
+
       {/* Save & Export */}
       <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => setShowSettingsDialog(true)}
+          data-tooltip="Settings"
+          data-tooltip-side="left"
+          aria-label="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
         <Button
           variant="outline"
           size="icon"

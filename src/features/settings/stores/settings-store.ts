@@ -21,6 +21,10 @@ export interface AppSettings {
   // Performance
   maxUndoHistory: number;
   autoSaveInterval: number; // minutes (0 = disabled)
+
+  // Server configuration (empty = use env var default)
+  serverApiUrl: string;
+  serverSocketUrl: string;
 }
 
 interface SettingsActions {
@@ -46,7 +50,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Performance
   maxUndoHistory: 50,
-  autoSaveInterval: 5, // Auto-save every 5 minutes
+  autoSaveInterval: 0, // Auto-save disabled by default
+
+  // Server configuration (empty = use env var default)
+  serverApiUrl: '',
+  serverSocketUrl: '',
 };
 
 /**
@@ -82,3 +90,5 @@ export const selectDefaultExportFormat = (state: SettingsStore) =>
   state.defaultExportFormat;
 export const selectDefaultExportQuality = (state: SettingsStore) =>
   state.defaultExportQuality;
+export const selectServerApiUrl = (state: SettingsStore) => state.serverApiUrl;
+export const selectServerSocketUrl = (state: SettingsStore) => state.serverSocketUrl;

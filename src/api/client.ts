@@ -1,14 +1,16 @@
-import { config } from '@/lib/config';
+import { getServerConfig } from '@/lib/config';
 
 export class APIClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string = config.api.baseUrl) {
-    this.baseUrl = baseUrl;
+  /**
+   * Get the current base URL from settings or env vars.
+   * This allows the URL to be changed at runtime via settings.
+   */
+  private getBaseUrl(): string {
+    return getServerConfig().baseUrl;
   }
 
   async get<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(`${this.getBaseUrl()}${endpoint}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -24,7 +26,7 @@ export class APIClient {
   }
 
   async post<T>(endpoint: string, data: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(`${this.getBaseUrl()}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,7 +43,7 @@ export class APIClient {
   }
 
   async put<T>(endpoint: string, data: unknown): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(`${this.getBaseUrl()}${endpoint}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -58,7 +60,7 @@ export class APIClient {
   }
 
   async delete<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    const response = await fetch(`${this.getBaseUrl()}${endpoint}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -84,7 +86,7 @@ export class APIClient {
       formData.append(`media-${file.mediaId}`, file.blob, file.filename);
     }
 
-    const response = await fetch(`${this.baseUrl}/media/upload`, {
+    const response = await fetch(`${this.getBaseUrl()}/media/upload`, {
       method: 'POST',
       body: formData,
     });
