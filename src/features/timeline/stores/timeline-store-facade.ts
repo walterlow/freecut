@@ -18,6 +18,7 @@ import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 
 import { createLogger } from '@/lib/logger';
+import { DEFAULT_TRACK_HEIGHT } from '../constants';
 
 const logger = createLogger('TimelineStore');
 
@@ -42,6 +43,7 @@ import { convertTimelineToRemotion } from '@/features/export/utils/timeline-to-r
 import { resolveMediaUrls } from '@/features/preview/utils/media-resolver';
 import { validateMediaReferences } from '@/features/timeline/utils/media-validation';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/lib/migrations';
 
 
 /**
@@ -199,21 +201,48 @@ async function saveTimeline(projectId: string): Promise<void> {
   }
 }
 
-/** Default track height for new projects */
-const DEFAULT_TRACK_HEIGHT = 80;
-
 /**
  * Load timeline from project in IndexedDB.
  * Single source of truth for all timeline loading (project open, refresh, etc.)
+ *
+ * This function:
+ * 1. Loads the project from storage
+ * 2. Runs migrations if the project schema is outdated
+ * 3. Normalizes data to apply current defaults
+ * 4. Persists migrated projects back to storage
+ * 5. Restores timeline state to stores
  */
 async function loadTimeline(projectId: string): Promise<void> {
   // Mark loading started - used to coordinate initial player sync
   useTimelineSettingsStore.getState().setTimelineLoading(true);
 
   try {
-    const project = await getProject(projectId);
-    if (!project) {
+    const rawProject = await getProject(projectId);
+    if (!rawProject) {
       throw new Error(`Project not found: ${projectId}`);
+    }
+
+    // Run migrations and normalization
+    const migrationResult = migrateProject(rawProject);
+    const project = migrationResult.project;
+
+    // Log migration activity
+    if (migrationResult.migrated) {
+      if (migrationResult.appliedMigrations.length > 0) {
+        logger.info(
+          `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`,
+          { migrations: migrationResult.appliedMigrations }
+        );
+      } else {
+        logger.debug('Project normalized with current defaults');
+      }
+
+      // Persist migrated project back to storage
+      await updateProject(projectId, {
+        ...project,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      });
+      logger.debug('Saved migrated project to storage');
     }
 
     if (project.timeline && project.timeline.tracks?.length > 0) {
@@ -224,6 +253,7 @@ async function loadTimeline(projectId: string): Promise<void> {
         itemsCount: t.items?.length ?? 0,
         keyframesCount: t.keyframes?.length ?? 0,
         transitionsCount: t.transitions?.length ?? 0,
+        schemaVersion: project.schemaVersion ?? 1,
       });
 
       // Restore tracks and items from project

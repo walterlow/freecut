@@ -7,6 +7,11 @@ export interface Project {
   createdAt: number;
   updatedAt: number;
   duration: number;
+  /**
+   * Schema version for migrations. Projects without this field are version 1.
+   * Increment CURRENT_SCHEMA_VERSION in lib/migrations when adding migrations.
+   */
+  schemaVersion?: number;
   thumbnailId?: string; // Reference to ThumbnailData in IndexedDB
   thumbnail?: string; // @deprecated Base64 data URL (for backward compatibility)
   thumbnailUrl?: string; // @deprecated External URL

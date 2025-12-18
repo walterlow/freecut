@@ -1,12 +1,9 @@
 import express from 'express';
-import { createServer } from 'http';
-import { Server as SocketServer } from 'socket.io';
 import cors from 'cors';
 import renderRouter from './routes/render.js';
 import { renderService } from './services/render-service.js';
 
 const app = express();
-const httpServer = createServer(app);
 
 // Environment configuration
 const PORT = process.env.PORT || 3001;
@@ -18,16 +15,6 @@ const corsOrigins = CORS_ORIGIN.split(',').map(o => o.trim());
 
 console.log(`[Server] Environment: ${NODE_ENV}`);
 console.log(`[Server] CORS origins: ${corsOrigins.join(', ')}`);
-
-const io = new SocketServer(httpServer, {
-  cors: {
-    origin: corsOrigins.length === 1 ? corsOrigins[0] : corsOrigins,
-    methods: ['GET', 'POST', 'DELETE'],
-    credentials: true,
-  },
-  // Allow long polling as fallback
-  transports: ['websocket', 'polling'],
-});
 
 // Middleware
 app.use(cors({
@@ -52,17 +39,8 @@ app.get('/health', (req, res) => {
 // API routes
 app.use('/api', renderRouter);
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  console.log('[Server] Client connected:', socket.id);
-
-  socket.on('disconnect', () => {
-    console.log('[Server] Client disconnected:', socket.id);
-  });
-});
-
-// Set Socket.IO instance for render service
-renderService.setSocketIO(io);
+// Server instance for graceful shutdown
+let server: ReturnType<typeof app.listen>;
 
 // Start server
 async function startServer() {
@@ -74,9 +52,9 @@ async function startServer() {
 
     // Listen on 0.0.0.0 for container/cloud deployment
     const HOST = process.env.HOST || '0.0.0.0';
-    httpServer.listen(Number(PORT), HOST, () => {
+    server = app.listen(Number(PORT), HOST, () => {
       console.log(`[Server] Running on http://${HOST}:${PORT}`);
-      console.log(`[Server] WebSocket ready`);
+      console.log(`[Server] SSE streaming enabled`);
       console.log(`[Server] Health check: http://${HOST}:${PORT}/health`);
     });
   } catch (error) {
@@ -88,7 +66,7 @@ async function startServer() {
 // Handle graceful shutdown
 process.on('SIGINT', () => {
   console.log('[Server] Shutting down gracefully...');
-  httpServer.close(() => {
+  server?.close(() => {
     console.log('[Server] Server closed');
     process.exit(0);
   });
@@ -96,7 +74,7 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log('[Server] Shutting down gracefully...');
-  httpServer.close(() => {
+  server?.close(() => {
     console.log('[Server] Server closed');
     process.exit(0);
   });

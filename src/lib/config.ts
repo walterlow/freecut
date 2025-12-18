@@ -15,7 +15,6 @@ import { useSettingsStore } from '@/features/settings/stores/settings-store';
 interface AppConfig {
   api: {
     baseUrl: string;
-    socketUrl: string;
   };
   isDev: boolean;
   isProd: boolean;
@@ -23,7 +22,6 @@ interface AppConfig {
 
 interface ServerConfig {
   baseUrl: string;
-  socketUrl: string;
 }
 
 function getEnvVar(key: string, defaultValue: string): string {
@@ -32,12 +30,10 @@ function getEnvVar(key: string, defaultValue: string): string {
 }
 
 const ENV_API_BASE_URL = getEnvVar('VITE_API_BASE_URL', 'http://localhost:3001/api');
-const ENV_SOCKET_URL = getEnvVar('VITE_SOCKET_URL', 'http://localhost:3001');
 
 export const config: AppConfig = {
   api: {
     baseUrl: ENV_API_BASE_URL,
-    socketUrl: ENV_SOCKET_URL,
   },
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,
@@ -53,6 +49,5 @@ export function getServerConfig(): ServerConfig {
   const state = useSettingsStore.getState();
   return {
     baseUrl: state.serverApiUrl || ENV_API_BASE_URL,
-    socketUrl: state.serverSocketUrl || ENV_SOCKET_URL,
   };
 }

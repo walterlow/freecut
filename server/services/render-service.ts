@@ -1,6 +1,5 @@
 import { bundle } from '@remotion/bundler';
 import { renderMedia, selectComposition, makeCancelSignal } from '@remotion/renderer';
-import { Server as SocketServer } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
@@ -14,16 +13,8 @@ const __dirname = path.dirname(__filename);
 const OUTPUT_DIR = path.join(__dirname, '..', 'temp', 'output');
 
 export class RenderService {
-  private io: SocketServer | null = null;
   private bundleLocation: string | null = null;
   private activeRenders: Map<string, () => void> = new Map(); // Stores cancel functions from makeCancelSignal
-
-  /**
-   * Set Socket.IO instance for emitting progress
-   */
-  setSocketIO(io: SocketServer): void {
-    this.io = io;
-  }
 
   /**
    * Check if the Remotion bundle is ready
@@ -98,7 +89,6 @@ export class RenderService {
     try {
       // Update job status
       jobManager.updateJob(jobId, { status: 'processing' });
-      this.emitProgress(jobId, { progress: 0, status: 'processing' });
 
       // Ensure bundle is ready
       const bundleLocation = await this.bundleProject();
@@ -229,13 +219,6 @@ export class RenderService {
             status: 'processing',
           });
 
-          this.emitProgress(jobId, {
-            progress,
-            renderedFrames,
-            totalFrames: compositionData.durationInFrames,
-            status: 'processing',
-          });
-
           if (renderedFrames % 30 === 0) {
             console.log(`[RenderService] Job ${jobId}: ${renderedFrames}/${compositionData.durationInFrames} frames (${progress}%)`);
           }
@@ -262,7 +245,6 @@ export class RenderService {
 
       // Mark as completed
       jobManager.completeJob(jobId, outputPath);
-      this.emitProgress(jobId, { progress: 100, status: 'completed' });
 
       console.log(`[RenderService] Job ${jobId} completed successfully`);
 
@@ -274,12 +256,10 @@ export class RenderService {
                           error?.message?.includes('cancelled');
       if (isCancelled) {
         jobManager.cancelJob(jobId);
-        this.emitProgress(jobId, { progress: 0, status: 'cancelled' });
         console.log(`[RenderService] Job ${jobId} was cancelled`);
       } else {
         const errorMessage = error?.message || String(error);
         jobManager.failJob(jobId, errorMessage);
-        this.emitProgress(jobId, { progress: 0, status: 'failed' });
         console.error(`[RenderService] Job ${jobId} failed:`, error);
       }
 
@@ -301,18 +281,6 @@ export class RenderService {
       return true;
     }
     return false;
-  }
-
-  /**
-   * Emit progress update via Socket.IO
-   */
-  private emitProgress(jobId: string, progress: Partial<RenderProgress>): void {
-    if (this.io) {
-      this.io.emit('render:progress', {
-        jobId,
-        ...progress,
-      });
-    }
   }
 
   /**

@@ -24,7 +24,6 @@ export interface AppSettings {
 
   // Server configuration (empty = use env var default)
   serverApiUrl: string;
-  serverSocketUrl: string;
 }
 
 interface SettingsActions {
@@ -54,7 +53,6 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Server configuration (empty = use env var default)
   serverApiUrl: '',
-  serverSocketUrl: '',
 };
 
 /**
@@ -91,4 +89,3 @@ export const selectDefaultExportFormat = (state: SettingsStore) =>
 export const selectDefaultExportQuality = (state: SettingsStore) =>
   state.defaultExportQuality;
 export const selectServerApiUrl = (state: SettingsStore) => state.serverApiUrl;
-export const selectServerSocketUrl = (state: SettingsStore) => state.serverSocketUrl;

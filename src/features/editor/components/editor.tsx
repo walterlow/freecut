@@ -18,6 +18,7 @@ import { ExportDialog } from '@/features/export/components/export-dialog';
 import { BundleExportDialog } from '@/features/project-bundle/components/bundle-export-dialog';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
 import { useEditorHotkeys } from '@/hooks/use-editor-hotkeys';
+import { useAutoSave } from '../hooks/use-auto-save';
 import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
 import { useTransitionBreakageNotifications } from '@/features/timeline/hooks/use-transition-breakage-notifications';
 import { initTransitionChainSubscription } from '@/features/timeline/stores/transition-chain-store';
@@ -40,14 +41,6 @@ export interface EditorProps {
 
 /**
  * Video Editor Component
- *
- * Modular architecture following CLAUDE.md guidelines:
- * - Uses Zustand stores with granular selectors (not local useState)
- * - Composed of specialized components (toolbar, sidebars, preview, timeline)
- * - React 19 optimizations with Activity components in sidebars
- * - Zundo temporal middleware for undo/redo in timeline
- * - Comprehensive keyboard shortcuts
- *
  * Memoized to prevent re-renders from route changes cascading to all children.
  */
 /** Extra percentage to add to timeline panel when graph editor is open */
@@ -148,6 +141,12 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   useEditorHotkeys({
     onSave: handleSave,
     onExport: handleExport,
+  });
+
+  // Enable auto-save based on settings interval
+  useAutoSave({
+    isDirty,
+    onSave: handleSave,
   });
 
   // Enable timeline shortcuts (space, cut tool, rate tool, etc.)

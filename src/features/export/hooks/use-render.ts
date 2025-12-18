@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useState, useCallback, useRef } from 'react';
 import type { ExportSettings } from '@/types/export';
 import type { RenderStatus } from '@/api/render';
 import {
@@ -16,9 +15,6 @@ import { getServerConfig } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('useRender');
-
-// Connection mode: prefer WebSocket, fallback to SSE
-type ConnectionMode = 'websocket' | 'sse' | 'none';
 
 interface UseRenderReturn {
   isExporting: boolean;
@@ -45,11 +41,9 @@ export function useRender(): UseRenderReturn {
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
 
-  const socketRef = useRef<Socket | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const connectionModeRef = useRef<ConnectionMode>('none');
 
-  // Handle progress updates from any source (WebSocket or SSE)
+  // Handle progress updates from SSE
   const handleProgressUpdate = useCallback((data: Partial<RenderStatus> & { jobId: string }) => {
     log.debug('Progress update:', data);
 
@@ -80,7 +74,6 @@ export function useRender(): UseRenderReturn {
 
     const eventSource = new EventSource(sseUrl);
     eventSourceRef.current = eventSource;
-    connectionModeRef.current = 'sse';
 
     eventSource.onmessage = (event) => {
       try {
@@ -95,40 +88,6 @@ export function useRender(): UseRenderReturn {
       log.error('SSE error:', err);
       eventSource.close();
       eventSourceRef.current = null;
-    };
-  }, [handleProgressUpdate]);
-
-  // Initialize Socket.IO connection
-  useEffect(() => {
-    const { socketUrl } = getServerConfig();
-    socketRef.current = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-      autoConnect: false, // Don't connect until we need it
-      reconnection: true,
-      reconnectionAttempts: 3, // Fewer retries before falling back to SSE
-      reconnectionDelay: 1000,
-      timeout: 5000, // 5s connection timeout
-    });
-
-    socketRef.current.on('connect', () => {
-      log.debug('Socket connected');
-      connectionModeRef.current = 'websocket';
-    });
-
-    socketRef.current.on('disconnect', () => {
-      log.debug('Socket disconnected');
-    });
-
-    socketRef.current.on('connect_error', (error) => {
-      log.warn('Socket connection error:', error.message);
-      // Don't set error state here - SSE fallback will handle it
-    });
-
-    socketRef.current.on('render:progress', handleProgressUpdate);
-
-    return () => {
-      socketRef.current?.disconnect();
-      eventSourceRef.current?.close();
     };
   }, [handleProgressUpdate]);
 
@@ -148,39 +107,8 @@ export function useRender(): UseRenderReturn {
         const newJobId = crypto.randomUUID();
         setJobId(newJobId);
 
-        // Try WebSocket first, fallback to SSE
-        let useSSE = false;
-        if (socketRef.current && !socketRef.current.connected) {
-          try {
-            socketRef.current.connect();
-            // Wait for connection or timeout
-            await new Promise<void>((resolve, reject) => {
-              const timeout = setTimeout(() => {
-                reject(new Error('WebSocket connection timeout'));
-              }, 3000);
-
-              socketRef.current!.once('connect', () => {
-                clearTimeout(timeout);
-                resolve();
-              });
-
-              socketRef.current!.once('connect_error', () => {
-                clearTimeout(timeout);
-                reject(new Error('WebSocket connection failed'));
-              });
-            });
-            log.debug('WebSocket connected successfully');
-          } catch (wsError) {
-            log.warn('WebSocket unavailable, using SSE fallback');
-            useSSE = true;
-            socketRef.current.disconnect();
-          }
-        }
-
-        // If WebSocket failed or is unavailable, use SSE
-        if (useSSE) {
-          connectSSE(newJobId);
-        }
+        // Connect to SSE for progress updates
+        connectSSE(newJobId);
 
         // Read current state directly from store to avoid stale closure issues
         const state = useTimelineStore.getState();
@@ -273,7 +201,7 @@ export function useRender(): UseRenderReturn {
         setStatus('failed');
       }
     },
-    [] // Dependencies empty - we read from store directly inside callback
+    [connectSSE]
   );
 
   /**
@@ -322,10 +250,9 @@ export function useRender(): UseRenderReturn {
     setError(null);
     setJobId(null);
 
-    // Clean up connections
+    // Clean up SSE connection
     eventSourceRef.current?.close();
     eventSourceRef.current = null;
-    connectionModeRef.current = 'none';
   }, []);
 
   return {

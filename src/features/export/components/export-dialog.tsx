@@ -84,7 +84,6 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
 
   const serverApiUrl = useSettingsStore((s) => s.serverApiUrl);
-  const serverSocketUrl = useSettingsStore((s) => s.serverSocketUrl);
   const setSetting = useSettingsStore((s) => s.setSetting);
 
   const [settings, setSettings] = useState<ExportSettings>({
@@ -403,17 +402,6 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                             placeholder="http://localhost:3001/api"
                             value={serverApiUrl}
                             onChange={(e) => setSetting('serverApiUrl', e.target.value)}
-                            className="h-8 text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="serverSocketUrl" className="text-xs">WebSocket URL</Label>
-                          <Input
-                            id="serverSocketUrl"
-                            type="url"
-                            placeholder="http://localhost:3001"
-                            value={serverSocketUrl}
-                            onChange={(e) => setSetting('serverSocketUrl', e.target.value)}
                             className="h-8 text-sm"
                           />
                         </div>

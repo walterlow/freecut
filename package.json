@@ -64,8 +64,6 @@
     "react-hotkeys-hook": "^5.2.1",
     "react-resizable-panels": "^3.0.6",
     "remotion": "^4.0.390",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
