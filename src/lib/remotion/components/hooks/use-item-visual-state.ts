@@ -1,6 +1,6 @@
 import { useMemo, useCallback } from 'react';
-import { useVideoConfig, useCurrentFrame } from '../../hooks/use-remotion-compat';
-import { interpolate } from '@/features/player/composition';
+import { useVideoConfig } from '../../hooks/use-remotion-compat';
+import { interpolate, useSequenceContext } from '@/features/player/composition';
 import { useGizmoStore, type ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import type { TimelineItem } from '@/types/timeline';
@@ -86,12 +86,14 @@ export function useItemVisualState(
   masks: MaskInfo[] = []
 ): ItemVisualState {
   const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
-  const frame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  const sequenceContext = useSequenceContext();
+  const frame = sequenceContext?.localFrame ?? 0;
   const canvas: CanvasSettings = { width: canvasWidth, height: canvasHeight, fps };
 
   // Calculate frame relative to item start for keyframe interpolation.
   // When items share a Sequence (e.g., split clips via StableVideoSequence),
-  // useCurrentFrame() returns frame relative to the shared Sequence's `from` (group.minFrom),
+  // localFrame is relative to the shared Sequence's `from` (group.minFrom),
   // but keyframes are stored relative to item.from.
   // _sequenceFrameOffset = item.from - group.minFrom, so:
   // relativeFrame = frame - _sequenceFrameOffset = frame - (item.from - group.minFrom)

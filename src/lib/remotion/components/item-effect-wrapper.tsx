@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useCurrentFrame } from '../hooks/use-remotion-compat';
+import { useSequenceContext } from '@/features/player/composition';
 import type { AdjustmentItem } from '@/types/timeline';
 import type { ItemEffect, GlitchEffect } from '@/types/effects';
 import { effectsToCSSFilter, getGlitchEffects, getVignetteEffect, getVignetteStyle, getHalftoneEffect, getHalftoneStyles } from '@/features/effects/utils/effect-to-css';
@@ -194,12 +194,14 @@ const ItemEffectWrapperInternal = React.memo<ItemEffectWrapperInternalProps>(({
 
 /**
  * Frame-aware wrapper for ItemEffectWrapper.
- * Isolates useCurrentFrame() to this component so that parent components
+ * Isolates useSequenceContext to this component so that parent components
  * don't re-render on every frame. Only this component and its children
  * will re-render per frame.
  */
 export const ItemEffectWrapper: React.FC<ItemEffectWrapperProps> = (props) => {
-  const frame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  const sequenceContext = useSequenceContext();
+  const frame = sequenceContext?.localFrame ?? 0;
   return <ItemEffectWrapperInternal {...props} frame={frame} />;
 };
 

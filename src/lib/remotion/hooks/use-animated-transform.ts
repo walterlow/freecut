@@ -4,7 +4,7 @@
  */
 
 import { useMemo } from 'react';
-import { useCurrentFrame } from './use-remotion-compat';
+import { useSequenceContext } from '@/features/player/composition';
 import type { TimelineItem } from '@/types/timeline';
 import type { CanvasSettings, ResolvedTransform } from '@/types/transform';
 import type { ItemKeyframes } from '@/types/keyframe';
@@ -26,8 +26,9 @@ export function useAnimatedTransform(
   itemKeyframes: ItemKeyframes | undefined,
   sequenceFrameOffset: number = 0
 ): ResolvedTransform {
-  // Get current frame from Remotion (relative to Sequence start)
-  const sequenceFrame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  const sequenceContext = useSequenceContext();
+  const sequenceFrame = sequenceContext?.localFrame ?? 0;
 
   // Calculate item-relative frame (accounting for shared sequence offsets)
   const frame = sequenceFrame - sequenceFrameOffset;

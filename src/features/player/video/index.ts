@@ -58,3 +58,27 @@ export {
 
 // Native video layer (alternative to Remotion-based rendering)
 export { NativeVideoLayer } from './NativeVideoLayer';
+
+// Video Source Pool - Efficient element reuse by source URL
+export {
+  VideoSourcePool,
+  SourceController,
+  getGlobalVideoSourcePool,
+  disposeGlobalVideoSourcePool,
+  type SourceMetadata,
+  type ElementAssignment,
+} from './VideoSourcePool';
+
+// Pooled Video Layer - React component using source pool
+export {
+  PooledVideoLayer,
+  usePoolStats,
+  type PooledVideoLayerProps,
+} from './PooledVideoLayer';
+
+// Video Source Pool Context - React context for pool access
+export {
+  VideoSourcePoolProvider,
+  useVideoSourcePool,
+  type VideoSourcePoolProviderProps,
+} from './VideoSourcePoolContext';

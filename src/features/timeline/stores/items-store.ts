@@ -275,6 +275,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         (leftItem as typeof item).sourceEnd = boundaries.left.sourceEnd;
         (rightItem as typeof item).sourceStart = boundaries.right.sourceStart;
         (rightItem as typeof item).sourceEnd = boundaries.right.sourceEnd;
+
+        // DEBUG: Log split operation values
+        console.log(`[_splitItem] Original sourceStart:${sourceStart} speed:${speed} leftDuration:${leftDuration} rightDuration:${rightDuration}`);
+        console.log(`[_splitItem] boundaries.right.sourceStart:${boundaries.right.sourceStart} rightItem.sourceStart:${(rightItem as any).sourceStart}`);
       }
 
       set((state) => ({

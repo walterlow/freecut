@@ -11,8 +11,8 @@
  */
 
 import React, { useMemo } from 'react';
-import { Sequence } from '@/features/player/composition';
-import { useCurrentFrame, useVideoConfig } from '../hooks/use-remotion-compat';
+import { Sequence, useSequenceContext } from '@/features/player/composition';
+import { useVideoConfig } from '../hooks/use-remotion-compat';
 import type { VideoItem } from '@/types/timeline';
 
 /** Video item with additional properties added by MainComposition */
@@ -180,7 +180,9 @@ function areGroupPropsEqual(
         prevItem.sourceStart !== nextItem.sourceStart ||
         prevItem.sourceEnd !== nextItem.sourceEnd ||
         prevItem.from !== nextItem.from ||
-        prevItem.durationInFrames !== nextItem.durationInFrames) {
+        prevItem.durationInFrames !== nextItem.durationInFrames ||
+        prevItem.trackVisible !== nextItem.trackVisible ||
+        prevItem.muted !== nextItem.muted) {
       return false;
     }
   }
@@ -192,15 +194,25 @@ const GroupRenderer: React.FC<{
   group: VideoGroup;
   renderItem: (item: EnrichedVideoItem) => React.ReactNode;
 }> = React.memo(({ group, renderItem }) => {
-  // useCurrentFrame() returns LOCAL frame relative to the Sequence's `from`
-  const localFrame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  // The Sequence component provides this via SequenceContext
+  const sequenceContext = useSequenceContext();
+  const localFrame = sequenceContext?.localFrame ?? 0;
+
+  // CRITICAL: Don't render during premount phase (localFrame < 0)
+  // Premount is for keeping React tree mounted, not for showing content.
+  // Without this check, clips with gaps would show their start frame
+  // before the playhead actually reaches them.
+  const isPremounted = localFrame < 0;
+
   // Convert to global frame for comparison with item.from (which is global)
   const globalFrame = localFrame + group.minFrom;
 
   // Find the active item ID for current frame
   // IMPORTANT: Only extract the ID here, not the object reference.
   // The object reference from .find() changes every frame, but the ID is stable.
-  const activeItemId = group.items.find(
+  // During premount, don't find any active item - we shouldn't render.
+  const activeItemId = isPremounted ? undefined : group.items.find(
     (item) => globalFrame >= item.from && globalFrame < item.from + item.durationInFrames
   )?.id;
 
@@ -209,7 +221,7 @@ const GroupRenderer: React.FC<{
   // CRITICAL: Compute inline (not memoized) to ensure it always reflects current group.items values.
   // Using useMemo here could miss updates if React.memo on GroupRenderer doesn't re-render.
   const itemsFingerprint = group.items
-    .map(i => `${i.id}:${i.speed ?? 1}:${i.sourceStart ?? 0}:${i.sourceEnd ?? ''}:${i.from}:${i.durationInFrames}`)
+    .map(i => `${i.id}:${i.speed ?? 1}:${i.sourceStart ?? 0}:${i.sourceEnd ?? ''}:${i.from}:${i.durationInFrames}:${i.trackVisible}:${i.muted}`)
     .join('|');
 
   // Memoize the adjusted item based on active item's identity.
@@ -238,9 +250,11 @@ const GroupRenderer: React.FC<{
     // IMPORTANT: Round to match how splitItem calculates sourceStart (uses Math.round)
     // Without rounding, floating point errors cause fractional sourceStart values
     const sourceFrameOffset = Math.round(itemOffset * speed);
+    const adjustedSourceStart = (activeItem.sourceStart ?? 0) - sourceFrameOffset;
+
     return {
       ...activeItem,
-      sourceStart: (activeItem.sourceStart ?? 0) - sourceFrameOffset,
+      sourceStart: adjustedSourceStart,
       trimStart: activeItem.trimStart != null ? activeItem.trimStart - sourceFrameOffset : undefined,
       offset: activeItem.offset != null ? activeItem.offset - sourceFrameOffset : undefined,
       // Pass the frame offset so fades can be calculated correctly within shared Sequences

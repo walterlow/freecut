@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { useCurrentFrame, useVideoConfig, useIsPlaying } from '../hooks/use-remotion-compat';
-import { interpolate } from '@/features/player/composition';
+import { useVideoConfig, useIsPlaying } from '../hooks/use-remotion-compat';
+import { interpolate, useSequenceContext } from '@/features/player/composition';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 
@@ -45,7 +45,9 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   crossfadeFadeIn,
   crossfadeFadeOut,
 }) => {
-  const frame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  const sequenceContext = useSequenceContext();
+  const frame = sequenceContext?.localFrame ?? 0;
   const { fps } = useVideoConfig();
   const playing = useIsPlaying();
 

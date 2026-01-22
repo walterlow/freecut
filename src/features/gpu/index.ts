@@ -15,3 +15,9 @@ export * from './graph';
 
 // Media exports
 export * from './media';
+
+// Playback exports (WASM-powered buffered playback)
+export * from './playback';
+
+// Component exports
+export * from './components';

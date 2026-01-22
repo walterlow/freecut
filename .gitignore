@@ -48,3 +48,5 @@ coverage
 .vercel
 .env*.local
 CLAUDE.md
+crates/*/target/
+crates/*/Cargo.lock

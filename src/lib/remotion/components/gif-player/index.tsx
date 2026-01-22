@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { AbsoluteFill } from '@/features/player/composition';
-import { useCurrentFrame, useVideoConfig } from '../../hooks/use-remotion-compat';
+import { AbsoluteFill, useSequenceContext } from '@/features/player/composition';
+import { useVideoConfig } from '../../hooks/use-remotion-compat';
 import { useGifFrames } from '../../../../features/timeline/hooks/use-gif-frames';
 import { GifCanvas } from './gif-canvas';
 
@@ -35,7 +35,9 @@ export const GifPlayer: React.FC<GifPlayerProps> = ({
   loopBehavior = 'loop',
   style,
 }) => {
-  const currentFrame = useCurrentFrame();
+  // Get local frame from Sequence context (0-based within this Sequence)
+  const sequenceContext = useSequenceContext();
+  const currentFrame = sequenceContext?.localFrame ?? 0;
   const { fps } = useVideoConfig();
 
   const { getFrameAtTime, totalDuration, isLoading, isComplete, frames, error } = useGifFrames({

@@ -122,7 +122,10 @@ export const Sequence = memo<SequenceProps>(
     const shouldMount = globalFrame >= premountStart && globalFrame < endFrame;
 
     // Calculate local frame (0-based within this sequence)
-    const localFrame = Math.max(0, globalFrame - from);
+    // NOTE: During premount, localFrame can be negative (before the sequence starts).
+    // This allows children to detect premount phase and avoid rendering content.
+    // Previously this was clamped to 0, but that caused premount content to be visible.
+    const localFrame = globalFrame - from;
 
     // Create context value
     const contextValue = useMemo<SequenceContextValue>(

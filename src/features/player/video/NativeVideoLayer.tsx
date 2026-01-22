@@ -1,10 +1,11 @@
 /**
- * NativeVideoLayer.tsx - Native video rendering layer using custom VideoTrackManager
+ * NativeVideoLayer.tsx - Native video rendering layer using VideoSourcePool
  *
  * This component provides an alternative to Remotion's video rendering,
  * using HTMLVideoElement directly for better control over playback.
  *
  * Features:
+ * - Element reuse by source URL (split clips share elements)
  * - Frame-accurate seeking via requestVideoFrameCallback
  * - Web Audio API for volume boost (>1x)
  * - Preloading for smooth playback
@@ -15,8 +16,8 @@
  * when you want to use native video rendering instead of Remotion.
  */
 
-import React, { useMemo, useCallback } from 'react';
-import { VideoTrackManager } from './VideoTrackManager';
+import React, { useMemo } from 'react';
+import { PooledVideoLayer } from './PooledVideoLayer';
 import type { VideoItemData } from './types';
 import type { VideoItem } from '@/types/timeline';
 
@@ -50,7 +51,7 @@ interface NativeVideoLayerProps {
 }
 
 /**
- * Convert EnrichedVideoItem to VideoItemData for VideoTrackManager
+ * Convert EnrichedVideoItem to VideoItemData for PooledVideoLayer
  */
 function convertToVideoItemData(item: EnrichedVideoItem): VideoItemData {
   return {
@@ -76,7 +77,10 @@ function convertToVideoItemData(item: EnrichedVideoItem): VideoItemData {
  * NativeVideoLayer Component
  *
  * A drop-in replacement for StableVideoSequence that uses native
- * HTMLVideoElement rendering instead of Remotion's OffthreadVideo.
+ * HTMLVideoElement rendering with source pooling for efficiency.
+ *
+ * Split clips from the same source file share video elements,
+ * dramatically reducing memory usage and improving performance.
  */
 export const NativeVideoLayer: React.FC<NativeVideoLayerProps> = ({
   items,
@@ -88,45 +92,22 @@ export const NativeVideoLayer: React.FC<NativeVideoLayerProps> = ({
   preloadBehindFrames,
   onVideoError,
 }) => {
-  // Convert items to VideoItemData format
-  const videoItems = useMemo(
+  // Convert items to VideoItemData format (filter out items without src)
+  const videoClips = useMemo(
     () => items.filter((item) => item.src).map(convertToVideoItemData),
     [items]
   );
 
-  // Custom render function to apply transforms and effects
-  const renderItem = useCallback(
-    (item: VideoItemData, videoElement: React.ReactNode) => {
-      return (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: item.zIndex ?? 0,
-            visibility: item.trackVisible ? 'visible' : 'hidden',
-            // GPU layer hints for smooth transitions
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-          }}
-        >
-          {videoElement}
-        </div>
-      );
-    },
-    []
-  );
-
   return (
-    <VideoTrackManager
-      items={videoItems}
+    <PooledVideoLayer
+      clips={videoClips}
       currentFrame={currentFrame}
       fps={fps}
       isPlaying={isPlaying}
       playbackRate={playbackRate}
       preloadAheadFrames={preloadAheadFrames}
       preloadBehindFrames={preloadBehindFrames}
-      renderItem={renderItem}
-      onVideoError={onVideoError}
+      onClipError={onVideoError}
     />
   );
 };

@@ -104,16 +104,16 @@ export type {
 } from './types';
 
 // Codec Support - Detection and capability checking
+export type { VideoCodec, AudioCodec, DecoderPath } from './codec-support';
 export {
-  VideoCodec,
-  AudioCodec,
-  DecoderPath,
-  detectVideoCodec,
-  detectAudioCodec,
-  getDecoderPath,
-  isCodecSupported,
-  getCodecCapabilities,
-  type CodecCapabilities,
+  checkWebCodecsSupport,
+  checkVideoCodecSupport,
+  checkAudioCodecSupport,
+  getVideoDecoderPath,
+  getAudioDecoderPath,
+  parseVideoCodec,
+  parseAudioCodec,
+  checkAllCodecSupport,
 } from './codec-support';
 
 // WebCodecs Decoder - Hardware-accelerated decoding
