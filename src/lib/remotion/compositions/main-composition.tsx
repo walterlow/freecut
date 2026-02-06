@@ -365,6 +365,8 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transiti
     return map;
   }, [allVisualItems]);
 
+  // Build transition enrichment data for clips involved in transitions.
+  // Each clip gets: source offset (for video sync) and audio crossfade info.
   // Video items for rendering (all video items, rendered by StableVideoSequence)
   const videoItems = useMemo(() =>
     allVisualItems.filter((item) => item.type === 'video'),

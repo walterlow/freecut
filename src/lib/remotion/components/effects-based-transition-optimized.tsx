@@ -75,8 +75,10 @@ interface NativeTransitionVideoProps {
   playbackRate: number;
   fps: number;
   containerRef: React.RefObject<HTMLDivElement | null>;
-  /** Frames to delay before source starts advancing (incoming clip waits leftPortion frames) */
-  frameOffset?: number;
+  /** Hold on the first frame for this many frames before advancing.
+   *  Used for incoming clips so that at transitionEnd the overlay
+   *  source position matches the normal clip's position. */
+  holdFrames?: number;
 }
 
 const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
@@ -86,7 +88,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   playbackRate,
   fps,
   containerRef,
-  frameOffset = 0,
+  holdFrames = 0,
 }) => {
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
@@ -97,10 +99,11 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
 
-  // effectiveFrame accounts for the delay before the clip starts advancing.
-  // Incoming clip waits `leftPortion` frames (freeze at first frame), then advances.
-  const effectiveFrame = Math.max(0, frame - frameOffset);
-  const targetTime = (sourceStart / fps) + (effectiveFrame * playbackRate / fps);
+  // Hold on first frame for holdFrames, then advance normally.
+  // This ensures the incoming clip's source position at transitionEnd
+  // matches the normal clip's position (no visual snap on handoff).
+  const advancingFrame = Math.max(0, frame - holdFrames);
+  const targetTime = (sourceStart / fps) + (Math.max(0, advancingFrame) * playbackRate / fps);
 
   // Acquire element from pool on mount
   useEffect(() => {
@@ -178,20 +181,9 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     const videoDuration = video.duration || Infinity;
     const clampedTargetTime = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
 
-    // During premount (frame < 0), seek to start position and stay paused
-    if (frame < 0) {
-      if (!video.paused) video.pause();
-      const startTime = sourceStart / fps;
-      if (canSeek && Math.abs(video.currentTime - startTime) > 0.1) {
-        video.currentTime = Math.max(0, startTime);
-      }
-      return;
-    }
-
-    // During freeze period (incoming clip before cut point), stay paused at sourceStart
-    const inFreezePeriod = frameOffset > 0 && frame < frameOffset;
-
-    if (inFreezePeriod) {
+    // During premount (frame < 0) or hold period, seek to target and stay paused
+    const isHolding = holdFrames > 0 && frame < holdFrames && frame >= 0;
+    if (frame < 0 || isHolding) {
       if (!video.paused) video.pause();
       if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.05) {
         video.currentTime = clampedTargetTime;
@@ -240,7 +232,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
         }
       }
     }
-  }, [frame, playbackRate, targetTime, sourceStart, fps, isPlaying, frameOffset]);
+  }, [frame, playbackRate, targetTime, sourceStart, fps, isPlaying, holdFrames]);
 
   // Render nothing — the pool element is mounted directly into the container
   return null;
@@ -255,25 +247,25 @@ interface ClipContentProps {
   /** Unique ID for video pool acquisition */
   poolItemId: string;
   sourceStartOffset?: number;
-  /** Frames to delay before video starts advancing (for incoming clip sync) */
-  videoFrameOffset?: number;
   canvasWidth: number;
   canvasHeight: number;
   fps: number;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
   clipGlobalFrom: number;
+  /** Hold on first video frame for this many frames before advancing */
+  videoHoldFrames?: number;
 }
 
 const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent({
   clip,
   poolItemId,
   sourceStartOffset = 0,
-  videoFrameOffset = 0,
   canvasWidth,
   canvasHeight,
   fps,
   adjustmentLayers,
   clipGlobalFrom,
+  videoHoldFrames,
 }) {
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
@@ -376,7 +368,7 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
           playbackRate={playbackRate}
           fps={fps}
           containerRef={videoContainerRef}
-          frameOffset={videoFrameOffset}
+          holdFrames={videoHoldFrames}
         />
       </div>
     );
@@ -609,8 +601,6 @@ export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTrans
           }}
         >
           {/* Incoming clip (below outgoing) */}
-          {/* frameOffset=leftPortion: freeze at first frame until the cut point,
-              then advance in sync with the normal right clip */}
           <TransitionOverlay
             transition={transition}
             isOutgoing={false}
@@ -623,12 +613,12 @@ export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTrans
               clip={rightClip}
               poolItemId={`t-${transition.id}-right`}
               sourceStartOffset={0}
-              videoFrameOffset={leftPortion}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               fps={fps}
               adjustmentLayers={adjustmentLayers}
               clipGlobalFrom={rightClipGlobalFrom}
+              videoHoldFrames={leftPortion}
             />
           </TransitionOverlay>
 
