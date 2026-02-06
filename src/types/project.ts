@@ -119,6 +119,9 @@ export interface ProjectTimeline {
     presentation?: string;
     timing?: string;
     direction?: string;
+    alignment?: number;
+    bezierPoints?: { x1: number; y1: number; x2: number; y2: number };
+    presetId?: string;
   }>;
   // Keyframe animations
   keyframes?: Array<{

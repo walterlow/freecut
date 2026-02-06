@@ -7,7 +7,8 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { springEasing } from '@/features/keyframes/utils/easing';
+import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/features/keyframes/utils/easing';
+import { transitionRegistry } from '@/lib/transitions/registry';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CanvasTransitions');
@@ -69,10 +70,11 @@ export function findActiveTransitions(
 
     if (!leftClip || !rightClip) continue;
 
-    // Calculate transition timing
+    // Calculate transition timing with alignment support
     const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const halfDuration = Math.floor(transition.durationInFrames / 2);
-    const transitionStart = cutPoint - halfDuration;
+    const alignment = transition.alignment ?? 0.5;
+    const leftPortion = Math.floor(transition.durationInFrames * alignment);
+    const transitionStart = cutPoint - leftPortion;
     const transitionEnd = transitionStart + transition.durationInFrames;
 
     // Check if frame is within transition window
@@ -82,7 +84,8 @@ export function findActiveTransitions(
         localFrame,
         transition.durationInFrames,
         transition.timing,
-        fps
+        fps,
+        transition.bezierPoints
       );
 
       active.push({
@@ -111,23 +114,31 @@ export function findActiveTransitions(
 export function calculateProgress(
   localFrame: number,
   duration: number,
-  timing: 'linear' | 'spring',
-  _fps: number
+  timing: string,
+  _fps: number,
+  bezierPoints?: { x1: number; y1: number; x2: number; y2: number }
 ): number {
   // Linear progress
   const maxFrame = Math.max(1, duration - 1);
   const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame));
 
-  if (timing === 'spring') {
-    // Use spring easing for physics-based animation
-    return springEasing(linearProgress, {
-      tension: 180,
-      friction: 12,
-      mass: 1,
-    });
+  switch (timing) {
+    case 'spring':
+      return springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 });
+    case 'ease-in':
+      return easeIn(linearProgress);
+    case 'ease-out':
+      return easeOut(linearProgress);
+    case 'ease-in-out':
+      return easeInOut(linearProgress);
+    case 'cubic-bezier':
+      if (bezierPoints) {
+        return cubicBezier(linearProgress, bezierPoints);
+      }
+      return linearProgress;
+    default:
+      return linearProgress;
   }
-
-  return linearProgress;
 }
 
 // ============================================================================
@@ -477,6 +488,14 @@ export function renderTransition(
     duration: transition.durationInFrames,
   });
 
+  // Try registry renderer first
+  const renderer = transitionRegistry.getRenderer(presentation);
+  if (renderer?.renderCanvas) {
+    renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas);
+    return;
+  }
+
+  // Built-in fallback
   switch (presentation) {
     case 'fade':
       renderFadeTransition(ctx, leftCanvas, rightCanvas, progress);
@@ -543,8 +562,9 @@ export function isInTransition(
     if (!leftClip) continue;
 
     const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const halfDuration = Math.floor(transition.durationInFrames / 2);
-    const transitionStart = cutPoint - halfDuration;
+    const alignment = transition.alignment ?? 0.5;
+    const leftPortion = Math.floor(transition.durationInFrames * alignment);
+    const transitionStart = cutPoint - leftPortion;
     const transitionEnd = transitionStart + transition.durationInFrames;
 
     if (frame >= transitionStart && frame < transitionEnd) {
@@ -571,8 +591,9 @@ export function getTransitionClipIds(
     if (!leftClip) continue;
 
     const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const halfDuration = Math.floor(transition.durationInFrames / 2);
-    const transitionStart = cutPoint - halfDuration;
+    const alignment = transition.alignment ?? 0.5;
+    const leftPortion = Math.floor(transition.durationInFrames * alignment);
+    const transitionStart = cutPoint - leftPortion;
     const transitionEnd = transitionStart + transition.durationInFrames;
 
     if (frame >= transitionStart && frame < transitionEnd) {

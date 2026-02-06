@@ -32,7 +32,7 @@ import { useTransitionsStore } from './transitions-store';
 import { useKeyframesStore } from './keyframes-store';
 import { useMarkersStore } from './markers-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
-import { validateTransitions } from '../utils/transition-validation';
+import { repairTransitions } from '../utils/transition-auto-repair';
 import { canAddTransition } from '../utils/transition-utils';
 import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 
@@ -40,6 +40,43 @@ import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition
 const execute = <T>(type: string, action: () => T, payload?: Record<string, unknown>): T => {
   return useTimelineCommandStore.getState().execute({ type, payload }, action);
 };
+
+/**
+ * Apply transition repair results to the store.
+ * Replaces the old validate-and-remove pattern with smart repair.
+ */
+function applyTransitionRepairs(
+  changedClipIds: string[],
+  deletedClipIds?: Set<string>
+): void {
+  const items = useItemsStore.getState().items;
+  const transitions = useTransitionsStore.getState().transitions;
+  const { valid, repaired, broken } = repairTransitions(
+    changedClipIds,
+    items,
+    transitions,
+    deletedClipIds
+  );
+
+  // Merge valid + repaired transitions
+  const repairedTransitions = repaired.map((r) => r.repaired);
+  useTransitionsStore.getState().setTransitions([...valid, ...repairedTransitions]);
+
+  // Log repairs
+  if (repaired.length > 0) {
+    for (const r of repaired) {
+      logger.info(`[TransitionRepair] ${r.action}`);
+    }
+  }
+
+  // Report breakages
+  if (broken.length > 0) {
+    useTransitionsStore.getState().setPendingBreakages([
+      ...useTransitionsStore.getState().pendingBreakages,
+      ...broken,
+    ]);
+  }
+}
 
 // =============================================================================
 // TRACK ACTIONS
@@ -67,20 +104,10 @@ export function updateItem(id: string, updates: Partial<TimelineItem>): void {
   execute('UPDATE_ITEM', () => {
     useItemsStore.getState()._updateItem(id, updates);
 
-    // Validate transitions if position changed
+    // Repair transitions if position changed
     const positionChanged = 'from' in updates || 'durationInFrames' in updates || 'trackId' in updates;
     if (positionChanged) {
-      const items = useItemsStore.getState().items;
-      const transitions = useTransitionsStore.getState().transitions;
-      const { valid, broken } = validateTransitions([id], items, transitions);
-
-      useTransitionsStore.getState().setTransitions(valid);
-      if (broken.length > 0) {
-        useTransitionsStore.getState().setPendingBreakages([
-          ...useTransitionsStore.getState().pendingBreakages,
-          ...broken,
-        ]);
-      }
+      applyTransitionRepairs([id]);
     }
 
     useTimelineSettingsStore.getState().markDirty();
@@ -118,23 +145,10 @@ export function closeGapAtPosition(trackId: string, frame: number): void {
   execute('CLOSE_GAP', () => {
     useItemsStore.getState()._closeGapAtPosition(trackId, frame);
 
-    // Validate all transitions on this track
+    // Repair all transitions on this track
     const items = useItemsStore.getState().items;
-    const trackItems = items.filter((i) => i.trackId === trackId);
-    const transitions = useTransitionsStore.getState().transitions;
-    const { valid, broken } = validateTransitions(
-      trackItems.map((i) => i.id),
-      items,
-      transitions
-    );
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    const trackItemIds = items.filter((i) => i.trackId === trackId).map((i) => i.id);
+    applyTransitionRepairs(trackItemIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { trackId, frame });
@@ -144,18 +158,8 @@ export function moveItem(id: string, newFrom: number, newTrackId?: string): void
   execute('MOVE_ITEM', () => {
     useItemsStore.getState()._moveItem(id, newFrom, newTrackId);
 
-    // Validate transitions
-    const items = useItemsStore.getState().items;
-    const transitions = useTransitionsStore.getState().transitions;
-    const { valid, broken } = validateTransitions([id], items, transitions);
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    // Repair transitions
+    applyTransitionRepairs([id]);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newTrackId });
@@ -186,20 +190,9 @@ export function moveItems(updates: Array<{ id: string; from: number; trackId?: s
       return t;
     });
 
-    // Validate transitions for all moved items
-    const { valid, broken } = validateTransitions(
-      updates.map((u) => u.id),
-      items,
-      updatedTransitions
-    );
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    // Apply updated transitions (with trackId fixes) then repair
+    useTransitionsStore.getState().setTransitions(updatedTransitions);
+    applyTransitionRepairs(updates.map((u) => u.id));
 
     useTimelineSettingsStore.getState().markDirty();
   }, { count: updates.length });
@@ -220,18 +213,8 @@ export function trimItemStart(id: string, trimAmount: number): void {
   execute('TRIM_ITEM_START', () => {
     useItemsStore.getState()._trimItemStart(id, trimAmount);
 
-    // Validate transitions
-    const items = useItemsStore.getState().items;
-    const transitions = useTransitionsStore.getState().transitions;
-    const { valid, broken } = validateTransitions([id], items, transitions);
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    // Repair transitions (auto-adjusts duration if clip got shorter)
+    applyTransitionRepairs([id]);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, trimAmount });
@@ -241,18 +224,8 @@ export function trimItemEnd(id: string, trimAmount: number): void {
   execute('TRIM_ITEM_END', () => {
     useItemsStore.getState()._trimItemEnd(id, trimAmount);
 
-    // Validate transitions
-    const items = useItemsStore.getState().items;
-    const transitions = useTransitionsStore.getState().transitions;
-    const { valid, broken } = validateTransitions([id], items, transitions);
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    // Repair transitions (auto-adjusts duration if clip got shorter)
+    applyTransitionRepairs([id]);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, trimAmount });
@@ -320,18 +293,8 @@ export function rateStretchItem(
       useKeyframesStore.getState()._scaleKeyframesForItem(id, oldDuration, newDuration);
     }
 
-    // Validate transitions
-    const items = useItemsStore.getState().items;
-    const transitions = useTransitionsStore.getState().transitions;
-    const { valid, broken } = validateTransitions([id], items, transitions);
-
-    useTransitionsStore.getState().setTransitions(valid);
-    if (broken.length > 0) {
-      useTransitionsStore.getState().setPendingBreakages([
-        ...useTransitionsStore.getState().pendingBreakages,
-        ...broken,
-      ]);
-    }
+    // Repair transitions
+    applyTransitionRepairs([id]);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newDuration, newSpeed });
@@ -476,7 +439,7 @@ export function addTransition(
 
 export function updateTransition(
   id: string,
-  updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>
+  updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'alignment' | 'bezierPoints' | 'presetId'>>
 ): void {
   execute('UPDATE_TRANSITION', () => {
     useTransitionsStore.getState()._updateTransition(id, updates);
@@ -487,7 +450,7 @@ export function updateTransition(
 export function updateTransitions(
   updates: Array<{
     id: string;
-    updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>;
+    updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'alignment' | 'bezierPoints' | 'presetId'>>;
   }>
 ): void {
   if (updates.length === 0) return;

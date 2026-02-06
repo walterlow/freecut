@@ -144,11 +144,17 @@ function checkTransitionValidity(
     );
   }
 
-  // Check for duration validity (Remotion constraint)
-  // Transition duration must be < min(leftDuration, rightDuration)
-  const maxDuration =
-    Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
-  if (transition.durationInFrames > maxDuration) {
+  // Check for duration validity
+  // With alignment support, left portion must fit in left clip, right portion in right clip
+  const alignment = transition.alignment ?? 0.5;
+  const leftPortion = Math.floor(transition.durationInFrames * alignment);
+  const rightPortion = transition.durationInFrames - leftPortion;
+
+  if (leftPortion >= leftClip.durationInFrames || rightPortion >= rightClip.durationInFrames) {
+    const maxDuration = Math.min(
+      Math.floor(leftClip.durationInFrames / alignment),
+      Math.floor(rightClip.durationInFrames / (1 - alignment))
+    ) - 1;
     return createBreakage(
       transition,
       'invalid_duration',
@@ -212,7 +218,7 @@ export function canAddTransitionBetween(
     };
   }
 
-  // Duration check
+  // Duration check (centered alignment by default)
   const maxDuration =
     Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
   if (durationInFrames > maxDuration) {
@@ -221,6 +227,9 @@ export function canAddTransitionBetween(
       reason: `Duration exceeds max ${maxDuration} frames`,
     };
   }
+
+  // Validate alignment bounds if provided
+  // (alignment is validated here for the add case)
 
   // Existing transition check
   const existing = existingTransitions.find(

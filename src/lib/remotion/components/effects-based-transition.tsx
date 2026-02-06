@@ -208,7 +208,7 @@ function getFlipTransform(progress: number, direction: FlipDirection, isOutgoing
  * Calculate conic-gradient mask for clock wipe presentation
  * Creates a sweeping reveal like a clock hand moving clockwise from 12 o'clock
  */
-function getClockWipeMask(progress: number, isOutgoing: boolean): string {
+function getClockWipeMask(progress: number): string {
   // Clock wipe sweeps clockwise from 12 o'clock (top)
   // For outgoing: transparent area expands clockwise, hiding the clip
   const degrees = progress * 360;
@@ -226,7 +226,7 @@ function getClockWipeMask(progress: number, isOutgoing: boolean): string {
  * Calculate radial-gradient mask for iris presentation
  * Creates a circular hole expanding from center, revealing the clip underneath
  */
-function getIrisMask(progress: number, isOutgoing: boolean): string {
+function getIrisMask(progress: number): string {
   // Iris: hole expands from center outward
   // For radial-gradient with 'circle', percentage is relative to the smaller dimension
   // To cover corners of a 16:9 frame, we need ~118% (sqrt(1 + (16/9)^2) / 2 ≈ 1.18)
@@ -266,7 +266,7 @@ const ClipContent: React.FC<{
   clipGlobalFrom: number;
   /** Debug label for logging */
   debugLabel?: string;
-}> = ({ clip, sourceStartOffset = 0, canvasWidth, canvasHeight, fps, adjustmentLayers, clipGlobalFrom, debugLabel }) => {
+}> = ({ clip, sourceStartOffset = 0, canvasWidth, canvasHeight, fps, adjustmentLayers, clipGlobalFrom }) => {
   // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
@@ -604,7 +604,7 @@ const TransitionOverlay: React.FC<{
           transform: `translateZ(0) ${getSlideTransform(progress, direction as SlideDirection || 'from-left', isOutgoing, canvasWidth, canvasHeight)}`,
         };
 
-      case 'flip':
+      case 'flip': {
         // Card flip: outgoing visible in first half, incoming in second half
         // Use opacity to hide the clip that shouldn't be visible at this progress
         const flipMidpoint = 0.5;
@@ -616,6 +616,7 @@ const TransitionOverlay: React.FC<{
           transform: getFlipTransform(progress, direction as FlipDirection || 'from-left', isOutgoing),
           opacity: flipOpacity,
         };
+      }
 
       case 'none':
         // Hard cut at midpoint
@@ -629,8 +630,8 @@ const TransitionOverlay: React.FC<{
         if (isOutgoing) {
           return {
             ...baseStyle,
-            maskImage: getClockWipeMask(progress, true),
-            WebkitMaskImage: getClockWipeMask(progress, true),
+            maskImage: getClockWipeMask(progress),
+            WebkitMaskImage: getClockWipeMask(progress),
             maskSize: '100% 100%',
             WebkitMaskSize: '100% 100%',
             maskPosition: 'center',
@@ -645,8 +646,8 @@ const TransitionOverlay: React.FC<{
         if (isOutgoing) {
           return {
             ...baseStyle,
-            maskImage: getIrisMask(progress, true),
-            WebkitMaskImage: getIrisMask(progress, true),
+            maskImage: getIrisMask(progress),
+            WebkitMaskImage: getIrisMask(progress),
             maskSize: '100% 100%',
             WebkitMaskSize: '100% 100%',
             maskPosition: 'center',
@@ -728,9 +729,7 @@ export const EffectsBasedTransitionRenderer = React.memo<EffectsBasedTransitionP
           visibility: leftClip.trackVisible && rightClip.trackVisible ? 'visible' : 'hidden',
         }}
       >
-        {/* Opaque background to cover underlying normal clip renders */}
-        {/* This ensures the transition effect is the only thing visible during transition */}
-        <AbsoluteFill style={{ backgroundColor: '#000' }} />
+        {/* NO black background - let normal clips show through until transition videos ready */}
 
         {/* Incoming clip (right) - sits at bottom, gets revealed */}
         {/* Uses sourceStartOffset so frames align with normal rendering after transition */}
@@ -772,12 +771,12 @@ export const EffectsBasedTransitionRenderer = React.memo<EffectsBasedTransitionP
         >
           <Sequence
             from={0}
-            durationInFrames={transition.durationInFrames + Math.abs(leftClipContentOffset)}
+            durationInFrames={transition.durationInFrames}
             premountFor={premountFrames}
           >
             <ClipContent
               clip={leftClip}
-              sourceStartOffset={leftClipContentOffset}
+              sourceStartOffset={leftClip.durationInFrames - transition.durationInFrames}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               fps={fps}

@@ -38,7 +38,7 @@ export interface TransitionsActions {
   ) => string;
   _updateTransition: (
     id: string,
-    updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>
+    updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'alignment' | 'bezierPoints' | 'presetId'>>
   ) => void;
   _removeTransition: (id: string) => void;
   _removeTransitions: (ids: string[]) => void;
