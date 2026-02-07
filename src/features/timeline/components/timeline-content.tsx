@@ -26,6 +26,7 @@ import {
 // Components
 import { TimelineMarkers } from './timeline-markers';
 import { TimelinePlayhead } from './timeline-playhead';
+import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
 import { TimelineGuidelines } from './timeline-guidelines';
 import { TimelineSplitIndicator } from './timeline-split-indicator';
@@ -67,7 +68,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   const furthestItemEndFrame = useTimelineStore((s) =>
     s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
   );
-  const { timeToPixels, pixelsToTime, frameToPixels, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
+  const { timeToPixels, pixelsToTime, frameToPixels, pixelsToFrame, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
     minZoom: 0.01,
     maxZoom: 2, // Match slider range
   });
@@ -97,6 +98,33 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   const marqueeWasActiveRef = useRef(false);
   const dragWasActiveRef = useRef(false);
   const scrubWasActiveRef = useRef(false);
+
+  // Preview frame hover state
+  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
+  const setPreviewFrameRef = useRef(setPreviewFrame);
+  setPreviewFrameRef.current = setPreviewFrame;
+  const previewRafRef = useRef<number | null>(null);
+
+  const pixelsToFrameRef = useRef(pixelsToFrame);
+  pixelsToFrameRef.current = pixelsToFrame;
+
+  // Clear previewFrame when playback starts
+  useEffect(() => {
+    return usePlaybackStore.subscribe((state, prev) => {
+      if (state.isPlaying && !prev.isPlaying) {
+        state.setPreviewFrame(null);
+      }
+    });
+  }, []);
+
+  // Cleanup preview RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (previewRafRef.current !== null) {
+        cancelAnimationFrame(previewRafRef.current);
+      }
+    };
+  }, []);
 
   // Use refs to avoid callback recreation on every frame/zoom change
   // Access currentFrame via store subscription (no re-renders) instead of hook
@@ -416,6 +444,45 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     setHoveredItemElement(null);
   }, []);
 
+  // Preview scrubber: show ghost playhead on hover
+  const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
+    // Skip during playback
+    if (usePlaybackStore.getState().isPlaying) {
+      if (usePlaybackStore.getState().previewFrame !== null) {
+        setPreviewFrameRef.current(null);
+      }
+      return;
+    }
+    // Skip in razor mode (has its own cursor)
+    if (activeToolRef.current === 'razor') return;
+    // Skip during any drag (playhead drag, item drag, marquee)
+    if (marqueeWasActiveRef.current || dragWasActiveRef.current || scrubWasActiveRef.current) return;
+
+    const scrollContainer = containerRef.current;
+    if (!scrollContainer) return;
+
+    const rect = scrollContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left + scrollContainer.scrollLeft;
+    const frame = Math.max(0, pixelsToFrameRef.current(x));
+
+    // RAF-throttle the store update
+    if (previewRafRef.current !== null) {
+      cancelAnimationFrame(previewRafRef.current);
+    }
+    previewRafRef.current = requestAnimationFrame(() => {
+      previewRafRef.current = null;
+      setPreviewFrameRef.current(frame);
+    });
+  }, []);
+
+  const handleTimelineMouseLeave = useCallback(() => {
+    if (previewRafRef.current !== null) {
+      cancelAnimationFrame(previewRafRef.current);
+      previewRafRef.current = null;
+    }
+    setPreviewFrameRef.current(null);
+  }, []);
+
   // Calculate the actual timeline duration and width based on content
   // Uses derived furthestItemEndFrame selector instead of full items array
   const { actualDuration, timelineWidth } = useMemo(() => {
@@ -720,6 +787,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
         willChange: 'scroll-position', // Hint to browser for optimization
       }}
       onClick={handleContainerClick}
+      onMouseMove={handleTimelineMouseMove}
+      onMouseLeave={handleTimelineMouseLeave}
     >
       {/* Marquee selection overlay */}
       <MarqueeOverlay marqueeState={marqueeState} />
@@ -727,6 +796,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
       {/* Time Ruler - sticky at top */}
       <div className="sticky top-0 z-30 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
         <TimelineMarkers duration={actualDuration} width={timelineWidth} />
+        <TimelinePreviewScrubber inRuler />
         <TimelinePlayhead inRuler maxFrame={Math.floor(actualDuration * fps)} />
       </div>
 
@@ -764,6 +834,9 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
               tracksContainerRef={tracksContainerRef}
             />
           )}
+
+          {/* Preview scrubber ghost line through all tracks */}
+          <TimelinePreviewScrubber />
 
           {/* Playhead line through all tracks */}
           <TimelinePlayhead maxFrame={Math.floor(actualDuration * fps)} />

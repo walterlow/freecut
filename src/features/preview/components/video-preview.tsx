@@ -158,6 +158,33 @@ function useCustomPlayer(
     return unsubscribe;
   }, [playerReady, playerRef]);
 
+  // Preview frame seeking: seek to hovered position on timeline
+  useEffect(() => {
+    if (!playerReady || !playerRef.current) return;
+
+    return usePlaybackStore.subscribe((state, prev) => {
+      if (!playerRef.current) return;
+      if (state.isPlaying) return;
+      if (state.previewFrame === prev.previewFrame) return;
+
+      if (state.previewFrame !== null) {
+        // Seek to preview position
+        ignorePlayerUpdatesRef.current = true;
+        playerRef.current.seekTo(state.previewFrame);
+        requestAnimationFrame(() => {
+          ignorePlayerUpdatesRef.current = false;
+        });
+      } else {
+        // Preview ended — seek back to actual playback position
+        ignorePlayerUpdatesRef.current = true;
+        playerRef.current.seekTo(state.currentFrame);
+        requestAnimationFrame(() => {
+          ignorePlayerUpdatesRef.current = false;
+        });
+      }
+    });
+  }, [playerReady, playerRef]);
+
   return { isBuffering };
 }
 
@@ -469,7 +496,9 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
   }, []);
 
   // Handle frame change from player
+  // Skip when in preview mode to keep primary playhead stationary
   const handleFrameChange = useCallback((frame: number) => {
+    if (usePlaybackStore.getState().previewFrame !== null) return;
     usePlaybackStore.getState().setCurrentFrame(frame);
   }, []);
 
@@ -492,6 +521,8 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
     const handleTimeUpdate = () => {
       const now = performance.now();
       if (now - lastUpdateTime >= THROTTLE_MS) {
+        // Skip when in preview mode to keep primary playhead stationary
+        if (usePlaybackStore.getState().previewFrame !== null) return;
         const frame = playerRef.current?.getCurrentFrame();
         if (frame !== undefined) {
           usePlaybackStore.getState().setCurrentFrame(frame);
@@ -549,13 +580,15 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
             {GPU_MODE === 'buffered' ? (
               // WASM-buffered GPU playback (experimental)
               (() => {
+                const s = usePlaybackStore.getState();
+                const effectiveFrame = s.previewFrame ?? s.currentFrame;
                 const videoItems = items.filter((item) => item.type === 'video');
                 const firstVideo = videoItems[0];
                 const videoSrc = firstVideo?.mediaId ? resolvedUrls.get(firstVideo.mediaId) ?? '' : '';
                 return (
                   <BufferedGPUPreview
                     src={videoSrc}
-                    currentFrame={usePlaybackStore.getState().currentFrame}
+                    currentFrame={effectiveFrame}
                     fps={fps}
                     width={Math.round(playerSize.width)}
                     height={Math.round(playerSize.height)}
@@ -567,21 +600,27 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
                 );
               })()
             ) : GPU_MODE === 'always' || (GPU_MODE === 'scrubbing' && !usePlaybackStore.getState().isPlaying) ? (
-              <GPUVideoPreview
-                items={items.filter((item) => item.type === 'video').map((item) => ({
-                  ...item,
-                  type: 'video' as const,
-                  src: resolvedUrls.get(item.mediaId ?? '') ?? '',
-                }))}
-                tracks={tracks}
-                currentFrame={usePlaybackStore.getState().currentFrame}
-                fps={fps}
-                width={Math.round(playerSize.width)}
-                height={Math.round(playerSize.height)}
-                backgroundColor={project.backgroundColor}
-                onFrameRendered={handleFrameChange}
-                onError={(err) => console.error('[GPU Preview]', err)}
-              />
+              (() => {
+                const s2 = usePlaybackStore.getState();
+                const effectiveFrame2 = s2.previewFrame ?? s2.currentFrame;
+                return (
+                  <GPUVideoPreview
+                    items={items.filter((item) => item.type === 'video').map((item) => ({
+                      ...item,
+                      type: 'video' as const,
+                      src: resolvedUrls.get(item.mediaId ?? '') ?? '',
+                    }))}
+                    tracks={tracks}
+                    currentFrame={effectiveFrame2}
+                    fps={fps}
+                    width={Math.round(playerSize.width)}
+                    height={Math.round(playerSize.height)}
+                    backgroundColor={project.backgroundColor}
+                    onFrameRendered={handleFrameChange}
+                    onError={(err) => console.error('[GPU Preview]', err)}
+                  />
+                );
+              })()
             ) : (
               <Player
                 ref={playerRef}

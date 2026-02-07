@@ -15,6 +15,8 @@ export interface PlaybackState {
   volume: number;
   muted: boolean;
   zoom: number;
+  /** Frame to preview on hover (null when not hovering) */
+  previewFrame: number | null;
   /** Function to capture the current Player frame as a data URL (set by VideoPreview) */
   captureFrame: ((options?: CaptureOptions) => Promise<string | null>) | null;
 }
@@ -29,6 +31,7 @@ export interface PlaybackActions {
   setVolume: (volume: number) => void;
   toggleMute: () => void;
   setZoom: (zoom: number) => void;
+  setPreviewFrame: (frame: number | null) => void;
   /** Register a frame capture function (called by VideoPreview on mount) */
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
 }
