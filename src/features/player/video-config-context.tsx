@@ -1,13 +1,13 @@
 /**
- * Video Config Context - Provides video configuration for Remotion components
+ * Video Config Context - Provides video configuration for Composition components
  * 
- * This context mimics Remotion's Internals.useVideoConfig() so that
- * MainComposition and other Remotion components work correctly.
+ * This context mimics Composition's Internals.useVideoConfig() so that
+ * MainComposition and other Composition components work correctly.
  */
 
 import React, { createContext, useContext, useMemo } from 'react';
 
-// Video config type matching Remotion's VideoConfig
+// Video config type matching Composition's VideoConfig
 export interface VideoConfig {
   fps: number;
   width: number;

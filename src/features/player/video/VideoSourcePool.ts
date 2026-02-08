@@ -41,7 +41,9 @@ export class SourceController {
   private onElementError?: (element: HTMLVideoElement, error: Error) => void;
 
   // Configuration
-  private static readonly MAX_OVERFLOW_ELEMENTS = 2;
+  // Need enough concurrent elements for same-source split transitions:
+  // left main clip + right main clip + transition left + transition right = 4 total.
+  private static readonly MAX_OVERFLOW_ELEMENTS = 3;
 
   constructor(
     sourceUrl: string,
@@ -109,17 +111,17 @@ export class SourceController {
       return element;
     }
 
-    // All elements in use - return primary anyway (will cause visual glitch but won't crash)
-    // This handles edge case of >3 simultaneous clips from same source
+    // All pooled elements are currently in use.
+    // Do NOT reuse an in-use element: this can cause cross-clip state conflicts
+    // (mute/seek/playback race) and audible dropouts during transitions.
+    // Instead, create an extra overflow element for this rare overlap.
     console.warn(
-      `[SourceController] All elements in use for ${this.sourceUrl}, reusing primary`
+      `[SourceController] All pooled elements in use for ${this.sourceUrl}, creating extra overflow element`
     );
-    if (this.primary) {
-      this.assignments.set(clipId, this.primary);
-      return this.primary;
-    }
-
-    return null;
+    const extraElement = this.createElementSync();
+    this.overflow.push(extraElement);
+    this.assignments.set(clipId, extraElement);
+    return extraElement;
   }
 
   /**

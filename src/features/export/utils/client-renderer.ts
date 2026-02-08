@@ -1,11 +1,11 @@
 /**
  * Client-side video renderer using mediabunny
  *
- * Renders the Remotion composition to a canvas and encodes it to video
+ * Renders the Composition composition to a canvas and encodes it to video
  * using mediabunny's WebCodecs-based encoder.
  *
  * Architecture:
- * 1. Mount a hidden Remotion Player at the export resolution
+ * 1. Mount a hidden Composition Player at the export resolution
  * 2. For each frame, seek to that frame and capture to canvas
  * 3. Feed canvas frames to mediabunny CanvasSource for encoding
  * 4. Collect audio from media items and encode with AudioDataSource

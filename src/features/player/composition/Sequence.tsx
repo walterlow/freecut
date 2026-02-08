@@ -1,14 +1,14 @@
 /**
  * Sequence.tsx - Time-bounded visibility component
  *
- * A replacement for Remotion's Sequence component that shows/hides
+ * A replacement for Composition's Sequence component that shows/hides
  * children based on the current frame position.
  *
- * Key differences from Remotion:
+ * Key differences from Composition:
  * - Uses CSS visibility instead of conditional rendering
  *   (keeps DOM stable, prevents video element remounting)
  * - Provides local frame context to children
- * - No dependency on Remotion's internals
+ * - No dependency on Composition's internals
  */
 
 import React, { createContext, useContext, useMemo, memo } from 'react';
@@ -83,7 +83,7 @@ export interface SequenceProps {
    */
   premountFor?: number;
   /**
-   * Show loop timestamps for debugging (Remotion compat, ignored)
+   * Show loop timestamps for debugging (Composition compat, ignored)
    */
   showLoopTimestamps?: boolean;
 }

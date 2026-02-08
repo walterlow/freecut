@@ -11,7 +11,7 @@ import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/remotion/utils/transform-resolver';
+} from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 import { autoKeyframeProperty as autoKeyframeProp } from '@/features/keyframes/utils/auto-keyframe';
 import {

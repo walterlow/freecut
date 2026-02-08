@@ -1,8 +1,8 @@
 /**
- * Remotion compatibility layer for the custom player.
+ * Composition compatibility layer for the custom player.
  *
- * These hooks provide a Remotion-like API using the custom Clock-based player.
- * Export uses Canvas + WebCodecs (client-render-engine.ts), not Remotion's renderer.
+ * These hooks provide a Composition-like API using the custom Clock-based player.
+ * Export uses Canvas + WebCodecs (client-render-engine.ts), not Composition's renderer.
  */
 
 import { useVideoConfig as useCustomVideoConfig } from '@/features/player/video-config-context';
@@ -24,7 +24,7 @@ export function useCurrentFrame() {
 
 /**
  * Check if we're in rendering mode.
- * Always returns false since we use Canvas + WebCodecs for export, not Remotion's renderer.
+ * Always returns false since we use Canvas + WebCodecs for export, not Composition's renderer.
  */
 export function useIsRendering(): boolean {
   return false;

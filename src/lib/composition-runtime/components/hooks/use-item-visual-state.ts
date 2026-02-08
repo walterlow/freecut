@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react';
-import { useVideoConfig } from '../../hooks/use-remotion-compat';
+import { useVideoConfig } from '../../hooks/use-player-compat';
 import { interpolate, useSequenceContext } from '@/features/player/composition';
 import { useGizmoStore, type ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';

@@ -1,12 +1,12 @@
 import type { TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
 
-// Base type for all timeline items (following Remotion pattern)
+// Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
   id: string;
   trackId: string;
-  from: number; // Start frame (Remotion convention)
-  durationInFrames: number; // Duration in frames (Remotion convention)
+  from: number; // Start frame (Composition convention)
+  durationInFrames: number; // Duration in frames (Composition convention)
   label: string;
   mediaId?: string;
   originId?: string; // Tracks lineage - items from same split share this for stable React keys

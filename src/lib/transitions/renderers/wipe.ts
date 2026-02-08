@@ -16,24 +16,25 @@ const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', '
 // ============================================================================
 
 function calculateWipeClipPath(progress: number, direction: WipeDirection, isOutgoing: boolean): string {
-  const p = isOutgoing ? progress : 1 - progress;
+  const p = Math.max(0, Math.min(1, progress));
+  const inverse = 1 - p;
   switch (direction) {
     case 'from-left':
       return isOutgoing
         ? `inset(0 0 0 ${p * 100}%)`
-        : `inset(0 ${p * 100}% 0 0)`;
+        : `inset(0 ${inverse * 100}% 0 0)`;
     case 'from-right':
       return isOutgoing
         ? `inset(0 ${p * 100}% 0 0)`
-        : `inset(0 0 0 ${p * 100}%)`;
+        : `inset(0 0 0 ${inverse * 100}%)`;
     case 'from-top':
       return isOutgoing
         ? `inset(${p * 100}% 0 0 0)`
-        : `inset(0 0 ${p * 100}% 0)`;
+        : `inset(0 0 ${inverse * 100}% 0)`;
     case 'from-bottom':
       return isOutgoing
         ? `inset(0 0 ${p * 100}% 0)`
-        : `inset(${p * 100}% 0 0 0)`;
+        : `inset(${inverse * 100}% 0 0 0)`;
     default:
       return 'none';
   }
@@ -41,12 +42,12 @@ function calculateWipeClipPath(progress: number, direction: WipeDirection, isOut
 
 const wipeRenderer: TransitionRenderer = {
   calculateStyles(progress, isOutgoing, _cw, _ch, direction): TransitionStyleCalculation {
-    const p = Math.max(0, Math.min(1, progress));
-    if (isOutgoing) {
-      const clipPath = calculateWipeClipPath(p, (direction as WipeDirection) || 'from-left', true);
-      return { clipPath, webkitClipPath: clipPath };
-    }
-    return {};
+    const clipPath = calculateWipeClipPath(
+      progress,
+      (direction as WipeDirection) || 'from-left',
+      isOutgoing
+    );
+    return { clipPath, webkitClipPath: clipPath };
   },
   renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
     const p = Math.max(0, Math.min(1, progress));
@@ -54,21 +55,34 @@ const wipeRenderer: TransitionRenderer = {
     const w = canvas?.width ?? leftCanvas.width;
     const h = canvas?.height ?? leftCanvas.height;
 
-    ctx.drawImage(rightCanvas, 0, 0);
-    ctx.save();
-    const ep = p; // effective progress for outgoing
-    const path = new Path2D();
+    const outgoingPath = new Path2D();
+    const incomingPath = new Path2D();
     switch (dir) {
       case 'from-left':
-        path.rect(ep * w, 0, w, h); break;
+        incomingPath.rect(0, 0, p * w, h);
+        outgoingPath.rect(p * w, 0, w, h);
+        break;
       case 'from-right':
-        path.rect(0, 0, (1 - ep) * w, h); break;
+        incomingPath.rect((1 - p) * w, 0, w, h);
+        outgoingPath.rect(0, 0, (1 - p) * w, h);
+        break;
       case 'from-top':
-        path.rect(0, ep * h, w, h); break;
+        incomingPath.rect(0, 0, w, p * h);
+        outgoingPath.rect(0, p * h, w, h);
+        break;
       case 'from-bottom':
-        path.rect(0, 0, w, (1 - ep) * h); break;
+        incomingPath.rect(0, (1 - p) * h, w, h);
+        outgoingPath.rect(0, 0, w, (1 - p) * h);
+        break;
     }
-    ctx.clip(path);
+
+    ctx.save();
+    ctx.clip(incomingPath);
+    ctx.drawImage(rightCanvas, 0, 0);
+    ctx.restore();
+
+    ctx.save();
+    ctx.clip(outgoingPath);
     ctx.drawImage(leftCanvas, 0, 0);
     ctx.restore();
   },

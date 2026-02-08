@@ -172,25 +172,26 @@ export function calculateWipeClipPath(
   direction: WipeDirection,
   isOutgoing: boolean
 ): string {
-  const effectiveProgress = isOutgoing ? progress : 1 - progress;
+  const p = Math.max(0, Math.min(1, progress));
+  const inverse = 1 - p;
 
   switch (direction) {
     case 'from-left':
       return isOutgoing
-        ? `inset(0 0 0 ${effectiveProgress * 100}%)`
-        : `inset(0 ${effectiveProgress * 100}% 0 0)`;
+        ? `inset(0 0 0 ${p * 100}%)`
+        : `inset(0 ${inverse * 100}% 0 0)`;
     case 'from-right':
       return isOutgoing
-        ? `inset(0 ${effectiveProgress * 100}% 0 0)`
-        : `inset(0 0 0 ${effectiveProgress * 100}%)`;
+        ? `inset(0 ${p * 100}% 0 0)`
+        : `inset(0 0 0 ${inverse * 100}%)`;
     case 'from-top':
       return isOutgoing
-        ? `inset(${effectiveProgress * 100}% 0 0 0)`
-        : `inset(0 0 ${effectiveProgress * 100}% 0)`;
+        ? `inset(${p * 100}% 0 0 0)`
+        : `inset(0 0 ${inverse * 100}% 0)`;
     case 'from-bottom':
       return isOutgoing
-        ? `inset(0 0 ${effectiveProgress * 100}% 0)`
-        : `inset(${effectiveProgress * 100}% 0 0 0)`;
+        ? `inset(0 0 ${p * 100}% 0)`
+        : `inset(${inverse * 100}% 0 0 0)`;
     default:
       return 'none';
   }
@@ -327,11 +328,12 @@ function calculateBuiltinTransitionStyles(
       return { opacity: calculateFadeOpacity(progress, isOutgoing) };
     }
     case 'wipe': {
-      if (isOutgoing) {
-        const clipPath = calculateWipeClipPath(progress, (direction as WipeDirection) || 'from-left', true);
-        return { clipPath, webkitClipPath: clipPath };
-      }
-      return {};
+      const clipPath = calculateWipeClipPath(
+        progress,
+        (direction as WipeDirection) || 'from-left',
+        isOutgoing
+      );
+      return { clipPath, webkitClipPath: clipPath };
     }
     case 'slide': {
       return {

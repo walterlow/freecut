@@ -3,8 +3,8 @@ import { AbsoluteFill, interpolate, useSequenceContext } from '@/features/player
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useDebugStore } from '@/features/editor/stores/debug-store';
-import { useVideoConfig, useIsPlaying } from '../hooks/use-remotion-compat';
-import type { TimelineItem, VideoItem } from '@/types/timeline';
+import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
+import type { TimelineItem, VideoItem, ShapeItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
@@ -618,7 +618,7 @@ const VideoContent: React.FC<{
   }
 
   // Use native HTML5 video with VideoSourcePool for element reuse
-  // Export uses Canvas + WebCodecs (client-render-engine.ts), not Remotion's renderer
+  // Export uses Canvas + WebCodecs (client-render-engine.ts), not Composition's renderer
   return (
     <NativePreviewVideo
       itemId={item.id}
@@ -645,10 +645,10 @@ export interface ItemProps {
 }
 
 /**
- * Remotion Item Component
+ * Composition Item Component
  *
- * Renders different item types following Remotion best practices:
- * - Video: OffthreadVideo for preview (resilient to UI), @remotion/media Video for rendering
+ * Renders different item types following Composition best practices:
+ * - Video: OffthreadVideo for preview (resilient to UI), @legacy-video/media Video for rendering
  * - Audio: Uses Audio component with trim support
  * - Image: Uses img tag
  * - Text: Renders text with styling
@@ -660,7 +660,7 @@ export interface ItemProps {
  */
 export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) => {
   // Use muted prop directly - MainComposition already passes track.muted
-  // Avoiding store subscription here prevents re-render issues with @remotion/media Audio
+  // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
   // Debug overlay toggle (always false in production via store)
   const showDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay);
@@ -706,7 +706,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
     const hasCorruptedMetadata = sourceDuration === 0 && effectiveSourceSegment === 0 && trimBefore > MAX_REASONABLE_FRAMES;
 
     if (hasCorruptedMetadata || isInvalidSeek) {
-      console.error('[Remotion Item] Invalid source position detected:', {
+      console.error('[Composition Item] Invalid source position detected:', {
         itemId: item.id,
         sourceStart: item.sourceStart,
         trimBefore,
@@ -731,7 +731,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
     // Also use effectiveSourceSegment as fallback for rate-stretched clips
     const effectiveDuration = sourceDuration > 0 ? sourceDuration : effectiveSourceSegment;
     if (exceedsSource && safeTrimBefore === 0 && effectiveDuration > 0 && sourceFramesNeeded > effectiveDuration) {
-      console.error('[Remotion Item] Clip duration exceeds source duration:', {
+      console.error('[Composition Item] Clip duration exceeds source duration:', {
         itemId: item.id,
         sourceFramesNeeded,
         sourceDuration,
@@ -820,7 +820,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
       );
     }
 
-    // Use Remotion's Gif component for animated GIFs
+    // Use Composition's Gif component for animated GIFs
     // This ensures proper frame-by-frame rendering during export
     // Check both src URL and item label (original filename) for .gif extension
     const isAnimatedGif = isGifUrl(item.src) || (item.label && item.label.toLowerCase().endsWith('.gif'));
@@ -879,7 +879,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
 
   if (item.type === 'shape') {
     // Use new ItemVisualWrapper for consolidated state and fixed DOM structure
-    // ShapeContent renders the appropriate Remotion shape based on shapeType
+    // ShapeContent renders the appropriate Composition shape based on shapeType
     return (
       <ItemVisualWrapper item={item} masks={masks}>
         <ShapeContent item={item} />

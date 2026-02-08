@@ -1,4 +1,4 @@
-// CSS filter types that work in both browser preview and Remotion export
+// CSS filter types that work in both browser preview and Composition export
 export type CSSFilterType =
   | 'brightness'
   | 'contrast'

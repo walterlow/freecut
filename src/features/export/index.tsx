@@ -1,7 +1,7 @@
 export { ExportDialog } from './components/export-dialog';
 export { useClientRender } from './hooks/use-client-render';
 export * from './types';
-export * from './utils/timeline-to-remotion';
+export * from './utils/timeline-to-composition';
 // Client renderer utilities (types exported with different names to avoid conflicts)
 export {
   mapToClientSettings,

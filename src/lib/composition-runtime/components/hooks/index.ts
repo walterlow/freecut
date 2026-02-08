@@ -1,5 +1,5 @@
 /**
- * Remotion component hooks for visual state management.
+ * Composition component hooks for visual state management.
  */
 export {
   useItemVisualState,

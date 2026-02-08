@@ -9,7 +9,7 @@ import { useGizmoStore, isFullTransform } from '@/features/preview/stores/gizmo-
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/remotion/utils/transform-resolver';
+} from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 
 /**
@@ -40,7 +40,7 @@ interface ProjectSize {
  * 2. Unified preview (preview[itemId].transform) - from panels or group drag
  * 3. Keyframe-animated base transform - default
  *
- * Use this in gizmo/preview components. For Remotion composition components,
+ * Use this in gizmo/preview components. For Composition composition components,
  * use the inline logic with useCurrentFrame() since it's already relative
  * to the item's Sequence.
  *

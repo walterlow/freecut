@@ -1,7 +1,7 @@
 /**
  * Native shape utilities
  *
- * Replaces @remotion/shapes and @remotion/paths with native implementations.
+ * Replaces @legacy-video/shapes and @legacy-video/paths with native implementations.
  */
 
 // Shape path generators

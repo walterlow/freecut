@@ -1,5 +1,5 @@
 /**
- * Native SVG shape generators to replace @remotion/shapes
+ * Native SVG shape generators to replace @legacy-video/shapes
  *
  * Generates SVG path strings for common shapes.
  * All paths are generated at origin (0,0) and can be translated/scaled as needed.
@@ -193,7 +193,7 @@ export function makePolygon(options: {
 
 /**
  * Generate a heart path
- * Port of Remotion's makeHeart algorithm using 7 cubic bezier segments.
+ * Port of Composition's makeHeart algorithm using 7 cubic bezier segments.
  * The heart width equals height * 1.1.
  */
 export function makeHeart(options: { height: number }): ShapeResult {

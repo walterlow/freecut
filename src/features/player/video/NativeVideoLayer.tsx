@@ -1,7 +1,7 @@
 /**
  * NativeVideoLayer.tsx - Native video rendering layer using VideoSourcePool
  *
- * This component provides an alternative to Remotion's video rendering,
+ * This component provides an alternative to Composition's video rendering,
  * using HTMLVideoElement directly for better control over playback.
  *
  * Features:
@@ -13,7 +13,7 @@
  *
  * Usage:
  * Replace StableVideoSequence with NativeVideoLayer in MainComposition
- * when you want to use native video rendering instead of Remotion.
+ * when you want to use native video rendering instead of Composition.
  */
 
 import React, { useMemo } from 'react';

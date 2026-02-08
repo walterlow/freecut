@@ -1,8 +1,8 @@
 /**
- * Composition Components - Replacements for Remotion primitives
+ * Composition Components - Replacements for Composition primitives
  *
  * This module provides components and utilities that replace
- * Remotion's composition primitives:
+ * Composition's composition primitives:
  *
  * - Sequence: Time-bounded visibility
  * - AbsoluteFill: Full container positioning

@@ -5,9 +5,10 @@
  * Supports audio from video items and standalone audio items.
  */
 
-import type { RemotionInputProps } from '@/types/export';
+import type { CompositionInputProps } from '@/types/export';
 import type { VideoItem, AudioItem } from '@/types/timeline';
 import { createLogger } from '@/lib/logger';
+import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
 
 const log = createLogger('CanvasAudio');
 
@@ -74,9 +75,45 @@ export interface AudioProcessingConfig {
  * @param composition - The composition with tracks
  * @returns Array of audio segments to process
  */
-export function extractAudioSegments(composition: RemotionInputProps): AudioSegment[] {
-  const { tracks = [] } = composition;
+export function extractAudioSegments(composition: CompositionInputProps): AudioSegment[] {
+  const { tracks = [], transitions = [] } = composition;
   const segments: AudioSegment[] = [];
+  const audioOnlySegments: AudioSegment[] = [];
+  const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean }>();
+  const extensionByClipId = new Map<string, { before: number; after: number }>();
+
+  const ensureExtension = (clipId: string): { before: number; after: number } => {
+    const existing = extensionByClipId.get(clipId);
+    if (existing) return existing;
+    const created = { before: 0, after: 0 };
+    extensionByClipId.set(clipId, created);
+    return created;
+  };
+
+  const getVideoTrimBefore = (item: VideoItem): number => {
+    return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+  };
+
+  const isContinuousAudioTransition = (left: VideoItem, right: VideoItem): boolean => {
+    const leftSpeed = left.speed ?? 1;
+    const rightSpeed = right.speed ?? 1;
+    if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
+
+    const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
+      || (!!left.src && !!right.src && left.src === right.src);
+    if (!sameMedia) return false;
+
+    if (left.originId && right.originId && left.originId !== right.originId) return false;
+
+    const expectedRightFrom = left.from + left.durationInFrames;
+    if (right.from !== expectedRightFrom) return false;
+
+    const leftTrim = getVideoTrimBefore(left);
+    const rightTrim = getVideoTrimBefore(right);
+    const expectedRightTrim = leftTrim + Math.round(left.durationInFrames * leftSpeed);
+
+    return Math.abs(rightTrim - expectedRightTrim) <= 1;
+  };
 
   for (const track of tracks) {
     if (track.visible === false) continue;
@@ -85,24 +122,10 @@ export function extractAudioSegments(composition: RemotionInputProps): AudioSegm
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
         if (!videoItem.src) continue;
-
-        // Use sourceStart as primary - it contains the full source offset including:
-      // 1. Original position from split operations
-      // 2. Additional trim from IO markers
-      // Fall back to trimStart for backward compatibility
-      segments.push({
-          itemId: item.id,
+        videoById.set(item.id, {
+          item: videoItem,
           trackId: track.id,
-          src: videoItem.src,
-          startFrame: item.from,
-          durationFrames: item.durationInFrames,
-          sourceStartFrame: videoItem.sourceStart ?? videoItem.trimStart ?? 0,
-          volume: item.volume ?? 0, // dB
-          fadeInFrames: item.audioFadeIn ?? 0,
-          fadeOutFrames: item.audioFadeOut ?? 0,
-          speed: videoItem.speed ?? 1,
           muted: track.muted ?? false,
-          type: 'video',
         });
       } else if (item.type === 'audio') {
         const audioItem = item as AudioItem;
@@ -110,7 +133,7 @@ export function extractAudioSegments(composition: RemotionInputProps): AudioSegm
 
         // Use sourceStart as primary for consistency with video items
         // This ensures split audio clips and IO markers work correctly
-        segments.push({
+        audioOnlySegments.push({
           itemId: item.id,
           trackId: track.id,
           src: audioItem.src,
@@ -127,6 +150,63 @@ export function extractAudioSegments(composition: RemotionInputProps): AudioSegm
       }
     }
   }
+
+  const videoItemsById = new Map<string, VideoItem>();
+  for (const [id, entry] of videoById) {
+    videoItemsById.set(id, entry.item);
+  }
+  const resolvedWindows = resolveTransitionWindows(transitions, videoItemsById);
+
+  for (const window of resolvedWindows) {
+    const leftEntry = videoById.get(window.transition.leftClipId);
+    const rightEntry = videoById.get(window.transition.rightClipId);
+    if (!leftEntry || !rightEntry) continue;
+
+    const left = leftEntry.item;
+    const right = rightEntry.item;
+    if (isContinuousAudioTransition(left, right)) continue;
+
+    const rightPreRoll = Math.max(0, right.from - window.startFrame);
+    const leftPostRoll = Math.max(0, window.endFrame - (left.from + left.durationInFrames));
+
+    if (rightPreRoll > 0) {
+      const rightExt = ensureExtension(right.id);
+      rightExt.before = Math.max(rightExt.before, rightPreRoll);
+    }
+
+    if (leftPostRoll > 0) {
+      const leftExt = ensureExtension(left.id);
+      leftExt.after = Math.max(leftExt.after, leftPostRoll);
+    }
+  }
+
+  const expandedVideoSegments: AudioSegment[] = [];
+  for (const [, entry] of videoById) {
+    const videoItem = entry.item;
+    const speed = videoItem.speed ?? 1;
+    const baseTrimBefore = getVideoTrimBefore(videoItem);
+    const extension = extensionByClipId.get(videoItem.id) ?? { before: 0, after: 0 };
+    const maxBeforeBySource = speed > 0 ? Math.floor(baseTrimBefore / speed) : 0;
+    const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
+    const after = Math.max(0, extension.after);
+
+    expandedVideoSegments.push({
+      itemId: videoItem.id,
+      trackId: entry.trackId,
+      src: videoItem.src,
+      startFrame: videoItem.from - before,
+      durationFrames: videoItem.durationInFrames + before + after,
+      sourceStartFrame: baseTrimBefore - (before * speed),
+      volume: videoItem.volume ?? 0,
+      fadeInFrames: before === 0 ? (videoItem.audioFadeIn ?? 0) : 0,
+      fadeOutFrames: after === 0 ? (videoItem.audioFadeOut ?? 0) : 0,
+      speed,
+      muted: entry.muted,
+      type: 'video',
+    });
+  }
+
+  segments.push(...expandedVideoSegments, ...audioOnlySegments);
 
   log.info('Extracted audio segments', {
     count: segments.length,
@@ -600,7 +680,7 @@ export function mixAudioTracks(
  * @returns Processed audio ready for encoding
  */
 export async function processAudio(
-  composition: RemotionInputProps,
+  composition: CompositionInputProps,
   signal?: AbortSignal
 ): Promise<{
   samples: Float32Array[];
@@ -795,7 +875,7 @@ export interface AudioEncodingOptions {
 /**
  * Check if composition has any audio content.
  */
-export function hasAudioContent(composition: RemotionInputProps): boolean {
+export function hasAudioContent(composition: CompositionInputProps): boolean {
   const segments = extractAudioSegments(composition);
   return segments.some((s) => !s.muted);
 }

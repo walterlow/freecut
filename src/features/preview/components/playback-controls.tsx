@@ -36,7 +36,7 @@ export function PlaybackControls({ totalFrames, fps: _fps }: PlaybackControlsPro
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setVolume = usePlaybackStore((s) => s.setVolume);
 
-  // Note: Automatic playback loop is now handled by Remotion Player
+  // Note: Automatic playback loop is now handled by Composition Player
   // The Player controls frame advancement via frameupdate events
 
   // Note: totalFrames is the count, so valid frame indices are [0, totalFrames - 1]

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { useVideoConfig, useIsPlaying } from '../hooks/use-remotion-compat';
+import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { interpolate, useSequenceContext } from '@/features/player/composition';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
@@ -218,7 +218,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     }
   }, [finalVolume, muted]);
 
-  // Sync playback with Remotion timeline
+  // Sync playback with Composition timeline
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -226,6 +226,14 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     // Calculate target time in the source audio
     const compositionTimeSeconds = frame / fps;
     const sourceTimeSeconds = (trimBefore / fps) + (compositionTimeSeconds * playbackRate);
+    const clipStartTimeSeconds = Math.max(0, trimBefore / fps);
+
+    // During Sequence premount, frame is negative. Keep audio paused and pre-seek to
+    // clip start so playback starts immediately when frame reaches 0.
+    const isPremounted = frame < 0;
+    const targetTimeSeconds = isPremounted
+      ? clipStartTimeSeconds
+      : Math.max(0, sourceTimeSeconds);
 
     // Detect if frame actually changed (for scrub detection)
     const frameChanged = frame !== lastFrameRef.current;
@@ -235,12 +243,26 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
     const canSeek = audio.readyState >= 1;
 
+    if (isPremounted) {
+      if (!audio.paused) {
+        audio.pause();
+      }
+      if (canSeek && Math.abs(audio.currentTime - clipStartTimeSeconds) > 0.05) {
+        try {
+          audio.currentTime = clipStartTimeSeconds;
+        } catch {
+          // Seek failed - audio may not be ready yet
+        }
+      }
+      return;
+    }
+
     if (playing) {
       const currentTime = audio.currentTime;
       const now = Date.now();
 
       // Calculate drift direction: positive = audio ahead, negative = audio behind
-      const drift = currentTime - sourceTimeSeconds;
+      const drift = currentTime - targetTimeSeconds;
       const timeSinceLastSync = now - lastSyncTimeRef.current;
 
       // Determine if we need to seek:
@@ -256,7 +278,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
 
       if (needsSync && canSeek) {
         try {
-          audio.currentTime = sourceTimeSeconds;
+          audio.currentTime = targetTimeSeconds;
           lastSyncTimeRef.current = now;
           needsInitialSyncRef.current = false;
         } catch {
@@ -282,7 +304,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       // Only seek when paused if frame actually changed (user is scrubbing) and audio is ready
       if (frameChanged && canSeek) {
         try {
-          audio.currentTime = sourceTimeSeconds;
+          audio.currentTime = targetTimeSeconds;
         } catch {
           // Seek failed - audio may not be ready yet
         }

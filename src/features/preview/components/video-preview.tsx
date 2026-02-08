@@ -3,10 +3,10 @@ import { Player, type PlayerRef } from '@/features/player';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { MainComposition } from '@/lib/remotion/compositions/main-composition';
+import { MainComposition } from '@/lib/composition-runtime/compositions/main-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { GizmoOverlay } from './gizmo-overlay';
-import type { RemotionInputProps } from '@/types/export';
+import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
 // GPU rendering imports
@@ -374,9 +374,9 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
   }, [resolvedTracks]);
 
   // Memoize inputProps to prevent Player from re-rendering
-  const inputProps: RemotionInputProps = useMemo(() => ({
+  const inputProps: CompositionInputProps = useMemo(() => ({
     fps,
-    tracks: resolvedTracks as RemotionInputProps['tracks'],
+    tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
   }), [fps, tracksFingerprint, transitions, project.backgroundColor]);

@@ -10,7 +10,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
+import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';

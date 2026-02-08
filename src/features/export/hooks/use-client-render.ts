@@ -18,7 +18,7 @@ import {
   getAudioBitrateForQuality,
 } from '../utils/client-renderer';
 import { renderComposition, renderAudioOnly } from '../utils/client-render-engine';
-import { convertTimelineToRemotion } from '../utils/timeline-to-remotion';
+import { convertTimelineToComposition } from '../utils/timeline-to-composition';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { resolveMediaUrls } from '@/features/preview/utils/media-resolver';
@@ -205,9 +205,9 @@ export function useClientRender(): UseClientRenderReturn {
           }
         }
 
-        // Convert timeline to Remotion format (handles I/O point trimming)
+        // Convert timeline to Composition format (handles I/O point trimming)
         // Use PROJECT resolution so transforms match preview (will scale to export res later)
-        const composition = convertTimelineToRemotion(
+        const composition = convertTimelineToComposition(
           tracks,
           items,
           transitions,

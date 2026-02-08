@@ -1,7 +1,7 @@
 /**
  * Player.tsx - Main Player Component for FreeCut
  * 
- * A customizable video player component inspired by Remotion Player
+ * A customizable video player component inspired by Composition Player
  * with support for:
  * - Frame-accurate playback
  * - Custom controls

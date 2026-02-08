@@ -2,7 +2,7 @@
  * interpolate.ts - Animation interpolation utilities
  *
  * Provides interpolation functions for animating values based on
- * the current frame. Replacement for Remotion's interpolate function.
+ * the current frame. Replacement for Composition's interpolate function.
  *
  * Features:
  * - Linear interpolation between keyframes
@@ -434,7 +434,7 @@ export interface SpringConfig {
 }
 
 /**
- * Spring function options (Remotion-compatible API)
+ * Spring function options (Composition-compatible API)
  */
 export interface SpringOptions {
   frame: number;
@@ -448,7 +448,7 @@ export interface SpringOptions {
 }
 
 /**
- * Spring interpolation (Remotion-compatible)
+ * Spring interpolation (Composition-compatible)
  *
  * Creates a spring animation value that progresses from 0 to 1
  * (or from/to values if specified) using spring physics.

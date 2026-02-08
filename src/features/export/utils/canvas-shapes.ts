@@ -7,7 +7,7 @@
 
 import type { ShapeItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
-import { getShapePath, rotatePath } from '@/lib/remotion/utils/shape-path';
+import { getShapePath, rotatePath } from '@/lib/composition-runtime/utils/shape-path';
 import { svgPathToPath2D } from './canvas-masks';
 import { createLogger } from '@/lib/logger';
 

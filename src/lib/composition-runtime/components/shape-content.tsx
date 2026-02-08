@@ -5,7 +5,7 @@ import type { ShapeItem } from '@/types/timeline';
 
 /**
  * Shape content with live property preview support.
- * Renders Remotion shapes (Rect, Circle, Triangle, Ellipse, Star, Polygon).
+ * Renders Composition shapes (Rect, Circle, Triangle, Ellipse, Star, Polygon).
  * Reads preview values from gizmo store for real-time updates during editing.
  */
 export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
@@ -183,7 +183,7 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
     }
 
     case 'heart': {
-      // Heart: use Remotion's Heart component for consistency with mask path generation
+      // Heart: use Composition's Heart component for consistency with mask path generation
       // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (fits container)
       const heartHeight = baseSize / 1.1;

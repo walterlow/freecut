@@ -74,7 +74,7 @@ export function getSourceDimensions(
 }
 
 /**
- * Convert resolved transform to CSS properties for Remotion rendering.
+ * Convert resolved transform to CSS properties for Composition rendering.
  * Positions relative to canvas center, rotates around item center.
  */
 export function toTransformStyle(

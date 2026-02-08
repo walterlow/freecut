@@ -16,7 +16,7 @@
  * - Progress reporting and cancellation
  */
 
-import type { RemotionInputProps } from '@/types/export';
+import type { CompositionInputProps } from '@/types/export';
 import type {
   TimelineItem,
   VideoItem,
@@ -78,7 +78,7 @@ type MediabunnyModule = typeof import('mediabunny');
 
 export interface RenderEngineOptions {
   settings: ClientExportSettings;
-  composition: RemotionInputProps;
+  composition: CompositionInputProps;
   onProgress: (progress: RenderProgress) => void;
   signal?: AbortSignal;
 }
@@ -285,7 +285,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   });
 
   // Create a composition renderer
-  const frameRenderer = await createCompositionRenderer(composition, renderCanvas, ctx, settings);
+  const frameRenderer = await createCompositionRenderer(composition, renderCanvas, ctx);
 
   try {
     // Preload media
@@ -425,10 +425,9 @@ interface CanvasSettings {
  * with full support for effects, masks, transitions, and keyframe animations.
  */
 async function createCompositionRenderer(
-  composition: RemotionInputProps,
+  composition: CompositionInputProps,
   canvas: OffscreenCanvas,
-  ctx: OffscreenCanvasRenderingContext2D,
-  _settings: ClientExportSettings
+  ctx: OffscreenCanvasRenderingContext2D
 ) {
   const {
     fps,
@@ -1507,15 +1506,10 @@ async function createCompositionRenderer(
       log.info(`TRANSITION START: frame=${frame} progress=${progress.toFixed(3)} presentation=${transition.presentation} duration=${transition.durationInFrames} leftClip=${leftClip.id.substring(0,8)} rightClip=${rightClip.id.substring(0,8)}`);
     }
 
-    // Calculate the frame position within the transition (0 to durationInFrames)
-    const transitionLocalFrame = frame - transitionStart;
-    const halfDuration = Math.floor(transition.durationInFrames / 2);
-
-    // For left clip: calculate effective frame to show ending frames during transition
-    // At transitionLocalFrame 0, show leftClip's (durationInFrames - transition.durationInFrames)th frame
-    // This matches Remotion's approach where left clip Sequence uses from={leftClipContentOffset}
-    const leftLocalFrameInClip = leftClip.durationInFrames - transition.durationInFrames + transitionLocalFrame;
-    const leftEffectiveFrame = leftClip.from + leftLocalFrameInClip;
+    // Render transition clips at the global timeline frame.
+    // This preserves chronological playback across overlap windows and chain transitions.
+    const leftEffectiveFrame = frame;
+    const rightEffectiveFrame = frame;
 
     // === PERFORMANCE: Use pooled canvases for transition rendering ===
     const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
@@ -1534,16 +1528,10 @@ async function createCompositionRenderer(
       leftFinalCanvas = leftEffectCanvas;
     }
 
-    // For right clip: use effective frame for timeline position
-    // Apply -halfDuration offset to source time to prevent rewind at transition end
-    // Matches Remotion's rightClipSourceOffset = -halfDuration
-    const rightEffectiveFrame = rightClip.from + transitionLocalFrame;
-    const rightSourceOffset = -halfDuration;
-
     const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire();
     const rightKeyframes = keyframesMap.get(rightClip.id);
     const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, rightEffectiveFrame, canvas);
-    await renderItem(rightCtx, rightClip, rightTransform, rightEffectiveFrame, canvas, videoElements, imageElements, rightSourceOffset);
+    await renderItem(rightCtx, rightClip, rightTransform, rightEffectiveFrame, canvas, videoElements, imageElements, 0);
 
     // Apply effects to right (incoming) clip
     const rightAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, rightEffectiveFrame);
@@ -1611,7 +1599,7 @@ async function createCompositionRenderer(
 // =============================================================================
 
 export interface SingleFrameOptions {
-  composition: RemotionInputProps;
+  composition: CompositionInputProps;
   frame: number;
   width?: number;
   height?: number;
@@ -1647,18 +1635,7 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
   }
 
   // Use the SAME renderer as export - single source of truth
-  const dummySettings: ClientExportSettings = {
-    mode: 'video',
-    resolution: { width: compositionWidth, height: compositionHeight },
-    codec: 'avc',
-    container: 'mp4',
-    videoBitrate: 8000000,
-    audioBitrate: 128000,
-    quality: 'high',
-    fps: composition.fps || 30,
-  };
-
-  const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx, dummySettings);
+  const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx);
   await renderer.preload();
   await renderer.renderFrame(frame);
 
@@ -1681,7 +1658,7 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
 
 export interface AudioRenderOptions {
   settings: ClientExportSettings;
-  composition: RemotionInputProps;
+  composition: CompositionInputProps;
   onProgress: (progress: RenderProgress) => void;
   signal?: AbortSignal;
 }

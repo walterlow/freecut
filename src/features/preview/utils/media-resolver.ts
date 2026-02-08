@@ -18,7 +18,7 @@ const blobUrlCache = new Map<string, string>();
 const pendingRequests = new Map<string, Promise<string>>();
 
 /**
- * Resolves a mediaId to a blob URL for use in Remotion Player
+ * Resolves a mediaId to a blob URL for use in Composition Player
  *
  * @param mediaId - The ID of the media in the media library
  * @returns Blob URL for the media, or empty string if not found
@@ -42,7 +42,7 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
 
       if (!media) {
         console.warn(`Media not found: ${mediaId}`);
-        return ''; // Fallback: empty string (Remotion will skip)
+        return ''; // Fallback: empty string (Composition will skip)
       }
 
       // Get blob from OPFS (returns Blob to prevent access handle leaks)

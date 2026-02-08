@@ -1,5 +1,5 @@
 /**
- * Native SVG path utilities to replace @remotion/paths
+ * Native SVG path utilities to replace @legacy-video/paths
  *
  * Provides path transformation functions for scaling and translating SVG paths.
  */

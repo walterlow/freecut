@@ -13,9 +13,9 @@ import {
 } from '@/lib/shapes';
 
 /**
- * Generates SVG path data for shape items using Remotion's shape utilities.
+ * Generates SVG path data for shape items using Composition's shape utilities.
  * This ensures mask paths match exactly how shapes are rendered in ShapeContent.
- * Uses @remotion/shapes for path generation and @remotion/paths for transformations.
+ * Uses @legacy-video/shapes for path generation and @legacy-video/paths for transformations.
  */
 
 interface ShapePathOptions {
@@ -181,7 +181,7 @@ export function getShapePath(
     }
 
     case 'heart': {
-      // Use Remotion's makeHeart for consistent path generation
+      // Use Composition's makeHeart for consistent path generation
       // Heart output width = 1.1 × input height, so we scale input to fit within baseSize
       // Using height = baseSize / 1.1 ensures output width = baseSize (matches ShapeContent)
       const heartHeight = baseSize / 1.1;

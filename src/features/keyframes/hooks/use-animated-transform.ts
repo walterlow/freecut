@@ -6,7 +6,7 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/remotion/utils/transform-resolver';
+} from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '../utils/animated-transform-resolver';
 
 export interface AnimatedTransformResult {
@@ -27,7 +27,7 @@ interface ProjectSize {
  * Hook to get the animated transform for a single item.
  * Handles keyframe interpolation automatically.
  *
- * Use this in gizmo/preview components. For Remotion components,
+ * Use this in gizmo/preview components. For Composition components,
  * use the inline logic with useCurrentFrame() since it's already
  * relative to the item's Sequence.
  */

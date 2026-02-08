@@ -8,6 +8,7 @@
 
 import type { Transition } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
+import { calculateTransitionPortions } from '@/lib/transitions/transition-planner';
 
 /**
  * Frame range representing a blocked region (inclusive start, exclusive end)
@@ -42,42 +43,67 @@ export function getTransitionBlockedRanges(
   transitions: Transition[]
 ): BlockedFrameRange[] {
   const blockedRanges: BlockedFrameRange[] = [];
+  let incomingTransition: Transition | undefined;
+  let outgoingTransition: Transition | undefined;
+  let incomingPortion = 0;
+  let outgoingPortion = 0;
 
   for (const transition of transitions) {
-    // Transition is centered on the cut point:
-    // halfDuration = floor(durationInFrames / 2)
-    // transitionStart = cutPoint - halfDuration
-    // transitionEnd = cutPoint + ceil(durationInFrames / 2)
-    const halfDuration = Math.floor(transition.durationInFrames / 2);
-    const otherHalf = transition.durationInFrames - halfDuration; // ceil(durationInFrames / 2)
-
     if (transition.leftClipId === clipId) {
-      // This clip is the outgoing (left) clip
-      // Transition affects the last `halfDuration` frames of this clip
-      const start = clip.durationInFrames - halfDuration;
-      const end = clip.durationInFrames;
-
-      blockedRanges.push({
-        start: Math.max(0, start),
-        end,
-        transition,
-        role: 'outgoing',
-      });
+      const portions = calculateTransitionPortions(
+        transition.durationInFrames,
+        transition.alignment
+      );
+      outgoingTransition = transition;
+      outgoingPortion = portions.leftPortion;
     }
 
     if (transition.rightClipId === clipId) {
-      // This clip is the incoming (right) clip
-      // Transition affects the first `otherHalf` frames of this clip
-      const start = 0;
-      const end = otherHalf;
-
-      blockedRanges.push({
-        start,
-        end: Math.min(end, clip.durationInFrames),
-        transition,
-        role: 'incoming',
-      });
+      const portions = calculateTransitionPortions(
+        transition.durationInFrames,
+        transition.alignment
+      );
+      incomingTransition = transition;
+      incomingPortion = portions.rightPortion;
     }
+  }
+
+  // Keep blocked ranges chain-safe for clips with both incoming and outgoing transitions.
+  if (incomingTransition && outgoingTransition) {
+    const available = Math.max(0, clip.durationInFrames);
+    const total = incomingPortion + outgoingPortion;
+    if (total > available && total > 0) {
+      const scale = available / total;
+      incomingPortion = Math.floor(incomingPortion * scale);
+      outgoingPortion = Math.floor(outgoingPortion * scale);
+
+      const remainder = available - (incomingPortion + outgoingPortion);
+      if (remainder > 0) {
+        if (incomingPortion <= outgoingPortion) {
+          incomingPortion += remainder;
+        } else {
+          outgoingPortion += remainder;
+        }
+      }
+    }
+  }
+
+  if (incomingTransition && incomingPortion > 0) {
+    blockedRanges.push({
+      start: 0,
+      end: Math.min(incomingPortion, clip.durationInFrames),
+      transition: incomingTransition,
+      role: 'incoming',
+    });
+  }
+
+  if (outgoingTransition && outgoingPortion > 0) {
+    blockedRanges.push({
+      start: Math.max(0, clip.durationInFrames - outgoingPortion),
+      end: clip.durationInFrames,
+      transition: outgoingTransition,
+      role: 'outgoing',
+    });
   }
 
   return blockedRanges;

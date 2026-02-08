@@ -8,7 +8,7 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
-import { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
+import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 
 /**
@@ -78,7 +78,7 @@ export function hasKeyframes(keyframes: ItemKeyframes | undefined): boolean {
 }
 
 // Re-export utilities for direct use
-export { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
+export { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
 export { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 export { interpolatePropertyValue, getPropertyKeyframes } from '@/features/keyframes/utils/interpolation';
 export { applyEasing, springEasing, cubicBezier } from '@/features/keyframes/utils/easing';

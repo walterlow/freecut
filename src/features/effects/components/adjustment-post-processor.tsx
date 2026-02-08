@@ -16,7 +16,7 @@
  */
 
 import React, { useRef, useEffect, useState, useCallback, useLayoutEffect } from 'react';
-import { useVideoConfig } from '@/lib/remotion/hooks/use-remotion-compat';
+import { useVideoConfig } from '@/lib/composition-runtime/hooks/use-player-compat';
 import { adjustmentPostProcessingManager, type PostProcessingEffect } from '../utils/post-processing-pipeline';
 
 // Default effect for when post-processing is disabled (values won't be used but prevent null checks)

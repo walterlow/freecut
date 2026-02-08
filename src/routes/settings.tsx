@@ -259,7 +259,7 @@ function Settings() {
           <div className="grid gap-2 text-sm text-muted-foreground">
             <p>FreeCut - Open Source Video Editor</p>
             <p>
-              Built with React, Remotion, and modern web technologies.{' '}
+              Built with React and modern web technologies.{' '}
               <a
                 href="https://github.com/walterlow/freecut"
                 target="_blank"

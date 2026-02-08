@@ -31,7 +31,7 @@ export interface DebugOverlayProps {
 }
 
 /**
- * Debug overlay component for Remotion video items
+ * Debug overlay component for Composition video items
  *
  * Shows detailed information about video timing, trimming, and playback.
  * Useful for diagnosing issues with sped-up clips, trimming, and exports.

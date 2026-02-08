@@ -50,7 +50,7 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
     : undefined;
 
   // Build stroke/outline effect using text-stroke or text shadow workaround
-  // Note: -webkit-text-stroke is not well supported in Remotion rendering
+  // Note: -webkit-text-stroke is not well supported in Composition rendering
   // Using multiple text shadows as a fallback for stroke effect
   const strokeShadows = item.stroke
     ? [

@@ -1,14 +1,16 @@
 import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence } from '@/features/player/composition';
-import { useCurrentFrame, useVideoConfig } from '../hooks/use-remotion-compat';
-import type { RemotionInputProps } from '@/types/export';
+import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
+import type { CompositionInputProps } from '@/types/export';
 import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, ImageItem } from '@/types/timeline';
 import { Item } from '../components/item';
+import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { EffectsBasedTransitionsLayer } from '../components/transition-renderer';
 import { StableVideoSequence } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
 import { getShapePath, rotatePath } from '../utils/shape-path';
+import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 import { KeyframesProvider } from '../contexts/keyframes-context';
@@ -22,11 +24,58 @@ type EnrichedVisualItem = (VideoItem | ImageItem) & {
   trackOrder: number;
   trackVisible: boolean;
 };
+type EnrichedVideoItem = EnrichedVisualItem & { type: 'video' };
 
 /** Mask shape with its track order for scope calculation */
 interface MaskWithTrackOrder {
   mask: ShapeItem;
   trackOrder: number;
+}
+
+interface ClipAudioExtension {
+  before: number;
+  after: number;
+}
+
+interface VideoAudioSegment {
+  key: string;
+  itemId: string;
+  src: string;
+  from: number;
+  durationInFrames: number;
+  trimBefore: number;
+  playbackRate: number;
+  volumeDb: number;
+  muted: boolean;
+  audioFadeIn: number;
+  audioFadeOut: number;
+}
+
+function getVideoTrimBefore(item: EnrichedVideoItem): number {
+  return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+}
+
+function isContinuousAudioTransition(left: EnrichedVideoItem, right: EnrichedVideoItem): boolean {
+  const leftSpeed = left.speed ?? 1;
+  const rightSpeed = right.speed ?? 1;
+  if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
+
+  const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
+    || (!!left.src && !!right.src && left.src === right.src);
+  if (!sameMedia) return false;
+
+  // Prefer lineage continuity when available (split clips share originId).
+  if (left.originId && right.originId && left.originId !== right.originId) return false;
+
+  const expectedRightFrom = left.from + left.durationInFrames;
+  if (right.from !== expectedRightFrom) return false;
+
+  const leftTrim = getVideoTrimBefore(left);
+  const rightTrim = getVideoTrimBefore(right);
+  const expectedRightTrim = leftTrim + Math.round(left.durationInFrames * leftSpeed);
+
+  // Allow tiny rounding drift from split/rate math.
+  return Math.abs(rightTrim - expectedRightTrim) <= 1;
 }
 
 /** Props for MaskDefinitions component */
@@ -298,7 +347,7 @@ const StableMaskedGroup: React.FC<{
 
 
 /**
- * Main Remotion Composition
+ * Main Composition Composition
  *
  * ARCHITECTURE FOR STABLE DOM (prevents re-renders on item/adjustment layer add/delete):
  *
@@ -314,7 +363,7 @@ const StableMaskedGroup: React.FC<{
  * 3. Only items BELOW adjustment layer (higher track order) receive effects
  * 4. Adding/removing adjustment layers doesn't change DOM structure
  */
-export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transitions = [], backgroundColor = '#000000', keyframes }) => {
+export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, transitions = [], backgroundColor = '#000000', keyframes }) => {
   const { fps, width: canvasWidth, height: canvasHeight } = useVideoConfig();
   // NOTE: useCurrentFrame() removed from here to prevent per-frame re-renders.
   // Frame-dependent logic is now isolated in FrameAwareMaskDefinitions and ClearingLayer.
@@ -365,8 +414,6 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transiti
     return map;
   }, [allVisualItems]);
 
-  // Build transition enrichment data for clips involved in transitions.
-  // Each clip gets: source offset (for video sync) and audio crossfade info.
   // Video items for rendering (all video items, rendered by StableVideoSequence)
   const videoItems = useMemo(() =>
     allVisualItems.filter((item) => item.type === 'video'),
@@ -388,6 +435,84 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transiti
     ),
     [tracks, visibleTrackIds]
   );
+
+  // Video audio is rendered in a dedicated audio layer to decouple audio
+  // from transition visual overlays and pooled video element state.
+  const videoAudioItems = useMemo(() =>
+    allVisualItems.filter((item): item is EnrichedVideoItem => item.type === 'video'),
+    [allVisualItems]
+  );
+
+  // Build explicit audio playback segments for transition overlaps:
+  // - One continuous segment per clip (decoupled from visual transitions)
+  // - Segments are expanded into transition handles so both clips overlap chronologically
+  const videoAudioSegments = useMemo<VideoAudioSegment[]>(() => {
+    const clipsById = new Map(videoAudioItems.map((item) => [item.id, item]));
+    const resolvedWindows = resolveTransitionWindows(transitions, clipsById);
+    const extensionByClipId = new Map<string, ClipAudioExtension>();
+
+    const ensureExtension = (clipId: string): ClipAudioExtension => {
+      const existing = extensionByClipId.get(clipId);
+      if (existing) return existing;
+      const created: ClipAudioExtension = { before: 0, after: 0 };
+      extensionByClipId.set(clipId, created);
+      return created;
+    };
+
+    for (const window of resolvedWindows) {
+      const left = clipsById.get(window.transition.leftClipId);
+      const right = clipsById.get(window.transition.rightClipId);
+      if (!left || !right || !left.src || !right.src) continue;
+      if (isContinuousAudioTransition(left, right)) continue;
+
+      const rightPreRoll = Math.max(0, right.from - window.startFrame);
+      const leftPostRoll = Math.max(
+        0,
+        window.endFrame - (left.from + left.durationInFrames)
+      );
+
+      if (rightPreRoll > 0) {
+        const rightExt = ensureExtension(right.id);
+        rightExt.before = Math.max(rightExt.before, rightPreRoll);
+      }
+
+      if (leftPostRoll > 0) {
+        const leftExt = ensureExtension(left.id);
+        leftExt.after = Math.max(leftExt.after, leftPostRoll);
+      }
+    }
+
+    const expandedSegments: VideoAudioSegment[] = [];
+    for (const item of videoAudioItems) {
+      if (!item.src) continue;
+
+      const playbackRate = item.speed ?? 1;
+      const baseTrimBefore = getVideoTrimBefore(item);
+      const extension = extensionByClipId.get(item.id) ?? { before: 0, after: 0 };
+      const maxBeforeBySource = playbackRate > 0 ? Math.floor(baseTrimBefore / playbackRate) : 0;
+      const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
+      const after = Math.max(0, extension.after);
+
+      expandedSegments.push({
+        key: `video-audio-${item.id}`,
+        itemId: item.id,
+        src: item.src,
+        from: item.from - before,
+        durationInFrames: item.durationInFrames + before + after,
+        trimBefore: baseTrimBefore - (before * playbackRate),
+        playbackRate,
+        volumeDb: item.volume ?? 0,
+        muted: item.muted || !item.trackVisible,
+        audioFadeIn: before === 0 ? (item.audioFadeIn ?? 0) : 0,
+        audioFadeOut: after === 0 ? (item.audioFadeOut ?? 0) : 0,
+      });
+    }
+
+    return expandedSegments.toSorted((a, b) => {
+      if (a.from !== b.from) return a.from - b.from;
+      return a.key.localeCompare(b.key);
+    });
+  }, [videoAudioItems, transitions]);
 
   // Active masks: shapes with isMask: true
   const activeMasks: MaskWithTrackOrder[] = useMemo(() => {
@@ -479,7 +604,7 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transiti
           adjustmentLayers={visibleAdjustmentLayers}
           sequenceFrom={sequenceFrom}
         >
-          <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
+          <Item item={item} muted={true} masks={[]} />
         </ItemEffectWrapper>
       </AbsoluteFill>
     );
@@ -502,8 +627,31 @@ export const MainComposition: React.FC<RemotionInputProps> = ({ tracks, transiti
         <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
 
         {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
-        {/* Audio uses item.id as key (not generateStableKey) to prevent remounts on speed changes */}
-        {/* Hidden tracks are muted but stay in DOM for stable structure */}
+        {/* Video audio is decoupled from visual video elements for transition stability */}
+        {videoAudioSegments.map((segment) => {
+          return (
+            <Sequence
+              key={segment.key}
+              from={segment.from}
+              durationInFrames={segment.durationInFrames}
+              premountFor={Math.round(fps * 2)}
+            >
+              <PitchCorrectedAudio
+                src={segment.src}
+                itemId={segment.itemId}
+                trimBefore={segment.trimBefore}
+                volume={segment.volumeDb}
+                playbackRate={segment.playbackRate}
+                muted={segment.muted}
+                durationInFrames={segment.durationInFrames}
+                audioFadeIn={segment.audioFadeIn}
+                audioFadeOut={segment.audioFadeOut}
+              />
+            </Sequence>
+          );
+        })}
+
+        {/* Standalone audio items */}
         {audioItems.map((item) => (
           <Sequence
             key={item.id}

@@ -9,7 +9,7 @@ export interface TrackProps {
 }
 
 /**
- * Remotion Track Component
+ * Composition Track Component
  *
  * NOTE: This component is no longer used by MainComposition.
  * MainComposition now renders all items at composition level to prevent

@@ -92,7 +92,7 @@ See `.env.example` for complete documentation.
 - [React](https://react.dev/) - UI framework with concurrent features
 - [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
 - [Vite](https://vitejs.dev/) - Fast build tool with HMR
-- [Remotion](https://www.remotion.dev/) - Programmatic video rendering
+- Canvas + WebCodecs - In-browser composition rendering and export
 - [TanStack Router](https://tanstack.com/router) - Type-safe routing
 - [Zustand](https://github.com/pmndrs/zustand) - State management
 - [Tailwind CSS](https://tailwindcss.com/) - Utility-first styling
@@ -126,7 +126,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 Built with these amazing open source projects:
 
-- [Remotion](https://www.remotion.dev/) - Programmatic video creation
 - [Mediabunny](https://mediabunny.dev/) - Video processing
 - [TanStack Router](https://tanstack.com/router) - Type-safe routing
 - [Zustand](https://github.com/pmndrs/zustand) - State management

@@ -44,10 +44,6 @@ const faqItems = [
       <>
         <p className="mb-3">
           A huge thank you to{' '}
-          <a href="https://www.remotion.dev/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">
-            Remotion
-          </a>{' '}
-          for their incredible video composition framework and{' '}
           <a href="https://mediabunny.dev/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">
             Mediabunny
           </a>{' '}

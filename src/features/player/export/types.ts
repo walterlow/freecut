@@ -3,7 +3,7 @@
  *
  * These types define the composition data structure needed for export.
  * They are compatible with the existing client-render-engine but
- * provide a Remotion-independent interface.
+ * provide a Composition-independent interface.
  */
 
 import type { TimelineTrack } from '@/types/timeline';
@@ -13,8 +13,8 @@ import type { ItemKeyframes } from '@/types/keyframe';
 /**
  * Composition data for export
  *
- * This is equivalent to RemotionInputProps but with a clearer name
- * that doesn't imply Remotion dependency.
+ * This is equivalent to CompositionInputProps but with a clearer name
+ * that doesn't imply Composition dependency.
  */
 export interface CompositionData {
   /** Frames per second */

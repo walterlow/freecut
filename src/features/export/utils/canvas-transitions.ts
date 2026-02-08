@@ -9,6 +9,7 @@ import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@
 import type { TimelineItem } from '@/types/timeline';
 import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/features/keyframes/utils/easing';
 import { transitionRegistry } from '@/lib/transitions/registry';
+import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CanvasTransitions');
@@ -31,6 +32,10 @@ export interface ActiveTransition {
   rightClip: TimelineItem;
   progress: number; // 0 to 1
   transitionStart: number;
+  transitionEnd: number;
+  durationInFrames: number;
+  leftPortion: number;
+  rightPortion: number;
   cutPoint: number;
 }
 
@@ -64,39 +69,31 @@ export function findActiveTransitions(
 ): ActiveTransition[] {
   const active: ActiveTransition[] = [];
 
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    const rightClip = clipMap.get(transition.rightClipId);
+  const resolvedWindows = resolveTransitionWindows(transitions, clipMap);
+  for (const window of resolvedWindows) {
+    if (frame < window.startFrame || frame >= window.endFrame) continue;
 
-    if (!leftClip || !rightClip) continue;
+    const localFrame = frame - window.startFrame;
+    const progress = calculateProgress(
+      localFrame,
+      window.durationInFrames,
+      window.transition.timing,
+      fps,
+      window.transition.bezierPoints
+    );
 
-    // Calculate transition timing with alignment support
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const leftPortion = Math.floor(transition.durationInFrames * alignment);
-    const transitionStart = cutPoint - leftPortion;
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    // Check if frame is within transition window
-    if (frame >= transitionStart && frame < transitionEnd) {
-      const localFrame = frame - transitionStart;
-      const progress = calculateProgress(
-        localFrame,
-        transition.durationInFrames,
-        transition.timing,
-        fps,
-        transition.bezierPoints
-      );
-
-      active.push({
-        transition,
-        leftClip,
-        rightClip,
-        progress,
-        transitionStart,
-        cutPoint,
-      });
-    }
+    active.push({
+      transition: window.transition,
+      leftClip: window.leftClip,
+      rightClip: window.rightClip,
+      progress,
+      transitionStart: window.startFrame,
+      transitionEnd: window.endFrame,
+      durationInFrames: window.durationInFrames,
+      leftPortion: window.leftPortion,
+      rightPortion: window.rightPortion,
+      cutPoint: window.cutPoint,
+    });
   }
 
   return active;
@@ -190,38 +187,36 @@ function getWipeClipPath(
   isOutgoing: boolean,
   canvas: TransitionCanvasSettings
 ): Path2D {
-  const effectiveProgress = isOutgoing ? progress : 1 - progress;
+  const p = Math.max(0, Math.min(1, progress));
   const path = new Path2D();
 
   switch (direction) {
     case 'from-left':
       if (isOutgoing) {
-        // Outgoing clips from left
-        path.rect(effectiveProgress * canvas.width, 0, canvas.width, canvas.height);
+        path.rect(p * canvas.width, 0, canvas.width, canvas.height);
       } else {
-        // Incoming reveals from left
-        path.rect(0, 0, (1 - effectiveProgress) * canvas.width, canvas.height);
+        path.rect(0, 0, p * canvas.width, canvas.height);
       }
       break;
     case 'from-right':
       if (isOutgoing) {
-        path.rect(0, 0, (1 - effectiveProgress) * canvas.width, canvas.height);
+        path.rect(0, 0, (1 - p) * canvas.width, canvas.height);
       } else {
-        path.rect(effectiveProgress * canvas.width, 0, canvas.width, canvas.height);
+        path.rect((1 - p) * canvas.width, 0, canvas.width, canvas.height);
       }
       break;
     case 'from-top':
       if (isOutgoing) {
-        path.rect(0, effectiveProgress * canvas.height, canvas.width, canvas.height);
+        path.rect(0, p * canvas.height, canvas.width, canvas.height);
       } else {
-        path.rect(0, 0, canvas.width, (1 - effectiveProgress) * canvas.height);
+        path.rect(0, 0, canvas.width, p * canvas.height);
       }
       break;
     case 'from-bottom':
       if (isOutgoing) {
-        path.rect(0, 0, canvas.width, (1 - effectiveProgress) * canvas.height);
+        path.rect(0, 0, canvas.width, (1 - p) * canvas.height);
       } else {
-        path.rect(0, effectiveProgress * canvas.height, canvas.width, canvas.height);
+        path.rect(0, (1 - p) * canvas.height, canvas.width, canvas.height);
       }
       break;
   }
@@ -242,13 +237,17 @@ export function renderWipeTransition(
 ): void {
   const clampedProgress = Math.max(0, Math.min(1, progress));
 
-  // Draw incoming clip (full)
-  ctx.drawImage(rightCanvas, 0, 0);
-
-  // Draw outgoing clip with clip mask
+  // Draw incoming clip in revealed region only
   ctx.save();
-  const clipPath = getWipeClipPath(clampedProgress, direction, true, canvas);
-  ctx.clip(clipPath);
+  const incomingClipPath = getWipeClipPath(clampedProgress, direction, false, canvas);
+  ctx.clip(incomingClipPath);
+  ctx.drawImage(rightCanvas, 0, 0);
+  ctx.restore();
+
+  // Draw outgoing clip in remaining region
+  ctx.save();
+  const outgoingClipPath = getWipeClipPath(clampedProgress, direction, true, canvas);
+  ctx.clip(outgoingClipPath);
   ctx.drawImage(leftCanvas, 0, 0);
   ctx.restore();
 }
@@ -557,17 +556,9 @@ export function isInTransition(
   clipMap: Map<string, TimelineItem>,
   frame: number
 ): boolean {
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    if (!leftClip) continue;
-
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const leftPortion = Math.floor(transition.durationInFrames * alignment);
-    const transitionStart = cutPoint - leftPortion;
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    if (frame >= transitionStart && frame < transitionEnd) {
+  const resolvedWindows = resolveTransitionWindows(transitions, clipMap);
+  for (const window of resolvedWindows) {
+    if (frame >= window.startFrame && frame < window.endFrame) {
       return true;
     }
   }
@@ -586,19 +577,11 @@ export function getTransitionClipIds(
 ): Set<string> {
   const clipIds = new Set<string>();
 
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    if (!leftClip) continue;
-
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const leftPortion = Math.floor(transition.durationInFrames * alignment);
-    const transitionStart = cutPoint - leftPortion;
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    if (frame >= transitionStart && frame < transitionEnd) {
-      clipIds.add(transition.leftClipId);
-      clipIds.add(transition.rightClipId);
+  const resolvedWindows = resolveTransitionWindows(transitions, clipMap);
+  for (const window of resolvedWindows) {
+    if (frame >= window.startFrame && frame < window.endFrame) {
+      clipIds.add(window.transition.leftClipId);
+      clipIds.add(window.transition.rightClipId);
     }
   }
 

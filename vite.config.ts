@@ -29,14 +29,6 @@ export default defineConfig({
           if (id.includes('node_modules/react/')) {
             return 'react-vendor';
           }
-          // Remotion Player - loaded when preview is needed
-          if (id.includes('@remotion/player')) {
-            return 'remotion-player';
-          }
-          // Remotion core
-          if (id.includes('node_modules/remotion')) {
-            return 'remotion-core';
-          }
           // Media processing - loaded on demand
           if (id.includes('mediabunny')) {
             return 'media-processing';

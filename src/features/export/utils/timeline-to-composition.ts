@@ -1,14 +1,14 @@
 import type { TimelineTrack, TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
-import type { RemotionInputProps } from '@/types/export';
+import type { CompositionInputProps } from '@/types/export';
 import type { ItemKeyframes, Keyframe, PropertyKeyframes } from '@/types/keyframe';
 import { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
 import { createLogger } from '@/lib/logger';
 
-const log = createLogger('TimelineToRemotion');
+const log = createLogger('TimelineToComposition');
 
 /**
- * Convert timeline data to Remotion input props
+ * Convert timeline data to Composition input props
  *
  * Calculates duration from the rightmost timeline item and includes
  * resolution settings from export dialog.
@@ -21,7 +21,7 @@ const log = createLogger('TimelineToRemotion');
  * Tracks are sorted by their order property so that higher-numbered tracks
  * (e.g., Track 2) render on top of lower-numbered tracks (e.g., Track 1).
  */
-export function convertTimelineToRemotion(
+export function convertTimelineToComposition(
   tracks: TimelineTrack[],
   items: TimelineItem[],
   transitions: Transition[],
@@ -32,7 +32,7 @@ export function convertTimelineToRemotion(
   outPoint?: number | null,
   keyframes?: ItemKeyframes[],
   backgroundColor?: string
-): RemotionInputProps {
+): CompositionInputProps {
   // Determine if we're exporting a specific in/out range
   const hasInOutRange = inPoint !== null && inPoint !== undefined &&
                         outPoint !== null && outPoint !== undefined &&

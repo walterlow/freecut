@@ -39,7 +39,7 @@ import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useZoomStore } from './zoom-store';
 import type { ProjectTimeline } from '@/types/project';
 import { renderSingleFrame } from '@/features/export/utils/client-render-engine';
-import { convertTimelineToRemotion } from '@/features/export/utils/timeline-to-remotion';
+import { convertTimelineToComposition } from '@/features/export/utils/timeline-to-composition';
 import { resolveMediaUrls } from '@/features/preview/utils/media-resolver';
 import { validateMediaReferences } from '@/features/timeline/utils/media-validation';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
@@ -122,8 +122,8 @@ async function saveTimeline(projectId: string): Promise<void> {
         const height = project.metadata?.height || 1080;
         const backgroundColor = project.metadata?.backgroundColor;
 
-        // Convert timeline to Remotion composition format
-        const composition = convertTimelineToRemotion(
+        // Convert timeline to Composition composition format
+        const composition = convertTimelineToComposition(
           itemsState.tracks,
           itemsState.items,
           transitionsState.transitions,

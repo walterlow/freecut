@@ -2,7 +2,7 @@ import type { TimelineItem } from '@/types/timeline';
 
 /**
  * Generates a stable key for timeline items that includes source timing.
- * Key changes on split/join to ensure Remotion Sequence updates correctly.
+ * Key changes on split/join to ensure Composition Sequence updates correctly.
  *
  * For media items: key = mediaId + originId + sourceStart + sourceEnd + speed
  * - Split: both pieces get new keys (sourceStart or sourceEnd changes)

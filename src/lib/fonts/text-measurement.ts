@@ -1,5 +1,5 @@
 /**
- * Native text measurement utilities to replace @remotion/layout-utils
+ * Native text measurement utilities to replace @legacy-video/layout-utils
  *
  * Uses the Canvas API for accurate text measurement.
  */

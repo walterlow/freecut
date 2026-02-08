@@ -12,7 +12,7 @@ interface DebugState {
  * In production, all values are false/no-op for tree-shaking
  *
  * Note: Safe check for import.meta.env to support both Vite (client) and
- * webpack (Remotion server-side rendering) bundlers
+ * webpack (Composition server-side rendering) bundlers
  */
 const isDev = typeof import.meta !== 'undefined' &&
   typeof import.meta.env !== 'undefined' &&

@@ -1,5 +1,5 @@
 /**
- * Hook for resolving animated transforms in Remotion components.
+ * Hook for resolving animated transforms in Composition components.
  * Combines base transform resolution with keyframe interpolation.
  */
 

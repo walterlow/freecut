@@ -6,8 +6,8 @@
  */
 
 import type { ShapeItem, TimelineTrack } from '@/types/timeline';
-import { getShapePath, rotatePath } from '@/lib/remotion/utils/shape-path';
-import { resolveTransform, getSourceDimensions } from '@/lib/remotion/utils/transform-resolver';
+import { getShapePath, rotatePath } from '@/lib/composition-runtime/utils/shape-path';
+import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CanvasMasks');

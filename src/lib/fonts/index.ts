@@ -1,7 +1,7 @@
 /**
  * Native font utilities
  *
- * Replaces @remotion/google-fonts and @remotion/layout-utils with native implementations.
+ * Replaces @legacy-video/google-fonts and @legacy-video/layout-utils with native implementations.
  */
 
 export {

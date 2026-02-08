@@ -2,7 +2,7 @@ import React, { createContext, useContext, useMemo, useCallback } from 'react';
 import type { ItemKeyframes } from '@/types/keyframe';
 
 /**
- * Context for providing keyframes to Remotion composition components.
+ * Context for providing keyframes to Composition composition components.
  *
  * During preview (Player), keyframes are read from the timeline store via useTimelineStore.
  * During render (server-side), keyframes are passed as inputProps and provided via this context.
@@ -28,7 +28,7 @@ interface KeyframesProviderProps {
 
 /**
  * Provider component that makes keyframes available to all child components.
- * Use this at the root of the Remotion composition when keyframes are provided via inputProps.
+ * Use this at the root of the Composition composition when keyframes are provided via inputProps.
  */
 export const KeyframesProvider: React.FC<KeyframesProviderProps> = ({ keyframes, children }) => {
   // Build a map for O(1) lookup by itemId

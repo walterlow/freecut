@@ -1,5 +1,5 @@
 /**
- * NativeExporter.ts - Standalone export class without Remotion dependency
+ * NativeExporter.ts - Standalone export class without Composition dependency
  *
  * This class provides a clean interface for exporting compositions
  * using the existing canvas-based render engine and mediabunny.
@@ -10,7 +10,7 @@
  * - Multiple container support (MP4, WebM, MOV, MKV)
  * - Progress reporting
  * - Cancellation support
- * - No Remotion runtime dependency
+ * - No Composition runtime dependency
  */
 
 import type {
@@ -108,7 +108,7 @@ export async function checkAllCodecSupport(
  * NativeExporter class
  *
  * Provides a simple interface for exporting compositions without
- * requiring Remotion at runtime.
+ * requiring Composition at runtime.
  *
  * @example
  * ```typescript

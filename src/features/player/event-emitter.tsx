@@ -4,7 +4,7 @@ import React, { useContext, useMemo } from 'react';
  * Custom Event Emitter for FreeCut Player
  * 
  * Provides a type-safe event system for player state changes,
- * inspired by Remotion's PlayerEmitter but simplified for our use case.
+ * inspired by Composition's PlayerEmitter but simplified for our use case.
  */
 
 // Event payload types

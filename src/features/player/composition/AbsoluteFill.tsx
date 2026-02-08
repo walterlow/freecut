@@ -2,7 +2,7 @@
  * AbsoluteFill.tsx - Full container positioning component
  *
  * A simple component that fills its parent container absolutely.
- * Replacement for Remotion's AbsoluteFill.
+ * Replacement for Composition's AbsoluteFill.
  */
 
 import React, { memo, forwardRef } from 'react';

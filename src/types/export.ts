@@ -30,7 +30,7 @@ export interface ExtendedExportSettings extends ExportSettings {
   renderWholeProject?: boolean;
 }
 
-export interface RemotionInputProps {
+export interface CompositionInputProps {
   fps: number;
   durationInFrames?: number;
   width?: number;

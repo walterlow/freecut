@@ -1,7 +1,7 @@
 /**
- * Native SVG shape components to replace @remotion/shapes
+ * Native SVG shape components to replace @legacy-video/shapes
  *
- * These components render SVG elements that match the Remotion shapes API.
+ * These components render SVG elements that match the Composition shapes API.
  */
 
 import React from 'react';

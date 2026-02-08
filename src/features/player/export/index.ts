@@ -2,7 +2,7 @@
  * Export System - Client-side video export
  *
  * This module provides WebCodecs-based video export without
- * requiring Remotion at runtime.
+ * requiring Composition at runtime.
  *
  * Features:
  * - WebCodecs video encoding (H.264, HEVC, VP8, VP9, AV1)

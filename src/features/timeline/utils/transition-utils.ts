@@ -4,7 +4,7 @@
  * Functions for validating and calculating transition parameters
  * between adjacent clips.
  *
- * REMOTION TRANSITIONSERIES RULES:
+ * COMPOSITION TRANSITIONSERIES RULES:
  * 1. Transition duration must be < min(leftClipDuration, rightClipDuration)
  * 2. No two transitions can be adjacent (must have a sequence/clip between them)
  * 3. Every transition must have a sequence/clip before AND after it
@@ -47,7 +47,7 @@ export function canAddTransition(
     return { canAdd: false, reason: 'Transitions only work with video and image clips' };
   }
 
-  // Remotion constraint: transition duration cannot exceed either clip's duration
+  // Composition constraint: transition duration cannot exceed either clip's duration
   // TransitionSeries needs at least 1 frame from each clip outside the transition
   const maxByClipDuration = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
   if (durationInFrames > maxByClipDuration) {
@@ -179,7 +179,7 @@ export function clipHasTransition(
 
 /**
  * Calculate the maximum transition duration based on clip durations and available handles.
- * Remotion requires transition < min(leftDuration, rightDuration)
+ * Composition requires transition < min(leftDuration, rightDuration)
  */
 export function getMaxTransitionDuration(
   leftClip: TimelineItem,

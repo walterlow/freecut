@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AbsoluteFill, useSequenceContext } from '@/features/player/composition';
-import { useVideoConfig } from '../../hooks/use-remotion-compat';
+import { useVideoConfig } from '../../hooks/use-player-compat';
 import { useGifFrames } from '../../../../features/timeline/hooks/use-gif-frames';
 import { GifCanvas } from './gif-canvas';
 

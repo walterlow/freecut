@@ -19,13 +19,13 @@ import type {
 import type { TransitionStyleCalculation } from './engine';
 
 /**
- * Renderer interface for CSS/DOM-based transitions (preview + Remotion).
+ * Renderer interface for CSS/DOM-based transitions (preview + Composition).
  * Each registered transition must provide this.
  */
 export interface TransitionRenderer {
   /**
    * Calculate CSS styles for a clip at a given transition progress.
-   * Used by the engine, preview, and Remotion renderer.
+   * Used by the engine, preview, and Composition renderer.
    */
   calculateStyles(
     progress: number,

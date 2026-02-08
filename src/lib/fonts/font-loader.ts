@@ -1,5 +1,5 @@
 /**
- * Native font loading utilities to replace @remotion/google-fonts
+ * Native font loading utilities to replace @legacy-video/google-fonts
  *
  * Uses the CSS Font Loading API and Google Fonts CSS API.
  */

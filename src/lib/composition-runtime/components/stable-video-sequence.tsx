@@ -1,7 +1,7 @@
 /**
  * Stable Video Sequence
  *
- * A wrapper around Remotion's Sequence that uses a stable key based on
+ * A wrapper around Composition's Sequence that uses a stable key based on
  * originId for video items. This prevents video remounting when clips
  * are split, as split clips share the same originId.
  *
@@ -12,7 +12,7 @@
 
 import React, { useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/player/composition';
-import { useVideoConfig } from '../hooks/use-remotion-compat';
+import { useVideoConfig } from '../hooks/use-player-compat';
 import type { VideoItem } from '@/types/timeline';
 
 /** Video item with additional properties added by MainComposition */

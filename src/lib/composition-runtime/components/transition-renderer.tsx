@@ -23,7 +23,7 @@
 
 import React, { useMemo, useRef, useEffect } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/player/composition';
-import { useVideoConfig, useIsPlaying } from '../hooks/use-remotion-compat';
+import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useVideoSourcePool } from '@/features/player/video/VideoSourcePoolContext';
 import type { VideoItem, ImageItem, AdjustmentItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
@@ -39,6 +39,7 @@ import {
 import { getGlitchFilterString, getScanlinesStyle } from '@/features/effects/utils/glitch-algorithms';
 import type { GlitchEffect, ItemEffect } from '@/types/effects';
 import { calculateEasingCurve, calculateTransitionStyles } from '@/lib/transitions/engine';
+import { resolveTransitionWindows, type ResolvedTransitionWindow } from '@/lib/transitions/transition-planner';
 
 // ============================================================================
 // Types
@@ -57,7 +58,7 @@ type EnrichedVisualItem = (VideoItem | ImageItem) & {
 };
 
 interface OptimizedTransitionProps {
-  transition: Transition;
+  window: ResolvedTransitionWindow;
   leftClip: EnrichedVisualItem;
   rightClip: EnrichedVisualItem;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
@@ -75,10 +76,6 @@ interface NativeTransitionVideoProps {
   playbackRate: number;
   fps: number;
   containerRef: React.RefObject<HTMLDivElement | null>;
-  /** Hold on the first frame for this many frames before advancing.
-   *  Used for incoming clips so that at transitionEnd the overlay
-   *  source position matches the normal clip's position. */
-  holdFrames?: number;
 }
 
 const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
@@ -88,7 +85,6 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   playbackRate,
   fps,
   containerRef,
-  holdFrames = 0,
 }) => {
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
@@ -99,11 +95,9 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
 
-  // Hold on first frame for holdFrames, then advance normally.
-  // This ensures the incoming clip's source position at transitionEnd
-  // matches the normal clip's position (no visual snap on handoff).
-  const advancingFrame = Math.max(0, frame - holdFrames);
-  const targetTime = (sourceStart / fps) + (Math.max(0, advancingFrame) * playbackRate / fps);
+  // Transition clips should advance continuously across the overlap window.
+  const advancingFrame = Math.max(0, frame);
+  const targetTime = (sourceStart / fps) + (advancingFrame * playbackRate / fps);
 
   // Acquire element from pool on mount
   useEffect(() => {
@@ -162,7 +156,6 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
       elementRef.current = null;
     };
     // Only re-acquire when identity changes, not on every frame
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poolItemId, src, pool, containerRef]);
 
   // Sync video with timeline — mirrors NativePreviewVideo's approach:
@@ -181,9 +174,8 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     const videoDuration = video.duration || Infinity;
     const clampedTargetTime = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
 
-    // During premount (frame < 0) or hold period, seek to target and stay paused
-    const isHolding = holdFrames > 0 && frame < holdFrames && frame >= 0;
-    if (frame < 0 || isHolding) {
+    // During premount (frame < 0), seek to target and stay paused.
+    if (frame < 0) {
       if (!video.paused) video.pause();
       if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.05) {
         video.currentTime = clampedTargetTime;
@@ -198,10 +190,8 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
       const timeSinceLastSync = now - lastSyncTimeRef.current;
 
       const videoBehind = drift < -0.2;
-      const videoAhead = drift > 0.15;
       const needsSync = needsInitialSyncRef.current
-        || (videoBehind && timeSinceLastSync > 500)
-        || videoAhead;
+        || (videoBehind && timeSinceLastSync > 500);
 
       if (needsSync && canSeek) {
         try {
@@ -232,7 +222,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
         }
       }
     }
-  }, [frame, playbackRate, targetTime, sourceStart, fps, isPlaying, holdFrames]);
+  }, [frame, playbackRate, targetTime, sourceStart, fps, isPlaying]);
 
   // Render nothing — the pool element is mounted directly into the container
   return null;
@@ -252,8 +242,6 @@ interface ClipContentProps {
   fps: number;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
   clipGlobalFrom: number;
-  /** Hold on first video frame for this many frames before advancing */
-  videoHoldFrames?: number;
 }
 
 const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent({
@@ -265,7 +253,6 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
   fps,
   adjustmentLayers,
   clipGlobalFrom,
-  videoHoldFrames,
 }) {
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
@@ -356,8 +343,9 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
     if (!clip.src) return null;
 
     const baseSourceStart = clip.sourceStart ?? clip.trimStart ?? clip.offset ?? 0;
-    const sourceStart = Math.max(0, baseSourceStart + sourceStartOffset);
     const playbackRate = clip.speed ?? 1;
+    const sourceFrameOffset = Math.round(sourceStartOffset * playbackRate);
+    const sourceStart = Math.max(0, baseSourceStart + sourceFrameOffset);
 
     mediaContent = (
       <div ref={videoContainerRef} style={{ ...transformStyle, overflow: 'hidden', position: 'relative' }}>
@@ -368,7 +356,6 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
           playbackRate={playbackRate}
           fps={fps}
           containerRef={videoContainerRef}
-          holdFrames={videoHoldFrames}
         />
       </div>
     );
@@ -568,30 +555,25 @@ const TransitionOverlay: React.FC<TransitionOverlayProps> = React.memo(function 
 
 export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionProps>(
   function OptimizedEffectsBasedTransitionRenderer({
-    transition,
+    window,
     leftClip,
     rightClip,
     adjustmentLayers,
   }) {
     const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
 
-    // Calculate where the transition sits in the global timeline
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const leftPortion = Math.floor(transition.durationInFrames * alignment);
-    const transitionStart = cutPoint - leftPortion;
     const premountFrames = Math.round(fps * 2);
     const effectsZIndex = Math.max(leftClip.zIndex, rightClip.zIndex) + 200;
 
     // Global frame offsets for ClipContent's adjustment layer calculations
-    // Both use transitionStart since localFrame + transitionStart = actual global frame
-    const leftClipGlobalFrom = transitionStart;
-    const rightClipGlobalFrom = transitionStart;
+    // Both use startFrame since localFrame + startFrame = actual global frame
+    const leftClipGlobalFrom = window.startFrame;
+    const rightClipGlobalFrom = window.startFrame;
 
     return (
       <Sequence
-        from={transitionStart}
-        durationInFrames={transition.durationInFrames}
+        from={window.startFrame}
+        durationInFrames={window.durationInFrames}
         premountFor={premountFrames}
       >
         <AbsoluteFill
@@ -602,7 +584,7 @@ export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTrans
         >
           {/* Incoming clip (below outgoing) */}
           <TransitionOverlay
-            transition={transition}
+            transition={window.transition}
             isOutgoing={false}
             zIndex={1}
             canvasWidth={canvasWidth}
@@ -611,22 +593,20 @@ export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTrans
           >
             <ClipContent
               clip={rightClip}
-              poolItemId={`t-${transition.id}-right`}
-              sourceStartOffset={0}
+              poolItemId={`t-${window.transition.id}-right`}
+              sourceStartOffset={window.startFrame - rightClip.from}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               fps={fps}
               adjustmentLayers={adjustmentLayers}
               clipGlobalFrom={rightClipGlobalFrom}
-              videoHoldFrames={leftPortion}
             />
           </TransitionOverlay>
 
           {/* Outgoing clip (above incoming, gets faded/wiped/slid away) */}
-          {/* Offset into source so the outgoing clip plays its last N frames
-              across the full transition duration */}
+          {/* Both overlap clips are aligned to timeline chronology at window.startFrame. */}
           <TransitionOverlay
-            transition={transition}
+            transition={window.transition}
             isOutgoing={true}
             zIndex={2}
             canvasWidth={canvasWidth}
@@ -635,8 +615,8 @@ export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTrans
           >
             <ClipContent
               clip={leftClip}
-              poolItemId={`t-${transition.id}-left`}
-              sourceStartOffset={leftClip.durationInFrames - transition.durationInFrames}
+              poolItemId={`t-${window.transition.id}-left`}
+              sourceStartOffset={window.startFrame - leftClip.from}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               fps={fps}
@@ -665,18 +645,22 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
 }) {
   if (transitions.length === 0) return null;
 
+  const resolvedWindows = useMemo(() => {
+    return resolveTransitionWindows(transitions, itemsById);
+  }, [transitions, itemsById]);
+
   return (
     <>
-      {transitions.map((transition) => {
-        const leftClip = itemsById.get(transition.leftClipId);
-        const rightClip = itemsById.get(transition.rightClipId);
+      {resolvedWindows.map((window) => {
+        const leftClip = itemsById.get(window.transition.leftClipId);
+        const rightClip = itemsById.get(window.transition.rightClipId);
 
         if (!leftClip || !rightClip) return null;
 
         return (
           <OptimizedEffectsBasedTransitionRenderer
-            key={transition.id}
-            transition={transition}
+            key={window.transition.id}
+            window={window}
             leftClip={leftClip}
             rightClip={rightClip}
             adjustmentLayers={adjustmentLayers}

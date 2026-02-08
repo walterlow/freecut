@@ -1,7 +1,7 @@
 /**
  * NativeAudioLayer.tsx - Native audio rendering layer using custom AudioTrackManager
  *
- * This component provides an alternative to Remotion's audio rendering,
+ * This component provides an alternative to Composition's audio rendering,
  * using HTMLAudioElement with Web Audio API for better control.
  *
  * Features:
@@ -12,7 +12,7 @@
  * - Master volume and mute controls
  *
  * Usage:
- * Replace Remotion's Audio rendering in MainComposition with NativeAudioLayer
+ * Replace Composition's Audio rendering in MainComposition with NativeAudioLayer
  * when you want to use native audio rendering.
  */
 
@@ -77,7 +77,7 @@ function convertToAudioItemData(item: EnrichedAudioItem): AudioItemData {
 /**
  * NativeAudioLayer Component
  *
- * A drop-in replacement for Remotion's audio rendering that uses native
+ * A drop-in replacement for Composition's audio rendering that uses native
  * HTMLAudioElement with Web Audio API for better control.
  */
 export const NativeAudioLayer: React.FC<NativeAudioLayerProps> = ({

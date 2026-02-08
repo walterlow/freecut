@@ -56,7 +56,7 @@ export {
   seekToTimeAccurate,
 } from './use-video-frame';
 
-// Native video layer (alternative to Remotion-based rendering)
+// Native video layer (alternative to Composition-based rendering)
 export { NativeVideoLayer } from './NativeVideoLayer';
 
 // Video Source Pool - Efficient element reuse by source URL
