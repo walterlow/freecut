@@ -54,8 +54,3 @@ export function useVideoSourcePool(): VideoSourcePool {
   const contextPool = useContext(VideoSourcePoolContext);
   return contextPool ?? getGlobalVideoSourcePool();
 }
-
-/**
- * Hook to get pool statistics for debugging.
- */
-export { usePoolStats } from './PooledVideoLayer';

@@ -9,28 +9,8 @@ import { GizmoOverlay } from './gizmo-overlay';
 import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
-// GPU rendering imports
-import { GPUVideoPreview, BufferedGPUPreview } from '@/features/gpu/components';
-
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
-
-// GPU rendering mode:
-// - 'off': Always use HTML5 video (current behavior, most stable)
-// - 'scrubbing': GPU for paused/scrubbing, HTML5 for playback
-// - 'always': Always use GPU (slow without buffering)
-// - 'buffered': WASM-powered buffered GPU playback (experimental)
-//
-// 'buffered' mode uses a Rust/WASM ring buffer with A/V sync for smooth
-// GPU-accelerated playback. This enables effects during playback.
-//
-// GPU playback is slow without pre-rendered frame cache. HTML5 video uses
-// browser's native decoder which is optimized. GPU path is for:
-// - Frame-accurate scrubbing (when paused)
-// - Export rendering
-// - Effects that CSS can't do (LUTs, GPU blur, blend modes)
-// Change this value to switch GPU rendering mode
-const GPU_MODE = 'off' as 'off' | 'scrubbing' | 'always' | 'buffered';
 
 interface VideoPreviewProps {
   project: {
@@ -58,14 +38,11 @@ function useCustomPlayer(
   playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
 
-  const [isBuffering] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const lastSyncedFrameRef = useRef<number>(0);
   const ignorePlayerUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
-  const pendingFrameRef = useRef<number | null>(null);
 
   // Detect when Player becomes ready
   useEffect(() => {
@@ -99,15 +76,11 @@ function useCustomPlayer(
         playerRef.current.play();
       } else if (!isPlaying && wasPlaying) {
         playerRef.current.pause();
-        if (pendingFrameRef.current !== null) {
-          setCurrentFrame(pendingFrameRef.current);
-          pendingFrameRef.current = null;
-        }
       }
     } catch (error) {
       console.error('[Player Sync] Failed to control playback:', error);
     }
-  }, [isPlaying, playerRef, setCurrentFrame]);
+  }, [isPlaying, playerRef]);
 
   // Timeline → Player: Sync frame position
   useEffect(() => {
@@ -185,7 +158,6 @@ function useCustomPlayer(
     });
   }, [playerReady, playerRef]);
 
-  return { isBuffering };
 }
 
 /**
@@ -202,7 +174,6 @@ function useCustomPlayer(
  */
 export const VideoPreview = memo(function VideoPreview({ project, containerSize }: VideoPreviewProps) {
   const playerRef = useRef<PlayerRef>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
   // State for gizmo overlay positioning
@@ -210,7 +181,6 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
 
   // Callback ref that measures immediately when element is available
   const setPlayerContainerRefCallback = useCallback((el: HTMLDivElement | null) => {
-    containerRef.current = el;
     playerContainerRef.current = el;
     if (el) {
       setPlayerContainerRect(el.getBoundingClientRect());
@@ -225,7 +195,7 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
   const zoom = usePlaybackStore((s) => s.zoom);
 
   // Custom Player integration (hook handles bidirectional sync)
-  const { isBuffering } = useCustomPlayer(playerRef);
+  useCustomPlayer(playerRef);
 
   // Register frame capture function for project thumbnail generation and split transitions
   const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
@@ -569,78 +539,24 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
               </div>
             )}
 
-            {isBuffering && !isResolving && (
-              <div className="absolute top-2 left-2 z-20 flex items-center gap-2 bg-black/70 px-2 py-1 rounded">
-                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span className="text-white text-xs">Buffering...</span>
-              </div>
-            )}
-
-            {/* GPU mode: 'always' = GPU only, 'scrubbing' = GPU when paused, 'buffered' = WASM buffered, 'off' = HTML5 only */}
-            {GPU_MODE === 'buffered' ? (
-              // WASM-buffered GPU playback (experimental)
-              (() => {
-                const s = usePlaybackStore.getState();
-                const effectiveFrame = s.previewFrame ?? s.currentFrame;
-                const videoItems = items.filter((item) => item.type === 'video');
-                const firstVideo = videoItems[0];
-                const videoSrc = firstVideo?.mediaId ? resolvedUrls.get(firstVideo.mediaId) ?? '' : '';
-                return (
-                  <BufferedGPUPreview
-                    src={videoSrc}
-                    currentFrame={effectiveFrame}
-                    fps={fps}
-                    width={Math.round(playerSize.width)}
-                    height={Math.round(playerSize.height)}
-                    isPlaying={usePlaybackStore.getState().isPlaying}
-                    backgroundColor={project.backgroundColor}
-                    onFrameRendered={handleFrameChange}
-                    onError={(err) => console.error('[Buffered GPU Preview]', err)}
-                  />
-                );
-              })()
-            ) : GPU_MODE === 'always' || (GPU_MODE === 'scrubbing' && !usePlaybackStore.getState().isPlaying) ? (
-              (() => {
-                const s2 = usePlaybackStore.getState();
-                const effectiveFrame2 = s2.previewFrame ?? s2.currentFrame;
-                return (
-                  <GPUVideoPreview
-                    items={items.filter((item) => item.type === 'video').map((item) => ({
-                      ...item,
-                      type: 'video' as const,
-                      src: resolvedUrls.get(item.mediaId ?? '') ?? '',
-                    }))}
-                    tracks={tracks}
-                    currentFrame={effectiveFrame2}
-                    fps={fps}
-                    width={Math.round(playerSize.width)}
-                    height={Math.round(playerSize.height)}
-                    backgroundColor={project.backgroundColor}
-                    onFrameRendered={handleFrameChange}
-                    onError={(err) => console.error('[GPU Preview]', err)}
-                  />
-                );
-              })()
-            ) : (
-              <Player
-                ref={playerRef}
-                durationInFrames={totalFrames}
-                fps={fps}
-                width={project.width}
-                height={project.height}
-                autoPlay={false}
-                loop={false}
-                controls={false}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                }}
-                onFrameChange={handleFrameChange}
-                onPlayStateChange={handlePlayStateChange}
-              >
-                <MainComposition {...inputProps} />
-              </Player>
-            )}
+            <Player
+              ref={playerRef}
+              durationInFrames={totalFrames}
+              fps={fps}
+              width={project.width}
+              height={project.height}
+              autoPlay={false}
+              loop={false}
+              controls={false}
+              style={{
+                width: '100%',
+                height: '100%',
+              }}
+              onFrameChange={handleFrameChange}
+              onPlayStateChange={handlePlayStateChange}
+            >
+              <MainComposition {...inputProps} />
+            </Player>
           </div>
 
           <GizmoOverlay
