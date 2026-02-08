@@ -142,8 +142,3 @@ fn main(@location(0) uv: vec2f) -> @location(0) vec4f {
 `;
   }
 }
-
-/**
- * Global compiler instance
- */
-export const globalCompiler = new GraphCompiler();

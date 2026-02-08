@@ -70,25 +70,3 @@ function showBreakageNotification(breakages: TransitionBreakage[]) {
     }
   }
 }
-
-/**
- * Get human-readable reason for breakage
- */
-export function getBreakageReasonText(
-  reason: TransitionBreakage['reason']
-): string {
-  switch (reason) {
-    case 'clip_deleted':
-      return 'Clip was deleted';
-    case 'not_adjacent':
-      return 'Clips are no longer adjacent';
-    case 'cross_track':
-      return 'Clips moved to different tracks';
-    case 'invalid_duration':
-      return 'Transition duration became invalid';
-    case 'invalid_type':
-      return 'Clip type changed';
-    default:
-      return 'Unknown reason';
-  }
-}

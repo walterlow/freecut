@@ -113,7 +113,6 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   sourceDuration,
   trimStart,
   speed,
-  fps: _fps,
   isVisible,
   pixelsPerSecond,
 }: ClipFilmstripProps) {
@@ -243,5 +242,3 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     </div>
   );
 });
-
-export { THUMBNAIL_WIDTH };

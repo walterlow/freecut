@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { RenderBackend } from '../backend/types';
-import type { DecodedVideoFrame, ManagedMediaSource } from '../media';
+import type { ManagedMediaSource } from '../media';
 import {
   createTextureImporter,
   type TextureImporter,
@@ -58,7 +58,7 @@ export function useGPUVideoFrame(
   currentFrame: number,
   options: UseGPUVideoFrameOptions
 ): UseGPUVideoFrameResult {
-  const { backend, fps } = options;
+  const { backend } = options;
 
   const [texture, setTexture] = useState<ImportedTexture | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -203,90 +203,4 @@ export function useGPUVideoFrame(
     releaseTexture,
     stats,
   };
-}
-
-/**
- * Hook to batch import multiple frames for compositing
- *
- * Used when rendering multiple video clips simultaneously.
- */
-export function useGPUVideoFrameBatch(
-  sources: Array<{
-    id: string;
-    source: ManagedMediaSource | null;
-    frameNumber: number;
-  }>,
-  backend: RenderBackend | null
-): Map<string, ImportedTexture | null> {
-  const [textures, setTextures] = useState<Map<string, ImportedTexture | null>>(new Map());
-  const importerRef = useRef<TextureImporter | null>(null);
-  const texturesRef = useRef<Map<string, ImportedTexture>>(new Map());
-
-  // Setup importer
-  useEffect(() => {
-    if (!backend) return;
-
-    if (!importerRef.current) {
-      importerRef.current = createTextureImporter({
-        maxPooledPerSize: 8, // Higher for batch
-        preferZeroCopy: true,
-      });
-    }
-
-    importerRef.current.setBackend(backend);
-
-    return () => {
-      // Release all textures
-      for (const tex of texturesRef.current.values()) {
-        importerRef.current?.release(tex);
-      }
-      texturesRef.current.clear();
-
-      importerRef.current?.dispose();
-      importerRef.current = null;
-    };
-  }, [backend]);
-
-  // Import frames
-  useEffect(() => {
-    if (!backend || !importerRef.current) return;
-
-    const loadFrames = async () => {
-      const newTextures = new Map<string, ImportedTexture | null>();
-
-      for (const { id, source, frameNumber } of sources) {
-        if (!source) {
-          newTextures.set(id, null);
-          continue;
-        }
-
-        try {
-          // Release old texture for this ID
-          const old = texturesRef.current.get(id);
-          if (old) {
-            importerRef.current!.release(old);
-            texturesRef.current.delete(id);
-          }
-
-          // Decode and import
-          const frame = await source.getVideoFrameByNumber(frameNumber);
-          if (frame) {
-            const tex = importerRef.current!.import(frame);
-            texturesRef.current.set(id, tex);
-            newTextures.set(id, tex);
-          } else {
-            newTextures.set(id, null);
-          }
-        } catch {
-          newTextures.set(id, null);
-        }
-      }
-
-      setTextures(newTextures);
-    };
-
-    loadFrames();
-  }, [sources, backend]);
-
-  return textures;
 }

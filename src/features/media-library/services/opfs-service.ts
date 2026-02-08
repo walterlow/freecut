@@ -11,7 +11,7 @@ import { formatBytes } from '@/utils/format-utils';
  * Provides a Promise-based API for file operations, hiding the complexity
  * of worker communication using MessageChannel pattern.
  */
-export class OPFSService {
+class OPFSService {
   private worker: Worker | null = null;
 
   /**

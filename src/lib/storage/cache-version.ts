@@ -22,14 +22,14 @@ const VERSION_PREFIX = 'cache-version-';
  * Cache version configuration
  * Bump version numbers here when format changes require cache invalidation
  */
-export const CACHE_VERSIONS = {
+const CACHE_VERSIONS = {
   filmstrip: 7,    // OPFS filmstrip frames (v7: 1fps, multi-worker)
   waveform: 2,     // OPFS waveform data
   thumbnail: 1,    // IndexedDB thumbnails
   media: 1,        // OPFS media files
 } as const;
 
-export type CacheType = keyof typeof CACHE_VERSIONS;
+type CacheType = keyof typeof CACHE_VERSIONS;
 
 interface CacheMigration {
   needsMigration: boolean;
@@ -61,33 +61,4 @@ export function getCacheMigration(cacheType: CacheType): CacheMigration {
       }
     },
   };
-}
-
-/**
- * Clear all cache versions (forces full rebuild on next load)
- */
-export function clearAllCacheVersions(): void {
-  for (const cacheType of Object.keys(CACHE_VERSIONS)) {
-    localStorage.removeItem(`${VERSION_PREFIX}${cacheType}`);
-  }
-  logger.debug('All cache versions cleared');
-}
-
-/**
- * Get current cache version status for debugging
- */
-export function getCacheVersionStatus(): Record<CacheType, { stored: number | null; current: number; needsUpdate: boolean }> {
-  const status: Record<string, { stored: number | null; current: number; needsUpdate: boolean }> = {};
-
-  for (const [cacheType, currentVersion] of Object.entries(CACHE_VERSIONS)) {
-    const stored = localStorage.getItem(`${VERSION_PREFIX}${cacheType}`);
-    const storedVersion = stored ? parseInt(stored, 10) : null;
-    status[cacheType] = {
-      stored: storedVersion,
-      current: currentVersion,
-      needsUpdate: storedVersion !== currentVersion,
-    };
-  }
-
-  return status as Record<CacheType, { stored: number | null; current: number; needsUpdate: boolean }>;
 }

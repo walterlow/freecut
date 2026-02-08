@@ -1,4 +1,4 @@
-import { useRef, useEffect, memo, useCallback } from 'react';
+import { useRef, useEffect, memo } from 'react';
 
 // Tile width - 1000px for faster individual renders and better cache granularity
 const TILE_WIDTH = 1000;
@@ -118,40 +118,3 @@ export const TiledCanvas = memo(function TiledCanvas({
     />
   );
 });
-
-/**
- * Hook to create a stable render function for tiled canvas
- * that updates when dependencies change without causing re-renders
- *
- * NOTE: This has a race condition with rapid updates. For zoom-sensitive
- * rendering, pass renderTile directly to TiledCanvas and include it in
- * the version prop calculation instead.
- */
-export function useTiledCanvasRenderer(
-  render: (
-    ctx: CanvasRenderingContext2D,
-    tileIndex: number,
-    tileOffset: number,
-    tileWidth: number
-  ) => void,
-  deps: React.DependencyList
-): (
-  ctx: CanvasRenderingContext2D,
-  tileIndex: number,
-  tileOffset: number,
-  tileWidth: number
-) => void {
-  const renderRef = useRef(render);
-
-  useEffect(() => {
-    renderRef.current = render;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-
-  return useCallback(
-    (ctx: CanvasRenderingContext2D, tileIndex: number, tileOffset: number, tileWidth: number) => {
-      renderRef.current(ctx, tileIndex, tileOffset, tileWidth);
-    },
-    []
-  );
-}

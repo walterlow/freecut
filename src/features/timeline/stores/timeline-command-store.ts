@@ -176,15 +176,3 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
     },
   })
 );
-
-/**
- * Hook to get undo/redo state for UI.
- * Use this instead of subscribing to the full store.
- */
-export function useCanUndo(): boolean {
-  return useTimelineCommandStore((s) => s.canUndo);
-}
-
-export function useCanRedo(): boolean {
-  return useTimelineCommandStore((s) => s.canRedo);
-}

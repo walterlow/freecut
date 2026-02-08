@@ -154,13 +154,6 @@ export function useMediaSource(
 }
 
 /**
- * Hook to get the global media source manager
- */
-export function useMediaSourceManager(): MediaSourceManager {
-  return getManager();
-}
-
-/**
  * Dispose the global manager (call on app unmount)
  */
 export function disposeGlobalMediaManager(): void {

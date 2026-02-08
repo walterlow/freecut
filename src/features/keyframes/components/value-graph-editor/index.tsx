@@ -878,4 +878,3 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 
 // Re-export types and components
 export type { GraphViewport, GraphKeyframePoint, GraphPadding } from './types';
-export { DEFAULT_GRAPH_PADDING } from './types';

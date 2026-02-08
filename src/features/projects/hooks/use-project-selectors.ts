@@ -45,19 +45,6 @@ export const useFilteredProjects = (): Project[] => {
 };
 
 /**
- * Get current project
- */
-export const useCurrentProject = () => useProjectStore((s) => s.currentProject);
-
-/**
- * Get project by ID (memoized)
- */
-export const useProjectById = (id: string): Project | undefined => {
-  const projects = useProjectStore((s) => s.projects);
-  return useMemo(() => projects.find((p) => p.id === id), [projects, id]);
-};
-
-/**
  * Get loading state
  */
 export const useProjectsLoading = () => useProjectStore((s) => s.isLoading);
@@ -101,18 +88,4 @@ export const useHasActiveFilters = (): boolean => {
   const filterFps = useProjectStore((s) => s.filterFps);
 
   return Boolean(searchQuery.trim() || filterResolution || filterFps);
-};
-
-/**
- * Get project count (filtered vs total)
- */
-export const useProjectCounts = () => {
-  const totalProjects = useProjectStore((s) => s.projects.length);
-  const filteredProjects = useFilteredProjects();
-
-  return {
-    total: totalProjects,
-    filtered: filteredProjects.length,
-    hasFilter: filteredProjects.length !== totalProjects,
-  };
 };

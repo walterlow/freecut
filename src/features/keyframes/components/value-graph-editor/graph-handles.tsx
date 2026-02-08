@@ -189,32 +189,6 @@ const BezierHandle = memo(function BezierHandle({
 });
 
 /**
- * Helper to convert bezier handle position to control point values (0-1).
- */
-export function handleToControlPoint(
-  handle: GraphBezierHandle,
-  startPoint: GraphKeyframePoint,
-  endPoint: GraphKeyframePoint
-): { x: number; y: number } {
-  const segmentWidth = endPoint.x - startPoint.x;
-  const segmentHeight = endPoint.y - startPoint.y;
-
-  // Avoid division by zero
-  if (segmentWidth === 0) {
-    return { x: handle.type === 'out' ? 0 : 1, y: 0.5 };
-  }
-
-  const x = (handle.x - startPoint.x) / segmentWidth;
-  const y = segmentHeight === 0 ? 0.5 : (handle.y - startPoint.y) / segmentHeight;
-
-  // Clamp x to valid bezier range (0-1)
-  return {
-    x: Math.max(0, Math.min(1, x)),
-    y: y, // Y can go outside 0-1 for overshoot effects
-  };
-}
-
-/**
  * Helper to update bezier config from new handle position.
  */
 export function updateBezierFromHandle(

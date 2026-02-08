@@ -16,7 +16,7 @@
  */
 
 import type { TimelineItem } from '@/types/timeline';
-import type { CanAddTransitionResult, Transition, TRANSITION_CONFIGS } from '@/types/transition';
+import type { CanAddTransitionResult } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
 
 /**
@@ -73,7 +73,7 @@ export function canAddTransition(
  * @param side 'start' for head handle, 'end' for tail handle
  * @returns Number of available frames for transition
  */
-export function getAvailableHandle(
+function getAvailableHandle(
   clip: TimelineItem,
   side: 'start' | 'end'
 ): number {
@@ -105,105 +105,4 @@ export function getAvailableHandle(
     const availableAfter = getAvailableSourceFrames(effectiveSourceDuration, effectiveSourceEnd);
     return sourceToTimelineFrames(availableAfter, speed);
   }
-}
-
-/**
- * Calculate the overlap region for a transition.
- * The right clip shifts left to overlap with the left clip.
- */
-export function calculateOverlapRegion(
-  _leftClip: TimelineItem,
-  rightClip: TimelineItem,
-  durationInFrames: number
-): {
-  overlapStart: number;
-  overlapEnd: number;
-  newRightFrom: number;
-} {
-  // Overlap starts where the right clip will move to
-  const overlapStart = rightClip.from - durationInFrames;
-  // Overlap ends at the original right clip start (now middle of transition)
-  const overlapEnd = rightClip.from;
-  // Right clip's new position
-  const newRightFrom = overlapStart;
-
-  return { overlapStart, overlapEnd, newRightFrom };
-}
-
-/**
- * Find the transition between two clips, if one exists.
- */
-export function findTransitionBetween(
-  transitions: Transition[],
-  leftClipId: string,
-  rightClipId: string
-): Transition | undefined {
-  return transitions.find(
-    (t) => t.leftClipId === leftClipId && t.rightClipId === rightClipId
-  );
-}
-
-/**
- * Get all transitions on a specific track.
- */
-export function getTransitionsForTrack(
-  transitions: Transition[],
-  trackId: string
-): Transition[] {
-  return transitions.filter((t) => t.trackId === trackId);
-}
-
-/**
- * Get the transition involving a specific clip (as either left or right).
- */
-export function getTransitionsForClip(
-  transitions: Transition[],
-  clipId: string
-): Transition[] {
-  return transitions.filter(
-    (t) => t.leftClipId === clipId || t.rightClipId === clipId
-  );
-}
-
-/**
- * Check if a clip is involved in any transition.
- */
-export function clipHasTransition(
-  transitions: Transition[],
-  clipId: string
-): boolean {
-  return transitions.some(
-    (t) => t.leftClipId === clipId || t.rightClipId === clipId
-  );
-}
-
-/**
- * Calculate the maximum transition duration based on clip durations and available handles.
- * Composition requires transition < min(leftDuration, rightDuration)
- */
-export function getMaxTransitionDuration(
-  leftClip: TimelineItem,
-  rightClip: TimelineItem
-): number {
-  const leftHandle = getAvailableHandle(leftClip, 'end');
-  const rightHandle = getAvailableHandle(rightClip, 'start');
-  // Transition cannot exceed either clip's duration (minus 1 frame for safety)
-  const maxByClipDuration = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
-  return Math.min(leftHandle, rightHandle, maxByClipDuration);
-}
-
-/**
- * Validate and clamp transition duration to valid range.
- */
-export function clampTransitionDuration(
-  duration: number,
-  leftClip: TimelineItem,
-  rightClip: TimelineItem,
-  config: typeof TRANSITION_CONFIGS[keyof typeof TRANSITION_CONFIGS]
-): number {
-  const maxDuration = getMaxTransitionDuration(leftClip, rightClip);
-  return Math.max(
-    config.minDuration,
-    Math.min(duration, config.maxDuration, maxDuration)
-  );
 }

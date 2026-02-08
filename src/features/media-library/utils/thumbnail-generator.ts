@@ -27,7 +27,7 @@ const loadMediabunny = () => import('mediabunny');
  * Generate thumbnail for video file using mediabunny
  * Preserves aspect ratio - portrait videos stay portrait, landscape stays landscape
  */
-export async function generateVideoThumbnail(
+async function generateVideoThumbnail(
   file: File,
   options: ThumbnailOptions = {}
 ): Promise<Blob> {
@@ -77,7 +77,13 @@ export async function generateVideoThumbnail(
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => blob ? resolve(blob) : reject(new Error('Failed to create blob')),
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        reject(new Error('Failed to create blob'));
+      },
       'image/webp',
       opts.quality
     );
@@ -87,7 +93,7 @@ export async function generateVideoThumbnail(
 /**
  * Generate thumbnail for audio file (waveform placeholder)
  */
-export async function generateAudioThumbnail(
+async function generateAudioThumbnail(
   file: File,
   options: ThumbnailOptions = {}
 ): Promise<Blob> {
@@ -121,7 +127,11 @@ export async function generateAudioThumbnail(
     const centerY = height / 2;
     for (let x = 0; x < width; x++) {
       const y = centerY + Math.sin(x * 0.02) * amplitude;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
     }
     ctx.stroke();
 
@@ -144,7 +154,7 @@ export async function generateAudioThumbnail(
 /**
  * Generate thumbnail for image file (resized, preserving aspect ratio)
  */
-export async function generateImageThumbnail(
+async function generateImageThumbnail(
   file: File,
   options: ThumbnailOptions = {}
 ): Promise<Blob> {
@@ -175,7 +185,11 @@ export async function generateImageThumbnail(
       canvas.toBlob(
         (blob) => {
           URL.revokeObjectURL(img.src);
-          blob ? resolve(blob) : reject(new Error('Failed to create blob'));
+          if (blob) {
+            resolve(blob);
+            return;
+          }
+          reject(new Error('Failed to create blob'));
         },
         'image/webp',
         opts.quality

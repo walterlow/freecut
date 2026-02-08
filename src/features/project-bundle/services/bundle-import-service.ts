@@ -244,7 +244,7 @@ export async function importProjectBundle(
   // Step 8: Associate all imported media with the project
   onProgress?.({ percent: 95, stage: 'linking' });
 
-  for (const [_originalId, newMediaId] of mediaIdMap) {
+  for (const [, newMediaId] of mediaIdMap) {
     await associateMediaWithProject(newProjectId, newMediaId);
   }
 
@@ -274,7 +274,7 @@ async function unzipBundle(file: File): Promise<Record<string, Uint8Array>> {
 /**
  * Validate a bundle file without importing
  */
-export async function validateBundle(file: File): Promise<{
+async function validateBundle(file: File): Promise<{
   valid: boolean;
   manifest?: BundleManifest;
   errors: string[];

@@ -28,7 +28,7 @@ interface GraphKeyframeProps {
  * A single keyframe point on the graph.
  * Uses pointer events with pointer capture for reliable dragging.
  */
-export const GraphKeyframe = memo(function GraphKeyframe({
+const GraphKeyframe = memo(function GraphKeyframe({
   point,
   size = 10,
   previewValues,

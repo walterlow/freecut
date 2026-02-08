@@ -145,19 +145,3 @@ export function getTransitionBlockedMessage(range: BlockedFrameRange): string {
   const position = range.role === 'outgoing' ? 'end' : 'start';
   return `Keyframes cannot be added here. This region is part of a transition at the ${position} of the clip.`;
 }
-
-/**
- * Check if a clip has any transitions attached to it.
- *
- * @param clipId - The clip ID to check
- * @param transitions - All transitions in the timeline
- * @returns true if the clip is part of any transition
- */
-export function clipHasTransitions(
-  clipId: string,
-  transitions: Transition[]
-): boolean {
-  return transitions.some(
-    (t) => t.leftClipId === clipId || t.rightClipId === clipId
-  );
-}

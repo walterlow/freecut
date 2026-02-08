@@ -64,36 +64,3 @@ export function hasKeyframeAnimation(itemKeyframes: ItemKeyframes | undefined): 
   if (!itemKeyframes) return false;
   return itemKeyframes.properties.some((p) => p.keyframes.length > 0);
 }
-
-/**
- * Get all animated property values at a specific frame.
- * Returns only properties that have keyframes (not base values).
- *
- * @param itemKeyframes - All keyframes for the item
- * @param baseResolved - The base resolved transform
- * @param frame - Current frame relative to item start
- * @returns Object with only the animated property values
- */
-export function getAnimatedValues(
-  itemKeyframes: ItemKeyframes | undefined,
-  baseResolved: ResolvedTransform,
-  frame: number
-): Partial<ResolvedTransform> {
-  if (!itemKeyframes) return {};
-
-  const result: Partial<ResolvedTransform> = {};
-
-  for (const propKeyframes of itemKeyframes.properties) {
-    if (propKeyframes.keyframes.length > 0) {
-      const property = propKeyframes.property;
-      const baseValue = baseResolved[property];
-      result[property] = interpolatePropertyValue(
-        propKeyframes.keyframes,
-        frame,
-        baseValue
-      );
-    }
-  }
-
-  return result;
-}

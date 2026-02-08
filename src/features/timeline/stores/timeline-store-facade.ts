@@ -11,7 +11,7 @@
  * - This facade combines them into a single unified API
  */
 
-import { useSyncExternalStore, useMemo } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { TimelineState, TimelineActions } from '../types';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
@@ -595,45 +595,6 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
 
 // Export the facade
 export const useTimelineStore = createTimelineStoreFacade();
-
-// =============================================================================
-// MEMOIZED SELECTORS (re-export for backward compatibility)
-// =============================================================================
-
-/**
- * Memoized selector that returns keyframes as a Map for O(1) lookups by itemId.
- */
-export function useKeyframeMap(): Map<string, ItemKeyframes> {
-  const keyframes = useKeyframesStore((s) => s.keyframes);
-
-  return useMemo(() => {
-    const map = new Map<string, ItemKeyframes>();
-    for (const kf of keyframes) {
-      map.set(kf.itemId, kf);
-    }
-    return map;
-  }, [keyframes]);
-}
-
-/**
- * Get keyframes for a specific item.
- */
-export function useItemKeyframes(itemId: string): ItemKeyframes | undefined {
-  return useKeyframesStore((s) =>
-    s.keyframes.find((k) => k.itemId === itemId)
-  );
-}
-
-// =============================================================================
-// RE-EXPORTS for direct domain store access (optional, for new code)
-// =============================================================================
-
-export { useItemsStore } from './items-store';
-export { useTransitionsStore } from './transitions-store';
-export { useKeyframesStore } from './keyframes-store';
-export { useMarkersStore } from './markers-store';
-export { useTimelineSettingsStore } from './timeline-settings-store';
-export { useTimelineCommandStore, useCanUndo, useCanRedo } from './timeline-command-store';
 
 // Re-export actions for direct use
 export * from './timeline-actions';

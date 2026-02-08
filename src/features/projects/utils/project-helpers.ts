@@ -3,7 +3,7 @@ import type { Project } from '@/types/project';
 /**
  * Generate a unique project ID (8-character base62 hash)
  */
-export function generateProjectId(): string {
+function generateProjectId(): string {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const array = new Uint8Array(8);
   crypto.getRandomValues(array);
@@ -32,30 +32,6 @@ export function formatRelativeTime(timestamp: number): string {
   if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
   if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
   return `${years} year${years > 1 ? 's' : ''} ago`;
-}
-
-/**
- * Format date to locale string
- */
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-/**
- * Format date and time
- */
-export function formatDateTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 /**
@@ -125,11 +101,12 @@ export function sortProjects(
       case 'updatedAt':
         comparison = a.updatedAt - b.updatedAt;
         break;
-      case 'resolution':
+      case 'resolution': {
         const aRes = (a?.metadata?.width || 0) * (a?.metadata?.height || 0);
         const bRes = (b?.metadata?.width || 0) * (b?.metadata?.height || 0);
         comparison = aRes - bRes;
         break;
+      }
     }
 
     return direction === 'asc' ? comparison : -comparison;
@@ -160,28 +137,6 @@ export function getUniqueFps(projects: Project[]): number[] {
       .map((p) => p.metadata.fps)
   );
   return Array.from(fpsSet).sort((a, b) => a - b);
-}
-
-/**
- * Debounce function for search
- */
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null;
-      func(...args);
-    };
-
-    if (timeout) {
-      clearTimeout(timeout);
-    }
-    timeout = setTimeout(later, wait);
-  };
 }
 
 /**
@@ -226,56 +181,5 @@ export function duplicateProject(project: Project): Project {
     name: `${project.name} (Copy)`,
     createdAt: now,
     updatedAt: now,
-  };
-}
-
-/**
- * Calculate project statistics
- */
-export function calculateProjectStats(projects: Project[]): {
-  totalProjects: number;
-  totalSize: number;
-  averageResolution: { width: number; height: number };
-  mostCommonFps: number;
-} {
-  const totalProjects = projects.length;
-
-  if (totalProjects === 0) {
-    return {
-      totalProjects: 0,
-      totalSize: 0,
-      averageResolution: { width: 0, height: 0 },
-      mostCommonFps: 30,
-    };
-  }
-
-  // Calculate average resolution
-  const totalWidth = projects.reduce((sum, p) => sum + (p?.metadata?.width || 0), 0);
-  const totalHeight = projects.reduce((sum, p) => sum + (p?.metadata?.height || 0), 0);
-
-  const averageResolution = {
-    width: Math.round(totalWidth / totalProjects),
-    height: Math.round(totalHeight / totalProjects),
-  };
-
-  // Find most common FPS
-  const fpsCount: Record<number, number> = {};
-  projects.forEach((p) => {
-    const fps = p?.metadata?.fps;
-    if (fps) {
-      fpsCount[fps] = (fpsCount[fps] || 0) + 1;
-    }
-  });
-
-  const mostCommonFps =
-    parseInt(
-      Object.entries(fpsCount).sort(([, a], [, b]) => b - a)[0]?.[0] || '30'
-    ) || 30;
-
-  return {
-    totalProjects,
-    totalSize: 0, // TODO: Calculate from actual media files
-    averageResolution,
-    mostCommonFps,
   };
 }

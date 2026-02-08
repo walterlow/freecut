@@ -27,7 +27,7 @@ const CURVE_SAMPLES = 50;
 /**
  * A single interpolation curve between two keyframes.
  */
-export const GraphCurve = memo(function GraphCurve({
+const GraphCurve = memo(function GraphCurve({
   startPoint,
   endPoint,
   easingConfig,

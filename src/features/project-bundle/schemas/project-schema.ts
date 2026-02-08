@@ -314,7 +314,7 @@ const projectResolutionSchema = z.object({
 // Project Schema
 // ============================================================================
 
-export const projectSchema = z.object({
+const projectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(100),
   description: z.string().max(500),
@@ -331,7 +331,7 @@ export const projectSchema = z.object({
 // Media Reference Schema
 // ============================================================================
 
-export const mediaReferenceSchema = z.object({
+const mediaReferenceSchema = z.object({
   id: z.string().min(1),
   fileName: z.string().min(1),
   fileSize: z.number().int().min(0),
@@ -349,7 +349,7 @@ export const mediaReferenceSchema = z.object({
 // Snapshot Schema
 // ============================================================================
 
-export const snapshotSchema = z.object({
+const snapshotSchema = z.object({
   version: z.string(),
   exportedAt: z.string().datetime(),
   editorVersion: z.string(),

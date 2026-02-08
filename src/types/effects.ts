@@ -126,19 +126,6 @@ export const HALFTONE_BLEND_MODE_LABELS: Record<HalftoneBlendMode, string> = {
   'soft-light': 'Soft Light',
 };
 
-// Halftone fade direction labels
-export const HALFTONE_FADE_DIRECTION_LABELS: Record<HalftoneFadeDirection, string> = {
-  none: 'None',
-  top: 'Top',
-  bottom: 'Bottom',
-  left: 'Left',
-  right: 'Right',
-  'top-left': 'Top Left',
-  'top-right': 'Top Right',
-  'bottom-left': 'Bottom Left',
-  'bottom-right': 'Bottom Right',
-};
-
 // Halftone effect configuration metadata
 export const HALFTONE_CONFIG = {
   patternType: { label: 'Pattern', default: 'dots' as HalftonePatternType },

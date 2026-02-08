@@ -63,7 +63,7 @@ export interface UseMarqueeSelectionOptions {
  * Returns true if the rectangles have ANY overlap at all, even if just touching edges.
  * Does NOT require one rectangle to be fully contained within the other.
  */
-export function rectIntersects(rect1: Rect, rect2: Rect): boolean {
+function rectIntersects(rect1: Rect, rect2: Rect): boolean {
   return !(
     rect1.right < rect2.left ||
     rect1.left > rect2.right ||

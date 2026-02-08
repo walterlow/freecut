@@ -9,27 +9,9 @@
  * - thumbnails.ts: Thumbnail operations
  * - content.ts: Content-addressable storage (reference counting)
  * - project-media.ts: Project-media associations
- * - filmstrips.ts: Video filmstrip thumbnails
  * - waveforms.ts: Audio waveform data
  * - gif-frames.ts: GIF frame data
  */
-
-// Schema exports
-export type {
-  VideoEditorDB,
-  VideoEditorDBInstance,
-} from './schema';
-export { DB_NAME, DB_VERSION } from './schema';
-
-// Connection exports
-export {
-  getDB,
-  closeDB,
-  reconnectDB,
-  hasRequiredStores,
-  checkStorageQuota,
-  hasEnoughSpace,
-} from './connection';
 
 // Project exports
 export {
@@ -38,9 +20,6 @@ export {
   createProject,
   updateProject,
   deleteProject,
-  searchProjects,
-  getProjectsSorted,
-  clearAllProjects,
   getDBStats,
 } from './projects';
 
@@ -51,9 +30,6 @@ export {
   createMedia,
   updateMedia,
   deleteMedia,
-  searchMedia,
-  getMediaByType,
-  batchDeleteMedia,
 } from './media';
 
 // Thumbnail exports
@@ -61,20 +37,11 @@ export {
   saveThumbnail,
   getThumbnail,
   getThumbnailByMediaId,
-  deleteThumbnail,
   deleteThumbnailsByMediaId,
 } from './thumbnails';
 
 // Content exports
-export {
-  getContentByHash,
-  hasContentWithSize,
-  createContent,
-  incrementContentRef,
-  decrementContentRef,
-  deleteContent,
-  findMediaByContentHash,
-} from './content';
+export { incrementContentRef, decrementContentRef, deleteContent } from './content';
 
 // Project-media association exports
 export {
@@ -83,27 +50,10 @@ export {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject,
-  removeAllMediaFromProject,
-  isMediaInProject,
 } from './project-media';
 
-// Filmstrip exports
-export {
-  saveFilmstrip,
-  getFilmstrip,
-  getFilmstripByMediaAndDensity,
-  getFilmstripByMediaId,
-  getFilmstripsByMediaId,
-  deleteFilmstrip,
-  deleteFilmstripsByMediaId,
-} from './filmstrips';
-
 // Waveform exports
-export {
-  saveWaveform,
-  getWaveform,
-  deleteWaveform,
-} from './waveforms';
+export { getWaveform, deleteWaveform } from './waveforms';
 
 // GIF frames exports
 export {

@@ -5,23 +5,6 @@ import { createLogger } from '@/lib/logger';
 const logger = createLogger('IndexedDB:Waveforms');
 
 /**
- * Save waveform data to IndexedDB.
- */
-export async function saveWaveform(waveform: WaveformData): Promise<void> {
-  try {
-    let db = await getDB();
-    if (!db.objectStoreNames.contains('waveforms')) {
-      logger.warn('waveforms store not found, attempting reconnection...');
-      db = await reconnectDB();
-    }
-    await db.put('waveforms', waveform);
-  } catch (error) {
-    logger.error('Failed to save waveform:', error);
-    throw new Error('Failed to save waveform');
-  }
-}
-
-/**
  * Get waveform by ID (mediaId).
  */
 export async function getWaveform(

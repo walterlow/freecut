@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { formatBytes } from '@/utils/format-utils';
 
 /**
  * Validation schema for project creation/update form
@@ -97,24 +96,6 @@ export const DEFAULT_PROJECT_VALUES: ProjectFormData = {
 };
 
 /**
- * Validate project name uniqueness (async validation)
- */
-export async function validateProjectNameUnique(
-  name: string,
-  existingNames: string[],
-  currentProjectName?: string
-): Promise<boolean> {
-  const trimmedName = name.trim().toLowerCase();
-
-  // If editing, allow the current name
-  if (currentProjectName && trimmedName === currentProjectName.toLowerCase()) {
-    return true;
-  }
-
-  return !existingNames.some((existing) => existing.toLowerCase() === trimmedName);
-}
-
-/**
  * Get resolution aspect ratio
  */
 export function getAspectRatio(width: number, height: number): string {
@@ -138,28 +119,3 @@ export function getAspectRatio(width: number, height: number): string {
 
   return `${ratioWidth}:${ratioHeight}`;
 }
-
-/**
- * Calculate estimated file size based on resolution and fps
- */
-export function estimateProjectSize(
-  width: number,
-  height: number,
-  fps: number,
-  durationSeconds: number = 60
-): {
-  raw: number; // bytes
-  compressed: number; // bytes
-  formatted: string;
-} {
-  // Very rough estimation:
-  // Raw: width * height * 3 (RGB) * fps * duration
-  // Compressed: ~10% of raw (typical H.264 compression)
-  const raw = width * height * 3 * fps * durationSeconds;
-  const compressed = raw * 0.1;
-
-  const formatted = formatBytes(compressed);
-
-  return { raw, compressed, formatted };
-}
-

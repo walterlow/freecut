@@ -109,17 +109,6 @@ export function clampSpeed(speed: number): number {
 }
 
 /**
- * Calculate the source end position for a given timeline duration.
- */
-export function calculateSourceEnd(
-  sourceStart: number,
-  timelineDuration: number,
-  speed: number
-): number {
-  return sourceStart + timelineToSourceFrames(timelineDuration, speed);
-}
-
-/**
  * Validate that a seek position is within source bounds.
  */
 export function isValidSeekPosition(

@@ -1,67 +1,7 @@
 /**
- * Shader Graph Nodes
- *
- * All built-in node types for the shader graph system.
+ * Built-in shader graph node registration.
  */
 
-// Source nodes
-export {
-  createTextureSourceNode,
-  createColorSourceNode,
-  createGradientSourceNode,
-} from './source-node';
-
-// Effect nodes
-export {
-  createBrightnessNode,
-  createContrastNode,
-  createSaturationNode,
-  createOpacityNode,
-  createBrightnessContrastNode,
-} from './effect-nodes';
-
-// Blur nodes
-export { createBlurNode, createGaussianBlurNode, createFastBlurNode } from './blur-node';
-
-// Blend nodes
-export {
-  createBlendNode,
-  createNormalBlendNode,
-  createMultiplyBlendNode,
-  createScreenBlendNode,
-  createOverlayBlendNode,
-  createAddBlendNode,
-  createSubtractBlendNode,
-  createDifferenceBlendNode,
-  createDarkenBlendNode,
-  createLightenBlendNode,
-  createColorDodgeBlendNode,
-  createColorBurnBlendNode,
-  createHardLightBlendNode,
-  createSoftLightBlendNode,
-  getBlendFunctionsWGSL,
-  BLEND_MODES,
-} from './blend-node';
-
-// Transform nodes
-export {
-  createTransformNode,
-  createScaleNode,
-  createRotateNode,
-  createTranslateNode,
-  createFlipNode,
-  createCropNode,
-  getTransformFunctionsWGSL,
-} from './transform-node';
-
-// Output nodes
-export {
-  createOutputNode,
-  createExportOutputNode,
-  createPreviewOutputNode,
-} from './output-node';
-
-// Re-export node registration helper
 import { NodeRegistry, globalRegistry } from '../node-registry';
 import {
   createTextureSourceNode,
@@ -107,27 +47,23 @@ import {
 } from './output-node';
 
 /**
- * Register all built-in nodes with a registry
+ * Register all built-in nodes with a registry.
  */
 export function registerBuiltinNodes(registry: NodeRegistry = globalRegistry): void {
-  // Sources
   registry.register('texture-source', createTextureSourceNode);
   registry.register('color-source', createColorSourceNode);
   registry.register('gradient-source', createGradientSourceNode);
 
-  // Effects
   registry.register('brightness', createBrightnessNode);
   registry.register('contrast', createContrastNode);
   registry.register('saturation', createSaturationNode);
   registry.register('opacity', createOpacityNode);
   registry.register('brightness-contrast', createBrightnessContrastNode);
 
-  // Blur
   registry.register('blur', createBlurNode);
   registry.register('gaussian-blur', createGaussianBlurNode);
   registry.register('fast-blur', createFastBlurNode);
 
-  // Blend
   registry.register('blend', createBlendNode);
   registry.register('normal-blend', createNormalBlendNode);
   registry.register('multiply-blend', createMultiplyBlendNode);
@@ -143,7 +79,6 @@ export function registerBuiltinNodes(registry: NodeRegistry = globalRegistry): v
   registry.register('hard-light-blend', createHardLightBlendNode);
   registry.register('soft-light-blend', createSoftLightBlendNode);
 
-  // Transform
   registry.register('transform', createTransformNode);
   registry.register('scale', createScaleNode);
   registry.register('rotate', createRotateNode);
@@ -151,7 +86,6 @@ export function registerBuiltinNodes(registry: NodeRegistry = globalRegistry): v
   registry.register('flip', createFlipNode);
   registry.register('crop', createCropNode);
 
-  // Output
   registry.register('output', createOutputNode);
   registry.register('export-output', createExportOutputNode);
   registry.register('preview-output', createPreviewOutputNode);

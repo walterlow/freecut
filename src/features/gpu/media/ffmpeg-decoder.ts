@@ -89,13 +89,6 @@ export function setFFmpegFactory(factory: (() => Promise<FFmpegInstance>) | null
 }
 
 /**
- * Get current FFmpeg instance (for testing)
- */
-export function getFFmpegInstance(): FFmpegInstance | null {
-  return globalFFmpeg;
-}
-
-/**
  * Default FFmpeg factory using dynamic imports
  * This function is separated to allow tree-shaking and proper testing
  */
@@ -478,6 +471,7 @@ export class FFmpegDecoder implements MediaDecoder {
    * Seek to a position
    */
   async seek(_target: SeekTarget): Promise<void> {
+    void _target;
     // FFmpeg doesn't maintain state between frames,
     // so seek is essentially a no-op for the decoder itself
     // The media source handles seeking at the demuxer level

@@ -51,7 +51,7 @@ export async function validateMediaReferences(
  * Find matching media item by filename (case-insensitive).
  * Used for auto-relinking orphaned clips to existing media in the library.
  */
-export function findMatchingMediaByFilename(
+function findMatchingMediaByFilename(
   orphan: OrphanedClipInfo,
   mediaItems: MediaMetadata[]
 ): MediaMetadata | null {
@@ -79,7 +79,7 @@ export function findMatchingMediaByFilename(
  * Filter media items by type for the media picker.
  * Maps timeline item type to media MIME type prefix.
  */
-export function filterMediaByType(
+function filterMediaByType(
   mediaItems: MediaMetadata[],
   itemType: 'video' | 'audio' | 'image'
 ): MediaMetadata[] {

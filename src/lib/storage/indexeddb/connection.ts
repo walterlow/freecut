@@ -151,7 +151,7 @@ export async function getDB(): Promise<VideoEditorDBInstance> {
 /**
  * Close the database connection and clear the cached promise.
  */
-export async function closeDB(): Promise<void> {
+async function closeDB(): Promise<void> {
   if (dbPromise) {
     try {
       const db = await dbPromise;
@@ -169,30 +169,6 @@ export async function closeDB(): Promise<void> {
 export async function reconnectDB(): Promise<VideoEditorDBInstance> {
   await closeDB();
   return getDB();
-}
-
-/**
- * Check if database has required stores (for detecting outdated schema).
- */
-export async function hasRequiredStores(): Promise<boolean> {
-  try {
-    const db = await getDB();
-    const requiredStores = [
-      'projects',
-      'media',
-      'thumbnails',
-      'content',
-      'projectMedia',
-      'filmstrips',
-      'waveforms',
-      'gifFrames',
-    ] as const;
-    return requiredStores.every((store) =>
-      db.objectStoreNames.contains(store)
-    );
-  } catch {
-    return false;
-  }
 }
 
 /**

@@ -69,7 +69,7 @@ export class FileAccessError extends Error {
  * Provides atomic operations for media management, ensuring OPFS and IndexedDB
  * stay in sync.
  */
-export class MediaLibraryService {
+class MediaLibraryService {
   /** In-memory cache for thumbnail blob URLs to prevent flicker on re-renders */
   private thumbnailUrlCache = new Map<string, string>();
 

@@ -53,20 +53,3 @@ export interface CanvasSettings {
   height: number;
   fps: number;
 }
-
-/**
- * Type guard for checking if an item has explicit transform set
- */
-export function hasTransform(item: { transform?: TransformProperties }): boolean {
-  return item.transform !== undefined;
-}
-
-/**
- * Type guard for visual items that support transforms.
- * Audio items don't have transforms since they have no visual representation.
- */
-export function isVisualItemType(
-  type: string
-): type is 'video' | 'image' | 'text' | 'shape' {
-  return type !== 'audio';
-}

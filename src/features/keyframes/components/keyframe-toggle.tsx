@@ -11,7 +11,6 @@ import { Diamond } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import type { AnimatableProperty } from '@/types/keyframe';
 import {
   Tooltip,
@@ -182,110 +181,5 @@ export function KeyframeToggle({
         )}
       </TooltipContent>
     </Tooltip>
-  );
-}
-
-/**
- * Keyframe navigation buttons for jumping between keyframes.
- */
-interface KeyframeNavProps {
-  itemIds: string[];
-  property: AnimatableProperty;
-  className?: string;
-}
-
-export function KeyframeNav({ itemIds, property, className }: KeyframeNavProps) {
-  // Use throttled frame for display, but get immediate value for navigation
-  const currentFrame = useThrottledFrame();
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-
-  const firstItemId = itemIds[0];
-  const itemKeyframes = useTimelineStore(
-    useCallback(
-      (s) => (firstItemId ? s.keyframes.find((k) => k.itemId === firstItemId) : undefined),
-      [firstItemId]
-    )
-  );
-
-  const firstItem = useTimelineStore(
-    useCallback(
-      (s) => (firstItemId ? s.items.find((i) => i.id === firstItemId) : undefined),
-      [firstItemId]
-    )
-  );
-
-  // Get sorted keyframes for this property
-  const keyframes = useMemo(() => {
-    if (!itemKeyframes) return [];
-    const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
-    return propKeyframes?.keyframes ?? [];
-  }, [itemKeyframes, property]);
-
-  // Calculate relative frame
-  const relativeFrame = useMemo(() => {
-    if (!firstItem) return 0;
-    return currentFrame - firstItem.from;
-  }, [currentFrame, firstItem]);
-
-  // Find previous and next keyframes
-  const { prevKeyframe, nextKeyframe } = useMemo(() => {
-    let prev: typeof keyframes[0] | undefined;
-    let next: typeof keyframes[0] | undefined;
-
-    for (const kf of keyframes) {
-      if (kf.frame < relativeFrame) {
-        prev = kf;
-      } else if (kf.frame > relativeFrame && !next) {
-        next = kf;
-        break;
-      }
-    }
-
-    return { prevKeyframe: prev, nextKeyframe: next };
-  }, [keyframes, relativeFrame]);
-
-  const goToPrevious = useCallback(() => {
-    if (prevKeyframe && firstItem) {
-      setCurrentFrame(firstItem.from + prevKeyframe.frame);
-    }
-  }, [prevKeyframe, firstItem, setCurrentFrame]);
-
-  const goToNext = useCallback(() => {
-    if (nextKeyframe && firstItem) {
-      setCurrentFrame(firstItem.from + nextKeyframe.frame);
-    }
-  }, [nextKeyframe, firstItem, setCurrentFrame]);
-
-  if (keyframes.length === 0) return null;
-
-  return (
-    <div className={cn('flex items-center gap-0.5', className)}>
-      <button
-        type="button"
-        onClick={goToPrevious}
-        disabled={!prevKeyframe}
-        className={cn(
-          'flex items-center justify-center w-4 h-4 rounded-sm transition-colors',
-          'hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-          !prevKeyframe && 'opacity-30 cursor-not-allowed'
-        )}
-        aria-label="Previous keyframe"
-      >
-        <span className="text-[10px]">{'<'}</span>
-      </button>
-      <button
-        type="button"
-        onClick={goToNext}
-        disabled={!nextKeyframe}
-        className={cn(
-          'flex items-center justify-center w-4 h-4 rounded-sm transition-colors',
-          'hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-          !nextKeyframe && 'opacity-30 cursor-not-allowed'
-        )}
-        aria-label="Next keyframe"
-      >
-        <span className="text-[10px]">{'>'}</span>
-      </button>
-    </div>
   );
 }

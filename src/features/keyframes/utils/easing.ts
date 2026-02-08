@@ -14,7 +14,7 @@ import { DEFAULT_BEZIER_POINTS, DEFAULT_SPRING_PARAMS } from '@/types/keyframe';
 /**
  * Linear easing - constant speed
  */
-export function linear(t: number): number {
+function linear(t: number): number {
   return t;
 }
 
@@ -128,7 +128,7 @@ export function springEasing(t: number, params: SpringParameters): number {
 /**
  * Map of basic easing type to easing function
  */
-export const easingFunctions: Record<EasingType, (t: number) => number> = {
+const easingFunctions: Record<EasingType, (t: number) => number> = {
   'linear': linear,
   'ease-in': easeIn,
   'ease-out': easeOut,
@@ -140,7 +140,7 @@ export const easingFunctions: Record<EasingType, (t: number) => number> = {
 /**
  * Get an easing function by type
  */
-export function getEasingFunction(type: EasingType): (t: number) => number {
+function getEasingFunction(type: EasingType): (t: number) => number {
   return easingFunctions[type] ?? linear;
 }
 

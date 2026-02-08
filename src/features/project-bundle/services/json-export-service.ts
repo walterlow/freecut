@@ -56,7 +56,7 @@ export async function exportProjectJson(
   }
 
   // Collect media references if requested
-  let mediaReferences: SnapshotMediaReference[] = [];
+  const mediaReferences: SnapshotMediaReference[] = [];
   if (includeMediaReferences) {
     const mediaIds = await getProjectMediaIds(projectId);
     for (const mediaId of mediaIds) {
@@ -162,7 +162,7 @@ export async function downloadProjectJson(
 /**
  * Copy snapshot to clipboard as JSON
  */
-export async function copySnapshotToClipboard(snapshot: ProjectSnapshot): Promise<void> {
+async function copySnapshotToClipboard(snapshot: ProjectSnapshot): Promise<void> {
   const json = JSON.stringify(snapshot, null, 2);
   await navigator.clipboard.writeText(json);
 }

@@ -103,67 +103,6 @@ export async function deleteProject(id: string): Promise<void> {
 }
 
 /**
- * Search projects by name (case-insensitive).
- */
-export async function searchProjects(query: string): Promise<Project[]> {
-  try {
-    const db = await getDB();
-    const allProjects = await db.getAll('projects');
-
-    const lowerQuery = query.toLowerCase();
-    return allProjects.filter(
-      (project) =>
-        project.name.toLowerCase().includes(lowerQuery) ||
-        project.description?.toLowerCase().includes(lowerQuery)
-    );
-  } catch (error) {
-    logger.error('Failed to search projects:', error);
-    throw new Error('Failed to search projects');
-  }
-}
-
-/**
- * Get projects sorted by a specific field.
- */
-export async function getProjectsSorted(
-  field: 'name' | 'updatedAt' | 'createdAt',
-  direction: 'asc' | 'desc' = 'desc'
-): Promise<Project[]> {
-  try {
-    const db = await getDB();
-    const tx = db.transaction('projects', 'readonly');
-    const index = tx.store.index(field);
-
-    const projects =
-      direction === 'asc'
-        ? await index.getAll()
-        : await index.getAll(undefined, undefined);
-
-    if (direction === 'desc') {
-      projects.reverse();
-    }
-
-    return projects;
-  } catch (error) {
-    logger.error('Failed to get sorted projects:', error);
-    throw new Error('Failed to load sorted projects');
-  }
-}
-
-/**
- * Clear all projects (useful for testing or reset).
- */
-export async function clearAllProjects(): Promise<void> {
-  try {
-    const db = await getDB();
-    await db.clear('projects');
-  } catch (error) {
-    logger.error('Failed to clear projects:', error);
-    throw new Error('Failed to clear all projects');
-  }
-}
-
-/**
  * Get database statistics.
  */
 export async function getDBStats(): Promise<{

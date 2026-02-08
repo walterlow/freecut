@@ -72,14 +72,3 @@ export const useSettingsStore = create<SettingsStore>()(
     }
   )
 );
-
-// Selectors for granular subscriptions
-export const selectDefaultFps = (state: SettingsStore) => state.defaultFps;
-export const selectSnapEnabled = (state: SettingsStore) => state.snapEnabled;
-export const selectShowWaveforms = (state: SettingsStore) => state.showWaveforms;
-export const selectShowFilmstrips = (state: SettingsStore) => state.showFilmstrips;
-export const selectPreviewQuality = (state: SettingsStore) => state.previewQuality;
-export const selectDefaultExportFormat = (state: SettingsStore) =>
-  state.defaultExportFormat;
-export const selectDefaultExportQuality = (state: SettingsStore) =>
-  state.defaultExportQuality;

@@ -52,19 +52,6 @@ export async function getThumbnailByMediaId(
 }
 
 /**
- * Delete a thumbnail from IndexedDB.
- */
-export async function deleteThumbnail(id: string): Promise<void> {
-  try {
-    const db = await getDB();
-    await db.delete('thumbnails', id);
-  } catch (error) {
-    logger.error(`Failed to delete thumbnail ${id}:`, error);
-    throw new Error(`Failed to delete thumbnail: ${id}`);
-  }
-}
-
-/**
  * Delete thumbnails by media ID.
  */
 export async function deleteThumbnailsByMediaId(mediaId: string): Promise<void> {

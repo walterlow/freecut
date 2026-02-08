@@ -14,7 +14,7 @@ export interface FileSystemServiceError {
 /**
  * Request user to pick a directory via the File System Access API
  */
-export async function pickDirectory(
+async function pickDirectory(
   options?: DirectoryPickerOptions
 ): Promise<FileSystemDirectoryHandle> {
   try {
@@ -39,7 +39,7 @@ export async function pickDirectory(
 /**
  * Create a subdirectory within a parent directory
  */
-export async function getOrCreateSubdirectory(
+async function getOrCreateSubdirectory(
   parent: FileSystemDirectoryHandle,
   name: string
 ): Promise<FileSystemDirectoryHandle> {
@@ -58,7 +58,7 @@ export async function getOrCreateSubdirectory(
 /**
  * Write a file to a directory and return the file handle
  */
-export async function writeFile(
+async function writeFile(
   directory: FileSystemDirectoryHandle,
   fileName: string,
   content: Blob | ArrayBuffer | Uint8Array
@@ -100,7 +100,7 @@ export async function writeFile(
 /**
  * Check if a file exists in a directory
  */
-export async function fileExists(
+async function fileExists(
   directory: FileSystemDirectoryHandle,
   fileName: string
 ): Promise<boolean> {
@@ -115,7 +115,7 @@ export async function fileExists(
 /**
  * Generate a unique filename if the target already exists
  */
-export async function getUniqueFileName(
+async function getUniqueFileName(
   directory: FileSystemDirectoryHandle,
   fileName: string
 ): Promise<string> {

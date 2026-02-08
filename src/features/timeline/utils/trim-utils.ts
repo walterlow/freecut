@@ -95,25 +95,6 @@ function clampToMinDuration(
 }
 
 /**
- * Get the maximum timeline duration for an item based on source constraints.
- * Returns null if no source constraints (non-media or no sourceDuration).
- */
-export function getMaxTimelineDuration(item: TimelineItem, handle: TrimHandle): number | null {
-  if (!isMediaItem(item)) return null;
-
-  const { sourceStart, sourceDuration, speed } = getSourceProperties(item);
-
-  if (handle === 'end') {
-    // Always use sourceDuration - trimming should always be reversible
-    if (sourceDuration === undefined) return null;
-    return calcMaxDuration(sourceDuration, sourceStart, speed);
-  } else {
-    // For start handle: max extend amount in timeline frames
-    return getMaxStartExtension(sourceStart, speed);
-  }
-}
-
-/**
  * Calculate new source boundaries after a trim operation.
  */
 export interface TrimSourceUpdate {

@@ -4,18 +4,15 @@
 
 import { formatBytes } from '@/utils/format-utils';
 
-// Re-export for consumers that import from this module
-export { formatBytes };
-
 // Supported file types based on requirements
-export const SUPPORTED_VIDEO_TYPES = [
+const SUPPORTED_VIDEO_TYPES = [
   'video/mp4',
   'video/webm',
   'video/quicktime', // .mov files
   'video/x-matroska', // .mkv files
 ];
 
-export const SUPPORTED_AUDIO_TYPES = [
+const SUPPORTED_AUDIO_TYPES = [
   'audio/mp3',
   'audio/mpeg', // MP3 also uses audio/mpeg
   'audio/wav',
@@ -23,7 +20,7 @@ export const SUPPORTED_AUDIO_TYPES = [
   'audio/ogg', // Opus codec in Ogg container
 ];
 
-export const SUPPORTED_IMAGE_TYPES = [
+const SUPPORTED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
@@ -31,7 +28,7 @@ export const SUPPORTED_IMAGE_TYPES = [
   'image/webp',
 ];
 
-export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
 
 // Extension to MIME type mapping for fallback when browser doesn't provide MIME type
 const EXTENSION_TO_MIME: Record<string, string> = {
@@ -66,7 +63,7 @@ export function getMimeType(file: File): string {
   return ext ? EXTENSION_TO_MIME[ext] || '' : '';
 }
 
-export interface ValidationResult {
+interface ValidationResult {
   valid: boolean;
   error?: string;
 }
@@ -151,42 +148,4 @@ export function formatDuration(seconds: number): string {
   }
 
   return `${minutes}:${String(secs).padStart(2, '0')}`;
-}
-
-/**
- * Check if browser supports OPFS
- */
-export function supportsOPFS(): boolean {
-  return 'storage' in navigator && 'getDirectory' in navigator.storage;
-}
-
-/**
- * Check if browser supports required features
- */
-export function checkBrowserSupport(): {
-  supported: boolean;
-  missing: string[];
-} {
-  const missing: string[] = [];
-
-  if (!supportsOPFS()) {
-    missing.push('Origin Private File System (OPFS)');
-  }
-
-  if (!('storage' in navigator && 'estimate' in navigator.storage)) {
-    missing.push('Storage Estimation API');
-  }
-
-  if (typeof Worker === 'undefined') {
-    missing.push('Web Workers');
-  }
-
-  if (!('indexedDB' in window)) {
-    missing.push('IndexedDB');
-  }
-
-  return {
-    supported: missing.length === 0,
-    missing,
-  };
 }

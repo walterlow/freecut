@@ -15,23 +15,7 @@
  */
 
 // Main facade hook - maintains identical API to previous implementation
-export {
-  useTimelineStore,
-  useKeyframeMap,
-  useItemKeyframes,
-} from './timeline-store-facade';
-
-// Re-export domain stores for direct access (optional, for new code)
-export {
-  useItemsStore,
-  useTransitionsStore,
-  useKeyframesStore,
-  useMarkersStore,
-  useTimelineSettingsStore,
-  useTimelineCommandStore,
-  useCanUndo,
-  useCanRedo,
-} from './timeline-store-facade';
+export { useTimelineStore } from './timeline-store-facade';
 
 // Re-export all actions for direct use
 export * from './timeline-actions';

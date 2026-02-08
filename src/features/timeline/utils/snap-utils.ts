@@ -101,17 +101,3 @@ export function calculateAdaptiveSnapThreshold(
   // Minimum threshold of 1 frame
   return Math.max(1, thresholdFrames);
 }
-
-/**
- * Filter snap targets by type
- *
- * @param targets - All snap targets
- * @param types - Types to include
- * @returns Filtered snap targets
- */
-export function filterSnapTargets(
-  targets: SnapTarget[],
-  types: SnapTarget['type'][]
-): SnapTarget[] {
-  return targets.filter((target) => types.includes(target.type));
-}

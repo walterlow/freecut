@@ -725,16 +725,3 @@ export function getAvailableFixtures(): Array<{
     { type: 'stress-test', name: 'Stress Test', description: '10 tracks, 20 items each (200 total items)' },
   ];
 }
-
-/**
- * Generate all fixtures at once (useful for test suites)
- */
-export function generateAllFixtures(options: FixtureOptions = {}): Map<FixtureType, FixtureResult> {
-  const fixtures = new Map<FixtureType, FixtureResult>();
-
-  for (const { type } of getAvailableFixtures()) {
-    fixtures.set(type, generateFixture(type, options));
-  }
-
-  return fixtures;
-}

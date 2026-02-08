@@ -72,29 +72,6 @@ export const useCreateProject = () => {
 };
 
 /**
- * Hook for updating a project with error handling
- */
-export const useUpdateProject = () => {
-  const updateProject = useProjectStore((s) => s.updateProject);
-
-  return useCallback(
-    async (id: string, data: Partial<ProjectFormData>) => {
-      try {
-        const project = await updateProject(id, data);
-        return { success: true, project, error: null };
-      } catch (error) {
-        return {
-          success: false,
-          project: null,
-          error: error instanceof Error ? error.message : 'Failed to update project',
-        };
-      }
-    },
-    [updateProject]
-  );
-};
-
-/**
  * Hook for deleting a project
  */
 export const useDeleteProject = () => {

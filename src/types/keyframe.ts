@@ -128,19 +128,6 @@ export interface ItemKeyframes {
 }
 
 /**
- * All animatable property names as an array (useful for iteration)
- */
-export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
-  'x',
-  'y',
-  'width',
-  'height',
-  'rotation',
-  'opacity',
-  'cornerRadius',
-];
-
-/**
  * Display labels for animatable properties
  */
 export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
@@ -152,41 +139,6 @@ export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
   opacity: 'Opacity',
   cornerRadius: 'Corner Radius',
 };
-
-/**
- * Short labels for compact UI (keyframe lanes)
- */
-export const PROPERTY_SHORT_LABELS: Record<AnimatableProperty, string> = {
-  x: 'X',
-  y: 'Y',
-  width: 'W',
-  height: 'H',
-  rotation: 'R',
-  opacity: 'O',
-  cornerRadius: 'CR',
-};
-
-/**
- * Easing type display labels
- */
-export const EASING_LABELS: Record<EasingType, string> = {
-  'linear': 'Linear',
-  'ease-in': 'Ease In',
-  'ease-out': 'Ease Out',
-  'ease-in-out': 'Ease In Out',
-  'cubic-bezier': 'Custom Curve',
-  'spring': 'Spring',
-};
-
-/**
- * Basic easing types array (for backward-compatible pickers)
- */
-export const BASIC_EASING_TYPES: BasicEasingType[] = [
-  'linear',
-  'ease-in',
-  'ease-out',
-  'ease-in-out',
-];
 
 /**
  * Default spring parameters

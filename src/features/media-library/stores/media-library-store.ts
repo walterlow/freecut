@@ -704,8 +704,6 @@ export const useMediaLibraryStore = create<
 );
 
 // Selector hooks for common use cases (optional, but recommended)
-export const useMediaItems = () =>
-  useMediaLibraryStore((s) => s.mediaItems);
 export const useFilteredMediaItems = () => {
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const searchQuery = useMediaLibraryStore((s) => s.searchQuery);

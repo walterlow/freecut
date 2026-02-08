@@ -98,7 +98,7 @@ export async function validateSnapshotData(
 /**
  * Parse JSON string to snapshot object
  */
-export function parseSnapshotJson(jsonString: string): unknown {
+function parseSnapshotJson(jsonString: string): unknown {
   try {
     return JSON.parse(jsonString);
   } catch (e) {
@@ -109,7 +109,7 @@ export function parseSnapshotJson(jsonString: string): unknown {
 /**
  * Import a project from a snapshot
  */
-export async function importProjectFromSnapshot(
+async function importProjectFromSnapshot(
   snapshot: ProjectSnapshot,
   options: SnapshotImportOptions = {}
 ): Promise<SnapshotImportResult> {
@@ -345,7 +345,7 @@ export async function importProjectFromJsonString(
 /**
  * Import a project from a file
  */
-export async function importProjectFromFile(
+async function importProjectFromFile(
   file: File,
   options: SnapshotImportOptions = {}
 ): Promise<SnapshotImportResult> {
@@ -356,7 +356,7 @@ export async function importProjectFromFile(
 /**
  * Read snapshot from clipboard
  */
-export async function readSnapshotFromClipboard(): Promise<ProjectSnapshot> {
+async function readSnapshotFromClipboard(): Promise<ProjectSnapshot> {
   const text = await navigator.clipboard.readText();
   const data = parseSnapshotJson(text);
   const validation = await validateSnapshotData(data);
@@ -402,32 +402,11 @@ export async function showImportFilePicker(
         return;
       }
 
-      try {
-        const result = await importProjectFromFile(file, options);
-        resolve(result);
-      } catch (error) {
-        throw error;
-      }
+      const result = await importProjectFromFile(file, options);
+      resolve(result);
     };
 
     input.oncancel = () => resolve(null);
     input.click();
   });
-}
-
-/**
- * Merge snapshot timeline into existing project
- * Useful for copying timeline structure between projects
- */
-export async function mergeSnapshotTimeline(
-  _targetProjectId: string,
-  _snapshot: ProjectSnapshot,
-  _options: {
-    appendToTracks?: boolean;
-    offsetFrames?: number;
-  } = {}
-): Promise<void> {
-  // This is a placeholder for future implementation
-  // Would allow merging timelines from snapshots into existing projects
-  throw new Error('mergeSnapshotTimeline not yet implemented');
 }
