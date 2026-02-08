@@ -8,16 +8,10 @@
  * users split clips or have multiple clips from the same source.
  */
 
-export interface SourceMetadata {
+interface SourceMetadata {
   duration: number;
   width: number;
   height: number;
-}
-
-export interface ElementAssignment {
-  element: HTMLVideoElement;
-  clipId: string;
-  sourceTime: number;
 }
 
 /**
@@ -28,7 +22,7 @@ export interface ElementAssignment {
  * - Overflow elements (for simultaneous clips: transitions, PIP)
  * - Assignment tracking (which clip is using which element)
  */
-export class SourceController {
+class SourceController {
   readonly sourceUrl: string;
   private primary: HTMLVideoElement | null = null;
   private overflow: HTMLVideoElement[] = [];
@@ -462,9 +456,4 @@ export function getGlobalVideoSourcePool(): VideoSourcePool {
     globalPool = new VideoSourcePool();
   }
   return globalPool;
-}
-
-export function disposeGlobalVideoSourcePool(): void {
-  globalPool?.dispose();
-  globalPool = null;
 }

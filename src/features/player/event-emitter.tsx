@@ -8,17 +8,17 @@ import React, { useContext, useMemo } from 'react';
  */
 
 // Event payload types
-export type SeekPayload = { frame: number };
-export type TimeUpdatePayload = { frame: number };
-export type RateChangePayload = { playbackRate: number };
-export type VolumeChangePayload = { volume: number; isMuted: boolean };
-export type FullscreenChangePayload = { isFullscreen: boolean };
-export type ErrorPayload = { error: Error };
-export type WaitingPayload = Record<string, never>;
-export type ResumePayload = Record<string, never>;
+type SeekPayload = { frame: number };
+type TimeUpdatePayload = { frame: number };
+type RateChangePayload = { playbackRate: number };
+type VolumeChangePayload = { volume: number; isMuted: boolean };
+type FullscreenChangePayload = { isFullscreen: boolean };
+type ErrorPayload = { error: Error };
+type WaitingPayload = Record<string, never>;
+type ResumePayload = Record<string, never>;
 
 // Player state event map
-export type PlayerStateEventMap = {
+type PlayerStateEventMap = {
   seeked: SeekPayload;
   timeupdate: TimeUpdatePayload;
   play: undefined;
@@ -33,10 +33,10 @@ export type PlayerStateEventMap = {
 };
 
 // Event type exports
-export type PlayerEventTypes = keyof PlayerStateEventMap;
+type PlayerEventTypes = keyof PlayerStateEventMap;
 
 // Callback listener type
-export type CallbackListener<T extends PlayerEventTypes> = (data: {
+type CallbackListener<T extends PlayerEventTypes> = (data: {
   detail: PlayerStateEventMap[T];
 }) => void;
 
@@ -226,7 +226,7 @@ export class PlayerEmitter {
 /**
  * React Context for Player Event Emitter
  */
-export const PlayerEventEmitterContext = React.createContext<
+const PlayerEventEmitterContext = React.createContext<
   PlayerEmitter | undefined
 >(undefined);
 

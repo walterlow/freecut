@@ -5,7 +5,7 @@ import type { CompositionInputProps } from '@/types/export';
 import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, ImageItem } from '@/types/timeline';
 import { Item } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
-import { EffectsBasedTransitionsLayer } from '../components/transition-renderer';
+import { OptimizedEffectsBasedTransitionsLayer } from '../components/transition-renderer';
 import { StableVideoSequence } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
@@ -675,7 +675,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
 
           {/* Effects-based transitions - visual effect centered on cut point */}
           {/* These render ABOVE the normal clips during the transition window */}
-          <EffectsBasedTransitionsLayer
+          <OptimizedEffectsBasedTransitionsLayer
             transitions={transitions}
             itemsById={itemsById}
             adjustmentLayers={visibleAdjustmentLayers}

@@ -10,7 +10,7 @@ const SCALE_HANDLES: GizmoHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'
 /**
  * Screen bounds for the gizmo container.
  */
-export interface ScreenBounds {
+interface ScreenBounds {
   left: number;
   top: number;
   width: number;
@@ -20,7 +20,7 @@ export interface ScreenBounds {
 /**
  * Props for GizmoHandles component.
  */
-export interface GizmoHandlesProps {
+interface GizmoHandlesProps {
   /** Screen bounds of the gizmo */
   bounds: ScreenBounds;
   /** Current rotation of the item (for cursor calculation) */

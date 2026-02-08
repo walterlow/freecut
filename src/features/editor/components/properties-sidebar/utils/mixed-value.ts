@@ -3,7 +3,7 @@
  * Used in property panels when multiple items are selected.
  */
 
-export type MixedValue<T> = T | 'mixed';
+type MixedValue<T> = T | 'mixed';
 
 /**
  * Tolerance for comparing numeric values.
@@ -50,61 +50,4 @@ export function getMixedValue<TItem, TValue>(
   });
 
   return areEqual ? firstValue : 'mixed';
-}
-
-/**
- * Check if a value is mixed.
- * Type guard for narrowing MixedValue<T> to T.
- */
-export function isMixed<T>(value: MixedValue<T>): value is 'mixed' {
-  return value === 'mixed';
-}
-
-/**
- * Get the actual value from a MixedValue, using default if mixed.
- */
-export function getValueOrDefault<T>(value: MixedValue<T>, defaultValue: T): T {
-  return isMixed(value) ? defaultValue : value;
-}
-
-/**
- * Compute multiple mixed values in a single pass for efficiency.
- *
- * @param items - Array of items to extract values from
- * @param config - Object mapping keys to getter/default pairs
- * @returns Object with same keys, values are MixedValue<T>
- *
- * @example
- * ```ts
- * const values = getMixedValues(shapeItems, {
- *   fillColor: { get: (i) => i.fillColor, default: '#3b82f6' },
- *   strokeWidth: { get: (i) => i.strokeWidth, default: 0 },
- * });
- * // values.fillColor: string | 'mixed'
- * // values.strokeWidth: number | 'mixed'
- * ```
- */
-export function getMixedValues<
-  TItem,
-  TConfig extends Record<string, { get: (item: TItem) => unknown; default: unknown }>
->(
-  items: TItem[],
-  config: TConfig
-): {
-  [K in keyof TConfig]: MixedValue<
-    TConfig[K]['default'] extends infer D ? D : never
-  >;
-} {
-  const result = {} as Record<string, unknown>;
-
-  for (const key in config) {
-    const entry = config[key]!;
-    result[key] = getMixedValue(items, entry.get as (item: TItem) => unknown, entry.default);
-  }
-
-  return result as {
-    [K in keyof TConfig]: MixedValue<
-      TConfig[K]['default'] extends infer D ? D : never
-    >;
-  };
 }

@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useMemo } from 'react';
 
 // Video config type matching Composition's VideoConfig
-export interface VideoConfig {
+interface VideoConfig {
   fps: number;
   width: number;
   height: number;
@@ -17,7 +17,7 @@ export interface VideoConfig {
 }
 
 // Context for video config
-export const VideoConfigContext = createContext<VideoConfig | null>(null);
+const VideoConfigContext = createContext<VideoConfig | null>(null);
 
 /**
  * Hook to get the video config

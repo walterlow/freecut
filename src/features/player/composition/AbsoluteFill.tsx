@@ -7,7 +7,7 @@
 
 import React, { memo, forwardRef } from 'react';
 
-export interface AbsoluteFillProps {
+interface AbsoluteFillProps {
   /** Children to render */
   children?: React.ReactNode;
   /** Custom styles (merged with absolute fill styles) */
@@ -55,19 +55,3 @@ export const AbsoluteFill = memo(
 );
 
 AbsoluteFill.displayName = 'AbsoluteFill';
-
-/**
- * Hook to get the absolute fill style
- *
- * Useful when you need the style without using the component.
- */
-export function useAbsoluteFillStyle(
-  additionalStyle?: React.CSSProperties
-): React.CSSProperties {
-  if (!additionalStyle) {
-    return absoluteFillStyle;
-  }
-  return { ...absoluteFillStyle, ...additionalStyle };
-}
-
-export default AbsoluteFill;

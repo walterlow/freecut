@@ -210,5 +210,3 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     </>
   );
 };
-
-export default ItemVisualWrapper;

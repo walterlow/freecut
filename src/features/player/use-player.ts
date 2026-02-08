@@ -20,7 +20,7 @@ import {
 } from './clock';
 
 // Type definitions for the hook return value
-export interface UsePlayerMethods {
+interface UsePlayerMethods {
   frameBack: (frames: number) => void;
   frameForward: (frames: number) => void;
   isLastFrame: boolean;
@@ -271,12 +271,4 @@ export function usePlayer(
   ]);
 
   return returnValue;
-}
-
-/**
- * Hook to get player methods for external control
- * Returns a ref-based API for imperative control
- */
-export function usePlayerRef(): React.MutableRefObject<UsePlayerMethods> {
-  return useRef({} as UsePlayerMethods) as React.MutableRefObject<UsePlayerMethods>;
 }

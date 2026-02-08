@@ -38,29 +38,11 @@ export function useSequenceContext(): SequenceContextValue | null {
   return useContext(SequenceContext);
 }
 
-/**
- * Hook to get the local frame within the current sequence
- *
- * Returns 0 if not inside a Sequence.
- */
-export function useLocalFrame(): number {
-  const context = useContext(SequenceContext);
-  return context?.localFrame ?? 0;
-}
-
-/**
- * Hook to get the sequence's start frame
- */
-export function useSequenceFrom(): number {
-  const context = useContext(SequenceContext);
-  return context?.from ?? 0;
-}
-
 // ============================================
 // Sequence Component
 // ============================================
 
-export interface SequenceProps {
+interface SequenceProps {
   /** Children to render */
   children: React.ReactNode;
   /** Start frame (inclusive) */
@@ -105,8 +87,10 @@ export const Sequence = memo<SequenceProps>(
     style,
     className,
     premountFor = 0,
-    showLoopTimestamps: _showLoopTimestamps,
+    showLoopTimestamps,
   }) => {
+    void showLoopTimestamps;
+
     // Get the global frame from the clock
     const globalFrame = useClockFrame();
 
@@ -192,40 +176,3 @@ export const Sequence = memo<SequenceProps>(
 );
 
 Sequence.displayName = 'Sequence';
-
-// ============================================
-// Convenience hook for sequence visibility
-// ============================================
-
-/**
- * Hook to check if the current frame is within a given range
- *
- * @param from - Start frame (inclusive)
- * @param durationInFrames - Duration in frames
- * @returns Whether the current frame is in range
- */
-export function useIsInRange(from: number, durationInFrames: number): boolean {
-  const globalFrame = useClockFrame();
-  const endFrame = from + durationInFrames;
-  return globalFrame >= from && globalFrame < endFrame;
-}
-
-/**
- * Hook to get visibility and local frame for a sequence
- *
- * Useful when you need both values without using the Sequence component.
- */
-export function useSequenceVisibility(from: number, durationInFrames: number) {
-  const globalFrame = useClockFrame();
-  const endFrame = from + durationInFrames;
-  const isVisible = globalFrame >= from && globalFrame < endFrame;
-  const localFrame = Math.max(0, globalFrame - from);
-
-  return {
-    isVisible,
-    localFrame,
-    progress: durationInFrames > 0 ? localFrame / durationInFrames : 0,
-  };
-}
-
-export default Sequence;

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { useCallback } from 'react';
 import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
 import type { ItemEffect } from '@/types/effects';
 import { calculateTransform } from '../utils/transform-calculations';
@@ -388,55 +387,3 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
       set({ canvasBackgroundPreview: null }),
   })
 );
-
-// === Helper hooks for granular preview access ===
-
-/**
- * Hook to get preview for a specific item with proper memoization.
- * This avoids creating a new selector function on every render.
- *
- * @example
- * const preview = useItemPreview(itemId);
- * const transform = preview?.transform;
- */
-export function useItemPreview(itemId: string): ItemPreview | undefined {
-  const selector = useCallback(
-    (s: GizmoStoreState) => s.preview?.[itemId],
-    [itemId]
-  );
-  return useGizmoStore(selector);
-}
-
-/**
- * Hook to get transform preview for a specific item.
- * Returns undefined if no preview or no transform preview.
- */
-export function useItemTransformPreview(itemId: string): Partial<Transform> | undefined {
-  const selector = useCallback(
-    (s: GizmoStoreState) => s.preview?.[itemId]?.transform,
-    [itemId]
-  );
-  return useGizmoStore(selector);
-}
-
-/**
- * Hook to get properties preview for a specific item.
- */
-export function useItemPropertiesPreviewHook(itemId: string): ItemPropertiesPreview | undefined {
-  const selector = useCallback(
-    (s: GizmoStoreState) => s.preview?.[itemId]?.properties,
-    [itemId]
-  );
-  return useGizmoStore(selector);
-}
-
-/**
- * Hook to get effects preview for a specific item.
- */
-export function useItemEffectsPreview(itemId: string): ItemEffect[] | undefined {
-  const selector = useCallback(
-    (s: GizmoStoreState) => s.preview?.[itemId]?.effects,
-    [itemId]
-  );
-  return useGizmoStore(selector);
-}

@@ -132,16 +132,3 @@ export function cleanupBlobUrls(): void {
   blobUrlCache.clear();
   pendingRequests.clear(); // Clear any pending requests
 }
-
-/**
- * Revokes a specific blob URL from the cache
- *
- * @param mediaId - The media ID whose blob URL should be revoked
- */
-export function revokeBlobUrl(mediaId: string): void {
-  const url = blobUrlCache.get(mediaId);
-  if (url) {
-    URL.revokeObjectURL(url);
-    blobUrlCache.delete(mediaId);
-  }
-}

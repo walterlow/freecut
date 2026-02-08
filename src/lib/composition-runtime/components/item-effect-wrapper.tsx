@@ -204,15 +204,3 @@ export const ItemEffectWrapper: React.FC<ItemEffectWrapperProps> = (props) => {
   const frame = sequenceContext?.localFrame ?? 0;
   return <ItemEffectWrapperInternal {...props} frame={frame} />;
 };
-
-/**
- * Hook to check if an item should have adjustment effects applied.
- * Useful for conditional logic without rendering the wrapper.
- */
-export function useIsAffectedByAdjustment(
-  itemTrackOrder: number,
-  adjustmentLayers: AdjustmentLayerWithTrackOrder[]
-): boolean {
-  // An item is affected if there's any adjustment layer with lower track order
-  return adjustmentLayers.some(({ trackOrder }) => itemTrackOrder > trackOrder);
-}

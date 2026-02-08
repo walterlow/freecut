@@ -23,7 +23,7 @@ import { ClockProvider, useClock, useClockFrame, useClockIsPlaying, useClockPlay
 // Legacy Context Types (matching player-context.tsx)
 // ============================================
 
-export interface TimelineContextValue {
+interface TimelineContextValue {
   frame: number;
   playing: boolean;
   rootId: string;
@@ -34,7 +34,7 @@ export interface TimelineContextValue {
   outFrame: number | null;
 }
 
-export interface SetTimelineContextValue {
+interface SetTimelineContextValue {
   setFrame: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setPlaying: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -45,9 +45,6 @@ export interface SetTimelineContextValue {
 
 const BridgedTimelineContext = createContext<TimelineContextValue | null>(null);
 const BridgedSetTimelineContext = createContext<SetTimelineContextValue | null>(null);
-
-// Context for accessing the Clock directly (for new code)
-const ClockInstanceContext = createContext<Clock | null>(null);
 
 // ============================================
 // Provider Props
@@ -158,13 +155,11 @@ function ClockBridgeInner({
   }, [setFrame, setPlaying]);
 
   return (
-    <ClockInstanceContext.Provider value={clock}>
-      <BridgedTimelineContext.Provider value={timelineContextValue}>
-        <BridgedSetTimelineContext.Provider value={setTimelineContextValue}>
-          {children}
-        </BridgedSetTimelineContext.Provider>
-      </BridgedTimelineContext.Provider>
-    </ClockInstanceContext.Provider>
+    <BridgedTimelineContext.Provider value={timelineContextValue}>
+      <BridgedSetTimelineContext.Provider value={setTimelineContextValue}>
+        {children}
+      </BridgedSetTimelineContext.Provider>
+    </BridgedTimelineContext.Provider>
   );
 }
 
@@ -256,20 +251,6 @@ export function useBridgedSetTimelineContext(): SetTimelineContextValue {
 }
 
 /**
- * useClockInstance - Get the Clock instance directly
- *
- * Use this for new code that wants to use the Clock API directly
- * instead of the legacy context API.
- */
-export function useClockInstance(): Clock {
-  const clock = useContext(ClockInstanceContext);
-  if (!clock) {
-    throw new Error('useClockInstance must be used within a ClockBridgeProvider');
-  }
-  return clock;
-}
-
-/**
  * useBridgedCurrentFrame - Get the current frame (bridged)
  */
 export function useBridgedCurrentFrame(): number {
@@ -281,13 +262,6 @@ export function useBridgedCurrentFrame(): number {
  */
 export function useBridgedIsPlaying(): boolean {
   return useBridgedTimelineContext().playing;
-}
-
-/**
- * useBridgedPlaybackRate - Get the playback rate (bridged)
- */
-export function useBridgedPlaybackRate(): number {
-  return useBridgedTimelineContext().playbackRate;
 }
 
 /**
@@ -318,19 +292,6 @@ export function useBridgedSetTimelineFrame(): (frame: number) => void {
 }
 
 /**
- * useBridgedPlayingState - Get playing state and setter (bridged)
- */
-export function useBridgedPlayingState(): [
-  boolean,
-  React.Dispatch<React.SetStateAction<boolean>>,
-  React.MutableRefObject<boolean>,
-] {
-  const { playing, imperativePlaying } = useBridgedTimelineContext();
-  const { setPlaying } = useBridgedSetTimelineContext();
-  return [playing, setPlaying, imperativePlaying];
-}
-
-/**
  * useBridgedActualFirstFrame - Get the actual first frame (considering inFrame)
  */
 export function useBridgedActualFirstFrame(): number {
@@ -344,29 +305,4 @@ export function useBridgedActualFirstFrame(): number {
 export function useBridgedActualLastFrame(durationInFrames: number): number {
   const { outFrame } = useBridgedTimelineContext();
   return outFrame ?? durationInFrames - 1;
-}
-
-/**
- * useBridgedTimelinePosition - Get the current frame position
- */
-export function useBridgedTimelinePosition(): number {
-  return useBridgedTimelineContext().frame;
-}
-
-/**
- * useBridgedIsLastFrame - Check if at the last frame
- */
-export function useBridgedIsLastFrame(durationInFrames: number): boolean {
-  const frame = useBridgedTimelinePosition();
-  const lastFrame = useBridgedActualLastFrame(durationInFrames);
-  return frame === lastFrame;
-}
-
-/**
- * useBridgedIsFirstFrame - Check if at the first frame
- */
-export function useBridgedIsFirstFrame(): boolean {
-  const frame = useBridgedTimelinePosition();
-  const firstFrame = useBridgedActualFirstFrame();
-  return frame === firstFrame;
 }

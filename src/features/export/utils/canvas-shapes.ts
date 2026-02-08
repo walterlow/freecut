@@ -29,7 +29,7 @@ export interface ShapeCanvasSettings {
  * @param canvas - Canvas dimensions
  * @returns Path2D ready for canvas rendering
  */
-export function getShapePath2D(
+function getShapePath2D(
   shape: ShapeItem,
   transform: ResolvedTransform,
   canvas: ShapeCanvasSettings
@@ -113,59 +113,4 @@ export function renderShape(
   } finally {
     ctx.restore();
   }
-}
-
-/**
- * Check if a shape type is supported for canvas rendering.
- */
-export function isShapeTypeSupported(shapeType: string): boolean {
-  const supportedTypes = [
-    'rectangle',
-    'circle',
-    'ellipse',
-    'triangle',
-    'star',
-    'polygon',
-    'heart',
-  ];
-  return supportedTypes.includes(shapeType);
-}
-
-/**
- * Get shape bounds for hit testing or clipping.
- */
-export function getShapeBounds(
-  _shape: ShapeItem,
-  transform: ResolvedTransform,
-  canvas: ShapeCanvasSettings
-): { left: number; top: number; right: number; bottom: number } {
-  const centerX = canvas.width / 2 + transform.x;
-  const centerY = canvas.height / 2 + transform.y;
-  const halfWidth = transform.width / 2;
-  const halfHeight = transform.height / 2;
-
-  // For rotated shapes, calculate bounding box
-  if (transform.rotation !== 0) {
-    const rad = (transform.rotation * Math.PI) / 180;
-    const cos = Math.abs(Math.cos(rad));
-    const sin = Math.abs(Math.sin(rad));
-
-    // Rotated bounding box dimensions
-    const rotatedHalfWidth = halfWidth * cos + halfHeight * sin;
-    const rotatedHalfHeight = halfWidth * sin + halfHeight * cos;
-
-    return {
-      left: centerX - rotatedHalfWidth,
-      top: centerY - rotatedHalfHeight,
-      right: centerX + rotatedHalfWidth,
-      bottom: centerY + rotatedHalfHeight,
-    };
-  }
-
-  return {
-    left: centerX - halfWidth,
-    top: centerY - halfHeight,
-    right: centerX + halfWidth,
-    bottom: centerY + halfHeight,
-  };
 }

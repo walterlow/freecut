@@ -125,14 +125,14 @@ export function getDefaultAudioCodec(container: ClientContainer): ClientAudioCod
 /**
  * Check if a container is audio-only
  */
-export function isAudioOnlyContainer(container: ClientContainer): container is ClientAudioContainer {
+function isAudioOnlyContainer(container: ClientContainer): container is ClientAudioContainer {
   return ['mp3', 'wav', 'flac', 'aac'].includes(container);
 }
 
 /**
  * Check if a codec is supported by WebCodecs in this browser
  */
-export async function isCodecSupported(codec: ClientCodec, width: number, height: number): Promise<boolean> {
+async function isCodecSupported(codec: ClientCodec, width: number, height: number): Promise<boolean> {
   if (!('VideoEncoder' in window)) {
     return false;
   }
@@ -216,22 +216,6 @@ export async function createOutputFormat(container: ClientContainer, options?: {
 }
 
 /**
- * Get the file extension for a container type
- */
-export function getFileExtension(container: ClientContainer): string {
-  const extensionMap: Record<ClientContainer, string> = {
-    mp4: '.mp4',
-    mov: '.mov',
-    webm: '.webm',
-    mkv: '.mkv',
-    mp3: '.mp3',
-    aac: '.aac',
-    wav: '.wav',
-  };
-  return extensionMap[container] ?? '.mp4';
-}
-
-/**
  * Get the MIME type for a container/codec combination
  */
 export function getMimeType(container: ClientContainer, codec?: ClientCodec): string {
@@ -293,23 +277,6 @@ export function estimateFileSize(settings: ClientExportSettings, durationSeconds
 
   // Add ~10% overhead for container
   return Math.round(totalBytes * 1.1);
-}
-
-/**
- * Get available video codecs for a container
- */
-export function getVideoCodecsForContainer(container: ClientVideoContainer): ClientVideoCodec[] {
-  switch (container) {
-    case 'mp4':
-    case 'mov':
-      return ['avc', 'hevc'];
-    case 'webm':
-      return ['vp8', 'vp9', 'av1'];
-    case 'mkv':
-      return ['avc', 'hevc', 'vp8', 'vp9', 'av1'];
-    default:
-      return ['avc'];
-  }
 }
 
 /**

@@ -26,7 +26,7 @@ import { usePlayer } from './use-player';
 import { VideoConfigProvider } from './video-config-context';
 
 // Types
-export interface PlayerProps {
+interface PlayerProps {
   /** The component to render as video content */
   children: React.ReactNode;
   
@@ -120,9 +120,8 @@ const DefaultPlayPauseButton: React.FC<{
 const DefaultProgressBar: React.FC<{
   currentFrame: number;
   durationInFrames: number;
-  fps: number;
   seek: (frame: number) => void;
-}> = ({ currentFrame, durationInFrames, fps: _fps, seek }) => {
+}> = ({ currentFrame, durationInFrames, seek }) => {
   const progress = durationInFrames > 0 ? (currentFrame / durationInFrames) * 100 : 0;
   
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -183,7 +182,6 @@ const DefaultControls: React.FC<{
         <DefaultProgressBar
           currentFrame={currentFrame}
           durationInFrames={durationInFrames}
-          fps={fps}
           seek={onSeek}
         />
       </div>
@@ -485,5 +483,3 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(
 );
 
 Player.displayName = 'Player';
-
-export default Player;

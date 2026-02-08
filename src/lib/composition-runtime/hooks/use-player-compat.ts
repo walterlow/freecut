@@ -23,14 +23,6 @@ export function useCurrentFrame() {
 }
 
 /**
- * Check if we're in rendering mode.
- * Always returns false since we use Canvas + WebCodecs for export, not Composition's renderer.
- */
-export function useIsRendering(): boolean {
-  return false;
-}
-
-/**
  * Get playing state from the custom player's Clock.
  */
 export function useIsPlaying(): boolean {

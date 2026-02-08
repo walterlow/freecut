@@ -89,7 +89,7 @@ class Logger {
 }
 
 // Root logger instance
-export const logger = new Logger();
+const logger = new Logger();
 
 /**
  * Factory for creating module-specific loggers

@@ -11,7 +11,7 @@ import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
 import { cn } from '@/lib/utils';
-import { CLIP_HEIGHT } from '@/features/timeline/constants';
+import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
@@ -613,7 +613,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             pointerEvents: isDragging || trackHidden ? 'none' : 'auto',
             zIndex: isBeingDragged ? 50 : undefined,
             contentVisibility: 'auto',
-            containIntrinsicSize: `0 ${CLIP_HEIGHT}px`,
+            containIntrinsicSize: `0 ${DEFAULT_TRACK_HEIGHT}px`,
           }}
           onClick={handleClick}
           onMouseDown={handleMouseDown}

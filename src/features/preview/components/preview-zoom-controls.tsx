@@ -7,30 +7,13 @@ import {
 } from '@/components/ui/select';
 import { usePreviewZoom } from '../hooks/use-preview-zoom';
 
-interface PreviewZoomControlsProps {
-  containerWidth?: number;
-  containerHeight?: number;
-  projectWidth: number;
-  projectHeight: number;
-}
-
 /**
  * Preview Zoom Controls Component
  *
  * Compact dropdown for zoom presets: Auto (fit), 25%, 50%, 100%
  */
-export function PreviewZoomControls({
-  containerWidth,
-  containerHeight,
-  projectWidth,
-  projectHeight,
-}: PreviewZoomControlsProps) {
-  const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom({
-    containerWidth,
-    containerHeight,
-    projectWidth,
-    projectHeight,
-  });
+export function PreviewZoomControls() {
+  const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
 
   // Get current zoom label
   const currentLabel = zoom === -1

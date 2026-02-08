@@ -14,7 +14,6 @@
  */
 
 import type { Transition, TransitionTiming, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
-import type { TimelineItem } from '@/types/timeline';
 import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/features/keyframes/utils/easing';
 import type { TransitionRenderer } from './registry';
 
@@ -31,30 +30,11 @@ export function _setRegistryGetter(getter: typeof _registryGetter): void {
 // Types
 // ============================================================================
 
-export interface TransitionTimingConfig {
+interface TransitionTimingConfig {
   timing: TransitionTiming;
   fps: number;
   durationInFrames: number;
   bezierPoints?: { x1: number; y1: number; x2: number; y2: number };
-}
-
-export interface TransitionCalculation {
-  progress: number; // 0 to 1
-  opacity?: number;
-  transform?: string;
-  clipPath?: string;
-  maskImage?: string;
-}
-
-export interface ActiveTransitionInfo {
-  transition: Transition;
-  leftClip: TimelineItem;
-  rightClip: TimelineItem;
-  progress: number;
-  isInTransition: boolean;
-  transitionStart: number;
-  transitionEnd: number;
-  cutPoint: number;
 }
 
 export interface TransitionStyleCalculation {
@@ -136,19 +116,6 @@ export function calculateEasingCurve(config: TransitionTimingConfig): number[] {
   return curve;
 }
 
-/**
- * Get progress for a specific frame using pre-calculated curve.
- * Much faster than calculating on the fly.
- */
-export function getTransitionProgress(
-  frame: number,
-  config: TransitionTimingConfig
-): number {
-  const curve = calculateEasingCurve(config);
-  const index = Math.max(0, Math.min(frame, curve.length - 1));
-  return curve[index] ?? 0;
-}
-
 // ============================================================================
 // Presentation Calculations (built-in fallbacks)
 // ============================================================================
@@ -156,7 +123,7 @@ export function getTransitionProgress(
 /**
  * Calculate fade opacity using equal-power crossfade.
  */
-export function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
+function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
   if (isOutgoing) {
     return Math.cos((progress * Math.PI) / 2);
   } else {
@@ -200,7 +167,7 @@ export function calculateWipeClipPath(
 /**
  * Calculate slide transform.
  */
-export function calculateSlideTransform(
+function calculateSlideTransform(
   progress: number,
   direction: SlideDirection,
   isOutgoing: boolean,
@@ -226,7 +193,7 @@ export function calculateSlideTransform(
 /**
  * Calculate flip transform with proper perspective.
  */
-export function calculateFlipTransform(
+function calculateFlipTransform(
   progress: number,
   direction: FlipDirection,
   isOutgoing: boolean
@@ -249,7 +216,7 @@ export function calculateFlipTransform(
 /**
  * Calculate clock wipe mask.
  */
-export function calculateClockWipeMask(progress: number): string {
+function calculateClockWipeMask(progress: number): string {
   const degrees = progress * 360;
   return `conic-gradient(from 0deg, transparent ${degrees}deg, black ${degrees}deg)`;
 }
@@ -257,7 +224,7 @@ export function calculateClockWipeMask(progress: number): string {
 /**
  * Calculate iris mask.
  */
-export function calculateIrisMask(progress: number): string {
+function calculateIrisMask(progress: number): string {
   const maxRadius = 120;
   const radius = progress * maxRadius;
   return `radial-gradient(circle, transparent ${radius}%, black ${radius}%)`;
@@ -373,151 +340,4 @@ function calculateBuiltinTransitionStyles(
     default:
       return { opacity: calculateFadeOpacity(progress, isOutgoing) };
   }
-}
-
-// ============================================================================
-// Active Transition Detection
-// ============================================================================
-
-/**
- * Compute the start frame of a transition using alignment.
- * alignment=0.5 (default) centers on cut point (backward compatible).
- */
-function computeTransitionStart(cutPoint: number, duration: number, alignment: number): number {
-  // leftPortion = how much of the transition falls in the outgoing (left) clip
-  const leftPortion = Math.floor(duration * alignment);
-  return cutPoint - leftPortion;
-}
-
-/**
- * Build a map of clip IDs to clips for quick lookup.
- */
-export function buildClipMap(clips: TimelineItem[]): Map<string, TimelineItem> {
-  const map = new Map<string, TimelineItem>();
-  for (const clip of clips) {
-    map.set(clip.id, clip);
-  }
-  return map;
-}
-
-/**
- * Find all active transitions at a given frame.
- * Optimized to avoid creating intermediate arrays when possible.
- */
-export function findActiveTransitions(
-  transitions: Transition[],
-  clipMap: Map<string, TimelineItem>,
-  frame: number,
-  fps: number
-): ActiveTransitionInfo[] {
-  const active: ActiveTransitionInfo[] = [];
-
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    const rightClip = clipMap.get(transition.rightClipId);
-
-    if (!leftClip || !rightClip) continue;
-
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const transitionStart = computeTransitionStart(cutPoint, transition.durationInFrames, alignment);
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    if (frame >= transitionStart && frame < transitionEnd) {
-      const localFrame = frame - transitionStart;
-      const progress = getTransitionProgress(localFrame, {
-        timing: transition.timing,
-        fps,
-        durationInFrames: transition.durationInFrames,
-        bezierPoints: transition.bezierPoints,
-      });
-
-      active.push({
-        transition,
-        leftClip,
-        rightClip,
-        progress,
-        isInTransition: true,
-        transitionStart,
-        transitionEnd,
-        cutPoint,
-      });
-    }
-  }
-
-  return active;
-}
-
-/**
- * Check if a specific frame is within any transition.
- */
-export function isFrameInTransition(
-  transitions: Transition[],
-  clipMap: Map<string, TimelineItem>,
-  frame: number
-): boolean {
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    if (!leftClip) continue;
-
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const transitionStart = computeTransitionStart(cutPoint, transition.durationInFrames, alignment);
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    if (frame >= transitionStart && frame < transitionEnd) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Get all clip IDs involved in transitions at a given frame.
- */
-export function getTransitionClipIds(
-  transitions: Transition[],
-  clipMap: Map<string, TimelineItem>,
-  frame: number
-): Set<string> {
-  const clipIds = new Set<string>();
-
-  for (const transition of transitions) {
-    const leftClip = clipMap.get(transition.leftClipId);
-    if (!leftClip) continue;
-
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    const alignment = transition.alignment ?? 0.5;
-    const transitionStart = computeTransitionStart(cutPoint, transition.durationInFrames, alignment);
-    const transitionEnd = transitionStart + transition.durationInFrames;
-
-    if (frame >= transitionStart && frame < transitionEnd) {
-      clipIds.add(transition.leftClipId);
-      clipIds.add(transition.rightClipId);
-    }
-  }
-
-  return clipIds;
-}
-
-// ============================================================================
-// Cache Management
-// ============================================================================
-
-/**
- * Clear the easing cache.
- * Call this when memory pressure is high or for testing.
- */
-export function clearEasingCache(): void {
-  easingCache.clear();
-}
-
-/**
- * Get cache statistics for debugging.
- */
-export function getEasingCacheStats(): { size: number; keys: string[] } {
-  return {
-    size: easingCache.size,
-    keys: Array.from(easingCache.keys()),
-  };
 }

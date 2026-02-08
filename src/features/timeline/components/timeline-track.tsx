@@ -15,7 +15,7 @@ import { useProjectStore } from '@/features/projects/stores/project-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getMediaDragData } from '@/features/media-library/utils/drag-data-cache';
-import { CLIP_HEIGHT } from '@/features/timeline/constants';
+import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 
 /**
  * Compute initial fit-to-canvas transform for an item.
@@ -588,7 +588,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
               style={{
                 left: `${ghost.left}px`,
                 width: `${ghost.width}px`,
-                height: CLIP_HEIGHT,
+                height: DEFAULT_TRACK_HEIGHT,
               }}
             >
               <span className="text-xs text-foreground/70 truncate">{ghost.label}</span>

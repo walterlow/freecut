@@ -7,7 +7,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
  * During preview (Player), keyframes are read from the timeline store via useTimelineStore.
  * During render (server-side), keyframes are passed as inputProps and provided via this context.
  *
- * Components should use `useKeyframesContext` to get keyframes, which will:
+ * Components should use `useItemKeyframesFromContext` to get keyframes, which will:
  * - Return keyframes from context if available (render mode)
  * - Return undefined if no context (preview mode - component should fall back to store)
  */
@@ -67,15 +67,6 @@ export const KeyframesProvider: React.FC<KeyframesProviderProps> = ({ keyframes,
     </KeyframesContext.Provider>
   );
 };
-
-/**
- * Hook to access keyframes from context.
- *
- * @returns KeyframesContextValue if in render mode with keyframes, null if in preview mode
- */
-export function useKeyframesContext(): KeyframesContextValue | null {
-  return useContext(KeyframesContext);
-}
 
 /**
  * Hook to get keyframes for a specific item.

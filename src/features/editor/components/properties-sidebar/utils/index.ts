@@ -1,7 +1,1 @@
-export {
-  getMixedValue,
-  getMixedValues,
-  isMixed,
-  getValueOrDefault,
-  type MixedValue,
-} from './mixed-value';
+export { getMixedValue } from './mixed-value';

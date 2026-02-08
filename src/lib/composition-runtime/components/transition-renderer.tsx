@@ -45,7 +45,7 @@ import { resolveTransitionWindows, type ResolvedTransitionWindow } from '@/lib/t
 // Types
 // ============================================================================
 
-export interface AdjustmentLayerWithTrackOrder {
+interface AdjustmentLayerWithTrackOrder {
   layer: AdjustmentItem;
   trackOrder: number;
 }
@@ -553,7 +553,7 @@ const TransitionOverlay: React.FC<TransitionOverlayProps> = React.memo(function 
 // Main Transition Renderer
 // ============================================================================
 
-export const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionProps>(
+const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionProps>(
   function OptimizedEffectsBasedTransitionRenderer({
     window,
     leftClip,
@@ -670,10 +670,3 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
     </>
   );
 });
-
-// ============================================================================
-// Backward Compatibility Exports
-// ============================================================================
-
-export const EffectsBasedTransitionRenderer = OptimizedEffectsBasedTransitionRenderer;
-export const EffectsBasedTransitionsLayer = OptimizedEffectsBasedTransitionsLayer;

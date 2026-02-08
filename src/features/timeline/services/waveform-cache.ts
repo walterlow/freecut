@@ -46,7 +46,7 @@ interface PendingRequest {
   abortController: AbortController;
 }
 
-export type WaveformUpdateCallback = (waveform: CachedWaveform) => void;
+type WaveformUpdateCallback = (waveform: CachedWaveform) => void;
 
 class WaveformCacheService {
   private memoryCache = new Map<string, CachedWaveform>();
@@ -379,7 +379,6 @@ class WaveformCacheService {
 
     const duration = audioBuffer.duration;
     const channels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
 
     // Mix channels to mono
     const monoSamples = new Float32Array(audioBuffer.length);
@@ -626,6 +625,3 @@ class WaveformCacheService {
 
 // Singleton instance
 export const waveformCache = new WaveformCacheService();
-
-// Re-export utilities for consumers
-export { chooseLevelForZoom, WAVEFORM_LEVELS } from './waveform-opfs-storage';

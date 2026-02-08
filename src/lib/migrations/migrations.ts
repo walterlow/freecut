@@ -15,7 +15,7 @@ import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
  * Migration registry.
  * Key is the target version number.
  */
-export const migrations: Record<number, Migration> = {
+const migrations: Record<number, Migration> = {
   /**
    * Version 2: Fix track height inconsistency
    *

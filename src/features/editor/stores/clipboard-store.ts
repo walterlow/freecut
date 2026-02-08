@@ -11,7 +11,7 @@ import type { TimelineItem } from '@/types/timeline';
 /**
  * Clipboard data for a copied transition
  */
-export interface TransitionClipboard {
+interface TransitionClipboard {
   /** Visual presentation style */
   presentation: TransitionPresentation;
   /** Direction for wipe/slide/flip transitions */
@@ -25,7 +25,7 @@ export interface TransitionClipboard {
 /**
  * Clipboard data for copied timeline items
  */
-export interface ItemsClipboard {
+interface ItemsClipboard {
   /** Serialized items (without IDs - IDs will be generated on paste) */
   items: Omit<TimelineItem, 'id'>[];
   /** Reference frame (playhead position at copy time) */
@@ -58,7 +58,7 @@ interface ClipboardActions {
   hasItemsClipboard: () => boolean;
 }
 
-export type ClipboardStore = ClipboardState & ClipboardActions;
+type ClipboardStore = ClipboardState & ClipboardActions;
 
 /**
  * Clipboard store for copy/paste operations.
@@ -127,13 +127,3 @@ export const useClipboardStore = create<ClipboardStore>((set, get) => ({
     return get().itemsClipboard !== null;
   },
 }));
-
-// Selectors for granular subscriptions
-export const selectTransitionClipboard = (state: ClipboardStore) =>
-  state.transitionClipboard;
-export const selectHasTransitionClipboard = (state: ClipboardStore) =>
-  state.transitionClipboard !== null;
-export const selectItemsClipboard = (state: ClipboardStore) =>
-  state.itemsClipboard;
-export const selectHasItemsClipboard = (state: ClipboardStore) =>
-  state.itemsClipboard !== null;

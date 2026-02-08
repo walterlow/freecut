@@ -266,21 +266,3 @@ export function calculateGroupRotationDelta(
 
   return currentAngle - startAngle;
 }
-
-/**
- * Convert group bounds to screen rectangle for gizmo positioning.
- */
-export function groupBoundsToScreenBounds(
-  groupBounds: BoundingBox,
-  _canvasWidth: number,
-  _canvasHeight: number,
-  scale: number
-): { left: number; top: number; width: number; height: number } {
-  // Group bounds are already in canvas coordinates (not offset from center)
-  return {
-    left: groupBounds.left * scale,
-    top: groupBounds.top * scale,
-    width: groupBounds.width * scale,
-    height: groupBounds.height * scale,
-  };
-}

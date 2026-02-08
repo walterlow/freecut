@@ -204,35 +204,15 @@ export function getShapePath(
       break;
     }
 
-    default:
+    default: {
       // Fallback to rectangle
       const fallbackResult = makeRect({ width, height, cornerRadius: 0 });
       path = translatePath(fallbackResult.path, boxLeft, boxTop);
+      break;
+    }
   }
 
   return path;
-}
-
-/**
- * Apply rotation transform to a path string.
- * Returns a transform attribute value for SVG.
- */
-export function getPathTransform(
-  transform: Transform,
-  canvasWidth: number,
-  canvasHeight: number
-): string {
-  if (!transform.rotation || transform.rotation === 0) {
-    return '';
-  }
-
-  // Calculate the center point for rotation
-  const centerX = canvasWidth / 2;
-  const centerY = canvasHeight / 2;
-  const cx = centerX + transform.x;
-  const cy = centerY + transform.y;
-
-  return `rotate(${transform.rotation} ${cx} ${cy})`;
 }
 
 /**

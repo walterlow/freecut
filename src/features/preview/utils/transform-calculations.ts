@@ -98,8 +98,6 @@ function calculateScale(
   if (maintainAspectRatio && isCornerHandle) {
     // For corner handles with aspect ratio lock, use scale factor approach
     // This prevents direction flipping by using distance from center
-    const aspectRatio = start.width / start.height;
-
     if (cornerAnchored) {
       // Corner-anchored: use distance from anchor point (opposite corner)
       // Anchor is opposite corner in local coordinates
@@ -234,32 +232,5 @@ function calculateRotation(
   return {
     ...start,
     rotation: newRotation,
-  };
-}
-
-/**
- * Get default transform for an item (fit to canvas, centered).
- */
-export function getDefaultTransform(
-  canvasWidth: number,
-  canvasHeight: number,
-  sourceWidth?: number,
-  sourceHeight?: number
-): Transform {
-  const srcWidth = sourceWidth ?? canvasWidth;
-  const srcHeight = sourceHeight ?? canvasHeight;
-
-  // Fit to canvas
-  const scaleX = canvasWidth / srcWidth;
-  const scaleY = canvasHeight / srcHeight;
-  const scale = Math.min(scaleX, scaleY);
-
-  return {
-    x: 0,
-    y: 0,
-    width: srcWidth * scale,
-    height: srcHeight * scale,
-    rotation: 0,
-    opacity: 1,
   };
 }

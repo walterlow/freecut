@@ -1,5 +1,4 @@
 import type {
-  TransformProperties,
   ResolvedTransform,
   SourceDimensions,
   CanvasSettings,
@@ -104,90 +103,5 @@ export function toTransformStyle(
     opacity: resolved.opacity,
     borderRadius: resolved.cornerRadius > 0 ? resolved.cornerRadius : undefined,
     willChange: 'transform', // Hint for GPU acceleration
-  };
-}
-
-/**
- * Check if an item has any transform properties set.
- */
-export function hasTransformSet(item: TimelineItem): boolean {
-  return item.transform !== undefined;
-}
-
-/**
- * Check if the resolved transform matches the default (fit-to-canvas).
- * Useful for determining if transform gizmos need to be shown.
- */
-export function isDefaultTransform(
-  resolved: ResolvedTransform,
-  canvas: CanvasSettings,
-  sourceDimensions?: SourceDimensions
-): boolean {
-  const sourceWidth = sourceDimensions?.width ?? canvas.width;
-  const sourceHeight = sourceDimensions?.height ?? canvas.height;
-  const scaleX = canvas.width / sourceWidth;
-  const scaleY = canvas.height / sourceHeight;
-  const fitScale = Math.min(scaleX, scaleY);
-  const defaultWidth = sourceWidth * fitScale;
-  const defaultHeight = sourceHeight * fitScale;
-
-  return (
-    resolved.x === 0 &&
-    resolved.y === 0 &&
-    Math.abs(resolved.width - defaultWidth) < 0.1 &&
-    Math.abs(resolved.height - defaultHeight) < 0.1 &&
-    resolved.rotation === 0 &&
-    resolved.opacity === 1 &&
-    resolved.cornerRadius === 0
-  );
-}
-
-/**
- * Calculate the bounding box of a transformed item in canvas coordinates.
- * Accounts for rotation.
- */
-export function getTransformBounds(
-  resolved: ResolvedTransform,
-  canvas: CanvasSettings
-): { left: number; top: number; right: number; bottom: number } {
-  const centerX = canvas.width / 2 + resolved.x;
-  const centerY = canvas.height / 2 + resolved.y;
-  const halfWidth = resolved.width / 2;
-  const halfHeight = resolved.height / 2;
-
-  // If no rotation, simple bounds
-  if (resolved.rotation === 0) {
-    return {
-      left: centerX - halfWidth,
-      top: centerY - halfHeight,
-      right: centerX + halfWidth,
-      bottom: centerY + halfHeight,
-    };
-  }
-
-  // With rotation, calculate rotated corners
-  const rad = (resolved.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-
-  // Corner offsets from center
-  const corners = [
-    { dx: -halfWidth, dy: -halfHeight },
-    { dx: halfWidth, dy: -halfHeight },
-    { dx: halfWidth, dy: halfHeight },
-    { dx: -halfWidth, dy: halfHeight },
-  ];
-
-  // Rotate corners and find bounds
-  const rotatedCorners = corners.map(({ dx, dy }) => ({
-    x: centerX + dx * cos - dy * sin,
-    y: centerY + dx * sin + dy * cos,
-  }));
-
-  return {
-    left: Math.min(...rotatedCorners.map((c) => c.x)),
-    top: Math.min(...rotatedCorners.map((c) => c.y)),
-    right: Math.max(...rotatedCorners.map((c) => c.x)),
-    bottom: Math.max(...rotatedCorners.map((c) => c.y)),
   };
 }

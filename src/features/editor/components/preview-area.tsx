@@ -119,12 +119,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
         {/* Right: Zoom Controls */}
         <div className="absolute right-6">
-          <PreviewZoomControls
-            containerWidth={containerSize.width}
-            containerHeight={containerSize.height}
-            projectWidth={width}
-            projectHeight={height}
-          />
+          <PreviewZoomControls />
         </div>
       </div>
     </div>

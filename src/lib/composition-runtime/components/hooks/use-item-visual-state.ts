@@ -408,11 +408,3 @@ export function useItemVisualState(
  * Generate scanlines overlay style.
  */
 export { getScanlinesStyle };
-
-/**
- * Get canvas settings from video config (convenience for content components).
- */
-export function useCanvasSettings(): CanvasSettings {
-  const { width, height, fps } = useVideoConfig();
-  return { width, height, fps };
-}

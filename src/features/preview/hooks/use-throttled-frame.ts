@@ -43,8 +43,6 @@ export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
 
   // Refs for tracking state without re-renders
   const lastUpdateTimeRef = useRef(0);
-  const rafIdRef = useRef<number | null>(null);
-
   useEffect(() => {
     let wasPlaying = usePlaybackStore.getState().isPlaying;
 
@@ -84,27 +82,8 @@ export function useThrottledFrame(options: UseThrottledFrameOptions = {}) {
 
     return () => {
       unsubscribe();
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-      }
     };
   }, [updateDuringPlayback, throttleMs]);
 
   return frame;
-}
-
-/**
- * Returns a ref containing the current frame, updated without React re-renders.
- * Use this when you only need the value in callbacks/effects, not for rendering.
- */
-export function useCurrentFrameRef() {
-  const frameRef = useRef(usePlaybackStore.getState().currentFrame);
-
-  useEffect(() => {
-    return usePlaybackStore.subscribe((state) => {
-      frameRef.current = state.currentFrame;
-    });
-  }, []);
-
-  return frameRef;
 }

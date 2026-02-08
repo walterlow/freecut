@@ -21,41 +21,6 @@ const rgbSplitFilterCache = new Map<number, string>();
 const RGB_SPLIT_CACHE_MAX_SIZE = 100;
 
 /**
- * RGB Split effect styles (legacy - returns transform offsets).
- * Creates chromatic aberration by offsetting color channels.
- *
- * @deprecated Use getRGBSplitFilter instead for single-render approach
- * @param intensity - Effect intensity (0-1)
- * @param frame - Current frame number
- * @param speed - Animation speed multiplier
- * @param seed - Random seed for deterministic output
- * @returns Offset values for red and blue channels
- */
-export function getRGBSplitStyles(
-  intensity: number,
-  frame: number,
-  speed: number,
-  seed: number
-): {
-  redOffset: number;
-  blueOffset: number;
-  active: boolean;
-} {
-  const random = seededRandom(Math.floor(frame * speed) + seed);
-  const baseOffset = intensity * 15;
-  const jitter = (random() - 0.5) * intensity * 10;
-
-  // Smooth oscillation with random jitter
-  const offset = Math.sin(frame * 0.3 * speed) * baseOffset + jitter;
-
-  return {
-    redOffset: offset,
-    blueOffset: -offset,
-    active: Math.abs(offset) > 0.5,
-  };
-}
-
-/**
  * RGB Split effect using SVG filter (preferred approach).
  * Creates chromatic aberration using a single SVG filter - no content duplication.
  * Works for both clip effects and adjustment layers without audio issues.
@@ -66,7 +31,7 @@ export function getRGBSplitStyles(
  * @param seed - Random seed for deterministic output
  * @returns CSS filter string with embedded SVG data URL
  */
-export function getRGBSplitFilter(
+function getRGBSplitFilter(
   intensity: number,
   frame: number,
   speed: number,
@@ -177,7 +142,7 @@ export function getScanlinesStyle(intensity: number): React.CSSProperties {
  * @param seed - Random seed for deterministic output
  * @returns Hue rotation in degrees (0 if no glitch this frame)
  */
-export function getColorGlitch(
+function getColorGlitch(
   intensity: number,
   frame: number,
   speed: number,

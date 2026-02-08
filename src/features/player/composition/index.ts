@@ -16,30 +16,14 @@
 export {
   Sequence,
   useSequenceContext,
-  useLocalFrame,
-  useSequenceFrom,
-  useIsInRange,
-  useSequenceVisibility,
-  type SequenceProps,
 } from './Sequence';
 
 // AbsoluteFill component
 export {
   AbsoluteFill,
-  useAbsoluteFillStyle,
-  type AbsoluteFillProps,
 } from './AbsoluteFill';
 
 // Interpolation utilities
 export {
   interpolate,
-  interpolateColors,
-  Easing,
-  clamp,
-  mapRange,
-  spring,
-  type InterpolateOptions,
-  type ExtrapolationType,
-  type SpringOptions,
-  type SpringConfig,
 } from './interpolate';

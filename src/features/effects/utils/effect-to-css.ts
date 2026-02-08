@@ -67,26 +67,12 @@ export function effectsToCSSFilter(effects: ItemEffect[]): string {
 }
 
 /**
- * Check if any effects require non-CSS rendering (e.g., glitch effects).
- */
-export function hasGlitchEffects(effects: ItemEffect[]): boolean {
-  return effects.some((e) => e.enabled && e.effect.type === 'glitch');
-}
-
-/**
  * Get all enabled glitch effects from an array of effects.
  */
 export function getGlitchEffects(effects: ItemEffect[]) {
   return effects
     .filter((e) => e.enabled && e.effect.type === 'glitch')
     .map((e) => ({ id: e.id, ...e.effect }));
-}
-
-/**
- * Check if any effects require canvas-based rendering (e.g., halftone).
- */
-export function hasCanvasEffects(effects: ItemEffect[]): boolean {
-  return effects.some((e) => e.enabled && e.effect.type === 'canvas-effect');
 }
 
 /**
@@ -100,13 +86,6 @@ export function getHalftoneEffect(
   );
   if (!effect) return null;
   return { id: effect.id, ...(effect.effect as HalftoneEffect) };
-}
-
-/**
- * Check if any effects require overlay rendering (e.g., vignette).
- */
-export function hasOverlayEffects(effects: ItemEffect[]): boolean {
-  return effects.some((e) => e.enabled && e.effect.type === 'overlay-effect');
 }
 
 /**
@@ -195,25 +174,28 @@ function getPatternGradient(
     case 'dots':
       return `radial-gradient(circle at center, ${fgColor} ${hardEdge}px, ${bgColor} ${radius}px)`;
 
-    case 'lines':
+    case 'lines': {
       // Repeating linear gradient for parallel lines
       // Line width is dotSize, gap is (spacing - dotSize)
       const lineWidth = dotSize;
       const lineHardEdge = lineWidth * (1 - softness * 0.5);
       return `repeating-linear-gradient(0deg, ${fgColor} 0px, ${fgColor} ${lineHardEdge}px, ${bgColor} ${lineWidth}px, ${bgColor} ${spacing}px)`;
+    }
 
-    case 'rays':
+    case 'rays': {
       // Repeating conic gradient for sunburst/ray pattern
       // Each ray takes up a portion of the 360 degrees
       const rayAngle = (dotSize / spacing) * 30; // Scale dot size to angle
       const rayHardEdge = rayAngle * (1 - softness * 0.5);
       return `repeating-conic-gradient(from 0deg, ${fgColor} 0deg, ${fgColor} ${rayHardEdge}deg, ${bgColor} ${rayAngle}deg)`;
+    }
 
-    case 'ripples':
+    case 'ripples': {
       // Repeating radial gradient for concentric circles
       const rippleWidth = dotSize;
       const rippleHardEdge = rippleWidth * (1 - softness * 0.5);
       return `repeating-radial-gradient(circle at center, ${fgColor} 0px, ${fgColor} ${rippleHardEdge}px, ${bgColor} ${rippleWidth}px, ${bgColor} ${spacing}px)`;
+    }
 
     default:
       return `radial-gradient(circle at center, ${fgColor} ${hardEdge}px, ${bgColor} ${radius}px)`;

@@ -6,7 +6,7 @@
  */
 
 import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect } from '@/types/effects';
-import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
+import type { AdjustmentItem } from '@/types/timeline';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CanvasEffects');
@@ -35,7 +35,7 @@ export interface EffectCanvasSettings {
  * Build CSS filter string from effects array.
  * Canvas 2D context supports CSS filter syntax via ctx.filter.
  */
-export function buildCSSFilterString(effects: ItemEffect[]): string {
+function buildCSSFilterString(effects: ItemEffect[]): string {
   const filterParts: string[] = [];
 
   for (const effect of effects) {
@@ -104,21 +104,6 @@ function isFilterAtDefault(filter: string, value: number): boolean {
   }
 }
 
-/**
- * Apply CSS filter string to canvas context.
- * Must be called BEFORE drawing operations.
- */
-export function applyCSSFilters(
-  ctx: OffscreenCanvasRenderingContext2D,
-  filterString: string
-): void {
-  if (filterString) {
-    ctx.filter = filterString;
-  } else {
-    ctx.filter = 'none';
-  }
-}
-
 // ============================================================================
 // Glitch Effects
 // ============================================================================
@@ -137,7 +122,7 @@ function seededRandom(seed: number): () => number {
 /**
  * Get glitch effects from an effects array.
  */
-export function getGlitchEffects(effects: ItemEffect[]): GlitchEffect[] {
+function getGlitchEffects(effects: ItemEffect[]): GlitchEffect[] {
   return effects
     .filter((e) => e.enabled && e.effect.type === 'glitch')
     .map((e) => e.effect as GlitchEffect);
@@ -154,7 +139,7 @@ export function getGlitchEffects(effects: ItemEffect[]): GlitchEffect[] {
  * @param speed - Animation speed multiplier
  * @param seed - Random seed for deterministic output
  */
-export function applyRGBSplit(
+function applyRGBSplit(
   ctx: OffscreenCanvasRenderingContext2D,
   sourceCanvas: OffscreenCanvas,
   intensity: number,
@@ -221,7 +206,7 @@ export function applyRGBSplit(
  * @param canvas - Canvas dimensions
  * @param intensity - Effect intensity (0-1)
  */
-export function applyScanlines(
+function applyScanlines(
   ctx: OffscreenCanvasRenderingContext2D,
   canvas: EffectCanvasSettings,
   intensity: number
@@ -248,7 +233,7 @@ export function applyScanlines(
  * @param frame - Current frame number
  * @returns Hue rotation in degrees, or 0 if no glitch
  */
-export function getColorGlitchHueShift(
+function getColorGlitchHueShift(
   effect: GlitchEffect,
   frame: number
 ): number {
@@ -264,7 +249,7 @@ export function getColorGlitchHueShift(
 /**
  * Build combined filter string including glitch effects.
  */
-export function buildGlitchFilterString(
+function buildGlitchFilterString(
   effects: GlitchEffect[],
   frame: number
 ): string {
@@ -291,7 +276,7 @@ export function buildGlitchFilterString(
 /**
  * Get halftone effect from effects array.
  */
-export function getHalftoneEffect(effects: ItemEffect[]): HalftoneEffect | null {
+function getHalftoneEffect(effects: ItemEffect[]): HalftoneEffect | null {
   const effect = effects.find(
     (e) => e.enabled && e.effect.type === 'canvas-effect' && e.effect.variant === 'halftone'
   );
@@ -305,7 +290,7 @@ export function getHalftoneEffect(effects: ItemEffect[]): HalftoneEffect | null 
  * @param canvas - Canvas dimensions
  * @param effect - Halftone effect configuration
  */
-export function applyHalftone(
+function applyHalftone(
   ctx: OffscreenCanvasRenderingContext2D,
   canvas: EffectCanvasSettings,
   effect: HalftoneEffect
@@ -426,7 +411,7 @@ function mapBlendMode(blendMode: string): GlobalCompositeOperation {
 /**
  * Get vignette effect from effects array.
  */
-export function getVignetteEffect(effects: ItemEffect[]): VignetteEffect | null {
+function getVignetteEffect(effects: ItemEffect[]): VignetteEffect | null {
   const effect = effects.find(
     (e) => e.enabled && e.effect.type === 'overlay-effect' && e.effect.variant === 'vignette'
   );
@@ -441,7 +426,7 @@ export function getVignetteEffect(effects: ItemEffect[]): VignetteEffect | null 
  * @param canvas - Canvas dimensions
  * @param effect - Vignette effect configuration
  */
-export function applyVignette(
+function applyVignette(
   ctx: OffscreenCanvasRenderingContext2D,
   canvas: EffectCanvasSettings,
   effect: VignetteEffect
@@ -641,13 +626,4 @@ export function applyAllEffects(
   if (vignetteEffect) {
     applyVignette(ctx, canvas, vignetteEffect);
   }
-}
-
-/**
- * Check if item has any visual effects that need processing.
- */
-export function hasVisualEffects(item: TimelineItem): boolean {
-  const effects = item.effects;
-  if (!effects || effects.length === 0) return false;
-  return effects.some((e) => e.enabled);
 }

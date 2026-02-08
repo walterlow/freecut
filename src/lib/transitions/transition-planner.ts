@@ -1,7 +1,7 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 
-export interface TransitionPortions {
+interface TransitionPortions {
   leftPortion: number;
   rightPortion: number;
 }
@@ -27,7 +27,7 @@ interface MutableResolvedTransition<T extends TimelineItem> {
   rightPortion: number;
 }
 
-export function clampTransitionAlignment(alignment: number | undefined): number {
+function clampTransitionAlignment(alignment: number | undefined): number {
   const value = alignment ?? 0.5;
   return Math.max(0, Math.min(1, value));
 }

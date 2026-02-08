@@ -12,14 +12,7 @@ const ZOOM_PRESETS = [
   { label: '100%', value: 1 },
 ] as const;
 
-export type ZoomPreset = (typeof ZOOM_PRESETS)[number];
-
-interface UsePreviewZoomOptions {
-  containerWidth?: number;
-  containerHeight?: number;
-  projectWidth: number;
-  projectHeight: number;
-}
+type ZoomPreset = (typeof ZOOM_PRESETS)[number];
 
 /**
  * Hook for managing preview zoom level
@@ -30,10 +23,9 @@ interface UsePreviewZoomOptions {
  * - Fine-tune zoom setter
  * - Fit-to-viewport calculation
  *
- * @param options - Container and project dimensions for fit calculation
  * @returns Zoom state and controls
  */
-export function usePreviewZoom(options?: UsePreviewZoomOptions) {
+export function usePreviewZoom() {
   const zoom = usePlaybackStore((s) => s.zoom);
   const setZoom = usePlaybackStore((s) => s.setZoom);
 

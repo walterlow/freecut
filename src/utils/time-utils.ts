@@ -48,23 +48,6 @@ export function formatTimecode(frame: number, fps: number): string {
 }
 
 /**
- * Format seconds as simple time (e.g., "5s", "1m 30s", "1h 5m")
- * @param seconds - Time in seconds
- * @returns Formatted time string
- */
-export function formatTime(seconds: number): string {
-  const { hours, minutes, seconds: secs } = decomposeSeconds(seconds);
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`;
-  } else {
-    return `${secs}s`;
-  }
-}
-
-/**
  * Convert seconds to frame number
  * @param seconds - Time in seconds
  * @param fps - Frames per second

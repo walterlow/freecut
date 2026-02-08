@@ -114,32 +114,3 @@ export function migrateProject(project: Project): MigrationResult {
     toVersion: CURRENT_SCHEMA_VERSION,
   };
 }
-
-/**
- * Check if a project needs migration.
- * Useful for showing UI indicators before loading.
- */
-export function needsMigration(project: Project): boolean {
-  const version = getSchemaVersion(project);
-  return version < CURRENT_SCHEMA_VERSION;
-}
-
-/**
- * Get migration info for a project without actually migrating.
- */
-export function getMigrationInfo(project: Project): {
-  currentVersion: number;
-  targetVersion: number;
-  migrationsNeeded: number;
-  migrationDescriptions: string[];
-} {
-  const currentVersion = getSchemaVersion(project);
-  const migrations = getMigrationsToApply(currentVersion, CURRENT_SCHEMA_VERSION);
-
-  return {
-    currentVersion,
-    targetVersion: CURRENT_SCHEMA_VERSION,
-    migrationsNeeded: migrations.length,
-    migrationDescriptions: migrations.map((m) => `v${m.version}: ${m.description}`),
-  };
-}

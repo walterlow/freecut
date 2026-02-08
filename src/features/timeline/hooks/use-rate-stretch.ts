@@ -13,10 +13,7 @@ import {
   sourceToTimelineFrames,
 } from '../utils/source-calculations';
 
-export type StretchHandle = 'start' | 'end';
-
-// Re-export for consumers that import from this module
-export { MIN_SPEED, MAX_SPEED };
+type StretchHandle = 'start' | 'end';
 
 // For GIFs/images that loop, use generous duration limits (1 frame to ~10 minutes at 30fps)
 const LOOPING_MEDIA_MAX_DURATION = 30 * 60 * 10; // 10 minutes at 30fps

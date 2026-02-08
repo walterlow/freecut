@@ -20,7 +20,7 @@ import React, {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { Clock, createClock, type ClockConfig, type ClockEvent } from './Clock';
+import { Clock, createClock, type ClockConfig } from './Clock';
 
 // ============================================
 // Context Types
@@ -158,50 +158,10 @@ export function useClock(): Clock {
 }
 
 /**
- * useClockState - Get reactive clock state that triggers re-renders
- *
- * Use this when your component needs to display clock state:
- * - Current frame/time
- * - Playing state
- * - Playback rate
- *
- * Uses useSyncExternalStore for optimal performance and
- * concurrent mode compatibility.
- */
-export function useClockState(): ClockEvent {
-  const clock = useClock();
-
-  const subscribe = useCallback(
-    (callback: () => void) => {
-      // Subscribe to all relevant events
-      clock.addEventListener('framechange', callback);
-      clock.addEventListener('play', callback);
-      clock.addEventListener('pause', callback);
-      clock.addEventListener('seek', callback);
-      clock.addEventListener('ratechange', callback);
-
-      return () => {
-        clock.removeEventListener('framechange', callback);
-        clock.removeEventListener('play', callback);
-        clock.removeEventListener('pause', callback);
-        clock.removeEventListener('seek', callback);
-        clock.removeEventListener('ratechange', callback);
-      };
-    },
-    [clock]
-  );
-
-  const getSnapshot = useCallback(() => clock.getState(), [clock]);
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
-
-/**
  * useClockFrame - Get just the current frame (optimized)
  *
  * Use this when you only need the current frame number.
- * This is more efficient than useClockState() if you don't
- * need other state like isPlaying or playbackRate.
+ * Use this when you only need the frame number.
  */
 export function useClockFrame(): number {
   const clock = useClock();
@@ -272,111 +232,4 @@ export function useClockPlaybackRate(): number {
   const getSnapshot = useCallback(() => clock.playbackRate, [clock]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
-
-/**
- * useClockTime - Get the current time in seconds
- */
-export function useClockTime(): number {
-  const clock = useClock();
-
-  const subscribe = useCallback(
-    (callback: () => void) => {
-      clock.addEventListener('framechange', callback);
-      clock.addEventListener('seek', callback);
-
-      return () => {
-        clock.removeEventListener('framechange', callback);
-        clock.removeEventListener('seek', callback);
-      };
-    },
-    [clock]
-  );
-
-  const getSnapshot = useCallback(() => clock.currentTime, [clock]);
-
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-}
-
-/**
- * useClockCallback - Subscribe to clock events with a callback
- *
- * Use this for side effects that should run on clock events
- * without triggering re-renders.
- *
- * @param event - The event type to listen for
- * @param callback - The callback to run when the event fires
- */
-export function useClockCallback(
-  event: 'framechange' | 'play' | 'pause' | 'seek' | 'ended' | 'timeupdate' | 'ratechange',
-  callback: (event: ClockEvent) => void
-): void {
-  const clock = useClock();
-  const callbackRef = useRef(callback);
-  callbackRef.current = callback;
-
-  React.useEffect(() => {
-    const handler = (e: ClockEvent) => {
-      callbackRef.current(e);
-    };
-
-    clock.addEventListener(event, handler);
-    return () => {
-      clock.removeEventListener(event, handler);
-    };
-  }, [clock, event]);
-}
-
-/**
- * useClockControls - Get stable callback references for clock controls
- *
- * Returns memoized callbacks for play/pause/seek that won't change
- * between renders. Useful for passing to child components without
- * causing unnecessary re-renders.
- */
-export function useClockControls() {
-  const clock = useClock();
-
-  const play = useCallback(() => clock.play(), [clock]);
-  const pause = useCallback(() => clock.pause(), [clock]);
-  const toggle = useCallback(() => clock.toggle(), [clock]);
-  const seekToFrame = useCallback((frame: number) => clock.seekToFrame(frame), [clock]);
-  const seekToTime = useCallback((time: number) => clock.seekToTime(time), [clock]);
-  const stepForward = useCallback((frames?: number) => clock.stepForward(frames), [clock]);
-  const stepBackward = useCallback((frames?: number) => clock.stepBackward(frames), [clock]);
-  const goToStart = useCallback(() => clock.goToStart(), [clock]);
-  const goToEnd = useCallback(() => clock.goToEnd(), [clock]);
-  const setPlaybackRate = useCallback(
-    (rate: number) => {
-      clock.playbackRate = rate;
-    },
-    [clock]
-  );
-
-  return useMemo(
-    () => ({
-      play,
-      pause,
-      toggle,
-      seekToFrame,
-      seekToTime,
-      stepForward,
-      stepBackward,
-      goToStart,
-      goToEnd,
-      setPlaybackRate,
-    }),
-    [
-      play,
-      pause,
-      toggle,
-      seekToFrame,
-      seekToTime,
-      stepForward,
-      stepBackward,
-      goToStart,
-      goToEnd,
-      setPlaybackRate,
-    ]
-  );
 }

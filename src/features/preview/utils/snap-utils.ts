@@ -13,7 +13,7 @@ export interface SnapLine {
 }
 
 /** Result of snap calculation */
-export interface SnapResult {
+interface SnapResult {
   transform: Transform;
   snapLines: SnapLine[];
 }

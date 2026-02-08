@@ -36,9 +36,6 @@ const FONT_CONFIGS: Record<string, FontConfig> = {
   Anton: { family: 'Anton', weights: [400] },
 };
 
-// Available fonts
-export const AVAILABLE_FONTS = Object.keys(FONT_CONFIGS);
-
 /**
  * Build Google Fonts URL for a font
  */
@@ -147,16 +144,6 @@ export function loadFont(fontName: string): string {
 }
 
 /**
- * Load a font and wait for it to be ready
- *
- * @param fontName - The font name to load
- * @returns Promise resolving to the CSS font-family value
- */
-export async function loadFontAsync(fontName: string): Promise<string> {
-  return loadGoogleFont(fontName);
-}
-
-/**
  * Load all fonts needed for a set of text items.
  *
  * @param fontNames - Array of font names to load
@@ -165,45 +152,4 @@ export async function loadFontAsync(fontName: string): Promise<string> {
 export function loadFonts(fontNames: string[]): string[] {
   const uniqueFonts = [...new Set(fontNames)];
   return uniqueFonts.map(loadFont);
-}
-
-/**
- * Load all fonts and wait for them to be ready
- *
- * @param fontNames - Array of font names to load
- * @returns Promise resolving to array of CSS fontFamily values
- */
-export async function loadFontsAsync(fontNames: string[]): Promise<string[]> {
-  const uniqueFonts = [...new Set(fontNames)];
-  return Promise.all(uniqueFonts.map(loadFontAsync));
-}
-
-/**
- * Check if a font is loaded
- *
- * @param fontName - The font name to check
- * @returns Whether the font is loaded
- */
-export function isFontLoaded(fontName: string): boolean {
-  return loadedFontFamilies.has(fontName);
-}
-
-/**
- * Get the CSS font-family for a font (returns fallback if not loaded)
- *
- * @param fontName - The font name
- * @returns The CSS font-family value
- */
-export function getFontFamily(fontName: string): string {
-  const cached = loadedFontFamilies.get(fontName);
-  if (cached) {
-    return cached;
-  }
-
-  const config = FONT_CONFIGS[fontName];
-  if (config) {
-    return `"${config.family}", sans-serif`;
-  }
-
-  return fontName;
 }

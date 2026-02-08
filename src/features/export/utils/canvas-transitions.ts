@@ -108,7 +108,7 @@ export function findActiveTransitions(
  * @param fps - Frames per second
  * @returns Progress value (0 to 1, may overshoot for spring)
  */
-export function calculateProgress(
+function calculateProgress(
   localFrame: number,
   duration: number,
   timing: string,
@@ -145,7 +145,7 @@ export function calculateProgress(
 /**
  * Calculate opacity for fade transition using equal-power crossfade.
  */
-export function getFadeOpacity(progress: number, isOutgoing: boolean): number {
+function getFadeOpacity(progress: number, isOutgoing: boolean): number {
   if (isOutgoing) {
     return Math.cos(progress * Math.PI / 2);
   } else {
@@ -156,7 +156,7 @@ export function getFadeOpacity(progress: number, isOutgoing: boolean): number {
 /**
  * Render fade transition.
  */
-export function renderFadeTransition(
+function renderFadeTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -227,7 +227,7 @@ function getWipeClipPath(
 /**
  * Render wipe transition.
  */
-export function renderWipeTransition(
+function renderWipeTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -280,7 +280,7 @@ function getSlideOffset(
 /**
  * Render slide transition.
  */
-export function renderSlideTransition(
+function renderSlideTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -301,7 +301,7 @@ export function renderSlideTransition(
  * Render flip transition.
  * This is a 2D approximation of a 3D flip effect.
  */
-export function renderFlipTransition(
+function renderFlipTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -362,7 +362,7 @@ export function renderFlipTransition(
  * - At progress=0: outgoing clip fully visible
  * - At progress=1: incoming clip fully visible (outgoing wiped away clockwise)
  */
-export function renderClockWipeTransition(
+function renderClockWipeTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -406,7 +406,7 @@ export function renderClockWipeTransition(
  * - At progress=0: outgoing clip fully visible
  * - At progress=1: incoming clip fully visible
  */
-export function renderIrisTransition(
+function renderIrisTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -442,7 +442,7 @@ export function renderIrisTransition(
 /**
  * Render hard cut (no transition effect).
  */
-export function renderCutTransition(
+function renderCutTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
@@ -546,24 +546,6 @@ export function renderTransition(
       renderCutTransition(ctx, leftCanvas, rightCanvas, progress);
       break;
   }
-}
-
-/**
- * Check if a frame is within any transition window.
- */
-export function isInTransition(
-  transitions: Transition[],
-  clipMap: Map<string, TimelineItem>,
-  frame: number
-): boolean {
-  const resolvedWindows = resolveTransitionWindows(transitions, clipMap);
-  for (const window of resolvedWindows) {
-    if (frame >= window.startFrame && frame < window.endFrame) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 /**

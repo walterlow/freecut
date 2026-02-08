@@ -44,7 +44,7 @@ export function svgPathToPath2D(svgPath: string): Path2D {
  * @param frame - Current frame (for checking if mask is active)
  * @returns Path2D and metadata, or null if mask is not active
  */
-export function getMaskPath(
+function getMaskPath(
   mask: ShapeItem,
   canvas: MaskCanvasSettings,
   frame: number
@@ -104,7 +104,7 @@ export function getMaskPath(
  * @param frame - Current frame
  * @returns Array of active masks with their track orders
  */
-export function collectActiveMasks(
+function collectActiveMasks(
   tracks: TimelineTrack[],
   frame: number
 ): MaskWithTrackOrder[] {
@@ -139,7 +139,7 @@ export function collectActiveMasks(
  * @param inverted - If true, show content OUTSIDE the path
  * @param canvas - Canvas dimensions
  */
-export function applyClipMask(
+function applyClipMask(
   ctx: OffscreenCanvasRenderingContext2D,
   path: Path2D,
   inverted: boolean,
@@ -172,7 +172,7 @@ export function applyClipMask(
  * @param feather - Feather amount in pixels (blur radius)
  * @param canvas - Canvas dimensions
  */
-export function applyAlphaMask(
+function applyAlphaMask(
   ctx: OffscreenCanvasRenderingContext2D,
   contentCanvas: OffscreenCanvas,
   path: Path2D,
@@ -298,29 +298,6 @@ export function applyMasks(
 
   // Draw final result
   ctx.drawImage(currentContent, 0, 0);
-}
-
-/**
- * Check if any masks are active at the current frame.
- */
-export function hasActiveMasks(
-  tracks: TimelineTrack[],
-  frame: number
-): boolean {
-  for (const track of tracks) {
-    if (track.visible === false) continue;
-
-    for (const item of track.items) {
-      if (item.type === 'shape' && item.isMask) {
-        const maskStart = item.from;
-        const maskEnd = item.from + item.durationInFrames;
-        if (frame >= maskStart && frame < maskEnd) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
 }
 
 /**

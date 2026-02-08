@@ -75,7 +75,7 @@ export interface AudioProcessingConfig {
  * @param composition - The composition with tracks
  * @returns Array of audio segments to process
  */
-export function extractAudioSegments(composition: CompositionInputProps): AudioSegment[] {
+function extractAudioSegments(composition: CompositionInputProps): AudioSegment[] {
   const { tracks = [], transitions = [] } = composition;
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
@@ -227,7 +227,7 @@ export function extractAudioSegments(composition: CompositionInputProps): AudioS
  * @param endTime - End time in seconds (optional, defaults to full duration)
  * @returns Decoded audio data for the specified range
  */
-export async function decodeAudioFromSource(
+async function decodeAudioFromSource(
   src: string,
   itemId: string,
   startTime?: number,
@@ -393,14 +393,14 @@ async function decodeAudioFallback(src: string, itemId: string): Promise<Decoded
 /**
  * Convert dB to linear gain.
  */
-export function dbToGain(db: number): number {
+function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
 }
 
 /**
  * Apply volume (in dB) to audio samples.
  */
-export function applyVolume(
+function applyVolume(
   samples: Float32Array,
   volumeDb: number
 ): Float32Array {
@@ -422,7 +422,7 @@ export function applyVolume(
  * @param fadeOutSamples - Number of samples for fade out
  * @param useEqualPower - Use equal-power (sin/cos) fades for smoother crossfades
  */
-export function applyFades(
+function applyFades(
   samples: Float32Array,
   fadeInSamples: number,
   fadeOutSamples: number,
@@ -469,7 +469,7 @@ export function applyFades(
  * @param speed - Playback rate (1.0 = normal, 2.0 = double speed, 0.5 = half speed)
  * @param sampleRate - Sample rate for the audio
  */
-export async function applySpeed(
+async function applySpeed(
   samples: Float32Array,
   speed: number,
   sampleRate: number
@@ -574,7 +574,7 @@ export async function applySpeed(
 /**
  * Resample audio to target sample rate.
  */
-export function resample(
+function resample(
   samples: Float32Array,
   sourceSampleRate: number,
   targetSampleRate: number
@@ -604,7 +604,7 @@ export function resample(
  * @param config - Audio processing configuration
  * @returns Mixed stereo audio samples
  */
-export function mixAudioTracks(
+function mixAudioTracks(
   segments: Array<{
     samples: Float32Array[];
     startSample: number;

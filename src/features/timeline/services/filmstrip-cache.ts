@@ -14,10 +14,10 @@ import { createLogger } from '@/lib/logger';
 const logger = createLogger('FilmstripCache');
 
 import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT } from '@/features/timeline/constants';
-import { filmstripOPFSStorage, type FilmstripFrame, type LoadedFilmstrip } from './filmstrip-opfs-storage';
+import { filmstripOPFSStorage, type FilmstripFrame } from './filmstrip-opfs-storage';
 import type { ExtractRequest, WorkerResponse } from '../workers/filmstrip-extraction-worker';
 
-export { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT };
+export { THUMBNAIL_WIDTH };
 export type { FilmstripFrame };
 
 export interface Filmstrip {
@@ -27,7 +27,7 @@ export interface Filmstrip {
   progress: number;
 }
 
-export type FilmstripUpdateCallback = (filmstrip: Filmstrip) => void;
+type FilmstripUpdateCallback = (filmstrip: Filmstrip) => void;
 
 // Configuration for parallel extraction
 const FRAME_RATE = 1; // Must match worker - 1fps for filmstrip thumbnails
@@ -184,7 +184,7 @@ class FilmstripCacheService {
     const framesToExtract = totalFrames - skipSet.size;
 
     // Determine number of workers based on frame count
-    let workerCount = Math.min(
+    const workerCount = Math.min(
       MAX_WORKERS,
       Math.max(1, Math.floor(framesToExtract / MIN_FRAMES_PER_WORKER))
     );

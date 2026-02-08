@@ -15,7 +15,7 @@
  * - Handles variable playback rates
  */
 
-export type ClockEventType =
+type ClockEventType =
   | 'framechange'
   | 'play'
   | 'pause'
@@ -24,7 +24,7 @@ export type ClockEventType =
   | 'ended'
   | 'timeupdate';
 
-export interface ClockEvent {
+interface ClockEvent {
   type: ClockEventType;
   frame: number;
   time: number;
@@ -32,7 +32,7 @@ export interface ClockEvent {
   playbackRate: number;
 }
 
-export type ClockEventCallback = (event: ClockEvent) => void;
+type ClockEventCallback = (event: ClockEvent) => void;
 
 export interface ClockConfig {
   fps: number;
