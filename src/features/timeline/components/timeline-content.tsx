@@ -67,6 +67,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   const furthestItemEndFrame = useTimelineStore((s) =>
     s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
   );
+  const maxTimelineFrame = Math.floor(Math.max(furthestItemEndFrame / fps, 10) * fps);
   const { timeToPixels, frameToPixels, pixelsToFrame, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
     minZoom: 0.01,
     maxZoom: 2, // Match slider range
@@ -105,6 +106,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
 
   const pixelsToFrameRef = useRef(pixelsToFrame);
   pixelsToFrameRef.current = pixelsToFrame;
+  const maxTimelineFrameRef = useRef(maxTimelineFrame);
+  maxTimelineFrameRef.current = maxTimelineFrame;
 
   // Clear previewFrame when playback starts
   useEffect(() => {
@@ -455,7 +458,10 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
 
     const rect = scrollContainer.getBoundingClientRect();
     const x = e.clientX - rect.left + scrollContainer.scrollLeft;
-    const frame = Math.max(0, pixelsToFrameRef.current(x));
+    const frame = Math.max(
+      0,
+      Math.min(Math.round(pixelsToFrameRef.current(x)), maxTimelineFrameRef.current)
+    );
 
     // RAF-throttle the store update
     if (previewRafRef.current !== null) {
@@ -786,8 +792,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
       {/* Time Ruler - sticky at top */}
       <div className="sticky top-0 z-30 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
         <TimelineMarkers duration={actualDuration} width={timelineWidth} />
-        <TimelinePreviewScrubber inRuler />
-        <TimelinePlayhead inRuler maxFrame={Math.floor(actualDuration * fps)} />
+        <TimelinePreviewScrubber inRuler maxFrame={maxTimelineFrame} />
+        <TimelinePlayhead inRuler maxFrame={maxTimelineFrame} />
       </div>
 
       {/* Track lanes */}
@@ -826,10 +832,10 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
           )}
 
           {/* Preview scrubber ghost line through all tracks */}
-          <TimelinePreviewScrubber />
+          <TimelinePreviewScrubber maxFrame={maxTimelineFrame} />
 
           {/* Playhead line through all tracks */}
-          <TimelinePlayhead maxFrame={Math.floor(actualDuration * fps)} />
+          <TimelinePlayhead maxFrame={maxTimelineFrame} />
       </div>
     </div>
   );

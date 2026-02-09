@@ -5,6 +5,7 @@ import { formatTimecode } from '@/utils/time-utils';
 
 interface TimelinePreviewScrubberProps {
   inRuler?: boolean;
+  maxFrame?: number;
 }
 
 /**
@@ -15,17 +16,19 @@ interface TimelinePreviewScrubberProps {
  * - DOM is updated directly via refs
  * - pointer-events: none so it doesn't interfere with clicks/drags
  */
-export function TimelinePreviewScrubber({ inRuler = false }: TimelinePreviewScrubberProps) {
+export function TimelinePreviewScrubber({ inRuler = false, maxFrame }: TimelinePreviewScrubberProps) {
   const { frameToPixels, fps } = useTimelineZoomContext();
   const scrubberRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const frameToPixelsRef = useRef(frameToPixels);
   const fpsRef = useRef(fps);
+  const maxFrameRef = useRef(maxFrame);
 
   useEffect(() => {
     frameToPixelsRef.current = frameToPixels;
     fpsRef.current = fps;
-  }, [frameToPixels, fps]);
+    maxFrameRef.current = maxFrame;
+  }, [frameToPixels, fps, maxFrame]);
 
   // Subscribe to previewFrame and update DOM directly (zero re-renders)
   useEffect(() => {
@@ -37,13 +40,18 @@ export function TimelinePreviewScrubber({ inRuler = false }: TimelinePreviewScru
         return;
       }
 
-      const leftPosition = Math.round(frameToPixelsRef.current(previewFrame));
+      let clampedFrame = Math.max(0, previewFrame);
+      if (maxFrameRef.current !== undefined) {
+        clampedFrame = Math.min(clampedFrame, maxFrameRef.current);
+      }
+
+      const leftPosition = Math.round(frameToPixelsRef.current(clampedFrame));
       scrubberRef.current.style.display = '';
       scrubberRef.current.style.left = `${leftPosition}px`;
 
       // Update tooltip text
       if (tooltipRef.current) {
-        tooltipRef.current.textContent = formatTimecode(previewFrame, fpsRef.current);
+        tooltipRef.current.textContent = formatTimecode(clampedFrame, fpsRef.current);
       }
     };
 
@@ -60,9 +68,13 @@ export function TimelinePreviewScrubber({ inRuler = false }: TimelinePreviewScru
     if (!scrubberRef.current) return;
     const previewFrame = usePlaybackStore.getState().previewFrame;
     if (previewFrame === null) return;
-    const leftPosition = Math.round(frameToPixels(previewFrame));
+    let clampedFrame = Math.max(0, previewFrame);
+    if (maxFrame !== undefined) {
+      clampedFrame = Math.min(clampedFrame, maxFrame);
+    }
+    const leftPosition = Math.round(frameToPixels(clampedFrame));
     scrubberRef.current.style.left = `${leftPosition}px`;
-  }, [frameToPixels]);
+  }, [frameToPixels, maxFrame]);
 
   return (
     <div
