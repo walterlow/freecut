@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   GraphRenderer,
   createGraphRenderer,
-  GraphRendererOptions,
   SourceTextureInfo,
 } from './graph-renderer';
 import type { RenderBackend, RenderTexture, BackendCapabilities } from '../backend/types';

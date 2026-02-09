@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   WebCodecsDecoder,
   createWebCodecsDecoder,
@@ -6,27 +6,6 @@ import {
   getWebCodecsVideoCodec,
   getWebCodecsAudioCodec,
 } from './webcodecs-decoder';
-
-// Mock VideoDecoder for testing
-const mockVideoDecoder = {
-  decode: vi.fn(),
-  flush: vi.fn().mockResolvedValue(undefined),
-  reset: vi.fn(),
-  close: vi.fn(),
-  configure: vi.fn(),
-  state: 'configured',
-  decodeQueueSize: 0,
-};
-
-const mockAudioDecoder = {
-  decode: vi.fn(),
-  flush: vi.fn().mockResolvedValue(undefined),
-  reset: vi.fn(),
-  close: vi.fn(),
-  configure: vi.fn(),
-  state: 'configured',
-  decodeQueueSize: 0,
-};
 
 describe('WebCodecs Decoder', () => {
   describe('createWebCodecsDecoder', () => {

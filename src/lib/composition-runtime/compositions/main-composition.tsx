@@ -6,7 +6,7 @@ import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, ImageItem } from '
 import { Item } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { OptimizedEffectsBasedTransitionsLayer } from '../components/transition-renderer';
-import { StableVideoSequence } from '../components/stable-video-sequence';
+import { StableVideoSequence, type StableVideoSequenceItem } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
 import { getShapePath, rotatePath } from '../utils/shape-path';
@@ -433,7 +433,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
 
   // Video items for rendering (all video items, rendered by StableVideoSequence)
   const videoItems = useMemo(() =>
-    allVisualItems.filter((item) => item.type === 'video'),
+    allVisualItems.filter((item): item is StableVideoSequenceItem => item.type === 'video'),
     [allVisualItems]
   );
 
@@ -709,7 +709,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
   // useCallback ensures the function reference stays stable between renders
   // Uses CSS visibility for hidden tracks to avoid DOM changes
   // Now uses ItemEffectWrapper for per-item adjustment effects (no DOM restructuring)
-  const renderVideoItem = useCallback((item: typeof videoItems[number] & { _sequenceFrameOffset?: number }) => {
+  const renderVideoItem = useCallback((item: StableVideoSequenceItem) => {
     // Calculate the parent Sequence's `from` value for local-to-global frame conversion
     // For shared Sequences (split clips), _sequenceFrameOffset is the offset from group.minFrom to item.from
     // sequenceFrom = item.from - offset = group.minFrom
@@ -796,9 +796,9 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
           {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
           {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
           <StableVideoSequence
-            items={videoItems as any}
+            items={videoItems}
             premountFor={Math.round(fps * 1)}
-            renderItem={renderVideoItem as any}
+            renderItem={renderVideoItem}
           />
 
           {/* Effects-based transitions - visual effect centered on cut point */}

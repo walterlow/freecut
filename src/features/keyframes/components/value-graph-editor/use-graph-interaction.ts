@@ -13,7 +13,7 @@ import type {
   GraphBezierHandle,
 } from './types';
 import type { KeyframeRef, BezierControlPoints } from '@/types/keyframe';
-import { updateBezierFromHandle } from './graph-handles';
+import { updateBezierFromHandle } from './bezier-utils';
 import type { BlockedFrameRange } from '../../utils/transition-region';
 
 /** Movement threshold in pixels before committing to drag (vs click) */

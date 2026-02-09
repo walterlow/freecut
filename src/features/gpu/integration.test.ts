@@ -3,7 +3,7 @@ import { createBackend, getAvailableBackendNames } from './backend';
 import { CanvasBackend } from './backend/canvas-backend';
 import { WebGL2Backend } from './backend/webgl2-backend';
 import { WebGPUBackend } from './backend/webgpu-backend';
-import type { RenderBackend, TextureHandle } from './backend/types';
+import type { RenderBackend } from './backend/types';
 
 /**
  * Integration tests for the GPU rendering module.

@@ -16,25 +16,26 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import type { VideoItem } from '@/types/timeline';
 
 /** Video item with additional properties added by MainComposition */
-type EnrichedVideoItem = VideoItem & {
+export type StableVideoSequenceItem = VideoItem & {
   zIndex: number;
   muted: boolean;
   trackOrder: number;
   trackVisible: boolean;
+  _sequenceFrameOffset?: number;
 };
 
 interface StableVideoSequenceProps {
   /** All video items that might share the same origin */
-  items: EnrichedVideoItem[];
+  items: StableVideoSequenceItem[];
   /** Render function for the video content */
-  renderItem: (item: EnrichedVideoItem) => React.ReactNode;
+  renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
   /** Number of frames to premount */
   premountFor?: number;
 }
 
 interface VideoGroup {
   originKey: string;
-  items: EnrichedVideoItem[];
+  items: StableVideoSequenceItem[];
   minFrom: number;
   maxEnd: number;
 }
@@ -57,9 +58,9 @@ interface VideoGroup {
  * - The formula (sourceStart - itemOffset * speed) produces negative values when
  *   a clip with speed > 1 is far from the group start
  */
-function groupByOrigin(items: EnrichedVideoItem[]): VideoGroup[] {
+function groupByOrigin(items: StableVideoSequenceItem[]): VideoGroup[] {
   // First, collect items by their origin key
-  const byOriginKey = new Map<string, EnrichedVideoItem[]>();
+  const byOriginKey = new Map<string, StableVideoSequenceItem[]>();
 
   for (const item of items) {
     const originId = item.originId || item.id;
@@ -84,7 +85,7 @@ function groupByOrigin(items: EnrichedVideoItem[]): VideoGroup[] {
     const sorted = originItems.toSorted((a, b) => a.from - b.from);
 
     // Build contiguous groups - clips must be adjacent (no gap)
-    let currentGroup: EnrichedVideoItem[] = [sorted[0]!];
+    let currentGroup: StableVideoSequenceItem[] = [sorted[0]!];
     let currentEnd = sorted[0]!.from + sorted[0]!.durationInFrames;
 
     for (let i = 1; i < sorted.length; i++) {
@@ -150,8 +151,8 @@ function groupByOrigin(items: EnrichedVideoItem[]): VideoGroup[] {
  * cases where group.items contains items with changed properties (like speed after rate stretch).
  */
 function areGroupPropsEqual(
-  prevProps: { group: VideoGroup; renderItem: (item: EnrichedVideoItem) => React.ReactNode },
-  nextProps: { group: VideoGroup; renderItem: (item: EnrichedVideoItem) => React.ReactNode }
+  prevProps: { group: VideoGroup; renderItem: (item: StableVideoSequenceItem) => React.ReactNode },
+  nextProps: { group: VideoGroup; renderItem: (item: StableVideoSequenceItem) => React.ReactNode }
 ): boolean {
   // Quick reference check first
   if (prevProps.group === nextProps.group && prevProps.renderItem === nextProps.renderItem) {
@@ -192,7 +193,7 @@ function areGroupPropsEqual(
 
 const GroupRenderer: React.FC<{
   group: VideoGroup;
-  renderItem: (item: EnrichedVideoItem) => React.ReactNode;
+  renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
 }> = React.memo(({ group, renderItem }) => {
   // Get local frame from Sequence context (0-based within this Sequence)
   // The Sequence component provides this via SequenceContext

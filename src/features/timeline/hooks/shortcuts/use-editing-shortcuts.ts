@@ -14,7 +14,7 @@ import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
 import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog';
+import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog-store';
 
 export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);

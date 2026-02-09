@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   FramePrefetcher,
   createPrefetcher,
-  type PrefetchRequest,
 } from './prefetch';
 import { createFrameCache } from './frame-cache';
 import type { ManagedMediaSource } from './media-source-manager';

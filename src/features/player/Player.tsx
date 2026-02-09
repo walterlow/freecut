@@ -17,7 +17,12 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { PlayerEmitterProvider, usePlayerEmitter } from './event-emitter';
+import {
+  PlayerEmitterProvider,
+  usePlayerEmitter,
+  type PlayerEventTypes,
+  type CallbackListener,
+} from './event-emitter';
 import {
   ClockBridgeProvider,
   useBridgedTimelineContext,
@@ -83,8 +88,8 @@ export interface PlayerRef {
   seekTo: (frame: number) => void;
   getCurrentFrame: () => number;
   isPlaying: () => boolean;
-  addEventListener: <E extends string>(event: E, callback: (data: any) => void) => void;
-  removeEventListener: <E extends string>(event: E, callback: (data: any) => void) => void;
+  addEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
+  removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
 }
 
 /**
@@ -366,10 +371,10 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
         getCurrentFrame: () => player.getCurrentFrame(),
         isPlaying: () => player.isPlaying(),
         addEventListener: (event, callback) => {
-          emitter.addEventListener(event as any, callback as any);
+          emitter.addEventListener(event, callback);
         },
         removeEventListener: (event, callback) => {
-          emitter.removeEventListener(event as any, callback as any);
+          emitter.removeEventListener(event, callback);
         },
       }),
       [player, emitter],

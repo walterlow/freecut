@@ -312,7 +312,6 @@ const NativePreviewVideo: React.FC<{
     };
     // Note: frame, fps, targetTime intentionally NOT in deps - we only want to acquire once on mount
     // Ongoing seeking is handled by the separate sync effect
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId, src, pool, onError, containerRef, shortId]);
 
   // Sync video playback with timeline

@@ -2,9 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   TextureImporter,
   createTextureImporter,
-  type ImportedTexture,
 } from './texture-import';
-import type { RenderBackend, BackendCapabilities, TextureHandle } from '../backend/types';
+import type { RenderBackend, BackendCapabilities } from '../backend/types';
 import type { DecodedVideoFrame } from './types';
 
 // Mock VideoFrame and ImageBitmap for Node.js environment

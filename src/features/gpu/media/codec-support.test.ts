@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   checkWebCodecsSupport,
   checkVideoCodecSupport,
@@ -8,8 +8,6 @@ import {
   parseVideoCodec,
   parseAudioCodec,
   checkAllCodecSupport,
-  VideoCodec,
-  AudioCodec,
 } from './codec-support';
 
 describe('Codec Support', () => {

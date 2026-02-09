@@ -2,11 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type {
   ProbeResult,
   VideoTrackInfo,
-  AudioTrackInfo,
   DecodedVideoFrame,
   DecodedAudioSamples,
-  MediaDecoder,
-  MediaSource,
   FrameCacheEntry,
   CacheStats,
   PrefetchConfig,

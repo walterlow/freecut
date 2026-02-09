@@ -70,7 +70,7 @@ export function useRenderBackend(
         backend.destroy();
       }
     };
-  }, [canvasRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canvasRef.current]);
 
   const reinitialize = () => {
     if (backend) {

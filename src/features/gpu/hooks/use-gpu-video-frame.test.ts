@@ -2,7 +2,7 @@
  * useGPUVideoFrame Hook Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useGPUVideoFrame } from './use-gpu-video-frame';
 import type { RenderBackend, BackendCapabilities } from '../backend/types';
@@ -252,12 +252,13 @@ describe('useGPUVideoFrame', () => {
       expect(result.current.texture?.frameNumber).toBe(0);
     });
 
-    const callCount = (source.getVideoFrameByNumber as any).mock.calls.length;
+    const getVideoFrameByNumberMock = source.getVideoFrameByNumber as unknown as Mock;
+    const callCount = getVideoFrameByNumberMock.mock.calls.length;
 
     // Rerender with same frame
     rerender({ frame: 0 });
 
     // Should not make additional call
-    expect((source.getVideoFrameByNumber as any).mock.calls.length).toBe(callCount);
+    expect(getVideoFrameByNumberMock.mock.calls.length).toBe(callCount);
   });
 });

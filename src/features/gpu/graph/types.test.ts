@@ -1,10 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type {
   ShaderNode,
-  NodeInput,
-  NodeOutput,
   Connection,
-  ShaderGraph,
   NodeType,
   DataType,
 } from './types';

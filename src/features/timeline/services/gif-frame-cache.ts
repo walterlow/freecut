@@ -507,12 +507,20 @@ class GifFrameCacheService {
 
 // Singleton instance
 export const gifFrameCache = new GifFrameCacheService();
+
+declare global {
+  interface Window {
+    __gifFrameCache?: GifFrameCacheService;
+    __clearAllGifCache?: () => Promise<void>;
+  }
+}
+
 if (import.meta.env.DEV) {
   // Expose cache for debugging
-  (window as any).__gifFrameCache = gifFrameCache;
+  window.__gifFrameCache = gifFrameCache;
 
   // Debug helper: Clear all GIF frame caches (memory + IndexedDB)
-  (window as any).__clearAllGifCache = async () => {
+  window.__clearAllGifCache = async () => {
     gifFrameCache.clearAll();
     // Clear IndexedDB gifFrames store
     const { clearAllGifFrames } = await import('../../../lib/storage/indexeddb');

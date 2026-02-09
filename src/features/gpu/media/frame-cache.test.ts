@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   FrameCache,
   createFrameCache,
@@ -215,7 +215,6 @@ describe('Frame Cache', () => {
       // Small frames to fit multiple in cache
       const frame1 = createMockFrame({ frameNumber: 0, width: 100, height: 100 });
       const frame2 = createMockFrame({ frameNumber: 1, width: 100, height: 100 });
-      const frame3 = createMockFrame({ frameNumber: 2, width: 100, height: 100 });
 
       cache.setFrame('source-1', frame1);
       cache.setFrame('source-1', frame2);

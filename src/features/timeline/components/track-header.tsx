@@ -1,9 +1,8 @@
-import { useEffect, useRef, memo } from 'react';
+import { memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
-import { useTrackDrag, trackDragOffsetRef } from '../hooks/use-track-drag';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useTrackDrag } from '../hooks/use-track-drag';
 
 interface TrackHeaderProps {
   track: TimelineTrack;
@@ -47,65 +46,16 @@ export const TrackHeader = memo(function TrackHeader({
 }: TrackHeaderProps) {
   // Use track drag hook
   const { isDragging, dragOffset, handleDragStart } = useTrackDrag(track);
-
-  // Check if this track is part of multi-drag (not anchor) using granular selector
-  // Returns boolean only - avoids re-renders from dragState.offset changes
-  const isPartOfDrag = useSelectionStore((s) =>
-    s.dragState?.isDragging &&
-    (s.dragState.draggedTrackIds?.includes(track.id) ?? false)
-  ) && !isDragging; // Not the anchor track
-
-  const isBeingDragged = isDragging || isPartOfDrag;
-
-  // Ref for transform style (updated via RAF for smooth dragging without re-renders)
-  const transformRef = useRef<HTMLDivElement>(null);
-
-  // Use RAF to update transform for tracks being dragged along (not the anchor)
-  useEffect(() => {
-    if (!isPartOfDrag || !transformRef.current) return;
-
-    let rafId: number;
-    const updateTransform = () => {
-      if (transformRef.current && isPartOfDrag) {
-        const offset = trackDragOffsetRef.current;
-        transformRef.current.style.transform = `translateY(${offset}px) scale(1.02)`;
-        transformRef.current.style.opacity = '0.5';
-        transformRef.current.style.transition = 'none';
-        transformRef.current.style.pointerEvents = 'none';
-        transformRef.current.style.zIndex = '100';
-        rafId = requestAnimationFrame(updateTransform);
-      }
-    };
-
-    rafId = requestAnimationFrame(updateTransform);
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      // Reset styles when drag ends
-      if (transformRef.current) {
-        transformRef.current.style.transition = 'none';
-        transformRef.current.style.transform = '';
-        transformRef.current.style.opacity = '';
-        transformRef.current.style.pointerEvents = '';
-        transformRef.current.style.zIndex = '';
-        // Re-enable transitions after position updates (next frame)
-        requestAnimationFrame(() => {
-          if (transformRef.current) {
-            transformRef.current.style.transition = '';
-          }
-        });
-      }
-    };
-  }, [isPartOfDrag]);
+  const isBeingDragged = isDragging;
 
   return (
     <div
-      ref={transformRef}
       className={`
         flex items-center justify-between px-2 border-b border-border
         cursor-grab active:cursor-grabbing relative
         ${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/50'}
         ${isActive ? 'border-l-3 border-l-primary' : 'border-l-3 border-l-transparent'}
-        ${isBeingDragged ? 'opacity-50 pointer-events-none shadow-lg ring-2 ring-primary/30' : ''}
+        ${isBeingDragged ? 'opacity-50 shadow-lg ring-2 ring-primary/30' : ''}
         ${!isBeingDragged ? 'transition-all duration-150' : ''}
       `}
       style={{

@@ -5,13 +5,12 @@ import { ResourcePool } from './resource-pool';
 import { RenderGraph } from './render-graph';
 import { GraphRenderer, createGraphRenderer } from './graph-renderer';
 import { PassMerger } from './pass-merger';
-import { Compositor, createCompositor } from './compositor';
-import { createTextureSourceNode, createColorSourceNode } from './nodes/source-node';
+import { createCompositor } from './compositor';
+import { createTextureSourceNode } from './nodes/source-node';
 import { createBrightnessNode, createContrastNode, createSaturationNode } from './nodes/effect-nodes';
-import { createBlendNode, createScreenBlendNode, createMultiplyBlendNode } from './nodes/blend-node';
-import { createTransformNode, createScaleNode, createRotateNode } from './nodes/transform-node';
+import { createScaleNode, createRotateNode } from './nodes/transform-node';
 import { createOutputNode } from './nodes/output-node';
-import type { RenderBackend, RenderTexture, BackendCapabilities } from '../backend/types';
+import type { RenderBackend, BackendCapabilities } from '../backend/types';
 
 // Mock backend for testing
 function createMockBackend(): RenderBackend {
@@ -274,7 +273,7 @@ describe('Render Graph Integration', () => {
         zIndex: 2,
       });
 
-      const result = compositor.build();
+      compositor.build();
 
       // Should have 2 blend operations (3 layers = 2 blends)
       const stats = compositor.getStats();

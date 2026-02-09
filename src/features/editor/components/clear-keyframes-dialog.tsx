@@ -1,4 +1,3 @@
-import { create } from 'zustand';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,32 +9,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe';
-
-interface ClearKeyframesDialogState {
-  isOpen: boolean;
-  itemIds: string[];
-  /** If set, only clear this property's keyframes; otherwise clear all */
-  property: AnimatableProperty | null;
-  /** Open dialog to clear all keyframes for given items */
-  openClearAll: (itemIds: string[]) => void;
-  /** Open dialog to clear keyframes for a specific property */
-  openClearProperty: (itemIds: string[], property: AnimatableProperty) => void;
-  close: () => void;
-}
-
-/**
- * Store for managing clear keyframes confirmation dialog state.
- * Allows the dialog to be triggered from hotkeys and context menus without prop drilling.
- */
-export const useClearKeyframesDialogStore = create<ClearKeyframesDialogState>((set) => ({
-  isOpen: false,
-  itemIds: [],
-  property: null,
-  openClearAll: (itemIds) => set({ isOpen: true, itemIds, property: null }),
-  openClearProperty: (itemIds, property) => set({ isOpen: true, itemIds, property }),
-  close: () => set({ isOpen: false, itemIds: [], property: null }),
-}));
+import { PROPERTY_LABELS } from '@/types/keyframe';
+import { useClearKeyframesDialogStore } from './clear-keyframes-dialog-store';
 
 /**
  * Confirmation dialog for clearing keyframes from selected items.

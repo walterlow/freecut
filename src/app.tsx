@@ -17,6 +17,9 @@ declare module '@tanstack/react-router' {
 export function App() {
   // Prevent default browser zoom application-wide
   useEffect(() => {
+    const wheelListenerOptions: AddEventListenerOptions = { passive: false, capture: true };
+    const keyListenerOptions: AddEventListenerOptions = { capture: true };
+
     const preventBrowserZoom = (e: WheelEvent) => {
       // Prevent browser zoom when Ctrl/Cmd is held
       if (e.ctrlKey || e.metaKey) {
@@ -36,12 +39,12 @@ export function App() {
     };
 
     // Add listeners at capture phase to intercept before browser handles them
-    document.addEventListener('wheel', preventBrowserZoom, { passive: false, capture: true });
-    document.addEventListener('keydown', preventKeyboardZoom, { capture: true });
+    document.addEventListener('wheel', preventBrowserZoom, wheelListenerOptions);
+    document.addEventListener('keydown', preventKeyboardZoom, keyListenerOptions);
 
     return () => {
-      document.removeEventListener('wheel', preventBrowserZoom, { capture: true } as any);
-      document.removeEventListener('keydown', preventKeyboardZoom, { capture: true });
+      document.removeEventListener('wheel', preventBrowserZoom, wheelListenerOptions);
+      document.removeEventListener('keydown', preventKeyboardZoom, keyListenerOptions);
     };
   }, []);
 

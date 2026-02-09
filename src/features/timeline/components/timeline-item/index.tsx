@@ -20,7 +20,7 @@ import { JoinIndicators } from './join-indicators';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
-import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog';
+import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog-store';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;

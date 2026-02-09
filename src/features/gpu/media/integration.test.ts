@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Types
-import type { DecodedVideoFrame, ProbeResult } from './types';
-import type { RenderBackend, BackendCapabilities, TextureHandle } from '../backend/types';
+import type { DecodedVideoFrame } from './types';
+import type { RenderBackend, BackendCapabilities } from '../backend/types';
 
 // Components
 import { createFrameCache, FrameCache } from './frame-cache';
@@ -267,7 +267,7 @@ describe('Media System Integration', () => {
       const source = await manager.createSource('test-video.mp4');
 
       // Register with prefetcher
-      prefetcher.registerSource(source as any);
+      prefetcher.registerSource(source);
       prefetcher.start();
 
       // Update playhead to trigger prefetch
@@ -359,7 +359,6 @@ describe('Media System Integration', () => {
 
   describe('Cache Management', () => {
     it('should respect cache size limit', async () => {
-      const smallCache = createFrameCache(1); // 1MB limit
       const smallManager = createMediaSourceManager({
         skipDecoder: true,
         defaultCacheSizeMB: 1,
@@ -397,14 +396,7 @@ describe('Media System Integration', () => {
     it('should prefetch frames with callbacks', async () => {
       const source = await manager.createSource('test-video.mp4');
 
-      // Create a source info for the prefetcher
-      const sourceInfo = {
-        id: source.id,
-        probeResult: source.probeResult,
-        getVideoFrameByNumber: source.getVideoFrameByNumber.bind(source),
-      };
-
-      prefetcher.registerSource(sourceInfo as any);
+      prefetcher.registerSource(source);
       prefetcher.start();
 
       // Request specific frame with callback
@@ -421,13 +413,7 @@ describe('Media System Integration', () => {
     it('should adapt prefetch based on playback direction', async () => {
       const source = await manager.createSource('test-video.mp4');
 
-      const sourceInfo = {
-        id: source.id,
-        probeResult: source.probeResult,
-        getVideoFrameByNumber: source.getVideoFrameByNumber.bind(source),
-      };
-
-      prefetcher.registerSource(sourceInfo as any);
+      prefetcher.registerSource(source);
       prefetcher.start();
 
       // Simulate forward playback
@@ -449,13 +435,7 @@ describe('Media System Integration', () => {
     it('should handle source close during prefetch', async () => {
       const source = await manager.createSource('test-video.mp4');
 
-      const sourceInfo = {
-        id: source.id,
-        probeResult: source.probeResult,
-        getVideoFrameByNumber: source.getVideoFrameByNumber.bind(source),
-      };
-
-      prefetcher.registerSource(sourceInfo as any);
+      prefetcher.registerSource(source);
       prefetcher.start();
 
       // Request frames

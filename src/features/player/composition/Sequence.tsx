@@ -11,32 +11,9 @@
  * - No dependency on Composition's internals
  */
 
-import React, { createContext, useContext, useMemo, memo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { useClockFrame } from '../clock';
-
-// ============================================
-// Context for local frame within a Sequence
-// ============================================
-
-interface SequenceContextValue {
-  /** Start frame of this sequence in the global timeline */
-  from: number;
-  /** Duration of this sequence in frames */
-  durationInFrames: number;
-  /** Current local frame (0-based within this sequence) */
-  localFrame: number;
-  /** Parent sequence's from value (for nested sequences) */
-  parentFrom: number;
-}
-
-const SequenceContext = createContext<SequenceContextValue | null>(null);
-
-/**
- * Hook to get the sequence context
- */
-export function useSequenceContext(): SequenceContextValue | null {
-  return useContext(SequenceContext);
-}
+import { SequenceContext, type SequenceContextValue, useSequenceContext } from './sequence-context';
 
 // ============================================
 // Sequence Component

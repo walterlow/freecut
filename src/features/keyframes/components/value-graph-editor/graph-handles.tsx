@@ -187,21 +187,3 @@ const BezierHandle = memo(function BezierHandle({
     </g>
   );
 });
-
-/**
- * Helper to update bezier config from new handle position.
- */
-export function updateBezierFromHandle(
-  currentConfig: { x1: number; y1: number; x2: number; y2: number },
-  handleType: 'in' | 'out',
-  newX: number,
-  newY: number
-): { x1: number; y1: number; x2: number; y2: number } {
-  if (handleType === 'out') {
-    // Control point 1 (P1)
-    return { ...currentConfig, x1: newX, y1: newY };
-  } else {
-    // Control point 2 (P2)
-    return { ...currentConfig, x2: newX, y2: newY };
-  }
-}

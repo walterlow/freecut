@@ -424,6 +424,12 @@ class FilmstripCacheService {
 // Singleton
 export const filmstripCache = new FilmstripCacheService();
 
+declare global {
+  interface Window {
+    __filmstripCache?: FilmstripCacheService;
+  }
+}
+
 if (import.meta.env.DEV) {
-  (window as any).__filmstripCache = filmstripCache;
+  window.__filmstripCache = filmstripCache;
 }

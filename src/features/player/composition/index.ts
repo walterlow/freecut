@@ -15,8 +15,8 @@
 // Sequence component and hooks
 export {
   Sequence,
-  useSequenceContext,
 } from './Sequence';
+export { useSequenceContext } from './sequence-context';
 
 // AbsoluteFill component
 export {

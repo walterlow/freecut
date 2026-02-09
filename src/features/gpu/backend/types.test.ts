@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type {
   RenderBackend,
-  BackendCapabilities,
-  TextureHandle,
   TextureFormat,
 } from './types';
 

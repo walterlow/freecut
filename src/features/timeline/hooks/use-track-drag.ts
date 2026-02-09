@@ -68,6 +68,14 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
    */
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
+      const target = e.target;
+      if (
+        target instanceof Element &&
+        target.closest('button, [role="button"], a, input, textarea, select')
+      ) {
+        return;
+      }
+
       e.stopPropagation();
 
       // Don't modify selection during Ctrl/Cmd+click - let the click handler deal with it

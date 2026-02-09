@@ -1,9 +1,51 @@
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
+type TestGlobals = typeof globalThis & {
+  ImageData?: new (
+    dataOrWidth: Uint8ClampedArray | number,
+    widthOrHeight: number,
+    height?: number
+  ) => {
+    width: number;
+    height: number;
+    data: Uint8ClampedArray;
+  };
+  GPUShaderStage?: {
+    VERTEX: number;
+    FRAGMENT: number;
+    COMPUTE: number;
+  };
+  GPUTextureUsage?: {
+    COPY_SRC: number;
+    COPY_DST: number;
+    TEXTURE_BINDING: number;
+    STORAGE_BINDING: number;
+    RENDER_ATTACHMENT: number;
+  };
+  GPUBufferUsage?: {
+    MAP_READ: number;
+    MAP_WRITE: number;
+    COPY_SRC: number;
+    COPY_DST: number;
+    INDEX: number;
+    VERTEX: number;
+    UNIFORM: number;
+    STORAGE: number;
+    INDIRECT: number;
+    QUERY_RESOLVE: number;
+  };
+  GPUMapMode?: {
+    READ: number;
+    WRITE: number;
+  };
+};
+
+const testGlobals = globalThis as TestGlobals;
+
 // Mock ImageData for Canvas operations
-if (typeof globalThis.ImageData === 'undefined') {
-  (globalThis as any).ImageData = class ImageData {
+if (typeof testGlobals.ImageData === 'undefined') {
+  testGlobals.ImageData = class ImageData {
     width: number;
     height: number;
     data: Uint8ClampedArray;
@@ -27,8 +69,8 @@ if (typeof globalThis.ImageData === 'undefined') {
 }
 
 // Mock GPUShaderStage for WebGPU
-if (typeof globalThis.GPUShaderStage === 'undefined') {
-  (globalThis as any).GPUShaderStage = {
+if (typeof testGlobals.GPUShaderStage === 'undefined') {
+  testGlobals.GPUShaderStage = {
     VERTEX: 1,
     FRAGMENT: 2,
     COMPUTE: 4,
@@ -36,8 +78,8 @@ if (typeof globalThis.GPUShaderStage === 'undefined') {
 }
 
 // Mock GPUTextureUsage for WebGPU
-if (typeof globalThis.GPUTextureUsage === 'undefined') {
-  (globalThis as any).GPUTextureUsage = {
+if (typeof testGlobals.GPUTextureUsage === 'undefined') {
+  testGlobals.GPUTextureUsage = {
     COPY_SRC: 1,
     COPY_DST: 2,
     TEXTURE_BINDING: 4,
@@ -47,8 +89,8 @@ if (typeof globalThis.GPUTextureUsage === 'undefined') {
 }
 
 // Mock GPUBufferUsage for WebGPU
-if (typeof globalThis.GPUBufferUsage === 'undefined') {
-  (globalThis as any).GPUBufferUsage = {
+if (typeof testGlobals.GPUBufferUsage === 'undefined') {
+  testGlobals.GPUBufferUsage = {
     MAP_READ: 1,
     MAP_WRITE: 2,
     COPY_SRC: 4,
@@ -63,8 +105,8 @@ if (typeof globalThis.GPUBufferUsage === 'undefined') {
 }
 
 // Mock GPUMapMode for WebGPU
-if (typeof globalThis.GPUMapMode === 'undefined') {
-  (globalThis as any).GPUMapMode = {
+if (typeof testGlobals.GPUMapMode === 'undefined') {
+  testGlobals.GPUMapMode = {
     READ: 1,
     WRITE: 2,
   };
