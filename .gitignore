@@ -50,3 +50,4 @@ coverage
 CLAUDE.md
 crates/*/target/
 crates/*/Cargo.lock
+.knip-report.json
