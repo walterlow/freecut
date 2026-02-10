@@ -455,7 +455,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         className={`panel-bg border-r border-border overflow-hidden relative ${
           leftSidebarOpen ? '' : 'w-0'
         }`}
-        style={leftSidebarOpen ? { width: sidebarWidth, transition: 'none' } : { transition: 'width 200ms' }}
+        style={leftSidebarOpen ? { width: sidebarWidth, transition: isResizingRef.current ? 'none' : 'width 200ms' } : { transition: 'width 200ms' }}
       >
         {/* Use Activity for React 19 performance optimization - defers updates when hidden */}
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>

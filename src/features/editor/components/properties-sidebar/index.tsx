@@ -73,7 +73,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
         className={`panel-bg border-l border-border flex-shrink-0 relative ${
           rightSidebarOpen ? '' : 'w-0'
         }`}
-        style={rightSidebarOpen ? { width: rightSidebarWidth, transition: 'none' } : { transition: 'width 200ms' }}
+        style={rightSidebarOpen ? { width: rightSidebarWidth, transition: isResizingRef.current ? 'none' : 'width 200ms' } : { transition: 'width 200ms' }}
       >
         {/* Use Activity for React 19 performance optimization */}
         <Activity mode={rightSidebarOpen ? 'visible' : 'hidden'}>
