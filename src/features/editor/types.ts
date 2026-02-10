@@ -4,6 +4,7 @@ export interface EditorState {
   rightSidebarOpen: boolean;
   activeTab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions';
   sidebarWidth: number;
+  rightSidebarWidth: number;
   timelineHeight: number;
 }
 
@@ -15,6 +16,7 @@ export interface EditorActions {
   toggleRightSidebar: () => void;
   setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions') => void;
   setSidebarWidth: (width: number) => void;
+  setRightSidebarWidth: (width: number) => void;
   setTimelineHeight: (height: number) => void;
 }
 

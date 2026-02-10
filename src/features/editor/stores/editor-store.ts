@@ -8,6 +8,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarOpen: true,
   activeTab: 'media',
   sidebarWidth: 300,
+  rightSidebarWidth: 340,
   timelineHeight: 250,
 
   // Actions
@@ -18,5 +19,6 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   toggleRightSidebar: () => set((state) => ({ rightSidebarOpen: !state.rightSidebarOpen })),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSidebarWidth: (width) => set({ sidebarWidth: width }),
+  setRightSidebarWidth: (width) => set({ rightSidebarWidth: width }),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
 }));

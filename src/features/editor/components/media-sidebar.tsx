@@ -1,4 +1,4 @@
-import { useCallback, memo, Activity } from 'react';
+import { useCallback, useRef, useEffect, memo, Activity } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -50,6 +50,45 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
   const activeTab = useEditorStore((s) => s.activeTab);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
+  const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth);
+
+  // Resize handle logic
+  const isResizingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    startXRef.current = e.clientX;
+    startWidthRef.current = sidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const delta = e.clientX - startXRef.current;
+      const newWidth = Math.min(500, Math.max(200, startWidthRef.current + delta));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [setSidebarWidth]);
 
   // NOTE: Don't subscribe to tracks, items, currentProject here!
   // These change frequently and would cause re-renders cascading to MediaLibrary/MediaCards
@@ -410,13 +449,14 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
       {/* Content Panel */}
       <div
-        className={`panel-bg border-r border-border transition-all duration-200 overflow-hidden ${
-          leftSidebarOpen ? 'w-72' : 'w-0'
+        className={`panel-bg border-r border-border overflow-hidden relative ${
+          leftSidebarOpen ? '' : 'w-0'
         }`}
+        style={leftSidebarOpen ? { width: sidebarWidth, transition: 'none' } : { transition: 'width 200ms' }}
       >
         {/* Use Activity for React 19 performance optimization - defers updates when hidden */}
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>
-          <div className="h-full flex flex-col w-72">
+          <div className="h-full flex flex-col" style={{ width: sidebarWidth }}>
           {/* Panel Header */}
           <div className="h-10 flex items-center px-3 border-b border-border flex-shrink-0">
             <span className="text-sm font-medium text-foreground">
@@ -666,6 +706,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
           </div>
           </div>
         </Activity>
+        {/* Resize Handle */}
+        {leftSidebarOpen && (
+          <div
+            onMouseDown={handleResizeStart}
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10"
+          />
+        )}
       </div>
     </div>
   );

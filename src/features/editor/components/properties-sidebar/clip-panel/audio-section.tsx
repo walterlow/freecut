@@ -151,7 +151,7 @@ export function AudioSection({ items }: AudioSectionProps) {
   return (
     <PropertySection title="Audio" icon={Volume2} defaultOpen={true}>
       {/* Volume in dB (-60 to +20, 0 dB = unity gain) */}
-      <PropertyRow label="Volume">
+      <PropertyRow label="Gain">
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={volume}

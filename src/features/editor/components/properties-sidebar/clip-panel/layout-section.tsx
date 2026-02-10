@@ -515,69 +515,61 @@ export const LayoutSection = memo(function LayoutSection({
 
       {/* Dimensions */}
       <PropertyRow label="Size">
-        <div className="flex items-start gap-1 w-full">
-          <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <div className="flex items-center gap-0.5">
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="width"
-                currentValue={width === 'mixed' ? 100 : width}
-              />
-              <NumberInput
-                value={width}
-                onChange={handleWidthChange}
-                onLiveChange={handleWidthLiveChange}
-                label="W"
-                unit="px"
-                min={1}
-                max={7680}
-                step={1}
-                className="flex-1"
-              />
-            </div>
-            <div className="flex items-center gap-0.5">
-              <KeyframeToggle
-                itemIds={itemIds}
-                property="height"
-                currentValue={height === 'mixed' ? 100 : height}
-              />
-              <NumberInput
-                value={height}
-                onChange={handleHeightChange}
-                onLiveChange={handleHeightLiveChange}
-                label="H"
-                unit="px"
-                min={1}
-                max={7680}
-                step={1}
-                className="flex-1"
-              />
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-7 w-7 ${aspectLocked ? 'text-primary' : ''}`}
-              onClick={onAspectLockToggle}
-              title={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-            >
-              {aspectLocked ? (
-                <Link2 className="w-3.5 h-3.5" />
-              ) : (
-                <Link2Off className="w-3.5 h-3.5" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleResetScale}
-              title="Reset to original size"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </Button>
-          </div>
+        <div className="flex items-center gap-1 w-full">
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="width"
+            currentValue={width === 'mixed' ? 100 : width}
+          />
+          <NumberInput
+            value={width}
+            onChange={handleWidthChange}
+            onLiveChange={handleWidthLiveChange}
+            label="W"
+            unit="px"
+            min={1}
+            max={7680}
+            step={1}
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 flex-shrink-0 ${aspectLocked ? 'text-primary' : ''}`}
+            onClick={onAspectLockToggle}
+            title={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+          >
+            {aspectLocked ? (
+              <Link2 className="w-3.5 h-3.5" />
+            ) : (
+              <Link2Off className="w-3.5 h-3.5" />
+            )}
+          </Button>
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="height"
+            currentValue={height === 'mixed' ? 100 : height}
+          />
+          <NumberInput
+            value={height}
+            onChange={handleHeightChange}
+            onLiveChange={handleHeightLiveChange}
+            label="H"
+            unit="px"
+            min={1}
+            max={7680}
+            step={1}
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetScale}
+            title="Reset to original size"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </PropertyRow>
 
