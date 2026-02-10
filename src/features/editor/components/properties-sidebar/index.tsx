@@ -44,7 +44,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       if (!isResizingRef.current) return;
       // Dragging left increases width for right sidebar
       const delta = startXRef.current - e.clientX;
-      const newWidth = Math.min(500, Math.max(250, startWidthRef.current + delta));
+      const newWidth = Math.min(500, Math.max(320, startWidthRef.current + delta));
       setRightSidebarWidth(newWidth);
     };
 

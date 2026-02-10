@@ -96,6 +96,39 @@ class FilmstripOPFSStorage {
   }
 
   /**
+   * Get or create media directory handle
+   */
+  private async getOrCreateMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
+    const dir = await this.ensureDirectory();
+    return dir.getDirectoryHandle(mediaId, { create: true });
+  }
+
+  /**
+   * Save metadata file (used by worker and fallback extraction)
+   */
+  async saveMetadata(
+    mediaId: string,
+    metadata: { width: number; height: number; isComplete: boolean; frameCount: number }
+  ): Promise<void> {
+    const mediaDir = await this.getOrCreateMediaDir(mediaId);
+    const fileHandle = await mediaDir.getFileHandle('meta.json', { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(metadata));
+    await writable.close();
+  }
+
+  /**
+   * Save a frame blob at a specific index
+   */
+  async saveFrameBlob(mediaId: string, index: number, blob: Blob): Promise<void> {
+    const mediaDir = await this.getOrCreateMediaDir(mediaId);
+    const fileHandle = await mediaDir.getFileHandle(`${index}.webp`, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  }
+
+  /**
    * Load filmstrip - returns object URLs for img src
    */
   async load(mediaId: string): Promise<LoadedFilmstrip | null> {

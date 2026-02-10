@@ -33,6 +33,8 @@ type FilmstripUpdateCallback = (filmstrip: Filmstrip) => void;
 const FRAME_RATE = 1; // Must match worker - 1fps for filmstrip thumbnails
 const MIN_FRAMES_PER_WORKER = 30; // Don't spawn workers for tiny chunks
 const MAX_WORKERS = 2; // Limit parallel workers (reduced for 1fps)
+const IMAGE_FORMAT = 'image/webp';
+const IMAGE_QUALITY = 0.6;
 
 interface WorkerState {
   worker: Worker;
@@ -45,6 +47,12 @@ interface WorkerState {
 
 interface PendingExtraction {
   mediaId: string;
+  blobUrl: string;
+  duration: number;
+  skipIndices: number[];
+  forceSingleWorker: boolean;
+  fallbackAttempted: boolean;
+  isVideoFallback: boolean;
   workers: WorkerState[];
   totalFrames: number;
   completedWorkers: number;
@@ -171,7 +179,8 @@ class FilmstripCacheService {
     duration: number,
     skipIndices: number[],
     existingFrames: FilmstripFrame[],
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    forceSingleWorker = false
   ): void {
     // Check if already extracting
     if (this.pendingExtractions.has(mediaId)) {
@@ -184,8 +193,9 @@ class FilmstripCacheService {
     const framesToExtract = totalFrames - skipSet.size;
 
     // Determine number of workers based on frame count
+    const maxWorkers = forceSingleWorker ? 1 : MAX_WORKERS;
     const workerCount = Math.min(
-      MAX_WORKERS,
+      maxWorkers,
       Math.max(1, Math.floor(framesToExtract / MIN_FRAMES_PER_WORKER))
     );
 
@@ -198,6 +208,12 @@ class FilmstripCacheService {
     // Create pending extraction state
     const pending: PendingExtraction = {
       mediaId,
+      blobUrl,
+      duration,
+      skipIndices,
+      forceSingleWorker,
+      fallbackAttempted: false,
+      isVideoFallback: false,
       workers: [],
       totalFrames,
       completedWorkers: 0,
@@ -282,14 +298,22 @@ class FilmstripCacheService {
           }
 
         } else if (response.type === 'error') {
-          logger.error(`Worker ${i} error: ${response.error}`);
-          this.handleWorkerError(mediaId);
+          if (this.shouldRetryWithSingleWorker(response.error)) {
+            logger.warn(`Worker ${i} decode error: ${response.error}`);
+          } else {
+            logger.error(`Worker ${i} error: ${response.error}`);
+          }
+          this.handleWorkerError(mediaId, response.error);
         }
       };
 
       worker.onerror = (e) => {
-        logger.error(`Worker ${i} error:`, e.message);
-        this.handleWorkerError(mediaId);
+        if (this.shouldRetryWithSingleWorker(e.message)) {
+          logger.warn(`Worker ${i} decode error: ${e.message}`);
+        } else {
+          logger.error(`Worker ${i} error:`, e.message);
+        }
+        this.handleWorkerError(mediaId, e.message);
       };
 
       // Send extraction request with range
@@ -339,13 +363,308 @@ class FilmstripCacheService {
     }
   }
 
-  private handleWorkerError(mediaId: string): void {
+  private shouldRetryWithSingleWorker(error: string): boolean {
+    const normalized = error.toLowerCase();
+    return normalized.includes('key frame is required after configure() or flush()')
+      || normalized.includes('marked as type `key` but wasn\'t a key frame');
+  }
+
+  private startVideoElementFallback(
+    mediaId: string,
+    blobUrl: string,
+    duration: number,
+    skipIndices: number[],
+    existingFrames: FilmstripFrame[],
+    onProgress?: (progress: number) => void
+  ): void {
+    if (this.pendingExtractions.has(mediaId)) {
+      return;
+    }
+
+    const totalFrames = Math.ceil(duration * FRAME_RATE);
+    const extractedFrames = new Map<number, FilmstripFrame>();
+    for (const frame of existingFrames) {
+      extractedFrames.set(frame.index, frame);
+    }
+
+    const pending: PendingExtraction = {
+      mediaId,
+      blobUrl,
+      duration,
+      skipIndices,
+      forceSingleWorker: true,
+      fallbackAttempted: true,
+      isVideoFallback: true,
+      workers: [],
+      totalFrames,
+      completedWorkers: 0,
+      onProgress,
+      extractedFrames,
+    };
+
+    this.pendingExtractions.set(mediaId, pending);
+    logger.warn(`Falling back to HTMLVideoElement extraction for ${mediaId}`);
+
+    void this.extractWithVideoElement(mediaId);
+  }
+
+  private async extractWithVideoElement(mediaId: string): Promise<void> {
+    const pending = this.pendingExtractions.get(mediaId);
+    if (!pending || !pending.isVideoFallback) return;
+
+    const video = document.createElement('video');
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+
+    try {
+      video.src = pending.blobUrl;
+      await new Promise<void>((resolve, reject) => {
+        const onLoaded = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          video.removeEventListener('error', onError);
+          resolve();
+        };
+        const onError = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          video.removeEventListener('error', onError);
+          reject(new Error('Failed to load video metadata for filmstrip fallback'));
+        };
+        video.addEventListener('loadedmetadata', onLoaded, { once: true });
+        video.addEventListener('error', onError, { once: true });
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = THUMBNAIL_WIDTH;
+      canvas.height = THUMBNAIL_HEIGHT;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to create canvas context for filmstrip fallback');
+      }
+
+      const totalFrames = pending.totalFrames;
+      const skipSet = new Set<number>([
+        ...pending.skipIndices,
+        ...Array.from(pending.extractedFrames.keys()),
+      ]);
+
+      await filmstripOPFSStorage.saveMetadata(mediaId, {
+        width: THUMBNAIL_WIDTH,
+        height: THUMBNAIL_HEIGHT,
+        isComplete: false,
+        frameCount: pending.extractedFrames.size,
+      });
+
+      for (let i = 0; i < totalFrames; i++) {
+        const currentPending = this.pendingExtractions.get(mediaId);
+        if (!currentPending || !currentPending.isVideoFallback) {
+          return;
+        }
+
+        if (skipSet.has(i)) {
+          continue;
+        }
+
+        const maxSeekTime = Math.max(0, video.duration - 0.01);
+        const targetTime = Math.min(i / FRAME_RATE, maxSeekTime);
+
+        await this.seekVideo(video, targetTime);
+        this.drawCoverFrame(video, ctx, canvas.width, canvas.height);
+
+        const blob = await this.canvasToBlob(canvas);
+        await filmstripOPFSStorage.saveFrameBlob(mediaId, i, blob);
+
+        const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, i);
+        if (frame) {
+          currentPending.extractedFrames.set(i, frame);
+        }
+
+        const extractedCount = currentPending.extractedFrames.size;
+        const overallProgress = totalFrames > 0
+          ? Math.round((extractedCount / totalFrames) * 100)
+          : 100;
+        currentPending.onProgress?.(overallProgress);
+
+        if (extractedCount <= 3 || extractedCount % 10 === 0 || extractedCount === totalFrames) {
+          const frames = Array.from(currentPending.extractedFrames.values())
+            .sort((a, b) => a.index - b.index);
+          this.notifyUpdate(mediaId, {
+            frames,
+            isComplete: false,
+            isExtracting: true,
+            progress: overallProgress,
+          });
+        }
+      }
+
+      const finishedPending = this.pendingExtractions.get(mediaId);
+      if (!finishedPending || !finishedPending.isVideoFallback) {
+        return;
+      }
+
+      await filmstripOPFSStorage.saveMetadata(mediaId, {
+        width: THUMBNAIL_WIDTH,
+        height: THUMBNAIL_HEIGHT,
+        isComplete: true,
+        frameCount: finishedPending.extractedFrames.size,
+      });
+
+      const final = await filmstripOPFSStorage.load(mediaId);
+      this.notifyUpdate(mediaId, {
+        frames: final?.frames || [],
+        isComplete: true,
+        isExtracting: false,
+        progress: 100,
+      });
+      finishedPending.onProgress?.(100);
+      this.cleanupExtraction(mediaId);
+      logger.info(`Filmstrip ${mediaId} complete via video fallback: ${final?.frames.length || 0} frames`);
+    } catch (error) {
+      logger.error(`Video fallback extraction failed for ${mediaId}:`, error);
+
+      const currentPending = this.pendingExtractions.get(mediaId);
+      const frames = currentPending
+        ? Array.from(currentPending.extractedFrames.values()).sort((a, b) => a.index - b.index)
+        : [];
+
+      this.notifyUpdate(mediaId, {
+        frames,
+        isComplete: false,
+        isExtracting: false,
+        progress: 0,
+      });
+      this.cleanupExtraction(mediaId);
+    } finally {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+  }
+
+  private async seekVideo(video: HTMLVideoElement, targetTime: number): Promise<void> {
+    const clamped = Math.max(0, targetTime);
+    if (Math.abs(video.currentTime - clamped) < 0.001) {
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const onSeeked = () => {
+        video.removeEventListener('seeked', onSeeked);
+        video.removeEventListener('error', onError);
+        resolve();
+      };
+      const onError = () => {
+        video.removeEventListener('seeked', onSeeked);
+        video.removeEventListener('error', onError);
+        reject(new Error('Video seek failed during filmstrip fallback'));
+      };
+
+      video.addEventListener('seeked', onSeeked, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      video.currentTime = clamped;
+    });
+  }
+
+  private drawCoverFrame(
+    video: HTMLVideoElement,
+    ctx: CanvasRenderingContext2D,
+    targetWidth: number,
+    targetHeight: number
+  ): void {
+    const sourceWidth = video.videoWidth || targetWidth;
+    const sourceHeight = video.videoHeight || targetHeight;
+
+    const sourceAspect = sourceWidth / sourceHeight;
+    const targetAspect = targetWidth / targetHeight;
+
+    let drawWidth = targetWidth;
+    let drawHeight = targetHeight;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (sourceAspect > targetAspect) {
+      drawHeight = targetHeight;
+      drawWidth = drawHeight * sourceAspect;
+      offsetX = (targetWidth - drawWidth) / 2;
+    } else {
+      drawWidth = targetWidth;
+      drawHeight = drawWidth / sourceAspect;
+      offsetY = (targetHeight - drawHeight) / 2;
+    }
+
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+  }
+
+  private canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+            return;
+          }
+          reject(new Error('Failed to convert filmstrip fallback canvas to blob'));
+        },
+        IMAGE_FORMAT,
+        IMAGE_QUALITY
+      );
+    });
+  }
+
+  private handleWorkerError(mediaId: string, error = ''): void {
     const pending = this.pendingExtractions.get(mediaId);
     if (!pending) return;
 
     // Keep any frames we have
     const currentFrames = Array.from(pending.extractedFrames.values())
       .sort((a, b) => a.index - b.index);
+
+    if (
+      !pending.forceSingleWorker
+      && !pending.fallbackAttempted
+      && this.shouldRetryWithSingleWorker(error)
+    ) {
+      logger.warn(`Retrying filmstrip extraction for ${mediaId} with a single worker`);
+
+      const skipIndices = Array.from(new Set([
+        ...pending.skipIndices,
+        ...currentFrames.map(frame => frame.index),
+      ]));
+
+      pending.fallbackAttempted = true;
+      this.cleanupExtraction(mediaId);
+      this.startExtraction(
+        mediaId,
+        pending.blobUrl,
+        pending.duration,
+        skipIndices,
+        currentFrames,
+        pending.onProgress,
+        true
+      );
+      return;
+    }
+
+    if (pending.forceSingleWorker && !pending.isVideoFallback && this.shouldRetryWithSingleWorker(error)) {
+      logger.warn(`Single-worker decode failed for ${mediaId}; switching to video element fallback`);
+
+      const skipIndices = Array.from(new Set([
+        ...pending.skipIndices,
+        ...currentFrames.map(frame => frame.index),
+      ]));
+
+      this.cleanupExtraction(mediaId);
+      this.startVideoElementFallback(
+        mediaId,
+        pending.blobUrl,
+        pending.duration,
+        skipIndices,
+        currentFrames,
+        pending.onProgress
+      );
+      return;
+    }
 
     this.notifyUpdate(mediaId, {
       frames: currentFrames,

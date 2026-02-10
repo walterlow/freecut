@@ -71,7 +71,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
       const delta = e.clientX - startXRef.current;
-      const newWidth = Math.min(500, Math.max(200, startWidthRef.current + delta));
+      const newWidth = Math.min(500, Math.max(320, startWidthRef.current + delta));
       setSidebarWidth(newWidth);
     };
 
