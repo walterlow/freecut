@@ -3,6 +3,7 @@ import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
@@ -21,6 +22,7 @@ import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
 import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog-store';
+import { getRazorSplitPosition } from '../../utils/razor-snap';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -46,7 +48,7 @@ interface TimelineItemProps {
  * - Grid snapping support
  */
 export const TimelineItem = memo(function TimelineItem({ item, timelineDuration = 30, trackLocked = false, trackHidden = false }: TimelineItemProps) {
-  const { timeToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
+  const { timeToPixels, frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
 
   // Granular selector: only re-render when THIS item's selection state changes
   const isSelected = useSelectionStore(
@@ -404,10 +406,19 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     // Razor tool: split item at click position
     if (activeToolRef.current === 'razor') {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const clickOffsetFrames = pixelsToFrame(clickX);
-      const splitFrame = Math.round(item.from + clickOffsetFrames);
+      const tracksContainer = e.currentTarget.closest('.timeline-tracks') as HTMLElement | null;
+      const tracksRect = tracksContainer?.getBoundingClientRect();
+      const cursorX = tracksRect
+        ? e.clientX - tracksRect.left
+        : frameToPixels(item.from) + (e.clientX - e.currentTarget.getBoundingClientRect().left);
+      const { currentFrame, isPlaying } = usePlaybackStore.getState();
+      const { splitFrame } = getRazorSplitPosition({
+        cursorX,
+        currentFrame,
+        isPlaying,
+        frameToPixels,
+        pixelsToFrame,
+      });
       useTimelineStore.getState().splitItem(item.id, splitFrame);
       return;
     }
@@ -423,7 +434,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     } else {
       selectItems([item.id]);
     }
-  }, [trackLocked, pixelsToFrame, item.from, item.id]);
+  }, [trackLocked, frameToPixels, pixelsToFrame, item.from, item.id]);
 
   // Handle mouse move for edge hover detection
   const hoveredEdgeRef = useRef(hoveredEdge);

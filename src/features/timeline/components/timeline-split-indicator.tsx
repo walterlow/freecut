@@ -1,6 +1,6 @@
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
-import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { getRazorSplitPosition } from '../utils/razor-snap';
 
 interface TimelineSplitIndicatorProps {
   /** X position in pixels relative to timeline container */
@@ -11,9 +11,6 @@ interface TimelineSplitIndicatorProps {
   tracksContainerRef: React.RefObject<HTMLDivElement | null>;
 }
 
-// Snap threshold in pixels
-const SNAP_THRESHOLD_PX = 10;
-
 /**
  * Timeline Split Indicator Component
  *
@@ -23,7 +20,6 @@ const SNAP_THRESHOLD_PX = 10;
  */
 export function TimelineSplitIndicator({ cursorX, hoveredElement, tracksContainerRef }: TimelineSplitIndicatorProps) {
   const { pixelsToFrame, frameToPixels } = useTimelineZoomContext();
-  const fps = useTimelineStore((s) => s.fps);
   // Don't subscribe to currentFrame - read from store only when needed for snap calculation
   // This prevents re-renders during playback
 
@@ -32,25 +28,13 @@ export function TimelineSplitIndicator({ cursorX, hoveredElement, tracksContaine
   // Read playback state directly from store (no subscription = no re-renders during playback)
   const { currentFrame, isPlaying } = usePlaybackStore.getState();
 
-  // Get playhead position in pixels
-  const playheadX = frameToPixels(currentFrame);
-
-  // Check if cursor is near playhead (snap to playhead)
-  // Don't snap to playhead when video is playing - it moves too fast
-  const distanceToPlayhead = Math.abs(cursorX - playheadX);
-  const shouldSnapToPlayhead = !isPlaying && distanceToPlayhead <= SNAP_THRESHOLD_PX;
-
-  let snappedX: number;
-
-  if (shouldSnapToPlayhead) {
-    // Snap to playhead
-    snappedX = playheadX;
-  } else {
-    // Snap to nearest frame boundary
-    const frameAtCursor = pixelsToFrame(cursorX);
-    const snappedFrame = Math.round(frameAtCursor * fps) / fps;
-    snappedX = frameToPixels(snappedFrame);
-  }
+  const { snappedX } = getRazorSplitPosition({
+    cursorX,
+    currentFrame,
+    isPlaying,
+    frameToPixels,
+    pixelsToFrame,
+  });
 
   // Calculate clip position relative to tracks container
   const containerRect = tracksContainerRef.current.getBoundingClientRect();
