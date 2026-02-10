@@ -60,6 +60,9 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [setRightSidebarWidth]);
 

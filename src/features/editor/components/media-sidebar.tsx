@@ -87,6 +87,9 @@ export const MediaSidebar = memo(function MediaSidebar() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      isResizingRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [setSidebarWidth]);
 
