@@ -34,9 +34,13 @@ function VideoSource({ src }: { src: string }) {
     const frameDelta = Math.abs(frame - lastFrameRef.current);
     lastFrameRef.current = frame;
 
-    // When paused: always sync. When playing: only on seeks (jump > 1 frame)
-    if (!playing || frameDelta > 1) {
-      video.currentTime = frame / fps;
+    const canSeek = video.readyState >= 1;
+    if (canSeek && (!playing || frameDelta > 1)) {
+      try {
+        video.currentTime = frame / fps;
+      } catch {
+        // Ignore seek errors while media is loading
+      }
     }
   }, [frame, playing, src, fps]);
 
@@ -47,8 +51,13 @@ function VideoSource({ src }: { src: string }) {
 
     if (playing) {
       video.playbackRate = playbackRate;
-      // Sync position before playing
-      video.currentTime = lastFrameRef.current / fps;
+      if (video.readyState >= 1) {
+        try {
+          video.currentTime = lastFrameRef.current / fps;
+        } catch {
+          // Ignore seek errors while media is loading
+        }
+      }
       video.play().catch(() => {});
     } else {
       video.pause();
@@ -94,8 +103,13 @@ function AudioSource({ src, fileName }: { src: string; fileName: string }) {
     const frameDelta = Math.abs(frame - lastFrameRef.current);
     lastFrameRef.current = frame;
 
-    if (!playing || frameDelta > 1) {
-      audio.currentTime = frame / fps;
+    const canSeek = audio.readyState >= 1;
+    if (canSeek && (!playing || frameDelta > 1)) {
+      try {
+        audio.currentTime = frame / fps;
+      } catch {
+        // Ignore seek errors while media is loading
+      }
     }
   }, [frame, playing, src, fps]);
 
@@ -106,7 +120,13 @@ function AudioSource({ src, fileName }: { src: string; fileName: string }) {
 
     if (playing) {
       audio.playbackRate = playbackRate;
-      audio.currentTime = lastFrameRef.current / fps;
+      if (audio.readyState >= 1) {
+        try {
+          audio.currentTime = lastFrameRef.current / fps;
+        } catch {
+          // Ignore seek errors while media is loading
+        }
+      }
       audio.play().catch(() => {});
     } else {
       audio.pause();

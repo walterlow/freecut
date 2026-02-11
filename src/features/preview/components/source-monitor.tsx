@@ -271,6 +271,8 @@ function SourcePlaybackControls({
   // Progress bar with drag support
   const barRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const onMoveRef = useRef<((ev: MouseEvent) => void) | null>(null);
+  const onUpRef = useRef<(() => void) | null>(null);
 
   const seekFromX = useCallback(
     (clientX: number) => {
@@ -294,14 +296,37 @@ function SourcePlaybackControls({
       };
       const onUp = () => {
         draggingRef.current = false;
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        if (onMoveRef.current) {
+          document.removeEventListener('mousemove', onMoveRef.current);
+          onMoveRef.current = null;
+        }
+        if (onUpRef.current) {
+          document.removeEventListener('mouseup', onUpRef.current);
+          onUpRef.current = null;
+        }
       };
+      onMoveRef.current = onMove;
+      onUpRef.current = onUp;
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
     [seekFromX],
   );
+
+  // Clean up document listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (onMoveRef.current) {
+        document.removeEventListener('mousemove', onMoveRef.current);
+        onMoveRef.current = null;
+      }
+      if (onUpRef.current) {
+        document.removeEventListener('mouseup', onUpRef.current);
+        onUpRef.current = null;
+      }
+      draggingRef.current = false;
+    };
+  }, []);
 
   const progress = lastFrame > 0 ? (frame / lastFrame) * 100 : 0;
 

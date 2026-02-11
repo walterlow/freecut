@@ -88,11 +88,17 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
     const scheduleUpdate = () => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
-        rafId = null;
         const now = performance.now();
         if (now - lastUpdateTs < PREVIEW_RESIZE_MIN_UPDATE_MS) {
+          // Re-schedule for next frame instead of dropping the update
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            lastUpdateTs = performance.now();
+            updateSize();
+          });
           return;
         }
+        rafId = null;
         lastUpdateTs = now;
         updateSize();
       });
@@ -132,6 +138,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   const splitDragRafRef = useRef<number | null>(null);
   const lastSplitDragUpdateTsRef = useRef(0);
 
+  const splitDragCleanupRef = useRef<(() => void) | null>(null);
+
   const handleCloseSourceMonitor = useCallback(() => {
     useEditorStore.getState().setSourcePreviewMediaId(null);
   }, []);
@@ -169,22 +177,40 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
       });
     };
 
-    const handleMouseUp = () => {
-      isDraggingSplitRef.current = false;
-      pendingSplitPercentRef.current = null;
+    const cleanup = () => {
+      // Flush pending value before cancelling RAF
+      const pending = pendingSplitPercentRef.current;
+      if (pending !== null) {
+        setSplitPercent(Math.min(75, Math.max(25, pending)));
+      }
       if (splitDragRafRef.current !== null) {
         cancelAnimationFrame(splitDragRafRef.current);
         splitDragRafRef.current = null;
       }
+      isDraggingSplitRef.current = false;
+      pendingSplitPercentRef.current = null;
       setIsSplitDragging(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      splitDragCleanupRef.current = null;
     };
 
+    const handleMouseUp = () => {
+      cleanup();
+    };
+
+    splitDragCleanupRef.current = cleanup;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // Clean up split-drag listeners on unmount
+  useEffect(() => {
+    return () => {
+      splitDragCleanupRef.current?.();
+    };
   }, []);
 
   const isSplit = !!sourcePreviewMediaId;
