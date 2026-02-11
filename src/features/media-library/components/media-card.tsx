@@ -18,12 +18,13 @@ interface MediaCardProps {
   selected?: boolean;
   isBroken?: boolean;
   onSelect?: (event: React.MouseEvent) => void;
+  onDoubleClick?: () => void;
   onDelete?: () => void;
   onRelink?: () => void;
   viewMode?: 'grid' | 'list';
 }
 
-export function MediaCard({ media, selected = false, isBroken = false, onSelect, onDelete, onRelink, viewMode = 'grid' }: MediaCardProps) {
+export function MediaCard({ media, selected = false, isBroken = false, onSelect, onDoubleClick, onDelete, onRelink, viewMode = 'grid' }: MediaCardProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
@@ -139,6 +140,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
         onDragStart={isImporting ? undefined : handleDragStart}
         onDragEnd={isImporting ? undefined : handleDragEnd}
         onClick={isImporting ? undefined : handleClick}
+        onDoubleClick={isImporting ? undefined : (e) => { e.stopPropagation(); onDoubleClick?.(); }}
       >
         {/* Thumbnail */}
         <div className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 relative">
@@ -243,6 +245,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       onDragStart={isImporting ? undefined : handleDragStart}
       onDragEnd={isImporting ? undefined : handleDragEnd}
       onClick={isImporting ? undefined : handleClick}
+      onDoubleClick={isImporting ? undefined : (e) => { e.stopPropagation(); onDoubleClick?.(); }}
     >
       {/* Film strip perforations effect */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary via-muted to-secondary" />

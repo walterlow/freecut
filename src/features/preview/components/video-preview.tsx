@@ -22,6 +22,7 @@ interface VideoPreviewProps {
     width: number;
     height: number;
   };
+  suspendOverlay?: boolean;
 }
 
 /**
@@ -186,7 +187,11 @@ function useCustomPlayer(
  *
  * Memoized to prevent expensive Player re-renders.
  */
-export const VideoPreview = memo(function VideoPreview({ project, containerSize }: VideoPreviewProps) {
+export const VideoPreview = memo(function VideoPreview({
+  project,
+  containerSize,
+  suspendOverlay = false,
+}: VideoPreviewProps) {
   const playerRef = useRef<PlayerRef>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
 
@@ -450,12 +455,27 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
 
   // Track player container rect changes for gizmo positioning
   useLayoutEffect(() => {
+    if (suspendOverlay) return;
     const container = playerContainerRef.current;
     if (!container) return;
 
     const updateRect = () => {
-      setPlayerContainerRect(container.getBoundingClientRect());
+      const nextRect = container.getBoundingClientRect();
+      setPlayerContainerRect((prev) => {
+        if (
+          prev
+          && prev.left === nextRect.left
+          && prev.top === nextRect.top
+          && prev.width === nextRect.width
+          && prev.height === nextRect.height
+        ) {
+          return prev;
+        }
+        return nextRect;
+      });
     };
+
+    updateRect();
 
     const resizeObserver = new ResizeObserver(updateRect);
     resizeObserver.observe(container);
@@ -466,7 +486,7 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
       resizeObserver.disconnect();
       window.removeEventListener('scroll', updateRect, true);
     };
-  }, [playerSize]);
+  }, [suspendOverlay]);
 
   // Handle click on background area to deselect items
   const backgroundRef = useRef<HTMLDivElement>(null);
@@ -573,13 +593,15 @@ export const VideoPreview = memo(function VideoPreview({ project, containerSize 
             </Player>
           </div>
 
-          <GizmoOverlay
-            containerRect={playerContainerRect}
-            playerSize={playerSize}
-            projectSize={{ width: project.width, height: project.height }}
-            zoom={zoom}
-            hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
-          />
+          {!suspendOverlay && (
+            <GizmoOverlay
+              containerRect={playerContainerRect}
+              playerSize={playerSize}
+              projectSize={{ width: project.width, height: project.height }}
+              zoom={zoom}
+              hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
+            />
+          )}
         </div>
       </div>
     </div>

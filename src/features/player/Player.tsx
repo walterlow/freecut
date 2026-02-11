@@ -128,22 +128,80 @@ const DefaultProgressBar: React.FC<{
   seek: (frame: number) => void;
 }> = ({ currentFrame, durationInFrames, seek }) => {
   const progress = durationInFrames > 0 ? (currentFrame / durationInFrames) * 100 : 0;
-  
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percentage = x / rect.width;
-    const frame = Math.round(percentage * durationInFrames);
-    seek(Math.max(0, Math.min(frame, durationInFrames - 1)));
-  };
-  
+  const barRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const mouseMoveRef = useRef<((ev: MouseEvent) => void) | null>(null);
+  const mouseUpRef = useRef<(() => void) | null>(null);
+
+  const seekFromEvent = useCallback(
+    (clientX: number) => {
+      const bar = barRef.current;
+      if (!bar) return;
+      const rect = bar.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const percentage = Math.max(0, Math.min(1, x / rect.width));
+      const frame = Math.round(percentage * durationInFrames);
+      seek(Math.max(0, Math.min(frame, durationInFrames - 1)));
+    },
+    [durationInFrames, seek],
+  );
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      draggingRef.current = true;
+      seekFromEvent(e.clientX);
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        if (draggingRef.current) {
+          seekFromEvent(ev.clientX);
+        }
+      };
+
+      const handleMouseUp = () => {
+        draggingRef.current = false;
+        if (mouseMoveRef.current) {
+          document.removeEventListener('mousemove', mouseMoveRef.current);
+          mouseMoveRef.current = null;
+        }
+        if (mouseUpRef.current) {
+          document.removeEventListener('mouseup', mouseUpRef.current);
+          mouseUpRef.current = null;
+        }
+      };
+
+      mouseMoveRef.current = handleMouseMove;
+      mouseUpRef.current = handleMouseUp;
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    },
+    [seekFromEvent],
+  );
+
+  // Clean up document listeners on unmount
+  useEffect(() => {
+    return () => {
+      if (mouseMoveRef.current) {
+        document.removeEventListener('mousemove', mouseMoveRef.current);
+        mouseMoveRef.current = null;
+      }
+      if (mouseUpRef.current) {
+        document.removeEventListener('mouseup', mouseUpRef.current);
+        mouseUpRef.current = null;
+      }
+      draggingRef.current = false;
+    };
+  }, []);
+
   return (
     <div
+      ref={barRef}
       className="w-full h-2 bg-white/20 rounded cursor-pointer overflow-hidden"
-      onClick={handleClick}
+      onMouseDown={handleMouseDown}
     >
       <div
-        className="h-full bg-primary transition-none"
+        className="h-full bg-primary transition-none pointer-events-none"
         style={{ width: `${progress}%` }}
       />
     </div>
@@ -273,33 +331,63 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
 
     // State
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const containerRef = useRef<HTMLDivElement>(null);
+    const contentHostRef = useRef<HTMLDivElement>(null);
+    const contentScaleRef = useRef<HTMLDivElement>(null);
 
-    // Measure container size for scaling
+    // Measure container size for scaling. Apply layout imperatively to avoid
+    // re-rendering the entire composition tree on every resize step.
+    const updateScaledLayout = useCallback(() => {
+      const container = containerRef.current;
+      const contentHost = contentHostRef.current;
+      const contentScale = contentScaleRef.current;
+      if (!container || !contentHost || !contentScale) return;
+
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+      const scale = containerWidth > 0 && containerHeight > 0
+        ? Math.min(containerWidth / width, containerHeight / height)
+        : 1;
+
+      const scaledWidth = width * scale;
+      const scaledHeight = height * scale;
+
+      contentHost.style.width = `${scaledWidth}px`;
+      contentHost.style.height = `${scaledHeight}px`;
+      contentHost.style.marginLeft = `${-scaledWidth / 2}px`;
+      contentHost.style.marginTop = `${-scaledHeight / 2}px`;
+
+      contentScale.style.width = `${width}px`;
+      contentScale.style.height = `${height}px`;
+      contentScale.style.transform = `scale(${scale})`;
+    }, [height, width]);
+
     useEffect(() => {
       const container = containerRef.current;
       if (!container) return;
 
-      const observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry) {
-          setContainerSize({
-            width: entry.contentRect.width,
-            height: entry.contentRect.height,
-          });
-        }
-      });
+      let rafId: number | null = null;
+      const scheduleUpdate = () => {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          updateScaledLayout();
+        });
+      };
 
+      const observer = new ResizeObserver(scheduleUpdate);
       observer.observe(container);
-      // Initial measurement
-      setContainerSize({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      });
 
-      return () => observer.disconnect();
-    }, []);
+      // Initial measurement
+      updateScaledLayout();
+
+      return () => {
+        observer.disconnect();
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
+      };
+    }, [updateScaledLayout]);
     
     // Get player methods
     const player = usePlayer(durationInFrames, { loop, onEnded });
@@ -391,63 +479,55 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
         data-player-container
       >
         {/* Video content - canvas rendered at native size, scaled to fit via CSS */}
-        {(() => {
-          const scale = containerSize.width > 0 && containerSize.height > 0
-            ? Math.min(containerSize.width / width, containerSize.height / height)
-            : 1;
-          const scaledWidth = width * scale;
-          const scaledHeight = height * scale;
-          return (
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                width: scaledWidth,
-                height: scaledHeight,
-                marginLeft: -scaledWidth / 2,
-                marginTop: -scaledHeight / 2,
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  width,
-                  height,
-                  transform: `scale(${scale})`,
-                  transformOrigin: 'top left',
-                }}
-              >
-                {children}
-              </div>
-            </div>
-          );
-        })()}
+        <div
+          ref={contentHostRef}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width,
+            height,
+            marginLeft: -width / 2,
+            marginTop: -height / 2,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            ref={contentScaleRef}
+            style={{
+              width,
+              height,
+              transform: 'scale(1)',
+              transformOrigin: 'top left',
+            }}
+          >
+            {children}
+          </div>
+        </div>
         
         {/* Controls overlay */}
         {controls && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-0 pointer-events-auto">
-              <DefaultControls
-                isPlaying={playing}
-                currentFrame={currentFrame}
-                durationInFrames={durationInFrames}
-                fps={fps}
-                playbackRate={playbackRate}
-                isFullscreen={isFullscreen}
-                onTogglePlay={player.toggle}
-                onSeek={player.seek}
-                onPlaybackRateChange={setPlaybackRate}
-                onToggleFullscreen={toggleFullscreen}
-              />
-            </div>
-            
-            {/* Click to play/pause overlay */}
+          <>
+            {/* Click to play/pause overlay - behind controls */}
             <div
-              className="absolute inset-0 pointer-events-auto cursor-pointer"
+              className="absolute inset-0 cursor-pointer"
               onClick={() => player.toggle()}
             />
-          </div>
+
+            {/* Controls - on top so scrubber/buttons receive clicks */}
+            <DefaultControls
+              isPlaying={playing}
+              currentFrame={currentFrame}
+              durationInFrames={durationInFrames}
+              fps={fps}
+              playbackRate={playbackRate}
+              isFullscreen={isFullscreen}
+              onTogglePlay={player.toggle}
+              onSeek={player.seek}
+              onPlaybackRateChange={setPlaybackRate}
+              onToggleFullscreen={toggleFullscreen}
+            />
+          </>
         )}
       </div>
     );

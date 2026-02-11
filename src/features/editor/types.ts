@@ -6,6 +6,7 @@ export interface EditorState {
   sidebarWidth: number;
   rightSidebarWidth: number;
   timelineHeight: number;
+  sourcePreviewMediaId: string | null;
 }
 
 export interface EditorActions {
@@ -18,6 +19,7 @@ export interface EditorActions {
   setSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   setTimelineHeight: (height: number) => void;
+  setSourcePreviewMediaId: (mediaId: string | null) => void;
 }
 
 export interface SelectionState {

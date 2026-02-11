@@ -6,6 +6,7 @@ const logger = createLogger('MediaGrid');
 import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import { useEditorStore } from '@/features/editor/stores/editor-store';
 import { validateMediaFile } from '../utils/validation';
 import { useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
@@ -45,6 +46,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
+  const setSourcePreviewMediaId = useEditorStore((s) => s.setSourcePreviewMediaId);
 
   // Timeline store for checking references - don't subscribe to items to avoid re-renders
   const removeTimelineItems = useTimelineStore((s) => s.removeItems);
@@ -431,6 +433,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
                 selected={selectedMediaIds.includes(media.id)}
                 isBroken={brokenMediaIds.includes(media.id)}
                 onSelect={(event) => handleCardSelect(media.id, event)}
+                onDoubleClick={() => setSourcePreviewMediaId(media.id)}
                 onDelete={() => handleCardDelete(media.id)}
                 onRelink={() => handleRelink(media.id)}
                 viewMode={viewMode}

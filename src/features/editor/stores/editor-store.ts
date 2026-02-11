@@ -18,6 +18,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   sidebarWidth: loadNumber('editor:sidebarWidth', 320),
   rightSidebarWidth: loadNumber('editor:rightSidebarWidth', 320),
   timelineHeight: 250,
+  sourcePreviewMediaId: null,
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -35,4 +36,5 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     set({ rightSidebarWidth: width });
   },
   setTimelineHeight: (height) => set({ timelineHeight: height }),
+  setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
 }));

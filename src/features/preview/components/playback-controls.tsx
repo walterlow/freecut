@@ -53,9 +53,9 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
   };
 
   return (
-    <div className="h-16 border-t border-border panel-header flex items-center justify-center gap-6 px-6 flex-shrink-0">
+    <>
       {/* Transport Controls */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -115,14 +115,14 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="h-8" />
+      <Separator orientation="vertical" className="h-8 flex-shrink-0" />
 
-      {/* Volume Control */}
-      <div className="flex items-center gap-2.5">
+      {/* Volume Control — shrinks and clips when panel is narrow */}
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-shrink">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 flex-shrink-0"
           data-tooltip="Volume"
           aria-label="Volume"
         >
@@ -138,13 +138,13 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
           }}
           max={100}
           step={1}
-          className="w-24"
+          className="w-24 flex-shrink-0"
           aria-label="Volume control"
         />
-        <span className="text-xs text-muted-foreground font-mono w-8">
+        <span className="text-xs text-muted-foreground font-mono w-8 flex-shrink-0">
           {Math.round(volume * 100)}%
         </span>
       </div>
-    </div>
+    </>
   );
 }
