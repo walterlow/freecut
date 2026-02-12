@@ -331,7 +331,6 @@ function ProjectsIndex() {
               }}
               isEditing={true}
               isSubmitting={isSubmitting}
-              project={editingProject}
             />
           )}
         </DialogContent>

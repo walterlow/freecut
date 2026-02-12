@@ -190,7 +190,7 @@ export const useMediaLibraryStore = create<
     }),
     {
       name: 'MediaLibraryStore',
-      enabled: process.env.NODE_ENV === 'development',
+      enabled: import.meta.env.DEV,
     }
   )
 );

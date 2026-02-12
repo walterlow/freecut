@@ -116,6 +116,7 @@ export function GizmoHandles({
           s: 'Resize from bottom edge',
           sw: 'Resize from bottom-left corner',
           w: 'Resize from left edge',
+          rotate: 'Rotate element',
         };
         return (
           <div

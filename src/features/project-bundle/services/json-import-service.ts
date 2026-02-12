@@ -78,7 +78,7 @@ export async function validateSnapshotData(
 
   // Verify checksum if present
   if (validation.success && validation.data?.checksum) {
-    const checksumValid = await verifySnapshotChecksum(validation.data);
+    const checksumValid = await verifySnapshotChecksum(validation.data as ProjectSnapshot);
     if (!checksumValid) {
       warnings.push({
         path: 'checksum',

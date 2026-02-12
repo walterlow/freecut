@@ -47,7 +47,7 @@ function useCustomPlayer(
 
   const getPlayerFrame = useCallback(() => {
     const frame = playerRef.current?.getCurrentFrame();
-    return Number.isFinite(frame) ? Math.round(frame) : null;
+    return Number.isFinite(frame) ? Math.round(frame!) : null;
   }, [playerRef]);
 
   // Detect when Player becomes ready

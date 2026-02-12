@@ -459,7 +459,7 @@ export function GizmoOverlay({
         });
       } else if (itemsAtPoint.length === 1) {
         // Single item: just select it
-        selectItems([itemsAtPoint[0].id]);
+        selectItems([itemsAtPoint[0]!.id]);
       }
     },
     [coordParams, findAllItemsAtPoint, selectItems]
@@ -626,7 +626,7 @@ export function GizmoOverlay({
             {contextMenu.items.map((item, index) => {
               const track = tracks.find((t) => t.id === item.trackId);
               const trackName = track?.name ?? `Track ${index + 1}`;
-              const itemName = item.name || `${item.type} clip`;
+              const itemName = item.label || `${item.type} clip`;
 
               return (
                 <button

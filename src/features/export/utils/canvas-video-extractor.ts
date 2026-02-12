@@ -75,10 +75,10 @@ export class VideoFrameExtractor {
       this.input = new mb.Input({
         formats: mb.ALL_FORMATS,
         source: new mb.BlobSource(blob),
-      });
+      }) as unknown as MediabunnyInput;
 
       // Get video track
-      this.videoTrack = await this.input.getPrimaryVideoTrack();
+      this.videoTrack = await this.input!.getPrimaryVideoTrack();
       if (!this.videoTrack) {
         log.warn('No video track found', { itemId: this.itemId });
         return false;
@@ -95,10 +95,10 @@ export class VideoFrameExtractor {
       }
 
       // Get duration
-      this.duration = await this.input.computeDuration();
+      this.duration = await this.input!.computeDuration();
 
       // Create video sample sink for frame extraction
-      this.sink = new mb.VideoSampleSink(this.videoTrack);
+      this.sink = new mb.VideoSampleSink(this.videoTrack as any);
 
       this.ready = true;
       log.debug('Initialized', {

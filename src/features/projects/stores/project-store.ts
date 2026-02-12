@@ -387,7 +387,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
     {
       // Devtools options
       name: 'ProjectStore',
-      enabled: process.env.NODE_ENV === 'development',
+      enabled: import.meta.env.DEV,
     }
   )
 );

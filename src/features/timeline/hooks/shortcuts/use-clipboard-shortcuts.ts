@@ -13,7 +13,7 @@ import type { Transition } from '@/types/transition';
 export function useClipboardShortcuts() {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
-  const setSelectedItemIds = useSelectionStore((s) => s.setSelectedItemIds);
+  const selectItems = useSelectionStore((s) => s.selectItems);
   const activeTrackId = useSelectionStore((s) => s.activeTrackId);
   const items = useTimelineStore((s) => s.items);
   const transitions = useTimelineStore((s) => s.transitions);
@@ -141,7 +141,7 @@ export function useClipboardShortcuts() {
           }
           const trackExists = tracks.some((t) => t.id === targetTrackId);
           if (!trackExists && tracks.length > 0) {
-            targetTrackId = tracks[0].id;
+            targetTrackId = tracks[0]!.id;
           }
 
           const desiredFrom = currentFrame;
@@ -166,7 +166,7 @@ export function useClipboardShortcuts() {
         }
 
         if (newItemIds.length > 0) {
-          setSelectedItemIds(newItemIds);
+          selectItems(newItemIds);
         }
 
         if (itemsClipboard.copyType === 'cut') {
@@ -176,6 +176,6 @@ export function useClipboardShortcuts() {
       }
     },
     HOTKEY_OPTIONS,
-    [selectedTransitionId, transitionClipboard, updateTransition, itemsClipboard, tracks, addItem, setSelectedItemIds, removeItems, activeTrackId]
+    [selectedTransitionId, transitionClipboard, updateTransition, itemsClipboard, tracks, addItem, selectItems, removeItems, activeTrackId]
   );
 }

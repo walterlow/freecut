@@ -146,5 +146,5 @@ export function getScaleCursor(
   const cursorIndex = Math.round(adjustedAngle / 45) % 4;
   const cursors = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
 
-  return cursors[cursorIndex];
+  return cursors[cursorIndex] ?? 'default';
 }

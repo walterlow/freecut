@@ -91,6 +91,7 @@ export const GraphGrid = memo(function GraphGrid({
 
   // Generate horizontal grid lines (Y axis - values)
   const yLines = useMemo(() => {
+    if (!yMajorInterval) return [];
     const lines: Array<{ y: number; value: number; isMajor: boolean }> = [];
     // For small intervals, skip minor lines to avoid clutter
     const useMinorLines = yMajorInterval >= 1;

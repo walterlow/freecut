@@ -165,6 +165,7 @@ export function createProjectObject(
     },
     createdAt: now,
     updatedAt: now,
+    duration: 0,
     thumbnail: undefined,
   };
 }

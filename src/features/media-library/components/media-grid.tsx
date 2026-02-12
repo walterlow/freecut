@@ -85,7 +85,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
 
   // Marquee selection
   const { marqueeState } = useMarqueeSelection({
-    containerRef,
+    containerRef: containerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     onSelectionChange: (ids) => {
       selectMedia(ids);

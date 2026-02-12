@@ -264,7 +264,7 @@ async function extractAndSave(
     }
   } finally {
     // Clean up mediabunny resources to free memory
-    sink?.dispose?.();
+    (sink as any)?.dispose?.();
     input?.dispose();
   }
 }

@@ -10,7 +10,7 @@ import type {
 
 // Some third-party browser libs assume `window` exists.
 // In dedicated workers, alias it to `globalThis` to avoid runtime crashes.
-const workerGlobal = globalThis as typeof globalThis & { window?: typeof globalThis };
+const workerGlobal = globalThis as any;
 if (typeof workerGlobal.window === 'undefined') {
   workerGlobal.window = workerGlobal;
 }

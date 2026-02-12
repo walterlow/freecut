@@ -174,7 +174,6 @@ async function listFiles(directory: string): Promise<string[]> {
   // List all files in the directory
   const files: string[] = [];
 
-  // @ts-expect-error - TypeScript doesn't have full OPFS types yet
   for await (const [name, handle] of dir.entries()) {
     if (handle.kind === 'file') {
       files.push(name);

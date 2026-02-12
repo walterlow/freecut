@@ -561,7 +561,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 <div className="flex items-center justify-between text-sm gap-2">
                   <span className="text-muted-foreground truncate">
                     {status === 'preparing' && 'Preparing...'}
-                    {(status === 'rendering' || status === 'processing') && 'Rendering frames...'}
+                    {status === 'rendering' && 'Rendering frames...'}
                     {status === 'encoding' && 'Encoding...'}
                     {status === 'finalizing' && 'Finalizing...'}
                   </span>

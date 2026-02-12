@@ -96,7 +96,7 @@ function Settings() {
               <div className="w-40 flex items-center gap-2">
                 <Slider
                   value={[autoSaveInterval]}
-                  onValueChange={([v]) => setSetting('autoSaveInterval', v)}
+                  onValueChange={([v]) => setSetting('autoSaveInterval', v ?? 0)}
                   onValueCommit={() => {
                     if (document.activeElement instanceof HTMLElement) {
                       document.activeElement.blur();

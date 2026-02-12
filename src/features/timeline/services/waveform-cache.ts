@@ -385,7 +385,7 @@ class WaveformCacheService {
     for (let c = 0; c < channels; c++) {
       const channelData = audioBuffer.getChannelData(c);
       for (let i = 0; i < audioBuffer.length; i++) {
-        monoSamples[i] += channelData[i]! / channels;
+        monoSamples[i]! += channelData[i]! / channels;
       }
     }
     onProgress?.(70);
