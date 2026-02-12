@@ -420,6 +420,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         pixelsToFrame,
       });
       useTimelineStore.getState().splitItem(item.id, splitFrame);
+      // Keep selection focused on the split clip so downstream panels
+      // (like transitions) immediately evaluate the new adjacency.
+      useSelectionStore.getState().selectItems([item.id]);
       return;
     }
 

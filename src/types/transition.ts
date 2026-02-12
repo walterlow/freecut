@@ -30,8 +30,7 @@ export type BuiltinTransitionPresentation =
   | 'slide'
   | 'flip'
   | 'clockWipe'
-  | 'iris'
-  | 'none';
+  | 'iris';
 
 /**
  * Visual presentation styles for transitions.
@@ -248,13 +247,6 @@ export const PRESENTATION_CONFIGS: PresentationConfig[] = [
     label: 'Fade',
     description: 'Simple crossfade between clips',
     icon: 'Blend',
-    category: 'basic',
-  },
-  {
-    id: 'none',
-    label: 'Cut',
-    description: 'Instant cut with no effect',
-    icon: 'Scissors',
     category: 'basic',
   },
   // Wipe transitions (each direction as separate card)

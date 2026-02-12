@@ -15,8 +15,27 @@ const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', '
 // Wipe
 // ============================================================================
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function getDirectionVector(direction: WipeDirection): { x: number; y: number } {
+  switch (direction) {
+    case 'from-left':
+      return { x: 1, y: 0 };
+    case 'from-right':
+      return { x: -1, y: 0 };
+    case 'from-top':
+      return { x: 0, y: 1 };
+    case 'from-bottom':
+      return { x: 0, y: -1 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
 function calculateWipeClipPath(progress: number, direction: WipeDirection, isOutgoing: boolean): string {
-  const p = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
   const inverse = 1 - p;
   switch (direction) {
     case 'from-left':
@@ -40,17 +59,42 @@ function calculateWipeClipPath(progress: number, direction: WipeDirection, isOut
   }
 }
 
+function getWipeOffset(
+  progress: number,
+  direction: WipeDirection,
+  isOutgoing: boolean,
+  w: number,
+  h: number
+): { x: number; y: number } {
+  const p = clamp01(progress);
+  const vec = getDirectionVector(direction);
+
+  // Keep wipe edge motion tight so the center seam doesn't feel too wide.
+  const travel = isOutgoing ? 0.035 : 0.025;
+  const phase = isOutgoing ? p : p - 1;
+
+  return {
+    x: vec.x * phase * w * travel,
+    y: vec.y * phase * h * travel,
+  };
+}
+
 const wipeRenderer: TransitionRenderer = {
-  calculateStyles(progress, isOutgoing, _cw, _ch, direction): TransitionStyleCalculation {
-    const clipPath = calculateWipeClipPath(
-      progress,
-      (direction as WipeDirection) || 'from-left',
-      isOutgoing
-    );
-    return { clipPath, webkitClipPath: clipPath };
+  calculateStyles(progress, isOutgoing, canvasWidth, canvasHeight, direction): TransitionStyleCalculation {
+    const p = clamp01(progress);
+    const dir = (direction as WipeDirection) || 'from-left';
+    const clipPath = calculateWipeClipPath(p, dir, isOutgoing);
+    const offset = getWipeOffset(p, dir, isOutgoing, canvasWidth, canvasHeight);
+
+    return {
+      clipPath,
+      webkitClipPath: clipPath,
+      transform: `translate(${offset.x}px, ${offset.y}px)`,
+      opacity: 1,
+    };
   },
   renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
-    const p = Math.max(0, Math.min(1, progress));
+    const p = clamp01(progress);
     const dir = (direction as WipeDirection) || 'from-left';
     const w = canvas?.width ?? leftCanvas.width;
     const h = canvas?.height ?? leftCanvas.height;
@@ -76,14 +120,18 @@ const wipeRenderer: TransitionRenderer = {
         break;
     }
 
+    const incomingOffset = getWipeOffset(p, dir, false, w, h);
     ctx.save();
     ctx.clip(incomingPath);
-    ctx.drawImage(rightCanvas, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(rightCanvas, incomingOffset.x, incomingOffset.y);
     ctx.restore();
 
+    const outgoingOffset = getWipeOffset(p, dir, true, w, h);
     ctx.save();
     ctx.clip(outgoingPath);
-    ctx.drawImage(leftCanvas, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(leftCanvas, outgoingOffset.x, outgoingOffset.y);
     ctx.restore();
   },
 };

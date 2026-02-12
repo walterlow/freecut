@@ -100,4 +100,18 @@ describe('resolveTransitionWindows', () => {
     expect((first?.rightPortion ?? 0) + (second?.leftPortion ?? 0)).toBe(40);
     expect(first?.endFrame).toBe(second?.startFrame);
   });
+
+  it('accepts tiny floating-point adjacency drift', () => {
+    const left = createVideoClip('A', 0, 100);
+    const right = createVideoClip('B', 100.0004, 100);
+    const transition = createTransition('T1', left.id, right.id, 20, 0.5);
+
+    const windows = resolveTransitionWindows([transition], new Map([
+      [left.id, left],
+      [right.id, right],
+    ]));
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0]?.cutPoint).toBe(right.from);
+  });
 });

@@ -37,6 +37,73 @@ const connectedVideoElements = new WeakSet<HTMLVideoElement>();
 // Store gain nodes by video element for volume updates
 const videoGainNodes = new WeakMap<HTMLVideoElement, GainNode>();
 const videoAudioContexts = new WeakMap<HTMLVideoElement, AudioContext>();
+let sharedVideoAudioContext: AudioContext | null = null;
+
+function getSharedVideoAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+
+  const webkitWindow = window as Window & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+  const AudioContextCtor = window.AudioContext ?? webkitWindow.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  if (sharedVideoAudioContext === null || sharedVideoAudioContext.state === 'closed') {
+    sharedVideoAudioContext = new AudioContextCtor();
+  }
+
+  return sharedVideoAudioContext;
+}
+
+function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolume: number): void {
+  // Pool creates elements muted. Keep element unmuted and control via volume/gain.
+  video.muted = false;
+
+  // Already connected to Web Audio API: update gain and resume context if needed.
+  if (connectedVideoElements.has(video)) {
+    const gainNode = videoGainNodes.get(video);
+    const audioContext = videoAudioContexts.get(video);
+    if (gainNode) {
+      gainNode.gain.value = audioVolume;
+    }
+    if (audioContext?.state === 'suspended') {
+      audioContext.resume();
+    }
+    return;
+  }
+
+  // For <= 1, native volume is cheaper.
+  if (audioVolume <= 1) {
+    video.volume = Math.max(0, audioVolume);
+    return;
+  }
+
+  // For boost > 1, use shared Web Audio context.
+  try {
+    const audioContext = getSharedVideoAudioContext();
+    if (!audioContext) {
+      video.volume = Math.min(1, Math.max(0, audioVolume));
+      return;
+    }
+
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = audioVolume;
+    const sourceNode = audioContext.createMediaElementSource(video);
+    sourceNode.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    connectedVideoElements.add(video);
+    videoGainNodes.set(video, gainNode);
+    videoAudioContexts.set(video, audioContext);
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+  } catch {
+    // Fallback if Web Audio setup fails.
+    video.volume = Math.min(1, Math.max(0, audioVolume));
+  }
+}
 
 /**
  * Hook to calculate video audio volume with fades and preview support.
@@ -152,10 +219,13 @@ const NativePreviewVideo: React.FC<{
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
   const elementRef = useRef<HTMLVideoElement | null>(null);
+  const forceRenderTimeoutRef = useRef<number | null>(null);
+  const audioVolumeRef = useRef(audioVolume);
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
   const [isReady, setIsReady] = useState(false);
+  audioVolumeRef.current = audioVolume;
 
   // Get playing state from our clock
   const isPlaying = useIsPlaying();
@@ -176,6 +246,14 @@ const NativePreviewVideo: React.FC<{
       console.error('[NativePreviewVideo] Missing itemId or src');
       return;
     }
+
+    // Reset sync state for the new clip. The component doesn't unmount when
+    // crossing split boundaries (React reconciles with new props), so refs
+    // retain stale values from the previous clip. Without this reset, the
+    // sync effect skips the initial seek for the new clip because it thinks
+    // initial sync already happened.
+    needsInitialSyncRef.current = true;
+    lastSyncTimeRef.current = 0;
 
     videoLog.debug(`[${shortId}] acquiring element for:`, src);
 
@@ -209,9 +287,31 @@ const NativePreviewVideo: React.FC<{
       }
     }
 
-    // Pause immediately - will be played based on isPlaying state
-    element.pause();
-    elementRef.current = element;
+    // Check if this is a split boundary crossing during playback.
+    // The pool may return the same element that was just released by cleanup.
+    // If the element is already near the correct position, keep it playing
+    // to avoid a decode restart stutter.
+    const initialTargetTime = (safeTrimBefore / fps) + (frame * playbackRate / fps);
+    const clampedInitial = Math.min(initialTargetTime, (element.duration || Infinity) - 0.1);
+    const currentlyPlaying = usePlaybackStore.getState().isPlaying;
+    const isNearTarget = Math.abs(element.currentTime - clampedInitial) < 0.2;
+    const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
+
+    if (isContinuousPlayback) {
+      // Split boundary during playback: element was just paused by cleanup
+      // but is at the right position. Resume immediately to minimize the
+      // decode pipeline interruption (pause→play in same synchronous batch).
+      elementRef.current = element;
+      applyVideoElementAudioVolume(element, audioVolumeRef.current);
+      element.playbackRate = playbackRate;
+      element.play().catch(() => {});
+      needsInitialSyncRef.current = false;
+    } else {
+      // Normal mount (first mount, scrubbing, or position mismatch)
+      element.pause();
+      elementRef.current = element;
+      applyVideoElementAudioVolume(element, audioVolumeRef.current);
+    }
 
     // Set up event listeners
     const handleCanPlay = () => {
@@ -258,22 +358,25 @@ const NativePreviewVideo: React.FC<{
       videoLog.debug(`[${shortId}] mounted to container`);
     }
 
-    // Seek to initial position - need to calculate here since deps don't include targetTime
-    // Use playbackRate to correctly calculate source position for speed-adjusted clips
-    const initialTargetTime = (safeTrimBefore / fps) + (frame * playbackRate / fps);
-    videoLog.debug(`[${shortId}] initial seek to:`, initialTargetTime.toFixed(3),
-      'safeTrimBefore:', safeTrimBefore, 'frame:', frame, 'playbackRate:', playbackRate,
-      'fps:', fps,
-      'videoDuration:', element.duration?.toFixed(3),
-      'seekPastEnd:', initialTargetTime > element.duration);
-    // Clamp to video duration to avoid seeking past end
-    const clampedTime = Math.min(initialTargetTime, (element.duration || Infinity) - 0.1);
-    element.currentTime = clampedTime;
+    // Seek to initial position (skip for continuous playback - already at position)
+    if (!isContinuousPlayback) {
+      videoLog.debug(`[${shortId}] initial seek to:`, clampedInitial.toFixed(3),
+        'safeTrimBefore:', safeTrimBefore, 'frame:', frame, 'playbackRate:', playbackRate,
+        'fps:', fps,
+        'videoDuration:', element.duration?.toFixed(3),
+        'seekPastEnd:', initialTargetTime > element.duration);
+      element.currentTime = clampedInitial;
+    } else {
+      videoLog.debug(`[${shortId}] continuous playback, skipping seek (drift: ${(element.currentTime - clampedInitial).toFixed(3)}s)`);
+    }
 
     // Force a frame render by doing a quick play/pause - some browsers need this
-    // to actually display the video frame after seeking
+    // to actually display the video frame after seeking.
+    // IMPORTANT: Only do this when NOT playing. During playback, the sync effect
+    // handles play() and this timeout's play→pause sequence would race with it,
+    // causing the video to get paused right after the sync effect started it.
     const forceFrameRender = () => {
-      if (element.paused && element.readyState >= 2) {
+      if (element.paused && element.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
         element.play().then(() => {
           element.pause();
           videoLog.debug(`[${shortId}] forced frame render`);
@@ -284,7 +387,7 @@ const NativePreviewVideo: React.FC<{
     };
 
     // Try after a short delay to allow the seek to complete
-    setTimeout(forceFrameRender, 100);
+    forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
 
     // Check if already ready
     if (element.readyState >= 3) {
@@ -299,6 +402,10 @@ const NativePreviewVideo: React.FC<{
 
       // Pause and remove from DOM
       element.pause();
+      if (forceRenderTimeoutRef.current !== null) {
+        clearTimeout(forceRenderTimeoutRef.current);
+        forceRenderTimeoutRef.current = null;
+      }
       if (element.parentElement) {
         element.parentElement.removeChild(element);
       }
@@ -414,57 +521,11 @@ const NativePreviewVideo: React.FC<{
     }
   }, [frame, fps, isPlaying, isReady, playbackRate, safeTrimBefore, targetTime]);
 
-  // Update volume using Web Audio API for values > 1
+  // Keep volume/gain in sync for pooled element.
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
-
-    // CRITICAL: Unmute video element - pool creates them muted
-    // This must happen regardless of volume path (native or Web Audio)
-    video.muted = false;
-
-    // Check if already connected to Web Audio API
-    if (connectedVideoElements.has(video)) {
-      const gainNode = videoGainNodes.get(video);
-      const audioContext = videoAudioContexts.get(video);
-      if (gainNode) {
-        gainNode.gain.value = audioVolume;
-      }
-      // CRITICAL: Resume AudioContext if suspended - browser autoplay policy
-      // After split, the component remounts but the video element and AudioContext
-      // may be reused. The AudioContext can be suspended and needs to be resumed.
-      if (audioContext?.state === 'suspended') {
-        audioContext.resume();
-      }
-      return;
-    }
-
-    // For volume <= 1, use native volume
-    if (audioVolume <= 1) {
-      video.volume = Math.max(0, audioVolume);
-      return;
-    }
-
-    // Set up Web Audio API for volume boost > 1
-    try {
-      const audioContext = new AudioContext();
-      const gainNode = audioContext.createGain();
-      gainNode.gain.value = audioVolume;
-      const sourceNode = audioContext.createMediaElementSource(video);
-      sourceNode.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      connectedVideoElements.add(video);
-      videoGainNodes.set(video, gainNode);
-      videoAudioContexts.set(video, audioContext);
-
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
-    } catch {
-      // Failed to set up Web Audio - use native volume
-      video.volume = Math.min(1, Math.max(0, audioVolume));
-    }
+    applyVideoElementAudioVolume(video, audioVolume);
   }, [audioVolume]);
 
   // Guard: itemId is required for rendering
@@ -514,83 +575,8 @@ const VideoContent: React.FC<{
   const audioVolume = useVideoAudioVolume(item, muted);
   const [hasError, setHasError] = useState(false);
 
-  // Web Audio API refs for volume boost > 1
+  // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const currentVideoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Set up Web Audio API when video element is available (for volume > 1 boost)
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    // Find the video element rendered by NativePreviewVideo
-    const findAndConnectVideo = () => {
-      const video = containerRef.current?.querySelector('video');
-      if (!video) return;
-
-      currentVideoRef.current = video;
-
-      // Check if this video is already connected (can only connect once ever)
-      if (connectedVideoElements.has(video)) {
-        // Already connected - just update the gain
-        const gainNode = videoGainNodes.get(video);
-        const audioContext = videoAudioContexts.get(video);
-        if (gainNode) {
-          gainNode.gain.value = audioVolume;
-        }
-        if (audioContext?.state === 'suspended') {
-          audioContext.resume();
-        }
-        return;
-      }
-
-      // Set up Web Audio API for this video element
-      try {
-        const audioContext = new AudioContext();
-        const gainNode = audioContext.createGain();
-        gainNode.gain.value = audioVolume;
-        const sourceNode = audioContext.createMediaElementSource(video);
-        sourceNode.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        // Track this video as connected
-        connectedVideoElements.add(video);
-        videoGainNodes.set(video, gainNode);
-        videoAudioContexts.set(video, audioContext);
-
-        // Resume if suspended (browsers require user interaction)
-        if (audioContext.state === 'suspended') {
-          audioContext.resume();
-        }
-      } catch {
-        // Failed to set up Web Audio - volume boost won't work but audio still plays
-      }
-    };
-
-    // Try immediately and also observe for changes
-    findAndConnectVideo();
-    const observer = new MutationObserver(findAndConnectVideo);
-    observer.observe(containerRef.current, { childList: true, subtree: true });
-
-    return () => {
-      observer.disconnect();
-      // Don't disconnect audio - video element might be reused
-    };
-  }, [audioVolume]);
-
-  // Update gain node volume (allows > 1 for boost)
-  useEffect(() => {
-    const video = currentVideoRef.current;
-    if (video) {
-      const gainNode = videoGainNodes.get(video);
-      const audioContext = videoAudioContexts.get(video);
-      if (gainNode) {
-        gainNode.gain.value = audioVolume;
-      }
-      if (audioContext?.state === 'suspended') {
-        audioContext.resume();
-      }
-    }
-  }, [audioVolume]);
 
   // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup)
   const handleError = useCallback((error: Error) => {

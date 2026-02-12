@@ -4,6 +4,24 @@ import { interpolate, useSequenceContext } from '@/features/player/composition';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 
+let sharedAudioContext: AudioContext | null = null;
+
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+
+  const webkitWindow = window as Window & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+  const AudioContextCtor = window.AudioContext ?? webkitWindow.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  if (sharedAudioContext === null || sharedAudioContext.state === 'closed') {
+    sharedAudioContext = new AudioContextCtor();
+  }
+
+  return sharedAudioContext;
+}
+
 interface PitchCorrectedAudioProps {
   src: string;
   itemId: string;
@@ -52,8 +70,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   const playing = useIsPlaying();
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Web Audio API refs for volume boost > 1
-  const audioContextRef = useRef<AudioContext | null>(null);
+  // Web Audio API refs are created lazily only when gain > 1 is needed.
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   // Track when we last synced - initialized to current time
@@ -162,11 +179,9 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
   const finalVolume = itemVolume * effectiveMasterVolume;
 
-  // Use HTML5 audio with native preservesPitch
-  // Export uses Canvas + WebCodecs (client-render-engine.ts) which handles audio separately
-  // Web Audio API is used for volume boost > 1
-
-  // Create and manage audio element with Web Audio API for volume boost
+  // Use HTML5 audio with native preservesPitch.
+  // Export uses Canvas + WebCodecs (client-render-engine.ts) which handles audio separately.
+  // Web Audio graph is created lazily only when volume boost (>1) is needed.
   useEffect(() => {
     const audio = new window.Audio();
     audio.src = src;
@@ -177,26 +192,13 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     audio.webkitPreservesPitch = true;
     audioRef.current = audio;
 
-    // Set up Web Audio API for volume control (allows > 1 for boost)
-    const audioContext = new AudioContext();
-    const gainNode = audioContext.createGain();
-    const sourceNode = audioContext.createMediaElementSource(audio);
-    sourceNode.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    audioContextRef.current = audioContext;
-    gainNodeRef.current = gainNode;
-    sourceNodeRef.current = sourceNode;
-
     return () => {
       audio.pause();
       audio.src = '';
       audioRef.current = null;
-      // Clean up Web Audio API
-      sourceNode.disconnect();
-      gainNode.disconnect();
-      audioContext.close();
-      audioContextRef.current = null;
+      // Disconnect per-element nodes; shared AudioContext is reused.
+      sourceNodeRef.current?.disconnect();
+      gainNodeRef.current?.disconnect();
       gainNodeRef.current = null;
       sourceNodeRef.current = null;
     };
@@ -209,12 +211,45 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     }
   }, [playbackRate]);
 
-  // Update volume (with fades applied) using Web Audio API GainNode
-  // This allows volume > 1 for boost (up to +20dB = 10x)
+  // Update volume. Use native audio.volume for <= 1, lazily promote to Web Audio gain for boosts.
   useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const clampedVolume = muted ? 0 : Math.max(0, finalVolume);
+
+    // Existing graph: keep using gain node regardless of current value.
     if (gainNodeRef.current) {
-      // GainNode supports values > 1 for volume boost
-      gainNodeRef.current.gain.value = muted ? 0 : Math.max(0, finalVolume);
+      gainNodeRef.current.gain.value = clampedVolume;
+      return;
+    }
+
+    // Fast path: native volume is cheaper and avoids allocating Web Audio nodes.
+    if (clampedVolume <= 1) {
+      audio.volume = clampedVolume;
+      return;
+    }
+
+    // Promote to Web Audio graph only when boost above 1 is actually required.
+    const audioContext = getSharedAudioContext();
+    if (!audioContext) {
+      audio.volume = 1;
+      return;
+    }
+
+    try {
+      const gainNode = audioContext.createGain();
+      const sourceNode = audioContext.createMediaElementSource(audio);
+      sourceNode.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      gainNodeRef.current = gainNode;
+      sourceNodeRef.current = sourceNode;
+      audio.volume = 1;
+      gainNode.gain.value = clampedVolume;
+    } catch {
+      // Fallback if graph connection fails (e.g., browser restrictions).
+      audio.volume = 1;
     }
   }, [finalVolume, muted]);
 
@@ -288,9 +323,10 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
 
       // Play if paused and audio is ready
       if (audio.paused && audio.readyState >= 2) {
-        // Resume AudioContext if suspended (browsers require user interaction)
-        if (audioContextRef.current?.state === 'suspended') {
-          audioContextRef.current.resume();
+        // Resume shared context when this clip is using Web Audio gain.
+        const sharedContext = gainNodeRef.current ? getSharedAudioContext() : null;
+        if (sharedContext?.state === 'suspended') {
+          sharedContext.resume();
         }
         audio.play().catch(() => {
           // Autoplay might be blocked - this is fine

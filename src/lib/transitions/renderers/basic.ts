@@ -1,7 +1,7 @@
 /**
  * Basic Transition Renderers
  *
- * Includes: fade, none (cut)
+ * Includes: fade
  */
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
@@ -12,6 +12,10 @@ import type { TransitionDefinition } from '@/types/transition';
 // Fade
 // ============================================================================
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
   if (isOutgoing) {
     return Math.cos((progress * Math.PI) / 2);
@@ -19,20 +23,53 @@ function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
   return Math.sin((progress * Math.PI) / 2);
 }
 
+function calculateFadeScale(progress: number, isOutgoing: boolean): number {
+  if (isOutgoing) {
+    // A small zoom-out reinforces that the outgoing clip is leaving.
+    return 1 - (0.04 * progress);
+  }
+  // Incoming clip starts slightly larger and settles to 1.
+  return 1.04 - (0.04 * progress);
+}
+
+function drawScaledCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  canvas: OffscreenCanvas,
+  scale: number
+): void {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.scale(scale, scale);
+  ctx.translate(-w / 2, -h / 2);
+  ctx.drawImage(canvas, 0, 0);
+  ctx.restore();
+}
+
 const fadeRenderer: TransitionRenderer = {
   calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    const p = Math.max(0, Math.min(1, progress));
-    return { opacity: calculateFadeOpacity(p, isOutgoing) };
+    const p = clamp01(progress);
+    const scale = calculateFadeScale(p, isOutgoing);
+    return {
+      opacity: calculateFadeOpacity(p, isOutgoing),
+      transform: `scale(${scale})`,
+    };
   },
   renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
-    const p = Math.max(0, Math.min(1, progress));
+    const p = clamp01(progress);
+
+    // Draw incoming clip (right) first.
     ctx.save();
     ctx.globalAlpha = calculateFadeOpacity(p, false);
-    ctx.drawImage(rightCanvas, 0, 0);
+    drawScaledCanvas(ctx, rightCanvas, calculateFadeScale(p, false));
     ctx.restore();
+
+    // Draw outgoing clip (left) on top.
     ctx.save();
     ctx.globalAlpha = calculateFadeOpacity(p, true);
-    ctx.drawImage(leftCanvas, 0, 0);
+    drawScaledCanvas(ctx, leftCanvas, calculateFadeScale(p, true));
     ctx.restore();
   },
 };
@@ -51,45 +88,9 @@ const fadeDef: TransitionDefinition = {
 };
 
 // ============================================================================
-// None (Cut)
-// ============================================================================
-
-const noneRenderer: TransitionRenderer = {
-  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
-    const midpoint = 0.5;
-    return {
-      opacity: isOutgoing
-        ? progress < midpoint ? 1 : 0
-        : progress >= midpoint ? 1 : 0,
-    };
-  },
-  renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
-    if (progress < 0.5) {
-      ctx.drawImage(leftCanvas, 0, 0);
-    } else {
-      ctx.drawImage(rightCanvas, 0, 0);
-    }
-  },
-};
-
-const noneDef: TransitionDefinition = {
-  id: 'none',
-  label: 'Cut',
-  description: 'Instant cut with no effect',
-  category: 'basic',
-  icon: 'Scissors',
-  hasDirection: false,
-  supportedTimings: ['linear'],
-  defaultDuration: 30,
-  minDuration: 2,
-  maxDuration: 90,
-};
-
-// ============================================================================
 // Registration
 // ============================================================================
 
 export function registerBasicTransitions(registry: TransitionRegistry): void {
   registry.register('fade', fadeDef, fadeRenderer);
-  registry.register('none', noneDef, noneRenderer);
 }

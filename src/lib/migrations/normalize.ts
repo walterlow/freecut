@@ -55,6 +55,22 @@ function normalizeItem(
   item: ProjectTimeline['items'][number]
 ): ProjectTimeline['items'][number] {
   const normalized = { ...item };
+  const maybeFrameFields = normalized as typeof normalized & {
+    trimStart?: number;
+    trimEnd?: number;
+    sourceStart?: number;
+    sourceEnd?: number;
+    sourceDuration?: number;
+  };
+
+  // Keep timeline and source coordinates aligned to whole frames.
+  normalized.from = Math.max(0, Math.round(normalized.from ?? 0));
+  normalized.durationInFrames = Math.max(1, Math.round(normalized.durationInFrames ?? 1));
+  if (maybeFrameFields.trimStart !== undefined) maybeFrameFields.trimStart = Math.max(0, Math.round(maybeFrameFields.trimStart));
+  if (maybeFrameFields.trimEnd !== undefined) maybeFrameFields.trimEnd = Math.max(0, Math.round(maybeFrameFields.trimEnd));
+  if (maybeFrameFields.sourceStart !== undefined) maybeFrameFields.sourceStart = Math.max(0, Math.round(maybeFrameFields.sourceStart));
+  if (maybeFrameFields.sourceEnd !== undefined) maybeFrameFields.sourceEnd = Math.max(0, Math.round(maybeFrameFields.sourceEnd));
+  if (maybeFrameFields.sourceDuration !== undefined) maybeFrameFields.sourceDuration = Math.max(0, Math.round(maybeFrameFields.sourceDuration));
 
   // Ensure speed is valid (default 1.0, range 0.1-10.0)
   if (normalized.speed !== undefined) {
@@ -111,7 +127,7 @@ function normalizeTransition(
   return {
     ...transition,
     // Ensure duration is at least 1 frame
-    durationInFrames: Math.max(1, transition.durationInFrames),
+    durationInFrames: Math.max(1, Math.round(transition.durationInFrames)),
   };
 }
 

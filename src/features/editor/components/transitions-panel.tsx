@@ -1,8 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import {
   Blend,
-  Scissors,
   ArrowRight,
   ArrowLeft,
   ArrowUp,
@@ -22,6 +20,7 @@ import {
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useSelectionStore } from '../stores/selection-store';
 import { transitionRegistry } from '@/lib/transitions';
+import { areFramesAligned } from '@/features/timeline/utils/transition-utils';
 import type {
   TransitionCategory,
   WipeDirection,
@@ -34,7 +33,6 @@ import { cn } from '@/lib/utils';
 // Icon mapping for presentations
 const ICON_MAP: Record<string, LucideIcon> = {
   Blend,
-  Scissors,
   ArrowRight,
   ArrowLeft,
   ArrowUp,
@@ -255,57 +253,53 @@ function computeAdjacentInfo(
 
   const selectedEnd = selectedItem.from + selectedItem.durationInFrames;
 
-  // Check neighbors
-  const leftNeighbor = trackItems[selectedIndex - 1];
-  const rightNeighbor = trackItems[selectedIndex + 1];
-
-  let canAddLeft = false;
-  let leftClipId: string | undefined;
-  let hasTransitionLeft = false;
-
-  if (leftNeighbor) {
-    const leftEnd = leftNeighbor.from + leftNeighbor.durationInFrames;
-    canAddLeft = leftEnd === selectedItem.from;
-    leftClipId = leftNeighbor.id;
-    hasTransitionLeft = transitions.some(
-      (t) => t.leftClipId === leftNeighbor.id && t.rightClipId === selectedId
-    );
+  const transitionByPair = new Map<string, string>();
+  for (const t of transitions) {
+    transitionByPair.set(`${t.leftClipId}->${t.rightClipId}`, t.id);
   }
 
-  let canAddRight = false;
-  let rightClipId: string | undefined;
-  let hasTransitionRight = false;
+  const rightCandidates = trackItems
+    .filter((i) => i.id !== selectedId && areFramesAligned(selectedEnd, i.from))
+    .toSorted((a, b) => a.from - b.from);
+  const leftCandidates = trackItems
+    .filter((i) => i.id !== selectedId && areFramesAligned(i.from + i.durationInFrames, selectedItem.from))
+    .toSorted((a, b) => b.from - a.from);
 
-  if (rightNeighbor) {
-    canAddRight = selectedEnd === rightNeighbor.from;
-    rightClipId = rightNeighbor.id;
-    hasTransitionRight = transitions.some(
-      (t) => t.leftClipId === selectedId && t.rightClipId === rightNeighbor.id
-    );
+  const rightWithoutTransition = rightCandidates.find(
+    (candidate) => !transitionByPair.has(`${selectedId}->${candidate.id}`)
+  );
+  if (rightWithoutTransition) {
+    return { leftClipId: selectedId, rightClipId: rightWithoutTransition.id, hasExisting: false };
   }
 
-  // Prefer right neighbor
-  if (canAddRight && !hasTransitionRight) {
-    return { leftClipId: selectedId, rightClipId: rightClipId!, hasExisting: false };
-  } else if (canAddLeft && !hasTransitionLeft) {
-    return { leftClipId: leftClipId!, rightClipId: selectedId, hasExisting: false };
-  } else if (canAddRight && hasTransitionRight) {
+  const leftWithoutTransition = leftCandidates.find(
+    (candidate) => !transitionByPair.has(`${candidate.id}->${selectedId}`)
+  );
+  if (leftWithoutTransition) {
+    return { leftClipId: leftWithoutTransition.id, rightClipId: selectedId, hasExisting: false };
+  }
+
+  const rightWithTransition = rightCandidates.find(
+    (candidate) => transitionByPair.has(`${selectedId}->${candidate.id}`)
+  );
+  if (rightWithTransition) {
     return {
       leftClipId: selectedId,
-      rightClipId: rightClipId!,
+      rightClipId: rightWithTransition.id,
       hasExisting: true,
-      existingTransitionId: transitions.find(
-        (t) => t.leftClipId === selectedId && t.rightClipId === rightClipId
-      )?.id,
+      existingTransitionId: transitionByPair.get(`${selectedId}->${rightWithTransition.id}`),
     };
-  } else if (canAddLeft && hasTransitionLeft) {
+  }
+
+  const leftWithTransition = leftCandidates.find(
+    (candidate) => transitionByPair.has(`${candidate.id}->${selectedId}`)
+  );
+  if (leftWithTransition) {
     return {
-      leftClipId: leftClipId!,
+      leftClipId: leftWithTransition.id,
       rightClipId: selectedId,
       hasExisting: true,
-      existingTransitionId: transitions.find(
-        (t) => t.leftClipId === leftClipId && t.rightClipId === selectedId
-      )?.id,
+      existingTransitionId: transitionByPair.get(`${leftWithTransition.id}->${selectedId}`),
     };
   }
 
@@ -315,6 +309,8 @@ function computeAdjacentInfo(
 export const TransitionsPanel = memo(function TransitionsPanel() {
   const addTransition = useTimelineStore((s) => s.addTransition);
   const updateTransition = useTimelineStore((s) => s.updateTransition);
+  const items = useTimelineStore((s) => s.items);
+  const transitions = useTimelineStore((s) => s.transitions);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Get selection
@@ -322,18 +318,10 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   const selectionCount = selectedItemIds.length;
   const selectedId = selectionCount === 1 ? selectedItemIds[0] : null;
 
-  // Compute adjacentInfo via derived selector with shallow comparison
-  const adjacentInfo = useTimelineStore(
-    useShallow(
-      useCallback(
-        (s) => {
-          if (!selectedId) return null;
-          return computeAdjacentInfo([selectedId], s.items, s.transitions);
-        },
-        [selectedId]
-      )
-    )
-  );
+  const adjacentInfo = useMemo(() => {
+    if (!selectedId) return null;
+    return computeAdjacentInfo([selectedId], items, transitions);
+  }, [selectedId, items, transitions]);
 
   // Filter configs by search query
   const filteredCategories = useMemo(() => {
@@ -389,9 +377,9 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
       if (!config) return;
 
       // Get fresh state at click time
-      const { items, transitions } = useTimelineStore.getState();
+      const { items: currentItems, transitions: currentTransitions } = useTimelineStore.getState();
       const currentSelectedIds = useSelectionStore.getState().selectedItemIds;
-      const info = computeAdjacentInfo(currentSelectedIds, items, transitions);
+      const info = computeAdjacentInfo(currentSelectedIds, currentItems, currentTransitions);
 
       if (!info) return;
 

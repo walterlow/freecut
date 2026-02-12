@@ -1,4 +1,5 @@
 import type { TimelineItem } from '@/types/timeline';
+import { areFramesAligned } from './transition-utils';
 
 /**
  * Check if two items can be joined (inverse of split)
@@ -18,7 +19,7 @@ export function canJoinItems(leftItem: TimelineItem, rightItem: TimelineItem): b
   // Must be from same source media
   if (leftItem.mediaId !== rightItem.mediaId) return false;
   // Must be adjacent (left ends where right begins)
-  if (leftItem.from + leftItem.durationInFrames !== rightItem.from) return false;
+  if (!areFramesAligned(leftItem.from + leftItem.durationInFrames, rightItem.from)) return false;
   // Must have same speed
   if ((leftItem.speed || 1) !== (rightItem.speed || 1)) return false;
 

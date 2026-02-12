@@ -23,6 +23,24 @@ describe('getRazorSplitPosition', () => {
     expect(result.snappedX).toBe(playheadX);
   });
 
+  it('rounds snapped playhead split frame to an integer', () => {
+    const currentFrame = 120.49;
+    const roundedFrame = Math.round(currentFrame);
+    const playheadX = frameToPixels(roundedFrame);
+
+    const result = getRazorSplitPosition({
+      cursorX: playheadX,
+      currentFrame,
+      isPlaying: false,
+      frameToPixels,
+      pixelsToFrame,
+    });
+
+    expect(result.snappedToPlayhead).toBe(true);
+    expect(result.splitFrame).toBe(roundedFrame);
+    expect(result.snappedX).toBe(playheadX);
+  });
+
   it('does not snap to playhead while playback is running', () => {
     const currentFrame = 120;
     const playheadX = frameToPixels(currentFrame);

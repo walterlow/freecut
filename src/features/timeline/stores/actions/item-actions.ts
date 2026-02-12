@@ -7,6 +7,7 @@ import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
+import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { execute, applyTransitionRepairs } from './shared';
 
 export function addItem(item: TimelineItem): void {
@@ -171,6 +172,10 @@ export function splitItem(
       return t;
     });
     useTransitionsStore.getState().setTransitions(updatedTransitions);
+
+    // Keep selection anchored to the split clip for immediate downstream
+    // adjacency/transition detection across all split entry points.
+    useSelectionStore.getState().selectItems([result.leftItem.id]);
 
     useTimelineSettingsStore.getState().markDirty();
     return result;

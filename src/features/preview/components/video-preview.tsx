@@ -45,6 +45,11 @@ function useCustomPlayer(
   const ignorePlayerUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
 
+  const getPlayerFrame = useCallback(() => {
+    const frame = playerRef.current?.getCurrentFrame();
+    return Number.isFinite(frame) ? Math.round(frame) : null;
+  }, [playerRef]);
+
   // Detect when Player becomes ready
   useEffect(() => {
     if (playerRef.current && !playerReady) {
@@ -76,18 +81,23 @@ function useCustomPlayer(
       if (isPlaying && !wasPlaying) {
         // Always resume from the store playhead, not the hover-preview (gray) playhead.
         const { currentFrame, setPreviewFrame } = usePlaybackStore.getState();
-        ignorePlayerUpdatesRef.current = true;
-        playerRef.current.seekTo(currentFrame);
+        const playerFrame = getPlayerFrame();
+        const needsSeek = playerFrame === null || Math.abs(playerFrame - currentFrame) > 1;
+        if (needsSeek) {
+          ignorePlayerUpdatesRef.current = true;
+          playerRef.current.seekTo(currentFrame);
+          lastSyncedFrameRef.current = currentFrame;
+        }
         setPreviewFrame(null);
-        requestAnimationFrame(() => {
-          // If playback was toggled off before this frame, do not start.
-          if (!usePlaybackStore.getState().isPlaying) {
-            ignorePlayerUpdatesRef.current = false;
-            return;
-          }
-          playerRef.current?.play();
+
+        // Start playback immediately after optional seek. Deferring to rAF adds
+        // an extra frame of latency every time playback resumes.
+        if (!usePlaybackStore.getState().isPlaying) {
           ignorePlayerUpdatesRef.current = false;
-        });
+          return;
+        }
+        playerRef.current?.play();
+        ignorePlayerUpdatesRef.current = false;
         return;
       } else if (!isPlaying && wasPlaying) {
         playerRef.current.pause();
@@ -95,7 +105,7 @@ function useCustomPlayer(
     } catch (error) {
       console.error('[Player Sync] Failed to control playback:', error);
     }
-  }, [isPlaying, playerRef]);
+  }, [isPlaying, playerRef, getPlayerFrame]);
 
   // Timeline → Player: Sync frame position
   useEffect(() => {
@@ -116,27 +126,28 @@ function useCustomPlayer(
       const frameDiff = Math.abs(currentFrame - lastSyncedFrameRef.current);
       if (frameDiff === 0) return;
 
-      if (state.isPlaying && frameDiff === 1) {
-        lastSyncedFrameRef.current = currentFrame;
-        return;
+      if (state.isPlaying) {
+        const playerFrame = getPlayerFrame();
+        // While actively playing, most store frame updates originate from the Player itself.
+        // Only seek when there is real drift, which indicates an external timeline seek.
+        if (playerFrame !== null && Math.abs(playerFrame - currentFrame) <= 2) {
+          lastSyncedFrameRef.current = currentFrame;
+          return;
+        }
       }
 
       lastSyncedFrameRef.current = currentFrame;
       ignorePlayerUpdatesRef.current = true;
 
       try {
-        const handleSeeked = () => {
+        playerRef.current.seekTo(currentFrame);
+        requestAnimationFrame(() => {
           const actualFrame = playerRef.current?.getCurrentFrame();
           if (actualFrame !== undefined) {
             lastSyncedFrameRef.current = actualFrame;
           }
-          requestAnimationFrame(() => {
-            ignorePlayerUpdatesRef.current = false;
-          });
-          playerRef.current?.seekTo(currentFrame);
-        };
-
-        handleSeeked();
+          ignorePlayerUpdatesRef.current = false;
+        });
       } catch (error) {
         console.error('Failed to seek Player:', error);
         ignorePlayerUpdatesRef.current = false;
@@ -144,7 +155,7 @@ function useCustomPlayer(
     });
 
     return unsubscribe;
-  }, [playerReady, playerRef]);
+  }, [playerReady, playerRef, getPlayerFrame]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
@@ -173,6 +184,7 @@ function useCustomPlayer(
     });
   }, [playerReady, playerRef]);
 
+  return { ignorePlayerUpdatesRef };
 }
 
 /**
@@ -214,7 +226,7 @@ export const VideoPreview = memo(function VideoPreview({
   const zoom = usePlaybackStore((s) => s.zoom);
 
   // Custom Player integration (hook handles bidirectional sync)
-  useCustomPlayer(playerRef);
+  const { ignorePlayerUpdatesRef } = useCustomPlayer(playerRef);
 
   // Register frame capture function for project thumbnail generation and split transitions
   const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
@@ -502,8 +514,13 @@ export const VideoPreview = memo(function VideoPreview({
   // Handle frame change from player
   // Skip when in preview mode to keep primary playhead stationary
   const handleFrameChange = useCallback((frame: number) => {
-    if (usePlaybackStore.getState().previewFrame !== null) return;
-    usePlaybackStore.getState().setCurrentFrame(frame);
+    if (ignorePlayerUpdatesRef.current) return;
+    const playbackState = usePlaybackStore.getState();
+    if (!playbackState.isPlaying && playbackState.previewFrame !== null) return;
+    const nextFrame = Math.round(frame);
+    const { currentFrame, setCurrentFrame } = playbackState;
+    if (currentFrame === nextFrame) return;
+    setCurrentFrame(nextFrame);
   }, []);
 
   // Handle play state change from player
@@ -513,33 +530,6 @@ export const VideoPreview = memo(function VideoPreview({
     } else {
       usePlaybackStore.getState().pause();
     }
-  }, []);
-
-  // Handle frame update from player during playback
-  useEffect(() => {
-    if (!playerRef.current) return;
-
-    let lastUpdateTime = 0;
-    const THROTTLE_MS = 100;
-
-    const handleTimeUpdate = () => {
-      const now = performance.now();
-      if (now - lastUpdateTime >= THROTTLE_MS) {
-        // Skip when in preview mode to keep primary playhead stationary
-        if (usePlaybackStore.getState().previewFrame !== null) return;
-        const frame = playerRef.current?.getCurrentFrame();
-        if (frame !== undefined) {
-          usePlaybackStore.getState().setCurrentFrame(frame);
-          lastUpdateTime = now;
-        }
-      }
-    };
-
-    const intervalId = setInterval(handleTimeUpdate, 16); // ~60fps check
-
-    return () => {
-      clearInterval(intervalId);
-    };
   }, []);
 
   return (

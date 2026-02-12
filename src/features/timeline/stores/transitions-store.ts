@@ -48,6 +48,18 @@ interface TransitionsActions {
   clearPendingBreakages: () => void;
 }
 
+function normalizeTransitionDuration(durationInFrames: number): number {
+  if (!Number.isFinite(durationInFrames)) return 1;
+  return Math.max(1, Math.round(durationInFrames));
+}
+
+function normalizeTransition(transition: Transition): Transition {
+  return {
+    ...transition,
+    durationInFrames: normalizeTransitionDuration(transition.durationInFrames),
+  };
+}
+
 export const useTransitionsStore = create<TransitionsState & TransitionsActions>()(
   (set) => ({
     // State
@@ -55,7 +67,7 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
     pendingBreakages: [],
 
     // Bulk setters
-    setTransitions: (transitions) => set({ transitions }),
+    setTransitions: (transitions) => set({ transitions: transitions.map((transition) => normalizeTransition(transition)) }),
     setPendingBreakages: (breakages) => set({ pendingBreakages: breakages }),
 
     // Add transition
@@ -69,7 +81,7 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
       direction
     ) => {
       const config = TRANSITION_CONFIGS[type];
-      const duration = durationInFrames ?? config.defaultDuration;
+      const duration = normalizeTransitionDuration(durationInFrames ?? config.defaultDuration);
 
       const id = crypto.randomUUID();
 
@@ -94,9 +106,16 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
 
     // Update transition
     _updateTransition: (id, updates) => set((state) => ({
-      transitions: state.transitions.map((t) =>
-        t.id === id ? { ...t, ...updates } : t
-      ),
+      transitions: state.transitions.map((t) => {
+        if (t.id !== id) return t;
+        const normalizedUpdates = updates.durationInFrames === undefined
+          ? updates
+          : {
+              ...updates,
+              durationInFrames: normalizeTransitionDuration(updates.durationInFrames),
+            };
+        return normalizeTransition({ ...t, ...normalizedUpdates });
+      }),
     })),
 
     // Remove single transition

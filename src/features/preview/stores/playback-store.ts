@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { PlaybackState, PlaybackActions } from '../types';
 
+function normalizeFrame(frame: number): number {
+  if (!Number.isFinite(frame)) return 0;
+  return Math.max(0, Math.round(frame));
+}
+
 export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
   persist(
     (set) => ({
@@ -17,16 +22,24 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       captureFrame: null, // Set by VideoPreview when Player is mounted
 
       // Actions
-      setCurrentFrame: (frame) => set({ currentFrame: frame }),
-      play: () => set({ isPlaying: true }),
-      pause: () => set({ isPlaying: false }),
+      setCurrentFrame: (frame) =>
+        set((state) => {
+          const nextFrame = normalizeFrame(frame);
+          return state.currentFrame === nextFrame ? state : { currentFrame: nextFrame };
+        }),
+      play: () => set((state) => (state.isPlaying ? state : { isPlaying: true })),
+      pause: () => set((state) => (state.isPlaying ? { isPlaying: false } : state)),
       togglePlayPause: () => set((state) => ({ isPlaying: !state.isPlaying })),
       setPlaybackRate: (rate) => set({ playbackRate: rate }),
       toggleLoop: () => set((state) => ({ loop: !state.loop })),
       setVolume: (volume) => set({ volume }),
       toggleMute: () => set((state) => ({ muted: !state.muted })),
       setZoom: (zoom) => set({ zoom }),
-      setPreviewFrame: (frame) => set({ previewFrame: frame }),
+      setPreviewFrame: (frame) =>
+        set((state) => {
+          const nextFrame = frame == null ? null : normalizeFrame(frame);
+          return state.previewFrame === nextFrame ? state : { previewFrame: nextFrame };
+        }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
     }),
     {

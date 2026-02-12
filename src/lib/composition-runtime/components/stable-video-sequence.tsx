@@ -40,6 +40,32 @@ interface VideoGroup {
   maxEnd: number;
 }
 
+function findActiveItemIndex(items: StableVideoSequenceItem[], frame: number): number {
+  let low = 0;
+  let high = items.length - 1;
+
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const item = items[mid]!;
+    const start = item.from;
+    const end = item.from + item.durationInFrames;
+
+    if (frame < start) {
+      high = mid - 1;
+      continue;
+    }
+
+    if (frame >= end) {
+      low = mid + 1;
+      continue;
+    }
+
+    return mid;
+  }
+
+  return -1;
+}
+
 /**
  * Groups video items by their origin key (mediaId-originId) AND adjacency.
  * Only adjacent clips (one ends where another begins) are grouped together.
@@ -210,31 +236,13 @@ const GroupRenderer: React.FC<{
   const globalFrame = localFrame + group.minFrom;
 
   // Find the active item ID for current frame
-  // IMPORTANT: Only extract the ID here, not the object reference.
-  // The object reference from .find() changes every frame, but the ID is stable.
   // During premount, don't find any active item - we shouldn't render.
-  const activeItemId = isPremounted ? undefined : group.items.find(
-    (item) => globalFrame >= item.from && globalFrame < item.from + item.durationInFrames
-  )?.id;
+  const activeItemIndex = isPremounted ? -1 : findActiveItemIndex(group.items, globalFrame);
+  const activeItem = activeItemIndex >= 0 ? group.items[activeItemIndex] : null;
 
-  // Create a fingerprint of item properties that affect playback calculations.
-  // This ensures adjustedItem recalculates when speed/source bounds change (e.g., after rate stretch).
-  // CRITICAL: Compute inline (not memoized) to ensure it always reflects current group.items values.
-  // Using useMemo here could miss updates if React.memo on GroupRenderer doesn't re-render.
-  const itemsFingerprint = group.items
-    .map(i => `${i.id}:${i.speed ?? 1}:${i.sourceStart ?? 0}:${i.sourceEnd ?? ''}:${i.from}:${i.durationInFrames}:${i.trackVisible}:${i.muted}`)
-    .join('|');
-
-  // Memoize the adjusted item based on active item's identity.
-  // Only recalculates when crossing split boundaries (activeItemId changes).
-  // CRITICAL: Depend on activeItemId (string), NOT on the activeItem object reference.
-  // The object reference changes every frame due to .find(), but the ID is stable.
-  // Also depends on itemsFingerprint to catch property changes (speed, sourceStart, etc.)
+  // Memoize the adjusted item based on active item identity.
+  // Only recalculates when crossing split boundaries or when item/group properties change.
   const adjustedItem = useMemo(() => {
-    if (!activeItemId) return null;
-
-    // Look up item by ID inside useMemo - this ensures we use the stable group.items reference
-    const activeItem = group.items.find((item) => item.id === activeItemId);
     if (!activeItem) return null;
 
     // Adjust sourceStart to account for the shared Sequence.
@@ -263,7 +271,7 @@ const GroupRenderer: React.FC<{
       // not relative to this specific item, causing fades to misbehave on split clips
       _sequenceFrameOffset: itemOffset,
     };
-  }, [activeItemId, group.items, group.minFrom, itemsFingerprint]);
+  }, [activeItem, group.minFrom]);
 
   // CRITICAL: Also memoize the RENDERED OUTPUT.
   // This prevents calling renderItem (which creates new React elements) every frame.

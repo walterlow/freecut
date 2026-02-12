@@ -8,6 +8,48 @@ import { getSourceProperties, isMediaItem, calculateSplitSourceBoundaries } from
 
 const log = createLogger('ItemsStore');
 
+function roundFrame(value: number, fallback = 0): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.round(value));
+}
+
+function roundDuration(value: number, fallback = 1): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.round(value));
+}
+
+function roundOptionalFrame(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  return roundFrame(value);
+}
+
+function normalizeFrameFields<T extends TimelineItem>(item: T): T {
+  return {
+    ...item,
+    from: roundFrame(item.from),
+    durationInFrames: roundDuration(item.durationInFrames),
+    trimStart: roundOptionalFrame(item.trimStart),
+    trimEnd: roundOptionalFrame(item.trimEnd),
+    sourceStart: roundOptionalFrame(item.sourceStart),
+    sourceEnd: roundOptionalFrame(item.sourceEnd),
+    sourceDuration: roundOptionalFrame(item.sourceDuration),
+  };
+}
+
+function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineItem> {
+  const normalized = { ...updates } as Partial<TimelineItem>;
+
+  if (normalized.from !== undefined) normalized.from = roundFrame(normalized.from);
+  if (normalized.durationInFrames !== undefined) normalized.durationInFrames = roundDuration(normalized.durationInFrames);
+  if (normalized.trimStart !== undefined) normalized.trimStart = roundFrame(normalized.trimStart);
+  if (normalized.trimEnd !== undefined) normalized.trimEnd = roundFrame(normalized.trimEnd);
+  if (normalized.sourceStart !== undefined) normalized.sourceStart = roundFrame(normalized.sourceStart);
+  if (normalized.sourceEnd !== undefined) normalized.sourceEnd = roundFrame(normalized.sourceEnd);
+  if (normalized.sourceDuration !== undefined) normalized.sourceDuration = roundFrame(normalized.sourceDuration);
+
+  return normalized;
+}
+
 /**
  * Items state - timeline clips/items and tracks.
  * This is the core timeline content. Complex cross-domain operations
@@ -63,22 +105,25 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     tracks: [],
 
     // Bulk setters
-    setItems: (items) => set({ items }),
+    setItems: (items) => set({ items: items.map((item) => normalizeFrameFields(item)) }),
     setTracks: (tracks) => set({
       tracks: [...tracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     }),
 
     // Add item
     _addItem: (item) => set((state) => ({
-      items: [...state.items, item],
+      items: [...state.items, normalizeFrameFields(item)],
     })),
 
     // Update item
-    _updateItem: (id, updates) => set((state) => ({
+    _updateItem: (id, updates) => {
+      const normalizedUpdates = normalizeItemUpdates(updates);
+      return set((state) => ({
       items: state.items.map((i) =>
-        i.id === id ? { ...i, ...updates } as typeof i : i
+        i.id === id ? normalizeFrameFields({ ...i, ...normalizedUpdates } as typeof i) : i
       ),
-    })),
+      }));
+    },
 
     // Remove items (simple - cascade handled by timeline-actions)
     _removeItems: (ids) => set((state) => {
@@ -110,6 +155,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
     // Close gap at position
     _closeGapAtPosition: (trackId, frame) => set((state) => {
+      const targetFrame = roundFrame(frame);
       const trackItems = state.items
         .filter((i) => i.trackId === trackId)
         .sort((a, b) => a.from - b.from);
@@ -120,7 +166,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       let gapEnd = 0;
 
       for (const item of trackItems) {
-        if (frame >= gapStart && frame < item.from) {
+        if (targetFrame >= gapStart && targetFrame < item.from) {
           gapEnd = item.from;
           break;
         }
@@ -132,7 +178,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       const gapSize = gapEnd - gapStart;
       const newItems = state.items.map((item) => {
         if (item.trackId === trackId && item.from >= gapEnd) {
-          return { ...item, from: item.from - gapSize };
+          return normalizeFrameFields({ ...item, from: item.from - gapSize });
         }
         return item;
       });
@@ -141,26 +187,29 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     }),
 
     // Move single item
-    _moveItem: (id, newFrom, newTrackId) => set((state) => ({
+    _moveItem: (id, newFrom, newTrackId) => {
+      const normalizedFrom = roundFrame(newFrom);
+      return set((state) => ({
       items: state.items.map((item) =>
         item.id === id
-          ? { ...item, from: newFrom, ...(newTrackId && { trackId: newTrackId }) }
+          ? normalizeFrameFields({ ...item, from: normalizedFrom, ...(newTrackId && { trackId: newTrackId }) })
           : item
       ),
-    })),
+      }));
+    },
 
     // Move multiple items
     _moveItems: (updates) => set((state) => {
-      const updateMap = new Map(updates.map((u) => [u.id, u]));
+      const updateMap = new Map(updates.map((u) => [u.id, { ...u, from: roundFrame(u.from) }]));
       return {
         items: state.items.map((item) => {
           const update = updateMap.get(item.id);
           if (!update) return item;
-          return {
+          return normalizeFrameFields({
             ...item,
             from: update.from,
             ...(update.trackId && { trackId: update.trackId }),
-          };
+          });
         }),
       };
     }),
@@ -179,7 +228,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         const duplicate = {
           ...original,
           id: crypto.randomUUID(),
-          from: position.from,
+          from: roundFrame(position.from),
           trackId: position.trackId,
           // Give duplicate a new originId so it forms its own group in StableVideoSequence.
           // Without this, split clips that are duplicated would be grouped with the originals,
@@ -187,7 +236,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           originId: crypto.randomUUID(),
         } as TimelineItem;
 
-        newItems.push(duplicate);
+        newItems.push(normalizeFrameFields(duplicate));
       }
 
       set((state) => ({ items: [...state.items, ...newItems] }));
@@ -212,10 +261,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
         return {
           ...item,
-          from: newFrom,
-          durationInFrames: newDuration,
+          from: roundFrame(newFrom),
+          durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
-        };
+        } as typeof item;
       }),
     })),
 
@@ -235,9 +284,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
         return {
           ...item,
-          durationInFrames: newDuration,
+          durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
-        };
+        } as typeof item;
       }),
     })),
 
@@ -246,19 +295,26 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       const state = get();
       const item = state.items.find((i) => i.id === id);
       if (!item) return null;
+      const splitAt = roundFrame(splitFrame);
 
-      const itemStart = item.from;
-      const itemEnd = item.from + item.durationInFrames;
+      const itemStart = roundFrame(item.from);
+      const itemDuration = roundDuration(item.durationInFrames);
+      const itemEnd = itemStart + itemDuration;
 
       // Validate split point is within item
-      if (splitFrame <= itemStart || splitFrame >= itemEnd) return null;
+      if (splitAt <= itemStart || splitAt >= itemEnd) return null;
 
-      const leftDuration = splitFrame - itemStart;
-      const rightDuration = itemEnd - splitFrame;
+      const leftDuration = splitAt - itemStart;
+      const rightDuration = itemEnd - splitAt;
+      // Ensure split siblings share a stable lineage key.
+      // Legacy clips may not have originId; fall back to current item ID.
+      const splitOriginId = item.originId ?? item.id;
 
       // Create left item (keeps original ID for minimal disruption)
       const leftItem = {
         ...item,
+        from: itemStart,
+        originId: splitOriginId,
         durationInFrames: leftDuration,
       } as TimelineItem;
 
@@ -266,7 +322,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       const rightItem = {
         ...item,
         id: crypto.randomUUID(),
-        from: splitFrame,
+        originId: splitOriginId,
+        from: splitAt,
         durationInFrames: rightDuration,
       } as TimelineItem;
 
@@ -284,10 +341,12 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       }
 
       set((state) => ({
-        items: state.items.map((i) => (i.id === id ? leftItem : i)).concat(rightItem),
+        items: state.items
+          .map((i) => (i.id === id ? normalizeFrameFields(leftItem) : i))
+          .concat(normalizeFrameFields(rightItem)),
       }));
 
-      return { leftItem, rightItem };
+      return { leftItem: normalizeFrameFields(leftItem), rightItem: normalizeFrameFields(rightItem) };
     },
 
     // Join items
@@ -315,7 +374,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       // This is the inverse of split: first item provides start bounds, last item provides end bounds
       const joinedItem = {
         ...firstItem,
-        durationInFrames: totalDuration,
+        from: roundFrame(firstItem.from),
+        durationInFrames: roundDuration(totalDuration),
         // Take sourceEnd and trimEnd from the last item to maintain source continuity
         sourceEnd: lastItem.sourceEnd,
         trimEnd: lastItem.trimEnd,
@@ -326,7 +386,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       return {
         items: state.items
           .filter((i) => !idsToRemove.has(i.id))
-          .map((i) => (i.id === firstItem.id ? joinedItem : i)),
+          .map((i) => (i.id === firstItem.id ? normalizeFrameFields(joinedItem) : i)),
       };
     }),
 
@@ -348,10 +408,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
         return {
           ...item,
-          from: newFrom,
-          durationInFrames: newDuration,
+          from: roundFrame(newFrom),
+          durationInFrames: roundDuration(newDuration),
           speed: newSpeed,
-          sourceEnd: clampedSourceEnd,
+          sourceEnd: roundFrame(clampedSourceEnd),
         } as typeof item;
       }),
     })),

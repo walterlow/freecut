@@ -38,8 +38,15 @@ export function addTransition(
       return false;
     }
 
-    // Default duration is 1 second (fps frames)
-    const duration = durationInFrames ?? fps;
+    const maxByClipDuration = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
+    if (maxByClipDuration < 1) {
+      logger.warn('[addTransition] Cannot add transition: clips are too short');
+      return false;
+    }
+
+    // Default duration is 1 second (fps frames), but clamp to what both clips can support.
+    const requestedDuration = durationInFrames ?? fps;
+    const duration = Math.max(1, Math.min(Math.round(requestedDuration), maxByClipDuration));
 
     // Validate that transition can be added
     const validation = canAddTransition(leftClip, rightClip, duration);

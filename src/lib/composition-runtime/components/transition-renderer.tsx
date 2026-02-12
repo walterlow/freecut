@@ -439,6 +439,7 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
 
 interface TransitionOverlayProps {
   transition: Transition;
+  durationInFrames: number;
   isOutgoing: boolean;
   children: React.ReactNode;
   zIndex: number;
@@ -458,6 +459,7 @@ interface TransitionOverlayProps {
  */
 const TransitionOverlay: React.FC<TransitionOverlayProps> = React.memo(function TransitionOverlay({
   transition,
+  durationInFrames,
   isOutgoing,
   children,
   zIndex,
@@ -475,17 +477,20 @@ const TransitionOverlay: React.FC<TransitionOverlayProps> = React.memo(function 
       calculateEasingCurve({
         timing: transition.timing,
         fps,
-        durationInFrames: transition.durationInFrames,
+        durationInFrames,
         bezierPoints: transition.bezierPoints,
       }),
-    [transition.timing, fps, transition.durationInFrames, transition.bezierPoints]
+    [transition.timing, fps, durationInFrames, transition.bezierPoints]
   );
 
   // Apply styles directly to DOM each frame (bypasses React for performance)
   useEffect(() => {
     if (!containerRef.current || frame < 0) return;
 
-    const index = Math.max(0, Math.min(frame, easingCurve.length - 1));
+    // localFrame can be fractional if a transition window starts on a non-integer frame.
+    // Easing arrays are integer-indexed, so quantize before indexing.
+    const frameIndex = Math.floor(Number.isFinite(frame) ? frame : 0);
+    const index = Math.max(0, Math.min(frameIndex, easingCurve.length - 1));
     const progress = easingCurve[index] ?? 0;
 
     const styles = calculateTransitionStyles(
@@ -585,6 +590,7 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
           {/* Incoming clip (below outgoing) */}
           <TransitionOverlay
             transition={window.transition}
+            durationInFrames={window.durationInFrames}
             isOutgoing={false}
             zIndex={1}
             canvasWidth={canvasWidth}
@@ -607,6 +613,7 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
           {/* Both overlap clips are aligned to timeline chronology at window.startFrame. */}
           <TransitionOverlay
             transition={window.transition}
+            durationInFrames={window.durationInFrames}
             isOutgoing={true}
             zIndex={2}
             canvasWidth={canvasWidth}
@@ -670,3 +677,4 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
     </>
   );
 });
+

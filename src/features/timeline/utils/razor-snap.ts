@@ -26,13 +26,14 @@ export function getRazorSplitPosition({
   frameToPixels,
   pixelsToFrame,
 }: RazorSplitPositionParams): RazorSplitPositionResult {
-  const playheadX = frameToPixels(currentFrame);
+  const roundedPlayheadFrame = Math.round(currentFrame);
+  const playheadX = frameToPixels(roundedPlayheadFrame);
   const shouldSnapToPlayhead =
     !isPlaying && Math.abs(cursorX - playheadX) <= RAZOR_PLAYHEAD_SNAP_THRESHOLD_PX;
 
   if (shouldSnapToPlayhead) {
     return {
-      splitFrame: currentFrame,
+      splitFrame: roundedPlayheadFrame,
       snappedX: playheadX,
       snappedToPlayhead: true,
     };

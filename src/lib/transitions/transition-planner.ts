@@ -1,6 +1,8 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 
+const FRAME_EPSILON = 1;
+
 interface TransitionPortions {
   leftPortion: number;
   rightPortion: number;
@@ -30,6 +32,10 @@ interface MutableResolvedTransition<T extends TimelineItem> {
 function clampTransitionAlignment(alignment: number | undefined): number {
   const value = alignment ?? 0.5;
   return Math.max(0, Math.min(1, value));
+}
+
+function areFramesAligned(leftEnd: number, rightStart: number): boolean {
+  return Math.abs(leftEnd - rightStart) <= FRAME_EPSILON;
 }
 
 export function calculateTransitionPortions(
@@ -107,8 +113,9 @@ export function resolveTransitionWindows<T extends TimelineItem>(
     const rightClip = clipsById.get(transition.rightClipId);
     if (!leftClip || !rightClip) continue;
 
-    const cutPoint = leftClip.from + leftClip.durationInFrames;
-    if (rightClip.from !== cutPoint) continue;
+    const leftEnd = leftClip.from + leftClip.durationInFrames;
+    if (!areFramesAligned(leftEnd, rightClip.from)) continue;
+    const cutPoint = rightClip.from;
 
     const portions = calculateTransitionPortions(
       transition.durationInFrames,
@@ -174,3 +181,4 @@ export function resolveTransitionWindows<T extends TimelineItem>(
     return a.transition.id.localeCompare(b.transition.id);
   });
 }
+

@@ -19,6 +19,12 @@ import type { TimelineItem } from '@/types/timeline';
 import type { CanAddTransitionResult } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
 
+const FRAME_EPSILON = 1;
+
+export function areFramesAligned(leftEnd: number, rightStart: number): boolean {
+  return Math.abs(leftEnd - rightStart) <= FRAME_EPSILON;
+}
+
 /**
  * Check if a transition can be added between two clips.
  * Validates: same track, adjacency, and clip duration limits.
@@ -37,7 +43,7 @@ export function canAddTransition(
   }
 
   // Check adjacency (left clip ends where right clip starts)
-  if (leftClip.from + leftClip.durationInFrames !== rightClip.from) {
+  if (!areFramesAligned(leftClip.from + leftClip.durationInFrames, rightClip.from)) {
     return { canAdd: false, reason: 'Clips must be adjacent' };
   }
 
@@ -106,3 +112,4 @@ function getAvailableHandle(
     return sourceToTimelineFrames(availableAfter, speed);
   }
 }
+

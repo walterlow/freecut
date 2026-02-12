@@ -18,6 +18,7 @@ import type {
   TransitionBreakageReason,
   TransitionRepairResult,
 } from '@/types/transition';
+import { areFramesAligned } from './transition-utils';
 
 /** Clip types that can have transitions */
 const VALID_TRANSITION_TYPES = new Set(['video', 'image']);
@@ -134,7 +135,7 @@ function tryRepairTransition(
 
   // Check adjacency
   const leftEnd = leftClip.from + leftClip.durationInFrames;
-  if (leftEnd !== rightClip.from) {
+  if (!areFramesAligned(leftEnd, rightClip.from)) {
     return {
       status: 'broken',
       breakage: createBreakage(
@@ -234,14 +235,14 @@ function tryReassignClip(
     candidate = trackClips[existingIndex - 1];
     if (candidate) {
       const candidateEnd = candidate.from + candidate.durationInFrames;
-      if (candidateEnd !== existingClip.from) candidate = undefined;
+      if (!areFramesAligned(candidateEnd, existingClip.from)) candidate = undefined;
     }
   } else {
     // Need a clip immediately after the existing left clip
     candidate = trackClips[existingIndex + 1];
     if (candidate) {
       const existingEnd = existingClip.from + existingClip.durationInFrames;
-      if (existingEnd !== candidate.from) candidate = undefined;
+      if (!areFramesAligned(existingEnd, candidate.from)) candidate = undefined;
     }
   }
 

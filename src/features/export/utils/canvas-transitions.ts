@@ -189,12 +189,38 @@ function calculateProgress(
 /**
  * Calculate opacity for fade transition using equal-power crossfade.
  */
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 function getFadeOpacity(progress: number, isOutgoing: boolean): number {
   if (isOutgoing) {
     return Math.cos(progress * Math.PI / 2);
-  } else {
-    return Math.sin(progress * Math.PI / 2);
   }
+  return Math.sin(progress * Math.PI / 2);
+}
+
+function getFadeScale(progress: number, isOutgoing: boolean): number {
+  if (isOutgoing) {
+    return 1 - (0.04 * progress);
+  }
+  return 1.04 - (0.04 * progress);
+}
+
+function drawScaledCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  source: OffscreenCanvas,
+  canvas: TransitionCanvasSettings,
+  scale: number,
+  alpha = 1
+): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.scale(scale, scale);
+  ctx.translate(-canvas.width / 2, -canvas.height / 2);
+  ctx.drawImage(source, 0, 0);
+  ctx.restore();
 }
 
 /**
@@ -204,22 +230,58 @@ function renderFadeTransition(
   ctx: OffscreenCanvasRenderingContext2D,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
-  progress: number
+  progress: number,
+  canvas: TransitionCanvasSettings
 ): void {
-  // Clamp progress for opacity
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
 
-  // Draw incoming clip (right) first
-  ctx.save();
-  ctx.globalAlpha = getFadeOpacity(clampedProgress, false);
-  ctx.drawImage(rightCanvas, 0, 0);
-  ctx.restore();
+  drawScaledCanvas(
+    ctx,
+    rightCanvas,
+    canvas,
+    getFadeScale(p, false),
+    getFadeOpacity(p, false)
+  );
 
-  // Draw outgoing clip (left) on top
-  ctx.save();
-  ctx.globalAlpha = getFadeOpacity(clampedProgress, true);
-  ctx.drawImage(leftCanvas, 0, 0);
-  ctx.restore();
+  drawScaledCanvas(
+    ctx,
+    leftCanvas,
+    canvas,
+    getFadeScale(p, true),
+    getFadeOpacity(p, true)
+  );
+}
+
+function getWipeDirectionVector(direction: WipeDirection): { x: number; y: number } {
+  switch (direction) {
+    case 'from-left':
+      return { x: 1, y: 0 };
+    case 'from-right':
+      return { x: -1, y: 0 };
+    case 'from-top':
+      return { x: 0, y: 1 };
+    case 'from-bottom':
+      return { x: 0, y: -1 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
+function getWipeOffset(
+  progress: number,
+  direction: WipeDirection,
+  isOutgoing: boolean,
+  canvas: TransitionCanvasSettings
+): { x: number; y: number } {
+  const p = clamp01(progress);
+  const vec = getWipeDirectionVector(direction);
+  const travel = isOutgoing ? 0.035 : 0.025;
+  const phase = isOutgoing ? p : p - 1;
+
+  return {
+    x: vec.x * phase * canvas.width * travel,
+    y: vec.y * phase * canvas.height * travel,
+  };
 }
 
 /**
@@ -231,7 +293,7 @@ function getWipeClipPath(
   isOutgoing: boolean,
   canvas: TransitionCanvasSettings
 ): Path2D {
-  const p = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
   const path = new Path2D();
 
   switch (direction) {
@@ -279,20 +341,22 @@ function renderWipeTransition(
   direction: WipeDirection,
   canvas: TransitionCanvasSettings
 ): void {
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
 
-  // Draw incoming clip in revealed region only
+  const incomingOffset = getWipeOffset(p, direction, false, canvas);
   ctx.save();
-  const incomingClipPath = getWipeClipPath(clampedProgress, direction, false, canvas);
+  const incomingClipPath = getWipeClipPath(p, direction, false, canvas);
   ctx.clip(incomingClipPath);
-  ctx.drawImage(rightCanvas, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(rightCanvas, incomingOffset.x, incomingOffset.y);
   ctx.restore();
 
-  // Draw outgoing clip in remaining region
+  const outgoingOffset = getWipeOffset(p, direction, true, canvas);
   ctx.save();
-  const outgoingClipPath = getWipeClipPath(clampedProgress, direction, true, canvas);
+  const outgoingClipPath = getWipeClipPath(p, direction, true, canvas);
   ctx.clip(outgoingClipPath);
-  ctx.drawImage(leftCanvas, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(leftCanvas, outgoingOffset.x, outgoingOffset.y);
   ctx.restore();
 }
 
@@ -413,33 +477,30 @@ function renderClockWipeTransition(
   progress: number,
   canvas: TransitionCanvasSettings
 ): void {
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
 
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
-  // Use diagonal to ensure coverage of corners
   const radius = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
 
-  // In canvas coordinates:
-  // - 0 radians = 3 o'clock (right)
-  // - -π/2 radians = 12 o'clock (top)
-  const startAngle = -Math.PI / 2; // 12 o'clock
-  const sweepAngle = clampedProgress * Math.PI * 2;
+  const startAngle = -Math.PI / 2;
+  const sweepAngle = p * Math.PI * 2;
   const currentAngle = startAngle + sweepAngle;
 
-  // Draw incoming clip (full) first - sits underneath
-  ctx.drawImage(rightCanvas, 0, 0);
+  drawScaledCanvas(ctx, rightCanvas, canvas, 1.04 - (0.04 * p), 0.85 + (0.15 * p));
 
-  // Draw outgoing clip clipped to remaining area (inverse of revealed wedge)
   ctx.save();
   const clipPath = new Path2D();
   clipPath.moveTo(centerX, centerY);
-  // Arc from current angle BACK to start (the unrevealed portion)
   clipPath.arc(centerX, centerY, radius, currentAngle, startAngle + Math.PI * 2, false);
   clipPath.closePath();
   ctx.clip(clipPath);
-  ctx.drawImage(leftCanvas, 0, 0);
+  drawScaledCanvas(ctx, leftCanvas, canvas, 1 - (0.04 * p), 1 - (0.1 * p));
   ctx.restore();
+}
+
+function getIrisMaxRadius(width: number, height: number): number {
+  return Math.sqrt(Math.pow(width / 2, 2) + Math.pow(height / 2, 2)) * 1.2;
 }
 
 /**
@@ -457,29 +518,21 @@ function renderIrisTransition(
   progress: number,
   canvas: TransitionCanvasSettings
 ): void {
-  const clampedProgress = Math.max(0, Math.min(1, progress));
+  const p = clamp01(progress);
 
-  // Maximum radius to cover corners (diagonal / 2 * 1.2 for safety margin)
-  const maxRadius = Math.sqrt(
-    Math.pow(canvas.width / 2, 2) + Math.pow(canvas.height / 2, 2)
-  ) * 1.2;
-
-  const radius = clampedProgress * maxRadius;
+  const maxRadius = getIrisMaxRadius(canvas.width, canvas.height);
+  const radius = p * maxRadius;
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
 
-  // Draw incoming clip (full) first - sits underneath
-  ctx.drawImage(rightCanvas, 0, 0);
+  drawScaledCanvas(ctx, rightCanvas, canvas, 1.04 - (0.04 * p), 0.85 + (0.15 * p));
 
-  // Draw outgoing clip with inverse circle clip (donut shape - outside the iris)
   ctx.save();
   const clipPath = new Path2D();
-  // Full canvas rect
   clipPath.rect(0, 0, canvas.width, canvas.height);
-  // Cut out the circle (evenodd will invert)
   clipPath.arc(centerX, centerY, radius, 0, Math.PI * 2);
   ctx.clip(clipPath, 'evenodd');
-  ctx.drawImage(leftCanvas, 0, 0);
+  drawScaledCanvas(ctx, leftCanvas, canvas, 1 - (0.04 * p), 1 - (0.1 * p));
   ctx.restore();
 }
 
@@ -543,7 +596,7 @@ export function renderTransition(
   // Built-in fallback
   switch (presentation) {
     case 'fade':
-      renderFadeTransition(ctx, leftCanvas, rightCanvas, progress);
+      renderFadeTransition(ctx, leftCanvas, rightCanvas, progress, canvas);
       break;
 
     case 'wipe':

@@ -2,7 +2,6 @@ import { useMemo, useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Blend,
-  Scissors,
   ArrowRight,
   ArrowLeft,
   ArrowDown,
@@ -42,7 +41,6 @@ import { cn } from '@/lib/utils';
 // Icon mapping for presentation types
 const ICON_MAP: Record<string, LucideIcon> = {
   Blend,
-  Scissors,
   ArrowRight,
   ArrowLeft,
   ArrowDown,

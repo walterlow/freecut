@@ -159,7 +159,7 @@ export function useClipboardShortcuts() {
             id: newId,
             from: newFrom,
             trackId: targetTrackId,
-            originId: undefined,
+            originId: newId,
           };
 
           addItem(newItem as Parameters<typeof addItem>[0]);
