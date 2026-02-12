@@ -360,7 +360,8 @@ export function useClientRender(): UseClientRenderReturn {
         });
 
         // Resolve media URLs (convert mediaIds to blob URLs)
-        const resolvedTracks = await resolveMediaUrls(composition.tracks);
+        // Export always uses full-res source, never proxies
+        const resolvedTracks = await resolveMediaUrls(composition.tracks, { useProxy: false });
         composition.tracks = resolvedTracks;
 
         // Log resolved items to verify src is set

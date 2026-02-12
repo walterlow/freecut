@@ -303,13 +303,15 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       // Determine if we need to seek:
       // 1. Initial sync when component first plays
       // 2. Audio is BEHIND by more than threshold (needs to catch up)
+      // 3. Audio is far AHEAD (user seeked backwards, e.g., "Go to start")
       //
-      // IMPORTANT: Never seek backwards when audio is ahead!
-      // During heavy renders (drag operations), frame updates lag behind real-time
-      // audio playback. The frame will catch up naturally. Seeking backwards causes
-      // the audible "rewind" glitch that disrupts playback.
+      // Small positive drift (< 0.5s) during heavy renders is tolerated — the
+      // frame will catch up naturally. Seeking backwards on every render lag
+      // causes an audible "rewind" glitch. But large drift (> 0.5s) signals a
+      // deliberate user seek and must be respected.
       const audioBehind = drift < -0.2;
-      const needsSync = needsInitialSyncRef.current || (audioBehind && timeSinceLastSync > 500);
+      const audioFarAhead = drift > 0.5;
+      const needsSync = needsInitialSyncRef.current || audioFarAhead || (audioBehind && timeSinceLastSync > 500);
 
       if (needsSync && canSeek) {
         try {

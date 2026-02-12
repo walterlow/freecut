@@ -486,8 +486,10 @@ const NativePreviewVideo: React.FC<{
       // Determine if we need to seek:
       // 1. Initial sync when component first plays
       // 2. Video is BEHIND by more than threshold (needs to catch up)
+      // 3. Video is far AHEAD (user seeked backwards, e.g., "Go to start")
       const videoBehind = drift < -0.2;
-      const needsSync = needsInitialSyncRef.current || (videoBehind && timeSinceLastSync > 500);
+      const videoFarAhead = drift > 0.5;
+      const needsSync = needsInitialSyncRef.current || videoFarAhead || (videoBehind && timeSinceLastSync > 500);
 
       if (needsSync && canSeek) {
         try {

@@ -7,6 +7,7 @@ import { getMimeType } from '../utils/validation';
 import { createLogger } from '@/lib/logger';
 import { removeItems, updateItem } from '@/features/timeline/stores/timeline-actions';
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
+import { proxyService } from '../services/proxy-service';
 
 const logger = createLogger('MediaLibraryStore');
 
@@ -42,6 +43,10 @@ export const useMediaLibraryStore = create<
       showUnsupportedCodecDialog: false,
       unsupportedCodecResolver: null,
 
+      // Proxy video generation
+      proxyStatus: new Map(),
+      proxyProgress: new Map(),
+
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
         // Clear items and set loading state immediately to prevent flash
@@ -74,6 +79,15 @@ export const useMediaLibraryStore = create<
             mediaItems,
             isLoading: false,
           });
+
+          // Load existing proxies from OPFS (previously generated on-demand)
+          const videoItems = mediaItems.filter(
+            (m) => m.mimeType.startsWith('video/') && proxyService.needsProxy(m.width, m.height, m.mimeType)
+          );
+          if (videoItems.length > 0) {
+            const videoIds = videoItems.map((m) => m.id);
+            await proxyService.loadExistingProxies(videoIds);
+          }
         } catch (error) {
           logger.error('[MediaLibraryStore] loadMediaItems error:', error);
           const errorMessage =
@@ -692,6 +706,23 @@ export const useMediaLibraryStore = create<
           unsupportedCodecResolver: null,
         });
       },
+
+      // Proxy video generation
+      setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => {
+        set((state) => {
+          const newStatus = new Map(state.proxyStatus);
+          newStatus.set(mediaId, status);
+          return { proxyStatus: newStatus };
+        });
+      },
+
+      setProxyProgress: (mediaId: string, progress: number) => {
+        set((state) => {
+          const newProgress = new Map(state.proxyProgress);
+          newProgress.set(mediaId, progress);
+          return { proxyProgress: newProgress };
+        });
+      },
     }),
     {
       name: 'MediaLibraryStore',
@@ -699,6 +730,15 @@ export const useMediaLibraryStore = create<
     }
   )
 );
+
+// Wire up proxy service status listener to update store state
+proxyService.onStatusChange((mediaId, status, progress) => {
+  const store = useMediaLibraryStore.getState();
+  store.setProxyStatus(mediaId, status);
+  if (progress !== undefined) {
+    store.setProxyProgress(mediaId, progress);
+  }
+});
 
 // Selector hooks for common use cases (optional, but recommended)
 export const useFilteredMediaItems = () => {

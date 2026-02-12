@@ -24,6 +24,7 @@ import {
 } from '@/lib/storage/indexeddb';
 import { gifFrameCache } from '@/features/timeline/services/gif-frame-cache';
 import { opfsService } from './opfs-service';
+import { proxyService } from './proxy-service';
 import { validateMediaFile, getMimeType } from '../utils/validation';
 import { mediaProcessorService } from './media-processor-service';
 /**
@@ -293,6 +294,13 @@ class MediaLibraryService {
         await gifFrameCache.clearMedia(mediaId);
       } catch (error) {
         logger.warn('Failed to delete GIF frame cache:', error);
+      }
+
+      // Delete proxy video if exists
+      try {
+        await proxyService.deleteProxy(mediaId);
+      } catch (error) {
+        logger.warn('Failed to delete proxy:', error);
       }
 
       // For OPFS storage, handle content reference counting

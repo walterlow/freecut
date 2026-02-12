@@ -1,5 +1,6 @@
 import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { proxyService } from '@/features/media-library/services/proxy-service';
 import type { TimelineTrack } from '@/types/timeline';
 
 /**
@@ -87,13 +88,27 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
 }
 
 /**
+ * Resolves a proxy URL for a media item if available.
+ * Returns null if no proxy exists (caller should fall back to full-res).
+ */
+function resolveProxyUrl(mediaId: string): string | null {
+  return proxyService.getProxyBlobUrl(mediaId);
+}
+
+/**
  * Resolves all media URLs in timeline tracks
  * Creates a deep clone of tracks with resolved blob URLs
  *
  * @param tracks - Timeline tracks with media items
+ * @param options.useProxy - If true, prefer proxy URLs for video items (default: true)
  * @returns Tracks with resolved blob URLs in item.src
  */
-export async function resolveMediaUrls(tracks: TimelineTrack[]): Promise<TimelineTrack[]> {
+export async function resolveMediaUrls(
+  tracks: TimelineTrack[],
+  options?: { useProxy?: boolean }
+): Promise<TimelineTrack[]> {
+  const useProxy = options?.useProxy ?? true;
+
   // Deep clone tracks to avoid mutating original
   const resolvedTracks: TimelineTrack[] = JSON.parse(JSON.stringify(tracks));
 
@@ -108,7 +123,13 @@ export async function resolveMediaUrls(tracks: TimelineTrack[]): Promise<Timelin
         (item.type === 'video' || item.type === 'audio' || item.type === 'image')
       ) {
         const promise = resolveMediaUrl(item.mediaId).then((blobUrl) => {
-          item.src = blobUrl;
+          // For video items in preview mode, prefer proxy URL if available
+          if (useProxy && item.type === 'video') {
+            const proxyUrl = resolveProxyUrl(item.mediaId!);
+            item.src = proxyUrl || blobUrl;
+          } else {
+            item.src = blobUrl;
+          }
         });
         resolutionPromises.push(promise);
       }

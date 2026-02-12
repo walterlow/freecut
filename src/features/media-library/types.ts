@@ -68,6 +68,10 @@ export interface MediaLibraryState {
   unsupportedCodecFiles: UnsupportedCodecFile[];
   showUnsupportedCodecDialog: boolean;
   unsupportedCodecResolver: ((confirmed: boolean) => void) | null;
+
+  // Proxy video generation
+  proxyStatus: Map<string, 'generating' | 'ready' | 'error'>;
+  proxyProgress: Map<string, number>;
 }
 
 export interface MediaLibraryActions {
@@ -137,4 +141,8 @@ export interface MediaLibraryActions {
    */
   confirmUnsupportedCodecs: (files: UnsupportedCodecFile[]) => Promise<boolean>;
   resolveUnsupportedCodecDialog: (confirmed: boolean) => void;
+
+  // Proxy video generation
+  setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => void;
+  setProxyProgress: (mediaId: string, progress: number) => void;
 }
