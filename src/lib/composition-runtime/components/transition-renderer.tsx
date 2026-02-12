@@ -555,6 +555,29 @@ const TransitionOverlay: React.FC<TransitionOverlayProps> = React.memo(function 
 });
 
 // ============================================================================
+// Transition Background (for flip etc. — only visible during active frames)
+// ============================================================================
+
+const transitionBgStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  backgroundColor: '#000',
+  zIndex: 0,
+};
+
+/**
+ * Solid background behind transitions where clips don't cover the full frame
+ * mid-transition (e.g. flip). Only renders when localFrame >= 0 so it stays
+ * hidden during the premount window and doesn't black out clips before the
+ * transition starts.
+ */
+const TransitionBackground: React.FC = () => {
+  const ctx = useSequenceContext();
+  if (!ctx || ctx.localFrame < 0) return null;
+  return <div style={transitionBgStyle} />;
+};
+
+// ============================================================================
 // Main Transition Renderer
 // ============================================================================
 
@@ -573,7 +596,8 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     // Flip transitions scale clips to edge-on mid-transition, exposing uncovered
     // area. A solid background prevents the underlying regular clips from bleeding
     // through, matching the canvas-based export where the composition background
-    // is visible behind the flipping clip.
+    // is visible behind the flipping clip. Rendered as a child (not on the
+    // AbsoluteFill) so it's hidden during premount when frame < 0.
     const needsBackground = window.transition.presentation === 'flip';
 
     // Global frame offsets for ClipContent's adjustment layer calculations
@@ -591,9 +615,9 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
           style={{
             zIndex: effectsZIndex,
             visibility: leftClip.trackVisible && rightClip.trackVisible ? 'visible' : 'hidden',
-            backgroundColor: needsBackground ? '#000' : undefined,
           }}
         >
+          {needsBackground && <TransitionBackground />}
           {/* Incoming clip (below outgoing) */}
           <TransitionOverlay
             transition={window.transition}
