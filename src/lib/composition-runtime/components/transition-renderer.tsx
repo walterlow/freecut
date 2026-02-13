@@ -711,11 +711,11 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
   itemsById,
   adjustmentLayers,
 }) {
-  if (transitions.length === 0) return null;
-
   const resolvedWindows = useMemo(() => {
     return resolveTransitionWindows(transitions, itemsById);
   }, [transitions, itemsById]);
+
+  if (resolvedWindows.length === 0) return null;
 
   return (
     <>
