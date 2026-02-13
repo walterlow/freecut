@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { SnapLine } from '../utils/snap-utils';
+import type { SnapLine } from '../utils/canvas-snap-utils';
 import type { CoordinateParams } from '../types/gizmo';
 import { getEffectiveScale } from '../utils/coordinate-transform';
 

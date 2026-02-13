@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { GizmoState, GizmoHandle, Transform, Point } from '../types/gizmo';
 import type { ItemEffect } from '@/types/effects';
 import { calculateTransform } from '../utils/transform-calculations';
-import { applySnapping, applyScaleSnapping, type SnapLine } from '../utils/snap-utils';
+import { applySnapping, applyScaleSnapping, type SnapLine } from '../utils/canvas-snap-utils';
 
 /** Item properties that can be previewed (non-transform) */
 export interface ItemPropertiesPreview {

@@ -15,7 +15,7 @@ import { ProjectDebugPanel } from './project-debug-panel';
 import { Timeline } from '@/features/timeline/components/timeline';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
 import { toast } from 'sonner';
-import { useEditorHotkeys } from '@/hooks/use-editor-hotkeys';
+import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
 import { useTransitionBreakageNotifications } from '@/features/timeline/hooks/use-transition-breakage-notifications';

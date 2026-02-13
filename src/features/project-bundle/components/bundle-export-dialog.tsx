@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import type { ExportProgress, ExportResult } from '../types/bundle';
 import { exportProjectBundle, downloadBundle } from '../services/bundle-export-service';
+import { formatDuration } from '@/utils/time-utils';
+import { formatBytes } from '@/utils/format-utils';
 
 export interface BundleExportDialogProps {
   open: boolean;
@@ -30,19 +32,6 @@ export interface BundleExportDialogProps {
 }
 
 type ExportStatus = 'idle' | 'saving' | 'exporting' | 'completed' | 'failed';
-
-function formatTime(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 function getStageLabel(stage: ExportProgress['stage']): string {
   switch (stage) {
@@ -217,7 +206,7 @@ export function BundleExportDialog({
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   <span className="text-muted-foreground">Elapsed:</span>
-                  <span className="font-medium tabular-nums">{formatTime(elapsedSeconds)}</span>
+                  <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
                 </div>
               )}
             </div>
@@ -243,7 +232,7 @@ export function BundleExportDialog({
                   <div className="flex items-center gap-2 text-sm">
                     <HardDrive className="h-4 w-4 text-muted-foreground" />
                     <span className="text-muted-foreground">Size:</span>
-                    <span className="font-medium">{formatFileSize(result.size)}</span>
+                    <span className="font-medium">{formatBytes(result.size)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <FileVideo className="h-4 w-4 text-muted-foreground" />
@@ -254,7 +243,7 @@ export function BundleExportDialog({
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span className="text-muted-foreground">Time taken:</span>
-                      <span className="font-medium">{formatTime(elapsedSeconds)}</span>
+                      <span className="font-medium">{formatDuration(elapsedSeconds)}</span>
                     </div>
                   )}
                 </div>

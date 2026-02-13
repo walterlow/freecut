@@ -8,7 +8,7 @@ import {
   generateGridSnapPoints,
   findNearestSnapTarget,
   calculateAdaptiveSnapThreshold,
-} from '../utils/snap-utils';
+} from '../utils/timeline-snap-utils';
 import { BASE_SNAP_THRESHOLD_PIXELS } from '../constants';
 
 // Helper to get items on-demand without subscribing
