@@ -625,7 +625,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
             <Alert className="border-green-900 bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <AlertDescription className="text-green-400">
-                Video exported successfully!
+                {exportMode === 'audio' ? 'Audio' : 'Video'} exported successfully!
               </AlertDescription>
             </Alert>
 

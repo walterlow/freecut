@@ -25,6 +25,8 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const [volume, setVolume] = useState(0.75);
   const [isMuted, setIsMuted] = useState(false);
   const [isSeeking, setIsSeeking] = useState(false);
+  const isSeekingRef = useRef(false);
+  isSeekingRef.current = isSeeking;
 
   const togglePlay = useCallback(() => {
     const el = mediaRef.current;
@@ -59,12 +61,13 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const toggleMute = useCallback(() => {
     const el = mediaRef.current;
     if (!el) return;
-    el.muted = !el.muted;
-    setIsMuted(!el.muted);
+    const newMuted = !el.muted;
+    el.muted = newMuted;
+    setIsMuted(newMuted);
   }, []);
 
   const handleFullscreen = useCallback(() => {
-    const el = mediaRef.current;
+    const el = containerRef.current;
     if (!el || !isVideo) return;
     if (el.requestFullscreen) {
       void el.requestFullscreen();
@@ -79,7 +82,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onTimeUpdate = () => {
-      if (!isSeeking) setCurrentTime(el.currentTime);
+      if (!isSeekingRef.current) setCurrentTime(el.currentTime);
     };
     const onLoadedMetadata = () => setDuration(el.duration);
     const onEnded = () => {
@@ -100,7 +103,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
       el.removeEventListener('loadedmetadata', onLoadedMetadata);
       el.removeEventListener('ended', onEnded);
     };
-  }, [isSeeking, volume]);
+  }, [volume]);
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -150,9 +153,11 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
         {/* Seek bar */}
         <Slider
           value={[progressPercent]}
-          onValueChange={handleSeek}
-          onPointerDown={() => setIsSeeking(true)}
-          onPointerUp={() => setIsSeeking(false)}
+          onValueChange={(values) => {
+            setIsSeeking(true);
+            handleSeek(values);
+          }}
+          onValueCommit={() => setIsSeeking(false)}
           max={100}
           step={0.1}
           className="flex-1 min-w-0"
