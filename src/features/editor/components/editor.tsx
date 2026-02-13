@@ -6,6 +6,7 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable';
 import type { ImperativePanelHandle } from 'react-resizable-panels';
+import { ErrorBoundary } from '@/components/error-boundary';
 import { Toolbar } from './toolbar';
 import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
@@ -223,13 +224,19 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           <ResizablePanel defaultSize={70} minSize={50} maxSize={85}>
             <div className="h-full flex overflow-hidden relative">
               {/* Left Sidebar - Media Library */}
-              <MediaSidebar />
+              <ErrorBoundary level="feature">
+                <MediaSidebar />
+              </ErrorBoundary>
 
               {/* Center - Preview */}
-              <PreviewArea project={project} />
+              <ErrorBoundary level="feature">
+                <PreviewArea project={project} />
+              </ErrorBoundary>
 
               {/* Right Sidebar - Properties */}
-              <PropertiesSidebar />
+              <ErrorBoundary level="feature">
+                <PropertiesSidebar />
+              </ErrorBoundary>
             </div>
           </ResizablePanel>
 
@@ -242,10 +249,12 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             minSize={15}
             maxSize={50}
           >
-            <Timeline
-              duration={timelineDuration}
-              onGraphPanelOpenChange={handleGraphPanelOpenChange}
-            />
+            <ErrorBoundary level="feature">
+              <Timeline
+                duration={timelineDuration}
+                onGraphPanelOpenChange={handleGraphPanelOpenChange}
+              />
+            </ErrorBoundary>
           </ResizablePanel>
         </ResizablePanelGroup>
 

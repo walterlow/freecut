@@ -1,14 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/projects/$projectId')({
-  component: ProjectSettings,
-  loader: async () => {
-    // TODO: Load project for settings/editing
-    return { project: null };
+  beforeLoad: ({ params }) => {
+    // Redirect to the editor — project settings are handled via the edit dialog on /projects/
+    throw redirect({ to: '/editor/$projectId', params: { projectId: params.projectId } });
   },
+  component: () => null,
 });
-
-function ProjectSettings() {
-  // TODO: Implement project settings page
-  return null;
-}

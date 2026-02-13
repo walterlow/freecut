@@ -28,9 +28,6 @@ export default defineConfig({
           if (id.includes('/src/features/media-library/')) {
             return 'feature-media-library';
           }
-          if (id.includes('/src/features/gpu/')) {
-            return 'feature-gpu';
-          }
           if (id.includes('/src/features/effects/')) {
             return 'feature-effects';
           }
