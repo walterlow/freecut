@@ -190,7 +190,9 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
       const timeSinceLastSync = now - lastSyncTimeRef.current;
 
       const videoBehind = drift < -0.2;
+      const videoFarAhead = drift > 0.5;
       const needsSync = needsInitialSyncRef.current
+        || videoFarAhead
         || (videoBehind && timeSinceLastSync > 500);
 
       if (needsSync && canSeek) {
@@ -237,6 +239,10 @@ interface ClipContentProps {
   /** Unique ID for video pool acquisition */
   poolItemId: string;
   sourceStartOffset?: number;
+  /** Override the clip's playback rate for this transition rendering.
+   *  Used for the incoming clip to match the regular clip's position at
+   *  the transition end, preventing a visible rewind/jump. */
+  transitionPlaybackRate?: number;
   canvasWidth: number;
   canvasHeight: number;
   fps: number;
@@ -248,6 +254,7 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
   clip,
   poolItemId,
   sourceStartOffset = 0,
+  transitionPlaybackRate,
   canvasWidth,
   canvasHeight,
   fps,
@@ -320,9 +327,11 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
 
   // --- All hooks are above this line --- early return is safe below ---
 
-  if (frame < 0) {
-    return null;
-  }
+  // During premount (frame < 0), we still render video elements so they can
+  // acquire from the pool and seek to the correct position BEFORE the
+  // transition becomes visible. Without this, the video element is only
+  // acquired at frame 0, causing a flash while it loads/decodes.
+  const isPremounted = frame < 0;
 
   const canvas = { width: canvasWidth, height: canvasHeight, fps };
   const sourceDimensions = getSourceDimensions(clip);
@@ -343,9 +352,11 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
     if (!clip.src) return null;
 
     const baseSourceStart = clip.sourceStart ?? clip.trimStart ?? clip.offset ?? 0;
-    const playbackRate = clip.speed ?? 1;
-    const sourceFrameOffset = Math.round(sourceStartOffset * playbackRate);
-    const sourceStart = Math.max(0, baseSourceStart + sourceFrameOffset);
+    const playbackRate = transitionPlaybackRate ?? (clip.speed ?? 1);
+    // Use unrounded offset to match the regular clip's continuous
+    // targetTime = trimBefore/fps + localFrame * speed / fps formula.
+    const sourceFrameOffset = sourceStartOffset * playbackRate;
+    const sourceStart = baseSourceStart + sourceFrameOffset;
 
     mediaContent = (
       <div ref={videoContainerRef} style={{ ...transformStyle, overflow: 'hidden', position: 'relative' }}>
@@ -382,11 +393,13 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
         height: '100%',
         position: 'relative',
         filter: finalFilter || undefined,
+        // Hidden during premount — video elements still mount and pre-seek
+        visibility: isPremounted ? 'hidden' : undefined,
       }}
     >
       {mediaContent}
 
-      {hasOverlays && (
+      {hasOverlays && !isPremounted && (
         <div
           style={{
             position: 'absolute',
@@ -605,6 +618,22 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     const leftClipGlobalFrom = window.startFrame;
     const rightClipGlobalFrom = window.startFrame;
 
+    // Adjusted playback rate for the incoming (right) clip.
+    //
+    // Problem: the transition overlay creates separate video elements that play
+    // alongside the regular clip layer. Without adjustment, the incoming clip
+    // advances durationInFrames * speed source frames during the transition,
+    // but the regular clip only advances rightPortion * speed. When the overlay
+    // disappears at the transition end, the content visibly "rewinds."
+    //
+    // Fix: scale the incoming clip's playback rate so it covers exactly
+    // rightPortion * speed source frames over the full transition duration.
+    // This keeps motion smooth and eliminates the boundary mismatch.
+    const incomingClipSpeed = rightClip.speed ?? 1;
+    const incomingTransitionRate = window.durationInFrames > 0
+      ? (window.rightPortion * incomingClipSpeed) / window.durationInFrames
+      : incomingClipSpeed;
+
     return (
       <Sequence
         from={window.startFrame}
@@ -631,7 +660,8 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
             <ClipContent
               clip={rightClip}
               poolItemId={`t-${window.transition.id}-right`}
-              sourceStartOffset={window.startFrame - rightClip.from}
+              sourceStartOffset={0}
+              transitionPlaybackRate={incomingTransitionRate}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
               fps={fps}
