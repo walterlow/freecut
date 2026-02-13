@@ -306,7 +306,9 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
       itemIds.map((id) => ({
         id,
         getBoundingRect: () => {
-          const element = document.querySelector(`[data-item-id="${id}"]`);
+          // Scope query to timeline container to avoid matching preview player elements
+          // (video-content.tsx also uses data-item-id for the composition runtime)
+          const element = containerRef.current?.querySelector(`[data-item-id="${id}"]`);
           if (!element) {
             return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
           }
