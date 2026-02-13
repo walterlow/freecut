@@ -61,8 +61,8 @@ body.timeline-item-drag-cursor-not-allowed * {
     -45deg,
     transparent,
     transparent 6px,
-    oklch(0.5 0 0 / 0.12) 6px,
-    oklch(0.5 0 0 / 0.12) 8px
+    oklch(50% 0 0deg / 12%) 6px,
+    oklch(50% 0 0deg / 12%) 8px
   );
 }
 
