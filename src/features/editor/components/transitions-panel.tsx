@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import {
   Blend,
   ArrowRight,
@@ -14,7 +14,6 @@ import {
   Clock,
   Circle,
   Info,
-  Search,
   type LucideIcon,
 } from 'lucide-react';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
@@ -311,8 +310,6 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   const updateTransition = useTimelineStore((s) => s.updateTransition);
   const items = useTimelineStore((s) => s.items);
   const transitions = useTimelineStore((s) => s.transitions);
-  const [searchQuery, setSearchQuery] = useState('');
-
   // Get selection
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectionCount = selectedItemIds.length;
@@ -323,57 +320,10 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
     return computeAdjacentInfo([selectedId], items, transitions);
   }, [selectedId, items, transitions]);
 
-  // Filter configs by search query
-  const filteredCategories = useMemo(() => {
-    if (!searchQuery.trim()) return CATEGORIES;
-
-    const query = searchQuery.toLowerCase();
-    const filtered: Record<string, PresentationConfig[]> = {};
-    for (const [cat, configs] of Object.entries(CATEGORIES)) {
-      const matching = configs.filter(
-        (c) =>
-          c.label.toLowerCase().includes(query) ||
-          c.description.toLowerCase().includes(query) ||
-          c.id.toLowerCase().includes(query)
-      );
-      if (matching.length > 0) {
-        filtered[cat] = matching;
-      }
-    }
-    return filtered;
-  }, [searchQuery]);
-
-  // Recompute start indices for filtered results
-  const filteredStartIndices = useMemo(() => {
-    if (!searchQuery.trim()) return CATEGORY_START_INDICES;
-
-    // When filtering, we need to map each filtered config back to its index in REGISTRY_CONFIGS
-    const indices: Record<string, number> = {};
-    let running = 0;
-    for (const category of CATEGORY_ORDER) {
-      indices[category] = running;
-      running += (filteredCategories[category]?.length || 0);
-    }
-    return indices;
-  }, [searchQuery, filteredCategories]);
-
   // Apply a transition by config index
   const handleApplyByIndex = useCallback(
     (configIndex: number) => {
-      // When searching, we need to find the actual config
-      let config: PresentationConfig | undefined;
-
-      if (searchQuery.trim()) {
-        // Flatten filtered categories in order
-        const allFiltered: PresentationConfig[] = [];
-        for (const category of CATEGORY_ORDER) {
-          allFiltered.push(...(filteredCategories[category] || []));
-        }
-        config = allFiltered[configIndex];
-      } else {
-        config = REGISTRY_CONFIGS[configIndex];
-      }
-
+      const config = REGISTRY_CONFIGS[configIndex];
       if (!config) return;
 
       // Get fresh state at click time
@@ -393,7 +343,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
         addTransition(leftClipId, rightClipId, 'crossfade', undefined, presentation, direction);
       }
     },
-    [addTransition, updateTransition, searchQuery, filteredCategories]
+    [addTransition, updateTransition]
   );
 
   const hasValidSelection = adjacentInfo !== null;
@@ -421,29 +371,10 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
         </div>
       </div>
 
-      {/* Search bar */}
-      <div className="px-3 py-2 border-b border-border">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search transitions..."
-            className={cn(
-              'w-full pl-7 pr-2 py-1.5 text-xs rounded-md',
-              'bg-secondary/50 border border-border',
-              'placeholder:text-muted-foreground/50',
-              'focus:outline-none focus:ring-1 focus:ring-primary/50'
-            )}
-          />
-        </div>
-      </div>
-
       {/* Transitions grid by category */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {CATEGORY_ORDER.map((category) => {
-          const configs = filteredCategories[category];
+          const configs = CATEGORIES[category];
           if (!configs || configs.length === 0) return null;
 
           return (
@@ -451,7 +382,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
               key={category}
               category={category}
               configs={configs}
-              startIndex={filteredStartIndices[category]!}
+              startIndex={CATEGORY_START_INDICES[category]!}
               onApply={handleApplyByIndex}
               disabled={!hasValidSelection}
             />
