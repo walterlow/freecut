@@ -258,17 +258,18 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const fileSize = clientRender.result?.fileSize;
 
   // Preview blob URL for completed exports
-  const previewUrl = useMemo(() => {
-    const blob = clientRender.result?.blob;
-    if (!blob) return null;
-    return URL.createObjectURL(blob);
-  }, [clientRender.result?.blob]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
+    const blob = clientRender.result?.blob;
+    if (!blob) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [clientRender.result?.blob]);
 
   const isVideoResult = clientRender.result?.mimeType?.startsWith('video/') ?? false;
 
