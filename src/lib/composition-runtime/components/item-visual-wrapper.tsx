@@ -166,6 +166,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         style={{
           ...state.transformStyle,
           ...maskStyle,
+          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
         }}
       >
         {/* Inner: Effects + Content */}

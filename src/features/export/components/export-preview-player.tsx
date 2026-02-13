@@ -108,13 +108,13 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div ref={containerRef} className="rounded-lg border border-border overflow-hidden bg-black/90">
+    <div ref={containerRef} className="rounded-lg border border-border overflow-hidden bg-secondary/30">
       {/* Media element */}
       {isVideo ? (
         <video
           ref={mediaRef as React.RefObject<HTMLVideoElement>}
           src={src}
-          className="w-full max-h-[280px] object-contain bg-black cursor-pointer"
+          className="w-full max-h-[280px] object-contain bg-background cursor-pointer"
           onClick={togglePlay}
           preload="metadata"
         />
@@ -160,7 +160,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
           onValueCommit={() => setIsSeeking(false)}
           max={100}
           step={0.1}
-          className="flex-1 min-w-0"
+          className="flex-1 min-w-0 py-2"
           aria-label="Seek"
         />
 

@@ -147,6 +147,15 @@ export async function renderItem(
     ctx.translate(-centerX, -centerY);
   }
 
+  // Apply corner radius clipping
+  if (transform.cornerRadius > 0) {
+    const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+    const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+    ctx.beginPath();
+    ctx.roundRect(left, top, transform.width, transform.height, transform.cornerRadius);
+    ctx.clip();
+  }
+
   switch (item.type) {
     case 'video':
       await renderVideoItem(ctx, item as VideoItem, transform, frame, rctx, sourceFrameOffset);
