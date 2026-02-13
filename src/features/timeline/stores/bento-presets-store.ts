@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { LayoutPresetType } from '../utils/bento-layout';
 
 export interface CustomBentoPreset {
   id: string;
   name: string;
+  preset: LayoutPresetType;
   cols: number;
   rows: number;
   gap: number;
