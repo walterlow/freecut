@@ -71,20 +71,22 @@ export function getGroupDepth(tracks: TimelineTrack[], trackId: string): number 
 }
 
 /**
- * Get frame coverage ranges for a collapsed group's summary bar.
- * Returns an array of { from, to, type } for each item in the child tracks.
+ * Get the merged frame range for a collapsed group's summary bar.
+ * Returns a single { from, to } spanning all child items, or null if no items.
  */
-export function getGroupItemCoverage(
+export function getGroupCoverageRange(
   items: TimelineItem[],
   childTrackIds: Set<string>
-): Array<{ from: number; to: number; type: TimelineItem['type'] }> {
-  return items
-    .filter((item) => childTrackIds.has(item.trackId))
-    .map((item) => ({
-      from: item.from,
-      to: item.from + item.durationInFrames,
-      type: item.type,
-    }));
+): { from: number; to: number } | null {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const item of items) {
+    if (!childTrackIds.has(item.trackId)) continue;
+    min = Math.min(min, item.from);
+    max = Math.max(max, item.from + item.durationInFrames);
+  }
+  if (min === Infinity) return null;
+  return { from: min, to: max };
 }
 
 /**
