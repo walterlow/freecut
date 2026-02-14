@@ -344,7 +344,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   /**
    * Handle adding a new track
    * Inserts before the active track (appears above it), or at the top if no active track.
-   * If the active track is a group, inserts before the group (not inside it).
+   * If the active track is inside a group, the new track is added to the same group.
    */
   const handleAddTrack = () => {
     // Find the minimum order value to place new track at the top
@@ -374,8 +374,9 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         const firstChild = tracks.find((t) => t.parentTrackId === activeTrackId);
         insertTrack(newTrack, firstChild?.id ?? null);
       } else if (activeTrack?.parentTrackId) {
-        // Active track is inside a group → add above the group header
-        insertTrack(newTrack, activeTrack.parentTrackId);
+        // Active track is inside a group → add inside the same group, above the active track
+        newTrack.parentTrackId = activeTrack.parentTrackId;
+        insertTrack(newTrack, activeTrackId);
       } else {
         // Top-level track → insert above any group block that sits directly above it
         const idx = visibleTracks.findIndex((t) => t.id === activeTrackId);
