@@ -425,11 +425,11 @@ export function BentoLayoutDialog() {
   }, []);
 
   const handleApply = useCallback(() => {
-    // Flatten chains back to item IDs (order matches chain order for layout)
     const flatIds = chainOrder.flat();
     if (flatIds.length < 2) return;
     const cfg = resolveConfig();
-    applyBentoLayout(flatIds, canvasWidth, canvasHeight, cfg);
+    // Pass user's drag-swap ordered chains to preserve layout order
+    applyBentoLayout(flatIds, canvasWidth, canvasHeight, cfg, chainOrder);
     close();
   }, [chainOrder, canvasWidth, canvasHeight, resolveConfig, close]);
 

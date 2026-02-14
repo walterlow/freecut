@@ -51,6 +51,8 @@ export function applyBentoLayout(
   canvasWidth: number,
   canvasHeight: number,
   config?: LayoutConfig,
+  /** Pre-ordered chains from dialog drag-swap; skips buildTransitionChains when provided */
+  orderedChains?: string[][],
 ): void {
   const items = useItemsStore.getState().items;
 
@@ -62,10 +64,19 @@ export function applyBentoLayout(
 
   if (visualItemIds.length < 2) return;
 
-  // Build transition chains — items connected by transitions share one layout cell
-  const transitions = useTransitionsStore.getState().transitions;
-  const { transitionsByClipId } = buildTransitionIndexes(transitions);
-  const chains = buildTransitionChains(visualItemIds, transitionsByClipId);
+  // Use caller-provided chains (preserves user's drag-swap order) or rebuild from transitions
+  let chains: string[][];
+  if (orderedChains && orderedChains.length > 0) {
+    // Filter out any audio-only chains and ensure all IDs are in visualItemIds
+    const visualSet = new Set(visualItemIds);
+    chains = orderedChains
+      .map((chain) => chain.filter((id) => visualSet.has(id)))
+      .filter((chain) => chain.length > 0);
+  } else {
+    const transitions = useTransitionsStore.getState().transitions;
+    const { transitionsByClipId } = buildTransitionIndexes(transitions);
+    chains = buildTransitionChains(visualItemIds, transitionsByClipId);
+  }
 
   // One layout item per chain (use first item's source dimensions as representative)
   const layoutItems = chains.map((chain) => {

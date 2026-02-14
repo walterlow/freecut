@@ -28,10 +28,16 @@ export function buildTransitionChains(
 
     // Walk backwards to find the start of this chain
     let start = id;
-    // eslint-disable-next-line no-constant-condition
+    const backwardVisited = new Set<string>();
     while (true) {
       const index = transitionsByClipId.get(start);
-      if (index?.incoming && itemIdSet.has(index.incoming.leftClipId) && !visited.has(index.incoming.leftClipId)) {
+      if (
+        index?.incoming &&
+        itemIdSet.has(index.incoming.leftClipId) &&
+        !visited.has(index.incoming.leftClipId) &&
+        !backwardVisited.has(index.incoming.leftClipId)
+      ) {
+        backwardVisited.add(start);
         start = index.incoming.leftClipId;
       } else {
         break;
