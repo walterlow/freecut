@@ -7,7 +7,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown, Folder, Layers } from 'lucide-react';
+import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 
@@ -20,8 +20,6 @@ interface TrackHeaderProps {
   groupDepth: number;
   /** Whether grouping is available for current selection (2+ top-level non-group tracks) */
   canGroup: boolean;
-  /** Whether the parent group has mute/visibility/lock gated on */
-  parentGated?: { muted?: boolean; hidden?: boolean; locked?: boolean };
   onToggleLock: () => void;
   onToggleVisibility: () => void;
   onToggleMute: () => void;
@@ -43,8 +41,7 @@ function areTrackHeaderPropsEqual(prev: TrackHeaderProps, next: TrackHeaderProps
     prev.isSelected === next.isSelected &&
     prev.isDropTarget === next.isDropTarget &&
     prev.groupDepth === next.groupDepth &&
-    prev.canGroup === next.canGroup &&
-    prev.parentGated === next.parentGated
+    prev.canGroup === next.canGroup
   );
   // Callbacks (onToggleLock, etc.) are ignored - they're recreated each render but functionality is same
 }
@@ -65,7 +62,6 @@ export const TrackHeader = memo(function TrackHeader({
   isDropTarget,
   groupDepth,
   canGroup,
-  parentGated,
   onToggleLock,
   onToggleVisibility,
   onToggleMute,
@@ -132,16 +128,9 @@ export const TrackHeader = memo(function TrackHeader({
           <div className="flex items-center justify-center min-w-0 flex-1">
           <div className="flex flex-col items-start">
             {/* Row 1: Name */}
-            <div className="flex items-center gap-1">
-              {isGroup ? (
-                <Folder className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <Layers className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="text-sm font-bold font-mono truncate">
-                {track.name}
-              </span>
-            </div>
+            <span className="text-sm font-bold font-mono truncate">
+              {track.name}
+            </span>
 
             {/* Row 2: Control icons */}
             <div className="flex items-center gap-0.5">
@@ -156,10 +145,10 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {track.visible && !parentGated?.hidden ? (
+              {track.visible ? (
                 <Eye className="w-3 h-3" />
               ) : (
-                <EyeOff className={`w-3 h-3 ${parentGated?.hidden ? 'text-warning/50' : 'opacity-50'}`} />
+                <EyeOff className="w-3 h-3 opacity-50" />
               )}
             </Button>
 
@@ -174,8 +163,8 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
             >
-              {track.muted || parentGated?.muted ? (
-                <VolumeX className={`w-3 h-3 ${parentGated?.muted ? 'text-warning/50' : 'text-muted-foreground'}`} />
+              {track.muted ? (
+                <VolumeX className="w-3 h-3 opacity-50" />
               ) : (
                 <Volume2 className="w-3 h-3" />
               )}
@@ -209,7 +198,7 @@ export const TrackHeader = memo(function TrackHeader({
               onMouseDown={(e) => e.stopPropagation()}
             >
               <Lock
-                className={`w-3 h-3 ${track.locked || parentGated?.locked ? (parentGated?.locked ? 'text-warning/50' : 'text-primary') : ''}`}
+                className={`w-3 h-3 ${track.locked ? 'opacity-50' : ''}`}
               />
             </Button>
           </div>

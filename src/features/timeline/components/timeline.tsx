@@ -72,28 +72,12 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   // Derive visible tracks (collapsed group children are hidden)
   const visibleTracks = useMemo(() => getVisibleTracks(tracks), [tracks]);
 
-  // Pre-compute group depth and parent gate state for each visible track
+  // Pre-compute group depth for each visible track
   const trackMeta = useMemo(() => {
-    const meta = new Map<string, { depth: number; parentGated?: { muted?: boolean; hidden?: boolean; locked?: boolean } }>();
+    const meta = new Map<string, { depth: number }>();
     for (const track of visibleTracks) {
       const depth = getGroupDepth(tracks, track.id);
-      let parentGated: { muted?: boolean; hidden?: boolean; locked?: boolean } | undefined;
-      if (track.parentTrackId) {
-        const parent = tracks.find((t) => t.id === track.parentTrackId);
-        if (parent) {
-          const hasMuteGate = parent.muted;
-          const hasHiddenGate = !parent.visible;
-          const hasLockGate = parent.locked;
-          if (hasMuteGate || hasHiddenGate || hasLockGate) {
-            parentGated = {
-              muted: hasMuteGate || undefined,
-              hidden: hasHiddenGate || undefined,
-              locked: hasLockGate || undefined,
-            };
-          }
-        }
-      }
-      meta.set(track.id, { depth, parentGated });
+      meta.set(track.id, { depth });
     }
     return meta;
   }, [tracks, visibleTracks]);
@@ -520,7 +504,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                     isDropTarget={dropTargetGroupId === track.id}
                     groupDepth={meta?.depth ?? 0}
                     canGroup={canGroupSelection}
-                    parentGated={meta?.parentGated}
                     onToggleLock={() => toggleTrackLock(track.id)}
                     onToggleVisibility={() => toggleTrackVisibility(track.id)}
                     onToggleMute={() => toggleTrackMute(track.id)}

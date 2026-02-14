@@ -137,25 +137,35 @@ export function useTimelineTracks() {
 
   /**
    * Toggle track locked state.
-   * When unlocking a child inside a locked group, also unlocks the group
-   * and locks siblings so only the target track becomes unlocked.
+   * Group: propagates to all children.
+   * Child inside locked group: also unlocks the group.
    */
   const toggleTrackLock = useCallback(
     (id: string) => {
       const currentTracks = useTimelineStore.getState().tracks;
-      const currentTrack = currentTracks.find((t) => t.id === id);
-      if (!currentTrack) return;
+      const track = currentTracks.find((t) => t.id === id);
+      if (!track) return;
+      const newLocked = !track.locked;
 
-      const willUnlock = currentTrack.locked;
+      // Group → set group + all children
+      if (track.isGroup) {
+        setTracks(
+          currentTracks.map((t) => {
+            if (t.id === id || t.parentTrackId === id) return { ...t, locked: newLocked };
+            return t;
+          })
+        );
+        return;
+      }
 
-      if (willUnlock && currentTrack.parentTrackId) {
-        const parent = currentTracks.find((t) => t.id === currentTrack.parentTrackId);
+      // Child unlocking inside locked group → also unlock group
+      if (!newLocked && track.parentTrackId) {
+        const parent = currentTracks.find((t) => t.id === track.parentTrackId);
         if (parent?.locked) {
           setTracks(
             currentTracks.map((t) => {
               if (t.id === parent.id) return { ...t, locked: false };
               if (t.id === id) return { ...t, locked: false };
-              if (t.parentTrackId === parent.id && !t.locked) return { ...t, locked: true };
               return t;
             })
           );
@@ -163,32 +173,42 @@ export function useTimelineTracks() {
         }
       }
 
-      updateTrack(id, { locked: !currentTrack.locked });
+      updateTrack(id, { locked: newLocked });
     },
     [updateTrack, setTracks]
   );
 
   /**
    * Toggle track visibility.
-   * When showing a child inside a hidden group, also shows the group
-   * and hides siblings so only the target track becomes visible.
+   * Group: propagates to all children.
+   * Child showing inside hidden group: also shows the group.
    */
   const toggleTrackVisibility = useCallback(
     (id: string) => {
       const currentTracks = useTimelineStore.getState().tracks;
-      const currentTrack = currentTracks.find((t) => t.id === id);
-      if (!currentTrack) return;
+      const track = currentTracks.find((t) => t.id === id);
+      if (!track) return;
+      const newVisible = track.visible === false ? true : false;
 
-      const willShow = currentTrack.visible === false;
+      // Group → set group + all children
+      if (track.isGroup) {
+        setTracks(
+          currentTracks.map((t) => {
+            if (t.id === id || t.parentTrackId === id) return { ...t, visible: newVisible };
+            return t;
+          })
+        );
+        return;
+      }
 
-      if (willShow && currentTrack.parentTrackId) {
-        const parent = currentTracks.find((t) => t.id === currentTrack.parentTrackId);
+      // Child showing inside hidden group → also show group
+      if (newVisible && track.parentTrackId) {
+        const parent = currentTracks.find((t) => t.id === track.parentTrackId);
         if (parent && !parent.visible) {
           setTracks(
             currentTracks.map((t) => {
               if (t.id === parent.id) return { ...t, visible: true };
               if (t.id === id) return { ...t, visible: true };
-              if (t.parentTrackId === parent.id && t.visible !== false) return { ...t, visible: false };
               return t;
             })
           );
@@ -196,36 +216,42 @@ export function useTimelineTracks() {
         }
       }
 
-      updateTrack(id, { visible: !currentTrack.visible });
+      updateTrack(id, { visible: newVisible });
     },
     [updateTrack, setTracks]
   );
 
   /**
    * Toggle track audio muted state.
-   * When unmuting a child track inside a muted group, also unmutes the group
-   * and locks in mute on siblings so only the target track becomes audible.
+   * Group: propagates to all children.
+   * Child unmuting inside muted group: also unmutes the group.
    */
   const toggleTrackMute = useCallback(
     (id: string) => {
       const currentTracks = useTimelineStore.getState().tracks;
-      const currentTrack = currentTracks.find((t) => t.id === id);
-      if (!currentTrack) return;
+      const track = currentTracks.find((t) => t.id === id);
+      if (!track) return;
+      const newMuted = !track.muted;
 
-      const willUnmute = currentTrack.muted;
+      // Group → set group + all children
+      if (track.isGroup) {
+        setTracks(
+          currentTracks.map((t) => {
+            if (t.id === id || t.parentTrackId === id) return { ...t, muted: newMuted };
+            return t;
+          })
+        );
+        return;
+      }
 
-      // Unmuting a child inside a muted group: lift the group mute
-      if (willUnmute && currentTrack.parentTrackId) {
-        const parent = currentTracks.find((t) => t.id === currentTrack.parentTrackId);
+      // Child unmuting inside muted group → also unmute group
+      if (!newMuted && track.parentTrackId) {
+        const parent = currentTracks.find((t) => t.id === track.parentTrackId);
         if (parent?.muted) {
-          // Lock in mute on siblings that were only muted via the group,
-          // unmute the group, and unmute the target track — all in one update
           setTracks(
             currentTracks.map((t) => {
               if (t.id === parent.id) return { ...t, muted: false };
               if (t.id === id) return { ...t, muted: false };
-              // Sibling with muted:false was relying on group mute — lock it in
-              if (t.parentTrackId === parent.id && !t.muted) return { ...t, muted: true };
               return t;
             })
           );
@@ -233,7 +259,7 @@ export function useTimelineTracks() {
         }
       }
 
-      updateTrack(id, { muted: !currentTrack.muted });
+      updateTrack(id, { muted: newMuted });
     },
     [updateTrack, setTracks]
   );
