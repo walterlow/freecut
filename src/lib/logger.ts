@@ -90,8 +90,13 @@ class Logger {
   }
 }
 
-// Root logger instance
-const logger = new Logger();
+// Lazy root logger — avoids "Cannot access before initialization" in production
+// builds where Vite/Rollup may reorder module-level code across chunks.
+let _logger: Logger | undefined;
+function getLogger(): Logger {
+  if (!_logger) _logger = new Logger();
+  return _logger;
+}
 
 /**
  * Factory for creating module-specific loggers
@@ -101,5 +106,5 @@ const logger = new Logger();
  * log.debug('Socket connected');
  */
 export function createLogger(module: string): Logger {
-  return logger.child(module);
+  return getLogger().child(module);
 }
