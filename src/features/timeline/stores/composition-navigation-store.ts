@@ -24,6 +24,8 @@ interface StashedTimeline {
   tracks: TimelineTrack[];
   transitions: Transition[];
   keyframes: ItemKeyframes[];
+  /** Playhead frame at the time of stashing, so we can restore it on exit */
+  currentFrame: number;
 }
 
 interface CompositionNavigationState {
@@ -51,6 +53,7 @@ import { useTransitionsStore } from './transitions-store';
 import { useKeyframesStore } from './keyframes-store';
 import { useCompositionsStore } from './compositions-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 
 /** Save current items/tracks/transitions/keyframes from domain stores into a stash entry. */
 function captureCurrentTimeline(compositionId: string | null): StashedTimeline {
@@ -60,6 +63,7 @@ function captureCurrentTimeline(compositionId: string | null): StashedTimeline {
     tracks: useItemsStore.getState().tracks,
     transitions: useTransitionsStore.getState().transitions,
     keyframes: useKeyframesStore.getState().keyframes,
+    currentFrame: usePlaybackStore.getState().currentFrame,
   };
 }
 
@@ -70,6 +74,7 @@ function restoreTimeline(stash: StashedTimeline) {
   useTransitionsStore.getState().setTransitions(stash.transitions);
   useKeyframesStore.getState().setKeyframes(stash.keyframes);
   useSelectionStore.getState().clearSelection();
+  usePlaybackStore.getState().setCurrentFrame(stash.currentFrame);
 }
 
 /** Save current timeline data back to the compositions store (for sub-comps only). */
@@ -105,6 +110,9 @@ export const useCompositionNavigationStore = create<
   stashStack: [],
 
   enterComposition: (compositionId, label) => {
+    // Pause playback before switching timeline context
+    usePlaybackStore.getState().pause();
+
     const state = get();
 
     // Prevent infinite nesting
@@ -127,6 +135,21 @@ export const useCompositionNavigationStore = create<
     // Load the sub-composition data into domain stores
     if (!loadComposition(compositionId)) return;
 
+    // Map the global playhead to a local frame within the sub-composition.
+    // Find a composition item on the current timeline that references this compositionId.
+    const globalFrame = usePlaybackStore.getState().currentFrame;
+    const compItem = stash.items.find(
+      (i) => i.type === 'composition' && (i as { compositionId?: string }).compositionId === compositionId
+    );
+    let localFrame = 0;
+    if (compItem) {
+      const relativeFrame = globalFrame - compItem.from;
+      if (relativeFrame >= 0 && relativeFrame < compItem.durationInFrames) {
+        localFrame = relativeFrame;
+      }
+    }
+    usePlaybackStore.getState().setCurrentFrame(localFrame);
+
     set({
       breadcrumbs: [...state.breadcrumbs, { compositionId, label }],
       activeCompositionId: compositionId,
@@ -135,6 +158,9 @@ export const useCompositionNavigationStore = create<
   },
 
   exitComposition: () => {
+    // Pause playback before switching timeline context
+    usePlaybackStore.getState().pause();
+
     const state = get();
     if (state.breadcrumbs.length <= 1) return;
     if (state.stashStack.length === 0) return;
@@ -159,6 +185,9 @@ export const useCompositionNavigationStore = create<
   },
 
   navigateTo: (index) => {
+    // Pause playback before switching timeline context
+    usePlaybackStore.getState().pause();
+
     const state = get();
     if (index < 0 || index >= state.breadcrumbs.length) return;
 
@@ -189,6 +218,9 @@ export const useCompositionNavigationStore = create<
   },
 
   resetToRoot: () => {
+    // Pause playback before switching timeline context
+    usePlaybackStore.getState().pause();
+
     const state = get();
 
     // Save current sub-comp changes

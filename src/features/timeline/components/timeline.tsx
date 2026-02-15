@@ -13,6 +13,7 @@ import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
 import { CompositionBreadcrumbs } from './composition-breadcrumbs';
+import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import type { TimelineTrack } from '@/types/timeline';
 import { trackDropIndexRef, trackDropGroupIdRef, trackDropParentIdRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
@@ -281,6 +282,16 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       }
 
       const key = e.key.toLowerCase();
+
+      // Escape - exit composition if inside one
+      if (key === 'escape' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        const navStore = useCompositionNavigationStore.getState();
+        if (navStore.activeCompositionId !== null) {
+          e.preventDefault();
+          navStore.exitComposition();
+          return;
+        }
+      }
 
       // 'I' key - Set in-point at current playhead position
       if (key === 'i' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {

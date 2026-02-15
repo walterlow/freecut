@@ -1,11 +1,31 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { AbsoluteFill, Sequence } from '@/features/player/composition';
-import type { CompositionItem as CompositionItemType } from '@/types/timeline';
+import type { CompositionItem as CompositionItemType, TimelineItem } from '@/types/timeline';
 import { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
+import { blobUrlManager } from '@/lib/blob-url-manager';
 import { Item } from './item';
 
 interface CompositionContentProps {
   item: CompositionItemType;
+  parentMuted?: boolean;
+}
+
+/**
+ * Resolve media URLs on sub-comp items using the centralized blob URL manager.
+ * The parent preview has already acquired blob URLs for all mediaIds —
+ * we just need to look them up and set `src`.
+ */
+function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
+  if (
+    subItem.mediaId &&
+    (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'image')
+  ) {
+    const src = blobUrlManager.get(subItem.mediaId) ?? '';
+    if (src !== subItem.src) {
+      return { ...subItem, src } as TimelineItem;
+    }
+  }
+  return subItem;
 }
 
 /**
@@ -18,8 +38,14 @@ interface CompositionContentProps {
  * The sub-comp is rendered at its own resolution and then CSS-scaled to fit
  * the parent transform bounds (handled by the parent ItemVisualWrapper).
  */
-export const CompositionContent = React.memo<CompositionContentProps>(({ item }) => {
+export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
+
+  // Resolve media URLs for sub-comp items so they can render in preview
+  const resolvedItems = useMemo(() => {
+    if (!subComp) return [];
+    return subComp.items.map(resolveSubCompItem);
+  }, [subComp]);
 
   if (!subComp) {
     return (
@@ -44,7 +70,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item })
       {sortedTracks.map((track) => {
         if (!track.visible) return null;
 
-        const trackItems = subComp.items.filter((i) => i.trackId === track.id);
+        const trackItems = resolvedItems.filter((i) => i.trackId === track.id);
 
         return trackItems.map((subItem) => (
           <Sequence
@@ -52,7 +78,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item })
             from={subItem.from}
             durationInFrames={subItem.durationInFrames}
           >
-            <Item item={subItem} muted={track.muted} masks={[]} />
+            <Item item={subItem} muted={parentMuted || track.muted} masks={[]} />
           </Sequence>
         ));
       })}

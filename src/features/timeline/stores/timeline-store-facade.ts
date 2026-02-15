@@ -29,6 +29,8 @@ import { useKeyframesStore } from './keyframes-store';
 import { useMarkersStore } from './markers-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTimelineCommandStore } from './timeline-command-store';
+import { useCompositionsStore } from './compositions-store';
+import { useCompositionNavigationStore } from './composition-navigation-store';
 
 // Actions
 import * as timelineActions from './timeline-actions';
@@ -50,6 +52,13 @@ import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/lib/migrations';
  * Save timeline to project in IndexedDB.
  */
 async function saveTimeline(projectId: string): Promise<void> {
+  // If currently editing a sub-composition, navigate back to root first
+  // so we save the main timeline data (not the sub-comp currently in the stores).
+  const navStore = useCompositionNavigationStore.getState();
+  if (navStore.activeCompositionId !== null) {
+    navStore.resetToRoot();
+  }
+
   // Read directly from domain stores
   const itemsState = useItemsStore.getState();
   const transitionsState = useTransitionsStore.getState();
@@ -111,6 +120,26 @@ async function saveTimeline(projectId: string): Promise<void> {
           })),
         })),
       }),
+      // Sub-compositions (pre-comps)
+      ...(() => {
+        const comps = useCompositionsStore.getState().compositions;
+        if (comps.length === 0) return {};
+        return {
+          compositions: comps.map((c) => ({
+            id: c.id,
+            name: c.name,
+            items: c.items as ProjectTimeline['items'],
+            tracks: c.tracks as ProjectTimeline['tracks'],
+            ...(c.transitions?.length && { transitions: c.transitions as ProjectTimeline['transitions'] }),
+            ...(c.keyframes?.length && { keyframes: c.keyframes as ProjectTimeline['keyframes'] }),
+            fps: c.fps,
+            width: c.width,
+            height: c.height,
+            durationInFrames: c.durationInFrames,
+            ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
+          })),
+        };
+      })(),
     };
 
     // Generate thumbnail using the client render engine (renders all layers)
@@ -277,6 +306,30 @@ async function loadTimeline(projectId: string): Promise<void> {
       useMarkersStore.getState().setOutPoint(t.outPoint ?? null);
       useTimelineSettingsStore.getState().setScrollPosition(t.scrollPosition || 0);
 
+      // Restore sub-compositions
+      if (t.compositions && t.compositions.length > 0) {
+        useCompositionsStore.getState().setCompositions(
+          t.compositions.map((c) => ({
+            id: c.id,
+            name: c.name,
+            items: c.items as TimelineItem[],
+            tracks: c.tracks as TimelineTrack[],
+            transitions: (c.transitions ?? []) as Transition[],
+            keyframes: (c.keyframes ?? []) as ItemKeyframes[],
+            fps: c.fps,
+            width: c.width,
+            height: c.height,
+            durationInFrames: c.durationInFrames,
+            ...(c.backgroundColor && { backgroundColor: c.backgroundColor }),
+          }))
+        );
+      } else {
+        useCompositionsStore.getState().setCompositions([]);
+      }
+
+      // Reset composition navigation to root on load
+      useCompositionNavigationStore.getState().resetToRoot();
+
       // Restore zoom and playback
       if (t.zoomLevel !== undefined) {
         useZoomStore.getState().setZoomLevel(t.zoomLevel);
@@ -312,6 +365,8 @@ async function loadTimeline(projectId: string): Promise<void> {
       useMarkersStore.getState().setMarkers([]);
       useMarkersStore.getState().setInPoint(null);
       useMarkersStore.getState().setOutPoint(null);
+      useCompositionsStore.getState().setCompositions([]);
+      useCompositionNavigationStore.getState().resetToRoot();
       useTimelineSettingsStore.getState().setScrollPosition(0);
       useZoomStore.getState().setZoomLevel(1);
       usePlaybackStore.getState().setCurrentFrame(0);

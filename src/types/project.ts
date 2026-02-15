@@ -53,7 +53,7 @@ export interface ProjectTimeline {
     label: string;
     mediaId?: string;
     originId?: string; // Tracks lineage for stable React keys
-    type: 'video' | 'audio' | 'text' | 'image' | 'shape';
+    type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment';
     // Type-specific fields stored as optional for flexibility
     src?: string;
     thumbnailUrl?: string;
@@ -75,6 +75,11 @@ export interface ProjectTimeline {
     points?: number;
     innerRadius?: number;
     speed?: number; // Playback speed multiplier (default 1.0)
+    reversed?: boolean; // Play clip in reverse
+    // Composition item fields
+    compositionId?: string; // Reference to a sub-composition
+    compositionWidth?: number;
+    compositionHeight?: number;
     // Source dimensions (for video/image items)
     sourceWidth?: number;
     sourceHeight?: number;
@@ -125,6 +130,20 @@ export interface ProjectTimeline {
     alignment?: number;
     bezierPoints?: { x1: number; y1: number; x2: number; y2: number };
     presetId?: string;
+  }>;
+  // Sub-compositions (pre-comps)
+  compositions?: Array<{
+    id: string;
+    name: string;
+    items: ProjectTimeline['items'];
+    tracks: ProjectTimeline['tracks'];
+    transitions?: ProjectTimeline['transitions'];
+    keyframes?: ProjectTimeline['keyframes'];
+    fps: number;
+    width: number;
+    height: number;
+    durationInFrames: number;
+    backgroundColor?: string;
   }>;
   // Keyframe animations
   keyframes?: Array<{

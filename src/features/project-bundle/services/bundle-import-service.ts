@@ -207,6 +207,19 @@ export async function importProjectBundle(
               thumbnailUrl: undefined,
             };
           }),
+          // Also remap sub-composition items
+          compositions: bundleProject.timeline.compositions?.map((comp) => ({
+            ...comp,
+            items: comp.items.map((item) => {
+              const { mediaRef, ...rest } = item;
+              return {
+                ...rest,
+                mediaId: mediaRef ? mediaIdMap.get(mediaRef) : undefined,
+                src: undefined,
+                thumbnailUrl: undefined,
+              };
+            }),
+          })),
           currentFrame: bundleProject.timeline.currentFrame,
           zoomLevel: bundleProject.timeline.zoomLevel,
           inPoint: bundleProject.timeline.inPoint,

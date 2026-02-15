@@ -144,21 +144,30 @@ export async function exportProjectBundle(
   onProgress?.({ percent: 85, stage: 'packaging' });
 
   // Step 6: Create project.json with mediaRef instead of mediaId
+  // Helper to convert timeline items for bundle (mediaId → mediaRef, strip preview URLs)
+  const convertItemsForBundle = (items: NonNullable<typeof project.timeline>['items']) =>
+    items.map((item) => {
+      const { mediaId, ...rest } = item;
+      const itemWithoutPreviewUrls = { ...rest };
+      delete itemWithoutPreviewUrls.src;
+      delete itemWithoutPreviewUrls.thumbnailUrl;
+      return {
+        ...itemWithoutPreviewUrls,
+        mediaRef: mediaId, // Rename mediaId to mediaRef
+      };
+    });
+
   const bundleProject: BundleProject = {
     ...project,
     timeline: project.timeline
       ? {
           ...project.timeline,
-          items: project.timeline.items.map((item) => {
-            const { mediaId, ...rest } = item;
-            const itemWithoutPreviewUrls = { ...rest };
-            delete itemWithoutPreviewUrls.src;
-            delete itemWithoutPreviewUrls.thumbnailUrl;
-            return {
-              ...itemWithoutPreviewUrls,
-              mediaRef: mediaId, // Rename mediaId to mediaRef
-            };
-          }),
+          items: convertItemsForBundle(project.timeline.items),
+          // Also process sub-composition items
+          compositions: project.timeline.compositions?.map((comp) => ({
+            ...comp,
+            items: convertItemsForBundle(comp.items as NonNullable<typeof project.timeline>['items']),
+          })),
         }
       : undefined,
   };

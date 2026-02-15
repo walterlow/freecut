@@ -831,7 +831,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
                         adjustmentLayers={visibleAdjustmentLayers}
                         sequenceFrom={item.from}
                       >
-                        <Item item={item} muted={false} masks={[]} />
+                        <Item item={item} muted={track.muted || !track.trackVisible} masks={[]} />
                       </ItemEffectWrapper>
                     </Sequence>
                   ))}

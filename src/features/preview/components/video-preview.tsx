@@ -5,6 +5,7 @@ import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { MainComposition } from '@/lib/composition-runtime/compositions/main-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
+import { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
 import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import { GizmoOverlay } from './gizmo-overlay';
@@ -279,13 +280,23 @@ export const VideoPreview = memo(function VideoPreview({
   }, [combinedTracks, resolvedUrls]);
 
   // Create a stable fingerprint for media resolution using derived selector
-  const mediaFingerprint = useTimelineStore((s) =>
+  // Includes media from both main timeline items AND sub-composition items
+  const mainMediaFingerprint = useTimelineStore((s) =>
     s.items
       .filter((item) => item.mediaId)
       .map((item) => item.mediaId!)
       .toSorted()
       .join('|')
   );
+  const compMediaFingerprint = useCompositionsStore((s) =>
+    s.compositions
+      .flatMap((c) => c.items)
+      .filter((item) => item.mediaId)
+      .map((item) => item.mediaId!)
+      .toSorted()
+      .join('|')
+  );
+  const mediaFingerprint = mainMediaFingerprint + '||' + compMediaFingerprint;
 
   // Calculate total frames using derived selector for furthest item end
   const furthestItemEndFrame = useTimelineStore((s) =>
@@ -301,10 +312,15 @@ export const VideoPreview = memo(function VideoPreview({
     let isCancelled = false;
 
     async function resolve() {
-      const mediaIds = items
+      // Collect media IDs from both main timeline and sub-compositions
+      const mainMediaIds = items
         .filter((item) => item.mediaId)
         .map((item) => item.mediaId!);
-      const uniqueMediaIds = [...new Set(mediaIds)];
+      const compMediaIds = useCompositionsStore.getState().compositions
+        .flatMap((c) => c.items)
+        .filter((item) => item.mediaId)
+        .map((item) => item.mediaId!);
+      const uniqueMediaIds = [...new Set([...mainMediaIds, ...compMediaIds])];
 
       if (uniqueMediaIds.length === 0) {
         setResolvedUrls(new Map());

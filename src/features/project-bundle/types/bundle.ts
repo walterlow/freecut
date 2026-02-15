@@ -58,7 +58,7 @@ export interface BundleProject extends Omit<Project, 'id'> {
       from: number;
       durationInFrames: number;
       label: string;
-      type: 'video' | 'audio' | 'text' | 'image' | 'shape';
+      type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment';
       mediaRef?: string; // References manifest.media[].originalId (renamed from mediaId)
       // Other type-specific fields...
       [key: string]: unknown;
@@ -67,6 +67,28 @@ export interface BundleProject extends Omit<Project, 'id'> {
     zoomLevel?: number;
     inPoint?: number;
     outPoint?: number;
+    compositions?: Array<{
+      id: string;
+      name: string;
+      items: Array<{
+        id: string;
+        trackId: string;
+        from: number;
+        durationInFrames: number;
+        label: string;
+        type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment';
+        mediaRef?: string;
+        [key: string]: unknown;
+      }>;
+      tracks: ProjectTimeline['tracks'];
+      transitions?: ProjectTimeline['transitions'];
+      keyframes?: ProjectTimeline['keyframes'];
+      fps: number;
+      width: number;
+      height: number;
+      durationInFrames: number;
+      backgroundColor?: string;
+    }>;
   };
 }
 

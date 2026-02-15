@@ -71,32 +71,36 @@ export const Sequence = memo<SequenceProps>(
     // Get the global frame from the clock
     const globalFrame = useClockFrame();
 
-    // Get parent sequence context (for nested sequences)
+    // Get parent sequence context (for nested sequences like sub-compositions)
     const parentContext = useSequenceContext();
     const parentFrom = parentContext?.from ?? 0;
 
-    // Calculate visibility (with premount support)
-    const endFrame = from + durationInFrames;
-    const premountStart = from - premountFor;
-    const isVisible = globalFrame >= from && globalFrame < endFrame;
+    // When nested inside another Sequence (e.g. sub-comp items inside a CompositionItem),
+    // `from` is relative to the parent. Convert to absolute frame for clock comparison.
+    const absoluteFrom = parentFrom + from;
+    const endFrame = absoluteFrom + durationInFrames;
+    const premountStart = absoluteFrom - premountFor;
+
+    // Calculate visibility using absolute frame positions
+    const isVisible = globalFrame >= absoluteFrom && globalFrame < endFrame;
     // Mount content if visible OR within premount range
     const shouldMount = globalFrame >= premountStart && globalFrame < endFrame;
 
     // Calculate local frame (0-based within this sequence)
     // NOTE: During premount, localFrame can be negative (before the sequence starts).
     // This allows children to detect premount phase and avoid rendering content.
-    // Previously this was clamped to 0, but that caused premount content to be visible.
-    const localFrame = globalFrame - from;
+    const localFrame = globalFrame - absoluteFrom;
 
-    // Create context value
+    // Create context value — expose absoluteFrom so nested children
+    // can continue to offset their own `from` correctly.
     const contextValue = useMemo<SequenceContextValue>(
       () => ({
-        from,
+        from: absoluteFrom,
         durationInFrames,
         localFrame,
         parentFrom,
       }),
-      [from, durationInFrames, localFrame, parentFrom]
+      [absoluteFrom, durationInFrames, localFrame, parentFrom]
     );
 
     // Build style based on visibility and layout

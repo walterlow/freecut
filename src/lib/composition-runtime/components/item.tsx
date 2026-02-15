@@ -289,9 +289,10 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
 
   if (item.type === 'composition') {
     // Render sub-composition contents inline
+    // Pass parent muted so muting the track silences all sub-comp audio
     return (
       <ItemVisualWrapper item={item} masks={masks}>
-        <CompositionContent item={item} />
+        <CompositionContent item={item} parentMuted={muted} />
       </ItemVisualWrapper>
     );
   }
