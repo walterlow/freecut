@@ -71,7 +71,10 @@ export function getSourceDimensions(
   }
   if (item.type === 'composition') {
     const compItem = item as CompositionItem;
-    return { width: compItem.compositionWidth, height: compItem.compositionHeight };
+    if (compItem.compositionWidth && compItem.compositionHeight) {
+      return { width: compItem.compositionWidth, height: compItem.compositionHeight };
+    }
+    return undefined;
   }
   return undefined;
 }

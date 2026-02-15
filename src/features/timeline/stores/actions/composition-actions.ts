@@ -54,8 +54,9 @@ export function createPreComp(name?: string, itemIds?: string[]): CompositionIte
 
     // --- 3. Collect distinct source tracks and build sub-comp tracks ---
     const selectedItemIds = new Set(selectedIds);
-    const sourceTrackIds = [...new Set(selectedItems.map((i) => i.trackId))];
     const sourceTrackMap = new Map(tracks.map((t) => [t.id, t]));
+    const sourceTrackIds = [...new Set(selectedItems.map((i) => i.trackId))]
+      .sort((a, b) => (sourceTrackMap.get(a)?.order ?? 0) - (sourceTrackMap.get(b)?.order ?? 0));
 
     const subCompTracks: TimelineTrack[] = sourceTrackIds.map((trackId, index) => {
       const sourceTrack = sourceTrackMap.get(trackId);
@@ -145,8 +146,9 @@ export function createPreComp(name?: string, itemIds?: string[]): CompositionIte
     // Remove keyframes for selected items
     useKeyframesStore.getState()._removeKeyframesForItems(selectedIds);
 
-    // --- 9. Insert CompositionItem on the first selected item's track ---
-    const targetTrackId = selectedItems[0]!.trackId;
+    // --- 9. Insert CompositionItem on the highest-order (bottom-most) selected track ---
+    // Dissolve will map the last sub-comp track back here and expand upward
+    const targetTrackId = sourceTrackIds[sourceTrackIds.length - 1]!;
     const compositionItem: CompositionItem = {
       id: crypto.randomUUID(),
       type: 'composition',
@@ -202,42 +204,112 @@ export function dissolvePreComp(compositionItemId: string): boolean {
     const compTrackOrder = compTrack?.order ?? 0;
 
     // Map sub-comp tracks to main timeline tracks.
-    // First sub-comp track reuses the composition item's track;
-    // additional sub-comp tracks get new main-timeline tracks created for them.
+    // Bottom-most sub-comp track reuses the comp's track.
+    // Upper sub-comp tracks try to reuse existing tracks above the comp
+    // (checking for item overlap), only creating new tracks as a last resort.
     const sortedSubTracks = [...subComp.tracks].sort((a, b) => a.order - b.order);
     const trackIdMapping = new Map<string, string>();
     const newTracks: typeof tracks = [];
+    const lastIdx = sortedSubTracks.length - 1;
 
-    for (let i = 0; i < sortedSubTracks.length; i++) {
+    // Bottom-most sub-comp track → comp's track
+    trackIdMapping.set(sortedSubTracks[lastIdx]!.id, targetTrackId);
+
+    // Candidate tracks above the comp, sorted descending (closest to comp first)
+    // Exclude group tracks — they are headers, not item containers
+    const candidatesAbove = [...tracks]
+      .filter((t) => t.id !== targetTrackId && !t.isGroup && (t.order ?? 0) < compTrackOrder)
+      .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+
+    const usedTrackIds = new Set<string>([targetTrackId]);
+    // Current items excluding the comp item itself (for overlap checks)
+    const currentItems = items.filter((i) => i.id !== compositionItemId);
+
+    // Process from second-to-bottom upward so closest-to-comp gets matched first
+    for (let i = lastIdx - 1; i >= 0; i--) {
       const subTrack = sortedSubTracks[i]!;
-      if (i === 0) {
-        // First sub-comp track maps to the composition item's existing track
-        trackIdMapping.set(subTrack.id, targetTrackId);
+
+      // Items that will be restored onto this track (with absolute positions)
+      const restoredRanges = subComp.items
+        .filter((it) => it.trackId === subTrack.id)
+        .map((it) => ({ from: it.from + compFrom, end: it.from + compFrom + it.durationInFrames }));
+
+      // Try to find an existing track above the comp with no overlap
+      let foundTrackId: string | null = null;
+      for (const candidate of candidatesAbove) {
+        if (usedTrackIds.has(candidate.id)) continue;
+
+        const existingOnTrack = currentItems.filter((it) => it.trackId === candidate.id);
+        const overlaps = existingOnTrack.some((existing) => {
+          const existEnd = existing.from + existing.durationInFrames;
+          return restoredRanges.some((r) => r.from < existEnd && existing.from < r.end);
+        });
+
+        if (!overlaps) {
+          foundTrackId = candidate.id;
+          usedTrackIds.add(candidate.id);
+          break;
+        }
+      }
+
+      if (foundTrackId) {
+        trackIdMapping.set(subTrack.id, foundTrackId);
       } else {
-        // Create a new track for additional sub-comp tracks
+        // No suitable existing track — create a new one above the comp
+        const distFromBottom = lastIdx - i;
         const newTrackId = crypto.randomUUID();
         trackIdMapping.set(subTrack.id, newTrackId);
         newTracks.push({
           ...subTrack,
           id: newTrackId,
-          order: compTrackOrder + i * 0.01, // Insert right after the comp track
-          parentTrackId: compTrack?.parentTrackId, // Preserve group membership
+          order: compTrackOrder - distFromBottom * 0.01,
+          parentTrackId: compTrack?.parentTrackId,
         });
       }
     }
 
-    // Add new tracks to the store
+    // Add new tracks to the store (only if we couldn't reuse existing ones)
     if (newTracks.length > 0) {
       useItemsStore.getState().setTracks([...tracks, ...newTracks]);
     }
 
     // Reposition items back to absolute timeline positions with correct track mapping
-    const restoredItems: TimelineItem[] = subComp.items.map((item) => ({
-      ...item,
-      id: crypto.randomUUID(),
-      from: item.from + compFrom,
-      trackId: trackIdMapping.get(item.trackId) ?? targetTrackId,
-    }));
+    const itemIdMapping = new Map<string, string>();
+    const restoredItems: TimelineItem[] = subComp.items.map((item) => {
+      const newId = crypto.randomUUID();
+      itemIdMapping.set(item.id, newId);
+      return {
+        ...item,
+        id: newId,
+        from: item.from + compFrom,
+        trackId: trackIdMapping.get(item.trackId) ?? targetTrackId,
+      };
+    });
+
+    // Restore transitions with remapped IDs
+    const subTransitions = subComp.transitions ?? [];
+    if (subTransitions.length > 0) {
+      const currentTransitions = useTransitionsStore.getState().transitions;
+      const restoredTransitions = subTransitions.map((t) => ({
+        ...t,
+        id: crypto.randomUUID(),
+        leftClipId: itemIdMapping.get(t.leftClipId) ?? t.leftClipId,
+        rightClipId: itemIdMapping.get(t.rightClipId) ?? t.rightClipId,
+        trackId: trackIdMapping.get(t.trackId) ?? t.trackId,
+      }));
+      useTransitionsStore.getState().setTransitions([...currentTransitions, ...restoredTransitions]);
+    }
+
+    // Restore keyframes with remapped item IDs
+    const subKeyframes = subComp.keyframes ?? [];
+    if (subKeyframes.length > 0) {
+      const currentKeyframes = useKeyframesStore.getState().keyframes;
+      const restoredKeyframes = subKeyframes.map((kf) => ({
+        ...kf,
+        itemId: itemIdMapping.get(kf.itemId) ?? kf.itemId,
+      }));
+      useKeyframesStore.getState().setKeyframes([...currentKeyframes, ...restoredKeyframes]);
+    }
 
     // Remove the composition item
     useItemsStore.getState()._removeItems([compositionItemId]);

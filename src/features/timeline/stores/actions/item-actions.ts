@@ -10,6 +10,7 @@ import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { execute, applyTransitionRepairs, logger } from './shared';
+import { blobUrlManager } from '@/lib/blob-url-manager';
 
 /**
  * Close all gaps on a track by shifting items left to remove empty space.
@@ -438,7 +439,7 @@ export async function insertFreezeFrame(
     }
 
     const frameMediaId = crypto.randomUUID();
-    const frameBlobUrl = URL.createObjectURL(frameBlob);
+    const frameBlobUrl = blobUrlManager.acquire(frameMediaId, frameBlob);
     const fileName = `freeze-frame-${item.label || 'video'}-${Math.round(timestampSeconds * 100) / 100}s.png`;
 
     const mediaMetadata: MediaMetadata = {

@@ -79,11 +79,18 @@ function restoreTimeline(stash: StashedTimeline) {
 
 /** Save current timeline data back to the compositions store (for sub-comps only). */
 function saveCurrentToComposition(compositionId: string) {
+  const items = useItemsStore.getState().items;
+  // Compute updated duration from the furthest item end
+  const durationInFrames = items.length > 0
+    ? Math.max(...items.map((i) => i.from + i.durationInFrames))
+    : 0;
+
   useCompositionsStore.getState().updateComposition(compositionId, {
-    items: useItemsStore.getState().items,
+    items,
     tracks: useItemsStore.getState().tracks,
     transitions: useTransitionsStore.getState().transitions,
     keyframes: useKeyframesStore.getState().keyframes,
+    durationInFrames,
   });
 }
 

@@ -21,7 +21,7 @@ export const useMediaLibraryStore = create<
       // Initial state
       currentProjectId: null, // v3: Project context
       mediaItems: [],
-      isLoading: true, // Start loading until project context is set
+      isLoading: false, // Only load once a project context is available
       importingIds: [],
       error: null,
       notification: null,
@@ -66,8 +66,9 @@ export const useMediaLibraryStore = create<
       loadMediaItems: async () => {
         const { currentProjectId } = get();
 
-        // Don't load if no project context - keep loading state until project is set
+        // Don't load without project context; ensure loading state is cleared.
         if (!currentProjectId) {
+          set({ isLoading: false });
           return;
         }
 

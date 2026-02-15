@@ -52,10 +52,14 @@ import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/lib/migrations';
  * Save timeline to project in IndexedDB.
  */
 async function saveTimeline(projectId: string): Promise<void> {
-  // If currently editing a sub-composition, navigate back to root first
-  // so we save the main timeline data (not the sub-comp currently in the stores).
+  // If currently editing a sub-composition, navigate back to root to save
+  // the main timeline data, then re-enter after save completes.
   const navStore = useCompositionNavigationStore.getState();
-  if (navStore.activeCompositionId !== null) {
+  const previousCompositionId = navStore.activeCompositionId;
+  const previousLabel = previousCompositionId
+    ? navStore.breadcrumbs.find((b) => b.compositionId === previousCompositionId)?.label ?? ''
+    : '';
+  if (previousCompositionId !== null) {
     navStore.resetToRoot();
   }
 
@@ -224,8 +228,17 @@ async function saveTimeline(projectId: string): Promise<void> {
 
     // Mark as clean after successful save
     useTimelineSettingsStore.getState().markClean();
+
+    // Re-enter the sub-composition the user was editing before save
+    if (previousCompositionId !== null) {
+      useCompositionNavigationStore.getState().enterComposition(previousCompositionId, previousLabel);
+    }
   } catch (error) {
     logger.error('Failed to save timeline:', error);
+    // Re-enter even on failure so user doesn't lose their editing context
+    if (previousCompositionId !== null) {
+      useCompositionNavigationStore.getState().enterComposition(previousCompositionId, previousLabel);
+    }
     throw error;
   }
 }

@@ -672,62 +672,68 @@ async function renderCompositionItem(
   // Create an offscreen canvas at the sub-comp dimensions
   const { canvas: subCanvas, ctx: subCtx } = rctx.canvasPool.acquire();
 
-  // Clear the sub canvas
-  subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
+  try {
+    // Clear the sub canvas
+    subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
 
-  // Build sub-comp canvas settings using the sub-comp's own dimensions
-  // (note: pooled canvases are at the main canvas size — we render at that
-  // size and rely on the parent transform to scale)
-  const subCanvasSettings: CanvasSettings = {
-    width: subCanvas.width,
-    height: subCanvas.height,
-    fps: subComp.fps,
-  };
+    // Build sub-comp canvas settings using the sub-comp's own dimensions
+    // (note: pooled canvases are at the main canvas size — we render at that
+    // size and rely on the parent transform to scale)
+    const subCanvasSettings: CanvasSettings = {
+      width: subCanvas.width,
+      height: subCanvas.height,
+      fps: subComp.fps,
+    };
 
-  // Sort sub-comp tracks bottom-to-top (highest order renders first → lowest z)
-  const sortedTracks = [...subComp.tracks].sort(
-    (a, b) => (b.order ?? 0) - (a.order ?? 0)
-  );
+    // Build a keyframes lookup for sub-comp items
+    const subKeyframes = subComp.keyframes ?? [];
 
-  // Render each visible item at the local frame
-  for (const track of sortedTracks) {
-    if (!track.visible) continue;
+    // Sort sub-comp tracks bottom-to-top (highest order renders first → lowest z)
+    const sortedTracks = [...subComp.tracks].sort(
+      (a, b) => (b.order ?? 0) - (a.order ?? 0)
+    );
 
-    const trackItems = subComp.items.filter((i) => i.trackId === track.id);
+    // Render each visible item at the local frame
+    for (const track of sortedTracks) {
+      if (!track.visible) continue;
 
-    for (const subItem of trackItems) {
-      // Check if item is visible at this local frame
-      if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
-        continue;
+      const trackItems = subComp.items.filter((i) => i.trackId === track.id);
+
+      for (const subItem of trackItems) {
+        // Check if item is visible at this local frame
+        if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+          continue;
+        }
+
+        // Skip audio and adjustment items
+        if (subItem.type === 'audio' || subItem.type === 'adjustment') continue;
+
+        // Get transform for the sub-item using sub-comp's keyframes
+        const subItemKeyframes = subKeyframes.find((kf) => kf.itemId === subItem.id);
+        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
+
+        await renderItem(subCtx, subItem, subItemTransform, localFrame, rctx);
       }
-
-      // Skip audio and adjustment items
-      if (subItem.type === 'audio' || subItem.type === 'adjustment') continue;
-
-      // Get transform for the sub-item
-      const subItemTransform = getAnimatedTransform(subItem, undefined, localFrame, subCanvasSettings);
-
-      await renderItem(subCtx, subItem, subItemTransform, localFrame, rctx);
     }
+
+    // Draw the sub-composition result onto the main canvas at the CompositionItem's position
+    const drawDimensions = calculateMediaDrawDimensions(
+      subCanvas.width,
+      subCanvas.height,
+      transform,
+      rctx.canvasSettings,
+    );
+
+    ctx.drawImage(
+      subCanvas,
+      drawDimensions.x,
+      drawDimensions.y,
+      drawDimensions.width,
+      drawDimensions.height,
+    );
+  } finally {
+    rctx.canvasPool.release(subCanvas);
   }
-
-  // Draw the sub-composition result onto the main canvas at the CompositionItem's position
-  const drawDimensions = calculateMediaDrawDimensions(
-    subCanvas.width,
-    subCanvas.height,
-    transform,
-    rctx.canvasSettings,
-  );
-
-  ctx.drawImage(
-    subCanvas,
-    drawDimensions.x,
-    drawDimensions.y,
-    drawDimensions.width,
-    drawDimensions.height,
-  );
-
-  rctx.canvasPool.release(subCanvas);
 }
 
 // ---------------------------------------------------------------------------

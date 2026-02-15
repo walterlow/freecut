@@ -37,6 +37,7 @@ import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useCompositionNavigationStore } from '@/features/timeline/stores/composition-navigation-store';
+import { useProjectStore } from '@/features/projects/stores/project-store';
 
 interface MediaLibraryProps {
   onMediaSelect?: (mediaId: string) => void;
@@ -56,6 +57,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
+  const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
@@ -78,6 +80,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const clearNotification = useMediaLibraryStore((s) => s.clearNotification);
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
   const openMissingMediaDialog = useMediaLibraryStore((s) => s.openMissingMediaDialog);
+  const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
 
   // Composition navigation — show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
@@ -90,9 +93,15 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const showUnsupportedCodecDialog = useMediaLibraryStore((s) => s.showUnsupportedCodecDialog);
   const resolveUnsupportedCodecDialog = useMediaLibraryStore((s) => s.resolveUnsupportedCodecDialog);
 
-  // Load media items on mount and when project changes
-  // Important: Always load on mount because HMR preserves store state (isLoading: true)
-  // but remounts components, so the effect may not re-trigger if currentProjectId is unchanged
+  // HMR recovery: if media store lost project context, rehydrate it from project store.
+  useEffect(() => {
+    if (!currentProjectId && projectStoreProjectId) {
+      setCurrentProject(projectStoreProjectId);
+    }
+  }, [currentProjectId, projectStoreProjectId, setCurrentProject]);
+
+  // Load media items on mount and when project changes.
+  // We keep both paths because HMR can remount components without a project-id change.
   useEffect(() => {
     if (currentProjectId) {
       loadMediaItems();

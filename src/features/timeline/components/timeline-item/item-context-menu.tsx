@@ -188,7 +188,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
             Create Pre-Composition
           </ContextMenuItem>
         )}
-        {(isCompositionItem || canCreatePreComp) && (
+        {((isCompositionItem && (onEnterComposition || onDissolveComposition)) || (canCreatePreComp && onCreatePreComp)) && (
           <ContextMenuSeparator />
         )}
 

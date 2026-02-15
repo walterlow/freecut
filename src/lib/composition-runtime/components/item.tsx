@@ -26,11 +26,16 @@ export interface MaskInfo {
   transform: TransformProperties;
 }
 
+/** Max nesting depth for composition rendering to prevent infinite recursion */
+const MAX_RENDER_DEPTH = 2;
+
 interface ItemProps {
   item: TimelineItem;
   muted?: boolean;
   /** Active masks that should clip this item's content */
   masks?: MaskInfo[];
+  /** Current composition nesting depth (prevents infinite recursion) */
+  renderDepth?: number;
 }
 
 /**
@@ -47,7 +52,7 @@ interface ItemProps {
  *
  * Memoized to prevent unnecessary re-renders when parent (MainComposition) updates.
  */
-export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) => {
+export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], renderDepth = 0 }) => {
   // Use muted prop directly - MainComposition already passes track.muted
   // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
@@ -277,11 +282,15 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
   }
 
   if (item.type === 'composition') {
+    // Guard against infinite recursion from circular composition references
+    if (renderDepth >= MAX_RENDER_DEPTH) {
+      return null;
+    }
     // Render sub-composition contents inline
     // Pass parent muted so muting the track silences all sub-comp audio
     return (
       <ItemVisualWrapper item={item} masks={masks}>
-        <CompositionContent item={item} parentMuted={muted} />
+        <CompositionContent item={item} parentMuted={muted} renderDepth={renderDepth + 1} />
       </ItemVisualWrapper>
     );
   }

@@ -178,7 +178,12 @@ export function useClipboardShortcuts() {
         }
 
         if (itemsClipboard.copyType === 'cut') {
-          removeItems(itemsClipboard.originalIds);
+          // Only remove items that were actually pasted (composition items may have been filtered out)
+          const pastedOriginalIds = pasteItems.map((pi) => {
+            const idx = itemsClipboard.items.indexOf(pi);
+            return itemsClipboard.originalIds[idx]!;
+          }).filter(Boolean);
+          removeItems(pastedOriginalIds);
           useClipboardStore.getState().clearItemsClipboard();
         }
       }

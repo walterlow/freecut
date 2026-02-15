@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils';
 import { useCompositionsStore, type SubComposition } from '@/features/timeline/stores/compositions-store';
 import { useCompositionNavigationStore } from '@/features/timeline/stores/composition-navigation-store';
 import { useItemsStore } from '@/features/timeline/stores/items-store';
+import { removeItems } from '@/features/timeline/stores/actions/item-actions';
+import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 
 /**
@@ -39,10 +41,12 @@ export function CompositionsSection() {
   const enterComposition = useCompositionNavigationStore((s) => s.enterComposition);
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
 
+  const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const [open, setOpen] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<SubComposition | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const renameCancelledRef = useRef(false);
 
   if (compositions.length === 0) return null;
 
@@ -61,7 +65,7 @@ export function CompositionsSection() {
       (i) => i.type === 'composition' && i.compositionId === deleteTarget.id
     );
     if (refsOnTimeline.length > 0) {
-      useItemsStore.getState()._removeItems(refsOnTimeline.map((i) => i.id));
+      removeItems(refsOnTimeline.map((i) => i.id));
     }
     removeComposition(deleteTarget.id);
     setDeleteTarget(null);
@@ -73,6 +77,11 @@ export function CompositionsSection() {
   };
 
   const handleCommitRename = (id: string) => {
+    if (renameCancelledRef.current) {
+      renameCancelledRef.current = false;
+      setEditingId(null);
+      return;
+    }
     const trimmed = editValue.trim();
     if (trimmed && trimmed !== useCompositionsStore.getState().getComposition(id)?.name) {
       updateComposition(id, { name: trimmed });
@@ -104,11 +113,15 @@ export function CompositionsSection() {
             {compositions.length}
           </span>
         </CollapsibleTrigger>
-        <CollapsibleContent className="pt-1 pb-2 space-y-0.5">
+        <CollapsibleContent className={cn(
+          'pt-1 pb-2',
+          viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 gap-4' : 'space-y-2'
+        )}>
           {compositions.map((comp) => (
             <CompositionCard
               key={comp.id}
               composition={comp}
+              viewMode={viewMode}
               isInsideSubComp={activeCompositionId !== null}
               isEditing={editingId === comp.id}
               editValue={editValue}
@@ -117,6 +130,10 @@ export function CompositionsSection() {
               onDelete={handleDeleteRequest}
               onStartRename={handleStartRename}
               onCommitRename={handleCommitRename}
+              onCancelRename={() => {
+                renameCancelledRef.current = true;
+                setEditingId(null);
+              }}
             />
           ))}
         </CollapsibleContent>
@@ -166,6 +183,7 @@ export function CompositionsSection() {
 
 interface CompositionCardProps {
   composition: SubComposition;
+  viewMode: 'grid' | 'list';
   isInsideSubComp: boolean;
   isEditing: boolean;
   editValue: string;
@@ -174,10 +192,12 @@ interface CompositionCardProps {
   onDelete: (comp: SubComposition) => void;
   onStartRename: (comp: SubComposition) => void;
   onCommitRename: (id: string) => void;
+  onCancelRename: () => void;
 }
 
 function CompositionCard({
   composition,
+  viewMode,
   isInsideSubComp,
   isEditing,
   editValue,
@@ -186,6 +206,7 @@ function CompositionCard({
   onDelete,
   onStartRename,
   onCommitRename,
+  onCancelRename,
 }: CompositionCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -230,10 +251,10 @@ function CompositionCard({
       if (e.key === 'Enter') {
         onCommitRename(composition.id);
       } else if (e.key === 'Escape') {
-        onCommitRename(composition.id);
+        onCancelRename();
       }
     },
-    [composition.id, onCommitRename]
+    [composition.id, onCommitRename, onCancelRename]
   );
 
   const itemCount = composition.items.length;
@@ -244,6 +265,84 @@ function CompositionCard({
       ? `${durationSecs.toFixed(1)}s`
       : `${Math.floor(durationSecs / 60)}:${String(Math.floor(durationSecs % 60)).padStart(2, '0')}`;
 
+  if (viewMode === 'grid') {
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            draggable={!isInsideSubComp && !isEditing}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDoubleClick={handleDoubleClick}
+            className={cn(
+              'group relative panel-bg border-2 rounded-lg overflow-hidden transition-all duration-300 aspect-square flex flex-col hover:scale-[1.02]',
+              isInsideSubComp
+                ? 'opacity-50 cursor-not-allowed border-border'
+                : 'cursor-grab border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
+            )}
+          >
+            {/* Thumbnail area — gradient with centered icon */}
+            <div className="flex-1 bg-secondary relative overflow-hidden min-h-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
+              <Layers className="w-8 h-8 text-violet-400/70" />
+
+              {/* Bottom overlay badges */}
+              <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between gap-1 pointer-events-none">
+                <div className="p-0.5 rounded bg-violet-600/90 text-white">
+                  <Layers className="w-2.5 h-2.5" />
+                </div>
+                <div className="px-1 py-0.5 bg-black/70 border border-white/20 rounded text-[8px] font-mono text-white">
+                  {durationLabel}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-1.5 py-1 bg-panel-bg/50 flex-shrink-0">
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex-1 min-w-0">
+                  {isEditing ? (
+                    <input
+                      ref={inputRef}
+                      value={editValue}
+                      onChange={(e) => onEditValueChange(e.target.value)}
+                      onBlur={() => onCommitRename(composition.id)}
+                      onKeyDown={handleKeyDown}
+                      className="w-full bg-transparent border border-primary rounded px-1 py-0.5 text-[10px] text-foreground outline-none"
+                    />
+                  ) : (
+                    <h3 className="text-[10px] font-medium text-foreground truncate group-hover:text-violet-400 transition-colors">
+                      {composition.name}
+                    </h3>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Film strip edge detail */}
+            <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
+            <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
+          </div>
+        </ContextMenuTrigger>
+
+        <ContextMenuContent>
+          <ContextMenuItem onClick={() => onEnter(composition)}>
+            Enter Composition
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => onStartRename(composition)}>
+            Rename
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => onDelete(composition)}
+            className="text-destructive focus:text-destructive"
+          >
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  }
+
+  // List view (default) — matches MediaCard list layout
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -253,16 +352,18 @@ function CompositionCard({
           onDragEnd={handleDragEnd}
           onDoubleClick={handleDoubleClick}
           className={cn(
-            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors group',
-            isInsideSubComp ? 'opacity-50 cursor-not-allowed' : 'cursor-grab hover:bg-accent/50'
+            'group panel-bg border rounded overflow-hidden transition-all duration-200 flex items-center gap-3 p-2',
+            isInsideSubComp
+              ? 'opacity-50 cursor-not-allowed border-border'
+              : 'cursor-grab border-border hover:border-violet-500/50'
           )}
         >
-          {/* Purple composition icon */}
-          <div className="flex items-center justify-center w-6 h-6 rounded bg-violet-600/30 flex-shrink-0">
-            <Layers className="w-3.5 h-3.5 text-violet-400" />
+          {/* Thumbnail */}
+          <div className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
+            <Layers className="w-5 h-5 text-violet-400" />
           </div>
 
-          {/* Name / inline edit */}
+          {/* Info */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
               <input
@@ -274,11 +375,19 @@ function CompositionCard({
                 className="w-full bg-transparent border border-primary rounded px-1 py-0.5 text-xs text-foreground outline-none"
               />
             ) : (
-              <p className="truncate text-foreground">{composition.name}</p>
+              <h3 className="text-xs font-medium text-foreground truncate">
+                {composition.name}
+              </h3>
             )}
-            <p className="text-[10px] text-muted-foreground">
-              {durationLabel} &middot; {itemCount} item{itemCount !== 1 ? 's' : ''}
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {/* Type badge */}
+              <div className="p-0.5 rounded bg-violet-600/90 text-white flex-shrink-0">
+                <Layers className="w-2.5 h-2.5" />
+              </div>
+              <span className="text-[10px] text-muted-foreground">
+                {durationLabel} &middot; {itemCount} item{itemCount !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
         </div>
       </ContextMenuTrigger>

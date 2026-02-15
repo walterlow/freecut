@@ -627,9 +627,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Composition operations
   const isCompositionItem = item.type === 'composition';
-  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
-  const canCreatePreComp = selectedItemIds.length >= 1 && isSelected && !isInsideSubComp;
 
   const handleCreatePreComp = useCallback(() => {
     // Capture selection synchronously — context menu close may clear it before the dynamic import resolves
@@ -701,7 +699,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
-        canCreatePreComp={canCreatePreComp}
+        canCreatePreComp={isSelected && !isInsideSubComp}
         onCreatePreComp={handleCreatePreComp}
       >
         <div

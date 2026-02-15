@@ -8,6 +8,7 @@ import { Item } from './item';
 interface CompositionContentProps {
   item: CompositionItemType;
   parentMuted?: boolean;
+  renderDepth?: number;
 }
 
 /**
@@ -38,7 +39,7 @@ function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
  * The sub-comp is rendered at its own resolution and then CSS-scaled to fit
  * the parent transform bounds (handled by the parent ItemVisualWrapper).
  */
-export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false }) => {
+export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, renderDepth = 0 }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
 
   // Resolve media URLs for sub-comp items so they can render in preview
@@ -78,7 +79,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
             from={subItem.from}
             durationInFrames={subItem.durationInFrames}
           >
-            <Item item={subItem} muted={parentMuted || track.muted} masks={[]} />
+            <Item item={subItem} muted={parentMuted || track.muted} masks={[]} renderDepth={renderDepth} />
           </Sequence>
         ));
       })}
