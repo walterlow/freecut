@@ -33,9 +33,7 @@ const NativePreviewVideo: React.FC<{
   audioVolume: number;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
-  reversed?: boolean;
-  sourceEndFrame?: number;
-}> = ({ itemId, src, safeTrimBefore, playbackRate, audioVolume, onError, containerRef, reversed = false, sourceEndFrame = 0 }) => {
+}> = ({ itemId, src, safeTrimBefore, playbackRate, audioVolume, onError, containerRef }) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
   const sequenceContext = useSequenceContext();
@@ -59,13 +57,9 @@ const NativePreviewVideo: React.FC<{
   const safeTrimBeforeRef = useRef(safeTrimBefore);
   const playbackRateRef = useRef(playbackRate);
   const fpsRef = useRef(fps);
-  const reversedRef = useRef(reversed);
-  const sourceEndFrameRef = useRef(sourceEndFrame);
   safeTrimBeforeRef.current = safeTrimBefore;
   playbackRateRef.current = playbackRate;
   fpsRef.current = fps;
-  reversedRef.current = reversed;
-  sourceEndFrameRef.current = sourceEndFrame;
 
   // Get playing state from our clock
   const isPlaying = useIsPlaying();
@@ -75,10 +69,7 @@ const NativePreviewVideo: React.FC<{
   // frame is in TIMELINE frames (current position within the Sequence)
   // For seeking, we need: sourceStart + localFrame * speed
   // The playbackRate affects how many source frames we advance per timeline frame
-  // For reversed clips, we play from sourceEnd backwards
-  const targetTime = reversed
-    ? (sourceEndFrame / fps) - (frame * playbackRate / fps)
-    : (safeTrimBefore / fps) + (frame * playbackRate / fps);
+  const targetTime = (safeTrimBefore / fps) + (frame * playbackRate / fps);
 
   const shortId = itemId?.slice(0, 8) ?? 'no-id';
 
@@ -282,9 +273,8 @@ const NativePreviewVideo: React.FC<{
 
     // During premount, seek to the start of the clip (frame 0 position), not negative time
     // This ensures the video is ready at the correct starting frame when playback reaches this clip
-    // For reversed clips, premount at the sourceEnd position (where reverse playback starts)
     const effectiveTargetTime = isPremounted
-      ? (reversed ? (sourceEndFrame / fps) : (safeTrimBefore / fps))
+      ? (safeTrimBefore / fps)
       : targetTime;
 
     // Clamp target time to video duration to prevent seeking past the end
@@ -325,61 +315,46 @@ const NativePreviewVideo: React.FC<{
       // Invalidate any in-flight pre-warm promise so its .then()/.catch() no-ops
       preWarmGenRef.current += 1;
 
-      if (reversed) {
-        // Reversed playback: seek frame-by-frame (video element can't play backward)
-        // Keep video paused and just update currentTime each frame
-        if (!video.paused) {
-          video.pause();
+      // Normal forward playback
+      // Initial sync is always needed (first play after mount/seek)
+      if (needsInitialSyncRef.current && canSeek) {
+        try {
+          video.currentTime = clampedTargetTime;
+          lastSyncTimeRef.current = Date.now();
+          needsInitialSyncRef.current = false;
+        } catch {
+          // Seek failed - video may not be ready yet
         }
-        if (canSeek) {
+      }
+
+      // Drift correction: only run from React effect when rVFC is NOT available.
+      // When rVFC is supported, the callback below handles drift correction
+      // directly from the video's presentation callback, avoiding per-frame
+      // React scheduling overhead.
+      if (!supportsRVFC) {
+        const currentTime = video.currentTime;
+        const now = Date.now();
+        const drift = currentTime - clampedTargetTime;
+        const timeSinceLastSync = now - lastSyncTimeRef.current;
+        const videoBehind = drift < -0.2;
+        const videoFarAhead = drift > 0.5;
+        if ((videoFarAhead || (videoBehind && timeSinceLastSync > 500)) && canSeek) {
           try {
             video.currentTime = clampedTargetTime;
-          } catch {
-            // Seek failed
-          }
-        }
-      } else {
-        // Normal forward playback
-        // Initial sync is always needed (first play after mount/seek)
-        if (needsInitialSyncRef.current && canSeek) {
-          try {
-            video.currentTime = clampedTargetTime;
-            lastSyncTimeRef.current = Date.now();
-            needsInitialSyncRef.current = false;
+            lastSyncTimeRef.current = now;
           } catch {
             // Seek failed - video may not be ready yet
           }
         }
+      }
 
-        // Drift correction: only run from React effect when rVFC is NOT available.
-        // When rVFC is supported, the callback below handles drift correction
-        // directly from the video's presentation callback, avoiding per-frame
-        // React scheduling overhead.
-        if (!supportsRVFC) {
-          const currentTime = video.currentTime;
-          const now = Date.now();
-          const drift = currentTime - clampedTargetTime;
-          const timeSinceLastSync = now - lastSyncTimeRef.current;
-          const videoBehind = drift < -0.2;
-          const videoFarAhead = drift > 0.5;
-          if ((videoFarAhead || (videoBehind && timeSinceLastSync > 500)) && canSeek) {
-            try {
-              video.currentTime = clampedTargetTime;
-              lastSyncTimeRef.current = now;
-            } catch {
-              // Seek failed - video may not be ready yet
-            }
-          }
-        }
-
-        // Play if paused and video has buffered ahead (HAVE_FUTURE_DATA).
-        // >= 3 ensures the decoder has frames in its buffer, preventing
-        // stutter on play start after seeking to a new position.
-        if (video.paused && video.readyState >= 3) {
-          video.play().catch(() => {
-            // Autoplay might be blocked - this is fine
-          });
-        }
+      // Play if paused and video has buffered ahead (HAVE_FUTURE_DATA).
+      // >= 3 ensures the decoder has frames in its buffer, preventing
+      // stutter on play start after seeking to a new position.
+      if (video.paused && video.readyState >= 3) {
+        video.play().catch(() => {
+          // Autoplay might be blocked - this is fine
+        });
       }
     } else {
       // Pause video when not playing
@@ -423,7 +398,7 @@ const NativePreviewVideo: React.FC<{
         }, 50);
       }
     }
-  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, targetTime, reversed, sourceEndFrame]);
+  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, targetTime]);
 
   // requestVideoFrameCallback-based drift correction.
   // Runs outside React's render cycle — the browser calls us exactly when a
@@ -451,11 +426,7 @@ const NativePreviewVideo: React.FC<{
       const rate = playbackRateRef.current;
       const f = fpsRef.current;
       const trim = safeTrimBeforeRef.current;
-      const isRev = reversedRef.current;
-      const endFrame = sourceEndFrameRef.current;
-      const target = isRev
-        ? (endFrame / f) - (localFrame * rate / f)
-        : (trim / f) + (localFrame * rate / f);
+      const target = (trim / f) + (localFrame * rate / f);
       const dur = v.duration || Infinity;
       const clamped = Math.min(Math.max(0, target), dur - 0.05);
 
@@ -531,9 +502,7 @@ export const VideoContent: React.FC<{
   muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
-  reversed?: boolean;
-  sourceEndFrame?: number;
-}> = ({ item, muted, safeTrimBefore, playbackRate, reversed = false, sourceEndFrame = 0 }) => {
+}> = ({ item, muted, safeTrimBefore, playbackRate }) => {
   const audioVolume = useVideoAudioVolume(item, muted);
   const [hasError, setHasError] = useState(false);
 
@@ -572,11 +541,9 @@ export const VideoContent: React.FC<{
       src={item.src!}
       safeTrimBefore={safeTrimBefore}
       playbackRate={playbackRate}
-      audioVolume={reversed ? 0 : audioVolume}
+      audioVolume={audioVolume}
       onError={handleError}
       containerRef={containerRef}
-      reversed={reversed}
-      sourceEndFrame={sourceEndFrame}
     />
   );
 };

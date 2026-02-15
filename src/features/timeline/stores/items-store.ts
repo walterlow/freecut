@@ -91,9 +91,6 @@ interface ItemsActions {
   _updateItemsTransform: (ids: string[], transform: Partial<TransformProperties>) => void;
   _updateItemsTransformMap: (transformsMap: Map<string, Partial<TransformProperties>>) => void;
 
-  // Reverse operation
-  _toggleReverse: (id: string) => void;
-
   // Effect operations
   _addEffect: (itemId: string, effect: VisualEffect) => void;
   _addEffects: (updates: Array<{ itemId: string; effects: VisualEffect[] }>) => void;
@@ -483,18 +480,6 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         return {
           ...item,
           transform: { ...item.transform, ...transform },
-        } as typeof item;
-      }),
-    })),
-
-    // Toggle reverse playback for video/audio items
-    _toggleReverse: (id) => set((state) => ({
-      items: state.items.map((item) => {
-        if (item.id !== id) return item;
-        if (item.type !== 'video' && item.type !== 'audio') return item;
-        return {
-          ...item,
-          reversed: !item.reversed,
         } as typeof item;
       }),
     })),

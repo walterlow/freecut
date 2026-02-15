@@ -187,22 +187,6 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [selectedItemIds, items]
   );
 
-  // Editing: Alt+R - Toggle reverse on selected video/audio clip
-  useHotkeys(
-    HOTKEYS.REVERSE_CLIP,
-    (event) => {
-      if (selectedItemIds.length !== 1) return;
-      const selectedItem = items.find((i) => i.id === selectedItemIds[0]);
-      if (!selectedItem) return;
-      if (selectedItem.type !== 'video' && selectedItem.type !== 'audio') return;
-
-      event.preventDefault();
-      useTimelineStore.getState().toggleReverse(selectedItem.id);
-    },
-    HOTKEY_OPTIONS,
-    [selectedItemIds, items]
-  );
-
   // Keyframes: K - Add keyframe at playhead for selected items
   useHotkeys(
     HOTKEYS.ADD_KEYFRAME,

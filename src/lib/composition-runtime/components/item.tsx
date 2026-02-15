@@ -136,12 +136,6 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
       );
     }
 
-    // Reversed playback: calculate the source end position for reverse time mapping
-    const isReversed = item.reversed === true;
-    const sourceEndForReverse = isReversed
-      ? (item.sourceEnd ?? (safeTrimBefore + sourceFramesNeeded))
-      : 0;
-
     const videoContent = (
       <>
         <VideoContent
@@ -149,8 +143,6 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
           muted={muted}
           safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
-          reversed={isReversed}
-          sourceEndFrame={sourceEndForReverse}
         />
         {showDebugOverlay && (
           <DebugOverlay
@@ -190,9 +182,6 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
     // Get playback rate from speed property
     const playbackRate = item.speed ?? DEFAULT_SPEED;
 
-    // Mute audio when clip is reversed (reverse audio playback not supported in MVP)
-    const isAudioReversed = item.reversed === true;
-
     // Use PitchCorrectedAudio for pitch-preserved playback during preview
     // and toneFrequency correction during rendering
     return (
@@ -202,7 +191,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [] }) 
         trimBefore={trimBefore}
         volume={item.volume ?? 0}
         playbackRate={playbackRate}
-        muted={muted || isAudioReversed}
+        muted={muted}
         durationInFrames={item.durationInFrames}
         audioFadeIn={item.audioFadeIn}
         audioFadeOut={item.audioFadeOut}

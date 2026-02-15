@@ -36,7 +36,6 @@ export type VideoItem = BaseTimelineItem & {
   src: string;
   thumbnailUrl?: string;
   offset?: number; // Trim offset in source video
-  reversed?: boolean; // Play clip in reverse (default: false)
   // Source dimensions (intrinsic size from media metadata)
   sourceWidth?: number;
   sourceHeight?: number;
@@ -47,7 +46,6 @@ export type AudioItem = BaseTimelineItem & {
   src: string;
   waveformData?: number[];
   offset?: number; // Trim offset in source audio
-  reversed?: boolean; // Play clip in reverse (default: false, audio muted when reversed)
 };
 
 export type TextItem = BaseTimelineItem & {

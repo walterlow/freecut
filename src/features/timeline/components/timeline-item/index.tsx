@@ -618,15 +618,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     useBentoLayoutDialogStore.getState().open(selectedItemIds);
   }, []);
 
-  // Reverse clip toggle
-  const isReversible = item.type === 'video' || item.type === 'audio';
-  const isReversed = isReversible && item.reversed === true;
-
-  const handleToggleReverse = useCallback(() => {
-    if (item.type !== 'video' && item.type !== 'audio') return;
-    useTimelineStore.getState().toggleReverse(item.id);
-  }, [item.id, item.type]);
-
   // Freeze frame
   const handleFreezeFrame = useCallback(() => {
     if (item.type !== 'video') return;
@@ -711,9 +702,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           return frame > item.from && frame < item.from + item.durationInFrames;
         })()}
         onFreezeFrame={handleFreezeFrame}
-        isReversible={isReversible}
-        isReversed={isReversed}
-        onToggleReverse={handleToggleReverse}
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
@@ -770,7 +758,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             hasMediaId={!!item.mediaId}
             isMask={item.type === 'shape' ? item.isMask ?? false : false}
             isShape={item.type === 'shape'}
-            isReversed={isReversed}
           />
 
           {/* Trim handles */}
@@ -839,9 +826,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const prevIsMask = prevItem.type === 'shape' ? prevItem.isMask : undefined;
   const nextIsMask = nextItem.type === 'shape' ? nextItem.isMask : undefined;
 
-  const prevReversed = (prevItem.type === 'video' || prevItem.type === 'audio') ? prevItem.reversed : undefined;
-  const nextReversed = (nextItem.type === 'video' || nextItem.type === 'audio') ? nextItem.reversed : undefined;
-
   return (
     prevItem.id === nextItem.id &&
     prevItem.from === nextItem.from &&
@@ -856,7 +840,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevItem.trimStart === nextItem.trimStart &&
     prevItem.speed === nextItem.speed &&
     prevIsMask === nextIsMask &&
-    prevReversed === nextReversed &&
     prevProps.timelineDuration === nextProps.timelineDuration &&
     prevProps.trackLocked === nextProps.trackLocked &&
     prevProps.trackHidden === nextProps.trackHidden

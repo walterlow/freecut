@@ -204,19 +204,10 @@ async function renderVideoItem(
   const localTime = localFrame / fps;
   const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
   const speed = item.speed ?? 1;
-  const isReversed = item.reversed === true;
 
-  let sourceTime: number;
-  if (isReversed) {
-    // Reversed: play from sourceEnd backwards
-    const sourceEnd = item.sourceEnd ?? (sourceStart + Math.round(item.durationInFrames * speed));
-    const adjustedSourceEnd = sourceEnd - sourceFrameOffset;
-    sourceTime = adjustedSourceEnd / fps - localTime * speed;
-  } else {
-    // Normal: play from sourceStart forwards
-    const adjustedSourceStart = sourceStart + sourceFrameOffset;
-    sourceTime = adjustedSourceStart / fps + localTime * speed;
-  }
+  // Normal: play from sourceStart forwards
+  const adjustedSourceStart = sourceStart + sourceFrameOffset;
+  const sourceTime = adjustedSourceStart / fps + localTime * speed;
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
   if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id)) {

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Link2Off, Diamond, ArrowLeftRight } from 'lucide-react';
+import { Link2Off, Diamond } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ClipIndicatorsProps {
@@ -19,8 +19,6 @@ interface ClipIndicatorsProps {
   isMask: boolean;
   /** Whether the item is a shape */
   isShape: boolean;
-  /** Whether the clip is playing in reverse */
-  isReversed: boolean;
 }
 
 /**
@@ -39,7 +37,6 @@ export const ClipIndicators = memo(function ClipIndicators({
   hasMediaId,
   isMask,
   isShape,
-  isReversed,
 }: ClipIndicatorsProps) {
   const showSpeedBadge = Math.abs(currentSpeed - 1) > 0.005 && !isStretching;
 
@@ -66,17 +63,6 @@ export const ClipIndicators = memo(function ClipIndicators({
       {showSpeedBadge && (
         <div className="absolute top-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono">
           {currentSpeed.toFixed(2)}x
-        </div>
-      )}
-
-      {/* Reversed playback indicator */}
-      {isReversed && (
-        <div
-          className="absolute bottom-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-orange-500/80 text-white rounded flex items-center gap-0.5 pointer-events-none"
-          title="Reversed playback"
-        >
-          <ArrowLeftRight className="w-2.5 h-2.5" />
-          REV
         </div>
       )}
 

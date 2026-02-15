@@ -303,13 +303,6 @@ export function joinItems(itemIds: string[]): void {
   }, { itemIds });
 }
 
-export function toggleReverse(id: string): void {
-  execute('TOGGLE_REVERSE', () => {
-    useItemsStore.getState()._toggleReverse(id);
-    useTimelineSettingsStore.getState().markDirty();
-  }, { id });
-}
-
 export function rateStretchItem(
   id: string,
   newFrom: number,

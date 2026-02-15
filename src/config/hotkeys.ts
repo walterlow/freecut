@@ -23,7 +23,6 @@ export const HOTKEYS = {
   RIPPLE_DELETE: 'mod+delete',
   RIPPLE_DELETE_ALT: 'mod+backspace',
   FREEZE_FRAME: 'shift+f',
-  REVERSE_CLIP: 'alt+r',
 
   // History
   UNDO: 'mod+z',
@@ -97,7 +96,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RIPPLE_DELETE: 'Ripple delete selected items',
   RIPPLE_DELETE_ALT: 'Ripple delete selected items (alternative)',
   FREEZE_FRAME: 'Insert freeze frame at playhead',
-  REVERSE_CLIP: 'Reverse selected clip playback',
 
   // History
   UNDO: 'Undo',

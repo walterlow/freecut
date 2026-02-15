@@ -75,7 +75,6 @@ export interface ProjectTimeline {
     points?: number;
     innerRadius?: number;
     speed?: number; // Playback speed multiplier (default 1.0)
-    reversed?: boolean; // Play clip in reverse
     // Composition item fields
     compositionId?: string; // Reference to a sub-composition
     compositionWidth?: number;

@@ -38,11 +38,6 @@ interface ItemContextMenuProps {
   /** Whether the playhead is within this item's bounds */
   playheadInBounds?: boolean;
   onFreezeFrame?: () => void;
-  /** Whether this item is a media item (video/audio) that supports reverse */
-  isReversible?: boolean;
-  /** Whether the clip is currently reversed */
-  isReversed?: boolean;
-  onToggleReverse?: () => void;
   /** Whether this item is a composition item (enables enter/dissolve options) */
   isCompositionItem?: boolean;
   onEnterComposition?: () => void;
@@ -76,9 +71,6 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
-  isReversible,
-  isReversed,
-  onToggleReverse,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -164,17 +156,6 @@ export const ItemContextMenu = memo(function ItemContextMenu({
           <>
             <ContextMenuItem onClick={onBentoLayout}>
               Bento Layout...
-            </ContextMenuItem>
-            <ContextMenuSeparator />
-          </>
-        )}
-
-        {/* Reverse Clip - only show for video/audio items */}
-        {isReversible && onToggleReverse && (
-          <>
-            <ContextMenuItem onClick={onToggleReverse}>
-              {isReversed ? 'Remove Reverse' : 'Reverse Clip'}
-              <ContextMenuShortcut>Alt+R</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
