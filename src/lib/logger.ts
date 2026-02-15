@@ -1,6 +1,12 @@
 /**
  * Structured logging utility with log levels
  *
+ * IMPORTANT: This module uses only `function` declarations (no `class` or `const`
+ * at module scope) so that Rollup/Vite can hoist them in production chunks.
+ * `class` and `let`/`const` have temporal dead zones that cause
+ * "Cannot access before initialization" when chunk ordering places callers
+ * (e.g. connection.ts) before this module's body.
+ *
  * Usage:
  *   import { createLogger } from '@/lib/logger';
  *   const log = createLogger('MyComponent');
@@ -10,88 +16,75 @@
  *   log.error('Failed', error);
  */
 
-enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  SILENT = 4,
+export interface Logger {
+  debug(message: string, ...args: unknown[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
+  child(prefix: string): Logger;
+  setLevel(level: number): void;
 }
 
-interface LoggerConfig {
-  level: LogLevel;
-  prefix: string;
+// All functions below are `function` declarations — fully hoisted in JS,
+// safe to call before the module body executes in a Rollup chunk.
+
+function getDefaultLevel(): number {
+  // 0 = DEBUG, 2 = WARN
+  return (
+    typeof import.meta !== 'undefined' &&
+    typeof import.meta.env !== 'undefined' &&
+    import.meta.env.DEV
+  )
+    ? 0
+    : 2;
 }
 
-class Logger {
-  private config: LoggerConfig;
-
-  constructor(config?: Partial<LoggerConfig>) {
-    this.config = {
-      // In development, show all logs. In production, only warnings and errors.
-      // Safe check for import.meta.env to support both Vite and webpack (Composition SSR) bundlers
-      level: (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env.DEV)
-        ? LogLevel.DEBUG
-        : LogLevel.WARN,
-      prefix: '',
-      ...config,
-    };
-  }
-
-  private shouldLog(level: LogLevel): boolean {
-    return level >= this.config.level;
-  }
-
-  private formatMessage(message: string): string {
-    return this.config.prefix ? `[${this.config.prefix}] ${message}` : message;
-  }
-
-  debug(message: string, ...args: unknown[]): void {
-    if (this.shouldLog(LogLevel.DEBUG)) {
-      // eslint-disable-next-line no-console
-      console.log(this.formatMessage(message), ...args);
-    }
-  }
-
-  info(message: string, ...args: unknown[]): void {
-    if (this.shouldLog(LogLevel.INFO)) {
-      // eslint-disable-next-line no-console
-      console.info(this.formatMessage(message), ...args);
-    }
-  }
-
-  warn(message: string, ...args: unknown[]): void {
-    if (this.shouldLog(LogLevel.WARN)) {
-      console.warn(this.formatMessage(message), ...args);
-    }
-  }
-
-  error(message: string, ...args: unknown[]): void {
-    if (this.shouldLog(LogLevel.ERROR)) {
-      console.error(this.formatMessage(message), ...args);
-    }
-  }
-
-  /**
-   * Create a child logger with a specific prefix
-   */
-  child(prefix: string): Logger {
-    return new Logger({
-      ...this.config,
-      prefix: this.config.prefix ? `${this.config.prefix}:${prefix}` : prefix,
-    });
-  }
-
-  /**
-   * Set the log level at runtime
-   */
-  setLevel(level: LogLevel): void {
-    this.config.level = level;
-  }
+function shouldLog(current: number, threshold: number): boolean {
+  return current >= threshold;
 }
 
-// Root logger instance
-const logger = new Logger();
+function formatMessage(prefix: string, message: string): string {
+  return prefix ? `[${prefix}] ${message}` : message;
+}
+
+function makeLogger(prefix: string, level: number): Logger {
+  // eslint-disable-next-line prefer-const
+  let currentLevel = level;
+
+  return {
+    debug(message: string, ...args: unknown[]): void {
+      if (shouldLog(0, currentLevel)) {
+        // eslint-disable-next-line no-console
+        console.log(formatMessage(prefix, message), ...args);
+      }
+    },
+    info(message: string, ...args: unknown[]): void {
+      if (shouldLog(1, currentLevel)) {
+        // eslint-disable-next-line no-console
+        console.info(formatMessage(prefix, message), ...args);
+      }
+    },
+    warn(message: string, ...args: unknown[]): void {
+      if (shouldLog(2, currentLevel)) {
+        console.warn(formatMessage(prefix, message), ...args);
+      }
+    },
+    error(message: string, ...args: unknown[]): void {
+      if (shouldLog(3, currentLevel)) {
+        console.error(formatMessage(prefix, message), ...args);
+      }
+    },
+    child(childPrefix: string): Logger {
+      return makeLogger(
+        prefix ? `${prefix}:${childPrefix}` : childPrefix,
+        currentLevel,
+      );
+    },
+    setLevel(newLevel: number): void {
+      currentLevel = newLevel;
+    },
+  };
+}
 
 /**
  * Factory for creating module-specific loggers
@@ -101,5 +94,5 @@ const logger = new Logger();
  * log.debug('Socket connected');
  */
 export function createLogger(module: string): Logger {
-  return logger.child(module);
+  return makeLogger(module, getDefaultLevel());
 }
