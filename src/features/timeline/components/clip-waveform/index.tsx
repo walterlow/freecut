@@ -6,9 +6,10 @@ import { mediaLibraryService } from '@/features/media-library/services/media-lib
 import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
-// Wavesurfer-style path sampling
-const WAVEFORM_PATH_STEP_PX = 2;
-const WAVEFORM_VERTICAL_PADDING_PX = 1;
+// Thin bar waveform styling
+const WAVEFORM_BAR_WIDTH_PX = 1;
+const WAVEFORM_BAR_GAP_PX = 2;
+const WAVEFORM_VERTICAL_PADDING_PX = 7;
 
 interface ClipWaveformProps {
   /** Media ID from the timeline item */
@@ -34,7 +35,7 @@ interface ClipWaveformProps {
 /**
  * Clip Waveform Component
  *
- * Renders audio waveform as a mirrored continuous visualization for timeline clips.
+ * Renders audio waveform as a mirrored thin-bar visualization for timeline clips.
  * Uses tiled canvas for large clips and shows skeleton while loading.
  */
 export const ClipWaveform = memo(function ClipWaveform({
@@ -174,20 +175,16 @@ export const ClipWaveform = memo(function ClipWaveform({
 
       ctx.fillStyle = WAVEFORM_FILL_COLOR;
       ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
-      ctx.lineWidth = 0.5;
+      ctx.lineWidth = 0.75;
 
       // Calculate the time range visible in this tile
       const effectiveStart = sourceStart + trimStart;
 
       const centerY = height / 2;
       const maxWaveHeight = Math.max(1, centerY - WAVEFORM_VERTICAL_PADDING_PX);
-      const sampleStepPx = Math.max(
-        1,
-        Math.min(4, Math.floor((WAVEFORM_PATH_STEP_PX * 120) / Math.max(pixelsPerSecond, 1)))
-      );
+      const barSpacing = WAVEFORM_BAR_WIDTH_PX + WAVEFORM_BAR_GAP_PX;
 
-      const points: Array<{ x: number; amp: number }> = [];
-      for (let x = 0; x <= tileWidth; x += sampleStepPx) {
+      for (let x = 0; x <= tileWidth; x += barSpacing) {
         // Calculate timeline position for this point
         const timelinePosition = (tileOffset + x) / pixelsPerSecond;
 
@@ -203,88 +200,59 @@ export const ClipWaveform = memo(function ClipWaveform({
         // Read a small peak window for each point to avoid aliasing artifacts.
         const peakIndex = Math.floor(sourceTime * sampleRate);
         if (peakIndex < 0 || peakIndex >= peaks.length || sampleRate <= 0) {
-          points.push({ x, amp: 0 });
           continue;
         }
 
         const pointWindowSeconds = Math.max(
           1 / sampleRate,
-          (sampleStepPx / pixelsPerSecond) * speed
+          (barSpacing / pixelsPerSecond) * speed * 0.5
         );
         const samplesPerPoint = Math.max(1, Math.ceil(pointWindowSeconds * sampleRate));
         const halfWindow = Math.floor(samplesPerPoint / 2);
         const windowStart = Math.max(0, peakIndex - halfWindow);
         const windowEnd = Math.min(peaks.length, peakIndex + halfWindow + 1);
 
-        let windowPeak = 0;
+        let max1 = 0;
+        let max2 = 0;
         let windowSum = 0;
         let sampleCount = 0;
         for (let i = windowStart; i < windowEnd; i++) {
           const value = peaks[i] ?? 0;
-          if (value > windowPeak) {
-            windowPeak = value;
+          if (value >= max1) {
+            max2 = max1;
+            max1 = value;
+          } else if (value > max2) {
+            max2 = value;
           }
           windowSum += value;
           sampleCount++;
         }
 
         if (sampleCount === 0) {
-          points.push({ x, amp: 0 });
           continue;
         }
 
-        const normalizedPeak = Math.min(1, windowPeak / normalizationPeak);
+        const normalizedMax1 = Math.min(1, max1 / normalizationPeak);
+        const normalizedMax2 = Math.min(1, max2 / normalizationPeak);
         const normalizedMean = Math.min(1, (windowSum / sampleCount) / normalizationPeak);
-        const peakValue = Math.max(normalizedMean, normalizedPeak * 0.65);
-        points.push({
-          x,
-          amp: peakValue <= 0.001 ? 0 : Math.pow(peakValue, 0.9),
-        });
-      }
+        const needle = Math.max(0, normalizedMax1 - normalizedMax2);
+        const peakValue = Math.min(
+          1,
+          normalizedMean * 0.38 + normalizedMax2 * 0.34 + needle * 2.35
+        );
+        const amp = peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05);
+        if (amp <= 0.002) {
+          continue;
+        }
 
-      // Ensure right edge is sampled to avoid visible tile seams.
-      if (points.length === 0 || points[points.length - 1]!.x < tileWidth) {
-        points.push({ x: tileWidth, amp: 0 });
-      }
+        const barHeight = Math.max(1, amp * maxWaveHeight);
+        const barX = Math.round(x);
+        const barY = Math.round(centerY - barHeight);
+        const fullBarHeight = Math.round(barHeight * 2);
 
-      if (points.length < 2) {
-        return;
+        ctx.fillRect(barX, barY, WAVEFORM_BAR_WIDTH_PX, fullBarHeight);
+        ctx.strokeRect(barX, barY, WAVEFORM_BAR_WIDTH_PX, fullBarHeight);
       }
-
-      // Filled mirrored waveform body (wavesurfer-like silhouette).
-      ctx.beginPath();
-      ctx.moveTo(points[0]!.x, centerY - points[0]!.amp * maxWaveHeight);
-      for (let i = 1; i < points.length; i++) {
-        const point = points[i]!;
-        ctx.lineTo(point.x, centerY - point.amp * maxWaveHeight);
-      }
-      for (let i = points.length - 1; i >= 0; i--) {
-        const point = points[i]!;
-        ctx.lineTo(point.x, centerY + point.amp * maxWaveHeight);
-      }
-      ctx.closePath();
-      ctx.fill();
-
-      // Crisp top/bottom contour for readability at small heights.
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.lineWidth = 1;
-
-      ctx.beginPath();
-      ctx.moveTo(points[0]!.x, centerY - points[0]!.amp * maxWaveHeight);
-      for (let i = 1; i < points.length; i++) {
-        const point = points[i]!;
-        ctx.lineTo(point.x, centerY - point.amp * maxWaveHeight);
-      }
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(points[0]!.x, centerY + points[0]!.amp * maxWaveHeight);
-      for (let i = 1; i < points.length; i++) {
-        const point = points[i]!;
-        ctx.lineTo(point.x, centerY + point.amp * maxWaveHeight);
-      }
-      ctx.stroke();
     },
     [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height, normalizationPeak]
   );
