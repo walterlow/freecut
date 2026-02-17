@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TiledCanvas } from '../clip-filmstrip/tiled-canvas';
 import { WaveformSkeleton } from './waveform-skeleton';
 import { useWaveform } from '../../hooks/use-waveform';
@@ -6,9 +6,9 @@ import { mediaLibraryService } from '@/features/media-library/services/media-lib
 import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
-// Waveform dimensions
-const BAR_WIDTH = 2;
-const BAR_GAP = 1;
+// Wavesurfer-style path sampling
+const WAVEFORM_PATH_STEP_PX = 2;
+const WAVEFORM_VERTICAL_PADDING_PX = 1;
 
 interface ClipWaveformProps {
   /** Media ID from the timeline item */
@@ -34,7 +34,7 @@ interface ClipWaveformProps {
 /**
  * Clip Waveform Component
  *
- * Renders audio waveform as a mirrored bar visualization for timeline clips.
+ * Renders audio waveform as a mirrored continuous visualization for timeline clips.
  * Uses tiled canvas for large clips and shows skeleton while loading.
  */
 export const ClipWaveform = memo(function ClipWaveform({
@@ -140,12 +140,25 @@ export const ClipWaveform = memo(function ClipWaveform({
   }, [mediaId, isVisible]);
 
   // Use waveform hook - enabled once we have blobUrl (independent of visibility after that)
-  const { peaks, duration, sampleRate, isLoading, error } = useWaveform({
+  const { peaks, duration, sampleRate, isLoading, progress, error } = useWaveform({
     mediaId,
     blobUrl,
     isVisible: true, // Always consider visible once we start - prevents re-triggers
     enabled: !!blobUrl,
   });
+
+  // Normalize visual scale per clip so low-amplitude sources are still readable.
+  const normalizationPeak = useMemo(() => {
+    if (!peaks || peaks.length === 0) return 1;
+    let maxPeak = 0;
+    for (let i = 0; i < peaks.length; i++) {
+      const value = peaks[i] ?? 0;
+      if (value > maxPeak) {
+        maxPeak = value;
+      }
+    }
+    return maxPeak > 0 ? maxPeak : 1;
+  }, [peaks]);
 
   // Render function for tiled canvas
   const renderTile = useCallback(
@@ -166,14 +179,16 @@ export const ClipWaveform = memo(function ClipWaveform({
       // Calculate the time range visible in this tile
       const effectiveStart = sourceStart + trimStart;
 
-      // Calculate bar positions
-      const barSpacing = BAR_WIDTH + BAR_GAP;
       const centerY = height / 2;
-      const maxBarHeight = height / 2; // Fill container height
+      const maxWaveHeight = Math.max(1, centerY - WAVEFORM_VERTICAL_PADDING_PX);
+      const sampleStepPx = Math.max(
+        1,
+        Math.min(4, Math.floor((WAVEFORM_PATH_STEP_PX * 120) / Math.max(pixelsPerSecond, 1)))
+      );
 
-      // Iterate through bars that should be in this tile
-      for (let x = 0; x < tileWidth; x += barSpacing) {
-        // Calculate timeline position for this bar
+      const points: Array<{ x: number; amp: number }> = [];
+      for (let x = 0; x <= tileWidth; x += sampleStepPx) {
+        // Calculate timeline position for this point
         const timelinePosition = (tileOffset + x) / pixelsPerSecond;
 
         // Convert to source time
@@ -185,31 +200,93 @@ export const ClipWaveform = memo(function ClipWaveform({
           continue;
         }
 
-        // Find the corresponding peak value
-        // peaks index = sourceTime * sampleRate
+        // Read a small peak window for each point to avoid aliasing artifacts.
         const peakIndex = Math.floor(sourceTime * sampleRate);
-        if (peakIndex < 0 || peakIndex >= peaks.length) {
+        if (peakIndex < 0 || peakIndex >= peaks.length || sampleRate <= 0) {
+          points.push({ x, amp: 0 });
           continue;
         }
 
-        const peakValue = peaks[peakIndex] ?? 0;
+        const pointWindowSeconds = Math.max(
+          1 / sampleRate,
+          (sampleStepPx / pixelsPerSecond) * speed
+        );
+        const samplesPerPoint = Math.max(1, Math.ceil(pointWindowSeconds * sampleRate));
+        const halfWindow = Math.floor(samplesPerPoint / 2);
+        const windowStart = Math.max(0, peakIndex - halfWindow);
+        const windowEnd = Math.min(peaks.length, peakIndex + halfWindow + 1);
 
-        // Calculate bar height (mirrored from center)
-        const barHeight = Math.max(2, peakValue * maxBarHeight);
+        let windowPeak = 0;
+        let windowSum = 0;
+        let sampleCount = 0;
+        for (let i = windowStart; i < windowEnd; i++) {
+          const value = peaks[i] ?? 0;
+          if (value > windowPeak) {
+            windowPeak = value;
+          }
+          windowSum += value;
+          sampleCount++;
+        }
 
-        // Draw mirrored bar (extends both up and down from center)
-        const barX = Math.round(x);
-        const barY = Math.round(centerY - barHeight);
-        const fullBarHeight = Math.round(barHeight * 2);
+        if (sampleCount === 0) {
+          points.push({ x, amp: 0 });
+          continue;
+        }
 
-        // Fill
-        ctx.fillRect(barX, barY, BAR_WIDTH, fullBarHeight);
-
-        // Optional: stroke for sharper edges
-        // ctx.strokeRect(barX, barY, BAR_WIDTH, fullBarHeight);
+        const normalizedPeak = Math.min(1, windowPeak / normalizationPeak);
+        const normalizedMean = Math.min(1, (windowSum / sampleCount) / normalizationPeak);
+        const peakValue = Math.max(normalizedMean, normalizedPeak * 0.65);
+        points.push({
+          x,
+          amp: peakValue <= 0.001 ? 0 : Math.pow(peakValue, 0.9),
+        });
       }
+
+      // Ensure right edge is sampled to avoid visible tile seams.
+      if (points.length === 0 || points[points.length - 1]!.x < tileWidth) {
+        points.push({ x: tileWidth, amp: 0 });
+      }
+
+      if (points.length < 2) {
+        return;
+      }
+
+      // Filled mirrored waveform body (wavesurfer-like silhouette).
+      ctx.beginPath();
+      ctx.moveTo(points[0]!.x, centerY - points[0]!.amp * maxWaveHeight);
+      for (let i = 1; i < points.length; i++) {
+        const point = points[i]!;
+        ctx.lineTo(point.x, centerY - point.amp * maxWaveHeight);
+      }
+      for (let i = points.length - 1; i >= 0; i--) {
+        const point = points[i]!;
+        ctx.lineTo(point.x, centerY + point.amp * maxWaveHeight);
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      // Crisp top/bottom contour for readability at small heights.
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 1;
+
+      ctx.beginPath();
+      ctx.moveTo(points[0]!.x, centerY - points[0]!.amp * maxWaveHeight);
+      for (let i = 1; i < points.length; i++) {
+        const point = points[i]!;
+        ctx.lineTo(point.x, centerY - point.amp * maxWaveHeight);
+      }
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(points[0]!.x, centerY + points[0]!.amp * maxWaveHeight);
+      for (let i = 1; i < points.length; i++) {
+        const point = points[i]!;
+        ctx.lineTo(point.x, centerY + point.amp * maxWaveHeight);
+      }
+      ctx.stroke();
     },
-    [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height]
+    [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height, normalizationPeak]
   );
 
   // Show empty state for unsupported/failed waveforms (no infinite skeleton).
@@ -244,7 +321,9 @@ export const ClipWaveform = memo(function ClipWaveform({
   // Include quantized pixelsPerSecond in version to force re-render on zoom changes
   // Quantize to steps of 5 to reduce canvas redraws on small zoom changes
   const quantizedPPS = Math.round(pixelsPerSecond / 5) * 5;
-  const renderVersion = peaks.length * 10000 + quantizedPPS + height;
+  const progressBucket = Math.floor(progress);
+  // Include decode progress so tiles repaint as streaming chunks arrive.
+  const renderVersion = progressBucket * 10000000 + peaks.length * 10000 + quantizedPPS + height;
 
   return (
     <div ref={containerRef} className="absolute inset-0">

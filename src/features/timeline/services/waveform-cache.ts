@@ -36,7 +36,7 @@ const MAX_CACHE_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
 // Samples per second for waveform generation (highest resolution)
 const SAMPLES_PER_SECOND = WAVEFORM_LEVELS[0]; // 1000 samples/sec
-const WAVEFORM_BIN_DURATION_SEC = 30;
+const WAVEFORM_BIN_DURATION_SEC = 5;
 const WAVEFORM_BIN_SAMPLES = SAMPLES_PER_SECOND * WAVEFORM_BIN_DURATION_SEC;
 
 export interface CachedWaveform {

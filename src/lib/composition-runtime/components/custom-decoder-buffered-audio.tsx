@@ -6,7 +6,11 @@ import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
-import { getOrDecodeAudio } from '../utils/audio-decode-cache';
+import {
+  getOrDecodeAudio,
+  getOrDecodeAudioForPlayback,
+  isPreviewAudioDecodePending,
+} from '../utils/audio-decode-cache';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CustomDecoderBufferedAudio');
@@ -166,11 +170,14 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!mediaId || !src) return;
 
     let cancelled = false;
-    getOrDecodeAudio(mediaId, src)
+    getOrDecodeAudioForPlayback(mediaId, src, {
+      minReadySeconds: 8,
+      waitTimeoutMs: 6000,
+    })
       .then((buffer) => {
         if (!cancelled) {
           setAudioBuffer(buffer);
-          log.info('Audio buffer ready', {
+          log.info('Initial buffered audio ready', {
             mediaId,
             duration: buffer.duration.toFixed(2),
             sampleRate: buffer.sampleRate,
@@ -181,6 +188,24 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       .catch((err) => {
         if (!cancelled) {
           log.error('Failed to decode buffered audio', { mediaId, err });
+        }
+      });
+
+    // Upgrade to full decoded buffer when background decode/reassembly completes.
+    getOrDecodeAudio(mediaId, src)
+      .then((buffer) => {
+        if (!cancelled) {
+          setAudioBuffer((current) => {
+            if (current && current.length === buffer.length && current.sampleRate === buffer.sampleRate) {
+              return current;
+            }
+            return buffer;
+          });
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          log.error('Failed to finalize buffered audio decode', { mediaId, err });
         }
       });
 
@@ -261,6 +286,9 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         shouldStart = true;
       } else if (!sourceRef.current) {
         shouldStart = true;
+      } else if (sourceRef.current.buffer !== audioBuffer) {
+        // Audio buffer was upgraded (partial -> full), re-sync with new source.
+        shouldStart = true;
       } else if (Math.abs(playbackRate - lastStartRateRef.current) > 0.0001) {
         shouldStart = true;
       } else {
@@ -274,6 +302,13 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       }
 
       if (shouldStart) {
+        // If we only have a partial decode and timeline position is beyond its duration,
+        // wait for more bins/full decode instead of repeatedly starting at partial tail.
+        if (targetTime >= audioBuffer.duration - 0.01 && isPreviewAudioDecodePending(mediaId)) {
+          stopSource();
+          return;
+        }
+
         stopSource();
 
         const resumePromise = ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
