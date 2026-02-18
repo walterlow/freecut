@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import {
   type ProjectTemplate,
   DEFAULT_PROJECT_VALUES,
   FPS_PRESETS,
+  PROJECT_TEMPLATES,
 } from '../utils/validation';
 import { ProjectTemplatePicker } from './project-template-picker';
 
@@ -43,7 +44,24 @@ export function ProjectForm({
     mode: 'onChange',
   });
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>('youtube-1080p');
+  const matchTemplateId = (width: number, height: number) =>
+    PROJECT_TEMPLATES.find((t) => t.width === width && t.height === height)?.id ?? 'custom';
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
+    matchTemplateId(
+      defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
+      defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
+    )
+  );
+
+  useEffect(() => {
+    setSelectedTemplateId(
+      matchTemplateId(
+        defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
+        defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
+      )
+    );
+  }, [defaultValues?.width, defaultValues?.height]);
 
   const fps = watch('fps');
 
@@ -154,22 +172,22 @@ export function ProjectForm({
                          type="number"
                          {...register('width', { valueAsNumber: true })}
                          className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                         placeholder="1920"
-                         min={1}
-                       />
-                       {errors.width && <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>}
-                     </div>
-                     <span className="text-muted-foreground mt-4">×</span>
-                     <div className="flex-1">
-                       <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
-                       <input
-                         id="height"
-                         type="number"
-                         {...register('height', { valueAsNumber: true })}
-                         className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                         placeholder="1080"
-                         min={1}
-                       />
+                          placeholder="1920"
+                          min={320}
+                        />
+                        {errors.width && <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>}
+                      </div>
+                      <span className="text-muted-foreground mt-4">×</span>
+                      <div className="flex-1">
+                        <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
+                        <input
+                          id="height"
+                          type="number"
+                          {...register('height', { valueAsNumber: true })}
+                          className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                          placeholder="1080"
+                          min={240}
+                        />
                        {errors.height && <p className="mt-1 text-xs text-destructive">{errors.height.message}</p>}
                      </div>
                    </div>

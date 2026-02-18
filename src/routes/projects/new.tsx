@@ -1,10 +1,7 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { createLogger } from '@/lib/logger';
-import { Link } from '@tanstack/react-router';
-
-const logger = createLogger('NewProject');
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import { useProjectStore } from '@/features/projects/stores/project-store';
@@ -13,12 +10,17 @@ import { Button } from '@/components/ui/button';
 import { Github } from 'lucide-react';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 
+const logger = createLogger('NewProject');
+
 export const Route = createFileRoute('/projects/new')({
   component: NewProject,
   beforeLoad: async () => {
-    // Load projects to get existing names for template naming
-    const { loadProjects } = useProjectStore.getState();
-    await loadProjects();
+    try {
+      const { loadProjects } = useProjectStore.getState();
+      await loadProjects();
+    } catch (err) {
+      logger.warn('Failed to pre-load projects in beforeLoad:', err);
+    }
   },
 });
 

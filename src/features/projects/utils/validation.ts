@@ -67,7 +67,7 @@ export interface ProjectTemplate {
  * Project templates for common platforms
  * 6 preset configurations with collision-free naming
  */
-export const PROJECT_TEMPLATES: ProjectTemplate[] = [
+export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   {
     id: 'youtube-1080p',
     platform: 'YouTube',

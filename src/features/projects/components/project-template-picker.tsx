@@ -25,6 +25,7 @@ export function ProjectTemplatePicker({
            <button
              key={template.id}
              type="button"
+             aria-pressed={isSelected}
              onClick={() => onSelectTemplate(template)}
              className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
                isSelected
@@ -65,13 +66,14 @@ export function ProjectTemplatePicker({
          );
        })}
        {onSelectCustom && (
-         <button
-           type="button"
-           onClick={onSelectCustom}
-           className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
-             isCustomSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
-           }`}
-         >
+          <button
+            type="button"
+            aria-pressed={isCustomSelected}
+            onClick={onSelectCustom}
+            className={`group relative flex flex-col gap-3 p-4 panel-bg border rounded-lg transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
+              isCustomSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
+            }`}
+          >
            <div className="relative h-24 bg-secondary/30 rounded overflow-hidden flex items-center justify-center">
              <div
                className={`border-2 border-dashed rounded-sm transition-colors ${
