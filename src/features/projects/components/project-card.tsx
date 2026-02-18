@@ -212,6 +212,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
           <div
             className="absolute bottom-0 left-0 right-0 h-5 flex items-end cursor-pointer"
             onMouseDown={handleScrubMouseDown}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           >
             <div ref={scrubRef} className="relative w-full h-1 bg-white/20">
               <div
