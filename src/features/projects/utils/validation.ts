@@ -51,6 +51,80 @@ export const projectFormSchema = z.object({
 export type ProjectFormData = z.infer<typeof projectFormSchema>;
 
 /**
+ * Project template interface for preset configurations
+ */
+export interface ProjectTemplate {
+  id: string;
+  platform: string;
+  name: string;
+  namePrefix: string;
+  width: number;
+  height: number;
+  fps: number;
+}
+
+/**
+ * Project templates for common platforms
+ * 6 preset configurations with collision-free naming
+ */
+export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
+  {
+    id: 'youtube-1080p',
+    platform: 'YouTube',
+    name: 'YouTube 1080p',
+    namePrefix: 'YouTube',
+    width: 1920,
+    height: 1080,
+    fps: 30,
+  },
+  {
+    id: 'vertical-9-16',
+    platform: 'Vertical',
+    name: 'Shorts / TikTok / Reels',
+    namePrefix: 'Vertical',
+    width: 1080,
+    height: 1920,
+    fps: 30,
+  },
+  {
+    id: 'instagram-square',
+    platform: 'Instagram',
+    name: 'Instagram Square',
+    namePrefix: 'Instagram Square',
+    width: 1080,
+    height: 1080,
+    fps: 30,
+  },
+  {
+    id: 'instagram-portrait',
+    platform: 'Instagram',
+    name: 'Instagram Portrait',
+    namePrefix: 'Instagram Portrait',
+    width: 1080,
+    height: 1350,
+    fps: 30,
+  },
+  {
+    id: 'twitter-x',
+    platform: 'Twitter/X',
+    name: 'Twitter/X',
+    namePrefix: 'Twitter/X',
+    width: 1200,
+    height: 675,
+    fps: 30,
+  },
+  {
+    id: 'linkedin',
+    platform: 'LinkedIn',
+    name: 'LinkedIn',
+    namePrefix: 'LinkedIn',
+    width: 1200,
+    height: 627,
+    fps: 30,
+  },
+] as const;
+
+/**
  * Common resolution presets
  * Updated for 2025 social media standards
  */

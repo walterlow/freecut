@@ -184,3 +184,29 @@ export function duplicateProject(project: Project): Project {
     updatedAt: now,
   };
 }
+
+/**
+ * Generate a unique project name from a template prefix
+ * Finds the maximum numeric suffix and increments it
+ * @param namePrefix - The prefix for the project name (e.g., "YouTube")
+ * @param existingNames - Array of existing project names to check for collisions
+ * @returns A unique project name (e.g., "YouTube (1)", "YouTube (2)")
+ */
+export function generateTemplateName(
+  namePrefix: string,
+  existingNames: string[]
+): string {
+  const escapedPrefix = namePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escapedPrefix}\\s*\\((\\d+)\\)$`);
+  
+  let maxSuffix = 0;
+  for (const name of existingNames) {
+    const match = name.match(pattern);
+    if (match) {
+      const suffix = parseInt(match[1], 10);
+      maxSuffix = Math.max(maxSuffix, suffix);
+    }
+  }
+  
+  return `${namePrefix} (${maxSuffix + 1})`;
+}
