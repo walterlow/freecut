@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import { MoreVertical, PlayCircle, Edit2, Copy, Trash2, AlertTriangle, HardDrive } from 'lucide-react';
@@ -24,6 +24,7 @@ import type { Project } from '@/types/project';
 import { formatRelativeTime } from '../utils/project-helpers';
 import { useDeleteProject, useDuplicateProject } from '../hooks/use-project-actions';
 import { useProjectThumbnail } from '../hooks/use-project-thumbnail';
+import { useProjectHoverPreview } from '../hooks/use-project-hover-preview';
 
 interface ProjectCardProps {
   project: Project;
@@ -38,6 +39,52 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
   const deleteProject = useDeleteProject();
   const duplicateProject = useDuplicateProject();
   const thumbnailUrl = useProjectThumbnail(project);
+  const { previewState, videoSrc, onMouseEnter, onMouseLeave, onVideoEnded } = useProjectHoverPreview(project);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const scrubRef = useRef<HTMLDivElement>(null);
+  const [scrubProgress, setScrubProgress] = useState(0);
+
+  const isDraggingRef = useRef(false);
+
+  const seekToClientX = useCallback((clientX: number) => {
+    const video = videoRef.current;
+    const bar = scrubRef.current;
+    if (!video || !bar || !video.duration) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    video.currentTime = ratio * video.duration;
+    setScrubProgress(ratio);
+  }, []);
+
+  const handleVideoTimeUpdate = useCallback(() => {
+    if (isDraggingRef.current) return;
+    const video = videoRef.current;
+    if (!video || !video.duration) return;
+    setScrubProgress(video.currentTime / video.duration);
+  }, []);
+
+  const handleVideoEnded = useCallback(() => {
+    setScrubProgress(1);
+    onVideoEnded();
+  }, [onVideoEnded]);
+
+  const handleScrubMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingRef.current = true;
+    seekToClientX(e.clientX);
+
+    const onMove = (ev: MouseEvent) => {
+      seekToClientX(ev.clientX);
+    };
+    const onUp = () => {
+      isDraggingRef.current = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [seekToClientX]);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -106,27 +153,72 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
         to="/editor/$projectId"
         params={{ projectId: project.id }}
         className="block relative aspect-video bg-secondary/30 overflow-hidden"
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={() => onMouseLeave(() => isDraggingRef.current)}
       >
-        {thumbnailUrl ? (
-          <img
-            key={project.updatedAt} // Force re-render when project is updated
-            src={thumbnailUrl}
-            alt={project.name}
-            className="w-full h-full object-contain bg-black/40"
+        {/* Static thumbnail — hidden while video is active */}
+        {previewState === 'idle' || previewState === 'loading' ? (
+          thumbnailUrl ? (
+            <img
+              key={project.updatedAt}
+              src={thumbnailUrl}
+              alt={project.name}
+              className="w-full h-full object-contain bg-black/40"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/40 to-secondary/20">
+              <PlayCircle className="w-12 h-12 text-muted-foreground/40" />
+            </div>
+          )
+        ) : null}
+
+        {/* Loading shimmer */}
+        {previewState === 'loading' && (
+          <div className="absolute inset-0 bg-black/30 animate-pulse" />
+        )}
+
+        {/* Video player */}
+        {(previewState === 'playing' || previewState === 'ended') && videoSrc && (
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            className="w-full h-full object-contain bg-black"
+            autoPlay
+            muted
+            playsInline
+            onTimeUpdate={handleVideoTimeUpdate}
+            onEnded={handleVideoEnded}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/40 to-secondary/20">
-            <PlayCircle className="w-12 h-12 text-muted-foreground/40" />
+        )}
+
+        {/* Scrub bar — visible while playing */}
+        {previewState === 'playing' && (
+          <div
+            className="absolute bottom-0 left-0 right-0 h-5 flex items-end cursor-pointer"
+            onMouseDown={handleScrubMouseDown}
+          >
+            <div ref={scrubRef} className="relative w-full h-1 bg-white/20">
+              <div
+                className="h-full bg-white transition-none"
+                style={{ width: `${scrubProgress * 100}%` }}
+              />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow -translate-x-1/2"
+                style={{ left: `${scrubProgress * 100}%` }}
+              />
+            </div>
           </div>
         )}
 
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <div className="flex items-center gap-2 text-white">
-            <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">Open in Editor</span>
+        {/* "Open in Editor" overlay — appears when video ends */}
+        {previewState === 'ended' && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 text-white">
+              <PlayCircle className="w-6 h-6" />
+              <span className="font-medium">Open in Editor</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Resolution badge */}
         <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded text-xs font-mono text-white">
