@@ -18,6 +18,7 @@ export interface UseProjectHoverPreviewReturn {
   onMouseEnter: () => void;
   onMouseLeave: (isDragging: () => boolean) => void;
   onVideoEnded: () => void;
+  onVideoError: () => void;
 }
 
 export function useProjectHoverPreview(project: Project): UseProjectHoverPreviewReturn {
@@ -42,7 +43,11 @@ export function useProjectHoverPreview(project: Project): UseProjectHoverPreview
 
     try {
       const url = await resolveMediaUrl(mediaId);
-      if (controller.signal.aborted) return;
+
+      if (controller.signal.aborted) {
+        if (url) blobUrlManager.release(mediaId);
+        return;
+      }
 
       if (!url) {
         setPreviewState('idle');
@@ -77,5 +82,10 @@ export function useProjectHoverPreview(project: Project): UseProjectHoverPreview
     setPreviewState('ended');
   }, []);
 
-  return { previewState, videoSrc, onMouseEnter, onMouseLeave, onVideoEnded };
+  const onVideoError = useCallback(() => {
+    setVideoSrc(null);
+    setPreviewState('idle');
+  }, []);
+
+  return { previewState, videoSrc, onMouseEnter, onMouseLeave, onVideoEnded, onVideoError };
 }

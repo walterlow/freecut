@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
 import { MoreVertical, PlayCircle, Edit2, Copy, Trash2, AlertTriangle, HardDrive } from 'lucide-react';
@@ -39,12 +39,22 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
   const deleteProject = useDeleteProject();
   const duplicateProject = useDuplicateProject();
   const thumbnailUrl = useProjectThumbnail(project);
-  const { previewState, videoSrc, onMouseEnter, onMouseLeave, onVideoEnded } = useProjectHoverPreview(project);
+  const { previewState, videoSrc, onMouseEnter, onMouseLeave, onVideoEnded, onVideoError } = useProjectHoverPreview(project);
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubRef = useRef<HTMLDivElement>(null);
   const [scrubProgress, setScrubProgress] = useState(0);
 
   const isDraggingRef = useRef(false);
+  const dragMoveRef = useRef<((e: MouseEvent) => void) | null>(null);
+  const dragUpRef = useRef<((e: MouseEvent) => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (dragMoveRef.current) document.removeEventListener('mousemove', dragMoveRef.current);
+      if (dragUpRef.current) document.removeEventListener('mouseup', dragUpRef.current);
+      isDraggingRef.current = false;
+    };
+  }, []);
 
   const seekToClientX = useCallback((clientX: number) => {
     const video = videoRef.current;
@@ -68,20 +78,24 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     onVideoEnded();
   }, [onVideoEnded]);
 
+
+
   const handleScrubMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     isDraggingRef.current = true;
     seekToClientX(e.clientX);
 
-    const onMove = (ev: MouseEvent) => {
-      seekToClientX(ev.clientX);
-    };
+    const onMove = (ev: MouseEvent) => seekToClientX(ev.clientX);
     const onUp = () => {
       isDraggingRef.current = false;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      dragMoveRef.current = null;
+      dragUpRef.current = null;
     };
+    dragMoveRef.current = onMove;
+    dragUpRef.current = onUp;
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }, [seekToClientX]);
@@ -154,40 +168,42 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
         params={{ projectId: project.id }}
         className="block relative aspect-video bg-secondary/30 overflow-hidden"
         onMouseEnter={onMouseEnter}
-        onMouseLeave={() => onMouseLeave(() => isDraggingRef.current)}
+        onMouseLeave={() => {
+          onMouseLeave(() => isDraggingRef.current);
+          setScrubProgress(0);
+        }}
       >
-        {/* Static thumbnail — hidden while video is active */}
-        {previewState === 'idle' || previewState === 'loading' ? (
-          thumbnailUrl ? (
-            <img
-              key={project.updatedAt}
-              src={thumbnailUrl}
-              alt={project.name}
-              className="w-full h-full object-contain bg-black/40"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/40 to-secondary/20">
-              <PlayCircle className="w-12 h-12 text-muted-foreground/40" />
-            </div>
-          )
-        ) : null}
+        {/* Base layer — always rendered so the overlay has something beneath it */}
+        {thumbnailUrl ? (
+          <img
+            key={project.updatedAt}
+            src={thumbnailUrl}
+            alt={project.name}
+            className="w-full h-full object-contain bg-black/40"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary/40 to-secondary/20">
+            <PlayCircle className="w-12 h-12 text-muted-foreground/40" />
+          </div>
+        )}
 
         {/* Loading shimmer */}
         {previewState === 'loading' && (
           <div className="absolute inset-0 bg-black/30 animate-pulse" />
         )}
 
-        {/* Video player */}
-        {(previewState === 'playing' || previewState === 'ended') && videoSrc && (
+        {/* Video player — absolutely positioned so base layer stays mounted */}
+        {videoSrc && (
           <video
             ref={videoRef}
             src={videoSrc}
-            className="w-full h-full object-contain bg-black"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
             autoPlay
             muted
             playsInline
             onTimeUpdate={handleVideoTimeUpdate}
             onEnded={handleVideoEnded}
+            onError={onVideoError}
           />
         )}
 
