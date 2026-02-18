@@ -140,7 +140,7 @@ export interface ImportOptions {
  * Export result
  */
 export interface ExportResult {
-  blob: Blob;
+  blob?: Blob;
   filename: string;
   size: number;
   mediaCount: number;

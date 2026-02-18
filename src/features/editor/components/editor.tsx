@@ -71,6 +71,7 @@ const GRAPH_PANEL_SIZE_INCREASE = 12; // ~12% extra height
 export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
+  const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -159,8 +160,31 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     setExportDialogOpen(true);
   }, []);
 
-  const handleExportBundle = useCallback(() => {
+  const handleExportBundle = useCallback(async () => {
     void preloadBundleExportDialog();
+
+    // Show native save picker BEFORE opening the modal dialog to avoid
+    // focus-loss conflicts between the native picker and Radix Dialog.
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: 'project.freecut.zip',
+          types: [
+            {
+              description: 'FreeCut Project Bundle',
+              accept: { 'application/zip': ['.freecut.zip'] },
+            },
+          ],
+        });
+        setBundleFileHandle(handle);
+      } catch {
+        // User cancelled the picker — don't open the dialog
+        return;
+      }
+    } else {
+      setBundleFileHandle(undefined);
+    }
+
     setBundleExportDialogOpen(true);
   }, []);
 
@@ -271,9 +295,13 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         {bundleExportDialogOpen && (
           <LazyBundleExportDialog
             open={bundleExportDialogOpen}
-            onClose={() => setBundleExportDialogOpen(false)}
+            onClose={() => {
+              setBundleExportDialogOpen(false);
+              setBundleFileHandle(undefined);
+            }}
             projectId={projectId}
             onBeforeExport={handleSave}
+            fileHandle={bundleFileHandle}
           />
         )}
       </Suspense>

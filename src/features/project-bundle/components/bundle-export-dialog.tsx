@@ -20,7 +20,11 @@ import {
   Download,
 } from 'lucide-react';
 import type { ExportProgress, ExportResult } from '../types/bundle';
-import { exportProjectBundle, downloadBundle } from '../services/bundle-export-service';
+import {
+  exportProjectBundle,
+  exportProjectBundleStreaming,
+  downloadBundle,
+} from '../services/bundle-export-service';
 import { formatDuration } from '@/utils/time-utils';
 import { formatBytes } from '@/utils/format-utils';
 
@@ -29,6 +33,8 @@ export interface BundleExportDialogProps {
   onClose: () => void;
   projectId: string;
   onBeforeExport?: () => Promise<void>;
+  /** Pre-acquired file handle for streaming export (avoids native picker inside modal) */
+  fileHandle?: FileSystemFileHandle;
 }
 
 type ExportStatus = 'idle' | 'saving' | 'exporting' | 'completed' | 'failed';
@@ -53,6 +59,7 @@ export function BundleExportDialog({
   onClose,
   projectId,
   onBeforeExport,
+  fileHandle,
 }: BundleExportDialogProps) {
   const [status, setStatus] = useState<ExportStatus>('idle');
   const [progress, setProgress] = useState<ExportProgress>({ percent: 0, stage: 'collecting' });
@@ -65,6 +72,9 @@ export function BundleExportDialog({
   const isCompleted = status === 'completed';
   const isFailed = status === 'failed';
   const preventClose = isExporting || isCompleted;
+
+  // Whether the completed export used streaming (file already on disk)
+  const usedStreaming = isCompleted && !!fileHandle;
 
   // Track elapsed time
   useEffect(() => {
@@ -102,9 +112,19 @@ export function BundleExportDialog({
 
       setStatus('exporting');
 
-      const exportResult = await exportProjectBundle(projectId, (p) => {
-        setProgress(p);
-      });
+      let exportResult: ExportResult;
+
+      if (fileHandle) {
+        // Streaming path: write directly to the pre-acquired file handle
+        exportResult = await exportProjectBundleStreaming(projectId, fileHandle, (p) => {
+          setProgress(p);
+        });
+      } else {
+        // Fallback: in-memory export
+        exportResult = await exportProjectBundle(projectId, (p) => {
+          setProgress(p);
+        });
+      }
 
       setResult(exportResult);
       setStatus('completed');
@@ -112,7 +132,7 @@ export function BundleExportDialog({
       setError(err instanceof Error ? err.message : 'Export failed');
       setStatus('failed');
     }
-  }, [projectId, onBeforeExport]);
+  }, [projectId, onBeforeExport, fileHandle]);
 
   // Auto-start export when dialog opens
   useEffect(() => {
@@ -140,9 +160,9 @@ export function BundleExportDialog({
     }
   };
 
-  // Prevent closing during export
+  // Prevent closing during export (ref check catches the stale-closure case)
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && !isExporting) {
+    if (!newOpen && !isExporting && !busyRef.current) {
       onClose();
     }
   };
@@ -169,7 +189,7 @@ export function BundleExportDialog({
           </DialogTitle>
           <DialogDescription>
             {isExporting && 'Creating project bundle with all media files'}
-            {isCompleted && 'Your project bundle is ready to download'}
+            {isCompleted && (usedStreaming ? 'Your project bundle has been saved' : 'Your project bundle is ready to download')}
             {isFailed && 'Something went wrong during export'}
           </DialogDescription>
         </DialogHeader>
@@ -218,7 +238,9 @@ export function BundleExportDialog({
               <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-700 dark:text-green-400">
-                  Project bundle created successfully!
+                  {usedStreaming
+                    ? 'Project bundle saved to disk successfully!'
+                    : 'Project bundle created successfully!'}
                 </AlertDescription>
               </Alert>
 
@@ -267,10 +289,12 @@ export function BundleExportDialog({
               <Button variant="outline" onClick={onClose}>
                 Close
               </Button>
-              <Button onClick={handleDownload}>
-                <Download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
+              {!usedStreaming && (
+                <Button onClick={handleDownload}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </Button>
+              )}
             </>
           )}
 
