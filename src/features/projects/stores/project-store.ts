@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 import { temporal } from 'zundo';
 import type { Project } from '@/types/project';
 import type { ProjectFormData } from '../utils/validation';
+import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import {
   getAllProjects,
   getProject,
@@ -373,7 +374,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
       }),
       {
         // Zundo options
-        limit: 50, // Keep 50 history states
+        limit: useSettingsStore.getState().maxUndoHistory,
         partialize: (state) => {
           // Only include projects in undo/redo history
           // Exclude UI state like loading, error, filters

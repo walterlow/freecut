@@ -21,6 +21,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
+  const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
   const setSetting = useSettingsStore((s) => s.setSetting);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
 
@@ -81,6 +82,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </section>
 
           </div>
+
+            {/* Performance */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Performance</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Undo History Depth</Label>
+                  <div className="w-32 flex items-center gap-2">
+                    <Slider
+                      value={[maxUndoHistory]}
+                      onValueChange={([v]) => setSetting('maxUndoHistory', v || 10)}
+                      min={10}
+                      max={200}
+                      step={10}
+                    />
+                    <span className="text-xs text-muted-foreground w-6">{maxUndoHistory}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
         </ScrollArea>
       </DialogContent>
     </Dialog>

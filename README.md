@@ -165,14 +165,15 @@ src/
 │   ├── media-library/   # Media import, metadata, OPFS proxies
 │   ├── project-bundle/  # Project ZIP export/import
 │   ├── projects/        # Project management
-│   ├── settings/        # App settings
-│   └── ai/              # AI features (planned)
+│   └── settings/        # App settings
 ├── lib/
 │   ├── composition-runtime/  # Remotion-style Sequence/Item primitives
 │   ├── transitions/          # Transition renderers (CSS + canvas)
 │   ├── storage/              # IndexedDB persistence
 │   ├── shapes/               # SVG shape generators
-│   └── fonts/                # Font loader
+│   ├── fonts/                # Font loader
+│   ├── migrations/           # Data migration system
+│   └── debug/                # Debug utilities
 ├── components/ui/       # shadcn/ui components
 ├── config/hotkeys.ts    # Keyboard shortcut definitions
 ├── routes/              # TanStack Router (file-based)
