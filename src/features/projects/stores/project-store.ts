@@ -392,16 +392,26 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
   )
 );
 
-// Keep project undo history in sync with the maxUndoHistory setting.
-// Zundo's `limit` is static, so we subscribe and trim pastStates at runtime.
-let _prevMaxUndo = useSettingsStore.getState().maxUndoHistory;
-useSettingsStore.subscribe((state) => {
-  if (state.maxUndoHistory !== _prevMaxUndo) {
-    _prevMaxUndo = state.maxUndoHistory;
-    const temporal = useProjectStore.temporal.getState();
-    if (temporal.pastStates.length > state.maxUndoHistory) {
+// Enforce undo history cap on every save (zundo's static `limit` was removed).
+useProjectStore.temporal.getState().setOnSave(() => {
+  const max = useSettingsStore.getState().maxUndoHistory;
+  const { pastStates, futureStates } = useProjectStore.temporal.getState();
+  if (pastStates.length > max || futureStates.length > max) {
+    useProjectStore.temporal.setState({
+      pastStates: pastStates.slice(-max),
+      futureStates: futureStates.slice(-max),
+    });
+  }
+});
+
+// When maxUndoHistory changes, immediately trim both stacks.
+useSettingsStore.subscribe((state, prevState) => {
+  if (state.maxUndoHistory !== prevState.maxUndoHistory) {
+    const { pastStates, futureStates } = useProjectStore.temporal.getState();
+    if (pastStates.length > state.maxUndoHistory || futureStates.length > state.maxUndoHistory) {
       useProjectStore.temporal.setState({
-        pastStates: temporal.pastStates.slice(-state.maxUndoHistory),
+        pastStates: pastStates.slice(-state.maxUndoHistory),
+        futureStates: futureStates.slice(-state.maxUndoHistory),
       });
     }
   }
