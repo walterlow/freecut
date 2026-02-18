@@ -81,8 +81,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </div>
             </section>
 
-          </div>
-
             {/* Performance */}
             <section className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground">Performance</h3>
@@ -103,6 +101,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </div>
             </section>
 
+          </div>
         </ScrollArea>
       </DialogContent>
     </Dialog>

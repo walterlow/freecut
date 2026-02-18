@@ -373,8 +373,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         clearError: () => set({ error: null }),
       }),
       {
-        // Zundo options
-        limit: useSettingsStore.getState().maxUndoHistory,
+        // Zundo options — no static limit; trimmed dynamically via subscription below
         partialize: (state) => {
           // Only include projects in undo/redo history
           // Exclude UI state like loading, error, filters
@@ -392,3 +391,18 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
     }
   )
 );
+
+// Keep project undo history in sync with the maxUndoHistory setting.
+// Zundo's `limit` is static, so we subscribe and trim pastStates at runtime.
+let _prevMaxUndo = useSettingsStore.getState().maxUndoHistory;
+useSettingsStore.subscribe((state) => {
+  if (state.maxUndoHistory !== _prevMaxUndo) {
+    _prevMaxUndo = state.maxUndoHistory;
+    const temporal = useProjectStore.temporal.getState();
+    if (temporal.pastStates.length > state.maxUndoHistory) {
+      useProjectStore.temporal.setState({
+        pastStates: temporal.pastStates.slice(-state.maxUndoHistory),
+      });
+    }
+  }
+});
