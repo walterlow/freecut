@@ -7,6 +7,7 @@ import type {
 import { mediaLibraryService } from '../services/media-library-service';
 import { removeItems, updateItem } from '@/features/timeline/stores/timeline-actions';
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
+import { blobUrlManager } from '@/lib/blob-url-manager';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('MediaRelinkingActions');
@@ -71,6 +72,9 @@ export function createRelinkingActions(
           newHandle
         );
 
+        // Invalidate stale blob URL so preview re-fetches from the new handle
+        blobUrlManager.invalidate(mediaId);
+
         // Update local state
         set((state) => ({
           mediaItems: state.mediaItems.map((item) =>
@@ -107,6 +111,9 @@ export function createRelinkingActions(
             mediaId,
             handle
           );
+
+          // Invalidate stale blob URL so preview re-fetches from the new handle
+          blobUrlManager.invalidate(mediaId);
 
           // Update local state
           set((state) => ({

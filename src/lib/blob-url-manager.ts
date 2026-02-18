@@ -51,6 +51,17 @@ class BlobUrlManager {
   }
 
   /**
+   * Forcibly remove and revoke a blob URL regardless of reference count.
+   * Used when the underlying media file has changed (e.g., after relinking).
+   */
+  invalidate(mediaId: string): void {
+    const entry = this.entries.get(mediaId);
+    if (!entry) return;
+    URL.revokeObjectURL(entry.url);
+    this.entries.delete(mediaId);
+  }
+
+  /**
    * Release a reference to a blob URL.
    * Revokes the URL when the reference count reaches zero.
    */

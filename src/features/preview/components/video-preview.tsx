@@ -6,6 +6,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { MainComposition } from '@/lib/composition-runtime/compositions/main-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
+import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import { GizmoOverlay } from './gizmo-overlay';
@@ -296,7 +297,9 @@ export const VideoPreview = memo(function VideoPreview({
       .toSorted()
       .join('|')
   );
-  const mediaFingerprint = mainMediaFingerprint + '||' + compMediaFingerprint;
+  // Track broken media count so relinking (which removes entries) re-triggers resolution
+  const brokenMediaCount = useMediaLibraryStore((s) => s.brokenMediaIds.length);
+  const mediaFingerprint = mainMediaFingerprint + '||' + compMediaFingerprint + '||broken:' + brokenMediaCount;
 
   // Calculate total frames using derived selector for furthest item end
   const furthestItemEndFrame = useTimelineStore((s) =>
@@ -306,6 +309,27 @@ export const VideoPreview = memo(function VideoPreview({
     if (furthestItemEndFrame === 0) return 900; // Default 30s at 30fps
     return furthestItemEndFrame + (fps * 5);
   }, [furthestItemEndFrame, fps]);
+
+  // When media is relinked (removed from brokenMediaIds), clear its stale
+  // resolved URL so the resolution effect re-fetches from the new file handle.
+  const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
+  const prevBrokenRef = useRef<string[]>([]);
+  useEffect(() => {
+    const prev = prevBrokenRef.current;
+    prevBrokenRef.current = brokenMediaIds;
+    // Find IDs that were broken but are now healthy (relinked)
+    const relinkedIds = prev.filter((id) => !brokenMediaIds.includes(id));
+    if (relinkedIds.length > 0) {
+      setResolvedUrls((prevUrls) => {
+        const next = new Map(prevUrls);
+        let changed = false;
+        for (const id of relinkedIds) {
+          if (next.delete(id)) changed = true;
+        }
+        return changed ? next : prevUrls;
+      });
+    }
+  }, [brokenMediaIds]);
 
   // Resolve media URLs when media fingerprint changes (not on transform changes)
   useEffect(() => {
