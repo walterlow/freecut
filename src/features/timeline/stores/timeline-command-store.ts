@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import type { TimelineCommand, CommandEntry, TimelineSnapshot } from './commands/types';
 import { captureSnapshot, restoreSnapshot, snapshotsEqual } from './commands/snapshot';
-
-const MAX_HISTORY = 100;
+import { useSettingsStore } from '@/features/settings/stores/settings-store';
 
 /**
  * Command store state.
@@ -80,9 +79,10 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
 
       // Only add to history if state actually changed
       if (!snapshotsEqual(beforeSnapshot, afterSnapshot)) {
+        const maxHistory = useSettingsStore.getState().maxUndoHistory;
         set((state) => ({
           undoStack: [
-            ...state.undoStack.slice(-(MAX_HISTORY - 1)),
+            ...state.undoStack.slice(-(maxHistory - 1)),
             { command, beforeSnapshot, timestamp: Date.now() },
           ],
           redoStack: [], // Clear redo on new action
@@ -163,9 +163,10 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
       
       // Only add to history if state actually changed
       if (!snapshotsEqual(beforeSnapshot, afterSnapshot)) {
+        const maxHistory = useSettingsStore.getState().maxUndoHistory;
         set((state) => ({
           undoStack: [
-            ...state.undoStack.slice(-(MAX_HISTORY - 1)),
+            ...state.undoStack.slice(-(maxHistory - 1)),
             { command, beforeSnapshot, timestamp: Date.now() },
           ],
           redoStack: [], // Clear redo on new action
