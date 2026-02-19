@@ -58,7 +58,7 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
     if (!isDraggingIn) return;
 
     const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'grabbing';
+    document.body.style.cursor = 'col-resize';
 
     const handleMouseMove = (e: MouseEvent) => {
       const container = inMarkerRef.current?.closest('.timeline-ruler');
@@ -91,7 +91,7 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
     if (!isDraggingOut) return;
 
     const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'grabbing';
+    document.body.style.cursor = 'col-resize';
 
     const handleMouseMove = (e: MouseEvent) => {
       const container = outMarkerRef.current?.closest('.timeline-ruler');
@@ -165,7 +165,7 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
           bottom: 0,
           left: '-8px',
           width: '18px',
-          cursor: isDragging ? 'grabbing' : 'grab',
+          cursor: 'col-resize',
         }}
         onMouseDown={onMouseDown}
       />

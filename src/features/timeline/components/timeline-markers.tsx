@@ -767,7 +767,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     if (!isRangeDragging) return;
 
     const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'grabbing';
+    document.body.style.cursor = 'move';
 
     const handleMouseMove = (e: MouseEvent) => {
       const currentTimelineX = getTimelineXFromClientX(e.clientX);
@@ -863,7 +863,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       {/* Draggable in/out strip */}
       {inPoint !== null && outPoint !== null && (
         <div
-          className="absolute top-0 bottom-0 cursor-grab"
+          className="absolute top-0 bottom-0 cursor-move"
           onMouseDown={handleRangeMouseDown}
           style={{
             left: `${timeToPixels(inPoint / fps)}px`,
