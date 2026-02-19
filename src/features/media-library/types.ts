@@ -48,6 +48,7 @@ export interface MediaLibraryState {
   isLoading: boolean;
   importingIds: string[]; // IDs of media items currently being imported
   error: string | null;
+  errorLink: string | null;
   notification: MediaLibraryNotification | null;
   selectedMediaIds: string[];
   searchQuery: string;

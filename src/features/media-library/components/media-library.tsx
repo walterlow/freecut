@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2 } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check } from 'lucide-react';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -41,6 +41,24 @@ import { useProjectStore } from '@/features/projects/stores/project-store';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [text]);
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
+    </button>
+  );
+}
+
 interface MediaLibraryProps {
   onMediaSelect?: (mediaId: string) => void;
 }
@@ -77,6 +95,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const clearSelection = useMediaLibraryStore((s) => s.clearSelection);
   const error = useMediaLibraryStore((s) => s.error);
+  const errorLink = useMediaLibraryStore((s) => s.errorLink);
   const clearError = useMediaLibraryStore((s) => s.clearError);
   const notification = useMediaLibraryStore((s) => s.notification);
   const clearNotification = useMediaLibraryStore((s) => s.clearNotification);
@@ -388,7 +407,17 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {error && (
         <div className="mx-4 mt-3 p-3 bg-destructive/10 border border-destructive/50 rounded text-xs animate-in slide-in-from-top-2 duration-200">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-destructive leading-relaxed flex-1">{error}</p>
+            <div className="text-destructive leading-relaxed flex-1">
+              <p>{error}</p>
+              {errorLink && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground select-text">
+                    {errorLink}
+                  </code>
+                  <CopyButton text={errorLink} />
+                </div>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="sm"

@@ -27,8 +27,25 @@ const faqItems = [
     answer: 'Your videos and projects are stored locally in your browser or referenced to your local files using modern storage APIs.',
   },
   {
+    id: 'browser-support',
     question: 'What browsers are supported?',
-    answer: 'FreeCut currently supports Google Chrome version 102+. We use modern browser APIs like WebCodecs and File System Access which have limited cross-browser support.',
+    answer: (
+      <>
+        <p className="mb-3">
+          FreeCut currently supports Google Chrome version 102+. We use modern
+          browser APIs like WebCodecs and File System Access which have limited
+          cross-browser support.
+        </p>
+        <p>
+          <strong>Brave users:</strong> The File System Access API is disabled by
+          default. To enable it, navigate to{' '}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">
+            brave://flags/#file-system-access-api
+          </code>
+          , set it to <strong>Enabled</strong>, and relaunch the browser.
+        </p>
+      </>
+    ),
   },
   {
     question: 'What export formats are supported?',
@@ -102,7 +119,7 @@ const showcaseItems = [
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground select-text">
       {/* Hero Section */}
       <section className="relative flex min-h-[60vh] flex-col items-center justify-center px-6 py-12">
         {/* Subtle gradient background */}
@@ -259,7 +276,7 @@ function LandingPage() {
 
           <Accordion type="single" collapsible className="w-full">
             {faqItems.map((item, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
+              <AccordionItem key={index} value={`item-${index}`} id={item.id}>
                 <AccordionTrigger className="text-left">
                   {item.question}
                 </AccordionTrigger>

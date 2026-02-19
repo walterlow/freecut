@@ -24,6 +24,7 @@ export const useMediaLibraryStore = create<
       isLoading: false, // Only load once a project context is available
       importingIds: [],
       error: null,
+      errorLink: null,
       notification: null,
       selectedMediaIds: [],
       searchQuery: '',
@@ -125,7 +126,7 @@ export const useMediaLibraryStore = create<
       setViewMode: (viewMode) => set({ viewMode }),
 
       // Utility actions
-      clearError: () => set({ error: null }),
+      clearError: () => set({ error: null, errorLink: null }),
 
       showNotification: (notification: MediaLibraryNotification) => {
         set({ notification });

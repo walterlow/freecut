@@ -30,7 +30,13 @@ export function createImportActions(
 
       // Check if File System Access API is supported
       if (!('showOpenFilePicker' in window)) {
-        set({ error: 'File picker not supported. Please use Google Chrome.' });
+        const isBrave = 'brave' in navigator;
+        set({
+          error: isBrave
+            ? 'File System Access API is disabled in Brave. Copy the URL below, paste it in your address bar, set the flag to Enabled, and relaunch.'
+            : 'File picker not supported. Please use Google Chrome.',
+          errorLink: isBrave ? 'brave://flags/#file-system-access-api' : null,
+        });
         return [];
       }
 

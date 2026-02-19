@@ -93,6 +93,14 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 Chrome 102+ required. FreeCut uses WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
 
+### Brave
+
+Brave disables the File System Access API by default. To enable it:
+
+1. Navigate to `brave://flags/#file-system-access-api`
+2. Change the setting from **Disabled** to **Enabled**
+3. Click **Relaunch** to restart the browser
+
 ## Keyboard Shortcuts
 
 | Action | Shortcut |
