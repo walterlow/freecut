@@ -106,7 +106,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     } else if (activeGizmo?.itemId === item.id && previewTransform !== null) {
       resolved = {
         ...previewTransform,
-        cornerRadius: previewTransform.cornerRadius ?? 0,
+        cornerRadius: previewTransform.cornerRadius ?? animatedResolved.cornerRadius,
       };
     }
 
