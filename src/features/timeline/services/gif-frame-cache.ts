@@ -225,7 +225,7 @@ class GifFrameCacheService {
 
       onProgress?.(25);
 
-      // Create canvas for rendering
+      // Create compositing canvas (accumulates frames respecting disposal)
       const canvas = document.createElement('canvas');
       canvas.width = gif.lsd.width;
       canvas.height = gif.lsd.height;
@@ -235,11 +235,23 @@ class GifFrameCacheService {
         throw new Error('Failed to get 2D context');
       }
 
+      // Temp canvas for individual frame patches — drawImage composites
+      // properly (respects alpha blending), unlike putImageData which
+      // replaces pixels including alpha and causes flickering on
+      // transparent GIFs.
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d')!;
+
       const imageBitmaps: ImageBitmap[] = [];
       const blobs: Blob[] = [];
       const durations: number[] = [];
       let sizeBytes = 0;
       let lastUpdateCount = 0;
+
+      // GIF disposal state
+      let previousDisposalType = 0;
+      let previousDims = { left: 0, top: 0, width: 0, height: 0 };
+      let savedImageData: ImageData | null = null;
 
       // Process each frame
       for (let i = 0; i < rawFrames.length; i++) {
@@ -253,14 +265,49 @@ class GifFrameCacheService {
 
         const frame = rawFrames[i]!
 
-        // Apply frame patch to canvas
-        // The patch already contains composited pixel data from gifuct-js
+        // === GIF disposal handling ===
+        // Apply disposal from the PREVIOUS frame before drawing current.
+        // Disposal types:
+        //   0/1 — no disposal (leave previous frame in place)
+        //   2   — restore to background (clear the previous frame's area)
+        //   3   — restore to previous (revert canvas to saved state)
+        if (i > 0) {
+          if (previousDisposalType === 2) {
+            ctx.clearRect(
+              previousDims.left,
+              previousDims.top,
+              previousDims.width,
+              previousDims.height,
+            );
+          } else if (previousDisposalType === 3 && savedImageData) {
+            ctx.putImageData(savedImageData, 0, 0);
+          }
+        }
+
+        // Save canvas state BEFORE drawing this frame if its disposal is
+        // "restore to previous" — we'll need to revert to this state.
+        if (frame.disposalType === 3) {
+          savedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        }
+
+        // === Draw this frame's patch with proper alpha compositing ===
+        // 1. Put raw pixel data on temp canvas (putImageData is fine here —
+        //    we're just transferring raw RGBA to a blank surface).
+        // 2. drawImage from temp → main canvas (this composites correctly,
+        //    blending transparent pixels with existing content).
+        tempCanvas.width = frame.dims.width;
+        tempCanvas.height = frame.dims.height;
         const imageData = new ImageData(
           new Uint8ClampedArray(frame.patch),
           frame.dims.width,
           frame.dims.height
         );
-        ctx.putImageData(imageData, frame.dims.left, frame.dims.top);
+        tempCtx.putImageData(imageData, 0, 0);
+        ctx.drawImage(tempCanvas, frame.dims.left, frame.dims.top);
+
+        // Remember disposal info for next iteration
+        previousDisposalType = frame.disposalType;
+        previousDims = frame.dims;
 
         // Convert to PNG blob (preserve transparency)
         const blob = await new Promise<Blob>((resolve, reject) => {
@@ -431,6 +478,171 @@ class GifFrameCacheService {
     // Extract new frames
     const abortController = new AbortController();
     const promise = this.extractGifFrames(mediaId, blobUrl, onProgress);
+
+    this.pendingRequests.set(mediaId, { promise, abortController });
+
+    try {
+      const result = await promise;
+      return result;
+    } finally {
+      this.pendingRequests.delete(mediaId);
+    }
+  }
+
+  /**
+   * Extract animated WebP frames using the ImageDecoder API.
+   * Returns null if the WebP is not animated or ImageDecoder is unavailable.
+   */
+  private async extractWebpFrames(
+    mediaId: string,
+    blobUrl: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<CachedGifFrames> {
+    if (typeof ImageDecoder === 'undefined') {
+      throw new Error('ImageDecoder API not available');
+    }
+
+    const extractionState = { aborted: false };
+    this.activeExtractions.set(mediaId, extractionState);
+
+    try {
+      onProgress?.(5);
+
+      const response = await fetch(blobUrl);
+      if (!response.ok || !response.body) {
+        throw new Error('Failed to fetch WebP');
+      }
+
+      const decoder = new ImageDecoder({
+        data: response.body,
+        type: 'image/webp',
+      });
+
+      await decoder.completed;
+
+      if (extractionState.aborted) {
+        decoder.close();
+        throw new Error('Aborted');
+      }
+
+      onProgress?.(15);
+
+      const track = decoder.tracks.selectedTrack;
+      if (!track || !track.animated || track.frameCount <= 1) {
+        decoder.close();
+        throw new Error('WebP is not animated');
+      }
+
+      const frameCount = track.frameCount;
+      const frames: ImageBitmap[] = [];
+      const blobs: Blob[] = [];
+      const durations: number[] = [];
+      let sizeBytes = 0;
+      let lastUpdateCount = 0;
+
+      for (let i = 0; i < frameCount; i++) {
+        if (extractionState.aborted) {
+          for (const bitmap of frames) {
+            bitmap.close();
+          }
+          decoder.close();
+          throw new Error('Aborted');
+        }
+
+        const result = await decoder.decode({ frameIndex: i });
+        const videoFrame = result.image;
+
+        const bitmap = await createImageBitmap(videoFrame);
+        frames.push(bitmap);
+
+        // VideoFrame.duration is in microseconds; convert to ms
+        const durationMs = videoFrame.duration ? videoFrame.duration / 1000 : 100;
+        durations.push(durationMs);
+
+        sizeBytes += bitmap.width * bitmap.height * 4;
+        blobs.push(new Blob()); // No IndexedDB persistence for WebP frames
+
+        videoFrame.close();
+
+        const progress = 15 + Math.round((i / frameCount) * 80);
+        onProgress?.(Math.min(progress, 95));
+
+        // Progressive update
+        if (frames.length - lastUpdateCount >= FRAMES_PER_BATCH) {
+          lastUpdateCount = frames.length;
+
+          const cumulativeDelays = this.computeCumulativeDelays(durations);
+          const intermediate: CachedGifFrames = {
+            frames: [...frames],
+            blobs: [...blobs],
+            durations: [...durations],
+            cumulativeDelays,
+            totalDuration: cumulativeDelays[cumulativeDelays.length - 1]!,
+            width: frames[0]?.width ?? 0,
+            height: frames[0]?.height ?? 0,
+            sizeBytes,
+            lastAccessed: Date.now(),
+            isComplete: false,
+          };
+
+          this.addToMemoryCache(mediaId, intermediate);
+          this.notifyUpdate(mediaId, intermediate);
+        }
+      }
+
+      decoder.close();
+
+      onProgress?.(95);
+
+      const cumulativeDelays = this.computeCumulativeDelays(durations);
+      const cached: CachedGifFrames = {
+        frames,
+        blobs,
+        durations,
+        cumulativeDelays,
+        totalDuration: cumulativeDelays[cumulativeDelays.length - 1]!,
+        width: frames[0]?.width ?? 0,
+        height: frames[0]?.height ?? 0,
+        sizeBytes,
+        lastAccessed: Date.now(),
+        isComplete: true,
+      };
+
+      this.addToMemoryCache(mediaId, cached);
+      this.notifyUpdate(mediaId, cached);
+
+      onProgress?.(100);
+
+      return cached;
+    } finally {
+      this.activeExtractions.delete(mediaId);
+    }
+  }
+
+  /**
+   * Get animated WebP frames for a media item.
+   * Memory-only cache (no IndexedDB persistence — re-extracts on reload).
+   */
+  async getWebpFrames(
+    mediaId: string,
+    blobUrl: string,
+    onProgress?: (progress: number) => void,
+  ): Promise<CachedGifFrames> {
+    // Check memory cache first
+    const memoryCached = this.getFromMemoryCache(mediaId);
+    if (memoryCached) {
+      return memoryCached;
+    }
+
+    // Check for pending request
+    const pending = this.pendingRequests.get(mediaId);
+    if (pending) {
+      return pending.promise;
+    }
+
+    // Extract frames (no IndexedDB for WebP)
+    const abortController = new AbortController();
+    const promise = this.extractWebpFrames(mediaId, blobUrl, onProgress);
 
     this.pendingRequests.set(mediaId, { promise, abortController });
 

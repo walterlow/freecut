@@ -20,7 +20,7 @@ import {
   getSafeTrimBefore,
   DEFAULT_SPEED,
 } from '@/features/timeline/utils/source-calculations';
-import { isGifUrl } from '@/utils/media-utils';
+import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 
 /** Mask information passed from composition to items */
@@ -240,29 +240,30 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
       );
     }
 
-    // Use Composition's Gif component for animated GIFs
-    // This ensures proper frame-by-frame rendering during export
-    // Check both src URL and item label (original filename) for .gif extension
-    const isAnimatedGif = isGifUrl(item.src) || (item.label && item.label.toLowerCase().endsWith('.gif'));
+    // Use GifPlayer for animated images (GIF and WebP).
+    // This ensures frame-by-frame rendering synced to the timeline,
+    // rather than relying on the browser's auto-animation via <img>.
+    const label = item.label?.toLowerCase() ?? '';
+    const isAnimatedGif = isGifUrl(item.src) || label.endsWith('.gif');
+    const isAnimatedWebp = isWebpUrl(item.src) || label.endsWith('.webp');
 
-    if (isAnimatedGif) {
-      // Get playback rate from speed property
-      const gifPlaybackRate = item.speed ?? DEFAULT_SPEED;
+    if (isAnimatedGif || isAnimatedWebp) {
+      const playbackRate = item.speed ?? DEFAULT_SPEED;
 
-      const gifContent = (
+      const animatedContent = (
         <GifPlayer
           mediaId={item.mediaId!}
           src={item.src}
           fit="cover"
-          playbackRate={gifPlaybackRate}
+          playbackRate={playbackRate}
           loopBehavior="loop"
+          format={isAnimatedWebp ? 'webp' : 'gif'}
         />
       );
 
-      // Use new ItemVisualWrapper for consolidated state and fixed DOM structure
       return (
         <ItemVisualWrapper item={item} masks={masks}>
-          {gifContent}
+          {animatedContent}
         </ItemVisualWrapper>
       );
     }

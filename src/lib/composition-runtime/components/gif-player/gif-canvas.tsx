@@ -60,7 +60,13 @@ export const GifCanvas = memo(function GifCanvas({ frame, fit, style }: GifCanva
       dy = (containerHeight - dh) / 2;
     }
 
-    ctx.drawImage(frame, dx, dy, dw, dh);
+    // Guard against detached ImageBitmaps (can happen when the cache
+    // evicts entries or the user clears caches while frames are displayed).
+    try {
+      ctx.drawImage(frame, dx, dy, dw, dh);
+    } catch {
+      // ImageBitmap was closed/detached — ignore, next frame update will fix it
+    }
   }, [frame, fit]);
 
   return (

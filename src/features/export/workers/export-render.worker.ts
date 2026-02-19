@@ -1,5 +1,5 @@
 import { renderAudioOnly, renderComposition } from '../utils/client-render-engine';
-import { isGifUrl } from '@/utils/media-utils';
+import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { createLogger } from '@/lib/logger';
 import type { ImageItem } from '@/types/timeline';
 import type { RenderProgress } from '../utils/client-renderer';
@@ -19,14 +19,16 @@ const log = createLogger('ExportRenderWorker');
 
 const activeRequests = new Map<string, AbortController>();
 
-function compositionHasAnimatedGif(
+function compositionHasAnimatedImage(
   tracks: Array<{ items: Array<{ type: string; src?: string; label?: string }> }>
 ): boolean {
   for (const track of tracks) {
     for (const item of track.items ?? []) {
       if (item.type !== 'image') continue;
       const imageItem = item as ImageItem;
-      if (isGifUrl(imageItem.src) || (imageItem.label ?? '').toLowerCase().endsWith('.gif')) {
+      const label = (imageItem.label ?? '').toLowerCase();
+      if (isGifUrl(imageItem.src) || label.endsWith('.gif') ||
+          isWebpUrl(imageItem.src) || label.endsWith('.webp')) {
         return true;
       }
     }
@@ -72,8 +74,8 @@ self.onmessage = async (event: MessageEvent<ExportRenderWorkerRequest>) => {
   try {
     const tracks = composition.tracks ?? [];
 
-    if (settings.mode === 'video' && compositionHasAnimatedGif(composition.tracks ?? [])) {
-      throw new Error('WORKER_REQUIRES_MAIN_THREAD:gif');
+    if (settings.mode === 'video' && compositionHasAnimatedImage(composition.tracks ?? [])) {
+      throw new Error('WORKER_REQUIRES_MAIN_THREAD:animated-image');
     }
     if (compositionHasAudio(tracks) && typeof OfflineAudioContext === 'undefined') {
       throw new Error('WORKER_REQUIRES_MAIN_THREAD:audio-context');

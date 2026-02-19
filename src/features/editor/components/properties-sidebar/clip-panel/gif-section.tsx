@@ -20,10 +20,12 @@ interface GifSectionProps {
 }
 
 /**
- * Check if an image item is a GIF based on its label
+ * Check if an image item is an animated image (GIF or WebP) based on its label
  */
-function isGifItem(item: TimelineItem): item is ImageItem {
-  return item.type === 'image' && (item.label?.toLowerCase().endsWith('.gif') ?? false);
+function isAnimatedImageItem(item: TimelineItem): item is ImageItem {
+  if (item.type !== 'image') return false;
+  const label = item.label?.toLowerCase() ?? '';
+  return label.endsWith('.gif') || label.endsWith('.webp');
 }
 
 /**
@@ -38,7 +40,7 @@ export function GifSection({ items }: GifSectionProps) {
   const rateStretchItem = useTimelineStore((s: TimelineState & TimelineActions) => s.rateStretchItem);
 
   const gifItems = useMemo(
-    () => items.filter(isGifItem),
+    () => items.filter(isAnimatedImageItem),
     [items]
   );
 
@@ -58,7 +60,7 @@ export function GifSection({ items }: GifSectionProps) {
 
       const currentItems = useTimelineStore.getState().items;
       currentItems
-        .filter((item: TimelineItem): item is ImageItem => isGifItem(item) && itemIds.includes(item.id))
+        .filter((item: TimelineItem): item is ImageItem => isAnimatedImageItem(item) && itemIds.includes(item.id))
         .forEach((item: ImageItem) => {
           // For GIFs, duration stays the same, only speed changes
           rateStretchItem(item.id, item.from, item.durationInFrames, clampedSpeed);
@@ -72,7 +74,7 @@ export function GifSection({ items }: GifSectionProps) {
     const tolerance = 0.01;
     const currentItems = useTimelineStore.getState().items;
     currentItems
-      .filter((item: TimelineItem): item is ImageItem => isGifItem(item) && itemIds.includes(item.id))
+      .filter((item: TimelineItem): item is ImageItem => isAnimatedImageItem(item) && itemIds.includes(item.id))
       .forEach((item: ImageItem) => {
         const currentSpeed = item.speed || 1;
         if (Math.abs(currentSpeed - 1) <= tolerance) return;
@@ -85,7 +87,7 @@ export function GifSection({ items }: GifSectionProps) {
   if (gifItems.length === 0) return null;
 
   return (
-    <PropertySection title="GIF" icon={Image} defaultOpen={true}>
+    <PropertySection title="Animation" icon={Image} defaultOpen={true}>
       {/* Playback Speed - affects animation rate (not duration) */}
       <PropertyRow label="Speed">
         <div className="flex items-center gap-1 w-full">

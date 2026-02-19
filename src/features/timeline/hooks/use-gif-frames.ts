@@ -10,6 +10,8 @@ interface UseGifFramesOptions {
   isVisible: boolean;
   /** Whether to enable GIF frames (allows conditional disabling) */
   enabled?: boolean;
+  /** Image format — determines extraction method ('gif' = gifuct-js, 'webp' = ImageDecoder) */
+  format?: 'gif' | 'webp';
 }
 
 interface UseGifFramesResult {
@@ -44,6 +46,7 @@ export function useGifFrames({
   blobUrl,
   isVisible,
   enabled = true,
+  format = 'gif',
 }: UseGifFramesOptions): UseGifFramesResult {
   // State for GIF frame data
   const [gifData, setGifData] = useState<CachedGifFrames | null>(null);
@@ -100,9 +103,12 @@ export function useGifFrames({
     setProgress(0);
     setError(null);
 
-    // Request GIF frames from cache (which will extract if needed)
-    gifFrameCache
-      .getGifFrames(mediaId, blobUrl, onProgress)
+    // Request frames from cache (which will extract if needed)
+    const framePromise = format === 'webp'
+      ? gifFrameCache.getWebpFrames(mediaId, blobUrl, onProgress)
+      : gifFrameCache.getGifFrames(mediaId, blobUrl, onProgress);
+
+    framePromise
       .then((result) => {
         setGifData(result);
         setIsLoading(false);
@@ -121,7 +127,7 @@ export function useGifFrames({
 
     // Don't abort on effect re-runs - let extraction continue in background
     // Note: onProgress uses useEffectEvent so doesn't need to be in deps
-  }, [mediaId, blobUrl, isVisible, enabled, gifData?.isComplete]);
+  }, [mediaId, blobUrl, isVisible, enabled, format, gifData?.isComplete]);
 
   // Memoized getFrameAtTime function
   const getFrameAtTime = useCallback(

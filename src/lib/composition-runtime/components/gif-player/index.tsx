@@ -15,6 +15,8 @@ interface GifPlayerProps {
   playbackRate?: number;
   /** Loop behavior */
   loopBehavior?: 'loop' | 'pause-at-end';
+  /** Image format — determines extraction method */
+  format?: 'gif' | 'webp';
   /** Additional styles */
   style?: React.CSSProperties;
 }
@@ -33,6 +35,7 @@ export const GifPlayer: React.FC<GifPlayerProps> = ({
   fit = 'cover',
   playbackRate = 1,
   loopBehavior = 'loop',
+  format = 'gif',
   style,
 }) => {
   // Get local frame from Sequence context (0-based within this Sequence)
@@ -45,6 +48,7 @@ export const GifPlayer: React.FC<GifPlayerProps> = ({
     blobUrl: src,
     isVisible: true,
     enabled: true,
+    format,
   });
 
   // Calculate which GIF frame to show based on current timeline frame
