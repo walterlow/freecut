@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Play, Pause, Volume2, VolumeX, Maximize } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 
 interface ExportPreviewPlayerProps {
   src: string;
@@ -16,9 +16,25 @@ function formatMediaTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function useIsFullscreen(ref: React.RefObject<HTMLElement | null>) {
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      document.addEventListener('fullscreenchange', cb);
+      return () => document.removeEventListener('fullscreenchange', cb);
+    },
+    [],
+  );
+  const getSnapshot = useCallback(
+    () => document.fullscreenElement === ref.current,
+    [ref],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot);
+}
+
 export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) {
   const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isFullscreen = useIsFullscreen(containerRef);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -67,10 +83,14 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   }, []);
 
   const handleFullscreen = useCallback(() => {
-    const el = containerRef.current;
-    if (!el || !isVideo) return;
-    if (el.requestFullscreen) {
-      void el.requestFullscreen();
+    if (!isVideo) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      const el = containerRef.current;
+      if (el?.requestFullscreen) {
+        void el.requestFullscreen();
+      }
     }
   }, [isVideo]);
 
@@ -108,13 +128,22 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div ref={containerRef} className="rounded-lg border border-border overflow-hidden bg-secondary/30">
+    <div
+      ref={containerRef}
+      className={`overflow-hidden bg-secondary/30 ${
+        isFullscreen
+          ? 'flex flex-col h-full w-full bg-black'
+          : 'rounded-lg border border-border'
+      }`}
+    >
       {/* Media element */}
       {isVideo ? (
         <video
           ref={mediaRef as React.RefObject<HTMLVideoElement>}
           src={src}
-          className="w-full max-h-[280px] object-contain bg-background cursor-pointer"
+          className={`w-full object-contain cursor-pointer ${
+            isFullscreen ? 'flex-1 min-h-0 bg-black' : 'max-h-[280px] bg-background'
+          }`}
           onClick={togglePlay}
           preload="metadata"
         />
@@ -128,7 +157,11 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
       )}
 
       {/* Controls bar */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-secondary/50 border-t border-border">
+      <div className={`flex items-center gap-2 px-3 py-2 ${
+        isFullscreen
+          ? 'bg-black/80 border-t border-white/10'
+          : 'bg-secondary/50 border-t border-border'
+      }`}>
         {/* Play/Pause */}
         <Button
           size="icon"
@@ -196,9 +229,9 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleFullscreen}
-            aria-label="Fullscreen"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
-            <Maximize className="w-3.5 h-3.5" />
+            {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
           </Button>
         )}
       </div>
