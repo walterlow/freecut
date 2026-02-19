@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { DragState, UseTimelineDragReturn, SnapTarget } from '../types/drag';
@@ -47,7 +48,8 @@ function clearGlobalDragCursor(): void {
 export function useTimelineDrag(
   item: TimelineItem,
   timelineDuration: number,
-  trackLocked: boolean = false
+  trackLocked: boolean = false,
+  elementRef?: React.RefObject<HTMLDivElement | null>
 ): UseTimelineDragReturn {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -421,11 +423,16 @@ export function useTimelineDrag(
         ? deltaX * (clampedDeltaFrames / deltaFrames)
         : deltaX;
 
-      // Update drag offset for visual preview (local state for anchor item)
-      setDragOffset({ x: clampedDeltaX, y: deltaY });
+      // Immediate visual feedback — apply transform directly to bypass React render lag
+      if (elementRef?.current && !isAltDragRef.current) {
+        elementRef.current.style.transform = `translate(${clampedDeltaX}px, ${deltaY}px)`;
+      }
 
       // Update shared ref for other items to read (no re-renders)
       dragOffsetRef.current = { x: clampedDeltaX, y: deltaY };
+
+      // Update React state (batched) for ghost positioning and render fallback
+      setDragOffset({ x: clampedDeltaX, y: deltaY });
 
       dragStateRef.current.currentMouseX = e.clientX;
       dragStateRef.current.currentMouseY = e.clientY;
