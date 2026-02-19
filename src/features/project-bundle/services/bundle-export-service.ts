@@ -18,8 +18,27 @@ import { getProject, getProjectMediaIds, getThumbnail } from '@/lib/storage/inde
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { computeContentHashFromBuffer } from '@/features/media-library/utils/content-hash';
 
+import type { ProjectTimeline } from '@/types/project';
+
 // App version - should be imported from a config
 const APP_VERSION = '1.0.0';
+
+/**
+ * Convert timeline items for bundle: strip preview URLs (src, thumbnailUrl)
+ * and rename mediaId → mediaRef for portable references.
+ */
+function convertItemsForBundle(items: ProjectTimeline['items']) {
+  return items.map((item) => {
+    const { mediaId, ...rest } = item;
+    const itemWithoutPreviewUrls = { ...rest };
+    delete itemWithoutPreviewUrls.src;
+    delete itemWithoutPreviewUrls.thumbnailUrl;
+    return {
+      ...itemWithoutPreviewUrls,
+      mediaRef: mediaId,
+    };
+  });
+}
 
 /**
  * Export a project as a bundle
@@ -77,6 +96,8 @@ export async function exportProjectBundle(
   onProgress?.({ percent: 20, stage: 'packaging' });
 
   for (let i = 0; i < mediaItems.length; i++) {
+    if (zipError) break;
+
     const media = mediaItems[i];
     if (!media) continue;
 
@@ -145,19 +166,6 @@ export async function exportProjectBundle(
   onProgress?.({ percent: 85, stage: 'packaging' });
 
   // Step 6: Create project.json with mediaRef instead of mediaId
-  // Helper to convert timeline items for bundle (mediaId → mediaRef, strip preview URLs)
-  const convertItemsForBundle = (items: NonNullable<typeof project.timeline>['items']) =>
-    items.map((item) => {
-      const { mediaId, ...rest } = item;
-      const itemWithoutPreviewUrls = { ...rest };
-      delete itemWithoutPreviewUrls.src;
-      delete itemWithoutPreviewUrls.thumbnailUrl;
-      return {
-        ...itemWithoutPreviewUrls,
-        mediaRef: mediaId, // Rename mediaId to mediaRef
-      };
-    });
-
   const bundleProject: BundleProject = {
     ...project,
     timeline: project.timeline
@@ -167,7 +175,7 @@ export async function exportProjectBundle(
           // Also process sub-composition items
           compositions: project.timeline.compositions?.map((comp) => ({
             ...comp,
-            items: convertItemsForBundle(comp.items as NonNullable<typeof project.timeline>['items']),
+            items: convertItemsForBundle(comp.items as ProjectTimeline['items']),
           })),
         }
       : undefined,
@@ -370,18 +378,6 @@ export async function exportProjectBundleStreaming(
     onProgress?.({ percent: 85, stage: 'packaging' });
 
     // Step 6: Create project.json
-    const convertItemsForBundle = (items: NonNullable<typeof project.timeline>['items']) =>
-      items.map((item) => {
-        const { mediaId, ...rest } = item;
-        const itemWithoutPreviewUrls = { ...rest };
-        delete itemWithoutPreviewUrls.src;
-        delete itemWithoutPreviewUrls.thumbnailUrl;
-        return {
-          ...itemWithoutPreviewUrls,
-          mediaRef: mediaId,
-        };
-      });
-
     const bundleProject: BundleProject = {
       ...project,
       timeline: project.timeline
@@ -390,7 +386,7 @@ export async function exportProjectBundleStreaming(
             items: convertItemsForBundle(project.timeline.items),
             compositions: project.timeline.compositions?.map((comp) => ({
               ...comp,
-              items: convertItemsForBundle(comp.items as NonNullable<typeof project.timeline>['items']),
+              items: convertItemsForBundle(comp.items as ProjectTimeline['items']),
             })),
           }
         : undefined,
@@ -488,8 +484,9 @@ export function downloadBundle(result: ExportResult): void {
  * Sanitize filename for safe download
  */
 function sanitizeFilename(name: string): string {
-  return name
+  const sanitized = name
     .replace(/[<>:"/\\|?*]/g, '_')
     .replace(/\s+/g, '_')
     .substring(0, 100);
+  return sanitized || 'untitled';
 }

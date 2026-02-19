@@ -949,25 +949,11 @@ function mixAudioTracks(
 }
 
 /**
- * Process all audio for the composition.
- *
- * @param composition - The composition with tracks
- * @param signal - Optional abort signal
- * @returns Processed audio ready for encoding
+ * Pre-resolve sub-composition media URLs so extractAudioSegments can access them.
+ * blobUrlManager.get() is synchronous but may not have URLs for sub-comp items
+ * until they're acquired via resolveMediaUrl (async OPFS read).
  */
-export async function processAudio(
-  composition: CompositionInputProps,
-  signal?: AbortSignal
-): Promise<{
-  samples: Float32Array[];
-  sampleRate: number;
-  channels: number;
-} | null> {
-  const { fps, durationInFrames = 0 } = composition;
-
-  // Pre-resolve sub-composition media URLs so extractAudioSegments can access them.
-  // blobUrlManager.get() is synchronous but may not have URLs for sub-comp items
-  // until they're acquired via resolveMediaUrl (async OPFS read).
+async function resolveSubCompMediaUrls(composition: CompositionInputProps): Promise<void> {
   const tracks = composition.tracks ?? [];
   const urlResolutions: Promise<void>[] = [];
   for (const track of tracks) {
@@ -988,6 +974,26 @@ export async function processAudio(
     log.debug('Pre-resolving sub-comp audio URLs', { count: urlResolutions.length });
     await Promise.all(urlResolutions);
   }
+}
+
+/**
+ * Process all audio for the composition.
+ *
+ * @param composition - The composition with tracks
+ * @param signal - Optional abort signal
+ * @returns Processed audio ready for encoding
+ */
+export async function processAudio(
+  composition: CompositionInputProps,
+  signal?: AbortSignal
+): Promise<{
+  samples: Float32Array[];
+  sampleRate: number;
+  channels: number;
+} | null> {
+  const { fps, durationInFrames = 0 } = composition;
+
+  await resolveSubCompMediaUrls(composition);
 
   // Extract audio segments
   const segments = extractAudioSegments(composition, fps);
@@ -1178,8 +1184,11 @@ export function createAudioBuffer(
 
 /**
  * Check if composition has any audio content.
+ * Async because sub-composition media URLs may need to be resolved from OPFS
+ * before extractAudioSegments can see valid src values.
  */
-export function hasAudioContent(composition: CompositionInputProps): boolean {
+export async function hasAudioContent(composition: CompositionInputProps): Promise<boolean> {
+  await resolveSubCompMediaUrls(composition);
   const segments = extractAudioSegments(composition, composition.fps);
   return segments.some((s) => !s.muted);
 }

@@ -278,9 +278,6 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
                   localFilesDeleted = allRemoved;
                   // Track partial deletion so rollback logic knows files were touched
                   if (anyRemoved && !allRemoved) {
-                    localFilesDeleted = false;
-                    // Mark that we did partially mutate local files — set a flag
-                    // so the catch block doesn't claim "no local files were touched"
                     partialLocalDeletion = true;
                   }
                 }
@@ -306,7 +303,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
               const errorMessage = `${scope} but database cleanup failed — project may be inconsistent`;
               logger.error(errorMessage, error);
               set({ error: errorMessage, isLoading: false });
-              throw new Error(errorMessage);
+              throw new Error(errorMessage, { cause: error });
             }
             // Rollback on error (safe — no local files were touched)
             set({ projects: previousProjects, currentProject: previousCurrentProject });

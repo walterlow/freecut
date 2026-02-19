@@ -110,7 +110,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   // Process audio in parallel with setup
   let audioData: { samples: Float32Array[]; sampleRate: number; channels: number } | null = null;
-  if (hasAudioContent(composition)) {
+  if (await hasAudioContent(composition)) {
     try {
       audioData = await processAudio(composition, signal);
       log.info('Audio processed', {
@@ -498,7 +498,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
   });
 
   // Process audio
-  if (!hasAudioContent(composition)) {
+  if (!(await hasAudioContent(composition))) {
     throw new Error('No audio content found in composition');
   }
 

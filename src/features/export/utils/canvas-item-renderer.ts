@@ -727,6 +727,11 @@ async function renderCompositionItem(
       fps: subData.fps,
     };
 
+    // Use a scoped render context with sub-canvas settings so that
+    // rotation centers, clipping, and draw dimensions are relative to the
+    // sub-composition canvas, not the main canvas.
+    const subRctx: ItemRenderContext = { ...rctx, canvasSettings: subCanvasSettings };
+
     // Render each visible item at the local frame using pre-computed data
     let renderedSubItems = 0;
     for (const track of subData.sortedTracks) {
@@ -755,10 +760,6 @@ async function renderCompositionItem(
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
 
-        // Use a scoped render context with sub-canvas settings so that
-        // rotation centers, clipping, and draw dimensions are relative to the
-        // sub-composition canvas, not the main canvas.
-        const subRctx: ItemRenderContext = { ...rctx, canvasSettings: subCanvasSettings };
         await renderItem(subCtx, subItem, subItemTransform, localFrame, subRctx);
         renderedSubItems++;
       }

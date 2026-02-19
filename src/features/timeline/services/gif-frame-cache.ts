@@ -501,6 +501,7 @@ class GifFrameCacheService {
     mediaId: string,
     blobUrl: string,
     onProgress?: (progress: number) => void,
+    signal?: AbortSignal,
   ): Promise<CachedGifFrames> {
     if (typeof ImageDecoder === 'undefined') {
       throw new Error('ImageDecoder API not available');
@@ -515,7 +516,7 @@ class GifFrameCacheService {
     try {
       onProgress?.(5);
 
-      const response = await fetch(blobUrl);
+      const response = await fetch(blobUrl, { signal });
       if (!response.ok || !response.body) {
         throw new Error('Failed to fetch WebP');
       }
@@ -664,7 +665,7 @@ class GifFrameCacheService {
 
     // Extract frames (no IndexedDB for WebP)
     const abortController = new AbortController();
-    const promise = this.extractWebpFrames(mediaId, blobUrl, onProgress);
+    const promise = this.extractWebpFrames(mediaId, blobUrl, onProgress, abortController.signal);
 
     this.pendingRequests.set(mediaId, { promise, abortController });
 
