@@ -26,25 +26,22 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Tool: C - Split hovered item at gray playhead (or main playhead)
   useHotkeys(
-    HOTKEYS.RAZOR_TOOL,
+    HOTKEYS.SPLIT_AT_CURSOR,
     (event) => {
       event.preventDefault();
       const { previewFrame, previewItemId, currentFrame } = usePlaybackStore.getState();
       const splitFrame = previewFrame ?? currentFrame;
       const { items, splitItem } = useTimelineStore.getState();
-      const selectItems = useSelectionStore.getState().selectItems;
 
       // If hovering over a specific item, split only that item
       if (previewItemId) {
         const item = items.find((i) => i.id === previewItemId);
         if (item && item.type !== 'composition' && splitFrame > item.from && splitFrame < item.from + item.durationInFrames) {
           splitItem(item.id, splitFrame);
-          selectItems([item.id]);
+          if (callbacks.onSplit) {
+            callbacks.onSplit();
+          }
         }
-      }
-
-      if (callbacks.onSplit) {
-        callbacks.onSplit();
       }
     },
     HOTKEY_OPTIONS,
@@ -60,14 +57,16 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
       const { items, splitItem } = useTimelineStore.getState();
       const { selectedItemIds } = useSelectionStore.getState();
 
+      let didSplit = false;
       for (const id of selectedItemIds) {
         const item = items.find((i) => i.id === id);
         if (item && item.type !== 'composition' && currentFrame > item.from && currentFrame < item.from + item.durationInFrames) {
           splitItem(item.id, currentFrame);
+          didSplit = true;
         }
       }
 
-      if (callbacks.onSplit) {
+      if (didSplit && callbacks.onSplit) {
         callbacks.onSplit();
       }
     },

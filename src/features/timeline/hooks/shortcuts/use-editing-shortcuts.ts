@@ -21,7 +21,6 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
-  const selectItems = useSelectionStore((s) => s.selectItems);
   const removeItems = useTimelineStore((s) => s.removeItems);
   const removeMarker = useTimelineStore((s) => s.removeMarker);
   const removeTransition = useTimelineStore((s) => s.removeTransition);
@@ -159,13 +158,9 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
       for (const item of itemsToSplit) {
         splitItem(item.id, splitFrame);
       }
-
-      if (itemsToSplit.length === 1) {
-        selectItems([itemsToSplit[0]!.id]);
-      }
     },
     HOTKEY_OPTIONS,
-    [items, splitItem, selectItems]
+    [items, splitItem]
   );
 
   // Editing: Shift+F - Insert freeze frame at playhead

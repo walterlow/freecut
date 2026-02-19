@@ -295,6 +295,11 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
   const setPreviewFrameRef = useRef(usePlaybackStore.getState().setPreviewFrame);
+  useEffect(() => {
+    return usePlaybackStore.subscribe((state) => {
+      setPreviewFrameRef.current = state.setPreviewFrame;
+    });
+  }, []);
   const markDirtyRef = useRef(markDirty);
   const pauseRef = useRef(pause);
   const fpsRef = useRef(fps);
@@ -310,7 +315,6 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
-    setPreviewFrameRef.current = usePlaybackStore.getState().setPreviewFrame;
     markDirtyRef.current = markDirty;
     pauseRef.current = pause;
     fpsRef.current = fps;

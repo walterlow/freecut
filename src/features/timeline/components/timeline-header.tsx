@@ -232,7 +232,7 @@ export const TimelineHeader = memo(function TimelineHeader({
                 }
               }
             }}
-            data-tooltip="Split Selected at Playhead (C for cursor)"
+            data-tooltip="Split Selected at Playhead (Shift+C)"
           >
             <Scissors className="w-3.5 h-3.5" />
           </Button>

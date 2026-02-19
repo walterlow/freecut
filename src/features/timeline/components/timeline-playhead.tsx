@@ -156,8 +156,14 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
     };
 
     const handleMouseUp = () => {
-      setIsDragging(false);
+      // Cancel any pending RAF before clearing preview to prevent resurrection
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      pendingFrameRef.current = null;
       setPreviewFrameRef.current(null);
+      setIsDragging(false);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
