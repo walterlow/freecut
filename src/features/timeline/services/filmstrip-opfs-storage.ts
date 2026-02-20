@@ -190,7 +190,7 @@ class FilmstripOPFSStorage {
           for (const url of previousUrls) {
             URL.revokeObjectURL(url);
           }
-        });
+        }, { timeout: 10_000 });
       }
 
       const existingIndices = frameFiles.map(f => f.index);

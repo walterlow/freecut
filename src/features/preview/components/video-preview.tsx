@@ -185,8 +185,8 @@ function useCustomPlayer(
           // Preview ended — seek back to actual playback position
           playerRef.current.seekTo(state.currentFrame);
         }
-      } catch {
-        // Seek failed — ensure flag is still reset below
+      } catch (err) {
+        console.error('[VideoPreview] Seek failed:', err);
       }
       // Always schedule reset, even if seekTo threw, so the flag
       // never stays stuck at true (which would freeze the playhead).

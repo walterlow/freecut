@@ -43,6 +43,9 @@ class SourceController {
   private static readonly MAX_OVERFLOW_ELEMENTS = 3;
   private static readonly LOAD_TIMEOUT_MS = 15_000;
 
+  // Stored so dispose() can cancel a pending load timeout
+  private _loadTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
     sourceUrl: string,
     options?: {
@@ -77,8 +80,6 @@ class SourceController {
     this._pendingPrimary = element;
 
     this.loadPromise = new Promise<void>((resolve, reject) => {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
       const onCanPlay = () => {
         cleanup();
         resolve();
@@ -94,9 +95,9 @@ class SourceController {
       };
 
       const cleanup = () => {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
+        if (this._loadTimeoutId !== null) {
+          clearTimeout(this._loadTimeoutId);
+          this._loadTimeoutId = null;
         }
         element.removeEventListener('canplay', onCanPlay);
         element.removeEventListener('error', onError);
@@ -108,7 +109,7 @@ class SourceController {
       // Reject if the element never fires canplay or error (stale blob URL,
       // broken file, browser bug). Without this, the promise hangs forever
       // and blocks subsequent preloadSource() calls for the same URL.
-      timeoutId = setTimeout(() => {
+      this._loadTimeoutId = setTimeout(() => {
         cleanup();
         reject(
           new Error(
@@ -125,10 +126,13 @@ class SourceController {
       this.primary = element;
       this._pendingPrimary = null;
     }).catch((err) => {
-      // Don't leave a broken element where acquire() can find it
+      // Tear down the failed element so it doesn't linger in memory
       if (this._pendingPrimary === element) {
         this._pendingPrimary = null;
       }
+      element.pause();
+      element.src = '';
+      element.load();
       // Allow retries by clearing the rejected promise
       this.loadPromise = null;
       throw err;
@@ -252,7 +256,7 @@ class SourceController {
    * Get total number of video elements managed by this controller
    */
   getElementCount(): number {
-    return (this.primary ? 1 : 0) + this.overflow.length;
+    return (this.primary ? 1 : 0) + (this._pendingPrimary ? 1 : 0) + this.overflow.length;
   }
 
   /**
@@ -266,6 +270,12 @@ class SourceController {
    * Dispose all elements
    */
   dispose(): void {
+    // Cancel any in-flight load timeout so it can't reject after disposal
+    if (this._loadTimeoutId !== null) {
+      clearTimeout(this._loadTimeoutId);
+      this._loadTimeoutId = null;
+    }
+
     // Pause and clear all elements
     if (this.primary) {
       this.primary.pause();
