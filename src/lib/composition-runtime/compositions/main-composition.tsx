@@ -2,7 +2,7 @@ import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence } from '@/features/player/composition';
 import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
 import type { CompositionInputProps } from '@/types/export';
-import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, ImageItem } from '@/types/timeline';
+import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
 import { Item } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
@@ -59,12 +59,78 @@ interface VideoAudioSegment {
   crossfadeFadeOut?: number;
 }
 
+interface AudioSegment {
+  key: string;
+  itemId: string;
+  mediaId?: string;
+  src: string;
+  from: number;
+  durationInFrames: number;
+  trimBefore: number;
+  playbackRate: number;
+  sourceFps?: number;
+  volumeDb: number;
+  muted: boolean;
+  audioFadeIn: number;
+  audioFadeOut: number;
+}
+
 function getVideoTrimBefore(item: EnrichedVideoItem): number {
   return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
 }
 
 function hasExplicitTrimStart(item: EnrichedVideoItem): boolean {
   return item.sourceStart !== undefined || item.trimStart !== undefined || item.offset !== undefined;
+}
+
+/**
+ * Enriched audio item with track rendering metadata (parallel to EnrichedVideoItem)
+ */
+type EnrichedAudioItem = AudioItem & {
+  muted: boolean;
+  trackVisible: boolean;
+};
+
+function getAudioTrimBefore(item: EnrichedAudioItem): number {
+  return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+}
+
+function hasExplicitAudioTrimStart(item: EnrichedAudioItem): boolean {
+  return item.sourceStart !== undefined || item.trimStart !== undefined || item.offset !== undefined;
+}
+
+/**
+ * Check if two adjacent audio items form a continuous boundary (same source, same speed,
+ * source frames line up). Mirrors isContinuousAudioTransition for standalone audio clips.
+ */
+function isContinuousAudioBoundary(left: EnrichedAudioItem, right: EnrichedAudioItem, timelineFps: number = 30): boolean {
+  const leftSpeed = left.speed ?? 1;
+  const rightSpeed = right.speed ?? 1;
+  if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
+
+  const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
+    || (!!left.src && !!right.src && left.src === right.src);
+  if (!sameMedia) return false;
+
+  if (left.originId && right.originId && left.originId !== right.originId) return false;
+
+  const expectedRightFrom = left.from + left.durationInFrames;
+  if (Math.abs(right.from - expectedRightFrom) > 2) return false;
+
+  const leftTrim = getAudioTrimBefore(left);
+  const rightTrim = getAudioTrimBefore(right);
+  const leftSourceFps = left.sourceFps ?? timelineFps;
+  const computedLeftSourceEnd = leftTrim + timelineToSourceFrames(left.durationInFrames, leftSpeed, timelineFps, leftSourceFps);
+  const storedLeftSourceEnd = left.sourceEnd;
+  const computedContinuous = Math.abs(rightTrim - computedLeftSourceEnd) <= 2;
+  const storedContinuous = storedLeftSourceEnd !== undefined
+    ? Math.abs(rightTrim - storedLeftSourceEnd) <= 2
+    : false;
+
+  if (computedContinuous || storedContinuous) return true;
+
+  const rightMissingTrimStart = !hasExplicitAudioTrimStart(right);
+  return rightMissingTrimStart;
 }
 
 function isContinuousAudioTransition(left: EnrichedVideoItem, right: EnrichedVideoItem, timelineFps: number = 30): boolean {
@@ -449,10 +515,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
   // Audio items are memoized separately and rendered outside mask groups
   // This prevents audio from being affected by visual layer changes (mask add/delete, item moves)
   // Use ALL tracks for stable DOM structure, with trackVisible for conditional playback
-  const audioItems = useMemo(() =>
+  const audioItems: EnrichedAudioItem[] = useMemo(() =>
     tracks.flatMap((track) =>
       track.items
-        .filter((item) => item.type === 'audio')
+        .filter((item): item is AudioItem => item.type === 'audio')
         .map((item) => ({
           ...item,
           muted: track.muted,
@@ -461,6 +527,132 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
     ),
     [tracks, visibleTrackIds]
   );
+
+  // Merge continuous split audio clips into single segments to prevent
+  // audio element remount (click/gap) at split boundaries.
+  // Mirrors the videoAudioSegments merging pattern.
+  const audioSegments = useMemo<AudioSegment[]>(() => {
+    // Sort by track and time for adjacency detection
+    const sorted = audioItems.toSorted((a, b) => {
+      if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
+      if (a.from !== b.from) return a.from - b.from;
+      return a.id.localeCompare(b.id);
+    });
+
+    // Build resolved trim-before with continuity repair for legacy metadata
+    const resolvedTrimBeforeById = new Map<string, number>();
+    const previousByTrack = new Map<string, EnrichedAudioItem>();
+
+    for (const item of sorted) {
+      const explicitTrimBefore = getAudioTrimBefore(item);
+      let resolvedTrimBefore = explicitTrimBefore;
+
+      if (!hasExplicitAudioTrimStart(item)) {
+        const previous = previousByTrack.get(item.trackId);
+        if (previous) {
+          const prevSpeed = previous.speed ?? 1;
+          const clipSpeed = item.speed ?? 1;
+          const sameSpeed = Math.abs(prevSpeed - clipSpeed) <= 0.0001;
+          const sameMedia = (previous.mediaId && item.mediaId && previous.mediaId === item.mediaId)
+            || (!!previous.src && !!item.src && previous.src === item.src);
+          const adjacent = Math.abs(item.from - (previous.from + previous.durationInFrames)) <= 2;
+          const sameOrigin = previous.originId && item.originId
+            ? previous.originId === item.originId
+            : true;
+
+          if (sameSpeed && sameMedia && adjacent && sameOrigin) {
+            const prevTrimBefore = resolvedTrimBeforeById.get(previous.id) ?? getAudioTrimBefore(previous);
+            const prevSourceFps = previous.sourceFps ?? fps;
+            resolvedTrimBefore = prevTrimBefore + timelineToSourceFrames(previous.durationInFrames, prevSpeed, fps, prevSourceFps);
+          }
+        }
+      }
+
+      resolvedTrimBeforeById.set(item.id, resolvedTrimBefore);
+      previousByTrack.set(item.trackId, item);
+    }
+
+    // Build per-clip segments
+    type ExpandedAudioSegment = AudioSegment & { clip: EnrichedAudioItem };
+    const segments: ExpandedAudioSegment[] = [];
+
+    for (const item of sorted) {
+      if (!item.src) continue;
+
+      const playbackRate = item.speed ?? 1;
+      const baseTrimBefore = resolvedTrimBeforeById.get(item.id) ?? getAudioTrimBefore(item);
+
+      segments.push({
+        key: `audio-${item.id}`,
+        itemId: item.id,
+        mediaId: item.mediaId,
+        clip: item,
+        src: item.src,
+        from: item.from,
+        durationInFrames: item.durationInFrames,
+        trimBefore: baseTrimBefore,
+        playbackRate,
+        sourceFps: item.sourceFps,
+        volumeDb: item.volume ?? 0,
+        muted: item.muted || !item.trackVisible,
+        audioFadeIn: item.audioFadeIn ?? 0,
+        audioFadeOut: item.audioFadeOut ?? 0,
+      });
+    }
+
+    // Merge continuous split boundaries into single segments
+    const canMerge = (left: ExpandedAudioSegment, right: ExpandedAudioSegment): boolean => {
+      if (!isContinuousAudioBoundary(left.clip, right.clip, fps)) return false;
+      if (left.src !== right.src) return false;
+      if (Math.abs(left.playbackRate - right.playbackRate) > 0.0001) return false;
+      if (Math.abs(left.volumeDb - right.volumeDb) > 0.0001) return false;
+      if (left.muted !== right.muted) return false;
+      return true;
+    };
+
+    const toPublic = (s: ExpandedAudioSegment): AudioSegment => ({
+      key: s.key,
+      itemId: s.itemId,
+      mediaId: s.mediaId,
+      src: s.src,
+      from: s.from,
+      durationInFrames: s.durationInFrames,
+      trimBefore: s.trimBefore,
+      playbackRate: s.playbackRate,
+      sourceFps: s.sourceFps,
+      volumeDb: s.volumeDb,
+      muted: s.muted,
+      audioFadeIn: s.audioFadeIn,
+      audioFadeOut: s.audioFadeOut,
+    });
+
+    const merged: AudioSegment[] = [];
+    let active: ExpandedAudioSegment | null = null;
+
+    for (const segment of segments) {
+      if (!active) {
+        active = { ...segment };
+        continue;
+      }
+
+      if (canMerge(active, segment)) {
+        const mergedEnd = segment.from + segment.durationInFrames;
+        active.durationInFrames = mergedEnd - active.from;
+        active.audioFadeOut = segment.audioFadeOut;
+        active.clip = segment.clip;
+        continue;
+      }
+
+      merged.push(toPublic(active));
+      active = { ...segment };
+    }
+
+    if (active) {
+      merged.push(toPublic(active));
+    }
+
+    return merged;
+  }, [audioItems, fps]);
 
   // Video audio is rendered in a dedicated audio layer to decouple audio
   // from transition visual overlays and pooled video element state.
@@ -847,16 +1039,48 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
           );
         })}
 
-        {/* Standalone audio items */}
-        {audioItems.map((item) => (
-          <Sequence
-            key={item.id}
-            from={item.from}
-            durationInFrames={item.durationInFrames}
-          >
-            <Item item={item} muted={item.muted || !item.trackVisible} masks={[]} />
-          </Sequence>
-        ))}
+        {/* Standalone audio items - merged across split boundaries for stable playback */}
+        {audioSegments.map((segment) => {
+          const useCustomDecoder = shouldUseCustomDecoder(segment);
+          const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
+          return (
+            <Sequence
+              key={segment.key}
+              from={segment.from}
+              durationInFrames={segment.durationInFrames}
+              premountFor={Math.round(fps * 2)}
+            >
+              {useCustomDecoder ? (
+                <CustomDecoderAudio
+                  src={segment.src}
+                  mediaId={decodeMediaId}
+                  itemId={segment.itemId}
+                  trimBefore={segment.trimBefore}
+                  sourceFps={segment.sourceFps}
+                  volume={segment.volumeDb}
+                  playbackRate={segment.playbackRate}
+                  muted={segment.muted}
+                  durationInFrames={segment.durationInFrames}
+                  audioFadeIn={segment.audioFadeIn}
+                  audioFadeOut={segment.audioFadeOut}
+                />
+              ) : (
+                <PitchCorrectedAudio
+                  src={segment.src}
+                  itemId={segment.itemId}
+                  trimBefore={segment.trimBefore}
+                  sourceFps={segment.sourceFps}
+                  volume={segment.volumeDb}
+                  playbackRate={segment.playbackRate}
+                  muted={segment.muted}
+                  durationInFrames={segment.durationInFrames}
+                  audioFadeIn={segment.audioFadeIn}
+                  audioFadeOut={segment.audioFadeOut}
+                />
+              )}
+            </Sequence>
+          );
+        })}
 
         {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
         {/* This ensures items from different tracks respect z-index across all types */}
