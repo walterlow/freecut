@@ -97,7 +97,7 @@ const migrations: Record<number, Migration> = {
 
       const updatedTracks = project.timeline.tracks.map((track) => {
         if (track.height === 64) {
-          return { ...track, height: DEFAULT_TRACK_HEIGHT };
+          return { ...track, height: 80 };
         }
         return track;
       });

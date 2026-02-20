@@ -132,12 +132,12 @@ body.timeline-item-drag-cursor-not-allowed * {
  */
 .timeline-item {
   content-visibility: auto;
-  contain-intrinsic-size: auto 48px; /* width auto, estimated height 48px */
+  contain-intrinsic-size: auto 80px; /* width auto, estimated height matches DEFAULT_TRACK_HEIGHT */
 }
 
 .track-header-item {
   content-visibility: auto;
-  contain-intrinsic-size: 192px 48px; /* sidebar width, estimated height */
+  contain-intrinsic-size: 192px 80px; /* sidebar width, estimated height matches DEFAULT_TRACK_HEIGHT */
 }
 
 /* Filmstrip loading shimmer animation */

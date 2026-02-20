@@ -43,34 +43,33 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Keyframe indicator - constrained to label row */}
-      {hasKeyframes && (
+      {/* Label-row badges — single container to prevent overlap */}
+      {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
-          className="absolute right-1 z-10 pointer-events-none flex items-center"
-          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
-          title="Has keyframe animations"
-        >
-          <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />
-        </div>
-      )}
-
-      {/* Mask indicator for shape items - constrained to label row */}
-      {isShape && isMask && (
-        <div
-          className="absolute right-1 px-1 text-[10px] leading-none font-bold bg-cyan-500/80 text-white rounded flex items-center"
+          className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
           style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
         >
-          M
-        </div>
-      )}
-
-      {/* Speed badge - constrained to label row */}
-      {showSpeedBadge && (
-        <div
-          className="absolute right-1 px-1 text-[10px] leading-none font-bold bg-black/60 text-white rounded font-mono flex items-center"
-          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
-        >
-          {currentSpeed.toFixed(2)}x
+          {hasKeyframes && (
+            <span title="Has keyframe animations">
+              <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />
+            </span>
+          )}
+          {isShape && isMask && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-cyan-500/80 text-white rounded"
+              title="Mask"
+            >
+              M
+            </span>
+          )}
+          {showSpeedBadge && (
+            <span
+              className="px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono"
+              title={`Speed: ${currentSpeed.toFixed(2)}x`}
+            >
+              {currentSpeed.toFixed(2)}x
+            </span>
+          )}
         </div>
       )}
 

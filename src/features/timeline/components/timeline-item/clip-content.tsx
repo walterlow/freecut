@@ -20,8 +20,9 @@ interface ClipContentProps {
 
 /**
  * Renders the visual content of a timeline clip based on its type.
- * - Video: Filmstrip with overlayed label + waveform
- * - Audio: Label + waveform
+ * - Video: 3-row layout — label | filmstrip | waveform
+ * - Audio: Label row + waveform
+ * - Composition (with video): Same 3-row layout as video
  * - Text: Text content preview
  * - Adjustment: Effects summary
  * - Image/Shape: Simple label
@@ -150,8 +151,8 @@ export const ClipContent = memo(function ClipContent({
           {item.label}
         </div>
         {/* Row 2: Waveform - fills remaining space */}
-        <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
-          {showWaveforms && (
+        {showWaveforms && (
+          <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <ClipWaveform
               mediaId={item.mediaId}
               clipWidth={clipWidth}
@@ -163,8 +164,8 @@ export const ClipContent = memo(function ClipContent({
               isVisible={isClipVisible}
               pixelsPerSecond={pixelsPerSecond}
             />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     );
   }
