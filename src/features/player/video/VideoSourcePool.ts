@@ -41,6 +41,7 @@ class SourceController {
   // Need enough concurrent elements for same-source split transitions:
   // left main clip + right main clip + transition left + transition right = 4 total.
   private static readonly MAX_OVERFLOW_ELEMENTS = 3;
+  private static readonly LOAD_TIMEOUT_MS = 15_000;
 
   constructor(
     sourceUrl: string,
@@ -76,6 +77,8 @@ class SourceController {
     this._pendingPrimary = element;
 
     this.loadPromise = new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
       const onCanPlay = () => {
         cleanup();
         resolve();
@@ -91,12 +94,28 @@ class SourceController {
       };
 
       const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         element.removeEventListener('canplay', onCanPlay);
         element.removeEventListener('error', onError);
       };
 
       element.addEventListener('canplay', onCanPlay);
       element.addEventListener('error', onError);
+
+      // Reject if the element never fires canplay or error (stale blob URL,
+      // broken file, browser bug). Without this, the promise hangs forever
+      // and blocks subsequent preloadSource() calls for the same URL.
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(
+          new Error(
+            `Video load timed out after ${SourceController.LOAD_TIMEOUT_MS}ms for: ${this.sourceUrl.slice(0, 80)}`
+          )
+        );
+      }, SourceController.LOAD_TIMEOUT_MS);
 
       // Trigger load
       element.load();
@@ -230,6 +249,13 @@ class SourceController {
   }
 
   /**
+   * Get total number of video elements managed by this controller
+   */
+  getElementCount(): number {
+    return (this.primary ? 1 : 0) + this.overflow.length;
+  }
+
+  /**
    * Check if any clips are using this source
    */
   isInUse(): boolean {
@@ -284,11 +310,6 @@ class SourceController {
     element.preload = 'auto';
     element.playsInline = true;
     element.muted = true; // Start muted, unmute when needed
-
-    // Copy metadata from primary if available
-    if (this.metadata) {
-      // Metadata will be populated on loadedmetadata event
-    }
 
     element.addEventListener('loadedmetadata', () => {
       if (!this.metadata) {
@@ -459,7 +480,7 @@ export class VideoSourcePool {
     let activeClips = 0;
 
     for (const controller of this.sources.values()) {
-      totalElements += 1 + controller.getActiveCount(); // primary + overflow approximation
+      totalElements += controller.getElementCount();
       activeClips += controller.getActiveCount();
     }
 

@@ -240,6 +240,24 @@ const NativePreviewVideo: React.FC<{
     // Try after a short delay to allow the seek to complete
     forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
 
+    // Stall watchdog: if the element is stuck at readyState 0 for too long
+    // (e.g., stale proxy blob URL, broken file, browser decoder issue),
+    // retry loading. Without this the preview freezes permanently.
+    let stallTimerId: number | null = null;
+    if (element.readyState === 0) {
+      stallTimerId = window.setTimeout(() => {
+        stallTimerId = null;
+        if (elementRef.current === element && element.readyState === 0) {
+          console.warn(`[NativePreviewVideo] Video stalled at readyState 0 for ${shortId}, retrying load`);
+          try {
+            element.load();
+          } catch {
+            // load() can throw if element is in a bad state
+          }
+        }
+      }, 3000);
+    }
+
     return () => {
       element.removeEventListener('canplay', handleCanPlay);
       element.removeEventListener('seeked', handleSeeked);
@@ -255,6 +273,10 @@ const NativePreviewVideo: React.FC<{
       if (preWarmTimerRef.current !== null) {
         clearTimeout(preWarmTimerRef.current);
         preWarmTimerRef.current = null;
+      }
+      if (stallTimerId !== null) {
+        clearTimeout(stallTimerId);
+        stallTimerId = null;
       }
       if (element.parentElement) {
         element.parentElement.removeChild(element);
@@ -406,15 +428,15 @@ const NativePreviewVideo: React.FC<{
           if (v && v.paused && v.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
             v.muted = true;
             v.play().then(() => {
-              // Only pause+unmute if this pre-warm is still current and playback hasn't started
+              // Only pause if this pre-warm is still current and playback hasn't started
               if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
                 v.pause();
-                v.muted = false;
               }
+              // Always unmute — if playback started or another scrub superseded
+              // this pre-warm, leaving muted=true causes silent playback.
+              v.muted = false;
             }).catch(() => {
-              if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
-                v.muted = false;
-              }
+              v.muted = false;
             });
           }
         }, 50);

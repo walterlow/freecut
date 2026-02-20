@@ -176,21 +176,23 @@ function useCustomPlayer(
       if (state.isPlaying) return;
       if (state.previewFrame === prev.previewFrame) return;
 
-      if (state.previewFrame !== null) {
-        // Seek to preview position
-        ignorePlayerUpdatesRef.current = true;
-        playerRef.current.seekTo(state.previewFrame);
-        requestAnimationFrame(() => {
-          ignorePlayerUpdatesRef.current = false;
-        });
-      } else {
-        // Preview ended — seek back to actual playback position
-        ignorePlayerUpdatesRef.current = true;
-        playerRef.current.seekTo(state.currentFrame);
-        requestAnimationFrame(() => {
-          ignorePlayerUpdatesRef.current = false;
-        });
+      ignorePlayerUpdatesRef.current = true;
+      try {
+        if (state.previewFrame !== null) {
+          // Seek to preview position
+          playerRef.current.seekTo(state.previewFrame);
+        } else {
+          // Preview ended — seek back to actual playback position
+          playerRef.current.seekTo(state.currentFrame);
+        }
+      } catch {
+        // Seek failed — ensure flag is still reset below
       }
+      // Always schedule reset, even if seekTo threw, so the flag
+      // never stays stuck at true (which would freeze the playhead).
+      requestAnimationFrame(() => {
+        ignorePlayerUpdatesRef.current = false;
+      });
     });
   }, [playerReady, playerRef]);
 
