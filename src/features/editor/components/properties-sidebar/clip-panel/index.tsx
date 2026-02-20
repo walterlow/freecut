@@ -1,5 +1,4 @@
 import { useMemo, useCallback, memo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { Move, Sparkles, Film } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
@@ -63,13 +62,15 @@ export const ClipPanel = memo(function ClipPanel() {
   const updateItemsTransform = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItemsTransform);
   const currentProject = useProjectStore((s) => s.currentProject);
 
-  // Get selected items using derived selector with shallow comparison
-  // useShallow prevents re-renders when unrelated items change in the store
-  const selectedItems = useTimelineStore(
-    useShallow(useCallback(
-      (s: TimelineState & TimelineActions) => s.items.filter((item: TimelineItem) => selectedItemIds.includes(item.id)),
-      [selectedItemIds]
-    ))
+  // Get all items from the timeline store, then derive selected items via useMemo.
+  // NOTE: Do NOT use useShallow(useCallback(..., [selectedItemIds])) as a combined
+  // selector here. React 19's useSyncExternalStore does not re-evaluate a changed
+  // selector function when the re-render was triggered by a different store
+  // (selection store), causing stale items to be returned.
+  const items = useTimelineStore((s: TimelineState & TimelineActions) => s.items);
+  const selectedItems = useMemo(
+    () => items.filter((item: TimelineItem) => selectedItemIds.includes(item.id)),
+    [items, selectedItemIds]
   );
 
   // Canvas settings
