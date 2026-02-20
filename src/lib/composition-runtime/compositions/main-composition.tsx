@@ -863,7 +863,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
     return map;
   }, [mediaItems]);
 
-  const shouldUseCustomDecoder = useCallback((segment: VideoAudioSegment): boolean => {
+  const shouldUseCustomDecoder = useCallback((segment: VideoAudioSegment | AudioSegment): boolean => {
     if (!segment.mediaId) {
       // Legacy clips without media linkage: safest fallback is custom decode.
       return true;
