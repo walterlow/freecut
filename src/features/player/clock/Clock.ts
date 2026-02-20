@@ -449,6 +449,17 @@ export class Clock {
       }
 
       const now = performance.now();
+
+      // While the tab is hidden, browsers throttle RAF to ~1fps.
+      // Don't advance the frame — just keep the loop alive and reset
+      // the timing reference so the first visible tick starts fresh.
+      if (document.hidden) {
+        this._playbackStartTime = now;
+        this._playbackStartFrame = this._currentFrame;
+        this._animationFrameId = requestAnimationFrame(tick);
+        return;
+      }
+
       const elapsedMs = now - this._playbackStartTime;
       const elapsedSeconds = elapsedMs / 1000;
 
