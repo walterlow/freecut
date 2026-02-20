@@ -251,7 +251,7 @@ function SourceMonitorInner({
       {/* Video area - same gradient bg as composition panel */}
       <div
         ref={containerRef}
-        className="flex-1 min-h-0 relative overflow-hidden bg-linear-to-br from-background to-secondary/20"
+        className="flex-1 min-h-0 relative overflow-hidden bg-video-preview-background"
       >
         {src ? (
           <div

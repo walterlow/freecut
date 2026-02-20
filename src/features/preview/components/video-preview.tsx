@@ -643,7 +643,7 @@ export const VideoPreview = memo(function VideoPreview({
   return (
     <div
       ref={backgroundRef}
-      className="w-full h-full bg-gradient-to-br from-background to-secondary/20 relative"
+      className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
       onClick={handleBackgroundClick}
     >

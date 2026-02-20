@@ -36,6 +36,9 @@
   /* Snap/Join indicator colors */
   --color-timeline-snap: #f97316;                    /* orange-500 - snap indicator */
   --color-timeline-join: #fb923c;                    /* orange-400 - join indicator */
+
+
+  --color-video-preview-background: oklch(0.1914 0 58);
 }
 
 /* Scissors cursor for razor/cut tool - uses Lucide scissors icon */
