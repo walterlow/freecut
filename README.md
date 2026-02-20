@@ -194,7 +194,6 @@ src/
 
 1. **Report bugs** — open an issue
 2. **Suggest features** — start a discussion
-3. **Submit PRs** — fork, branch, and open a pull request
 
 ## License
 
