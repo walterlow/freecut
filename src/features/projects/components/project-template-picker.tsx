@@ -34,7 +34,7 @@ export function ProjectTemplatePicker({
              }`}
            >
              {/* Silhouette Container */}
-             <div className="relative h-24 bg-secondary/30 rounded overflow-hidden flex items-center justify-center">
+             <div className="relative h-24 bg-secondary/30 rounded overflow-hidden flex items-center justify-center" style={{ containerType: 'size' }}>
                {/* Aspect Ratio Silhouette */}
                <div
                  className={`bg-primary/20 border-2 border-dashed rounded-sm ${
@@ -42,8 +42,8 @@ export function ProjectTemplatePicker({
                  }`}
                  style={{
                    aspectRatio: `${template.width} / ${template.height}`,
-                   height: '100%',
-                   maxWidth: '100%',
+                   width: `min(100cqw, ${(template.width / template.height) * 100}cqh)`,
+                   height: `min(100cqh, ${(template.height / template.width) * 100}cqw)`,
                  }}
                />
              </div>
