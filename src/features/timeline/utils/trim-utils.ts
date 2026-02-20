@@ -93,6 +93,58 @@ export function clampTrimAmount(
 }
 
 /**
+ * Clamp trim amount so the item doesn't overlap adjacent items on the same track.
+ *
+ * For start handle (extending left): can't extend past the end of the previous item.
+ * For end handle (extending right): can't extend past the start of the next item.
+ */
+export function clampToAdjacentItems(
+  item: TimelineItem,
+  handle: TrimHandle,
+  trimAmount: number,
+  allItems: TimelineItem[]
+): number {
+  const itemEnd = item.from + item.durationInFrames;
+
+  if (handle === 'end' && trimAmount > 0) {
+    // Extending right — find nearest item that starts at or after our current end
+    let nearestStart = Infinity;
+    for (const other of allItems) {
+      if (other.id === item.id) continue;
+      if (other.trackId !== item.trackId) continue;
+      if (other.from >= itemEnd) {
+        nearestStart = Math.min(nearestStart, other.from);
+      }
+    }
+    if (nearestStart !== Infinity) {
+      const maxExtend = nearestStart - itemEnd;
+      if (trimAmount > maxExtend) {
+        return maxExtend;
+      }
+    }
+  } else if (handle === 'start' && trimAmount < 0) {
+    // Extending left — find nearest item that ends at or before our current start
+    let nearestEnd = -Infinity;
+    for (const other of allItems) {
+      if (other.id === item.id) continue;
+      if (other.trackId !== item.trackId) continue;
+      const otherEnd = other.from + other.durationInFrames;
+      if (otherEnd <= item.from) {
+        nearestEnd = Math.max(nearestEnd, otherEnd);
+      }
+    }
+    if (nearestEnd !== -Infinity) {
+      const maxExtend = item.from - nearestEnd;
+      if (-trimAmount > maxExtend) {
+        return maxExtend > 0 ? -maxExtend : 0;
+      }
+    }
+  }
+
+  return trimAmount;
+}
+
+/**
  * Clamp trim amount to ensure minimum duration of 1 frame.
  */
 function clampToMinDuration(

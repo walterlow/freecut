@@ -5,7 +5,7 @@ import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
-import { clampTrimAmount, type TrimHandle } from '../utils/trim-utils';
+import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
 
 interface TrimState {
   isTrimming: boolean;
@@ -128,6 +128,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       const currentItem = getItemFromStore();
       const { clampedAmount } = clampTrimAmount(currentItem, handle!, deltaFrames, fps);
       deltaFrames = clampedAmount;
+
+      // Clamp to adjacent items on the same track
+      const allItems = useTimelineStore.getState().items;
+      deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems);
 
       // Update local state for visual feedback
       if (deltaFrames !== trimStateRef.current.currentDelta) {
