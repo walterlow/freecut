@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Type, AlignLeft, AlignCenter, AlignRight, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +19,7 @@ import {
   ColorPicker,
 } from '../components';
 import { FontPicker } from './font-picker';
-import { FONT_CATALOG } from '@/lib/fonts';
+import { FONT_CATALOG, FONT_WEIGHT_MAP } from '@/lib/fonts';
 
 const FONT_WEIGHT_OPTIONS = [
   { value: 'normal', label: 'Regular' },
@@ -28,12 +28,7 @@ const FONT_WEIGHT_OPTIONS = [
   { value: 'bold', label: 'Bold' },
 ] as const;
 
-const FONT_WEIGHT_VALUES: Record<NonNullable<TextItem['fontWeight']>, number> = {
-  normal: 400,
-  medium: 500,
-  semibold: 600,
-  bold: 700,
-};
+const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<NonNullable<TextItem['fontWeight']>, number>;
 
 
 interface TextSectionProps {
@@ -97,6 +92,10 @@ export function TextSection({ items }: TextSectionProps) {
     return options.length > 0 ? options : FONT_WEIGHT_OPTIONS;
   }, [sharedValues?.fontFamily]);
 
+  const previousFontFamilyRef = useRef<string | undefined>(sharedValues?.fontFamily);
+  const sharedFontWeightRef = useRef<TextItem['fontWeight'] | undefined>(sharedValues?.fontWeight);
+  sharedFontWeightRef.current = sharedValues?.fontWeight;
+
   // Update all selected text items
   const updateTextItems = useCallback(
     (updates: Partial<TextItem>) => {
@@ -157,7 +156,14 @@ export function TextSection({ items }: TextSectionProps) {
   );
 
   useEffect(() => {
-    const currentWeight = sharedValues?.fontWeight;
+    const currentFontFamily = sharedValues?.fontFamily;
+    if (previousFontFamilyRef.current === currentFontFamily) {
+      return;
+    }
+
+    previousFontFamilyRef.current = currentFontFamily;
+
+    const currentWeight = sharedFontWeightRef.current;
     if (!currentWeight) {
       return;
     }
@@ -172,7 +178,7 @@ export function TextSection({ items }: TextSectionProps) {
     }
 
     updateTextItems({ fontWeight: fallbackWeight });
-  }, [sharedValues?.fontWeight, supportedFontWeightOptions, updateTextItems]);
+  }, [sharedValues?.fontFamily, supportedFontWeightOptions, updateTextItems]);
 
   // Live preview for color (during picker drag)
   const handleColorLiveChange = useCallback(

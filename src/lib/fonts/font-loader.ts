@@ -39,21 +39,30 @@ function normalizeWeights(weights: readonly number[]): number[] {
   return uniqueWeights.length > 0 ? uniqueWeights : [400];
 }
 
-function toConfigEntry(fontName: string, weights: readonly number[]): FontConfig {
+function toConfigEntry(family: string, weights: readonly number[]): FontConfig {
   return {
-    family: fontName,
+    family,
     weights: normalizeWeights(weights),
     display: 'swap',
   };
 }
 
-export function registerFont(fontName: string, weights: readonly number[] = [400]): void {
-  FONT_CONFIGS.set(fontName, toConfigEntry(fontName, weights));
+export function registerFont(
+  fontKey: string,
+  cssFamilyOrWeights: string | readonly number[] = fontKey,
+  weights: readonly number[] = [400]
+): void {
+  if (typeof cssFamilyOrWeights === 'string') {
+    FONT_CONFIGS.set(fontKey, toConfigEntry(cssFamilyOrWeights, weights));
+    return;
+  }
+
+  FONT_CONFIGS.set(fontKey, toConfigEntry(fontKey, cssFamilyOrWeights));
 }
 
 export function registerFontCatalog(catalog: readonly FontCatalogEntry[]): void {
   for (const font of catalog) {
-    registerFont(font.family, font.weights);
+    registerFont(font.value, font.family, font.weights);
   }
 }
 
@@ -75,8 +84,7 @@ registerFontCatalog(FONT_CATALOG);
  */
 function buildGoogleFontsUrl(config: FontConfig): string {
   const family = config.family.replace(/ /g, '+');
-  const weights = normalizeWeights(config.weights);
-  const weightsQuery = weights.length > 0 ? `:wght@${weights.join(';')}` : '';
+  const weightsQuery = config.weights.length > 0 ? `:wght@${config.weights.join(';')}` : '';
   return `https://fonts.googleapis.com/css2?family=${family}${weightsQuery}&display=${config.display ?? 'swap'}`;
 }
 

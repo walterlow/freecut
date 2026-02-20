@@ -119,6 +119,8 @@ export function FontPicker({
       return;
     }
 
+    const rootElement = rootRef.current;
+
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && rootRef.current && !rootRef.current.contains(target)) {
@@ -126,8 +128,21 @@ export function FontPicker({
       }
     };
 
+    const handleFocusOut = (event: FocusEvent) => {
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget instanceof Node && rootRef.current?.contains(relatedTarget)) {
+        return;
+      }
+
+      setOpen(false);
+    };
+
     window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
+    rootElement?.addEventListener('focusout', handleFocusOut);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      rootElement?.removeEventListener('focusout', handleFocusOut);
+    };
   }, [open]);
 
   const handleSelect = useCallback(
@@ -159,6 +174,13 @@ export function FontPicker({
 
   const handleOptionKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>, font: FontCatalogEntry) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        return;
+      }
+
       if (filteredFonts.length === 0) {
         return;
       }
@@ -207,6 +229,8 @@ export function FontPicker({
         variant="outline"
         className="h-7 w-full justify-between px-2 text-xs font-normal"
         onClick={() => setOpen((current) => !current)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
         <span
           className="truncate"

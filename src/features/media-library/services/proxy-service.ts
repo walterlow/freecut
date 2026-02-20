@@ -274,6 +274,11 @@ class ProxyService {
         return;
       }
 
+      const previousBlobUrl = this.blobUrlCache.get(mediaId);
+      if (previousBlobUrl) {
+        URL.revokeObjectURL(previousBlobUrl);
+      }
+
       const blobUrl = URL.createObjectURL(proxyFile);
       this.blobUrlCache.set(mediaId, blobUrl);
       this.statusListener?.(mediaId, 'ready');

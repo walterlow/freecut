@@ -92,8 +92,13 @@ async function saveMetadata(
 ): Promise<void> {
   const fileHandle = await dir.getFileHandle('meta.json', { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(JSON.stringify(metadata));
-  await writable.close();
+  try {
+    await writable.write(JSON.stringify(metadata));
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => undefined);
+    throw error;
+  }
 }
 
 function toEven(value: number): number {
@@ -199,8 +204,13 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     // Write proxy video to OPFS
     const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(buffer);
-    await writable.close();
+    try {
+      await writable.write(buffer);
+      await writable.close();
+    } catch (error) {
+      await writable.abort().catch(() => undefined);
+      throw error;
+    }
 
     // Update metadata
     await saveMetadata(dir, {
