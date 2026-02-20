@@ -3,7 +3,7 @@ import { createLogger } from '@/lib/logger';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect, ItemEffect } from '@/types/effects';
-import { clampTrimAmount, calculateTrimSourceUpdate } from '../utils/trim-utils';
+import { clampTrimAmount, clampToAdjacentItems, calculateTrimSourceUpdate } from '../utils/trim-utils';
 import { getSourceProperties, isMediaItem, calculateSplitSourceBoundaries, timelineToSourceFrames, calculateSpeed, clampSpeed } from '../utils/source-calculations';
 import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
@@ -279,7 +279,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
         // Clamp trim amount to source boundaries and minimum duration
         const timelineFps = useTimelineSettingsStore.getState().fps;
-        const { clampedAmount } = clampTrimAmount(item, 'start', trimAmount, timelineFps);
+        let { clampedAmount } = clampTrimAmount(item, 'start', trimAmount, timelineFps);
+        // Clamp to adjacent items on the same track
+        clampedAmount = clampToAdjacentItems(item, 'start', clampedAmount, state.items);
 
         const newFrom = item.from + clampedAmount;
         const newDuration = item.durationInFrames - clampedAmount;
@@ -305,7 +307,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
         // Clamp trim amount to source boundaries and minimum duration
         const timelineFps = useTimelineSettingsStore.getState().fps;
-        const { clampedAmount } = clampTrimAmount(item, 'end', trimAmount, timelineFps);
+        let { clampedAmount } = clampTrimAmount(item, 'end', trimAmount, timelineFps);
+        // Clamp to adjacent items on the same track
+        clampedAmount = clampToAdjacentItems(item, 'end', clampedAmount, state.items);
 
         const newDuration = item.durationInFrames + clampedAmount;
         if (newDuration <= 0) return item;
