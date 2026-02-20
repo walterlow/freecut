@@ -67,10 +67,14 @@ export const ClipPanel = memo(function ClipPanel() {
   // selector here. React 19's useSyncExternalStore does not re-evaluate a changed
   // selector function when the re-render was triggered by a different store
   // (selection store), causing stale items to be returned.
+  // Trade-off: subscribing to s.items means ClipPanel re-renders on any item
+  // mutation. If this becomes a hot path, replace with a custom equality selector:
+  //   useTimelineStore(useCallback((s) => s.items.filter(...), [selectedItemIds]), isShallowEqual)
   const items = useTimelineStore((s: TimelineState & TimelineActions) => s.items);
+  const selectedItemIdSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
   const selectedItems = useMemo(
-    () => items.filter((item: TimelineItem) => selectedItemIds.includes(item.id)),
-    [items, selectedItemIds]
+    () => items.filter((item: TimelineItem) => selectedItemIdSet.has(item.id)),
+    [items, selectedItemIdSet]
   );
 
   // Canvas settings
