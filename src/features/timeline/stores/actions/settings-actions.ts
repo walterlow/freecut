@@ -16,12 +16,6 @@ export function toggleSnap(): void {
   });
 }
 
-export function toggleMagneticMode(): void {
-  execute('TOGGLE_MAGNETIC_MODE', () => {
-    useTimelineSettingsStore.getState().toggleMagneticMode();
-  });
-}
-
 export function setScrollPosition(position: number): void {
   // No undo for scroll position - it's UI state
   useTimelineSettingsStore.getState().setScrollPosition(position);

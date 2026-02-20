@@ -17,7 +17,7 @@ FreeCut is a browser-based multi-track video editor. No installation, no uploads
 - Multi-track timeline with video, audio, text, image, and shape tracks
 - Track groups with mute/visible/locked propagation
 - Trim, split, join, ripple delete, and rate stretch tools
-- Magnetic timeline with snapping
+- Per-track "Close Gaps" for snapping items together
 - Filmstrip thumbnails and audio waveform visualization
 - Pre-compositions (nested compositions, 1 level deep)
 - Markers for organizing your edit
@@ -119,7 +119,6 @@ Brave disables the File System Access API by default. To enable it:
 | Razor tool | `C` |
 | Rate stretch tool | `R` |
 | Toggle snap | `S` |
-| Magnetic timeline | `N` |
 | Add / Remove marker | `M` / `Shift+M` |
 | Add keyframe | `K` |
 | Toggle keyframe editor | `Ctrl+K` |

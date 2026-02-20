@@ -16,7 +16,6 @@ import {
   Flag,
   FlagOff,
   LineChart,
-  Link,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
@@ -61,8 +60,6 @@ export const TimelineHeader = memo(function TimelineHeader({
   const { zoomLevel, zoomIn, zoomOut, setZoom } = useTimelineZoom();
   const snapEnabled = useTimelineStore((s) => s.snapEnabled);
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
-  const magneticMode = useTimelineStore((s) => s.magneticMode);
-  const toggleMagneticMode = useTimelineStore((s) => s.toggleMagneticMode);
   const inPoint = useTimelineStore((s) => s.inPoint);
   const outPoint = useTimelineStore((s) => s.outPoint);
   const setInPoint = useTimelineStore((s) => s.setInPoint);
@@ -366,19 +363,6 @@ export const TimelineHeader = memo(function TimelineHeader({
           data-tooltip={snapEnabled ? 'Snap Enabled' : 'Snap Disabled'}
         >
           <Magnet className="w-3.5 h-3.5" />
-        </Button>
-
-        {/* Magnetic Mode Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={`h-7 w-7 ${
-            magneticMode ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-          }`}
-          onClick={toggleMagneticMode}
-          data-tooltip={magneticMode ? 'Magnetic Mode (N) — auto-close gaps' : 'Magnetic Mode Off (N)'}
-        >
-          <Link className="w-3.5 h-3.5" />
         </Button>
 
         <Separator orientation="vertical" className="h-6 mx-2" />

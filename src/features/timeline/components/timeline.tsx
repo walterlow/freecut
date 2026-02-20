@@ -525,6 +525,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                     onToggleSolo={() => toggleTrackSolo(track.id)}
                     onToggleCollapse={track.isGroup ? () => toggleGroupCollapse(track.id) : undefined}
                     onGroup={canGroupSelection ? () => createGroup(selectedTrackIds) : undefined}
+                    onCloseGaps={!track.isGroup ? () => useTimelineStore.getState().closeAllGapsOnTrack(track.id) : undefined}
                     onUngroup={track.isGroup ? () => ungroup(track.id) : undefined}
                     onRemoveFromGroup={track.parentTrackId ? () => removeFromGroup([track.id]) : undefined}
                     onSelect={(e) => {

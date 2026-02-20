@@ -48,7 +48,6 @@ export const HOTKEYS = {
 
   // UI
   TOGGLE_SNAP: 's',
-  TOGGLE_MAGNETIC_MODE: 'n',
 
   // Markers
   ADD_MARKER: 'm',
@@ -122,7 +121,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
 
   // UI
   TOGGLE_SNAP: 'Toggle snap',
-  TOGGLE_MAGNETIC_MODE: 'Toggle magnetic timeline mode',
 
   // Markers
   ADD_MARKER: 'Add marker at playhead',

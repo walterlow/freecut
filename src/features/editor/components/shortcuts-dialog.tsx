@@ -46,7 +46,7 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[]; extra?: { descript
   },
   {
     name: 'UI',
-    keys: ['TOGGLE_SNAP', 'TOGGLE_MAGNETIC_MODE'],
+    keys: ['TOGGLE_SNAP'],
   },
   {
     name: 'Markers',

@@ -435,7 +435,6 @@ let lastOutPointRef: unknown = null;
 let lastFpsRef: unknown = null;
 let lastScrollPositionRef: unknown = null;
 let lastSnapEnabledRef: unknown = null;
-let lastMagneticModeRef: unknown = null;
 let lastIsDirtyRef: unknown = null;
 
 /**
@@ -461,7 +460,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastFpsRef !== settingsState.fps ||
     lastScrollPositionRef !== settingsState.scrollPosition ||
     lastSnapEnabledRef !== settingsState.snapEnabled ||
-    lastMagneticModeRef !== settingsState.magneticMode ||
     lastIsDirtyRef !== settingsState.isDirty;
 
   if (!cachedSnapshot || stateChanged) {
@@ -477,7 +475,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastFpsRef = settingsState.fps;
     lastScrollPositionRef = settingsState.scrollPosition;
     lastSnapEnabledRef = settingsState.snapEnabled;
-    lastMagneticModeRef = settingsState.magneticMode;
     lastIsDirtyRef = settingsState.isDirty;
 
     // Rebuild cached snapshot
@@ -494,7 +491,6 @@ function getSnapshot(): TimelineState & TimelineActions {
       fps: settingsState.fps,
       scrollPosition: settingsState.scrollPosition,
       snapEnabled: settingsState.snapEnabled,
-      magneticMode: settingsState.magneticMode,
       isDirty: settingsState.isDirty,
 
       // Actions (static references, never change)
@@ -509,8 +505,8 @@ function getSnapshot(): TimelineState & TimelineActions {
       removeItems: timelineActions.removeItems,
       rippleDeleteItems: timelineActions.rippleDeleteItems,
       closeGapAtPosition: timelineActions.closeGapAtPosition,
+      closeAllGapsOnTrack: timelineActions.closeAllGapsOnTrack,
       toggleSnap: timelineActions.toggleSnap,
-      toggleMagneticMode: timelineActions.toggleMagneticMode,
       setScrollPosition: timelineActions.setScrollPosition,
       moveItem: timelineActions.moveItem,
       moveItems: timelineActions.moveItems,
@@ -683,9 +679,6 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
     }
     if ('snapEnabled' in partial && partial.snapEnabled !== undefined) {
       useTimelineSettingsStore.getState().setSnapEnabled(partial.snapEnabled);
-    }
-    if ('magneticMode' in partial && partial.magneticMode !== undefined) {
-      useTimelineSettingsStore.getState().setMagneticMode(partial.magneticMode);
     }
     if ('isDirty' in partial && partial.isDirty !== undefined) {
       useTimelineSettingsStore.getState().setIsDirty(partial.isDirty);

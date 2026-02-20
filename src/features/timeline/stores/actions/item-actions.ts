@@ -13,47 +13,6 @@ import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 
-interface GapLocation {
-  trackId: string;
-  frame: number;
-}
-
-/**
- * Apply magnetic gap-closing at specific gap locations if magnetic mode is enabled.
- * Only closes the gaps created by the operation, preserving intentional gaps elsewhere.
- * Repairs transitions on affected tracks afterwards.
- */
-function applyMagneticRipple(gaps: GapLocation[]): void {
-  if (!useTimelineSettingsStore.getState().magneticMode) return;
-  if (gaps.length === 0) return;
-
-  // Group by track, sort descending — close rightmost gaps first
-  // so closing one gap doesn't shift the positions of gaps to its left
-  const byTrack = new Map<string, number[]>();
-  for (const gap of gaps) {
-    const frames = byTrack.get(gap.trackId) ?? [];
-    frames.push(gap.frame);
-    byTrack.set(gap.trackId, frames);
-  }
-
-  for (const [trackId, frames] of byTrack) {
-    frames.sort((a, b) => b - a);
-    for (const frame of frames) {
-      useItemsStore.getState()._closeGapAtPosition(trackId, frame);
-    }
-  }
-
-  // Repair transitions on affected tracks (same as before)
-  const uniqueTrackIds = [...byTrack.keys()];
-  const items = useItemsStore.getState().items;
-  const affectedItemIds = items
-    .filter((i) => uniqueTrackIds.includes(i.trackId))
-    .map((i) => i.id);
-  if (affectedItemIds.length > 0) {
-    applyTransitionRepairs(affectedItemIds);
-  }
-}
-
 export function addItem(item: TimelineItem): void {
   execute('ADD_ITEM', () => {
     useItemsStore.getState()._addItem(item);
@@ -77,12 +36,6 @@ export function updateItem(id: string, updates: Partial<TimelineItem>): void {
 
 export function removeItems(ids: string[]): void {
   execute('REMOVE_ITEMS', () => {
-    // Capture gap locations before removal (for magnetic mode)
-    const items = useItemsStore.getState().items;
-    const gapLocations: GapLocation[] = items
-      .filter((i) => ids.includes(i.id))
-      .map((i) => ({ trackId: i.trackId, frame: i.from }));
-
     // Remove items
     useItemsStore.getState()._removeItems(ids);
 
@@ -91,9 +44,6 @@ export function removeItems(ids: string[]): void {
 
     // Cascade: Remove keyframes for deleted items
     useKeyframesStore.getState()._removeKeyframesForItems(ids);
-
-    // Magnetic mode: close gaps at positions where items were removed
-    applyMagneticRipple(gapLocations);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { ids });
@@ -124,26 +74,43 @@ export function closeGapAtPosition(trackId: string, frame: number): void {
   }, { trackId, frame });
 }
 
+export function closeAllGapsOnTrack(trackId: string): void {
+  execute('CLOSE_ALL_GAPS', () => {
+    const items = useItemsStore.getState().items;
+    const trackItems = items
+      .filter((i) => i.trackId === trackId)
+      .sort((a, b) => a.from - b.from);
+
+    if (trackItems.length === 0) return;
+
+    // Walk items left-to-right, shift each to close any gap before it
+    let cursor = 0;
+    const updates: Array<{ id: string; from: number }> = [];
+    for (const item of trackItems) {
+      if (item.from > cursor) {
+        updates.push({ id: item.id, from: cursor });
+      }
+      cursor = Math.max(cursor, (updates.find((u) => u.id === item.id)?.from ?? item.from) + item.durationInFrames);
+    }
+
+    if (updates.length > 0) {
+      useItemsStore.getState()._moveItems(updates);
+
+      // Repair transitions on affected items
+      const trackItemIds = trackItems.map((i) => i.id);
+      applyTransitionRepairs(trackItemIds);
+    }
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { trackId });
+}
+
 export function moveItem(id: string, newFrom: number, newTrackId?: string): void {
   execute('MOVE_ITEM', () => {
-    // Capture source position before move (for magnetic gap-close on source track)
-    const item = useItemsStore.getState().items.find((i) => i.id === id);
-    const originalFrom = item?.from ?? 0;
-    const sourceTrackId = item?.trackId;
-
     useItemsStore.getState()._moveItem(id, newFrom, newTrackId);
 
     // Repair transitions
     applyTransitionRepairs([id]);
-
-    // Magnetic mode: close gap only on source track for cross-track moves.
-    // Same-track moves don't close gaps — the user is intentionally repositioning
-    // the clip, and closing the old gap would shift it (and neighbors) back.
-    const gaps: GapLocation[] = [];
-    if (sourceTrackId && newTrackId && newTrackId !== sourceTrackId) {
-      gaps.push({ trackId: sourceTrackId, frame: originalFrom });
-    }
-    applyMagneticRipple(gaps);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newTrackId });
@@ -151,19 +118,6 @@ export function moveItem(id: string, newFrom: number, newTrackId?: string): void
 
 export function moveItems(updates: Array<{ id: string; from: number; trackId?: string }>): void {
   execute('MOVE_ITEMS', () => {
-    // Capture source positions before move (for magnetic gap-close on cross-track moves only)
-    const itemsBefore = useItemsStore.getState().items;
-    const gapLocations: GapLocation[] = [];
-    for (const u of updates) {
-      // Only close gaps for items that actually change tracks.
-      // Same-track moves don't close gaps — the user is intentionally repositioning.
-      if (!u.trackId) continue;
-      const item = itemsBefore.find((i) => i.id === u.id);
-      if (item && u.trackId !== item.trackId) {
-        gapLocations.push({ trackId: item.trackId, frame: item.from });
-      }
-    }
-
     useItemsStore.getState()._moveItems(updates);
 
     const movedItemIds = new Set(updates.map((u) => u.id));
@@ -191,9 +145,6 @@ export function moveItems(updates: Array<{ id: string; from: number; trackId?: s
     useTransitionsStore.getState().setTransitions(updatedTransitions);
     applyTransitionRepairs(updates.map((u) => u.id));
 
-    // Magnetic mode: close gaps only on source tracks at original positions
-    applyMagneticRipple(gapLocations);
-
     useTimelineSettingsStore.getState().markDirty();
   }, { count: updates.length });
 }
@@ -211,20 +162,10 @@ export function duplicateItems(
 
 export function trimItemStart(id: string, trimAmount: number): void {
   execute('TRIM_ITEM_START', () => {
-    const item = useItemsStore.getState().items.find((i) => i.id === id);
-    const trackId = item?.trackId;
-    const originalFrom = item?.from ?? 0;
-
     useItemsStore.getState()._trimItemStart(id, trimAmount);
 
     // Repair transitions (auto-adjusts duration if clip got shorter)
     applyTransitionRepairs([id]);
-
-    // Magnetic mode: when trimming start inward (positive trimAmount),
-    // a gap opens before the item — close it at the original start position
-    if (trackId && trimAmount > 0) {
-      applyMagneticRipple([{ trackId, frame: originalFrom }]);
-    }
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, trimAmount });
@@ -232,22 +173,10 @@ export function trimItemStart(id: string, trimAmount: number): void {
 
 export function trimItemEnd(id: string, trimAmount: number): void {
   execute('TRIM_ITEM_END', () => {
-    const item = useItemsStore.getState().items.find((i) => i.id === id);
-    const trackId = item?.trackId;
-
     useItemsStore.getState()._trimItemEnd(id, trimAmount);
 
     // Repair transitions (auto-adjusts duration if clip got shorter)
     applyTransitionRepairs([id]);
-
-    // Magnetic mode: when trimming end inward (negative trimAmount),
-    // a gap opens after the item — close it at the item's new end position
-    if (trackId && trimAmount < 0) {
-      const updatedItem = useItemsStore.getState().items.find((i) => i.id === id);
-      if (updatedItem) {
-        applyMagneticRipple([{ trackId, frame: updatedItem.from + updatedItem.durationInFrames }]);
-      }
-    }
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, trimAmount });

@@ -7,7 +7,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown } from 'lucide-react';
+import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown, FoldHorizontal } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 
@@ -26,6 +26,7 @@ interface TrackHeaderProps {
   onToggleSolo: () => void;
   onToggleCollapse?: () => void;
   onSelect: (e: React.MouseEvent) => void;
+  onCloseGaps?: () => void;
   onGroup?: () => void;
   onUngroup?: () => void;
   onRemoveFromGroup?: () => void;
@@ -68,6 +69,7 @@ export const TrackHeader = memo(function TrackHeader({
   onToggleSolo,
   onToggleCollapse,
   onSelect,
+  onCloseGaps,
   onGroup,
   onUngroup,
   onRemoveFromGroup,
@@ -144,6 +146,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleVisibility();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              data-tooltip={track.visible ? 'Hide track' : 'Show track'}
             >
               {track.visible ? (
                 <Eye className="w-3 h-3" />
@@ -162,6 +165,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleMute();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              data-tooltip={track.muted ? 'Unmute track' : 'Mute track'}
             >
               {track.muted ? (
                 <VolumeX className="w-3 h-3 opacity-50" />
@@ -180,6 +184,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleSolo();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              data-tooltip={track.solo ? 'Unsolo track' : 'Solo track'}
             >
               <Radio
                 className={`w-3 h-3 ${track.solo ? 'text-primary' : ''}`}
@@ -196,11 +201,29 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleLock();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              data-tooltip={track.locked ? 'Unlock track' : 'Lock track'}
             >
               <Lock
                 className={`w-3 h-3 ${track.locked ? 'opacity-50' : ''}`}
               />
             </Button>
+
+            {/* Close Gaps Button - only for non-group tracks */}
+            {!isGroup && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-5 w-5 rounded hover:bg-secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCloseGaps?.();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                data-tooltip="Close all gaps"
+              >
+                <FoldHorizontal className="w-3 h-3" />
+              </Button>
+            )}
           </div>
           </div>
           </div>
@@ -224,6 +247,13 @@ export const TrackHeader = memo(function TrackHeader({
         {isInGroup && !isGroup && (
           <ContextMenuItem onClick={onRemoveFromGroup}>
             Remove from Group
+          </ContextMenuItem>
+        )}
+
+        {/* Close gaps - non-group tracks only */}
+        {!isGroup && (
+          <ContextMenuItem onClick={onCloseGaps}>
+            Close All Gaps
           </ContextMenuItem>
         )}
 
