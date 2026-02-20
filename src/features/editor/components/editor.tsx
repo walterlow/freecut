@@ -81,10 +81,26 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   const baseTimelineSizeRef = useRef(30); // Store the user's base timeline size
 
   // Initialize transition chain subscription (pre-computes chains from timeline data)
-  // This subscription recomputes chains when items/transitions change
+  // This subscription recomputes chains when items/transitions change — deferred to idle
+  // time so it doesn't compete with the initial editor render
   useEffect(() => {
-    const unsubscribe = initTransitionChainSubscription();
-    return unsubscribe;
+    let unsubscribe: (() => void) | undefined;
+    const id = requestIdleCallback(() => {
+      unsubscribe = initTransitionChainSubscription();
+    });
+    return () => {
+      cancelIdleCallback(id);
+      unsubscribe?.();
+    };
+  }, []);
+
+  // Preload export dialogs during idle time so they open instantly
+  useEffect(() => {
+    const id = requestIdleCallback(() => {
+      preloadExportDialog();
+      preloadBundleExportDialog();
+    });
+    return () => cancelIdleCallback(id);
   }, []);
 
   // Initialize timeline from project data (or create default tracks for new projects)

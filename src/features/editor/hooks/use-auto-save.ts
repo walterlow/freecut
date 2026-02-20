@@ -38,28 +38,39 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
 
     const intervalMs = autoSaveInterval * 60 * 1000; // Convert minutes to ms
 
-    const intervalId = setInterval(async () => {
+    let idleCallbackId: number | undefined;
+
+    const intervalId = setInterval(() => {
       // Only save if there are unsaved changes and not already saving
       if (!isDirty || isSavingRef.current) {
         return;
       }
 
-      isSavingRef.current = true;
-      logger.debug(`Auto-saving (interval: ${autoSaveInterval}m)...`);
+      // Defer save to idle time so it doesn't interrupt active editing (e.g., dragging).
+      // timeout ensures save still fires within 10s even under continuous activity.
+      idleCallbackId = requestIdleCallback(
+        async () => {
+          if (isSavingRef.current) return;
+          isSavingRef.current = true;
+          logger.debug(`Auto-saving (interval: ${autoSaveInterval}m)...`);
 
-      try {
-        await onSave();
-        logger.debug('Auto-save completed');
-      } catch (error) {
-        logger.error('Auto-save failed:', error);
-        toast.error('Auto-save failed');
-      } finally {
-        isSavingRef.current = false;
-      }
+          try {
+            await onSave();
+            logger.debug('Auto-save completed');
+          } catch (error) {
+            logger.error('Auto-save failed:', error);
+            toast.error('Auto-save failed');
+          } finally {
+            isSavingRef.current = false;
+          }
+        },
+        { timeout: 10_000 }
+      );
     }, intervalMs);
 
     return () => {
       clearInterval(intervalId);
+      if (idleCallbackId !== undefined) cancelIdleCallback(idleCallbackId);
     };
   }, [autoSaveInterval, isDirty, onSave, enabled]);
 }

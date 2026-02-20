@@ -497,8 +497,8 @@ export function useClientRender(): UseClientRenderReturn {
     a.click();
     document.body.removeChild(a);
 
-    // Revoke after a delay to ensure download starts
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Revoke during idle — download has already started by then
+    requestIdleCallback(() => URL.revokeObjectURL(url));
   }, [result]);
 
   /**

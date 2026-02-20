@@ -185,12 +185,12 @@ class FilmstripOPFSStorage {
       const previousUrls = this.objectUrls.get(mediaId) || [];
       this.objectUrls.set(mediaId, urls);
       if (previousUrls.length > 0) {
-        // Delay revocation slightly so in-flight renders can swap to new URLs.
-        setTimeout(() => {
+        // Revoke during idle so in-flight renders can swap to new URLs first
+        requestIdleCallback(() => {
           for (const url of previousUrls) {
             URL.revokeObjectURL(url);
           }
-        }, 250);
+        });
       }
 
       const existingIndices = frameFiles.map(f => f.index);

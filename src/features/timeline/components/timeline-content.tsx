@@ -104,6 +104,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   const marqueeWasActiveRef = useRef(false);
   const dragWasActiveRef = useRef(false);
   const scrubWasActiveRef = useRef(false);
+  const scrubTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Preview frame hover state
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
@@ -223,14 +224,14 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     // Measure immediately
     updateWidth();
 
-    // Also measure after a short delay to ensure DOM is ready
-    const timer = setTimeout(updateWidth, 0);
+    // Re-measure during idle in case DOM wasn't fully laid out on mount
+    const idleId = requestIdleCallback(updateWidth);
 
     // Measure on resize
     window.addEventListener('resize', updateWidth);
 
     return () => {
-      clearTimeout(timer);
+      cancelIdleCallback(idleId);
       window.removeEventListener('resize', updateWidth);
     };
   }, []);
@@ -382,9 +383,16 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
 
     const handleScrubEnd = () => {
       if (scrubWasActiveRef.current) {
+        // Clear any existing timeout before scheduling a new one
+        if (scrubTimeoutRef.current !== null) {
+          clearTimeout(scrubTimeoutRef.current);
+          scrubTimeoutRef.current = null;
+        }
+
         // Reset after a short delay when scrub ends
-        setTimeout(() => {
+        scrubTimeoutRef.current = setTimeout(() => {
           scrubWasActiveRef.current = false;
+          scrubTimeoutRef.current = null;
         }, 100);
       }
     };
@@ -395,6 +403,10 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     return () => {
       document.removeEventListener('mousedown', handleScrubStart, true);
       document.removeEventListener('mouseup', handleScrubEnd);
+      if (scrubTimeoutRef.current !== null) {
+        clearTimeout(scrubTimeoutRef.current);
+        scrubTimeoutRef.current = null;
+      }
     };
   }, []);
 
