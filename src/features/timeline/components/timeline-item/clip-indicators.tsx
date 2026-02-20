@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Link2Off, Diamond } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CLIP_LABEL_ROW_HEIGHT } from '@/features/timeline/constants';
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
@@ -42,26 +43,33 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Keyframe indicator */}
+      {/* Keyframe indicator - constrained to label row */}
       {hasKeyframes && (
         <div
-          className="absolute top-1 right-1 z-10 pointer-events-none"
+          className="absolute right-1 z-10 pointer-events-none flex items-center"
+          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
           title="Has keyframe animations"
         >
           <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />
         </div>
       )}
 
-      {/* Mask indicator for shape items */}
+      {/* Mask indicator for shape items - constrained to label row */}
       {isShape && isMask && (
-        <div className="absolute top-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-cyan-500/80 text-white rounded">
+        <div
+          className="absolute right-1 px-1 text-[10px] leading-none font-bold bg-cyan-500/80 text-white rounded flex items-center"
+          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
+        >
           M
         </div>
       )}
 
-      {/* Speed badge - show when speed is not 1x */}
+      {/* Speed badge - constrained to label row */}
       {showSpeedBadge && (
-        <div className="absolute top-1 right-1 px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono">
+        <div
+          className="absolute right-1 px-1 text-[10px] leading-none font-bold bg-black/60 text-white rounded font-mono flex items-center"
+          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
+        >
           {currentSpeed.toFixed(2)}x
         </div>
       )}

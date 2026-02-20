@@ -7,19 +7,19 @@
 // TRACK & CLIP DIMENSIONS
 // =============================================================================
 
-export const DEFAULT_TRACK_HEIGHT = 64;
-export const MIN_TRACK_HEIGHT = 40;
+export const DEFAULT_TRACK_HEIGHT = 80;
+export const MIN_TRACK_HEIGHT = 48;
 export const MAX_TRACK_HEIGHT = 200;
 
 // Clip fills entire track height (selection ring is inset)
 const CLIP_HEIGHT = DEFAULT_TRACK_HEIGHT;
 
 // Shared clip layout
-export const CLIP_LABEL_HEIGHT = 16;
+export const CLIP_LABEL_ROW_HEIGHT = 18;
 
-// Video clip layout (2 rows: filmstrip with overlayed label | waveform)
+// Video clip layout (3 rows: label | filmstrip | waveform)
 export const VIDEO_WAVEFORM_HEIGHT = 30;
-const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - VIDEO_WAVEFORM_HEIGHT;
+const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_ROW_HEIGHT - VIDEO_WAVEFORM_HEIGHT;
 
 // =============================================================================
 // FILMSTRIP / THUMBNAILS
