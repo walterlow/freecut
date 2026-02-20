@@ -87,10 +87,11 @@ export function closeAllGapsOnTrack(trackId: string): void {
     let cursor = 0;
     const updates: Array<{ id: string; from: number }> = [];
     for (const item of trackItems) {
-      if (item.from > cursor) {
-        updates.push({ id: item.id, from: cursor });
+      const newFrom = item.from > cursor ? cursor : item.from;
+      if (newFrom !== item.from) {
+        updates.push({ id: item.id, from: newFrom });
       }
-      cursor = Math.max(cursor, (updates.find((u) => u.id === item.id)?.from ?? item.from) + item.durationInFrames);
+      cursor = newFrom + item.durationInFrames;
     }
 
     if (updates.length > 0) {
@@ -99,9 +100,8 @@ export function closeAllGapsOnTrack(trackId: string): void {
       // Repair transitions on affected items
       const trackItemIds = trackItems.map((i) => i.id);
       applyTransitionRepairs(trackItemIds);
+      useTimelineSettingsStore.getState().markDirty();
     }
-
-    useTimelineSettingsStore.getState().markDirty();
   }, { trackId });
 }
 

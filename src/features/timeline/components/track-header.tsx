@@ -252,9 +252,12 @@ export const TrackHeader = memo(function TrackHeader({
 
         {/* Close gaps - non-group tracks only */}
         {!isGroup && (
-          <ContextMenuItem onClick={onCloseGaps}>
-            Close All Gaps
-          </ContextMenuItem>
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={onCloseGaps}>
+              Close All Gaps
+            </ContextMenuItem>
+          </>
         )}
 
         {/* Track controls */}

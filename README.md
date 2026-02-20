@@ -17,7 +17,7 @@ FreeCut is a browser-based multi-track video editor. No installation, no uploads
 - Multi-track timeline with video, audio, text, image, and shape tracks
 - Track groups with mute/visible/locked propagation
 - Trim, split, join, ripple delete, and rate stretch tools
-- Per-track "Close Gaps" for snapping items together
+- Per-track "Close Gaps" to remove empty space between clips, packing them left toward frame 0
 - Filmstrip thumbnails and audio waveform visualization
 - Pre-compositions (nested compositions, 1 level deep)
 - Markers for organizing your edit
