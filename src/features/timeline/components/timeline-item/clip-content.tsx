@@ -3,7 +3,7 @@ import type { TimelineItem } from '@/types/timeline';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
 import {
-  CLIP_LABEL_HEIGHT,
+  CLIP_LABEL_ROW_HEIGHT,
   VIDEO_WAVEFORM_HEIGHT,
 } from '@/features/timeline/constants';
 import { useSettingsStore } from '@/features/settings/stores/settings-store';
@@ -91,11 +91,18 @@ export const ClipContent = memo(function ClipContent({
   const trimStart = (item.trimStart ?? 0) / fps;
   const speed = item.speed ?? 1;
 
-  // Video clip 2-row layout: filmstrip (with overlayed label) | waveform
+  // Video clip 3-row layout: label | filmstrip | waveform
   if (item.type === 'video' && item.mediaId) {
     return (
       <div className="absolute inset-0 flex flex-col">
-        {/* Row 1: Filmstrip with overlayed label - flex-1 to fill remaining space */}
+        {/* Row 1: Label - fixed height */}
+        <div
+          className="px-2 text-[11px] font-medium truncate shrink-0"
+          style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
+        >
+          {item.label}
+        </div>
+        {/* Row 2: Filmstrip - flex-1 to fill remaining space */}
         <div className="relative overflow-hidden flex-1 min-h-0">
           {showFilmstrips && (
             <ClipFilmstrip
@@ -110,15 +117,8 @@ export const ClipContent = memo(function ClipContent({
               pixelsPerSecond={pixelsPerSecond}
             />
           )}
-          {/* Overlayed label */}
-          <div
-            className="absolute top-0 left-0 max-w-full px-2 text-[11px] font-medium truncate"
-            style={{ lineHeight: `${CLIP_LABEL_HEIGHT}px` }}
-          >
-            {item.label}
-          </div>
         </div>
-        {/* Row 2: Waveform - fixed height with gradient bg */}
+        {/* Row 3: Waveform - fixed height with gradient bg */}
         {showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
             <ClipWaveform
@@ -138,29 +138,32 @@ export const ClipContent = memo(function ClipContent({
     );
   }
 
-  // Audio clip - waveform fills entire clip with overlayed label
+  // Audio clip - label row + waveform fills remaining space
   if (item.type === 'audio' && item.mediaId) {
     return (
-      <div className="absolute inset-0 bg-waveform-gradient">
-        {showWaveforms && (
-          <ClipWaveform
-            mediaId={item.mediaId}
-            clipWidth={clipWidth}
-            sourceStart={sourceStart}
-            sourceDuration={sourceDuration}
-            trimStart={trimStart}
-            speed={speed}
-            fps={fps}
-            isVisible={isClipVisible}
-            pixelsPerSecond={pixelsPerSecond}
-          />
-        )}
-        {/* Overlayed label */}
+      <div className="absolute inset-0 flex flex-col">
+        {/* Row 1: Label - fixed height */}
         <div
-          className="absolute top-0 left-0 max-w-full px-2 text-[11px] font-medium truncate"
-          style={{ lineHeight: `${CLIP_LABEL_HEIGHT}px` }}
+          className="px-2 text-[11px] font-medium truncate shrink-0"
+          style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
         >
           {item.label}
+        </div>
+        {/* Row 2: Waveform - fills remaining space */}
+        <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
+          {showWaveforms && (
+            <ClipWaveform
+              mediaId={item.mediaId}
+              clipWidth={clipWidth}
+              sourceStart={sourceStart}
+              sourceDuration={sourceDuration}
+              trimStart={trimStart}
+              speed={speed}
+              fps={fps}
+              isVisible={isClipVisible}
+              pixelsPerSecond={pixelsPerSecond}
+            />
+          )}
         </div>
       </div>
     );
@@ -183,6 +186,14 @@ export const ClipContent = memo(function ClipContent({
     if (compTopVideoMediaId) {
       return (
         <div className="absolute inset-0 flex flex-col">
+          {/* Row 1: Label - fixed height */}
+          <div
+            className="px-2 text-[11px] font-medium truncate shrink-0"
+            style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
+          >
+            {item.label || 'Composition'}
+          </div>
+          {/* Row 2: Filmstrip - flex-1 */}
           <div className="relative overflow-hidden flex-1 min-h-0">
             {showFilmstrips && (
               <ClipFilmstrip
@@ -197,13 +208,8 @@ export const ClipContent = memo(function ClipContent({
                 pixelsPerSecond={pixelsPerSecond}
               />
             )}
-            <div
-              className="absolute top-0 left-0 max-w-full px-2 text-[11px] font-medium truncate"
-              style={{ lineHeight: `${CLIP_LABEL_HEIGHT}px` }}
-            >
-              {item.label || 'Composition'}
-            </div>
           </div>
+          {/* Row 3: Waveform */}
           {showWaveforms && (
             <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
               <ClipWaveform

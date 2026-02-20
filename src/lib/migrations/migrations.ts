@@ -80,6 +80,37 @@ const migrations: Record<number, Migration> = {
       };
     },
   },
+  /**
+   * Version 4: Increase default track height for 3-row clip layout
+   *
+   * The clip layout changed from 2-row (filmstrip with overlaid label + waveform)
+   * to 3-row (label | filmstrip | waveform). Increase track height from 64 to 80
+   * to accommodate the dedicated label row.
+   */
+  4: {
+    version: 4,
+    description: 'Increase track height from 64px to 80px for 3-row clip layout',
+    migrate: (project: Project): Project => {
+      if (!project.timeline?.tracks) {
+        return project;
+      }
+
+      const updatedTracks = project.timeline.tracks.map((track) => {
+        if (track.height === 64) {
+          return { ...track, height: DEFAULT_TRACK_HEIGHT };
+        }
+        return track;
+      });
+
+      return {
+        ...project,
+        timeline: {
+          ...project.timeline,
+          tracks: updatedTracks,
+        },
+      };
+    },
+  },
 };
 
 /**
