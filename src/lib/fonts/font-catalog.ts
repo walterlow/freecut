@@ -1,4 +1,6 @@
 export interface FontCatalogEntry {
+  // These are currently identical for bundled Google fonts, but kept separate so
+  // persisted value, display label, and CSS family can diverge in the future.
   value: string;
   label: string;
   family: string;

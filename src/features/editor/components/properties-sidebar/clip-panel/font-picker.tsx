@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, Loader2, Search, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,8 @@ interface FontPickerProps {
 }
 
 const DEFAULT_PREVIEW_TEXT = 'The quick brown fox jumps over the lazy dog';
+const PREVIEW_PREFETCH_LIMIT = 4;
+const PREVIEW_PREFETCH_DEBOUNCE_MS = 120;
 
 export function FontPicker({
   value,
@@ -25,6 +27,7 @@ export function FontPicker({
   onValueChange,
 }: FontPickerProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const fontOptionRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredFontValue, setHoveredFontValue] = useState<string | null>(null);
@@ -65,36 +68,41 @@ export function FontPicker({
     return fonts.filter((font) => font.label.toLowerCase().includes(query));
   }, [fonts, searchQuery]);
 
-  const visibleFonts = filteredFonts;
-
   const normalizedPreviewText = useMemo(() => {
     const source = previewText?.trim() ? previewText : DEFAULT_PREVIEW_TEXT;
     return source.replace(/\s+/g, ' ').slice(0, 72);
   }, [previewText]);
 
   const activePreviewFont = useMemo(() => {
-    const activeValue = hoveredFontValue ?? value ?? visibleFonts[0]?.value;
+    const activeValue = hoveredFontValue ?? value ?? filteredFonts[0]?.value;
     if (!activeValue) {
       return null;
     }
     return fonts.find((font) => font.value === activeValue) ?? null;
-  }, [fonts, hoveredFontValue, value, visibleFonts]);
+  }, [filteredFonts, fonts, hoveredFontValue, value]);
 
   const previewCandidates = useMemo(() => {
     const candidates = [
       value,
       hoveredFontValue,
-      ...visibleFonts.slice(0, 20).map((font) => font.value),
+      ...filteredFonts.slice(0, PREVIEW_PREFETCH_LIMIT).map((font) => font.value),
     ].filter((font): font is string => typeof font === 'string' && font.trim().length > 0);
 
     return [...new Set(candidates)];
-  }, [hoveredFontValue, value, visibleFonts]);
+  }, [filteredFonts, hoveredFontValue, value]);
 
   useEffect(() => {
     if (!open || previewCandidates.length === 0) {
       return;
     }
-    void ensureFontsLoaded(previewCandidates, [400]);
+
+    const timeoutId = window.setTimeout(() => {
+      void ensureFontsLoaded(previewCandidates, [400]);
+    }, PREVIEW_PREFETCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [open, previewCandidates]);
 
   useEffect(() => {
@@ -129,6 +137,65 @@ export function FontPicker({
       setOpen(false);
     },
     [onValueChange]
+  );
+
+  const focusFontByIndex = useCallback(
+    (index: number) => {
+      const font = filteredFonts[index];
+      if (!font) {
+        return;
+      }
+
+      const option = fontOptionRefs.current.get(font.value);
+      if (option) {
+        option.focus();
+      }
+
+      setHoveredFontValue(font.value);
+      void ensureFontsLoaded([font.value], [400]);
+    },
+    [filteredFonts]
+  );
+
+  const handleOptionKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, font: FontCatalogEntry) => {
+      if (filteredFonts.length === 0) {
+        return;
+      }
+
+      const currentIndex = filteredFonts.findIndex((candidate) => candidate.value === font.value);
+      if (currentIndex === -1) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'ArrowDown':
+          event.preventDefault();
+          focusFontByIndex((currentIndex + 1) % filteredFonts.length);
+          break;
+        case 'ArrowUp':
+          event.preventDefault();
+          focusFontByIndex((currentIndex - 1 + filteredFonts.length) % filteredFonts.length);
+          break;
+        case 'Home':
+          event.preventDefault();
+          focusFontByIndex(0);
+          break;
+        case 'End':
+          event.preventDefault();
+          focusFontByIndex(filteredFonts.length - 1);
+          break;
+        case 'Enter':
+        case ' ': {
+          event.preventDefault();
+          handleSelect(font);
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [filteredFonts, focusFontByIndex, handleSelect]
   );
 
   const triggerLabel = value ?? placeholder;
@@ -184,29 +251,46 @@ export function FontPicker({
             <span>{filteredFonts.length}</span>
           </div>
 
-          <div className="max-h-52 space-y-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
+          <div
+            className="max-h-52 space-y-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
+            role="listbox"
+            aria-label="Font options"
+          >
             {isLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
               </div>
-            ) : visibleFonts.length === 0 ? (
+            ) : filteredFonts.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 No fonts match your search.
               </div>
             ) : (
-              visibleFonts.map((font) => {
+              filteredFonts.map((font) => {
                 const isSelected = font.value === value;
 
                 return (
                   <button
                     key={font.value}
+                    ref={(node) => {
+                      if (node) {
+                        fontOptionRefs.current.set(font.value, node);
+                      } else {
+                        fontOptionRefs.current.delete(font.value);
+                      }
+                    }}
                     type="button"
+                    role="option"
+                    aria-selected={isSelected}
                     onClick={() => handleSelect(font)}
                     onPointerEnter={() => {
                       setHoveredFontValue(font.value);
                       void ensureFontsLoaded([font.value], [400]);
                     }}
-                    onFocus={() => setHoveredFontValue(font.value)}
+                    onFocus={() => {
+                      setHoveredFontValue(font.value);
+                      void ensureFontsLoaded([font.value], [400]);
+                    }}
+                    onKeyDown={(event) => handleOptionKeyDown(event, font)}
                     className="w-full rounded-md border border-transparent px-2 py-1.5 text-left transition-colors hover:border-border hover:bg-accent/40"
                   >
                     <div className="flex items-center justify-between gap-2">

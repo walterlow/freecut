@@ -85,28 +85,50 @@ export const useMediaLibraryStore = create<
             isLoading: false,
           });
 
-          // Load existing proxies from OPFS (previously generated on-demand)
-          const videoItems = mediaItems.filter(
-            (m) => m.mimeType.startsWith('video/') && proxyService.needsProxy(m.width, m.height, m.mimeType)
-          );
-          if (videoItems.length > 0) {
-            const videoIds = videoItems.map((m) => m.id);
-            const staleProxyIds = await proxyService.loadExistingProxies(videoIds);
+          // Load existing proxies from OPFS and regenerate stale entries in the background.
+          try {
+            const videoItems = mediaItems.filter(
+              (m) => m.mimeType.startsWith('video/') && proxyService.needsProxy(m.width, m.height, m.mimeType)
+            );
 
-            if (staleProxyIds.length > 0) {
-              const staleProxyIdSet = new Set(staleProxyIds);
-              const staleVideoItems = videoItems.filter((item) => staleProxyIdSet.has(item.id));
-              const urls = await Promise.all(
-                staleVideoItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
-              );
+            if (videoItems.length > 0) {
+              const videoIds = videoItems.map((m) => m.id);
+              const staleProxyIds = await proxyService.loadExistingProxies(videoIds);
 
-              staleVideoItems.forEach((item, index) => {
-                const blobUrl = urls[index];
-                if (blobUrl) {
-                  proxyService.generateProxy(item.id, blobUrl, item.width, item.height);
-                }
-              });
+              if (staleProxyIds.length > 0) {
+                const staleProxyIdSet = new Set(staleProxyIds);
+                const staleVideoItems = videoItems.filter((item) => staleProxyIdSet.has(item.id));
+                const blobUrlResults = await Promise.allSettled(
+                  staleVideoItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
+                );
+
+                blobUrlResults.forEach((result, index) => {
+                  const item = staleVideoItems[index];
+                  if (!item) {
+                    return;
+                  }
+
+                  if (result.status !== 'fulfilled') {
+                    logger.warn(`[MediaLibraryStore] Failed to load source blob URL for stale proxy ${item.id}:`, result.reason);
+                    return;
+                  }
+
+                  const blobUrl = result.value;
+                  if (!blobUrl) {
+                    logger.warn(`[MediaLibraryStore] Missing source blob URL for stale proxy ${item.id}`);
+                    return;
+                  }
+
+                  try {
+                    proxyService.generateProxy(item.id, blobUrl, item.width, item.height);
+                  } catch (error) {
+                    logger.warn(`[MediaLibraryStore] Failed to enqueue stale proxy regeneration for ${item.id}:`, error);
+                  }
+                });
+              }
             }
+          } catch (error) {
+            logger.warn('[MediaLibraryStore] Proxy initialization failed:', error);
           }
         } catch (error) {
           logger.error('[MediaLibraryStore] loadMediaItems error:', error);

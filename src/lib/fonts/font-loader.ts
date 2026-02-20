@@ -53,7 +53,7 @@ export function registerFont(fontName: string, weights: readonly number[] = [400
 
 export function registerFontCatalog(catalog: readonly FontCatalogEntry[]): void {
   for (const font of catalog) {
-    registerFont(font.value, font.weights);
+    registerFont(font.family, font.weights);
   }
 }
 

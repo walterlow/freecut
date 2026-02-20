@@ -8,15 +8,14 @@
  * Storage structure:
  *   proxies/{mediaId}/
  *     proxy.mp4
- *     meta.json - { width, height, status, createdAt }
+ *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
 
 import type { Conversion as ConversionType } from 'mediabunny';
+import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 
-const PROXY_DIR = 'proxies';
 const PROXY_WIDTH = 1280;
 const PROXY_HEIGHT = 720;
-const PROXY_SCHEMA_VERSION = 2;
 
 // Message types
 export interface ProxyGenerateRequest {
@@ -129,6 +128,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
 
   const dir = await getProxyDir(mediaId);
   const proxyDimensions = calculateProxyDimensions(sourceWidth, sourceHeight);
+  const createdAt = Date.now();
 
   // Save initial metadata
   await saveMetadata(dir, {
@@ -138,7 +138,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     sourceWidth,
     sourceHeight,
     status: 'generating',
-    createdAt: Date.now(),
+    createdAt,
   });
 
   const input = new Input({
@@ -161,7 +161,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       video: {
         width: proxyDimensions.width,
         height: proxyDimensions.height,
-        fit: 'fill',
+        fit: 'contain',
         codec: 'avc',
         bitrate: QUALITY_MEDIUM,
       },
@@ -210,7 +210,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       sourceWidth,
       sourceHeight,
       status: 'ready',
-      createdAt: Date.now(),
+      createdAt,
     });
 
     self.postMessage({
