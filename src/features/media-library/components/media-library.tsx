@@ -250,6 +250,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -715,15 +716,45 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       )}
 
-      {/* Scrollable content: collapsible sections for compositions and media */}
-      <div
-        className="flex-1 overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable] relative"
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {/* Drag overlay — covers visible scrollable area below toolbar/filters */}
+      {/* Scrollable content: wrapper provides relative context for the drag overlay */}
+      <div className="flex-1 relative min-h-0">
+        <div
+          className="h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Compositions section — collapsible, auto-hidden when empty */}
+          <CompositionsSection />
+
+          {/* Media section — collapsible, matches compositions header style */}
+          <Collapsible open={mediaOpen} onOpenChange={setMediaOpen}>
+            <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 hover:bg-secondary/50 rounded-md px-2 -mx-2 transition-colors">
+              <ChevronRight
+                className={cn(
+                  'w-3 h-3 text-muted-foreground transition-transform',
+                  mediaOpen && 'rotate-90'
+                )}
+              />
+              <Film className="w-3 h-3 text-muted-foreground" />
+              <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
+                Media
+              </span>
+              <span className="text-[10px] tabular-nums text-muted-foreground/60">
+                {mediaItems.length}
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-1 pb-2">
+              <MediaGrid
+                onMediaSelect={onMediaSelect}
+                viewMode={viewMode}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+
+        {/* Drag overlay — absolute sibling, always covers the visible viewport */}
         {isDragging && (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
             <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />
@@ -750,34 +781,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </div>
           </div>
         )}
-
-        {/* Compositions section — collapsible, auto-hidden when empty */}
-        <CompositionsSection />
-
-        {/* Media section — collapsible, matches compositions header style */}
-        <Collapsible open={mediaOpen} onOpenChange={setMediaOpen}>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 hover:bg-secondary/50 rounded-md px-2 -mx-2 transition-colors">
-            <ChevronRight
-              className={cn(
-                'w-3 h-3 text-muted-foreground transition-transform',
-                mediaOpen && 'rotate-90'
-              )}
-            />
-            <Film className="w-3 h-3 text-muted-foreground" />
-            <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-              Media
-            </span>
-            <span className="text-[10px] tabular-nums text-muted-foreground/60">
-              {mediaItems.length}
-            </span>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-1 pb-2">
-            <MediaGrid
-              onMediaSelect={onMediaSelect}
-              viewMode={viewMode}
-            />
-          </CollapsibleContent>
-        </Collapsible>
       </div>
 
       {/* Proxy generation progress bar */}
