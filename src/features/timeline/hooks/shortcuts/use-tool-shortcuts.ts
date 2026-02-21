@@ -69,4 +69,15 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
     HOTKEY_OPTIONS,
     [activeTool, setActiveTool]
   );
+
+  // Tool: N - Toggle Rolling Edit Tool
+  useHotkeys(
+    HOTKEYS.ROLLING_EDIT_TOOL,
+    (event) => {
+      event.preventDefault();
+      setActiveTool(activeTool === 'rolling-edit' ? 'select' : 'rolling-edit');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
 }

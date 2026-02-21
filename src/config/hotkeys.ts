@@ -42,6 +42,7 @@ export const HOTKEYS = {
   RAZOR_TOOL: 'c',
   SPLIT_AT_CURSOR: 'shift+c',
   RATE_STRETCH_TOOL: 'r',
+  ROLLING_EDIT_TOOL: 'n',
 
   // Project
   SAVE: 'mod+s',
@@ -116,6 +117,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RAZOR_TOOL: 'Razor tool',
   SPLIT_AT_CURSOR: 'Split at cursor',
   RATE_STRETCH_TOOL: 'Rate stretch tool',
+  ROLLING_EDIT_TOOL: 'Rolling edit tool',
 
   // Project
   SAVE: 'Save project',

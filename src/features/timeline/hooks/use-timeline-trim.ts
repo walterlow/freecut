@@ -72,9 +72,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
   /**
    * Find nearest snap target for a given frame position
+   * @param excludeItemId - Optional item ID to exclude from snap targets (e.g. rolling edit neighbor)
    */
   const findSnapForFrame = useCallback(
-    (targetFrame: number): { snappedFrame: number; snapTarget: SnapTarget | null } => {
+    (targetFrame: number, excludeItemId?: string): { snappedFrame: number; snapTarget: SnapTarget | null } => {
       if (!snapEnabled || magneticSnapTargets.length === 0) {
         return { snappedFrame: targetFrame, snapTarget: null };
       }
@@ -83,6 +84,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       let minDistance = snapThresholdFrames;
 
       for (const target of magneticSnapTargets) {
+        if (excludeItemId && target.itemId === excludeItemId) continue;
         const distance = Math.abs(targetFrame - target.frame);
         if (distance < minDistance) {
           nearestTarget = target;
@@ -110,7 +112,32 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       const { handle, initialFrom, initialDuration } = trimStateRef.current;
 
+      // Detect rolling edit state and neighbor early so we can exclude neighbor from snap targets
+      const isRollingEdit = altKeyRef.current || useSelectionStore.getState().activeTool === 'rolling-edit';
+      const allItems = useTimelineStore.getState().items;
+      const currentItem = getItemFromStore();
+      let neighborId: string | null = null;
+
+      if (isRollingEdit) {
+        if (handle === 'end') {
+          const neighbor = allItems.find(
+            (other) => other.id !== currentItem.id &&
+              other.trackId === currentItem.trackId &&
+              other.from === currentItem.from + currentItem.durationInFrames
+          );
+          if (neighbor) neighborId = neighbor.id;
+        } else {
+          const neighbor = allItems.find(
+            (other) => other.id !== currentItem.id &&
+              other.trackId === currentItem.trackId &&
+              other.from + other.durationInFrames === currentItem.from
+          );
+          if (neighbor) neighborId = neighbor.id;
+        }
+      }
+
       // Calculate the target edge position and apply snapping
+      // During rolling edit, exclude the neighbor from snap targets
       let targetEdgeFrame: number;
       if (handle === 'start') {
         // For start handle, we're moving the start position
@@ -121,7 +148,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
 
       // Find snap target for the edge being trimmed
-      const { snappedFrame, snapTarget } = findSnapForFrame(targetEdgeFrame);
+      const { snappedFrame, snapTarget } = findSnapForFrame(targetEdgeFrame, neighborId ?? undefined);
 
       // If snapped, adjust deltaFrames accordingly
       if (snapTarget) {
@@ -134,13 +161,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       // Apply source boundary clamping for media items
       // This ensures visual feedback matches what the store will actually commit
-      // Use fresh item from store to ensure we have latest values after previous trims
-      const currentItem = getItemFromStore();
       const { clampedAmount } = clampTrimAmount(currentItem, handle!, deltaFrames, fps);
       deltaFrames = clampedAmount;
 
       // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
-      const allItems = useTimelineStore.getState().items;
       const transitions = useTransitionsStore.getState().transitions;
       const transitionLinkedIds = new Set<string>();
       for (const t of transitions) {
@@ -149,43 +173,23 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
       deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
 
-      // Rolling edit: if Alt is held, find adjacent neighbor and clamp to both clips' limits
-      const currentAlt = altKeyRef.current;
-      let neighborId: string | null = null;
-
-      if (currentAlt) {
+      // Rolling edit: clamp to both clips' source limits
+      if (isRollingEdit && neighborId) {
+        const neighbor = allItems.find((i) => i.id === neighborId)!;
         if (handle === 'end') {
-          // Trimming end → neighbor is the clip immediately to the right
-          const neighbor = allItems.find(
-            (other) => other.id !== currentItem.id &&
-              other.trackId === currentItem.trackId &&
-              other.from === currentItem.from + currentItem.durationInFrames
-          );
-          if (neighbor) {
-            neighborId = neighbor.id;
-            // Neighbor's start is trimmed by the same delta (positive = shrink start)
-            const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'start', deltaFrames, fps);
-            // Use tighter constraint of both clips
-            if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
-              deltaFrames = neighborClamped;
-            }
+          // Neighbor's start is trimmed by the same delta (positive = shrink start)
+          const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'start', deltaFrames, fps);
+          // Use tighter constraint of both clips
+          if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
+            deltaFrames = neighborClamped;
           }
         } else {
-          // Trimming start → neighbor is the clip immediately to the left
-          const neighbor = allItems.find(
-            (other) => other.id !== currentItem.id &&
-              other.trackId === currentItem.trackId &&
-              other.from + other.durationInFrames === currentItem.from
-          );
-          if (neighbor) {
-            neighborId = neighbor.id;
-            // For the left neighbor's end, pass deltaFrames directly to clampTrimAmount
-            // delta > 0 (shrink this item's start, edit point moves right) → neighbor extends end (positive for trimEnd = extend)
-            // delta < 0 (extend this item's start, edit point moves left) → neighbor shrinks end (negative for trimEnd = shrink)
-            const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'end', deltaFrames, fps);
-            if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
-              deltaFrames = neighborClamped;
-            }
+          // For the left neighbor's end, pass deltaFrames directly to clampTrimAmount
+          // delta > 0 (shrink this item's start, edit point moves right) → neighbor extends end (positive for trimEnd = extend)
+          // delta < 0 (extend this item's start, edit point moves left) → neighbor shrinks end (negative for trimEnd = shrink)
+          const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'end', deltaFrames, fps);
+          if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
+            deltaFrames = neighborClamped;
           }
         }
       }
@@ -212,7 +216,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
 
       // Update local state for visual feedback
-      const isRolling = currentAlt && neighborId !== null;
+      const isRolling = isRollingEdit && neighborId !== null;
       if (deltaFrames !== trimStateRef.current.currentDelta ||
           isRolling !== trimStateRef.current.isRollingEdit ||
           neighborId !== trimStateRef.current.neighborId) {

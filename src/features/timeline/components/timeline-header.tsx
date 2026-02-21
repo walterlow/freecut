@@ -9,6 +9,7 @@ import {
   Magnet,
   Scissors,
   Gauge,
+  SplitSquareHorizontal,
   X,
   MousePointer2,
   Undo2,
@@ -235,6 +236,18 @@ export const TimelineHeader = memo(function TimelineHeader({
             data-tooltip="Rate Stretch Tool (R)"
           >
             <Gauge className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 ${
+              activeTool === 'rolling-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            }`}
+            onClick={() => setActiveTool(activeTool === 'rolling-edit' ? 'select' : 'rolling-edit')}
+            data-tooltip="Rolling Edit Tool (N)"
+          >
+            <SplitSquareHorizontal className="w-3.5 h-3.5" />
           </Button>
         </div>
 

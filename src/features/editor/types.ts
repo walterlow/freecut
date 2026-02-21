@@ -30,7 +30,7 @@ export interface SelectionState {
   selectedTrackIds: string[]; // Multi-track selection
   activeTrackId: string | null; // Single active track
   selectionType: 'item' | 'track' | 'marker' | 'transition' | null;
-  activeTool: 'select' | 'razor' | 'rate-stretch'; // Active timeline tool
+  activeTool: 'select' | 'razor' | 'rate-stretch' | 'rolling-edit'; // Active timeline tool
   // Drag state for visual feedback
   dragState: {
     isDragging: boolean;

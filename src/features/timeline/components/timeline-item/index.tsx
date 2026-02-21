@@ -653,10 +653,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-not-allowed opacity-60'
     : activeTool === 'razor'
     ? 'cursor-scissors'
-    : hoveredEdge !== null && (activeTool === 'select' || activeTool === 'rate-stretch')
+    : hoveredEdge !== null && (activeTool === 'select' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit')
     ? 'cursor-ew-resize'
     : activeTool === 'rate-stretch'
     ? 'cursor-gauge'
+    : activeTool === 'rolling-edit'
+    ? 'cursor-ew-resize'
     : isBeingDragged
     ? 'cursor-grabbing'
     : 'cursor-grab';
@@ -818,7 +820,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         return;
       }
     }
-    if (trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || hoveredEdge !== null) return;
+    // Rolling edit tool: block body drag (only edge trim is allowed)
+    if (activeTool === 'rolling-edit' && !trackLocked && hoveredEdge === null) return;
+    if (trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || hoveredEdge !== null) return;
     handleDragStart(e);
   }, [activeTool, trackLocked, isStretching, isTrimming, hoveredEdge, handleDragStart]);
 
