@@ -1,9 +1,70 @@
 import type { SnapTarget } from '../types/drag';
+import type { TimelineItem } from '@/types/timeline';
+import type { Transition } from '@/types/transition';
 
 /**
  * Snap utility functions for timeline drag-and-drop
  * Pure functions for snap calculations - no side effects
  */
+
+/** Minimal snap edge returned by the shared builder. Compatible with SnapTarget and RazorSnapTarget. */
+export interface ItemSnapEdge {
+  frame: number;
+  type: 'item-start' | 'item-end';
+  itemId?: string;
+}
+
+/**
+ * Build filtered item snap edges from items, tracks, and transitions.
+ *
+ * Handles:
+ * - Filtering items to visible tracks only (via `visibleTrackIds`)
+ * - Suppressing transition inner edges (left clip end / right clip start)
+ * - Adding transition visual midpoints as snap targets
+ * - Optionally excluding specific item IDs (e.g. the item being dragged)
+ *
+ * Returns edges + midpoints only. Callers add grid, playhead, and marker
+ * targets themselves.
+ */
+export function getFilteredItemSnapEdges(
+  items: TimelineItem[],
+  transitions: Transition[],
+  visibleTrackIds: Set<string>,
+  excludeItemIds?: string[],
+): ItemSnapEdge[] {
+  const edges: ItemSnapEdge[] = [];
+
+  // Build suppress sets from transitions
+  const suppressEnd = new Set<string>();
+  const suppressStart = new Set<string>();
+
+  for (const t of transitions) {
+    suppressEnd.add(t.leftClipId);
+    suppressStart.add(t.rightClipId);
+
+    // Add transition visual midpoint (only for visible tracks)
+    const rightClip = items.find((i) => i.id === t.rightClipId);
+    if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
+      const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
+      edges.push({ frame: midpoint, type: 'item-start' });
+    }
+  }
+
+  // Item edges — filtered by visible tracks, transition suppression, and exclusions
+  for (const item of items) {
+    if (!visibleTrackIds.has(item.trackId)) continue;
+    if (excludeItemIds && excludeItemIds.includes(item.id)) continue;
+
+    if (!suppressStart.has(item.id)) {
+      edges.push({ frame: item.from, type: 'item-start', itemId: item.id });
+    }
+    if (!suppressEnd.has(item.id)) {
+      edges.push({ frame: item.from + item.durationInFrames, type: 'item-end', itemId: item.id });
+    }
+  }
+
+  return edges;
+}
 
 /**
  * Generate grid snap points based on timeline scale and zoom level

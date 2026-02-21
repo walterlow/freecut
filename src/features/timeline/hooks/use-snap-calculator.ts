@@ -9,7 +9,9 @@ import {
   generateGridSnapPoints,
   findNearestSnapTarget,
   calculateAdaptiveSnapThreshold,
+  getFilteredItemSnapEdges,
 } from '../utils/timeline-snap-utils';
+import { getVisibleTrackIds } from '../utils/group-utils';
 import { BASE_SNAP_THRESHOLD_PIXELS } from '../constants';
 
 // Helpers to get state on-demand without subscribing
@@ -18,42 +20,6 @@ import { BASE_SNAP_THRESHOLD_PIXELS } from '../constants';
 // Subscribing to items would cause ALL items to re-render when ANY item moves!
 const getItemsOnDemand = () => useTimelineStore.getState().items;
 const getTracksOnDemand = () => useTimelineStore.getState().tracks;
-
-/**
- * Build a set of track IDs whose items should contribute snap targets.
- * Excludes: group tracks (hold no items), hidden tracks, children of
- * collapsed or hidden groups.
- */
-function getVisibleTrackIds(): Set<string> {
-  const tracks = getTracksOnDemand();
-  const ids = new Set<string>();
-
-  // Index groups by ID for quick lookup
-  const groupById = new Map<string, { visible: boolean; collapsed: boolean }>();
-  for (const t of tracks) {
-    if (t.isGroup) {
-      groupById.set(t.id, {
-        visible: t.visible !== false,
-        collapsed: !!t.isCollapsed,
-      });
-    }
-  }
-
-  for (const t of tracks) {
-    if (t.isGroup) continue; // Groups hold no items
-    if (t.visible === false) continue; // Explicitly hidden
-
-    // Check parent group state
-    if (t.parentTrackId) {
-      const parent = groupById.get(t.parentTrackId);
-      if (parent && (parent.collapsed || !parent.visible)) continue;
-    }
-
-    ids.add(t.id);
-  }
-
-  return ids;
-}
 
 /**
  * Advanced snap calculator hook
@@ -102,7 +68,7 @@ export function useSnapCalculator(
   const generateSnapTargets = useCallback(() => {
     const items = getItemsOnDemand();
     const transitions = useTransitionsStore.getState().transitions;
-    const visibleTrackIds = getVisibleTrackIds();
+    const visibleTrackIds = getVisibleTrackIds(getTracksOnDemand());
     const targets: SnapTarget[] = [];
 
     // 1. Grid snap points (timeline markers)
@@ -111,48 +77,11 @@ export function useSnapCalculator(
       targets.push({ frame, type: 'grid' });
     });
 
-    // 2. Build sets of edges hidden by transitions.
-    // In the overlap model, the left clip's end and right clip's start are
-    // inside the transition zone and don't correspond to visible boundaries.
-    // Suppress those edges and add the visual midpoint instead.
-    const suppressEnd = new Set<string>();   // item IDs whose end edge is hidden
-    const suppressStart = new Set<string>(); // item IDs whose start edge is hidden
-
-    for (const t of transitions) {
-      suppressEnd.add(t.leftClipId);
-      suppressStart.add(t.rightClipId);
-
-      // Add the visual midpoint of the transition as a snap target.
-      // Midpoint = rightClip.from + ceil(transitionDuration / 2)
-      const rightClip = items.find((i) => i.id === t.rightClipId);
-      if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
-        const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
-        targets.push({ frame: midpoint, type: 'item-start' });
-      }
+    // 2. Item edges + transition midpoints (filtered by visible tracks,
+    //    transition inner edges suppressed, dragged items excluded)
+    for (const edge of getFilteredItemSnapEdges(items, transitions, visibleTrackIds, excludeIds)) {
+      targets.push(edge);
     }
-
-    // 3. Magnetic snap points (item edges), skipping transition inner edges
-    //    and items on hidden/collapsed tracks
-    items
-      .filter((item) => !excludeIds.includes(item.id) && visibleTrackIds.has(item.trackId))
-      .forEach((item) => {
-        // Item start (skip if this clip is the RIGHT side of a transition)
-        if (!suppressStart.has(item.id)) {
-          targets.push({
-            frame: item.from,
-            type: 'item-start',
-            itemId: item.id,
-          });
-        }
-        // Item end (skip if this clip is the LEFT side of a transition)
-        if (!suppressEnd.has(item.id)) {
-          targets.push({
-            frame: item.from + item.durationInFrames,
-            type: 'item-end',
-            itemId: item.id,
-          });
-        }
-      });
 
     return targets;
   }, [excludeIds, timelineDuration, fps, zoomLevel]);

@@ -61,6 +61,34 @@ export function getVisibleTracks(tracks: TimelineTrack[]): TimelineTrack[] {
 }
 
 /**
+ * Build a set of track IDs whose items should contribute snap targets.
+ * Excludes: group tracks (hold no items), hidden tracks, children of
+ * collapsed or hidden groups.
+ */
+export function getVisibleTrackIds(tracks: TimelineTrack[]): Set<string> {
+  const ids = new Set<string>();
+
+  const groupById = new Map<string, { visible: boolean; collapsed: boolean }>();
+  for (const t of tracks) {
+    if (t.isGroup) {
+      groupById.set(t.id, { visible: t.visible !== false, collapsed: !!t.isCollapsed });
+    }
+  }
+
+  for (const t of tracks) {
+    if (t.isGroup) continue;
+    if (t.visible === false) continue;
+    if (t.parentTrackId) {
+      const parent = groupById.get(t.parentTrackId);
+      if (parent && (parent.collapsed || !parent.visible)) continue;
+    }
+    ids.add(t.id);
+  }
+
+  return ids;
+}
+
+/**
  * Get the nesting depth of a track (0 = top-level, 1 = inside a group).
  * Currently capped at 1 level of nesting.
  */

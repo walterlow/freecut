@@ -30,7 +30,8 @@ import type { AnimatableProperty } from '@/types/keyframe';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
 import type { RazorSnapTarget } from '../../utils/razor-snap';
-
+import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
+import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
@@ -521,50 +522,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       // Build snap targets when Shift is held
       let snapTargets: RazorSnapTarget[] | undefined;
       if (e.shiftKey) {
-        snapTargets = [];
         const timelineState = useTimelineStore.getState();
-        const allTransitions = useTransitionsStore.getState().transitions;
+        const transitions = useTransitionsStore.getState().transitions;
+        const visibleTrackIds = getVisibleTrackIds(timelineState.tracks);
 
-        // Build visible track IDs (skip hidden, collapsed, group-only tracks)
-        const visibleTrackIds = new Set<string>();
-        const groupById = new Map<string, { visible: boolean; collapsed: boolean }>();
-        for (const t of timelineState.tracks) {
-          if (t.isGroup) {
-            groupById.set(t.id, { visible: t.visible !== false, collapsed: !!t.isCollapsed });
-          }
-        }
-        for (const t of timelineState.tracks) {
-          if (t.isGroup) continue;
-          if (t.visible === false) continue;
-          if (t.parentTrackId) {
-            const parent = groupById.get(t.parentTrackId);
-            if (parent && (parent.collapsed || !parent.visible)) continue;
-          }
-          visibleTrackIds.add(t.id);
-        }
-
-        // Skip inner edges hidden by transitions
-        const suppressEnd = new Set<string>();
-        const suppressStart = new Set<string>();
-        for (const t of allTransitions) {
-          suppressEnd.add(t.leftClipId);
-          suppressStart.add(t.rightClipId);
-          const rightClip = timelineState.items.find((i) => i.id === t.rightClipId);
-          if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
-            const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
-            snapTargets.push({ frame: midpoint, type: 'item-start' });
-          }
-        }
-
-        for (const ti of timelineState.items) {
-          if (!visibleTrackIds.has(ti.trackId)) continue;
-          if (!suppressStart.has(ti.id)) {
-            snapTargets.push({ frame: ti.from, type: 'item-start' });
-          }
-          if (!suppressEnd.has(ti.id)) {
-            snapTargets.push({ frame: ti.from + ti.durationInFrames, type: 'item-end' });
-          }
-        }
+        // Item edges + transition midpoints
+        snapTargets = getFilteredItemSnapEdges(timelineState.items, transitions, visibleTrackIds);
         snapTargets.push({ frame: Math.round(currentFrame), type: 'playhead' });
         for (const marker of useMarkersStore.getState().markers) {
           snapTargets.push({ frame: marker.frame, type: 'marker' });

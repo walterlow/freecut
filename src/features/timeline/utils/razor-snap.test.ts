@@ -84,7 +84,7 @@ describe('getRazorSplitPosition', () => {
 
     it('snaps to nearest item edge when shift is held and cursor is within threshold', () => {
       // Item-end at frame 100, which is at pixel 200
-      // Cursor at pixel 205 (within RAZOR_SNAP_THRESHOLD_PX of 12)
+      // Cursor at pixel 200 + RAZOR_SNAP_THRESHOLD_PX - 1 (211)
       const result = getRazorSplitPosition({
         cursorX: 200 + RAZOR_SNAP_THRESHOLD_PX - 1,
         currentFrame: 0,
