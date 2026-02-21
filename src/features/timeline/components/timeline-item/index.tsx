@@ -387,14 +387,18 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, [transitions, item.id, previewOverlapLeft]);
 
   // Calculate position and width (convert frames to seconds, then to pixels)
-  // Display width hides overlap from both edges so the visual junction is centered
-  const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
-  const rippleOffsetPixels = Math.round(timeToPixels(rippleOffsetFrames / fps));
-  const left = Math.round(timeToPixels(item.from / fps)) + overlapLeftPixels + rippleOffsetPixels;
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight) / fps)) + rippleOffsetPixels;
+  // Display width hides overlap from both edges so the visual junction is centered.
+  // Fold overlap + ripple into the frame value BEFORE rounding so both clip edges
+  // derive from a single Math.round — avoids 1px gaps from independent rounding
+  // (Math.round(A) + Math.round(B) ≠ Math.round(A + B)).
+  const left = Math.round(timeToPixels((item.from + overlapLeft + rippleOffsetFrames) / fps));
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight + rippleOffsetFrames) / fps));
   const width = right - left;
   // Full untrimmed clip width — used to offset inner content when left-trimmed
   const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
+  // Pixel offset for inner content shift (filmstrip alignment) — independent rounding is fine
+  // here since it only affects content within this clip, not cross-clip alignment.
+  const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
 
   // Calculate trim visual feedback
   const minWidthPixels = timeToPixels(1 / fps);
