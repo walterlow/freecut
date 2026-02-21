@@ -101,8 +101,10 @@ export function TimelinePreviewScrubber({ inRuler = false, maxFrame }: TimelineP
 
     updateColor(useSelectionStore.getState().activeTool);
 
-    return useSelectionStore.subscribe((state) => {
-      updateColor(state.activeTool);
+    return useSelectionStore.subscribe((state, prev) => {
+      if (state.activeTool !== prev.activeTool) {
+        updateColor(state.activeTool);
+      }
     });
   }, []);
 
