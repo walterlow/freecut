@@ -645,9 +645,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     return canJoinMultipleItems(selectedItems);
   }, []);
 
-  // PERFORMANCE: Neighbors are computed on-demand from store snapshot
-  // Don't subscribe to item changes - it causes O(n²) re-renders
-  // Instead, compute neighbors when needed for join indicators
+  // Reactive neighbor detection: recompute join indicators when adjacent items
+  // change (covers deletion, moves to another track, and position shifts).
+  // The selector is O(n) but only triggers re-render when neighbor IDs change.
+  const neighborKey = useTimelineStore(
+    useCallback((s) => {
+      let leftId = '';
+      let rightId = '';
+      for (const other of s.items) {
+        if (other.id === item.id || other.trackId !== item.trackId) continue;
+        if (other.from + other.durationInFrames === item.from) leftId = other.id;
+        else if (other.from === item.from + item.durationInFrames) rightId = other.id;
+      }
+      return leftId + '|' + rightId;
+    }, [item.id, item.trackId, item.from, item.durationInFrames])
+  );
+
   const getNeighbors = useCallback(() => {
     const items = useTimelineStore.getState().items;
 
@@ -673,10 +686,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     };
   }, [item]);
 
-  // Compute neighbors once per render - no subscription, just snapshot
+  // Recomputes when item props change OR when adjacent neighbor set changes
   const { leftNeighbor, rightNeighbor, hasJoinableLeft, hasJoinableRight } = useMemo(
     () => getNeighbors(),
-    [getNeighbors]
+    [getNeighbors, neighborKey]
   );
 
   // Action handlers
