@@ -8,7 +8,8 @@ import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
-import { rollingTrimItems } from '../stores/actions/item-actions';
+import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
+import { rollingTrimItems, rippleTrimItem } from '../stores/actions/item-actions';
 
 interface TrimState {
   isTrimming: boolean;
@@ -18,6 +19,7 @@ interface TrimState {
   initialDuration: number;
   currentDelta: number; // Track current delta for visual feedback
   isRollingEdit: boolean;
+  isRippleEdit: boolean;
   neighborId: string | null;
 }
 
@@ -58,6 +60,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
     initialDuration: 0,
     currentDelta: 0,
     isRollingEdit: false,
+    isRippleEdit: false,
     neighborId: null,
   });
 
@@ -66,6 +69,9 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
   // Track Alt key state for rolling edit
   const altKeyRef = useRef(false);
+
+  // Track Shift key state for ripple edit
+  const shiftKeyRef = useRef(false);
 
   // Track previous snap target to avoid unnecessary store updates
   const prevSnapTargetRef = useRef<{ frame: number; type: string } | null>(null);
@@ -112,8 +118,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       const { handle, initialFrom, initialDuration } = trimStateRef.current;
 
-      // Detect rolling edit state and neighbor early so we can exclude neighbor from snap targets
-      const isRollingEdit = altKeyRef.current || useSelectionStore.getState().activeTool === 'rolling-edit';
+      // Detect edit modes
+      const activeTool = useSelectionStore.getState().activeTool;
+      const isRollingEdit = altKeyRef.current || activeTool === 'rolling-edit';
+      const isRippleEdit = shiftKeyRef.current || activeTool === 'ripple-edit';
       const allItems = useTimelineStore.getState().items;
       const currentItem = getItemFromStore();
       let neighborId: string | null = null;
@@ -165,18 +173,21 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       deltaFrames = clampedAmount;
 
       // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
-      const transitions = useTransitionsStore.getState().transitions;
-      const transitionLinkedIds = new Set<string>();
-      for (const t of transitions) {
-        if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
-        if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
+      // During ripple edit, skip adjacency clamping — downstream clips shift with the trim.
+      if (!isRippleEdit) {
+        const transitions = useTransitionsStore.getState().transitions;
+        const transitionLinkedIds = new Set<string>();
+        for (const t of transitions) {
+          if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
+          if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
+        }
+        // During rolling edit, exclude the neighbor from adjacency constraints —
+        // it moves with the edit point, so the rolling edit clamp below handles it.
+        if (isRollingEdit && neighborId) {
+          transitionLinkedIds.add(neighborId);
+        }
+        deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
       }
-      // During rolling edit, exclude the neighbor from adjacency constraints —
-      // it moves with the edit point, so the rolling edit clamp below handles it.
-      if (isRollingEdit && neighborId) {
-        transitionLinkedIds.add(neighborId);
-      }
-      deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
 
       // Rolling edit: clamp to both clips' source limits
       if (isRollingEdit && neighborId) {
@@ -220,15 +231,53 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         }
       }
 
+      // Update ripple edit preview store for downstream item visual feedback
+      if (isRippleEdit) {
+        // Calculate the shift that downstream items would experience
+        let rippleShift = 0;
+        if (handle === 'end') {
+          // End handle: extending right pushes downstream, shrinking left pulls them
+          rippleShift = deltaFrames;
+        } else {
+          // Start handle: extending left (negative delta) pushes downstream right (no shift),
+          // shrinking right (positive delta) pulls downstream left
+          // Actually for start handle: the item's end doesn't change position,
+          // but the item's start moves. The key insight is that ripple edit on start handle
+          // shifts downstream by -deltaFrames (trim start right = clip shrinks = pull downstream left)
+          rippleShift = -deltaFrames;
+        }
+
+        const rippleStore = useRippleEditPreviewStore.getState();
+        if (!rippleStore.trimmedItemId) {
+          rippleStore.setPreview({
+            trimmedItemId: item.id,
+            handle: handle!,
+            trackId: currentItem.trackId,
+            trimmedItemEnd: currentItem.from + currentItem.durationInFrames,
+            delta: rippleShift,
+          });
+        } else {
+          rippleStore.setDelta(rippleShift);
+        }
+      } else {
+        // Clear ripple preview when Shift is released or not in ripple mode
+        const rippleStore = useRippleEditPreviewStore.getState();
+        if (rippleStore.trimmedItemId) {
+          rippleStore.clearPreview();
+        }
+      }
+
       // Update local state for visual feedback
       const isRolling = isRollingEdit && neighborId !== null;
       if (deltaFrames !== trimStateRef.current.currentDelta ||
           isRolling !== trimStateRef.current.isRollingEdit ||
+          isRippleEdit !== trimStateRef.current.isRippleEdit ||
           neighborId !== trimStateRef.current.neighborId) {
         setTrimState(prev => ({
           ...prev,
           currentDelta: deltaFrames,
           isRollingEdit: isRolling,
+          isRippleEdit,
           neighborId: neighborId,
         }));
       }
@@ -261,7 +310,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       // Only update store if there was actual change
       if (deltaFrames !== 0) {
-        if (state.isRollingEdit && state.neighborId) {
+        if (state.isRippleEdit) {
+          // Ripple edit: trim + shift downstream items
+          rippleTrimItem(item.id, state.handle!, deltaFrames);
+        } else if (state.isRollingEdit && state.neighborId) {
           // Rolling edit: determine left/right clip IDs and edit point delta
           if (state.handle === 'end') {
             // Trimming end handle: this item is the left clip
@@ -284,12 +336,16 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // Clear rolling edit preview
       useRollingEditPreviewStore.getState().clearPreview();
 
+      // Clear ripple edit preview
+      useRippleEditPreviewStore.getState().clearPreview();
+
       // Clear drag state (including snap indicator)
       setDragState(null);
       prevSnapTargetRef.current = null;
 
-      // Reset Alt key ref
+      // Reset modifier key refs
       altKeyRef.current = false;
+      shiftKeyRef.current = false;
 
       setTrimState({
         isTrimming: false,
@@ -299,6 +355,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         initialDuration: 0,
         currentDelta: 0,
         isRollingEdit: false,
+        isRippleEdit: false,
         neighborId: null,
       });
     }
@@ -312,9 +369,13 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
           e.preventDefault(); // Prevent browser menu activation on Windows
           altKeyRef.current = true;
         }
+        if (e.key === 'Shift') {
+          shiftKeyRef.current = true;
+        }
       };
       const handleKeyUp = (e: KeyboardEvent) => {
         if (e.key === 'Alt') altKeyRef.current = false;
+        if (e.key === 'Shift') shiftKeyRef.current = false;
       };
 
       window.addEventListener('mousemove', handleMouseMove);
@@ -349,6 +410,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         initialDuration: item.durationInFrames,
         currentDelta: 0,
         isRollingEdit: false,
+        isRippleEdit: false,
         neighborId: null,
       });
     },
@@ -360,6 +422,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
     trimHandle: trimState.handle,
     trimDelta: trimState.currentDelta,
     isRollingEdit: trimState.isRollingEdit,
+    isRippleEdit: trimState.isRippleEdit,
     handleTrimStart,
   };
 }

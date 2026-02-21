@@ -10,6 +10,7 @@ import {
   Scissors,
   Gauge,
   SplitSquareHorizontal,
+  MoveHorizontal,
   X,
   MousePointer2,
   Undo2,
@@ -248,6 +249,18 @@ export const TimelineHeader = memo(function TimelineHeader({
             data-tooltip="Rolling Edit Tool (N)"
           >
             <SplitSquareHorizontal className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 ${
+              activeTool === 'ripple-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            }`}
+            onClick={() => setActiveTool(activeTool === 'ripple-edit' ? 'select' : 'ripple-edit')}
+            data-tooltip="Ripple Edit Tool (B)"
+          >
+            <MoveHorizontal className="w-3.5 h-3.5" />
           </Button>
         </div>
 

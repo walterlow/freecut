@@ -80,4 +80,15 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
     HOTKEY_OPTIONS,
     [activeTool, setActiveTool]
   );
+
+  // Tool: B - Toggle Ripple Edit Tool
+  useHotkeys(
+    HOTKEYS.RIPPLE_EDIT_TOOL,
+    (event) => {
+      event.preventDefault();
+      setActiveTool(activeTool === 'ripple-edit' ? 'select' : 'ripple-edit');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
 }

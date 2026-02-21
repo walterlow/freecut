@@ -43,6 +43,7 @@ export const HOTKEYS = {
   SPLIT_AT_CURSOR: 'shift+c',
   RATE_STRETCH_TOOL: 'r',
   ROLLING_EDIT_TOOL: 'n',
+  RIPPLE_EDIT_TOOL: 'b',
 
   // Project
   SAVE: 'mod+s',
@@ -118,6 +119,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   SPLIT_AT_CURSOR: 'Split at cursor',
   RATE_STRETCH_TOOL: 'Rate stretch tool',
   ROLLING_EDIT_TOOL: 'Rolling edit tool',
+  RIPPLE_EDIT_TOOL: 'Ripple edit tool',
 
   // Project
   SAVE: 'Save project',
