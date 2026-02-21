@@ -1,5 +1,6 @@
 import { useRef, useEffect, useLayoutEffect } from 'react';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { formatTimecode } from '@/utils/time-utils';
 
@@ -20,6 +21,8 @@ export function TimelinePreviewScrubber({ inRuler = false, maxFrame }: TimelineP
   const { frameToPixels, fps } = useTimelineZoomContext();
   const scrubberRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+  const diamondRef = useRef<HTMLDivElement>(null);
   const frameToPixelsRef = useRef(frameToPixels);
   const fpsRef = useRef(fps);
   const maxFrameRef = useRef(maxFrame);
@@ -76,6 +79,33 @@ export function TimelinePreviewScrubber({ inRuler = false, maxFrame }: TimelineP
     scrubberRef.current.style.left = `${leftPosition}px`;
   }, [frameToPixels, maxFrame]);
 
+  // Change color based on active tool: red for razor, purple for rate-stretch
+  useEffect(() => {
+    const updateColor = (tool: string) => {
+      const isRazor = tool === 'razor';
+      const isRateStretch = tool === 'rate-stretch';
+      const lineColor = isRazor
+        ? 'rgba(239, 68, 68, 0.7)'
+        : isRateStretch
+        ? 'rgba(168, 85, 247, 0.7)'
+        : 'rgba(255, 255, 255, 0.3)';
+      const diamondColor = isRazor
+        ? 'rgba(239, 68, 68, 0.8)'
+        : isRateStretch
+        ? 'rgba(168, 85, 247, 0.8)'
+        : 'rgba(255, 255, 255, 0.4)';
+
+      if (lineRef.current) lineRef.current.style.backgroundColor = lineColor;
+      if (diamondRef.current) diamondRef.current.style.backgroundColor = diamondColor;
+    };
+
+    updateColor(useSelectionStore.getState().activeTool);
+
+    return useSelectionStore.subscribe((state) => {
+      updateColor(state.activeTool);
+    });
+  }, []);
+
   return (
     <div
       ref={scrubberRef}
@@ -88,13 +118,14 @@ export function TimelinePreviewScrubber({ inRuler = false, maxFrame }: TimelineP
       }}
     >
       {/* Ghost line */}
-      <div className="absolute inset-0 bg-white/30" />
+      <div ref={lineRef} className="absolute inset-0 bg-white/30" />
 
       {/* Ruler area: diamond handle + time tooltip */}
       {inRuler && (
         <>
           {/* Small diamond */}
           <div
+            ref={diamondRef}
             className="absolute bg-white/40"
             style={{
               top: '-5px',

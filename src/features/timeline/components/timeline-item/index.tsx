@@ -606,6 +606,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-scissors'
     : hoveredEdge !== null && (activeTool === 'select' || activeTool === 'rate-stretch')
     ? 'cursor-ew-resize'
+    : activeTool === 'rate-stretch'
+    ? 'cursor-gauge'
     : isBeingDragged
     ? 'cursor-grabbing'
     : 'cursor-grab';

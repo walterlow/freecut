@@ -28,7 +28,6 @@ import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
 import { GroupSummaryTrack } from './group-summary-track';
 import { TimelineGuidelines } from './timeline-guidelines';
-import { TimelineSplitIndicator } from './timeline-split-indicator';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
@@ -87,18 +86,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   // Granular selectors for drag state - avoid subscribing to entire dragState object
   const isDragging = useSelectionStore((s) => !!s.dragState?.isDragging);
   const activeSnapTarget = useSelectionStore((s) => s.dragState?.activeSnapTarget ?? null);
-  const activeTool = useSelectionStore((s) => s.activeTool);
-
-  // Track cursor position for razor tool - only when hovering over an item
-  const [razorCursorX, setRazorCursorX] = useState<number | null>(null);
-  const [hoveredItemElement, setHoveredItemElement] = useState<HTMLElement | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Use ref for activeTool to avoid callback recreation on mode changes
-  const activeToolRef = useRef(activeTool);
-  activeToolRef.current = activeTool;
-
   const tracksContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const marqueeWasActiveRef = useRef(false);
@@ -426,39 +415,6 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
       selectMarker(null); // Also clear marker selection
     }
   };
-
-  // Track cursor position for razor tool split indicator - only over items
-  // Use refs to avoid callback recreation on every mode/state change (prevents playback lag)
-  const razorCursorXRef = useRef(razorCursorX);
-  razorCursorXRef.current = razorCursorX;
-  const hoveredItemElementRef = useRef(hoveredItemElement);
-  hoveredItemElementRef.current = hoveredItemElement;
-
-  const handleMouseMoveForRazor = useCallback((e: React.MouseEvent) => {
-    if (activeToolRef.current !== 'razor') {
-      if (razorCursorXRef.current !== null) setRazorCursorX(null);
-      if (hoveredItemElementRef.current) setHoveredItemElement(null);
-      return;
-    }
-
-    // Check if we're hovering over a timeline item
-    const target = e.target as HTMLElement;
-    const itemElement = target.closest('[data-item-id]') as HTMLElement | null;
-
-    if (itemElement) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setRazorCursorX(e.clientX - rect.left + e.currentTarget.scrollLeft);
-      if (hoveredItemElementRef.current !== itemElement) setHoveredItemElement(itemElement);
-    } else {
-      if (razorCursorXRef.current !== null) setRazorCursorX(null);
-      if (hoveredItemElementRef.current) setHoveredItemElement(null);
-    }
-  }, []); // Stable callback - reads from refs
-
-  const handleMouseLeaveForRazor = useCallback(() => {
-    setRazorCursorX(null);
-    setHoveredItemElement(null);
-  }, []);
 
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
@@ -830,8 +786,6 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
             contain: 'layout style paint',
             willChange: 'contents',
           }}
-          onMouseMove={handleMouseMoveForRazor}
-          onMouseLeave={handleMouseLeaveForRazor}
         >
           {/* Render all visible tracks - virtualization removed as it caused drag lag */}
           {/* Video editors typically have <10 tracks, making virtualization overhead not worth it */}
@@ -847,15 +801,6 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
           {isDragging && (
             <TimelineGuidelines
               activeSnapTarget={activeSnapTarget}
-            />
-          )}
-
-          {/* Split indicator (shown in razor mode when hovering over an item) */}
-          {activeTool === 'razor' && hoveredItemElement && (
-            <TimelineSplitIndicator
-              cursorX={razorCursorX}
-              hoveredElement={hoveredItemElement}
-              tracksContainerRef={tracksContainerRef}
             />
           )}
 

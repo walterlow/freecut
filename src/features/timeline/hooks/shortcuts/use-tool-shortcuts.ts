@@ -1,5 +1,5 @@
 /**
- * Tool shortcuts: V (Select), C (Split at cursor), R (Rate Stretch).
+ * Tool shortcuts: V (Select), C (Razor), Shift+C (Split at cursor), R (Rate Stretch).
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -24,7 +24,18 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
     [setActiveTool]
   );
 
-  // Tool: C - Split hovered item at gray playhead (or main playhead)
+  // Tool: C - Toggle Razor/Cut Mode
+  useHotkeys(
+    HOTKEYS.RAZOR_TOOL,
+    (event) => {
+      event.preventDefault();
+      setActiveTool(activeTool === 'razor' ? 'select' : 'razor');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
+
+  // Tool: Shift+C - Split hovered item at gray playhead (or main playhead)
   useHotkeys(
     HOTKEYS.SPLIT_AT_CURSOR,
     (event) => {
@@ -42,32 +53,6 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
             callbacks.onSplit();
           }
         }
-      }
-    },
-    HOTKEY_OPTIONS,
-    [callbacks]
-  );
-
-  // Tool: Shift+C - Split selected clip at main playhead
-  useHotkeys(
-    HOTKEYS.SPLIT_SELECTED,
-    (event) => {
-      event.preventDefault();
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const { items, splitItem } = useTimelineStore.getState();
-      const { selectedItemIds } = useSelectionStore.getState();
-
-      let didSplit = false;
-      for (const id of selectedItemIds) {
-        const item = items.find((i) => i.id === id);
-        if (item && item.type !== 'composition' && currentFrame > item.from && currentFrame < item.from + item.durationInFrames) {
-          splitItem(item.id, currentFrame);
-          didSplit = true;
-        }
-      }
-
-      if (didSplit && callbacks.onSplit) {
-        callbacks.onSplit();
       }
     },
     HOTKEY_OPTIONS,

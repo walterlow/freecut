@@ -38,7 +38,7 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[]; extra?: { descript
   },
   {
     name: 'Tools',
-    keys: ['SELECTION_TOOL', 'SPLIT_AT_CURSOR', 'SPLIT_SELECTED', 'RATE_STRETCH_TOOL'],
+    keys: ['SELECTION_TOOL', 'RAZOR_TOOL', 'SPLIT_AT_CURSOR', 'RATE_STRETCH_TOOL'],
   },
   {
     name: 'Project',
