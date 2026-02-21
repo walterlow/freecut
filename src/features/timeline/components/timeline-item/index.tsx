@@ -650,14 +650,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // The selector is O(n) but only triggers re-render when neighbor IDs change.
   const neighborKey = useTimelineStore(
     useCallback((s) => {
-      let left = '';
-      let right = '';
+      let leftId = '';
+      let rightId = '';
       for (const other of s.items) {
         if (other.id === item.id || other.trackId !== item.trackId) continue;
-        if (other.from + other.durationInFrames === item.from) left = other.id;
-        else if (other.from === item.from + item.durationInFrames) right = other.id;
+        if (other.from + other.durationInFrames === item.from) leftId = other.id;
+        else if (other.from === item.from + item.durationInFrames) rightId = other.id;
       }
-      return left + '|' + right;
+      return leftId + '|' + rightId;
     }, [item.id, item.trackId, item.from, item.durationInFrames])
   );
 
