@@ -323,7 +323,7 @@ describe('rolling edit', () => {
     expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100);
   });
 
-  it('clamps delta when right clip cannot shrink enough due to source bounds', () => {
+  it('clamps delta when right clip is too short to shrink by full amount', () => {
     const left = makeVideoItem({
       id: 'left',
       trackId: 'track-1',
@@ -334,34 +334,37 @@ describe('rolling edit', () => {
       sourceDuration: 200,
       sourceFps: 30,
     });
-    // Right clip starts at sourceStart 50, so it can only shrink by ~50 frames
-    // before hitting sourceEnd
+    // Right clip is only 40 frames long — min-duration guard (1 frame) limits
+    // shrink to 39, so a delta of 90 gets clamped.
     const right = makeVideoItem({
       id: 'right',
       trackId: 'track-1',
       from: 100,
-      durationInFrames: 100,
-      sourceStart: 50,
-      sourceEnd: 150,
-      sourceDuration: 150,
+      durationInFrames: 40,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
       sourceFps: 30,
       mediaId: 'media-2',
     });
 
     useItemsStore.getState().setItems([left, right]);
 
-    // Request 90 frames but right clip can only shrink by ~50
+    // Request 90 but right can only shrink by 39 (100 - 1 min duration)
     rollingTrimItems('left', 'right', 90);
 
     const items = useItemsStore.getState().items;
     const updatedLeft = items.find((i) => i.id === 'left')!;
     const updatedRight = items.find((i) => i.id === 'right')!;
 
-    // Delta should be clamped — right clip can't shrink more than its source allows
-    expect(updatedRight.durationInFrames).toBeGreaterThan(0);
+    // Right clamped to minimum 1 frame (shrank by 39, not 90)
+    expect(updatedRight.durationInFrames).toBe(1);
+    expect(updatedRight.from).toBe(139);
+    // Left extended by 39 (adjacency-clamped to freed space)
+    expect(updatedLeft.durationInFrames).toBe(139);
     // Total duration unchanged
-    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
-    // Left extended by actual effective delta, right shrunk by same amount
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(140);
+    // Clips remain adjacent
     expect(updatedLeft.from + updatedLeft.durationInFrames).toBe(updatedRight.from);
   });
 });
