@@ -290,6 +290,66 @@ class ProxyService {
     }
   }
 
+  /**
+   * Re-read all cached proxy files from OPFS and create fresh blob URLs.
+   * Call this after tab wake-up to recover from stale blob URLs caused by
+   * browser memory pressure or tab throttling during inactivity.
+   *
+   * @returns Number of proxy blob URLs that were refreshed
+   */
+  async refreshAllBlobUrls(): Promise<number> {
+    const mediaIds = [...this.blobUrlCache.keys()];
+    if (mediaIds.length === 0) return 0;
+
+    let refreshed = 0;
+
+    try {
+      const root = await navigator.storage.getDirectory();
+      let proxyRoot: FileSystemDirectoryHandle;
+      try {
+        proxyRoot = await root.getDirectoryHandle(PROXY_DIR);
+      } catch {
+        return 0;
+      }
+
+      for (const mediaId of mediaIds) {
+        try {
+          const mediaDir = await proxyRoot.getDirectoryHandle(mediaId);
+          const proxyHandle = await mediaDir.getFileHandle('proxy.mp4');
+          const proxyFile = await proxyHandle.getFile();
+
+          if (proxyFile.size === 0) continue;
+
+          // Revoke old blob URL
+          const oldUrl = this.blobUrlCache.get(mediaId);
+          if (oldUrl) {
+            URL.revokeObjectURL(oldUrl);
+          }
+
+          // Create fresh blob URL from OPFS
+          const freshUrl = URL.createObjectURL(proxyFile);
+          this.blobUrlCache.set(mediaId, freshUrl);
+          refreshed++;
+        } catch {
+          // Proxy file may have been deleted — remove stale cache entry
+          const oldUrl = this.blobUrlCache.get(mediaId);
+          if (oldUrl) {
+            URL.revokeObjectURL(oldUrl);
+          }
+          this.blobUrlCache.delete(mediaId);
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to refresh proxy blob URLs:', error);
+    }
+
+    if (refreshed > 0) {
+      logger.debug(`Refreshed ${refreshed} proxy blob URLs from OPFS`);
+    }
+
+    return refreshed;
+  }
+
   private revokeTrackedSourceBlobUrl(mediaId: string): void {
     const sourceBlobUrl = this.sourceBlobUrlByMediaId.get(mediaId);
     if (!sourceBlobUrl) {

@@ -101,6 +101,19 @@ class BlobUrlManager {
   }
 
   /**
+   * Revoke and remove all blob URLs regardless of reference count.
+   * Used on tab wake-up to recover from stale blob URLs after inactivity.
+   * Consumers will re-acquire fresh URLs on next resolve.
+   */
+  invalidateAll(): void {
+    for (const entry of this.entries.values()) {
+      URL.revokeObjectURL(entry.url);
+    }
+    this.entries.clear();
+    this.notify();
+  }
+
+  /**
    * Release all blob URLs (e.g., on project cleanup).
    */
   releaseAll(): void {
