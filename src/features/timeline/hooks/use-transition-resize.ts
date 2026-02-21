@@ -2,7 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Transition } from '@/types/transition';
 import { TRANSITION_CONFIGS } from '@/types/transition';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useItemsStore } from '../stores/items-store';
 import { useTimelineZoom } from './use-timeline-zoom';
+import { useTransitionResizePreviewStore } from '../stores/transition-resize-preview-store';
 import type { TimelineState, TimelineActions } from '../types';
 
 type ResizeHandle = 'left' | 'right';
@@ -55,9 +57,7 @@ export function useTransitionResize(transition: Transition) {
 
       const deltaX = e.clientX - resizeStateRef.current.startX;
       const deltaTime = pixelsToTime(deltaX);
-      // Double the delta so the bridge expands symmetrically from its center —
-      // each handle tracks the cursor 1:1 while the opposite edge moves equally.
-      let deltaFrames = Math.round(deltaTime * fps) * 2;
+      let deltaFrames = Math.round(deltaTime * fps);
 
       // Left handle: negative deltaX = increase duration
       // Right handle: positive deltaX = increase duration
@@ -76,6 +76,8 @@ export function useTransitionResize(transition: Transition) {
         ...prev,
         currentDelta: clampedDelta,
       }));
+
+      useTransitionResizePreviewStore.getState().setPreviewDuration(newDuration);
     },
     [pixelsToTime, fps, config.minDuration, config.maxDuration]
   );
@@ -96,6 +98,8 @@ export function useTransitionResize(transition: Transition) {
       updateTransition(transition.id, { durationInFrames: newDuration });
     }
 
+    useTransitionResizePreviewStore.getState().clearPreview();
+
     setResizeState({
       isResizing: false,
       handle: null,
@@ -114,6 +118,11 @@ export function useTransitionResize(transition: Transition) {
       e.preventDefault();
       e.stopPropagation();
 
+      // Look up the right clip's committed position for ripple preview
+      const rightClip = useItemsStore.getState().items.find(
+        (i) => i.id === transition.rightClipId
+      );
+
       setResizeState({
         isResizing: true,
         handle,
@@ -122,10 +131,20 @@ export function useTransitionResize(transition: Transition) {
         currentDelta: 0,
       });
 
+      useTransitionResizePreviewStore.getState().setPreview({
+        transitionId: transition.id,
+        previewDuration: transition.durationInFrames,
+        leftClipId: transition.leftClipId,
+        rightClipId: transition.rightClipId,
+        trackId: rightClip?.trackId ?? '',
+        rightClipFrom: rightClip?.from ?? 0,
+        committedDuration: transition.durationInFrames,
+      });
+
       document.body.style.cursor = 'ew-resize';
       document.body.style.userSelect = 'none';
     },
-    [transition.durationInFrames]
+    [transition.id, transition.durationInFrames, transition.leftClipId, transition.rightClipId]
   );
 
   // Add/remove global listeners with capture to intercept events first

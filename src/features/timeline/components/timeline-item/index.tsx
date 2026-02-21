@@ -3,6 +3,7 @@ import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
+import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
 import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
@@ -336,32 +337,61 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // We split the visual trim equally: D/2 from the left clip's right edge, D/2 from the
   // right clip's left edge. This centers the visual junction at the overlap midpoint (FCP-style).
   const transitions = useTransitionsStore((s) => s.transitions);
-  const overlapRight = useMemo(() => {
-    let overlap = 0;
-    for (const t of transitions) {
-      if (t.leftClipId === item.id) {
-        overlap = Math.max(overlap, t.durationInFrames);
-      }
-    }
-    return Math.ceil(overlap / 2);
-  }, [transitions, item.id]);
 
-  // Compute overlap hidden at the clip's head (this clip is the RIGHT clip in a transition).
-  const overlapLeft = useMemo(() => {
-    let overlap = 0;
+  // Smart per-concern selectors for transition resize preview.
+  // Return primitives so unaffected clips always get 0 (stable, no re-render).
+
+  // Only changes for the LEFT clip of the resizing transition
+  const previewOverlapRight = useTransitionResizePreviewStore(
+    useCallback((s) => {
+      if (s.leftClipId !== item.id) return 0;
+      return Math.ceil(s.previewDuration / 2);
+    }, [item.id])
+  );
+
+  // Only changes for the RIGHT clip
+  const previewOverlapLeft = useTransitionResizePreviewStore(
+    useCallback((s) => {
+      if (s.rightClipId !== item.id) return 0;
+      return Math.floor(s.previewDuration / 2);
+    }, [item.id])
+  );
+
+  // Only changes for right clip + items after it on same track
+  const rippleOffsetFrames = useTransitionResizePreviewStore(
+    useCallback((s) => {
+      if (!s.transitionId || s.trackId !== item.trackId) return 0;
+      const delta = s.committedDuration - s.previewDuration;
+      if (delta === 0) return 0;
+      if (item.id === s.rightClipId || item.from > s.rightClipFrom) return delta;
+      return 0;
+    }, [item.id, item.trackId, item.from])
+  );
+
+  // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
+  const overlapRight = useMemo(() => {
+    if (previewOverlapRight > 0) return previewOverlapRight;
     for (const t of transitions) {
-      if (t.rightClipId === item.id) {
-        overlap = Math.max(overlap, t.durationInFrames);
-      }
+      if (t.leftClipId === item.id) return Math.ceil(t.durationInFrames / 2);
     }
-    return Math.floor(overlap / 2);
-  }, [transitions, item.id]);
+    return 0;
+  }, [transitions, item.id, previewOverlapRight]);
+
+  // Merge preview + committed overlap for the left edge (this clip is RIGHT in a transition)
+  const overlapLeft = useMemo(() => {
+    if (previewOverlapLeft > 0) return previewOverlapLeft;
+    for (const t of transitions) {
+      if (t.rightClipId === item.id) return Math.floor(t.durationInFrames / 2);
+    }
+    return 0;
+  }, [transitions, item.id, previewOverlapLeft]);
 
   // Calculate position and width (convert frames to seconds, then to pixels)
   // Display width hides overlap from both edges so the visual junction is centered
   const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
-  const left = Math.round(timeToPixels(item.from / fps)) + overlapLeftPixels;
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight) / fps));
+  const rippleOffsetPixels = Math.round(timeToPixels(rippleOffsetFrames / fps));
+  const left = Math.round(timeToPixels(item.from / fps)) + overlapLeftPixels + rippleOffsetPixels;
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight) / fps)) + rippleOffsetPixels;
   const width = right - left;
   // Full untrimmed clip width — used to offset inner content when left-trimmed
   const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
@@ -869,6 +899,28 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           />
         </div>
       </ItemContextMenu>
+
+      {/* Transition resize ghost overlays — show overlap zones during resize */}
+      {previewOverlapRight > 0 && (
+        <div
+          className="absolute inset-y-0 rounded-r pointer-events-none"
+          style={{
+            left: visualLeft + visualWidth,
+            width: Math.round(timeToPixels(overlapRight / fps)),
+            background: 'linear-gradient(90deg, rgba(168,85,247,0.2), rgba(168,85,247,0.08))',
+          }}
+        />
+      )}
+      {previewOverlapLeft > 0 && (
+        <div
+          className="absolute inset-y-0 rounded-l pointer-events-none"
+          style={{
+            left: visualLeft - Math.round(timeToPixels(overlapLeft / fps)),
+            width: Math.round(timeToPixels(overlapLeft / fps)),
+            background: 'linear-gradient(270deg, rgba(168,85,247,0.2), rgba(168,85,247,0.08))',
+          }}
+        />
+      )}
 
       {/* Alt-drag ghosts */}
       <AnchorDragGhost

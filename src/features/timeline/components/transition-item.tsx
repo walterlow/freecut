@@ -125,33 +125,27 @@ export const TransitionItem = memo(function TransitionItem({
 
   // Calculate position and size for the transition indicator.
   // The bridge covers the actual overlap region: from (leftEnd - duration) to leftEnd.
-  // During resize, the bridge is centered on the initial midpoint so it expands
-  // symmetrically — each handle tracks the cursor 1:1 (delta is doubled in the hook).
+  // The right edge is anchored at leftEnd (the left clip's end); the left edge moves
+  // as the duration changes.  The left handle tracks the cursor 1:1.
   const position = useMemo(() => {
     if (!leftClip || !rightClip) return null;
 
     const leftEnd = leftClip.from + leftClip.durationInFrames;
-    const overlapStart = leftEnd - previewDuration;
-
-    // During resize, shift the bridge right by half the delta to center on the
-    // initial midpoint. transition.durationInFrames hasn't been committed yet,
-    // so it still holds the initial value.
-    const resizeOffset = isResizing
-      ? (previewDuration - transition.durationInFrames) / 2
-      : 0;
-    const startPixel = frameToPixels(overlapStart + resizeOffset);
-    const naturalWidth = frameToPixels(previewDuration);
+    // Round each edge independently — same pixel grid as timeline items
+    const bridgeRight = Math.round(frameToPixels(leftEnd));
+    const bridgeLeft = Math.round(frameToPixels(leftEnd - previewDuration));
+    const naturalWidth = bridgeRight - bridgeLeft;
 
     // Minimum width for visibility
     const minWidth = 32;
     const effectiveWidth = Math.max(naturalWidth, minWidth);
     // Center the minimum-width bridge on the overlap midpoint
     const left = naturalWidth >= minWidth
-      ? startPixel
-      : startPixel - (minWidth - naturalWidth) / 2;
+      ? bridgeLeft
+      : bridgeLeft - (minWidth - naturalWidth) / 2;
 
     return { left, width: effectiveWidth };
-  }, [leftClip, rightClip, frameToPixels, previewDuration, isResizing, transition.durationInFrames]);
+  }, [leftClip, rightClip, frameToPixels, previewDuration]);
 
   // Duration in seconds for display (use previewDuration for visual feedback)
   const durationSec = useMemo(() => {
