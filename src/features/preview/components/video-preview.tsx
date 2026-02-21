@@ -560,7 +560,7 @@ export const VideoPreview = memo(function VideoPreview({
     let lastHiddenAt = 0;
     const STALE_THRESHOLD_MS = 30_000; // Only refresh if hidden for >30s
 
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.hidden) {
         lastHiddenAt = Date.now();
         return;
@@ -572,7 +572,12 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       // 1. Refresh proxy blob URLs from OPFS (re-reads files, creates fresh URLs)
-      proxyService.refreshAllBlobUrls().catch(() => {});
+      //    Must complete before step 2 so re-resolution picks up fresh proxy URLs.
+      try {
+        await proxyService.refreshAllBlobUrls();
+      } catch {
+        // Best-effort — continue with source URL refresh even if proxy refresh fails
+      }
 
       // 2. Invalidate source media blob URLs so they get re-created on next resolve
       blobUrlManager.invalidateAll();

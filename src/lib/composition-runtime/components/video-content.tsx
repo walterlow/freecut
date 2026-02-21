@@ -6,7 +6,6 @@ import { useClock } from '@/features/player/clock/clock-hooks';
 import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/player/video/VideoSourcePoolContext';
 import { createLogger } from '@/lib/logger';
-import { proxyService } from '@/features/media-library/services/proxy-service';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
   applyVideoElementAudioVolume,
@@ -242,41 +241,22 @@ const NativePreviewVideo: React.FC<{
     forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
 
     // Stall watchdog: if the element is stuck at readyState 0 for too long
-    // (e.g., stale proxy blob URL, broken file, browser decoder issue),
-    // try refreshing the proxy URL from OPFS before retrying load.
-    // A plain load() won't help if the blob URL's backing data is gone.
+    // (e.g., slow OPFS read, browser decoder init, broken file), retry load.
+    // For stale blob URLs after inactivity, the visibilitychange handler in
+    // video-preview.tsx refreshes all proxy/source URLs and triggers a full
+    // re-render with fresh src props, which remounts this component.
     let stallTimerId: number | null = null;
     if (element.readyState === 0) {
       stallTimerId = window.setTimeout(() => {
         stallTimerId = null;
-        if (elementRef.current !== element || element.readyState !== 0) return;
-
-        console.warn(`[NativePreviewVideo] Video stalled at readyState 0 for ${shortId}, refreshing source`);
-
-        // Try refreshing all proxy blob URLs from OPFS (async, best-effort).
-        // If the stale URL was a proxy, this gives us a fresh one.
-        proxyService.refreshAllBlobUrls().then((refreshed) => {
-          if (elementRef.current !== element) return;
-          if (refreshed > 0 && element.readyState === 0) {
-            // Check if there's a fresh proxy URL for this element's source
-            // The parent component will re-render with the new URL, but
-            // in the meantime try reloading the element.
-            try {
-              element.load();
-            } catch {
-              // load() can throw if element is in a bad state
-            }
+        if (elementRef.current === element && element.readyState === 0) {
+          console.warn(`[NativePreviewVideo] Video stalled at readyState 0 for ${shortId}, retrying load`);
+          try {
+            element.load();
+          } catch {
+            // load() can throw if element is in a bad state
           }
-        }).catch(() => {
-          // If proxy refresh fails, still try a plain reload
-          if (elementRef.current === element && element.readyState === 0) {
-            try {
-              element.load();
-            } catch {
-              // Ignore
-            }
-          }
-        });
+        }
       }, 3000);
     }
 
