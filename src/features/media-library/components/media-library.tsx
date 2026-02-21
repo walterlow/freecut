@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload } from 'lucide-react';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -40,6 +40,7 @@ import { useCompositionNavigationStore } from '@/features/timeline/stores/compos
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
+import { validateMediaFile } from '../utils/validation';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -70,6 +71,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
   const [infoPanelDismissed, setInfoPanelDismissed] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(true);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Timeline store selectors - don't subscribe to items to avoid re-renders
   // Read items from store directly when needed (in delete handler)
@@ -231,6 +233,97 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       logger.error('Import failed:', error);
     }
   }, [importHandles]);
+
+  // Panel-level drag/drop handlers so the drop zone covers the full panel height.
+  // Uses an enter/leave counter to avoid flicker when dragging over child elements.
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (dragCounterRef.current === 1 && !e.dataTransfer.types.includes('application/json')) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+
+    // Ignore media items being dragged from the grid itself
+    try {
+      const jsonData = e.dataTransfer.getData('application/json');
+      if (jsonData) {
+        const data = JSON.parse(jsonData);
+        if (data.type === 'media-item' || data.type === 'media-items') {
+          return;
+        }
+      }
+    } catch {
+      // Not JSON data, continue with file handling
+    }
+
+    // Check if getAsFileSystemHandle is supported (Chrome/Edge only)
+    const firstItem = e.dataTransfer.items[0];
+    if (!firstItem || !('getAsFileSystemHandle' in firstItem)) {
+      showNotification({ type: 'warning', message: 'Drag-drop not supported. Please use Google Chrome.' });
+      return;
+    }
+
+    // Collect all handle promises SYNCHRONOUSLY before any await
+    const items = Array.from(e.dataTransfer.items);
+    const handlePromises: Promise<FileSystemHandle | null>[] = [];
+    for (const item of items) {
+      if ('getAsFileSystemHandle' in item) {
+        handlePromises.push(item.getAsFileSystemHandle());
+      }
+    }
+
+    const rawHandles = await Promise.all(handlePromises);
+
+    const handles: FileSystemFileHandle[] = [];
+    const errors: string[] = [];
+    for (const handle of rawHandles) {
+      if (handle?.kind === 'file') {
+        try {
+          const file = await (handle as FileSystemFileHandle).getFile();
+          const validation = validateMediaFile(file);
+          if (validation.valid) {
+            handles.push(handle as FileSystemFileHandle);
+          } else {
+            errors.push(`${file.name}: ${validation.error}`);
+          }
+        } catch (error) {
+          logger.warn('Failed to get file from handle:', error);
+        }
+      }
+    }
+
+    if (errors.length > 0) {
+      showNotification({ type: 'error', message: `Some files were rejected: ${errors.join(', ')}` });
+    }
+    if (handles.length > 0) {
+      await handleImportHandles(handles);
+    }
+  }, [showNotification, handleImportHandles]);
 
   // Count of items currently generating proxies
   const generatingCount = useMemo(() => {
@@ -623,7 +716,41 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       )}
 
       {/* Scrollable content: collapsible sections for compositions and media */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]">
+      <div
+        className="flex-1 overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable] relative"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {/* Drag overlay — covers visible scrollable area below toolbar/filters */}
+        {isDragging && (
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
+            <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />
+            <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-primary" />
+            <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-primary" />
+            <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-primary" />
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/20 border-2 border-primary">
+                <Upload className="w-7 h-7 text-primary animate-bounce" />
+              </div>
+              <p className="text-base font-bold tracking-wide text-primary">DROP FILES HERE</p>
+              <div className="flex flex-wrap justify-center gap-2 mt-2">
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WebM</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MOV</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP3</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WAV</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">JPG</span>
+                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">PNG</span>
+              </div>
+            </div>
+            <div className="absolute inset-0 overflow-hidden">
+              <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-scan" />
+            </div>
+          </div>
+        )}
+
         {/* Compositions section — collapsible, auto-hidden when empty */}
         <CompositionsSection />
 
@@ -647,8 +774,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           <CollapsibleContent className="pt-1 pb-2">
             <MediaGrid
               onMediaSelect={onMediaSelect}
-              onImportHandles={handleImportHandles}
-              onShowNotification={showNotification}
               viewMode={viewMode}
             />
           </CollapsibleContent>
