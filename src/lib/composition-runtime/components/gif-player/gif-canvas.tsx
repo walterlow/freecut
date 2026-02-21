@@ -31,8 +31,11 @@ export const GifCanvas = memo(function GifCanvas({ frame, fit, style }: GifCanva
     // CSS transforms (rotation/scale).  getBoundingClientRect() returns the
     // axis-aligned bounding box AFTER transforms, which distorts the canvas
     // pixel buffer when the item is rotated via the gizmo.
-    const containerWidth = container.offsetWidth || 1920;
-    const containerHeight = container.offsetHeight || 1080;
+    const containerWidth = container.offsetWidth;
+    const containerHeight = container.offsetHeight;
+
+    // Skip drawing when container is hidden or detached (zero dimensions)
+    if (containerWidth === 0 || containerHeight === 0) return;
 
     // Set canvas size to match container
     if (canvas.width !== containerWidth || canvas.height !== containerHeight) {
