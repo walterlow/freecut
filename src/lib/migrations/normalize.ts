@@ -19,8 +19,6 @@
 import type { Project, ProjectTimeline } from '@/types/project';
 import {
   DEFAULT_TRACK_HEIGHT,
-  MIN_TRACK_HEIGHT,
-  MAX_TRACK_HEIGHT,
   DEFAULT_FPS,
 } from '@/features/timeline/constants';
 
@@ -33,11 +31,8 @@ function normalizeTrack(
 ): ProjectTimeline['tracks'][number] {
   return {
     ...track,
-    // Ensure height is within valid bounds
-    height: Math.max(
-      MIN_TRACK_HEIGHT,
-      Math.min(MAX_TRACK_HEIGHT, track.height ?? DEFAULT_TRACK_HEIGHT)
-    ),
+    // Always use current default — no user-facing track resize exists yet
+    height: DEFAULT_TRACK_HEIGHT,
     // Ensure boolean fields have defaults
     locked: track.locked ?? false,
     visible: track.visible ?? true,
@@ -149,6 +144,13 @@ function normalizeTimeline(timeline: ProjectTimeline): ProjectTimeline {
     items: timeline.items.map(normalizeItem),
     // Normalize transitions if present
     transitions: timeline.transitions?.map(normalizeTransition),
+    // Normalize sub-composition tracks and items
+    compositions: timeline.compositions?.map((comp) => ({
+      ...comp,
+      tracks: comp.tracks.map((track, index) => normalizeTrack(track, index)),
+      items: comp.items.map(normalizeItem),
+      transitions: comp.transitions?.map(normalizeTransition),
+    })),
     // Ensure frame values are non-negative integers
     currentFrame: Math.max(0, Math.floor(timeline.currentFrame ?? 0)),
     // Ensure zoom is positive
