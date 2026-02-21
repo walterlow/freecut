@@ -6,10 +6,8 @@ import { mediaLibraryService } from '@/features/media-library/services/media-lib
 import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
-// Thin bar waveform styling
-const WAVEFORM_BAR_WIDTH_PX = 1;
-const WAVEFORM_BAR_GAP_PX = 2;
-const WAVEFORM_VERTICAL_PADDING_PX = 7;
+// Continuous filled-path waveform styling (NLE-style)
+const WAVEFORM_VERTICAL_PADDING_PX = 3;
 
 interface ClipWaveformProps {
   /** Media ID from the timeline item */
@@ -35,7 +33,7 @@ interface ClipWaveformProps {
 /**
  * Clip Waveform Component
  *
- * Renders audio waveform as a mirrored thin-bar visualization for timeline clips.
+ * Renders audio waveform as a top-half thin-bar visualization for timeline clips.
  * Uses tiled canvas for large clips and shows skeleton while loading.
  */
 export const ClipWaveform = memo(function ClipWaveform({
@@ -161,7 +159,7 @@ export const ClipWaveform = memo(function ClipWaveform({
     return maxPeak > 0 ? maxPeak : 1;
   }, [peaks]);
 
-  // Render function for tiled canvas
+  // Render function for tiled canvas — continuous filled path (NLE-style)
   const renderTile = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -173,39 +171,33 @@ export const ClipWaveform = memo(function ClipWaveform({
         return;
       }
 
-      ctx.fillStyle = WAVEFORM_FILL_COLOR;
-      ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
-      ctx.lineWidth = 0.75;
-
-      // Calculate the time range visible in this tile
       const effectiveStart = sourceStart + trimStart;
+      const baselineY = height - WAVEFORM_VERTICAL_PADDING_PX;
+      const maxWaveHeight = Math.max(1, height - WAVEFORM_VERTICAL_PADDING_PX * 2);
 
-      const centerY = height / 2;
-      const maxWaveHeight = Math.max(1, centerY - WAVEFORM_VERTICAL_PADDING_PX);
-      const barSpacing = WAVEFORM_BAR_WIDTH_PX + WAVEFORM_BAR_GAP_PX;
+      // Build a single path tracing the peak contour per-pixel
+      ctx.beginPath();
+      ctx.moveTo(0, baselineY);
 
-      for (let x = 0; x <= tileWidth; x += barSpacing) {
-        // Calculate timeline position for this point
+      for (let x = 0; x <= tileWidth; x++) {
         const timelinePosition = (tileOffset + x) / pixelsPerSecond;
-
-        // Convert to source time
-        // sourceTime = effectiveStart + (timelinePosition * speed)
         const sourceTime = effectiveStart + (timelinePosition * speed);
 
-        // Skip if outside source duration
-        if (sourceTime < 0 || sourceTime > sourceDuration) {
+        if (sourceTime < 0 || sourceTime > sourceDuration || sampleRate <= 0) {
+          ctx.lineTo(x, baselineY);
           continue;
         }
 
-        // Read a small peak window for each point to avoid aliasing artifacts.
         const peakIndex = Math.floor(sourceTime * sampleRate);
-        if (peakIndex < 0 || peakIndex >= peaks.length || sampleRate <= 0) {
+        if (peakIndex < 0 || peakIndex >= peaks.length) {
+          ctx.lineTo(x, baselineY);
           continue;
         }
 
+        // Window sampling to avoid aliasing
         const pointWindowSeconds = Math.max(
           1 / sampleRate,
-          (barSpacing / pixelsPerSecond) * speed * 0.5
+          (1 / pixelsPerSecond) * speed * 0.5
         );
         const samplesPerPoint = Math.max(1, Math.ceil(pointWindowSeconds * sampleRate));
         const halfWindow = Math.floor(samplesPerPoint / 2);
@@ -229,6 +221,7 @@ export const ClipWaveform = memo(function ClipWaveform({
         }
 
         if (sampleCount === 0) {
+          ctx.lineTo(x, baselineY);
           continue;
         }
 
@@ -241,18 +234,21 @@ export const ClipWaveform = memo(function ClipWaveform({
           normalizedMean * 0.38 + normalizedMax2 * 0.34 + needle * 2.35
         );
         const amp = peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05);
-        if (amp <= 0.002) {
-          continue;
-        }
-
-        const barHeight = Math.max(1, amp * maxWaveHeight);
-        const barX = Math.round(x);
-        const barY = Math.round(centerY - barHeight);
-        const fullBarHeight = Math.round(barHeight * 2);
-
-        ctx.fillRect(barX, barY, WAVEFORM_BAR_WIDTH_PX, fullBarHeight);
-        ctx.strokeRect(barX, barY, WAVEFORM_BAR_WIDTH_PX, fullBarHeight);
+        const waveY = baselineY - amp * maxWaveHeight;
+        ctx.lineTo(x, waveY);
       }
+
+      // Close path back along the baseline
+      ctx.lineTo(tileWidth, baselineY);
+      ctx.closePath();
+
+      ctx.fillStyle = WAVEFORM_FILL_COLOR;
+      ctx.fill();
+
+      // Thin stroke along the top contour for definition
+      ctx.strokeStyle = WAVEFORM_STROKE_COLOR;
+      ctx.lineWidth = 0.75;
+      ctx.stroke();
     },
     [peaks, duration, sampleRate, pixelsPerSecond, sourceStart, trimStart, speed, sourceDuration, height, normalizationPeak]
   );
