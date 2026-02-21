@@ -334,8 +334,8 @@ describe('rolling edit', () => {
       sourceDuration: 200,
       sourceFps: 30,
     });
-    // Right clip starts at sourceStart 90, so it can only shrink by 50 frames
-    // (durationInFrames 100 - minimum ~50 after clamping to sourceStart)
+    // Right clip starts at sourceStart 50, so it can only shrink by ~50 frames
+    // before hitting sourceEnd
     const right = makeVideoItem({
       id: 'right',
       trackId: 'track-1',

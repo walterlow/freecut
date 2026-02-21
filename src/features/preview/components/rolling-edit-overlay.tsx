@@ -105,8 +105,8 @@ function RollingEditOverlayInner({
       : rightItem.from + neighborDelta;
 
   // Local frames within each clip at the edit point
-  const outLocalFrame = editPointFrame - leftItem.from - 1;
-  const inLocalFrame = editPointFrame - rightItem.from;
+  const outLocalFrame = Math.max(0, editPointFrame - leftItem.from - 1);
+  const inLocalFrame = Math.max(0, editPointFrame - rightItem.from);
 
   // Source time calculations
   const leftSourceFps = leftItem.sourceFps ?? fps;
@@ -358,6 +358,10 @@ function ImageFrame({ item }: ImageFrameProps) {
       if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
     };
     img.src = blobUrl;
+
+    return () => {
+      img.onload = null;
+    };
   }, [blobUrl]);
 
   return (
