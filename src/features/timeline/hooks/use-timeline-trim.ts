@@ -7,6 +7,8 @@ import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
 import { useTransitionsStore } from '../stores/transitions-store';
+import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
+import { rollingTrimItems } from '../stores/actions/item-actions';
 
 interface TrimState {
   isTrimming: boolean;
@@ -15,6 +17,8 @@ interface TrimState {
   initialFrom: number;
   initialDuration: number;
   currentDelta: number; // Track current delta for visual feedback
+  isRollingEdit: boolean;
+  neighborId: string | null;
 }
 
 /**
@@ -53,10 +57,15 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
     initialFrom: 0,
     initialDuration: 0,
     currentDelta: 0,
+    isRollingEdit: false,
+    neighborId: null,
   });
 
   const trimStateRef = useRef(trimState);
   trimStateRef.current = trimState;
+
+  // Track Alt key state for rolling edit
+  const altKeyRef = useRef(false);
 
   // Track previous snap target to avoid unnecessary store updates
   const prevSnapTargetRef = useRef<{ frame: number; type: string } | null>(null);
@@ -140,9 +149,79 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
       deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
 
+      // Rolling edit: if Alt is held, find adjacent neighbor and clamp to both clips' limits
+      const currentAlt = altKeyRef.current;
+      let neighborId: string | null = null;
+
+      if (currentAlt) {
+        if (handle === 'end') {
+          // Trimming end → neighbor is the clip immediately to the right
+          const neighbor = allItems.find(
+            (other) => other.id !== currentItem.id &&
+              other.trackId === currentItem.trackId &&
+              other.from === currentItem.from + currentItem.durationInFrames
+          );
+          if (neighbor) {
+            neighborId = neighbor.id;
+            // Neighbor's start is trimmed by the same delta (positive = shrink start)
+            const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'start', deltaFrames, fps);
+            // Use tighter constraint of both clips
+            if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
+              deltaFrames = neighborClamped;
+            }
+          }
+        } else {
+          // Trimming start → neighbor is the clip immediately to the left
+          const neighbor = allItems.find(
+            (other) => other.id !== currentItem.id &&
+              other.trackId === currentItem.trackId &&
+              other.from + other.durationInFrames === currentItem.from
+          );
+          if (neighbor) {
+            neighborId = neighbor.id;
+            // For the left neighbor's end, pass deltaFrames directly to clampTrimAmount
+            // delta > 0 (shrink this item's start, edit point moves right) → neighbor extends end (positive for trimEnd = extend)
+            // delta < 0 (extend this item's start, edit point moves left) → neighbor shrinks end (negative for trimEnd = shrink)
+            const { clampedAmount: neighborClamped } = clampTrimAmount(neighbor, 'end', deltaFrames, fps);
+            if (Math.abs(neighborClamped) < Math.abs(deltaFrames)) {
+              deltaFrames = neighborClamped;
+            }
+          }
+        }
+      }
+
+      // Update rolling edit preview store
+      if (neighborId) {
+        const previewStore = useRollingEditPreviewStore.getState();
+        if (!previewStore.trimmedItemId) {
+          previewStore.setPreview({
+            trimmedItemId: item.id,
+            neighborItemId: neighborId,
+            handle: handle!,
+            neighborDelta: deltaFrames,
+          });
+        } else {
+          previewStore.setNeighborDelta(deltaFrames);
+        }
+      } else {
+        // Clear preview when Alt is released or no neighbor found
+        const previewStore = useRollingEditPreviewStore.getState();
+        if (previewStore.trimmedItemId) {
+          previewStore.clearPreview();
+        }
+      }
+
       // Update local state for visual feedback
-      if (deltaFrames !== trimStateRef.current.currentDelta) {
-        setTrimState(prev => ({ ...prev, currentDelta: deltaFrames }));
+      const isRolling = currentAlt && neighborId !== null;
+      if (deltaFrames !== trimStateRef.current.currentDelta ||
+          isRolling !== trimStateRef.current.isRollingEdit ||
+          neighborId !== trimStateRef.current.neighborId) {
+        setTrimState(prev => ({
+          ...prev,
+          currentDelta: deltaFrames,
+          isRollingEdit: isRolling,
+          neighborId: neighborId,
+        }));
       }
 
       // Update snap target visualization (only when changed)
@@ -169,19 +248,39 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
   const handleMouseUp = useCallback(() => {
     if (trimStateRef.current.isTrimming) {
       const deltaFrames = trimStateRef.current.currentDelta;
+      const state = trimStateRef.current;
 
       // Only update store if there was actual change
       if (deltaFrames !== 0) {
-        if (trimStateRef.current.handle === 'start') {
-          trimItemStart(item.id, deltaFrames);
-        } else if (trimStateRef.current.handle === 'end') {
-          trimItemEnd(item.id, deltaFrames);
+        if (state.isRollingEdit && state.neighborId) {
+          // Rolling edit: determine left/right clip IDs and edit point delta
+          if (state.handle === 'end') {
+            // Trimming end handle: this item is the left clip
+            rollingTrimItems(item.id, state.neighborId, deltaFrames);
+          } else {
+            // Trimming start handle: this item is the right clip, neighbor is left
+            // rollingTrimItems convention: positive delta = edit point moves right
+            rollingTrimItems(state.neighborId, item.id, deltaFrames);
+          }
+        } else {
+          // Normal trim
+          if (state.handle === 'start') {
+            trimItemStart(item.id, deltaFrames);
+          } else if (state.handle === 'end') {
+            trimItemEnd(item.id, deltaFrames);
+          }
         }
       }
+
+      // Clear rolling edit preview
+      useRollingEditPreviewStore.getState().clearPreview();
 
       // Clear drag state (including snap indicator)
       setDragState(null);
       prevSnapTargetRef.current = null;
+
+      // Reset Alt key ref
+      altKeyRef.current = false;
 
       setTrimState({
         isTrimming: false,
@@ -190,6 +289,8 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         initialFrom: 0,
         initialDuration: 0,
         currentDelta: 0,
+        isRollingEdit: false,
+        neighborId: null,
       });
     }
   }, [item.id, trimItemStart, trimItemEnd, setDragState]);
@@ -197,12 +298,26 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
   // Setup and cleanup mouse event listeners
   useEffect(() => {
     if (trimState.isTrimming) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Alt') {
+          e.preventDefault(); // Prevent browser menu activation on Windows
+          altKeyRef.current = true;
+        }
+      };
+      const handleKeyUp = (e: KeyboardEvent) => {
+        if (e.key === 'Alt') altKeyRef.current = false;
+      };
+
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
 
       return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
       };
     }
   }, [trimState.isTrimming, handleMouseMove, handleMouseUp]);
@@ -224,6 +339,8 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         initialFrom: item.from,
         initialDuration: item.durationInFrames,
         currentDelta: 0,
+        isRollingEdit: false,
+        neighborId: null,
       });
     },
     [item.from, item.durationInFrames, trackLocked]
@@ -233,6 +350,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
     isTrimming: trimState.isTrimming,
     trimHandle: trimState.handle,
     trimDelta: trimState.currentDelta,
+    isRollingEdit: trimState.isRollingEdit,
     handleTrimStart,
   };
 }

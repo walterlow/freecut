@@ -513,6 +513,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       duplicateItems: timelineActions.duplicateItems,
       trimItemStart: timelineActions.trimItemStart,
       trimItemEnd: timelineActions.trimItemEnd,
+      rollingTrimItems: timelineActions.rollingTrimItems,
       splitItem: timelineActions.splitItem,
       joinItems: timelineActions.joinItems,
       rateStretchItem: timelineActions.rateStretchItem,

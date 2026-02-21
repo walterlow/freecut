@@ -3,6 +3,7 @@ import type { VideoItem } from '@/types/timeline';
 import { useItemsStore } from './items-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { timelineToSourceFrames } from '../utils/source-calculations';
+import { rollingTrimItems } from './actions/item-actions';
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
@@ -207,5 +208,118 @@ describe('items-store rate stretch', () => {
     expect(updated.sourceEnd).toBe(4678);
     expect(updated.sourceStart).toBe(3185);
     expect(updated.sourceDuration).toBe(4809);
+  });
+});
+
+describe('rolling edit', () => {
+  beforeEach(() => {
+    useTimelineSettingsStore.setState({ fps: 30 });
+    useItemsStore.setState({ items: [], tracks: [] });
+  });
+
+  it('moves edit point right between adjacent same-track clips (positive delta)', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
+      sourceFps: 30,
+      mediaId: 'media-2',
+    });
+
+    useItemsStore.getState().setItems([left, right]);
+
+    // Move edit point right by 20 frames
+    rollingTrimItems('left', 'right', 20);
+
+    const items = useItemsStore.getState().items;
+    const updatedLeft = items.find((i) => i.id === 'left')!;
+    const updatedRight = items.find((i) => i.id === 'right')!;
+
+    // Left clip extended by 20
+    expect(updatedLeft.durationInFrames).toBe(120);
+    // Right clip shrunk by 20, start moved right by 20
+    expect(updatedRight.from).toBe(120);
+    expect(updatedRight.durationInFrames).toBe(80);
+    // Total duration unchanged
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
+  });
+
+  it('moves edit point left between adjacent same-track clips (negative delta)', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+    // Right clip starts at source frame 50 so it has room to extend left
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 50,
+      sourceEnd: 250,
+      sourceDuration: 250,
+      sourceFps: 30,
+      mediaId: 'media-2',
+    });
+
+    useItemsStore.getState().setItems([left, right]);
+
+    // Move edit point left by 30 frames
+    rollingTrimItems('left', 'right', -30);
+
+    const items = useItemsStore.getState().items;
+    const updatedLeft = items.find((i) => i.id === 'left')!;
+    const updatedRight = items.find((i) => i.id === 'right')!;
+
+    // Left clip shrunk by 30
+    expect(updatedLeft.durationInFrames).toBe(70);
+    // Right clip extended by 30, start moved left by 30
+    expect(updatedRight.from).toBe(70);
+    expect(updatedRight.durationInFrames).toBe(130);
+    // Total duration unchanged
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
+  });
+
+  it('does nothing when editPointDelta is zero', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      mediaId: 'media-2',
+    });
+
+    useItemsStore.getState().setItems([left, right]);
+    rollingTrimItems('left', 'right', 0);
+
+    const items = useItemsStore.getState().items;
+    expect(items.find((i) => i.id === 'left')!.durationInFrames).toBe(100);
+    expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100);
   });
 });

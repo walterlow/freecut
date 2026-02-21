@@ -519,3 +519,36 @@ export async function insertFreezeFrame(
     return false;
   }
 }
+
+/**
+ * Rolling edit: move the edit point between two adjacent clips.
+ * Trims the left clip's end and the right clip's start by the same amount,
+ * keeping total timeline duration unchanged.
+ *
+ * @param leftId - ID of the left clip (its end edge is being adjusted)
+ * @param rightId - ID of the right clip (its start edge is being adjusted)
+ * @param editPointDelta - Frames to move the edit point (positive = right, negative = left)
+ */
+export function rollingTrimItems(leftId: string, rightId: string, editPointDelta: number): void {
+  if (editPointDelta === 0) return;
+
+  execute('ROLLING_EDIT', () => {
+    // Order matters: shrink first, then extend. The internal _trimItemEnd/_trimItemStart
+    // methods have clampToAdjacentItems guards that prevent extending into a neighbor.
+    // By shrinking the losing clip first, we free up space for the gaining clip to extend into.
+    if (editPointDelta > 0) {
+      // Edit point moves right: right clip shrinks (frees space), then left clip extends
+      useItemsStore.getState()._trimItemStart(rightId, editPointDelta);
+      useItemsStore.getState()._trimItemEnd(leftId, editPointDelta);
+    } else {
+      // Edit point moves left: left clip shrinks (frees space), then right clip extends
+      useItemsStore.getState()._trimItemEnd(leftId, editPointDelta);
+      useItemsStore.getState()._trimItemStart(rightId, editPointDelta);
+    }
+
+    // Repair transitions for both clips
+    applyTransitionRepairs([leftId, rightId]);
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { leftId, rightId, editPointDelta });
+}

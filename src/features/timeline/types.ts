@@ -41,6 +41,7 @@ export interface TimelineActions {
   duplicateItems: (itemIds: string[], positions: Array<{ from: number; trackId: string }>) => void;
   trimItemStart: (id: string, trimAmount: number) => void;
   trimItemEnd: (id: string, trimAmount: number) => void;
+  rollingTrimItems: (leftId: string, rightId: string, editPointDelta: number) => void;
   splitItem: (id: string, splitFrame: number) => void;
   joinItems: (itemIds: string[]) => void;
   rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
