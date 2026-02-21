@@ -241,8 +241,10 @@ const NativePreviewVideo: React.FC<{
     forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
 
     // Stall watchdog: if the element is stuck at readyState 0 for too long
-    // (e.g., stale proxy blob URL, broken file, browser decoder issue),
-    // retry loading. Without this the preview freezes permanently.
+    // (e.g., slow OPFS read, browser decoder init, broken file), retry load.
+    // For stale blob URLs after inactivity, the visibilitychange handler in
+    // video-preview.tsx refreshes all proxy/source URLs and triggers a full
+    // re-render with fresh src props, which remounts this component.
     let stallTimerId: number | null = null;
     if (element.readyState === 0) {
       stallTimerId = window.setTimeout(() => {

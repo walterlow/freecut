@@ -8,6 +8,8 @@ import { MainComposition } from '@/lib/composition-runtime/compositions/main-com
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { proxyService } from '@/features/media-library/services/proxy-service';
+import { blobUrlManager } from '@/lib/blob-url-manager';
 import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import { GizmoOverlay } from './gizmo-overlay';
@@ -270,6 +272,8 @@ export const VideoPreview = memo(function VideoPreview({
   // Cache for resolved blob URLs (mediaId -> blobUrl)
   const [resolvedUrls, setResolvedUrls] = useState<Map<string, string>>(new Map());
   const [isResolving, setIsResolving] = useState(false);
+  // Bumped on tab wake-up to force re-resolution of media URLs
+  const [urlRefreshVersion, setUrlRefreshVersion] = useState(0);
 
   // Combine tracks and items into TimelineTrack format
   // resolveEffectiveTrackStates applies parent group gate behavior (mute/hide/lock)
@@ -415,7 +419,7 @@ export const VideoPreview = memo(function VideoPreview({
     return () => {
       isCancelled = true;
     };
-  }, [mediaFingerprint]);
+  }, [mediaFingerprint, urlRefreshVersion]);
 
   // Eagerly preload all video sources into the VideoSourcePool.
   // This creates and warms up <video> elements for every unique source
@@ -433,6 +437,12 @@ export const VideoPreview = memo(function VideoPreview({
     for (const track of combinedTracks) {
       for (const item of track.items) {
         if (item.type === 'video' && item.mediaId) {
+          // When proxy is enabled, the video element uses the proxy URL.
+          // Include both so pruneUnused doesn't discard active elements.
+          if (useProxy) {
+            const proxyUrl = resolveProxyUrl(item.mediaId);
+            if (proxyUrl) activeVideoSrcs.add(proxyUrl);
+          }
           const src = resolvedUrls.get(item.mediaId);
           if (src) activeVideoSrcs.add(src);
         }
@@ -443,6 +453,10 @@ export const VideoPreview = memo(function VideoPreview({
     for (const comp of compositions) {
       for (const subItem of comp.items) {
         if (subItem.type === 'video' && subItem.mediaId) {
+          if (useProxy) {
+            const proxyUrl = resolveProxyUrl(subItem.mediaId);
+            if (proxyUrl) activeVideoSrcs.add(proxyUrl);
+          }
           const src = resolvedUrls.get(subItem.mediaId);
           if (src) activeVideoSrcs.add(src);
         }
@@ -456,7 +470,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     // Release elements for sources removed from the timeline
     pool.pruneUnused(activeVideoSrcs);
-  }, [resolvedUrls, combinedTracks, compositions]);
+  }, [resolvedUrls, combinedTracks, compositions, useProxy]);
 
   // Create a stable fingerprint for tracks to detect meaningful changes
   const tracksFingerprint = useMemo(() => {
@@ -538,6 +552,46 @@ export const VideoPreview = memo(function VideoPreview({
       }
     };
   }, [fps, combinedTracks, resolvedUrls]);
+
+  // Refresh blob URLs on tab wake-up to recover from stale URLs.
+  // After extended inactivity, browsers may reclaim memory backing blob URLs
+  // created from OPFS File objects, causing video elements to hang at readyState 0.
+  useEffect(() => {
+    let lastHiddenAt = 0;
+    const STALE_THRESHOLD_MS = 30_000; // Only refresh if hidden for >30s
+
+    const handleVisibilityChange = async () => {
+      if (document.hidden) {
+        lastHiddenAt = Date.now();
+        return;
+      }
+
+      // Tab became visible — check if we were hidden long enough for staleness
+      if (lastHiddenAt === 0 || Date.now() - lastHiddenAt < STALE_THRESHOLD_MS) {
+        return;
+      }
+
+      // 1. Refresh proxy blob URLs from OPFS (re-reads files, creates fresh URLs)
+      //    Must complete before step 2 so re-resolution picks up fresh proxy URLs.
+      try {
+        await proxyService.refreshAllBlobUrls();
+      } catch {
+        // Best-effort — continue with source URL refresh even if proxy refresh fails
+      }
+
+      // 2. Invalidate source media blob URLs so they get re-created on next resolve
+      blobUrlManager.invalidateAll();
+
+      // 3. Clear resolved URL cache and bump version to trigger re-resolution
+      setResolvedUrls(new Map());
+      setUrlRefreshVersion((v) => v + 1);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Calculate player size based on zoom mode
   const playerSize = useMemo(() => {

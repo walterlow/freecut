@@ -44,6 +44,7 @@ class ProxyService {
   private sourceBlobUrlByMediaId = new Map<string, string>();
   private statusListener: ProxyStatusListener | null = null;
   private generatingSet = new Set<string>();
+  private isRefreshing = false;
 
   /**
    * Register a listener for proxy status changes (used by the store)
@@ -288,6 +289,79 @@ class ProxyService {
       logger.error(`Failed to load completed proxy for ${mediaId}:`, error);
       this.statusListener?.(mediaId, 'error');
     }
+  }
+
+  /**
+   * Re-read all cached proxy files from OPFS and create fresh blob URLs.
+   * Call this after tab wake-up to recover from stale blob URLs caused by
+   * browser memory pressure or tab throttling during inactivity.
+   *
+   * @returns Number of proxy blob URLs that were refreshed
+   */
+  async refreshAllBlobUrls(): Promise<number> {
+    if (this.isRefreshing) return 0;
+
+    const mediaIds = [...this.blobUrlCache.keys()];
+    if (mediaIds.length === 0) return 0;
+
+    this.isRefreshing = true;
+    let refreshed = 0;
+
+    try {
+      const root = await navigator.storage.getDirectory();
+      let proxyRoot: FileSystemDirectoryHandle;
+      try {
+        proxyRoot = await root.getDirectoryHandle(PROXY_DIR);
+      } catch {
+        return 0;
+      }
+
+      for (const mediaId of mediaIds) {
+        try {
+          const mediaDir = await proxyRoot.getDirectoryHandle(mediaId);
+          const proxyHandle = await mediaDir.getFileHandle('proxy.mp4');
+          const proxyFile = await proxyHandle.getFile();
+
+          if (proxyFile.size === 0) {
+            // Revoke stale cache entry for empty proxy file
+            const oldUrl = this.blobUrlCache.get(mediaId);
+            if (oldUrl) {
+              URL.revokeObjectURL(oldUrl);
+            }
+            this.blobUrlCache.delete(mediaId);
+            continue;
+          }
+
+          // Revoke old blob URL
+          const oldUrl = this.blobUrlCache.get(mediaId);
+          if (oldUrl) {
+            URL.revokeObjectURL(oldUrl);
+          }
+
+          // Create fresh blob URL from OPFS
+          const freshUrl = URL.createObjectURL(proxyFile);
+          this.blobUrlCache.set(mediaId, freshUrl);
+          refreshed++;
+        } catch {
+          // Proxy file may have been deleted — remove stale cache entry
+          const oldUrl = this.blobUrlCache.get(mediaId);
+          if (oldUrl) {
+            URL.revokeObjectURL(oldUrl);
+          }
+          this.blobUrlCache.delete(mediaId);
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to refresh proxy blob URLs:', error);
+    } finally {
+      this.isRefreshing = false;
+    }
+
+    if (refreshed > 0) {
+      logger.debug(`Refreshed ${refreshed} proxy blob URLs from OPFS`);
+    }
+
+    return refreshed;
   }
 
   private revokeTrackedSourceBlobUrl(mediaId: string): void {
