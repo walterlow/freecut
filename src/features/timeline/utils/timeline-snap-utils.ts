@@ -34,6 +34,9 @@ export function getFilteredItemSnapEdges(
 ): ItemSnapEdge[] {
   const edges: ItemSnapEdge[] = [];
 
+  // Index items by ID for O(1) lookup in the transitions loop below
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
   // Build suppress sets from transitions
   const suppressEnd = new Set<string>();
   const suppressStart = new Set<string>();
@@ -43,7 +46,7 @@ export function getFilteredItemSnapEdges(
     suppressStart.add(t.rightClipId);
 
     // Add transition visual midpoint (only for visible tracks)
-    const rightClip = items.find((i) => i.id === t.rightClipId);
+    const rightClip = itemById.get(t.rightClipId);
     if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
       const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
       edges.push({ frame: midpoint, type: 'item-start' });
