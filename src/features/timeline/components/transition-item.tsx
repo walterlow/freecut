@@ -123,41 +123,28 @@ export const TransitionItem = memo(function TransitionItem({
     };
   }, [transition.leftClipId, transition.rightClipId]);
 
-  // Calculate position and size for the transition region
-  // The transition is centered on the junction (half before, half after the cut point)
-  // Use previewDuration during resize for visual feedback
+  // Calculate position and size for the transition indicator.
+  // The bridge covers the actual overlap region: from (leftEnd - duration) to leftEnd.
+  // The right edge is anchored at leftEnd (the left clip's end); the left edge moves
+  // as the duration changes.  The left handle tracks the cursor 1:1.
   const position = useMemo(() => {
     if (!leftClip || !rightClip) return null;
 
-    // The junction is where the clips meet (rightClip.from = leftClip.from + leftClip.durationInFrames)
-    const junctionFrame = rightClip.from;
-    const junctionPixel = frameToPixels(junctionFrame);
-
-    // Transition is centered on junction: half before, half after
-    const halfDuration = Math.floor(previewDuration / 2);
-    const remainingDuration = previewDuration - halfDuration;
-
-    // Clamp to clip boundaries
-    const transitionStart = Math.max(leftClip.from, junctionFrame - halfDuration);
-    const transitionEnd = Math.min(
-      rightClip.from + rightClip.durationInFrames,
-      junctionFrame + remainingDuration
-    );
-
-    const startPixel = frameToPixels(transitionStart);
-    const endPixel = frameToPixels(transitionEnd);
-    const naturalWidth = endPixel - startPixel;
+    const leftEnd = leftClip.from + leftClip.durationInFrames;
+    // Round each edge independently — same pixel grid as timeline items
+    const bridgeRight = Math.round(frameToPixels(leftEnd));
+    const bridgeLeft = Math.round(frameToPixels(leftEnd - previewDuration));
+    const naturalWidth = bridgeRight - bridgeLeft;
 
     // Minimum width for visibility
     const minWidth = 32;
     const effectiveWidth = Math.max(naturalWidth, minWidth);
+    // Center the minimum-width bridge on the overlap midpoint
+    const left = naturalWidth >= minWidth
+      ? bridgeLeft
+      : bridgeLeft - (minWidth - naturalWidth) / 2;
 
-    // Center the minimum width on the junction if natural width is too small
-    const left = naturalWidth < minWidth
-      ? junctionPixel - effectiveWidth / 2
-      : startPixel;
-
-    return { left, width: effectiveWidth, junctionPixel };
+    return { left, width: effectiveWidth };
   }, [leftClip, rightClip, frameToPixels, previewDuration]);
 
   // Duration in seconds for display (use previewDuration for visual feedback)

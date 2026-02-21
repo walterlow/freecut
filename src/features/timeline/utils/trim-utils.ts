@@ -97,12 +97,16 @@ export function clampTrimAmount(
  *
  * For start handle (extending left): can't extend past the end of the previous item.
  * For end handle (extending right): can't extend past the start of the next item.
+ *
+ * @param transitionLinkedIds - IDs of clips that have a transition with this item.
+ *   These clips are allowed to overlap (they already do in the overlap model).
  */
 export function clampToAdjacentItems(
   item: TimelineItem,
   handle: TrimHandle,
   trimAmount: number,
-  allItems: TimelineItem[]
+  allItems: TimelineItem[],
+  transitionLinkedIds?: Set<string>
 ): number {
   const itemEnd = item.from + item.durationInFrames;
 
@@ -112,6 +116,8 @@ export function clampToAdjacentItems(
     for (const other of allItems) {
       if (other.id === item.id) continue;
       if (other.trackId !== item.trackId) continue;
+      // Skip transition-linked clips — they're allowed to overlap
+      if (transitionLinkedIds?.has(other.id)) continue;
       if (other.from >= itemEnd) {
         nearestStart = Math.min(nearestStart, other.from);
       }
@@ -128,6 +134,8 @@ export function clampToAdjacentItems(
     for (const other of allItems) {
       if (other.id === item.id) continue;
       if (other.trackId !== item.trackId) continue;
+      // Skip transition-linked clips — they're allowed to overlap
+      if (transitionLinkedIds?.has(other.id)) continue;
       const otherEnd = other.from + other.durationInFrames;
       if (otherEnd <= item.from) {
         nearestEnd = Math.max(nearestEnd, otherEnd);

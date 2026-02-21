@@ -7,6 +7,7 @@ import { clampTrimAmount, clampToAdjacentItems, calculateTrimSourceUpdate } from
 import { getSourceProperties, isMediaItem, calculateSplitSourceBoundaries, timelineToSourceFrames, calculateSpeed, clampSpeed } from '../utils/source-calculations';
 import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
+import { useTransitionsStore } from './transitions-store';
 
 const log = createLogger('ItemsStore');
 
@@ -74,6 +75,20 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   }
 
   return normalized;
+}
+
+/**
+ * Get IDs of clips that have a transition with the given item.
+ * These clips are allowed to overlap during trim operations.
+ */
+function getTransitionLinkedIds(itemId: string): Set<string> {
+  const transitions = useTransitionsStore.getState().transitions;
+  const linkedIds = new Set<string>();
+  for (const t of transitions) {
+    if (t.leftClipId === itemId) linkedIds.add(t.rightClipId);
+    if (t.rightClipId === itemId) linkedIds.add(t.leftClipId);
+  }
+  return linkedIds;
 }
 
 /**
@@ -280,8 +295,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         // Clamp trim amount to source boundaries and minimum duration
         const timelineFps = useTimelineSettingsStore.getState().fps;
         let { clampedAmount } = clampTrimAmount(item, 'start', trimAmount, timelineFps);
-        // Clamp to adjacent items on the same track
-        clampedAmount = clampToAdjacentItems(item, 'start', clampedAmount, state.items);
+        // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
+        const transitionLinkedIds = getTransitionLinkedIds(id);
+        clampedAmount = clampToAdjacentItems(item, 'start', clampedAmount, state.items, transitionLinkedIds);
 
         const newFrom = item.from + clampedAmount;
         const newDuration = item.durationInFrames - clampedAmount;
@@ -308,8 +324,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         // Clamp trim amount to source boundaries and minimum duration
         const timelineFps = useTimelineSettingsStore.getState().fps;
         let { clampedAmount } = clampTrimAmount(item, 'end', trimAmount, timelineFps);
-        // Clamp to adjacent items on the same track
-        clampedAmount = clampToAdjacentItems(item, 'end', clampedAmount, state.items);
+        // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
+        const transitionLinkedIds = getTransitionLinkedIds(id);
+        clampedAmount = clampToAdjacentItems(item, 'end', clampedAmount, state.items, transitionLinkedIds);
 
         const newDuration = item.durationInFrames + clampedAmount;
         if (newDuration <= 0) return item;

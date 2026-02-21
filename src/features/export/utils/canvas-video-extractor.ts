@@ -54,6 +54,14 @@ export class VideoFrameExtractor {
   private lastRequestedTimestamp: number | null = null;
   private sampleLoopError: unknown = null;
   private lastFailureKind: 'none' | 'no-sample' | 'decode-error' = 'none';
+  /**
+   * Cached VideoFrame from the current sample.  Kept alive between draws so
+   * that repeated draws of the same sample (common during transitions past the
+   * clip's timeline end) reuse the same VideoFrame instead of calling
+   * toVideoFrame() after a previous close() has invalidated the sample data.
+   */
+  private cachedVideoFrame: VideoFrame | null = null;
+  private cachedVideoFrameSample: MediabunnySample | null = null;
 
   constructor(
     private src: string,
@@ -143,6 +151,7 @@ export class VideoFrameExtractor {
         this.lastFailureKind = 'none';
         return true;
       }
+
       lastError = this.sampleLoopError;
       return this.reportDrawFailure(timestamp, clampedTime, lastError);
     } catch (error) {
@@ -187,6 +196,9 @@ export class VideoFrameExtractor {
       const candidate = await this.peekNextSample();
       if (!candidate) break;
       if (candidate.timestamp <= timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON) {
+        // Moving to a new sample — release the cached VideoFrame first
+        // so it's closed before the old sample is closed.
+        this.closeCachedVideoFrame();
         this.closeSample(this.currentSample);
         this.currentSample = candidate;
         this.nextSample = null;
@@ -257,29 +269,47 @@ export class VideoFrameExtractor {
       return false;
     }
 
-    let videoFrame: VideoFrame | null = null;
     try {
-      videoFrame = sample.toVideoFrame();
-      if (!videoFrame) {
-        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
-        this.lastFailureKind = 'decode-error';
-        return false;
+      // Reuse cached VideoFrame if we're drawing the same sample again.
+      // This is critical for transitions: the outgoing clip is rendered past
+      // its timeline end, which means the sample iterator is exhausted and
+      // the same last sample is drawn for many consecutive frames.  Calling
+      // toVideoFrame() after a previous VideoFrame was closed can return an
+      // empty/invalidated frame because the decoded buffer was released.
+      let videoFrame = this.cachedVideoFrame;
+      if (!videoFrame || this.cachedVideoFrameSample !== sample) {
+        // Different sample — release old cached frame and create new one
+        this.closeCachedVideoFrame();
+        videoFrame = sample.toVideoFrame();
+        if (!videoFrame) {
+          this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
+          this.lastFailureKind = 'decode-error';
+          return false;
+        }
+        this.cachedVideoFrame = videoFrame;
+        this.cachedVideoFrameSample = sample;
       }
 
       ctx.drawImage(videoFrame, x, y, width, height);
       return true;
     } catch (error) {
+      // Draw failed — discard the cached frame so next attempt gets a fresh one
+      this.closeCachedVideoFrame();
       this.sampleLoopError = error;
       this.lastFailureKind = 'decode-error';
       return false;
-    } finally {
-      if (videoFrame) {
-        try {
-          videoFrame.close();
-        } catch {
-          // Ignore close errors
-        }
+    }
+  }
+
+  private closeCachedVideoFrame(): void {
+    if (this.cachedVideoFrame) {
+      try {
+        this.cachedVideoFrame.close();
+      } catch {
+        // Ignore close errors
       }
+      this.cachedVideoFrame = null;
+      this.cachedVideoFrameSample = null;
     }
   }
 
@@ -309,6 +339,8 @@ export class VideoFrameExtractor {
     this.iteratorDone = true;
     this.lastRequestedTimestamp = null;
     this.sampleLoopError = null;
+    // Close cached VideoFrame before closing the sample it references
+    this.closeCachedVideoFrame();
     this.closeSample(this.currentSample);
     this.closeSample(this.nextSample);
     this.currentSample = null;

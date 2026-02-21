@@ -39,6 +39,10 @@ interface MaskWithTrackOrder {
 interface ClipAudioExtension {
   before: number;
   after: number;
+  /** Overlap model: crossfade out over this many frames at the end of the left (outgoing) clip */
+  overlapFadeOut: number;
+  /** Overlap model: crossfade in over this many frames at the start of the right (incoming) clip */
+  overlapFadeIn: number;
 }
 
 interface VideoAudioSegment {
@@ -712,7 +716,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
     const ensureExtension = (clipId: string): ClipAudioExtension => {
       const existing = extensionByClipId.get(clipId);
       if (existing) return existing;
-      const created: ClipAudioExtension = { before: 0, after: 0 };
+      const created: ClipAudioExtension = { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
       extensionByClipId.set(clipId, created);
       return created;
     };
@@ -723,6 +727,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
       if (!left || !right || !left.src || !right.src) continue;
       if (isContinuousAudioTransition(left, right, fps)) continue;
 
+      // Old model: extend clips to cover transition window
       const rightPreRoll = Math.max(0, right.from - window.startFrame);
       const leftPostRoll = Math.max(
         0,
@@ -737,6 +742,16 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
       if (leftPostRoll > 0) {
         const leftExt = ensureExtension(left.id);
         leftExt.after = Math.max(leftExt.after, leftPostRoll);
+      }
+
+      // Overlap model: crossfade audio during the overlap region.
+      // Left clip fades out, right clip fades in (equal-power sin/cos curves).
+      const overlapDuration = window.durationInFrames;
+      if (overlapDuration > 0) {
+        const leftExt = ensureExtension(left.id);
+        leftExt.overlapFadeOut = Math.max(leftExt.overlapFadeOut, overlapDuration);
+        const rightExt = ensureExtension(right.id);
+        rightExt.overlapFadeIn = Math.max(rightExt.overlapFadeIn, overlapDuration);
       }
     }
 
@@ -753,13 +768,21 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
       const playbackRate = item.speed ?? 1;
       const itemSourceFps = item.sourceFps ?? fps;
       const baseTrimBefore = resolvedTrimBeforeById.get(item.id) ?? getVideoTrimBefore(item);
-      const extension = extensionByClipId.get(item.id) ?? { before: 0, after: 0 };
+      const extension = extensionByClipId.get(item.id) ?? { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
       // baseTrimBefore is in source FPS frames; convert to timeline frames for comparison
       const maxBeforeBySource = playbackRate > 0
         ? sourceToTimelineFrames(baseTrimBefore, playbackRate, itemSourceFps, fps)
         : 0;
       const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
       const after = Math.max(0, extension.after);
+
+      // Crossfade regions: overlap model uses overlapFadeIn/Out, old extension model uses before/after
+      const crossfadeIn = extension.overlapFadeIn > 0
+        ? extension.overlapFadeIn
+        : (before > 0 ? before : undefined);
+      const crossfadeOut = extension.overlapFadeOut > 0
+        ? extension.overlapFadeOut
+        : (after > 0 ? after : undefined);
 
       expandedSegments.push({
         key: `video-audio-${item.id}`,
@@ -775,10 +798,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
         sourceFps: item.sourceFps,
         volumeDb: item.volume ?? 0,
         muted: item.muted || !item.trackVisible,
-        audioFadeIn: before === 0 ? (item.audioFadeIn ?? 0) : 0,
-        audioFadeOut: after === 0 ? (item.audioFadeOut ?? 0) : 0,
-        crossfadeFadeIn: before > 0 ? before : undefined,
-        crossfadeFadeOut: after > 0 ? after : undefined,
+        audioFadeIn: crossfadeIn === undefined ? (item.audioFadeIn ?? 0) : 0,
+        audioFadeOut: crossfadeOut === undefined ? (item.audioFadeOut ?? 0) : 0,
+        crossfadeFadeIn: crossfadeIn,
+        crossfadeFadeOut: crossfadeOut,
         beforeFrames: before,
         afterFrames: after,
       });

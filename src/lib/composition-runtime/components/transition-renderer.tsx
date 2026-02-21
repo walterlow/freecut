@@ -622,21 +622,10 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     const leftClipGlobalFrom = window.startFrame;
     const rightClipGlobalFrom = window.startFrame;
 
-    // Adjusted playback rate for the incoming (right) clip.
-    //
-    // Problem: the transition overlay creates separate video elements that play
-    // alongside the regular clip layer. Without adjustment, the incoming clip
-    // advances durationInFrames * speed source frames during the transition,
-    // but the regular clip only advances rightPortion * speed. When the overlay
-    // disappears at the transition end, the content visibly "rewinds."
-    //
-    // Fix: scale the incoming clip's playback rate so it covers exactly
-    // rightPortion * speed source frames over the full transition duration.
-    // This keeps motion smooth and eliminates the boundary mismatch.
-    const incomingClipSpeed = rightClip.speed ?? 1;
-    const incomingTransitionRate = window.durationInFrames > 0
-      ? (window.rightPortion * incomingClipSpeed) / window.durationInFrames
-      : incomingClipSpeed;
+    // In the overlap model, the right clip physically overlaps the left clip.
+    // The transition overlay and regular Sequence both start at the same
+    // timeline position, so no playback rate compensation is needed.
+    const incomingTransitionRate = rightClip.speed ?? 1;
 
     return (
       <Sequence
