@@ -521,6 +521,90 @@ export async function insertFreezeFrame(
 }
 
 /**
+ * Ripple edit: trim a clip and shift all downstream items on the same track.
+ *
+ * Unlike normal trim which leaves gaps, ripple edit closes/opens gaps by
+ * shifting everything after the trim point.
+ *
+ * End handle: trims the end, shifts downstream items by the change in end position.
+ * Start handle: trims the start (changes source/duration), then moves the trimmed
+ *   clip back to its original `from` and shifts downstream items by the duration change.
+ *
+ * @param id - ID of the clip being trimmed
+ * @param handle - Which handle is being dragged ('start' or 'end')
+ * @param trimDelta - Frames to trim (positive = shrink start / extend end,
+ *                    negative = extend start / shrink end)
+ */
+export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: number): void {
+  if (trimDelta === 0) return;
+
+  execute('RIPPLE_EDIT', () => {
+    const itemsBefore = useItemsStore.getState().items;
+    const item = itemsBefore.find((i) => i.id === id);
+    if (!item) return;
+
+    const oldFrom = item.from;
+    const oldEnd = item.from + item.durationInFrames;
+
+    // Apply the trim — skip adjacency clamping since downstream items will be shifted
+    if (handle === 'start') {
+      useItemsStore.getState()._trimItemStart(id, trimDelta, { skipAdjacentClamp: true });
+    } else {
+      useItemsStore.getState()._trimItemEnd(id, trimDelta, { skipAdjacentClamp: true });
+    }
+
+    const itemsAfterTrim = useItemsStore.getState().items;
+    const trimmedItem = itemsAfterTrim.find((i) => i.id === id);
+    if (!trimmedItem) return;
+
+    let shiftAmount: number;
+
+    if (handle === 'end') {
+      // End handle: downstream items shift by the change in end position
+      const newEnd = trimmedItem.from + trimmedItem.durationInFrames;
+      shiftAmount = newEnd - oldEnd;
+    } else {
+      // Start handle: _trimItemStart moved `from` — move it back and compute
+      // the shift from the duration change.
+      // _trimItemStart: newFrom = oldFrom + clamped, newDuration = oldDuration - clamped
+      // We want: from stays at oldFrom, same newDuration, downstream shifts by -clamped
+      const actualClamped = trimmedItem.from - oldFrom;
+      if (actualClamped !== 0) {
+        useItemsStore.getState()._moveItem(id, oldFrom);
+      }
+      // Duration got shorter by `actualClamped` (positive = shorter), so downstream
+      // should shift left (negative) by the same amount → shift = -actualClamped
+      shiftAmount = -actualClamped;
+    }
+
+    if (shiftAmount !== 0) {
+      // Shift all items on the same track that are downstream of the trimmed item's original end
+      const freshItems = useItemsStore.getState().items;
+      const downstream = freshItems.filter(
+        (i) => i.id !== id && i.trackId === item.trackId && i.from >= oldEnd
+      );
+
+      if (downstream.length > 0) {
+        const updates = downstream.map((i) => ({
+          id: i.id,
+          from: i.from + shiftAmount,
+        }));
+        useItemsStore.getState()._moveItems(updates);
+      }
+    }
+
+    // Repair transitions for the trimmed item and all downstream items
+    const finalItems = useItemsStore.getState().items;
+    const allAffected = [id, ...finalItems
+      .filter((i) => i.id !== id && i.trackId === item.trackId && i.from >= oldFrom)
+      .map((i) => i.id)];
+    applyTransitionRepairs(allAffected);
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { id, handle, trimDelta });
+}
+
+/**
  * Rolling edit: move the edit point between two adjacent clips.
  * Trims the left clip's end and the right clip's start by the same amount,
  * keeping total timeline duration unchanged.

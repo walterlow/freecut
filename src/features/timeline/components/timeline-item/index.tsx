@@ -5,6 +5,7 @@ import { useTimelineStore } from '../../stores/timeline-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
+import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
 import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
@@ -149,7 +150,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const { isDragging, dragOffset, handleDragStart } = useTimelineDrag(item, timelineDuration, trackLocked, transformRef);
 
   // Trim functionality - disabled if track is locked
-  const { isTrimming, trimHandle, trimDelta, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
+  const { isTrimming, trimHandle, trimDelta, isRippleEdit, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
 
   // Rate stretch functionality - disabled if track is locked
   const { isStretching, stretchHandle, handleStretchStart, getVisualFeedback } = useRateStretch(item, timelineDuration, trackLocked);
@@ -387,6 +388,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Ripple edit preview: downstream items shift by delta during ripple trim
+  const rippleEditOffset = useRippleEditPreviewStore(
+    useCallback((s) => {
+      if (!s.trimmedItemId || s.trackId !== item.trackId) return 0;
+      if (item.id === s.trimmedItemId) return 0;
+      // Items at or after the trimmed item's original end are downstream
+      if (item.from >= s.trimmedItemEnd) return s.delta;
+      return 0;
+    }, [item.id, item.trackId, item.from])
+  );
+
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
   const overlapRight = useMemo(() => {
     if (previewOverlapRight > 0) return previewOverlapRight;
@@ -410,8 +422,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Fold overlap + ripple into the frame value BEFORE rounding so both clip edges
   // derive from a single Math.round — avoids 1px gaps from independent rounding
   // (Math.round(A) + Math.round(B) ≠ Math.round(A + B)).
-  const left = Math.round(timeToPixels((item.from + overlapLeft + rippleOffsetFrames) / fps));
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight + rippleOffsetFrames) / fps));
+  const left = Math.round(timeToPixels((item.from + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight + rippleOffsetFrames + rippleEditOffset) / fps));
   const width = right - left;
   // Full untrimmed clip width — used to offset inner content when left-trimmed
   const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
@@ -443,9 +455,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           : subCompDuration !== null
             ? Math.max(0, subCompDuration - item.durationInFrames)
             : (currentSourceStart / currentSpeed);
-        const maxExtendByTimeline = item.from;
+        // In ripple mode, clip stays in place — no timeline position limit
+        const maxExtendByTimeline = isRippleEdit ? Infinity : item.from;
         const maxExtendTimelineFrames = Math.min(maxExtendBySource, maxExtendByTimeline);
-        const maxExtendPixels = timeToPixels(maxExtendTimelineFrames / fps);
+        const maxExtendPixels = canExtendInfinitely ? Infinity : timeToPixels(maxExtendTimelineFrames / fps);
         const maxTrimPixels = width - minWidthPixels;
 
         const clampedDelta = Math.max(
@@ -453,8 +466,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           Math.min(maxTrimPixels, trimDeltaPixels)
         );
 
-        trimVisualLeft = Math.round(left + clampedDelta);
-        trimVisualWidth = Math.round(width - clampedDelta);
+        if (isRippleEdit) {
+          // Ripple: left edge stays fixed, only width changes from the right
+          trimVisualWidth = Math.round(width - clampedDelta);
+        } else {
+          trimVisualLeft = Math.round(left + clampedDelta);
+          trimVisualWidth = Math.round(width - clampedDelta);
+        }
       } else {
         const maxExtendSourceFrames = canExtendInfinitely
           ? Infinity
@@ -510,7 +528,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
     canExtendInfinitely, currentSourceStart, currentSpeed, item.from, item.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
-    subCompDuration, rollingEditDelta, rollingEditHandle
+    subCompDuration, rollingEditDelta, rollingEditHandle, isRippleEdit
   ]);
 
   // Get color based on item type - memoized
@@ -658,11 +676,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-not-allowed opacity-60'
     : activeTool === 'razor'
     ? 'cursor-scissors'
-    : hoveredEdge !== null && (activeTool === 'select' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit')
+    : hoveredEdge !== null && (activeTool === 'select' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit')
     ? 'cursor-ew-resize'
     : activeTool === 'rate-stretch'
     ? 'cursor-gauge'
-    : activeTool === 'rolling-edit'
+    : activeTool === 'rolling-edit' || activeTool === 'ripple-edit'
     ? 'cursor-ew-resize'
     : isBeingDragged
     ? 'cursor-grabbing'
@@ -825,9 +843,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         return;
       }
     }
-    // Rolling edit tool: block body drag (only edge trim is allowed)
-    if (activeTool === 'rolling-edit' && !trackLocked && hoveredEdge === null) return;
-    if (trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || hoveredEdge !== null) return;
+    // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
+    if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
+    if (trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || hoveredEdge !== null) return;
     handleDragStart(e);
   }, [activeTool, trackLocked, isStretching, isTrimming, hoveredEdge, handleDragStart]);
 

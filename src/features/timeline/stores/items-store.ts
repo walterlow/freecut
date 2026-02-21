@@ -119,8 +119,8 @@ interface ItemsActions {
   _moveItem: (id: string, newFrom: number, newTrackId?: string) => void;
   _moveItems: (updates: Array<{ id: string; from: number; trackId?: string }>) => void;
   _duplicateItems: (itemIds: string[], positions: Array<{ from: number; trackId: string }>) => TimelineItem[];
-  _trimItemStart: (id: string, trimAmount: number) => void;
-  _trimItemEnd: (id: string, trimAmount: number) => void;
+  _trimItemStart: (id: string, trimAmount: number, options?: { skipAdjacentClamp?: boolean }) => void;
+  _trimItemEnd: (id: string, trimAmount: number, options?: { skipAdjacentClamp?: boolean }) => void;
   _splitItem: (id: string, splitFrame: number) => { leftItem: TimelineItem; rightItem: TimelineItem } | null;
   _joinItems: (itemIds: string[]) => void;
   _rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
@@ -288,7 +288,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     },
 
     // Trim item start
-    _trimItemStart: (id, trimAmount) => set((state) => ({
+    _trimItemStart: (id, trimAmount, options) => set((state) => ({
       items: state.items.map((item) => {
         if (item.id !== id) return item;
 
@@ -296,8 +296,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         const timelineFps = useTimelineSettingsStore.getState().fps;
         let { clampedAmount } = clampTrimAmount(item, 'start', trimAmount, timelineFps);
         // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
-        const transitionLinkedIds = getTransitionLinkedIds(id);
-        clampedAmount = clampToAdjacentItems(item, 'start', clampedAmount, state.items, transitionLinkedIds);
+        if (!options?.skipAdjacentClamp) {
+          const transitionLinkedIds = getTransitionLinkedIds(id);
+          clampedAmount = clampToAdjacentItems(item, 'start', clampedAmount, state.items, transitionLinkedIds);
+        }
 
         const newFrom = item.from + clampedAmount;
         const newDuration = item.durationInFrames - clampedAmount;
@@ -317,7 +319,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     })),
 
     // Trim item end
-    _trimItemEnd: (id, trimAmount) => set((state) => ({
+    _trimItemEnd: (id, trimAmount, options) => set((state) => ({
       items: state.items.map((item) => {
         if (item.id !== id) return item;
 
@@ -325,8 +327,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         const timelineFps = useTimelineSettingsStore.getState().fps;
         let { clampedAmount } = clampTrimAmount(item, 'end', trimAmount, timelineFps);
         // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
-        const transitionLinkedIds = getTransitionLinkedIds(id);
-        clampedAmount = clampToAdjacentItems(item, 'end', clampedAmount, state.items, transitionLinkedIds);
+        if (!options?.skipAdjacentClamp) {
+          const transitionLinkedIds = getTransitionLinkedIds(id);
+          clampedAmount = clampToAdjacentItems(item, 'end', clampedAmount, state.items, transitionLinkedIds);
+        }
 
         const newDuration = item.durationInFrames + clampedAmount;
         if (newDuration <= 0) return item;

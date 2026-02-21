@@ -514,6 +514,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       trimItemStart: timelineActions.trimItemStart,
       trimItemEnd: timelineActions.trimItemEnd,
       rollingTrimItems: timelineActions.rollingTrimItems,
+      rippleTrimItem: timelineActions.rippleTrimItem,
       splitItem: timelineActions.splitItem,
       joinItems: timelineActions.joinItems,
       rateStretchItem: timelineActions.rateStretchItem,
