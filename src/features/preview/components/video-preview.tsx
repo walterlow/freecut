@@ -13,6 +13,7 @@ import { blobUrlManager } from '@/lib/blob-url-manager';
 import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import { GizmoOverlay } from './gizmo-overlay';
+import { RollingEditOverlay } from './rolling-edit-overlay';
 import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
@@ -745,6 +746,9 @@ export const VideoPreview = memo(function VideoPreview({
             >
               <MainComposition {...inputProps} />
             </Player>
+
+            {/* Rolling edit 2-up frame comparison */}
+            <RollingEditOverlay fps={fps} />
           </div>
 
           {!suspendOverlay && (
