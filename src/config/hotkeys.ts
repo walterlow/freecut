@@ -30,6 +30,7 @@ export const HOTKEYS = {
 
   // Zoom
   ZOOM_TO_FIT: 'z',
+  ZOOM_TO_100: 'shift+z',
 
   // Clipboard
   COPY: 'mod+c',
@@ -103,6 +104,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
 
   // Zoom
   ZOOM_TO_FIT: 'Zoom to fit all content',
+  ZOOM_TO_100: 'Zoom to 100% at playhead',
 
   // Clipboard
   COPY: 'Copy selected items',

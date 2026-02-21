@@ -1,10 +1,11 @@
 /**
- * UI shortcuts: S (snap toggle), Z (zoom to fit), Undo/Redo.
+ * UI shortcuts: S (snap toggle), Z (zoom to fit), Shift+Z (zoom to 100%), Undo/Redo.
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useZoomStore } from '../../stores/zoom-store';
+import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 
@@ -83,5 +84,22 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [callbacks]
+  );
+
+  // Zoom: Shift+Z - Zoom to 100% centered on cursor (or playhead if cursor not on timeline)
+  useHotkeys(
+    HOTKEYS.ZOOM_TO_100,
+    (event) => {
+      event.preventDefault();
+      const { currentFrame, previewFrame } = usePlaybackStore.getState();
+      const targetFrame = previewFrame ?? currentFrame;
+
+      const handler = useZoomStore.getState()._zoomTo100Handler;
+      if (handler) {
+        handler(targetFrame);
+      }
+    },
+    HOTKEY_OPTIONS,
+    []
   );
 }

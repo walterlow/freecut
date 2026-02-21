@@ -11,6 +11,9 @@ interface ZoomActions {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomToFit: (containerWidth: number, contentDurationSeconds: number) => void;
+  /** Registered by TimelineContent — zooms to 100% centered on a frame */
+  _zoomTo100Handler: ((centerFrame: number) => void) | null;
+  registerZoomTo100: (handler: (centerFrame: number) => void) => void;
 }
 
 // Throttle zoom updates to reduce re-render frequency during rapid zoom
@@ -82,4 +85,6 @@ export const useZoomStore = create<ZoomState & ZoomActions>((set) => ({
     const newLevel = Math.max(0.01, Math.min(2, targetWidth / (duration * 100)));
     set({ level: newLevel, pixelsPerSecond: newLevel * 100 });
   },
+  _zoomTo100Handler: null,
+  registerZoomTo100: (handler) => set({ _zoomTo100Handler: handler }),
 }));

@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
+import { useZoomStore } from '../stores/zoom-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 
@@ -633,6 +634,29 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     setZoom(newZoomLevel);
     container.scrollLeft = 0;
   }, [setZoom]);
+
+  const handleZoomTo100 = useCallback((centerFrame: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const currentFps = useTimelineStore.getState().fps;
+
+    // At zoom 1, pixelsPerSecond = 100
+    const targetPixelX = (centerFrame / currentFps) * 100;
+    const effectiveWidth = containerWidthRef.current > 0 ? containerWidthRef.current : container.clientWidth;
+    const newScrollLeft = Math.max(0, targetPixelX - effectiveWidth / 2);
+
+    // Queue scroll via pendingScrollRef so it applies AFTER the re-render
+    pendingScrollRef.current = newScrollLeft;
+    scrollLeftRef.current = newScrollLeft;
+
+    setZoomImmediate(1);
+  }, [setZoomImmediate]);
+
+  // Register zoom-to-100 handler globally so keyboard shortcuts can use it
+  useEffect(() => {
+    useZoomStore.getState().registerZoomTo100(handleZoomTo100);
+  }, [handleZoomTo100]);
 
   // Expose zoom handlers to parent component (only once on mount)
   useEffect(() => {
