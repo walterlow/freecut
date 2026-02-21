@@ -2,17 +2,18 @@
  * Transition Utilities
  *
  * Functions for validating and calculating transition parameters
- * between adjacent clips.
+ * between clips using the FCP-style overlap model.
  *
- * COMPOSITION TRANSITIONSERIES RULES:
+ * OVERLAP MODEL:
+ * Transitions work by physically overlapping clips on the timeline.
+ * When a transition of D frames is added, the right clip slides left by D frames
+ * and its sourceStart is adjusted back by the equivalent source frames.
+ * Both clips have real source content during the transition — no virtual extensions.
+ *
+ * COMPOSITION RULES:
  * 1. Transition duration must be < min(leftClipDuration, rightClipDuration)
- * 2. No two transitions can be adjacent (must have a sequence/clip between them)
- * 3. Every transition must have a sequence/clip before AND after it
- *
- * Rules #2 and #3 are inherently satisfied by our data model:
- * - Each transition requires both leftClipId and rightClipId
- * - Transitions are stored separately and reference clips by ID
- * - We validate clips exist and are adjacent before creating transitions
+ * 2. Right clip must have sufficient handle (pre-roll footage) for the overlap
+ * 3. Each transition requires both leftClipId and rightClipId
  */
 
 import type { TimelineItem } from '@/types/timeline';
@@ -26,11 +27,19 @@ export function areFramesAligned(leftEnd: number, rightStart: number): boolean {
 }
 
 /**
+ * Check if two clips overlap (right clip starts before left clip ends).
+ */
+export function areFramesOverlapping(leftEnd: number, rightStart: number): boolean {
+  return rightStart < leftEnd - FRAME_EPSILON;
+}
+
+/**
  * Check if a transition can be added between two clips.
- * Validates: same track, adjacency, and clip duration limits.
+ * Validates: same track, adjacency, clip types, duration limits, and handle availability.
  *
- * NOTE: Handle availability is NOT required - the transition rendering uses
- * CSS mirroring (like CapCut) when source material is unavailable.
+ * The right clip must have sufficient handle (pre-roll footage before its current
+ * sourceStart) to accommodate the overlap. Without handle footage, the transition
+ * would need source content that doesn't exist.
  */
 export function canAddTransition(
   leftClip: TimelineItem,
@@ -42,9 +51,12 @@ export function canAddTransition(
     return { canAdd: false, reason: 'Clips must be on the same track' };
   }
 
-  // Check adjacency (left clip ends where right clip starts)
-  if (!areFramesAligned(leftClip.from + leftClip.durationInFrames, rightClip.from)) {
-    return { canAdd: false, reason: 'Clips must be adjacent' };
+  // Check adjacency (for new transitions) or overlap (for existing transitions)
+  const leftEnd = leftClip.from + leftClip.durationInFrames;
+  const isAdjacent = areFramesAligned(leftEnd, rightClip.from);
+  const isOverlapping = areFramesOverlapping(leftEnd, rightClip.from);
+  if (!isAdjacent && !isOverlapping) {
+    return { canAdd: false, reason: 'Clips must be adjacent or overlapping' };
   }
 
   // Check clip types - only video and image clips can have transitions
@@ -54,7 +66,7 @@ export function canAddTransition(
   }
 
   // Composition constraint: transition duration cannot exceed either clip's duration
-  // TransitionSeries needs at least 1 frame from each clip outside the transition
+  // Need at least 1 frame from each clip outside the transition
   const maxByClipDuration = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
   if (durationInFrames > maxByClipDuration) {
     return {
@@ -63,8 +75,6 @@ export function canAddTransition(
     };
   }
 
-  // Calculate available handles (informational - not a blocking requirement)
-  // When handles are insufficient, the transition renderer uses CSS mirroring
   const leftHandle = getAvailableHandle(leftClip, 'end');
   const rightHandle = getAvailableHandle(rightClip, 'start');
 
@@ -79,7 +89,7 @@ export function canAddTransition(
  * @param side 'start' for head handle, 'end' for tail handle
  * @returns Number of available frames for transition
  */
-function getAvailableHandle(
+export function getAvailableHandle(
   clip: TimelineItem,
   side: 'start' | 'end'
 ): number {

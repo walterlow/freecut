@@ -6,6 +6,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
+import { useTransitionsStore } from '../stores/transitions-store';
 
 interface TrimState {
   isTrimming: boolean;
@@ -129,9 +130,15 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       const { clampedAmount } = clampTrimAmount(currentItem, handle!, deltaFrames, fps);
       deltaFrames = clampedAmount;
 
-      // Clamp to adjacent items on the same track
+      // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
       const allItems = useTimelineStore.getState().items;
-      deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems);
+      const transitions = useTransitionsStore.getState().transitions;
+      const transitionLinkedIds = new Set<string>();
+      for (const t of transitions) {
+        if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
+        if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
+      }
+      deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
 
       // Update local state for visual feedback
       if (deltaFrames !== trimStateRef.current.currentDelta) {

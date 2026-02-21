@@ -20,6 +20,7 @@ import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useSelectionStore } from '../stores/selection-store';
 import { transitionRegistry } from '@/lib/transitions';
 import { areFramesAligned } from '@/features/timeline/utils/transition-utils';
+import type { Transition } from '@/types/transition';
 import type {
   TransitionCategory,
   WipeDirection,
@@ -232,7 +233,7 @@ interface AdjacentInfo {
 function computeAdjacentInfo(
   selectedItemIds: string[],
   items: typeof useTimelineStore.getState extends () => infer S ? S extends { items: infer I } ? I : never : never,
-  transitions: typeof useTimelineStore.getState extends () => infer S ? S extends { transitions: infer T } ? T : never : never
+  transitions: Transition[]
 ): AdjacentInfo | null {
   if (selectedItemIds.length !== 1) return null;
 
@@ -247,59 +248,52 @@ function computeAdjacentInfo(
     .filter((i) => i.trackId === selectedItem.trackId && validTypes.includes(i.type))
     .toSorted((a, b) => a.from - b.from);
 
-  const selectedIndex = trackItems.findIndex((i) => i.id === selectedId);
-  if (selectedIndex === -1) return null;
-
   const selectedEnd = selectedItem.from + selectedItem.durationInFrames;
 
+  // Build lookup of existing transition pairs
   const transitionByPair = new Map<string, string>();
   for (const t of transitions) {
     transitionByPair.set(`${t.leftClipId}->${t.rightClipId}`, t.id);
   }
 
-  const rightCandidates = trackItems
-    .filter((i) => i.id !== selectedId && areFramesAligned(selectedEnd, i.from))
-    .toSorted((a, b) => a.from - b.from);
-  const leftCandidates = trackItems
-    .filter((i) => i.id !== selectedId && areFramesAligned(i.from + i.durationInFrames, selectedItem.from))
-    .toSorted((a, b) => b.from - a.from);
-
-  const rightWithoutTransition = rightCandidates.find(
-    (candidate) => !transitionByPair.has(`${selectedId}->${candidate.id}`)
+  // Priority 1: Find adjacent clips WITHOUT an existing transition (for adding new)
+  const rightAdjacentWithout = trackItems.find(
+    (i) => i.id !== selectedId
+      && areFramesAligned(selectedEnd, i.from)
+      && !transitionByPair.has(`${selectedId}->${i.id}`)
   );
-  if (rightWithoutTransition) {
-    return { leftClipId: selectedId, rightClipId: rightWithoutTransition.id, hasExisting: false };
+  if (rightAdjacentWithout) {
+    return { leftClipId: selectedId, rightClipId: rightAdjacentWithout.id, hasExisting: false };
   }
 
-  const leftWithoutTransition = leftCandidates.find(
-    (candidate) => !transitionByPair.has(`${candidate.id}->${selectedId}`)
+  const leftAdjacentWithout = trackItems.findLast(
+    (i) => i.id !== selectedId
+      && areFramesAligned(i.from + i.durationInFrames, selectedItem.from)
+      && !transitionByPair.has(`${i.id}->${selectedId}`)
   );
-  if (leftWithoutTransition) {
-    return { leftClipId: leftWithoutTransition.id, rightClipId: selectedId, hasExisting: false };
+  if (leftAdjacentWithout) {
+    return { leftClipId: leftAdjacentWithout.id, rightClipId: selectedId, hasExisting: false };
   }
 
-  const rightWithTransition = rightCandidates.find(
-    (candidate) => transitionByPair.has(`${selectedId}->${candidate.id}`)
-  );
-  if (rightWithTransition) {
-    return {
-      leftClipId: selectedId,
-      rightClipId: rightWithTransition.id,
-      hasExisting: true,
-      existingTransitionId: transitionByPair.get(`${selectedId}->${rightWithTransition.id}`),
-    };
-  }
-
-  const leftWithTransition = leftCandidates.find(
-    (candidate) => transitionByPair.has(`${candidate.id}->${selectedId}`)
-  );
-  if (leftWithTransition) {
-    return {
-      leftClipId: leftWithTransition.id,
-      rightClipId: selectedId,
-      hasExisting: true,
-      existingTransitionId: transitionByPair.get(`${leftWithTransition.id}->${selectedId}`),
-    };
+  // Priority 2: Find existing transitions involving the selected clip
+  // (clips may be overlapping now, so use transition records directly)
+  for (const t of transitions) {
+    if (t.leftClipId === selectedId && trackItems.some((i) => i.id === t.rightClipId)) {
+      return {
+        leftClipId: selectedId,
+        rightClipId: t.rightClipId,
+        hasExisting: true,
+        existingTransitionId: t.id,
+      };
+    }
+    if (t.rightClipId === selectedId && trackItems.some((i) => i.id === t.leftClipId)) {
+      return {
+        leftClipId: t.leftClipId,
+        rightClipId: selectedId,
+        hasExisting: true,
+        existingTransitionId: t.id,
+      };
+    }
   }
 
   return null;

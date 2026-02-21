@@ -230,6 +230,9 @@ async function renderVideoItem(
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
+  // With the overlap model, source times are always valid during transitions
+  // (both clips have real content in the overlap region), so no past-duration
+  // workaround is needed.
   if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id)) {
     const extractor = videoExtractors.get(item.id);
     if (extractor) {
@@ -242,6 +245,10 @@ async function renderVideoItem(
         canvasSettings,
       );
 
+      if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
+        log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
+      }
+
       const success = await extractor.drawFrame(
         ctx,
         clampedTime,
@@ -253,9 +260,6 @@ async function renderVideoItem(
 
       if (success) {
         mediabunnyFailureCountByItem.set(item.id, 0);
-        if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
-          log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
-        }
         return;
       }
 
@@ -294,7 +298,7 @@ async function renderVideoItem(
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
   const video = videoElements.get(item.id);
   if (!video) {
-    if (frame === 0) log.warn('Video element not found', { itemId: item.id });
+    log.warn('Video element not found', { itemId: item.id, frame });
     return;
   }
 
@@ -812,11 +816,7 @@ export async function renderTransitionToCanvas(
   trackOrder: number,
 ): Promise<void> {
   const { canvasPool, canvasSettings, keyframesMap, adjustmentLayers } = rctx;
-  const { leftClip, rightClip, progress, transition, transitionStart } = activeTransition;
-
-  if (import.meta.env.DEV && frame === transitionStart) {
-    log.info(`TRANSITION START: frame=${frame} progress=${progress.toFixed(3)} presentation=${transition.presentation} duration=${transition.durationInFrames} leftClip=${leftClip.id.substring(0,8)} rightClip=${rightClip.id.substring(0,8)}`);
-  }
+  const { leftClip, rightClip } = activeTransition;
 
   const leftEffectiveFrame = frame;
   const rightEffectiveFrame = frame;
@@ -825,6 +825,7 @@ export async function renderTransitionToCanvas(
   const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
   const leftKeyframes = keyframesMap.get(leftClip.id);
   const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, leftEffectiveFrame, canvasSettings);
+
   await renderItem(leftCtx, leftClip, leftTransform, leftEffectiveFrame, rctx, 0);
 
   // Apply effects to left (outgoing) clip

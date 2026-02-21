@@ -89,12 +89,12 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
   const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean }>();
-  const extensionByClipId = new Map<string, { before: number; after: number }>();
+  const extensionByClipId = new Map<string, { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number }>();
 
-  const ensureExtension = (clipId: string): { before: number; after: number } => {
+  const ensureExtension = (clipId: string): { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number } => {
     const existing = extensionByClipId.get(clipId);
     if (existing) return existing;
-    const created = { before: 0, after: 0 };
+    const created = { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
     extensionByClipId.set(clipId, created);
     return created;
   };
@@ -205,6 +205,15 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       const leftExt = ensureExtension(left.id);
       leftExt.after = Math.max(leftExt.after, leftPostRoll);
     }
+
+    // Overlap model: crossfade audio during the overlap region
+    const overlapDuration = window.durationInFrames;
+    if (overlapDuration > 0) {
+      const leftExt = ensureExtension(left.id);
+      leftExt.overlapFadeOut = Math.max(leftExt.overlapFadeOut, overlapDuration);
+      const rightExt = ensureExtension(right.id);
+      rightExt.overlapFadeIn = Math.max(rightExt.overlapFadeIn, overlapDuration);
+    }
   }
 
   const resolvedTrimBeforeById = new Map<string, number>();
@@ -260,10 +269,19 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
     const videoItem = entry.item;
     const speed = videoItem.speed ?? 1;
     const baseTrimBefore = resolvedTrimBeforeById.get(videoItem.id) ?? getVideoTrimBefore(videoItem);
-    const extension = extensionByClipId.get(videoItem.id) ?? { before: 0, after: 0 };
+    const extension = extensionByClipId.get(videoItem.id) ?? { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
     const maxBeforeBySource = speed > 0 ? Math.floor(baseTrimBefore / speed) : 0;
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
     const after = Math.max(0, extension.after);
+
+    // Overlap model crossfade takes priority over old extension model and user fades
+    const hasOverlapFade = extension.overlapFadeOut > 0 || extension.overlapFadeIn > 0;
+    const fadeIn = extension.overlapFadeIn > 0
+      ? extension.overlapFadeIn
+      : (before > 0 ? before : ((videoItem.audioFadeIn ?? 0) * fps));
+    const fadeOut = extension.overlapFadeOut > 0
+      ? extension.overlapFadeOut
+      : (after > 0 ? after : ((videoItem.audioFadeOut ?? 0) * fps));
 
     const videoItemKeyframes = composition.keyframes?.find((k) => k.itemId === videoItem.id);
     const videoVolumeKfs = getPropertyKeyframes(videoItemKeyframes, 'volume');
@@ -278,9 +296,9 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       sourceStartFrame: baseTrimBefore - (before * speed),
       sourceFps: videoItem.sourceFps ?? fps,
       volume: videoItem.volume ?? 0,
-      fadeInFrames: before > 0 ? before : ((videoItem.audioFadeIn ?? 0) * fps),
-      fadeOutFrames: after > 0 ? after : ((videoItem.audioFadeOut ?? 0) * fps),
-      useEqualPowerFades: before > 0 || after > 0,
+      fadeInFrames: fadeIn,
+      fadeOutFrames: fadeOut,
+      useEqualPowerFades: before > 0 || after > 0 || hasOverlapFade,
       speed,
       muted: entry.muted,
       type: 'video',

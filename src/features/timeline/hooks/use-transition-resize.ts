@@ -55,20 +55,15 @@ export function useTransitionResize(transition: Transition) {
 
       const deltaX = e.clientX - resizeStateRef.current.startX;
       const deltaTime = pixelsToTime(deltaX);
-      let deltaFrames = Math.round(deltaTime * fps);
+      // Double the delta so the bridge expands symmetrically from its center —
+      // each handle tracks the cursor 1:1 while the opposite edge moves equally.
+      let deltaFrames = Math.round(deltaTime * fps) * 2;
 
-      // When dragging left handle to the left, we're increasing duration
-      // When dragging right handle to the right, we're increasing duration
       // Left handle: negative deltaX = increase duration
       // Right handle: positive deltaX = increase duration
       if (resizeStateRef.current.handle === 'left') {
         deltaFrames = -deltaFrames;
       }
-
-      // Double the delta because the transition is centered on the cut point,
-      // so each edge only moves by half the duration change. Doubling ensures
-      // the dragged handle follows the mouse position.
-      deltaFrames = deltaFrames * 2;
 
       // Calculate new duration and clamp
       const newDuration = Math.max(

@@ -348,15 +348,19 @@ export async function createCompositionRenderer(
         fallback: videoExtractors.size - useMediabunny.size,
       });
 
-      // === Handle items that failed mediabunny extraction ===
-      const fallbackVideoIds = Array.from(videoExtractors.keys()).filter(id => !useMediabunny.has(id));
+      // === Preload ALL fallback video elements ===
+      // Load every video element (not just those that failed mediabunny init)
+      // so the HTML5 fallback is ready if mediabunny fails mid-export.
+      // This is critical for transitions where the outgoing clip's extractor
+      // may fail past the source duration boundary.
+      const allVideoIds = Array.from(videoElements.keys());
 
-      if (!hasDom && fallbackVideoIds.length > 0) {
+      if (!hasDom && allVideoIds.some(id => !useMediabunny.has(id))) {
         throw new Error('WORKER_REQUIRES_MAIN_THREAD:video-fallback');
       }
 
-      if (fallbackVideoIds.length > 0) {
-        const videoLoadPromises = fallbackVideoIds.map(
+      if (hasDom && allVideoIds.length > 0) {
+        const videoLoadPromises = allVideoIds.map(
           (itemId) => {
             const video = videoElements.get(itemId)!;
             return new Promise<void>((resolve) => {
@@ -771,14 +775,6 @@ export async function createCompositionRenderer(
           itemRenderContext
         );
 
-        // Debug: check if itemCanvas has content (only in development, expensive operation)
-        if (import.meta.env.DEV && frame === 0) {
-          const imageData = itemCtx.getImageData(0, 0, 100, 100);
-          const hasContent = imageData.data.some((v, i) => i % 4 !== 3 && v > 0);
-          const hasAlpha = imageData.data.some((v, i) => i % 4 === 3 && v > 0);
-          log.info(`ITEM CANVAS CHECK: hasContent=${hasContent} hasAlpha=${hasAlpha} itemType=${item.type}`);
-        }
-
         // Apply effects
         if (combinedEffects.length > 0) {
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
@@ -801,10 +797,6 @@ export async function createCompositionRenderer(
         }
         // Skip items being handled by transitions
         if (transitionClipIds.has(item.id)) {
-          // Debug log only in development
-          if (import.meta.env.DEV && frame === activeTransitions[0]?.transitionStart) {
-            log.info(`SKIPPING clip ${item.id.substring(0,8)} - handled by transition`);
-          }
           return false;
         }
         // Skip audio items (handled separately)
@@ -948,12 +940,6 @@ export async function createCompositionRenderer(
               itemRenderContext,
               trackOrder
             );
-
-            // Debug: Check content after transition (only in development - expensive getImageData)
-            if (import.meta.env.DEV && frame === activeTransition.transitionStart) {
-              const afterData = contentCtx.getImageData(Math.floor(canvas.width/2), Math.floor(canvas.height/2), 1, 1).data;
-              log.info(`TRANSITION RENDERED: frame=${frame} trackOrder=${trackOrder} progress=${activeTransition.progress.toFixed(3)} centerPixel=(${afterData[0]},${afterData[1]},${afterData[2]},${afterData[3]})`);
-            }
           }
         }
       }
@@ -972,12 +958,6 @@ export async function createCompositionRenderer(
 
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);
-
-      // Debug: Check final output during transitions (only in development - expensive getImageData)
-      if (import.meta.env.DEV && activeTransitions.length > 0 && frame === activeTransitions[0]?.transitionStart) {
-        const finalData = ctx.getImageData(Math.floor(canvas.width/2), Math.floor(canvas.height/2), 1, 1).data;
-        log.info(`FINAL OUTPUT CHECK: frame=${frame} alpha=${finalData[3]} RGB=(${finalData[0]},${finalData[1]},${finalData[2]})`);
-      }
     },
 
     dispose() {

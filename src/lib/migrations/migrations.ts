@@ -111,6 +111,93 @@ const migrations: Record<number, Migration> = {
       };
     },
   },
+
+  /**
+   * Version 5: FCP-style overlap transition model
+   *
+   * Converts adjacent clips with transitions to overlapping clips.
+   * For each transition:
+   * - Right clip slides left by transition.durationInFrames
+   * - Right clip's sourceStart adjusted back by equivalent source frames
+   * - All subsequent items on the same track ripple left
+   * - If right clip doesn't have enough handle, clamp transition duration
+   */
+  5: {
+    version: 5,
+    description: 'Convert transitions from virtual-window model to FCP-style overlap model',
+    migrate: (project: Project): Project => {
+      if (!project.timeline?.transitions || project.timeline.transitions.length === 0) {
+        return project;
+      }
+
+      const items = [...(project.timeline.items ?? [])];
+      const transitions = [...project.timeline.transitions];
+      const itemsById = new Map(items.map((item) => [item.id, item]));
+
+      // Process each transition: convert adjacent clips to overlapping
+      const updatedTransitions = [];
+
+      for (const transition of transitions) {
+        const leftClip = itemsById.get(transition.leftClipId);
+        const rightClip = itemsById.get(transition.rightClipId);
+        if (!leftClip || !rightClip) {
+          updatedTransitions.push(transition);
+          continue;
+        }
+
+        // Check if clips are adjacent (old model) — if already overlapping, skip
+        const leftEnd = leftClip.from + leftClip.durationInFrames;
+        const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1;
+        if (!isAdjacent) {
+          // Already overlapping or separated — keep as is
+          updatedTransitions.push(transition);
+          continue;
+        }
+
+        // Clamp transition duration to clip durations
+        let duration = transition.durationInFrames;
+        const maxByClip = Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1;
+        if (duration > maxByClip) {
+          duration = Math.max(1, maxByClip);
+        }
+
+        if (duration < 1) {
+          // Can't convert — remove transition
+          continue;
+        }
+
+        // Slide right clip left (sourceStart stays unchanged — the first D
+        // source frames become the transition-in region)
+        rightClip.from -= duration;
+
+        // Ripple all items after the right clip's original position on the same track
+        const originalRightFrom = rightClip.from + duration; // original position before slide
+        for (const item of items) {
+          if (item.id === rightClip.id) continue;
+          if (item.trackId !== rightClip.trackId) continue;
+          if (item.from > originalRightFrom) {
+            item.from -= duration;
+          }
+        }
+
+        // Update transition duration if clamped
+        updatedTransitions.push(
+          duration !== transition.durationInFrames
+            ? { ...transition, durationInFrames: duration }
+            : transition
+        );
+      }
+
+      return {
+        ...project,
+        timeline: {
+          ...project.timeline,
+          items,
+          transitions: updatedTransitions,
+        },
+      };
+    },
+  },
 };
 
 /**

@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
+import { useTransitionsStore } from '../../stores/transitions-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
 import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
@@ -330,10 +331,40 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Get FPS for frame-to-time conversion
   const fps = useTimelineStore((s) => s.fps);
 
+  // Compute overlap hidden at the clip's tail (this clip is the LEFT clip in a transition).
+  // In the overlap model, the right clip slides left by D frames, creating physical overlap.
+  // We split the visual trim equally: D/2 from the left clip's right edge, D/2 from the
+  // right clip's left edge. This centers the visual junction at the overlap midpoint (FCP-style).
+  const transitions = useTransitionsStore((s) => s.transitions);
+  const overlapRight = useMemo(() => {
+    let overlap = 0;
+    for (const t of transitions) {
+      if (t.leftClipId === item.id) {
+        overlap = Math.max(overlap, t.durationInFrames);
+      }
+    }
+    return Math.ceil(overlap / 2);
+  }, [transitions, item.id]);
+
+  // Compute overlap hidden at the clip's head (this clip is the RIGHT clip in a transition).
+  const overlapLeft = useMemo(() => {
+    let overlap = 0;
+    for (const t of transitions) {
+      if (t.rightClipId === item.id) {
+        overlap = Math.max(overlap, t.durationInFrames);
+      }
+    }
+    return Math.floor(overlap / 2);
+  }, [transitions, item.id]);
+
   // Calculate position and width (convert frames to seconds, then to pixels)
-  const left = Math.round(timeToPixels(item.from / fps));
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames) / fps));
+  // Display width hides overlap from both edges so the visual junction is centered
+  const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
+  const left = Math.round(timeToPixels(item.from / fps)) + overlapLeftPixels;
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight) / fps));
   const width = right - left;
+  // Full untrimmed clip width — used to offset inner content when left-trimmed
+  const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
 
   // Calculate trim visual feedback
   const minWidthPixels = timeToPixels(1 / fps);
@@ -765,14 +796,26 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             <div className="absolute inset-0 rounded pointer-events-none z-20 ring-2 ring-inset ring-primary" />
           )}
 
-          {/* Clip visual content */}
-          <ClipContent
-            item={item}
-            clipWidth={visualWidth}
-            fps={fps}
-            isClipVisible={isClipVisible}
-            pixelsPerSecond={pixelsPerSecond}
-          />
+          {/* Clip visual content — offset when left-trimmed so filmstrip aligns correctly */}
+          {overlapLeftPixels > 0 ? (
+            <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: fullWidthPixels }}>
+              <ClipContent
+                item={item}
+                clipWidth={fullWidthPixels}
+                fps={fps}
+                isClipVisible={isClipVisible}
+                pixelsPerSecond={pixelsPerSecond}
+              />
+            </div>
+          ) : (
+            <ClipContent
+              item={item}
+              clipWidth={visualWidth}
+              fps={fps}
+              isClipVisible={isClipVisible}
+              pixelsPerSecond={pixelsPerSecond}
+            />
+          )}
 
           {/* Status indicators */}
           <ClipIndicators

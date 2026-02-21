@@ -1,9 +1,10 @@
 /**
  * Transition Types
  *
- * Transitions are visual effects applied between two adjacent clips.
- * Supports asymmetric alignment around the cut point.
- * Timeline duration remains unchanged - transitions are purely visual effects.
+ * Transitions use an FCP-style overlap model: when a transition is added,
+ * the right clip slides left to physically overlap the left clip. Both clips
+ * have real source content during the overlap — no virtual extensions.
+ * Timeline total duration shrinks by the transition duration.
  */
 
 export type TransitionType = 'crossfade';
@@ -71,9 +72,9 @@ export interface BezierPoints {
 }
 
 /**
- * A transition between two adjacent clips.
- * Clips stay at their original positions - transition is a visual effect.
- * The `alignment` property controls where the transition sits relative to the cut point.
+ * A transition between two overlapping clips.
+ * When added, the right clip slides left to create physical overlap.
+ * The overlap region is the transition — both clips have valid source content.
  */
 export interface Transition {
   /** Unique identifier */
@@ -119,9 +120,11 @@ export interface Transition {
 export type TransitionBreakageReason =
   | 'clip_deleted'
   | 'not_adjacent'
+  | 'not_overlapping'
   | 'cross_track'
   | 'invalid_duration'
-  | 'invalid_type';
+  | 'invalid_type'
+  | 'insufficient_handle';
 
 /**
  * Information about a broken transition for user notification

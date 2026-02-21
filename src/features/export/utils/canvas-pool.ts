@@ -51,6 +51,12 @@ export class CanvasPool {
       canvas.height = this.height;
     }
     const ctx = canvas.getContext('2d')!;
+    // Reset context state that might leak between pool users.
+    // save/restore should handle this, but a stale globalAlpha or
+    // globalCompositeOperation from an unbalanced save/restore would
+    // silently make all subsequent draws invisible.
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
     // Clear the canvas for reuse
     ctx.clearRect(0, 0, this.width, this.height);
     return { canvas, ctx };
