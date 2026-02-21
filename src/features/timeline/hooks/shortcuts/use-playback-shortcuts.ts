@@ -6,6 +6,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useItemsStore } from '../../stores/items-store';
 import { useMarkersStore } from '../../stores/markers-store';
+import { useTransitionsStore } from '../../stores/transitions-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
@@ -14,10 +15,26 @@ import { useSourcePlayerStore } from '@/features/preview/stores/source-player-st
 function getSnapPoints(): number[] {
   const items = useItemsStore.getState().items;
   const markers = useMarkersStore.getState().markers;
+  const transitions = useTransitionsStore.getState().transitions;
   const points = new Set<number>();
+
+  // Build sets of inner edges hidden by transitions
+  const suppressEnd = new Set<string>();
+  const suppressStart = new Set<string>();
+  for (const t of transitions) {
+    suppressEnd.add(t.leftClipId);
+    suppressStart.add(t.rightClipId);
+
+    // Add transition visual midpoint
+    const rightClip = items.find((i) => i.id === t.rightClipId);
+    if (rightClip) {
+      points.add(rightClip.from + Math.ceil(t.durationInFrames / 2));
+    }
+  }
+
   for (const item of items) {
-    points.add(item.from);
-    points.add(item.from + item.durationInFrames);
+    if (!suppressStart.has(item.id)) points.add(item.from);
+    if (!suppressEnd.has(item.id)) points.add(item.from + item.durationInFrames);
   }
   for (const marker of markers) {
     points.add(marker.frame);

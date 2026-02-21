@@ -32,6 +32,11 @@ import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
 import { getVisibleTracks } from '../utils/group-utils';
+import { getRazorSplitPosition } from '../utils/razor-snap';
+import type { RazorSnapTarget } from '../utils/razor-snap';
+import { useMarkersStore } from '../stores/markers-store';
+import { useTransitionsStore } from '../stores/transitions-store';
+
 
 interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
@@ -416,6 +421,70 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     }
   };
 
+  // Build snap targets for razor shift-snap (item edges, grid, playhead, markers)
+  // Called on-demand during mouse move — reads stores directly to avoid subscriptions
+  const buildRazorSnapTargets = useCallback((): RazorSnapTarget[] => {
+    const targets: RazorSnapTarget[] = [];
+    const items = useTimelineStore.getState().items;
+    const transitions = useTransitionsStore.getState().transitions;
+
+    // Build visible track IDs (skip hidden, collapsed, group-only tracks)
+    const tracks = useTimelineStore.getState().tracks;
+    const visibleTrackIds = new Set<string>();
+    const groupById = new Map<string, { visible: boolean; collapsed: boolean }>();
+    for (const t of tracks) {
+      if (t.isGroup) {
+        groupById.set(t.id, { visible: t.visible !== false, collapsed: !!t.isCollapsed });
+      }
+    }
+    for (const t of tracks) {
+      if (t.isGroup) continue;
+      if (t.visible === false) continue;
+      if (t.parentTrackId) {
+        const parent = groupById.get(t.parentTrackId);
+        if (parent && (parent.collapsed || !parent.visible)) continue;
+      }
+      visibleTrackIds.add(t.id);
+    }
+
+    // Skip inner edges hidden by transitions (same logic as useSnapCalculator)
+    const suppressEnd = new Set<string>();
+    const suppressStart = new Set<string>();
+    for (const t of transitions) {
+      suppressEnd.add(t.leftClipId);
+      suppressStart.add(t.rightClipId);
+
+      // Add transition visual midpoint (only for visible tracks)
+      const rightClip = items.find((i) => i.id === t.rightClipId);
+      if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
+        const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
+        targets.push({ frame: midpoint, type: 'item-start' });
+      }
+    }
+
+    // Item edges (excluding transition inner edges and hidden/collapsed tracks)
+    for (const item of items) {
+      if (!visibleTrackIds.has(item.trackId)) continue;
+      if (!suppressStart.has(item.id)) {
+        targets.push({ frame: item.from, type: 'item-start' });
+      }
+      if (!suppressEnd.has(item.id)) {
+        targets.push({ frame: item.from + item.durationInFrames, type: 'item-end' });
+      }
+    }
+
+    // Playhead
+    targets.push({ frame: Math.round(currentFrameRef.current), type: 'playhead' });
+
+    // Markers
+    const markers = useMarkersStore.getState().markers;
+    for (const marker of markers) {
+      targets.push({ frame: marker.frame, type: 'marker' });
+    }
+
+    return targets;
+  }, []);
+
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
     // Skip during playback
@@ -433,10 +502,28 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
 
     const rect = scrollContainer.getBoundingClientRect();
     const x = e.clientX - rect.left + scrollContainer.scrollLeft;
-    const frame = Math.max(
-      0,
-      Math.min(Math.round(pixelsToFrameRef.current(x)), maxTimelineFrameRef.current)
-    );
+
+    // In razor mode with Shift held, snap to nearby targets
+    const isRazor = useSelectionStore.getState().activeTool === 'razor';
+    let frame: number;
+    if (isRazor && e.shiftKey) {
+      const snapTargets = buildRazorSnapTargets();
+      const { splitFrame } = getRazorSplitPosition({
+        cursorX: x,
+        currentFrame: currentFrameRef.current,
+        isPlaying: false,
+        frameToPixels: frameToPixelsRef.current,
+        pixelsToFrame: pixelsToFrameRef.current,
+        shiftHeld: true,
+        snapTargets,
+      });
+      frame = Math.max(0, Math.min(splitFrame, maxTimelineFrameRef.current));
+    } else {
+      frame = Math.max(
+        0,
+        Math.min(Math.round(pixelsToFrameRef.current(x)), maxTimelineFrameRef.current)
+      );
+    }
 
     // Detect hovered item
     const target = e.target as HTMLElement;
