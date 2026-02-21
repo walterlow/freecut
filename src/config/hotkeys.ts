@@ -104,7 +104,7 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
 
   // Zoom
   ZOOM_TO_FIT: 'Zoom to fit all content',
-  ZOOM_TO_100: 'Zoom to 100% at playhead',
+  ZOOM_TO_100: 'Zoom to 100% at cursor or playhead',
 
   // Clipboard
   COPY: 'Copy selected items',

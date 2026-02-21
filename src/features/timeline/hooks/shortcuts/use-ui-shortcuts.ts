@@ -4,7 +4,7 @@
 
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTimelineStore } from '../../stores/timeline-store';
-import { useZoomStore } from '../../stores/zoom-store';
+import { useZoomStore, getZoomTo100Handler } from '../../stores/zoom-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
@@ -94,7 +94,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
       const { currentFrame, previewFrame } = usePlaybackStore.getState();
       const targetFrame = previewFrame ?? currentFrame;
 
-      const handler = useZoomStore.getState()._zoomTo100Handler;
+      const handler = getZoomTo100Handler();
       if (handler) {
         handler(targetFrame);
       }

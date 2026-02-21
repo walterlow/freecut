@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
-import { useZoomStore } from '../stores/zoom-store';
+import { registerZoomTo100 } from '../stores/zoom-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 
@@ -655,7 +655,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
 
   // Register zoom-to-100 handler globally so keyboard shortcuts can use it
   useEffect(() => {
-    useZoomStore.getState().registerZoomTo100(handleZoomTo100);
+    registerZoomTo100(handleZoomTo100);
+    return () => registerZoomTo100(null);
   }, [handleZoomTo100]);
 
   // Expose zoom handlers to parent component (only once on mount)
