@@ -9,6 +9,7 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
@@ -182,10 +183,37 @@ export function trimItemEnd(id: string, trimAmount: number): void {
   }, { id, trimAmount });
 }
 
+/**
+ * Check if a frame falls inside any transition overlap zone for a given item.
+ * Uses the full transition duration (not alignment-based portions) because
+ * the entire overlap region is part of the transition effect.
+ */
+function isInTransitionOverlap(itemId: string, relativeFrame: number, itemDuration: number): boolean {
+  const transitions = useTransitionsStore.getState().transitions;
+  return transitions.some((t) =>
+    (t.leftClipId === itemId && relativeFrame >= itemDuration - t.durationInFrames) ||
+    (t.rightClipId === itemId && relativeFrame < t.durationInFrames)
+  );
+}
+
 export function splitItem(
   id: string,
   splitFrame: number
 ): { leftItem: TimelineItem; rightItem: TimelineItem } | null {
+  const item = useItemsStore.getState().items.find((i) => i.id === id);
+  if (item) {
+    // Bounds check first — out-of-range splits are a silent no-op (handled by _splitItem),
+    // must not fall through to transition zone check which would false-positive.
+    if (splitFrame <= item.from || splitFrame >= item.from + item.durationInFrames) {
+      return null;
+    }
+    const relativeFrame = splitFrame - item.from;
+    if (isInTransitionOverlap(id, relativeFrame, item.durationInFrames)) {
+      toast.warning('Cannot split inside a transition zone');
+      return null;
+    }
+  }
+
   return execute('SPLIT_ITEM', () => {
     const result = useItemsStore.getState()._splitItem(id, splitFrame);
     if (!result) return null;
@@ -276,6 +304,11 @@ export async function insertFreezeFrame(
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
   if (playheadFrame <= itemStart || playheadFrame >= itemEnd) return false;
+
+  // Block freeze frame insertion inside transition overlap zones
+  if (isInTransitionOverlap(itemId, playheadFrame - itemStart, item.durationInFrames)) {
+    return false;
+  }
 
   const fps = useTimelineSettingsStore.getState().fps;
   const speed = item.speed ?? 1;
