@@ -380,6 +380,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return s.neighborDelta;
     }, [item.id])
   );
+  const rollingEditHandle = useRollingEditPreviewStore(
+    useCallback((s) => {
+      if (s.neighborItemId !== item.id) return null;
+      return s.handle;
+    }, [item.id])
+  );
 
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
   const overlapRight = useMemo(() => {
@@ -472,14 +478,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     // Rolling edit neighbor visual feedback
     if (rollingEditDelta !== 0) {
-      const store = useRollingEditPreviewStore.getState();
-      if (store.handle === 'end') {
+      if (rollingEditHandle === 'end') {
         // Trimmed item's end handle was dragged → this neighbor's start adjusts
         // Positive delta = edit point moved right = neighbor shrinks from left
         const deltaPixels = Math.round(timeToPixels(rollingEditDelta / fps));
         trimVisualLeft += deltaPixels;
         trimVisualWidth -= deltaPixels;
-      } else if (store.handle === 'start') {
+      } else if (rollingEditHandle === 'start') {
         // Trimmed item's start handle was dragged → this neighbor's end adjusts
         // Positive delta = edit point moved right → neighbor extends from right
         // Negative delta = edit point moved left → neighbor shrinks from right
@@ -505,7 +510,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
     canExtendInfinitely, currentSourceStart, currentSpeed, item.from, item.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
-    subCompDuration, rollingEditDelta
+    subCompDuration, rollingEditDelta, rollingEditHandle
   ]);
 
   // Get color based on item type - memoized

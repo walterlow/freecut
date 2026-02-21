@@ -171,6 +171,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
         if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
       }
+      // During rolling edit, exclude the neighbor from adjacency constraints —
+      // it moves with the edit point, so the rolling edit clamp below handles it.
+      if (isRollingEdit && neighborId) {
+        transitionLinkedIds.add(neighborId);
+      }
       deltaFrames = clampToAdjacentItems(currentItem, handle!, deltaFrames, allItems, transitionLinkedIds);
 
       // Rolling edit: clamp to both clips' source limits

@@ -322,4 +322,46 @@ describe('rolling edit', () => {
     expect(items.find((i) => i.id === 'left')!.durationInFrames).toBe(100);
     expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100);
   });
+
+  it('clamps delta when right clip cannot shrink enough due to source bounds', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+    // Right clip starts at sourceStart 90, so it can only shrink by 50 frames
+    // (durationInFrames 100 - minimum ~50 after clamping to sourceStart)
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 50,
+      sourceEnd: 150,
+      sourceDuration: 150,
+      sourceFps: 30,
+      mediaId: 'media-2',
+    });
+
+    useItemsStore.getState().setItems([left, right]);
+
+    // Request 90 frames but right clip can only shrink by ~50
+    rollingTrimItems('left', 'right', 90);
+
+    const items = useItemsStore.getState().items;
+    const updatedLeft = items.find((i) => i.id === 'left')!;
+    const updatedRight = items.find((i) => i.id === 'right')!;
+
+    // Delta should be clamped — right clip can't shrink more than its source allows
+    expect(updatedRight.durationInFrames).toBeGreaterThan(0);
+    // Total duration unchanged
+    expect(updatedLeft.durationInFrames + updatedRight.durationInFrames).toBe(200);
+    // Left extended by actual effective delta, right shrunk by same amount
+    expect(updatedLeft.from + updatedLeft.durationInFrames).toBe(updatedRight.from);
+  });
 });

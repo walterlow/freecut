@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useRollingEditPreviewStore } from '@/features/timeline/stores/rolling-edit-preview-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { getVideoTargetTimeSeconds } from '@/lib/composition-runtime/utils/video-timing';
@@ -87,9 +87,10 @@ function RollingEditOverlayInner({
   }, []);
 
   const items = useTimelineStore((s) => s.items);
+  const itemsMap = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
 
-  const trimmedItem = items.find((i) => i.id === trimmedItemId);
-  const neighborItem = items.find((i) => i.id === neighborItemId);
+  const trimmedItem = itemsMap.get(trimmedItemId);
+  const neighborItem = itemsMap.get(neighborItemId);
 
   if (!trimmedItem || !neighborItem) return null;
 
@@ -148,7 +149,6 @@ function RollingEditOverlayInner({
         sourceTime={outSourceTime}
         timecode={outTimecode}
         label="OUT"
-        fps={fps}
         areaHeight={sharedAreaHeight}
         panelWidth={panelWidth}
       />
@@ -157,7 +157,6 @@ function RollingEditOverlayInner({
         sourceTime={inSourceTime}
         timecode={inTimecode}
         label="IN"
-        fps={fps}
         areaHeight={sharedAreaHeight}
         panelWidth={panelWidth}
       />
@@ -170,12 +169,11 @@ interface FramePanelProps {
   sourceTime: number;
   timecode: string;
   label: string;
-  fps: number;
   areaHeight: number;
   panelWidth: number;
 }
 
-function FramePanel({ item, sourceTime, timecode, label, fps, areaHeight, panelWidth }: FramePanelProps) {
+function FramePanel({ item, sourceTime, timecode, label, areaHeight, panelWidth }: FramePanelProps) {
   const isVideo = item.type === 'video';
   const isImage = item.type === 'image';
   const ar = getItemAspectRatio(item);
@@ -203,7 +201,7 @@ function FramePanel({ item, sourceTime, timecode, label, fps, areaHeight, panelW
           style={{ width: videoWidth, height: videoHeight }}
         >
           {isVideo ? (
-            <VideoFrame item={item} sourceTime={sourceTime} fps={fps} />
+            <VideoFrame item={item} sourceTime={sourceTime} />
           ) : isImage ? (
             <ImageFrame item={item} />
           ) : (
@@ -223,7 +221,6 @@ function FramePanel({ item, sourceTime, timecode, label, fps, areaHeight, panelW
 interface VideoFrameProps {
   item: TimelineItem;
   sourceTime: number;
-  fps: number;
 }
 
 function VideoFrame({ item, sourceTime }: VideoFrameProps) {
@@ -248,6 +245,9 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
   useEffect(() => {
     if (!blobUrl) return;
 
+    seekingRef.current = false;
+    pendingTimeRef.current = null;
+
     const video = document.createElement('video');
     video.preload = 'auto';
     video.muted = true;
@@ -260,6 +260,8 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
       video.removeAttribute('src');
       video.load();
       videoRef.current = null;
+      seekingRef.current = false;
+      pendingTimeRef.current = null;
     };
   }, [blobUrl]);
 
