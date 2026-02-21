@@ -7,7 +7,6 @@ import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
-import { validateMediaFile } from '../utils/validation';
 import { useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import {
@@ -23,13 +22,10 @@ import {
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void;
-  onImportHandles: (handles: FileSystemFileHandle[]) => Promise<void>;
-  onShowNotification: (notification: { type: 'info' | 'warning' | 'error'; message: string }) => void;
   viewMode?: 'grid' | 'list';
 }
 
-export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandles, onShowNotification, viewMode = 'grid' }: MediaGridProps) {
-  const [isDragging, setIsDragging] = useState(false);
+export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid' }: MediaGridProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -202,114 +198,6 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Don't show drag overlay if dragging media items from the grid
-    // Media items have 'application/json' type, external files have 'Files' type
-    if (!e.dataTransfer.types.includes('application/json')) {
-      setIsDragging(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Only set dragging to false if leaving the container itself
-    if (e.currentTarget === e.target) {
-      setIsDragging(false);
-    }
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    // Check if this is a media item being dragged (not external files)
-    try {
-      const jsonData = e.dataTransfer.getData('application/json');
-      if (jsonData) {
-        const data = JSON.parse(jsonData);
-        // Ignore media items being dragged from the grid itself
-        if (data.type === 'media-item' || data.type === 'media-items') {
-          return;
-        }
-      }
-    } catch {
-      // Not JSON data, continue with file handling
-    }
-
-    // Check if getAsFileSystemHandle is supported (Chrome/Edge only)
-    const firstItem = e.dataTransfer.items[0];
-    if (!firstItem || !('getAsFileSystemHandle' in firstItem)) {
-      onShowNotification({
-        type: 'warning',
-        message: 'Drag-drop not supported. Please use Google Chrome.',
-      });
-      return;
-    }
-
-    // Get file handles from drop
-    // IMPORTANT: Collect all handle promises SYNCHRONOUSLY first, then await them
-    // The DataTransferItemList can become invalid after any async operation
-    const items = Array.from(e.dataTransfer.items);
-    logger.debug(`[handleDrop] Processing ${items.length} dropped items`);
-
-    // Start all getAsFileSystemHandle calls synchronously before any await
-    const handlePromises: Promise<FileSystemHandle | null>[] = [];
-    for (const item of items) {
-      logger.debug(`[handleDrop] Item kind: ${item.kind}, type: ${item.type}`);
-      if ('getAsFileSystemHandle' in item) {
-        handlePromises.push(item.getAsFileSystemHandle());
-      }
-    }
-
-    // Now await all the promises
-    const rawHandles = await Promise.all(handlePromises);
-    logger.debug(`[handleDrop] Got ${rawHandles.length} raw handles`);
-
-    // Filter and validate
-    const handles: FileSystemFileHandle[] = [];
-    const errors: string[] = [];
-
-    for (const handle of rawHandles) {
-      logger.debug(`[handleDrop] Handle:`, handle?.kind, handle?.name);
-      if (handle?.kind === 'file') {
-        try {
-          const file = await (handle as FileSystemFileHandle).getFile();
-          logger.debug(`[handleDrop] File: ${file.name}, size: ${file.size}, type: ${file.type}`);
-          const validation = validateMediaFile(file);
-          if (validation.valid) {
-            handles.push(handle as FileSystemFileHandle);
-            logger.debug(`[handleDrop] Added handle for ${file.name}`);
-          } else {
-            errors.push(`${file.name}: ${validation.error}`);
-            logger.debug(`[handleDrop] Validation failed for ${file.name}: ${validation.error}`);
-          }
-        } catch (error) {
-          logger.warn(`[handleDrop] Failed to get file from handle:`, error);
-        }
-      }
-    }
-
-    logger.debug(`[handleDrop] Total valid handles: ${handles.length}, errors: ${errors.length}`);
-
-    // Show validation errors if any
-    if (errors.length > 0) {
-      onShowNotification({
-        type: 'error',
-        message: `Some files were rejected: ${errors.join(', ')}`,
-      });
-    }
-
-    // Import valid file handles
-    if (handles.length > 0) {
-      await onImportHandles(handles);
-    }
-  };
-
   const handleContainerClick = (e: React.MouseEvent) => {
     // Don't clear selection if we just finished a marquee drag
     if (wasMarqueeDraggingRef.current) {
@@ -339,47 +227,11 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, onImportHandle
   return (
     <div
       ref={containerRef}
-      className="relative min-h-full"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      className="relative"
       onClick={handleContainerClick}
     >
       {/* Marquee selection overlay */}
       <MarqueeOverlay marqueeState={marqueeState} />
-
-      {/* Drag overlay - shown when dragging */}
-      {isDragging && (
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
-          {/* Animated corner accents */}
-          <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />
-          <div className="absolute top-2 right-2 w-6 h-6 border-r-2 border-t-2 border-primary" />
-          <div className="absolute bottom-2 left-2 w-6 h-6 border-l-2 border-b-2 border-primary" />
-          <div className="absolute bottom-2 right-2 w-6 h-6 border-r-2 border-b-2 border-primary" />
-
-          {/* Upload icon and message */}
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/20 border-2 border-primary">
-              <Upload className="w-7 h-7 text-primary animate-bounce" />
-            </div>
-            <p className="text-base font-bold tracking-wide text-primary">DROP FILES HERE</p>
-            <div className="flex flex-wrap justify-center gap-2 mt-2">
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WebM</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MOV</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP3</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WAV</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">JPG</span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">PNG</span>
-            </div>
-          </div>
-
-          {/* Animated scan line */}
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent animate-scan" />
-          </div>
-        </div>
-      )}
 
       {/* Content */}
       {isLoading ? (
