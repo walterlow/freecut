@@ -110,6 +110,7 @@ interface ItemsActions {
 
   // Internal mutations (prefixed with _ to indicate called by command system)
   _addItem: (item: TimelineItem) => void;
+  _addItems: (items: TimelineItem[]) => void;
   _updateItem: (id: string, updates: Partial<TimelineItem>) => void;
   _removeItems: (ids: string[]) => void;
 
@@ -154,6 +155,11 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     // Add item
     _addItem: (item) => set((state) => ({
       items: [...state.items, normalizeFrameFields(item)],
+    })),
+
+    // Add multiple items in one mutation
+    _addItems: (items) => set((state) => ({
+      items: [...state.items, ...items.map((item) => normalizeFrameFields(item))],
     })),
 
     // Update item

@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem, CompositionItem } from '@/types/timeline';
+import type { MediaMetadata } from '@/types/storage';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -35,6 +36,44 @@ interface GhostPreviewItem {
   width: number;
   label: string;
   type: string;
+}
+
+interface DragMediaItem {
+  mediaId: string;
+  mediaType: string;
+  fileName: string;
+  duration: number;
+}
+
+interface PlannedDroppedMediaItem {
+  dragItem: DragMediaItem;
+  media: MediaMetadata;
+  finalPosition: number;
+  itemDuration: number;
+}
+
+const MULTI_DROP_METADATA_CONCURRENCY = 3;
+
+async function mapWithConcurrency<T, U>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<U>
+): Promise<U[]> {
+  const results = new Array<U>(items.length);
+  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const currentIndex = nextIndex++;
+        if (currentIndex >= items.length) return;
+        results[currentIndex] = await mapper(items[currentIndex]!, currentIndex);
+      }
+    })
+  );
+
+  return results;
 }
 
 /**
@@ -76,6 +115,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     useShallow((s) => s.transitions.filter((t) => t.trackId === track.id))
   );
   const addItem = useTimelineStore((s) => s.addItem);
+  const addItems = useTimelineStore((s) => s.addItems);
   const fps = useTimelineStore((s) => s.fps);
   const closeGapAtPosition = useTimelineStore((s) => s.closeGapAtPosition);
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
@@ -350,36 +390,28 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
       // Handle multi-item drop (media-items)
       if (data.type === 'media-items') {
-        const items = data.items as Array<{
-          mediaId: string;
-          mediaType: string;
-          fileName: string;
-          duration: number;
-        }>;
+        const items = data.items as DragMediaItem[];
+        if (!Array.isArray(items) || items.length === 0) {
+          return;
+        }
 
-        // Track current position for sequential placement
         let currentPosition = Math.max(0, dropFrame);
-        // Keep track of items we're adding to include in collision detection
-        const addedItems: TimelineItemType[] = [];
+        const mediaById = new Map(getMedia.map((media) => [media.id, media]));
+        const storeItems = useTimelineStore.getState().items;
+        const reservedRanges: Array<{ from: number; durationInFrames: number; trackId: string }> = [];
+        const plannedItems: PlannedDroppedMediaItem[] = [];
 
-        for (const item of items) {
-          const { mediaId, mediaType, fileName, duration } = item;
-
-          // Get media metadata from store for additional info
-          const media = getMedia.find((m) => m.id === mediaId);
+        for (const dragItem of items) {
+          const { mediaId, mediaType, fileName, duration } = dragItem;
+          const media = mediaById.get(mediaId);
           if (!media) {
             logger.error('Media not found:', mediaId);
             continue;
           }
 
-          // Calculate duration in frames
           const durationInFrames = Math.round(duration * fps);
           const itemDuration = durationInFrames > 0 ? durationInFrames : (mediaType === 'image' ? fps * 3 : fps);
-
-          // Find nearest available space considering both existing items and items we're adding
-          // Read items from store directly to avoid subscription
-          const storeItems = useTimelineStore.getState().items;
-          const itemsToCheck = [...storeItems, ...addedItems];
+          const itemsToCheck = [...storeItems, ...reservedRanges as unknown as TimelineItemType[]];
           const finalPosition = findNearestAvailableSpace(
             currentPosition,
             itemDuration,
@@ -392,85 +424,107 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
             continue;
           }
 
-          // Get media blob URL for playback
-          const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId);
-          if (!blobUrl) {
-            logger.error('Failed to get media blob URL for', fileName);
-            continue;
-          }
-
-          // Get thumbnail URL if available
-          const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(mediaId);
-
-          // Create timeline item
-          // source* fields are stored in source-native frame units.
-          const sourceFps = media.fps || fps;
-          const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
-          const sourceFramesForItemDuration = Math.min(
-            actualSourceDurationFrames,
-            Math.round(itemDuration * sourceFps / fps)
-          );
-          const baseItem = {
-            id: crypto.randomUUID(),
-            trackId: track.id,
-            from: finalPosition,
-            durationInFrames: itemDuration,
-            label: fileName,
-            mediaId: mediaId,
-            originId: crypto.randomUUID(),
-            sourceStart: 0,
-            sourceEnd: sourceFramesForItemDuration,
-            sourceDuration: actualSourceDurationFrames,
-            sourceFps,
-            trimStart: 0,
-            trimEnd: 0,
-          };
-
-          let timelineItem: TimelineItemType;
-          if (mediaType === 'video') {
-            const sourceW = media.width || canvasWidth;
-            const sourceH = media.height || canvasHeight;
-            timelineItem = {
-              ...baseItem,
-              type: 'video',
-              src: blobUrl,
-              thumbnailUrl: thumbnailUrl || undefined,
-              sourceWidth: media.width || undefined,
-              sourceHeight: media.height || undefined,
-              transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-            } as VideoItem;
-          } else if (mediaType === 'audio') {
-            timelineItem = {
-              ...baseItem,
-              type: 'audio',
-              src: blobUrl,
-            } as AudioItem;
-          } else if (mediaType === 'image') {
-            const sourceW = media.width || canvasWidth;
-            const sourceH = media.height || canvasHeight;
-            timelineItem = {
-              ...baseItem,
-              type: 'image',
-              src: blobUrl,
-              thumbnailUrl: thumbnailUrl || undefined,
-              sourceWidth: media.width || undefined,
-              sourceHeight: media.height || undefined,
-              transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-            } as ImageItem;
-          } else {
-            logger.warn('Unsupported media type:', mediaType);
-            continue;
-          }
-
-          // Track the item for collision detection with subsequent items
-          addedItems.push(timelineItem);
-
-          // Update current position for next item (place after this one)
+          plannedItems.push({
+            dragItem,
+            media,
+            finalPosition,
+            itemDuration,
+          });
+          reservedRanges.push({ from: finalPosition, durationInFrames: itemDuration, trackId: track.id });
           currentPosition = finalPosition + itemDuration;
+        }
 
-          // Add the item to timeline
-          logger.debug('Adding item at frame:', timelineItem.from, 'which is', timelineItem.from / fps, 'seconds');
-          addItem(timelineItem);
+        if (plannedItems.length === 0) {
+          return;
+        }
+
+        const resolvedTimelineItems = await mapWithConcurrency(
+          plannedItems,
+          MULTI_DROP_METADATA_CONCURRENCY,
+          async (planned): Promise<TimelineItemType | null> => {
+            const { dragItem, media, finalPosition, itemDuration } = planned;
+            const needsThumbnail = dragItem.mediaType === 'video' || dragItem.mediaType === 'image';
+            const [blobUrl, thumbnailUrl] = await Promise.all([
+              mediaLibraryService.getMediaBlobUrl(dragItem.mediaId),
+              needsThumbnail
+                ? mediaLibraryService.getThumbnailBlobUrl(dragItem.mediaId)
+                : Promise.resolve(null),
+            ]);
+
+            if (!blobUrl) {
+              logger.error('Failed to get media blob URL for', dragItem.fileName);
+              return null;
+            }
+
+            const sourceFps = media.fps || fps;
+            const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
+            const sourceFramesForItemDuration = Math.min(
+              actualSourceDurationFrames,
+              Math.round(itemDuration * sourceFps / fps)
+            );
+            const baseItem = {
+              id: crypto.randomUUID(),
+              trackId: track.id,
+              from: finalPosition,
+              durationInFrames: itemDuration,
+              label: dragItem.fileName,
+              mediaId: dragItem.mediaId,
+              originId: crypto.randomUUID(),
+              sourceStart: 0,
+              sourceEnd: sourceFramesForItemDuration,
+              sourceDuration: actualSourceDurationFrames,
+              sourceFps,
+              trimStart: 0,
+              trimEnd: 0,
+            };
+
+            if (dragItem.mediaType === 'video') {
+              const sourceW = media.width || canvasWidth;
+              const sourceH = media.height || canvasHeight;
+              return {
+                ...baseItem,
+                type: 'video',
+                src: blobUrl,
+                thumbnailUrl: thumbnailUrl || undefined,
+                sourceWidth: media.width || undefined,
+                sourceHeight: media.height || undefined,
+                transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
+              } as VideoItem;
+            }
+
+            if (dragItem.mediaType === 'audio') {
+              return {
+                ...baseItem,
+                type: 'audio',
+                src: blobUrl,
+              } as AudioItem;
+            }
+
+            if (dragItem.mediaType === 'image') {
+              const sourceW = media.width || canvasWidth;
+              const sourceH = media.height || canvasHeight;
+              return {
+                ...baseItem,
+                type: 'image',
+                src: blobUrl,
+                thumbnailUrl: thumbnailUrl || undefined,
+                sourceWidth: media.width || undefined,
+                sourceHeight: media.height || undefined,
+                transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
+              } as ImageItem;
+            }
+
+            logger.warn('Unsupported media type:', dragItem.mediaType);
+            return null;
+          }
+        );
+
+        const timelineItemsToAdd = resolvedTimelineItems.filter(
+          (timelineItem): timelineItem is TimelineItemType => timelineItem !== null
+        );
+
+        if (timelineItemsToAdd.length > 0) {
+          addItems(timelineItemsToAdd);
         }
         return;
       }

@@ -23,6 +23,15 @@ export function addItem(item: TimelineItem): void {
   }, { itemId: item.id, type: item.type });
 }
 
+export function addItems(items: TimelineItem[]): void {
+  if (items.length === 0) return;
+
+  execute('ADD_ITEMS', () => {
+    useItemsStore.getState()._addItems(items);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: items.length });
+}
+
 export function updateItem(id: string, updates: Partial<TimelineItem>): void {
   execute('UPDATE_ITEM', () => {
     useItemsStore.getState()._updateItem(id, updates);

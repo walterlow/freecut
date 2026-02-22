@@ -501,6 +501,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       addToGroup: timelineActions.addToGroup,
       removeFromGroup: timelineActions.removeFromGroup,
       addItem: timelineActions.addItem,
+      addItems: timelineActions.addItems,
       updateItem: timelineActions.updateItem,
       removeItems: timelineActions.removeItems,
       rippleDeleteItems: timelineActions.rippleDeleteItems,

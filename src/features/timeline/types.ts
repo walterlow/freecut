@@ -29,6 +29,7 @@ export interface TimelineActions {
   addToGroup: (trackIds: string[], groupTrackId: string) => void;
   removeFromGroup: (trackIds: string[]) => void;
   addItem: (item: TimelineItem) => void;
+  addItems: (items: TimelineItem[]) => void;
   updateItem: (id: string, updates: Partial<TimelineItem>) => void;
   removeItems: (ids: string[]) => void;
   rippleDeleteItems: (ids: string[]) => void;
