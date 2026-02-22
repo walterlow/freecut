@@ -244,7 +244,7 @@ export const VideoPreview = memo(function VideoPreview({
   const hasRolling2Up = useRollingEditPreviewStore(
     (s) => Boolean(s.trimmedItemId && s.neighborItemId && s.handle),
   );
-  const hasRipple2Up = useRippleEditPreviewStore((s) => Boolean(s.trimmedItemId));
+  const hasRipple2Up = useRippleEditPreviewStore((s) => Boolean(s.trimmedItemId && s.handle));
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks

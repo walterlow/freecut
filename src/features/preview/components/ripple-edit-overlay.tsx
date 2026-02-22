@@ -153,10 +153,9 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
   }
 
   // --- Start-handle trim ---
-  // IN = trimmed clip at its new first visible frame
-  // trimDelta frames into the original clip's range
-  const inLocalFrame = Math.max(0, trimDelta);
-  const inInfo = getSourceFrameInfo(trimmedItem, inLocalFrame, fps);
+  // IN = trimmed clip at its new first visible frame.
+  // trimDelta frames into the original clip's range (negative when extending start).
+  const inInfo = getSourceFrameInfo(trimmedItem, trimDelta, fps);
 
   // Check if the previous clip is adjacent to A's start.
   // In the anchor-from ripple model, A's position doesn't change — only its

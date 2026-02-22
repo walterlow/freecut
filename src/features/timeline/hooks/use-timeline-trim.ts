@@ -293,7 +293,6 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
           rippleShift = -deltaFrames;
         }
 
-        console.error('[RIPPLE_HOOK]', 'handle=', handle, 'deltaFrames=', deltaFrames, 'rippleShift=', rippleShift, 'itemId=', item.id);
         const rippleStore = useRippleEditPreviewStore.getState();
         if (!rippleStore.trimmedItemId) {
           // Compute downstream item IDs once — includes transition-connected

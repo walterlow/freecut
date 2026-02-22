@@ -468,11 +468,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         timeToPixels((item.from + item.durationInFrames + rippleTrimDelta - overlapRight) / fps)
       );
       trimVisualWidth = newRight - trimVisualLeft;
-      console.error('[RIPPLE_VIS]', item.id, 'delta=', rippleTrimDelta, 'newRight=', newRight, 'width=', trimVisualWidth);
     } else if (isTrimming) {
-      if (rippleEditOffset !== 0) {
-        console.error('[RIPPLE_BUG] downstream shifting but trimmed item NOT in ripple path!', item.id, 'rippleEditOffset=', rippleEditOffset, 'rippleTrimDelta=', rippleTrimDelta, 'isTrimming=', isTrimming);
-      }
       if (trimHandle === 'start') {
         const maxExtendBySource = canExtendInfinitely
           ? Infinity

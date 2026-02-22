@@ -21,7 +21,7 @@ export function getSourceFrameInfo(
   const sourceTime = getVideoTargetTimeSeconds(
     sourceStart,
     sourceFps,
-    Math.max(0, localFrame),
+    localFrame,
     sourceRate,
     timelineFps,
     0,
