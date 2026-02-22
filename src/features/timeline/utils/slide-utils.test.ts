@@ -95,16 +95,16 @@ describe('computeSlideContinuitySourceDelta', () => {
       id: 'middle',
       from: 100,
       durationInFrames: 100,
-      sourceStart: 350,
-      sourceEnd: 450,
-      sourceDuration: 455,
+      sourceStart: 100,
+      sourceEnd: 200,
+      sourceDuration: 205,
     });
     const right = makeVideoItem({
       id: 'right',
       from: 200,
       durationInFrames: 100,
-      sourceStart: 450,
-      sourceEnd: 550,
+      sourceStart: 200,
+      sourceEnd: 300,
       sourceDuration: 600,
     });
 
@@ -112,4 +112,3 @@ describe('computeSlideContinuitySourceDelta', () => {
     expect(delta).toBe(0);
   });
 });
-
