@@ -1,24 +1,24 @@
-interface RollingPreviewLike {
+export interface RollingPreviewLike {
   trimmedItemId: string | null;
   neighborItemId: string | null;
   handle: 'start' | 'end' | null;
   delta: number;
 }
 
-interface SlidePreviewLike {
+export interface SlidePreviewLike {
   itemId: string | null;
   leftNeighborId: string | null;
   rightNeighborId: string | null;
   delta: number;
 }
 
-interface RipplePreviewLike {
+export interface RipplePreviewLike {
   trimmedItemId: string | null;
   delta: number;
   isDownstream: boolean;
 }
 
-interface PreviewAdjustments {
+export interface PreviewAdjustments {
   rolling: RollingPreviewLike;
   slide: SlidePreviewLike;
   ripple: RipplePreviewLike;
@@ -97,4 +97,3 @@ export function getTransitionBridgeBounds(
     rightFrame,
   };
 }
-

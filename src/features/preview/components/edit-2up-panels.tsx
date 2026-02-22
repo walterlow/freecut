@@ -1,6 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { resolveMediaUrl } from '../utils/media-resolver';
+import {
+  getItemAspectRatio,
+  computeFittedMediaSize,
+  renderPanelMedia,
+} from './edit-panel-media-utils';
 
 const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
   image: '#22c55e',
@@ -28,13 +33,6 @@ interface EditTwoUpPanelsProps {
   rightPanel: EditTwoUpPanelData;
 }
 
-function getItemAspectRatio(item: TimelineItem | null): number {
-  if (item && (item.type === 'video' || item.type === 'image') && item.sourceWidth && item.sourceHeight) {
-    return item.sourceWidth / item.sourceHeight;
-  }
-  return 16 / 9;
-}
-
 export function EditTwoUpPanels({ leftPanel, rightPanel }: EditTwoUpPanelsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -55,7 +53,7 @@ export function EditTwoUpPanels({ leftPanel, rightPanel }: EditTwoUpPanelsProps)
     return () => ro.disconnect();
   }, []);
 
-  const panelWidth = (containerSize.width - GAP) / 2;
+  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1);
   const maxAreaHeight = containerSize.height - TEXT_SPACE;
 
   const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item);
@@ -106,16 +104,7 @@ function FramePanel({
   placeholderText,
 }: FramePanelProps) {
   const ar = getItemAspectRatio(item);
-
-  let mediaWidth = panelWidth;
-  let mediaHeight = panelWidth / ar;
-  if (mediaHeight > areaHeight) {
-    mediaHeight = areaHeight;
-    mediaWidth = areaHeight * ar;
-  }
-
-  const isVideo = item?.type === 'video';
-  const isImage = item?.type === 'image';
+  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar);
 
   return (
     <div className="flex-1 min-w-0 flex flex-col items-center justify-center">
@@ -130,15 +119,11 @@ function FramePanel({
           className="overflow-hidden border border-white/10"
           style={{ width: mediaWidth, height: mediaHeight }}
         >
-          {!item ? (
-            <TypePlaceholder type="gap" text={placeholderText ?? 'GAP'} />
-          ) : isVideo ? (
-            <VideoFrame item={item} sourceTime={sourceTime ?? 0} />
-          ) : isImage ? (
-            <ImageFrame item={item} />
-          ) : (
-            <TypePlaceholder type={item.type} text={placeholderText ?? item.type} />
-          )}
+          {renderPanelMedia(item, sourceTime, placeholderText, {
+            renderVideo: (videoItem, time) => <VideoFrame item={videoItem} sourceTime={time} />,
+            renderImage: (imageItem) => <ImageFrame item={imageItem} />,
+            renderPlaceholder: (type, text) => <TypePlaceholder type={type} text={text} />,
+          })}
         </div>
       </div>
       <span className="text-lg font-mono text-white/90 tabular-nums pt-1">
@@ -217,7 +202,7 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     if (!video || !blobUrl) return;
 
     const targetTime = Math.max(0, sourceTime);
-    // Tolerance for comparing fractional video timestamps.
+    // 1ms tolerance for comparing fractional video timestamps.
     const tolerance = 0.001;
 
     const handleSeeked = () => {

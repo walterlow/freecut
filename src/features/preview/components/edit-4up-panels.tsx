@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EditTwoUpPanelData } from './edit-2up-panels';
-import { VideoFrame, ImageFrame, TypePlaceholder } from './edit-2up-panels';
+import {
+  VideoFrame,
+  ImageFrame,
+  TypePlaceholder,
+} from './edit-2up-panels';
 import type { TimelineItem } from '@/types/timeline';
+import {
+  getItemAspectRatio,
+  computeFittedMediaSize,
+  renderPanelMedia,
+} from './edit-panel-media-utils';
 
 const TEXT_SPACE = 56;
 const GAP = 8;
@@ -12,18 +21,6 @@ interface EditFourUpPanelsProps {
   rightPanel: EditTwoUpPanelData;
   topLeftCorner?: EditTwoUpPanelData;
   topRightCorner?: EditTwoUpPanelData;
-}
-
-function getItemAspectRatio(item: TimelineItem | null): number {
-  if (
-    item &&
-    (item.type === 'video' || item.type === 'image') &&
-    item.sourceWidth &&
-    item.sourceHeight
-  ) {
-    return item.sourceWidth / item.sourceHeight;
-  }
-  return 16 / 9;
 }
 
 export function EditFourUpPanels({
@@ -55,7 +52,7 @@ export function EditFourUpPanels({
     return <div ref={containerRef} className="absolute inset-0 z-30 bg-black" />;
   }
 
-  const panelWidth = (containerSize.width - GAP) / 2;
+  const panelWidth = Math.max((containerSize.width - GAP) / 2, 1);
   const maxAreaHeight = containerSize.height - TEXT_SPACE;
 
   const leftNatural = panelWidth / getItemAspectRatio(leftPanel.item);
@@ -66,8 +63,8 @@ export function EditFourUpPanels({
   );
 
   // Corner thumbnail sizing
-  const cornerWidth = panelWidth * CORNER_SCALE;
-  const cornerHeight = cornerWidth / (16 / 9);
+  const cornerWidth = Math.max(panelWidth * CORNER_SCALE, 1);
+  const cornerHeight = Math.max(cornerWidth / (16 / 9), 1);
 
   return (
     <div
@@ -110,16 +107,7 @@ interface MainPanelProps {
 
 function MainPanel({ data, areaHeight, panelWidth }: MainPanelProps) {
   const ar = getItemAspectRatio(data.item);
-
-  let mediaWidth = panelWidth;
-  let mediaHeight = panelWidth / ar;
-  if (mediaHeight > areaHeight) {
-    mediaHeight = areaHeight;
-    mediaWidth = areaHeight * ar;
-  }
-
-  const isVideo = data.item?.type === 'video';
-  const isImage = data.item?.type === 'image';
+  const { mediaWidth, mediaHeight } = computeFittedMediaSize(panelWidth, areaHeight, ar);
 
   return (
     <div className="flex-1 min-w-0 flex flex-col items-center justify-center">
@@ -134,15 +122,11 @@ function MainPanel({ data, areaHeight, panelWidth }: MainPanelProps) {
           className="overflow-hidden border border-white/10"
           style={{ width: mediaWidth, height: mediaHeight }}
         >
-          {!data.item ? (
-            <TypePlaceholder type="gap" text={data.placeholderText ?? 'GAP'} />
-          ) : isVideo ? (
-            <VideoFrame item={data.item} sourceTime={data.sourceTime ?? 0} />
-          ) : isImage ? (
-            <ImageFrame item={data.item} />
-          ) : (
-            <TypePlaceholder type={data.item.type} text={data.placeholderText ?? data.item.type} />
-          )}
+          {renderPanelMedia(data.item, data.sourceTime, data.placeholderText, {
+            renderVideo: (videoItem, time) => <VideoFrame item={videoItem} sourceTime={time} />,
+            renderImage: (imageItem) => <ImageFrame item={imageItem} />,
+            renderPlaceholder: (type, text) => <TypePlaceholder type={type} text={text} />,
+          })}
         </div>
       </div>
       <span className="text-lg font-mono text-white/90 tabular-nums pt-1">{data.timecode}</span>

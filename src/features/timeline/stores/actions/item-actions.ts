@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
+import { computeClampedSlipDelta } from '../../utils/slip-utils';
 
 export function addItem(item: TimelineItem): void {
   execute('ADD_ITEM', () => {
@@ -665,19 +666,7 @@ export function slipItem(id: string, slipDelta: number): void {
     const sourceEnd = item.sourceEnd;
     const sourceDuration = item.sourceDuration;
 
-    if (sourceEnd === undefined) return;
-
-    let clamped = slipDelta;
-
-    // Clamp: sourceStart + delta >= 0
-    if (sourceStart + clamped < 0) {
-      clamped = -sourceStart;
-    }
-
-    // Clamp: sourceEnd + delta <= sourceDuration
-    if (sourceDuration !== undefined && sourceEnd + clamped > sourceDuration) {
-      clamped = sourceDuration - sourceEnd;
-    }
+    const clamped = computeClampedSlipDelta(sourceStart, sourceEnd, sourceDuration, slipDelta);
 
     if (clamped === 0) return;
 

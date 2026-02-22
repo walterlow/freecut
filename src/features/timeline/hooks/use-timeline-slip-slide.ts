@@ -15,6 +15,7 @@ import {
 } from '../utils/source-calculations';
 import { clampTrimAmount } from '../utils/trim-utils';
 import { findEditNeighborsWithTransitions } from '../utils/transition-linked-neighbors';
+import { computeClampedSlipDelta } from '../utils/slip-utils';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -58,6 +59,7 @@ export function useTimelineSlipSlide(
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  const latestDeltaRef = useRef(0);
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
@@ -83,21 +85,7 @@ export function useTimelineSlipSlide(
     if (!isMediaItem(currentItem)) return 0;
 
     const { sourceStart, sourceEnd, sourceDuration } = getSourceProperties(currentItem);
-    if (sourceEnd === undefined) return 0;
-
-    let clamped = delta;
-
-    // Can't go below sourceStart=0
-    if (sourceStart + clamped < 0) {
-      clamped = -sourceStart;
-    }
-
-    // Can't exceed sourceDuration
-    if (sourceDuration !== undefined && sourceEnd + clamped > sourceDuration) {
-      clamped = sourceDuration - sourceEnd;
-    }
-
-    return clamped;
+    return computeClampedSlipDelta(sourceStart, sourceEnd, sourceDuration, delta);
   }, [getItemFromStore]);
 
   /**
@@ -170,7 +158,8 @@ export function useTimelineSlipSlide(
           previewStore.setSlipDelta(clamped);
         }
 
-        if (clamped !== stateRef.current.currentDelta) {
+        if (clamped !== latestDeltaRef.current) {
+          latestDeltaRef.current = clamped;
           setState((prev) => ({ ...prev, currentDelta: clamped }));
         }
       } else if (mode === 'slide') {
@@ -230,7 +219,8 @@ export function useTimelineSlipSlide(
           previewStore.setSlideDelta(clamped);
         }
 
-        if (clamped !== stateRef.current.currentDelta) {
+        if (clamped !== latestDeltaRef.current) {
+          latestDeltaRef.current = clamped;
           setState((prev) => ({ ...prev, currentDelta: clamped }));
         }
       }
@@ -242,7 +232,8 @@ export function useTimelineSlipSlide(
   const handleMouseUp = useCallback(() => {
     if (!stateRef.current.isActive) return;
 
-    const { mode, currentDelta, leftNeighborId, rightNeighborId } = stateRef.current;
+    const { mode, leftNeighborId, rightNeighborId } = stateRef.current;
+    const currentDelta = latestDeltaRef.current;
 
     try {
       if (currentDelta !== 0) {
@@ -268,6 +259,7 @@ export function useTimelineSlipSlide(
         leftNeighborId: null,
         rightNeighborId: null,
       });
+      latestDeltaRef.current = 0;
     }
   }, [item.id, setDragState]);
 
@@ -285,6 +277,7 @@ export function useTimelineSlipSlide(
           useSlipEditPreviewStore.getState().clearPreview();
           useSlideEditPreviewStore.getState().clearPreview();
           setDragState(null);
+          latestDeltaRef.current = 0;
         }
       };
     }
@@ -317,6 +310,7 @@ export function useTimelineSlipSlide(
         leftNeighborId: leftNeighbor?.id ?? null,
         rightNeighborId: rightNeighbor?.id ?? null,
       });
+      latestDeltaRef.current = 0;
     },
     [item.id, item.type, trackLocked, findNeighbors, setDragState],
   );

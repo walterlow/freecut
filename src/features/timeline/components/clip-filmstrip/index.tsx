@@ -7,6 +7,7 @@ import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 const ZOOM_SETTLE_MS = 80;
 const MAX_DEFER_LAG_RATIO = 0.12;
 const MAX_DEFER_LAG_PX = 180;
+const PRIORITY_PAD_SECONDS = 0.75;
 
 interface ClipFilmstripProps {
   /** Media ID from the timeline item */
@@ -200,9 +201,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     }
 
     const visibleSpanSeconds = (renderClipWidth / renderPixelsPerSecond) * speed;
-    const padSeconds = 0.75;
-    const startTime = Math.max(0, effectiveStart - padSeconds);
-    const endTime = Math.min(sourceDuration, effectiveStart + visibleSpanSeconds + padSeconds);
+    const startTime = Math.max(0, effectiveStart - PRIORITY_PAD_SECONDS);
+    const endTime = Math.min(sourceDuration, effectiveStart + visibleSpanSeconds + PRIORITY_PAD_SECONDS);
 
     if (endTime <= startTime) {
       return null;

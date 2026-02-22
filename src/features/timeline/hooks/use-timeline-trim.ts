@@ -453,6 +453,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       if (e.button !== 0) return;
       if (trackLocked) return;
 
+      // Always prevent default trim-handle mouse behavior for all paths,
+      // including guardrail early returns.
+      e.stopPropagation();
+      e.preventDefault();
+
       const activeTool = useSelectionStore.getState().activeTool;
       const explicitRolling = activeTool === 'rolling-edit';
       const explicitRipple = activeTool === 'ripple-edit';
@@ -485,9 +490,6 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         });
         return;
       }
-
-      e.stopPropagation();
-      e.preventDefault();
 
       setTrimState({
         isTrimming: true,
