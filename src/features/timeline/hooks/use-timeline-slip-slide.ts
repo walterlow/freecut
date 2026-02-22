@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import { toast } from 'sonner';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
@@ -13,6 +15,7 @@ import {
   timelineToSourceFrames,
 } from '../utils/source-calculations';
 import { clampTrimAmount } from '../utils/trim-utils';
+import { hasAnyTransitionBridge } from '../utils/transition-edit-guards';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -314,6 +317,20 @@ export function useTimelineSlipSlide(
       e.preventDefault();
 
       const { leftNeighbor, rightNeighbor } = findNeighbors();
+
+      if (mode === 'slide') {
+        const transitions = useTransitionsStore.getState().transitions;
+        const relatedIds = [item.id];
+        if (leftNeighbor) relatedIds.push(leftNeighbor.id);
+        if (rightNeighbor) relatedIds.push(rightNeighbor.id);
+
+        if (hasAnyTransitionBridge(transitions, relatedIds)) {
+          toast.warning('Slide edit is blocked on transition-linked clips', {
+            description: 'Remove transition bridges first, then slide.',
+          });
+          return;
+        }
+      }
 
       // Signal drag start so other components can detect active drag
       setDragState({

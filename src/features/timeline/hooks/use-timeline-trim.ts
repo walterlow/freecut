@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
@@ -10,6 +11,7 @@ import { useTransitionsStore } from '../stores/transitions-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { rollingTrimItems, rippleTrimItem } from '../stores/actions/item-actions';
+import { hasTransitionBridgeAtHandle } from '../utils/transition-edit-guards';
 
 interface TrimState {
   isTrimming: boolean;
@@ -44,6 +46,27 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
   }, [item.id]);
+
+  const findNeighborForHandle = useCallback(
+    (currentItem: TimelineItem, handle: TrimHandle, allItems: TimelineItem[]): string | null => {
+      if (handle === 'end') {
+        const neighbor = allItems.find(
+          (other) => other.id !== currentItem.id &&
+            other.trackId === currentItem.trackId &&
+            other.from === currentItem.from + currentItem.durationInFrames
+        );
+        return neighbor?.id ?? null;
+      }
+
+      const neighbor = allItems.find(
+        (other) => other.id !== currentItem.id &&
+          other.trackId === currentItem.trackId &&
+          other.from + other.durationInFrames === currentItem.from
+      );
+      return neighbor?.id ?? null;
+    },
+    []
+  );
 
   // Use snap calculator - pass item.id to exclude self from magnetic snaps
   // Only use magnetic snap targets (item edges), not grid lines
@@ -460,6 +483,40 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       if (e.button !== 0) return;
       if (trackLocked) return;
 
+      const activeTool = useSelectionStore.getState().activeTool;
+      const explicitRolling = activeTool === 'rolling-edit';
+      const explicitRipple = activeTool === 'ripple-edit';
+      const modifierRolling = !explicitRipple && e.altKey && !e.shiftKey;
+      const modifierRipple = !explicitRolling && e.shiftKey;
+
+      const wantsRolling = explicitRolling || modifierRolling;
+      const wantsRipple = explicitRipple || modifierRipple;
+
+      const currentItem = getItemFromStore();
+      const transitions = useTransitionsStore.getState().transitions;
+
+      if (wantsRolling) {
+        if (hasTransitionBridgeAtHandle(transitions, currentItem.id, handle)) {
+          toast.warning('Rolling edit is blocked on transition edges', {
+            description: 'Remove the transition bridge or edit outside the bridged edge.',
+          });
+          return;
+        }
+
+        const neighborId = findNeighborForHandle(currentItem, handle, useTimelineStore.getState().items);
+        if (!neighborId) {
+          toast.warning('Rolling edit needs an adjacent clip on this edge');
+          return;
+        }
+      }
+
+      if (wantsRipple && hasTransitionBridgeAtHandle(transitions, currentItem.id, handle)) {
+        toast.warning('Ripple edit is blocked on transition edges', {
+          description: 'Remove the transition bridge or edit the opposite edge.',
+        });
+        return;
+      }
+
       e.stopPropagation();
       e.preventDefault();
 
@@ -475,7 +532,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         neighborId: null,
       });
     },
-    [item.from, item.durationInFrames, trackLocked]
+    [item.from, item.durationInFrames, trackLocked, getItemFromStore, findNeighborForHandle]
   );
 
   return {
