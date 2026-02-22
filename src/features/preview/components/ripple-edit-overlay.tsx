@@ -106,7 +106,13 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
     const outLocalFrame = Math.max(0, editPointFrame - trimmedItem.from - 1);
     const outInfo = getSourceFrameInfo(trimmedItem, outLocalFrame, fps);
 
-    if (!nextItem) {
+    // Check if the next clip is adjacent to the new edit point.
+    // If there's a gap between them, IN should show GAP, not the distant clip.
+    const newEnd = editPointFrame;
+    const nextStart = nextItem ? nextItem.from + delta : Infinity;
+    const hasGapAfterEdit = !nextItem || nextStart > newEnd;
+
+    if (hasGapAfterEdit) {
       return (
         <EditTwoUpPanels
           leftPanel={{
@@ -125,9 +131,8 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
       );
     }
 
-    const shiftedNextFrom = nextItem.from + delta;
-    const inLocalFrame = Math.max(0, editPointFrame - shiftedNextFrom);
-    const inInfo = getSourceFrameInfo(nextItem, inLocalFrame, fps);
+    // B is not edited during a ripple trim of A's end — its content is constant
+    const inInfo = getSourceFrameInfo(nextItem, 0, fps);
 
     return (
       <EditTwoUpPanels
@@ -148,15 +153,18 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
   }
 
   // --- Start-handle trim ---
-  // Edit point is at the new start of the trimmed clip
-  const editPointFrame = trimmedItem.from + trimDelta;
-
   // IN = trimmed clip at its new first visible frame
   // trimDelta frames into the original clip's range
   const inLocalFrame = Math.max(0, trimDelta);
   const inInfo = getSourceFrameInfo(trimmedItem, inLocalFrame, fps);
 
-  if (!prevItem) {
+  // Check if the previous clip is adjacent to A's start.
+  // In the anchor-from ripple model, A's position doesn't change — only its
+  // sourceStart/duration do — so the gap between prev and A is constant.
+  const prevEnd = prevItem ? prevItem.from + prevItem.durationInFrames : -Infinity;
+  const hasGapBeforeEdit = !prevItem || prevEnd < trimmedItem.from;
+
+  if (hasGapBeforeEdit) {
     return (
       <EditTwoUpPanels
         leftPanel={{
@@ -175,8 +183,8 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
     );
   }
 
-  // OUT = previous clip's last frame before the edit point
-  const outLocalFrame = Math.max(0, editPointFrame - prevItem.from - 1);
+  // OUT = previous clip's last frame (not edited, so its content is constant)
+  const outLocalFrame = Math.max(0, prevItem.durationInFrames - 1);
   const outInfo = getSourceFrameInfo(prevItem, outLocalFrame, fps);
 
   return (

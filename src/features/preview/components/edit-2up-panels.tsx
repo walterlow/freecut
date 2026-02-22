@@ -229,7 +229,16 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
       }
     };
 
+    // Fallback for seeking to time 0 on a new video: currentTime is already 0
+    // so the browser won't fire 'seeked'. Draw once data is available instead.
+    const handleLoadedData = () => {
+      if (video.currentTime === targetTime) {
+        drawFrame();
+      }
+    };
+
     video.addEventListener('seeked', handleSeeked);
+    video.addEventListener('loadeddata', handleLoadedData);
 
     if (seekingRef.current) {
       pendingTimeRef.current = targetTime;
@@ -240,6 +249,7 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
 
     return () => {
       video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('loadeddata', handleLoadedData);
     };
   }, [sourceTime, blobUrl, drawFrame]);
 
