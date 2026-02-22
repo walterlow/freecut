@@ -4,6 +4,10 @@ import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 
+const ZOOM_SETTLE_MS = 80;
+const MAX_DEFER_LAG_RATIO = 0.12;
+const MAX_DEFER_LAG_PX = 180;
+
 interface ClipFilmstripProps {
   /** Media ID from the timeline item */
   mediaId: string;
@@ -105,7 +109,8 @@ const FilmstripTile = memo(function FilmstripTile({
  * Clip Filmstrip Component
  *
  * Renders video frame thumbnails as a tiled filmstrip.
- * Uses useDeferredValue to keep zoom interactions responsive.
+ * Uses adaptive defer during active zoom to keep interactions responsive
+ * without prolonged catch-up lag once zoom settles.
  * Auto-fills container height.
  */
 export const ClipFilmstrip = memo(function ClipFilmstrip({
@@ -122,6 +127,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Measure container height
   useEffect(() => {
@@ -151,9 +158,36 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   // Defer zoom values to keep zoom slider responsive
   const deferredPixelsPerSecond = useDeferredValue(pixelsPerSecond);
   const deferredClipWidth = useDeferredValue(clipWidth);
-  const renderPixelsPerSecond = preferImmediateRendering ? pixelsPerSecond : deferredPixelsPerSecond;
-  const renderClipWidth = preferImmediateRendering ? clipWidth : deferredClipWidth;
+  const ppsLagRatio = Math.abs(deferredPixelsPerSecond - pixelsPerSecond) / Math.max(1, pixelsPerSecond);
+  const widthLagPx = Math.abs(deferredClipWidth - clipWidth);
+  const lagTooHigh = ppsLagRatio > MAX_DEFER_LAG_RATIO || widthLagPx > MAX_DEFER_LAG_PX;
+  const useDeferredForZoom = !preferImmediateRendering && isZooming && !lagTooHigh;
+  const renderPixelsPerSecond = useDeferredForZoom ? deferredPixelsPerSecond : pixelsPerSecond;
+  const renderClipWidth = useDeferredForZoom ? deferredClipWidth : clipWidth;
   const effectiveStart = Math.max(0, sourceStart + trimStart);
+
+  // Track active zoom interaction from pps changes and drop defer shortly
+  // after changes stop to avoid visible catch-up.
+  useEffect(() => {
+    if (preferImmediateRendering) return;
+
+    setIsZooming(true);
+    if (zoomSettleTimeoutRef.current) {
+      clearTimeout(zoomSettleTimeoutRef.current);
+    }
+    zoomSettleTimeoutRef.current = setTimeout(() => {
+      setIsZooming(false);
+      zoomSettleTimeoutRef.current = null;
+    }, ZOOM_SETTLE_MS);
+  }, [pixelsPerSecond, preferImmediateRendering]);
+
+  useEffect(() => {
+    return () => {
+      if (zoomSettleTimeoutRef.current) {
+        clearTimeout(zoomSettleTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // During active edit previews, prioritize extracting the currently requested
   // source window first so expanding clips show thumbnails sooner.
