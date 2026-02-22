@@ -15,9 +15,9 @@ interface SlideEditOverlayProps {
  *   - OUT (left):  left neighbor's new last frame
  *   - IN (right):  right neighbor's new first frame
  *
- * Corner thumbnails (small, static):
- *   - Top-left:  slid clip's first frame (content unchanged)
- *   - Top-right: slid clip's last frame  (content unchanged)
+ * Corner thumbnails (small, static baseline):
+ *   - Top-left:  left neighbor's current OUT frame before drag delta
+ *   - Top-right: right neighbor's current IN frame before drag delta
  */
 export function SlideEditOverlay({ fps }: SlideEditOverlayProps) {
   const itemId = useSlideEditPreviewStore((s) => s.itemId);
@@ -36,13 +36,31 @@ export function SlideEditOverlay({ fps }: SlideEditOverlayProps) {
   const leftNeighbor = leftNeighborId ? (itemsMap.get(leftNeighborId) ?? null) : null;
   const rightNeighbor = rightNeighborId ? (itemsMap.get(rightNeighborId) ?? null) : null;
 
-  // --- Corner thumbnails: slid clip's first and last frames (static) ---
-  const firstFrameInfo = getSourceFrameInfo(slidItem, 0, fps);
-  const lastFrameInfo = getSourceFrameInfo(
-    slidItem,
-    Math.max(0, slidItem.durationInFrames - 1),
-    fps,
-  );
+  // --- Corner thumbnails: current baseline before drag delta ---
+  const topLeftCorner = leftNeighbor
+    ? (() => {
+        const outLocalFrame = Math.max(0, leftNeighbor.durationInFrames - 1);
+        const outInfo = getSourceFrameInfo(leftNeighbor, outLocalFrame, fps);
+        return {
+          item: leftNeighbor,
+          sourceTime: outInfo.sourceTime,
+          timecode: outInfo.timecode,
+          label: '',
+        };
+      })()
+    : undefined;
+
+  const topRightCorner = rightNeighbor
+    ? (() => {
+        const inInfo = getSourceFrameInfo(rightNeighbor, 0, fps);
+        return {
+          item: rightNeighbor,
+          sourceTime: inInfo.sourceTime,
+          timecode: inInfo.timecode,
+          label: '',
+        };
+      })()
+    : undefined;
 
   // --- Center-left (OUT): left neighbor's new last frame ---
   // The left neighbor extends or shrinks by slideDelta.
@@ -92,18 +110,8 @@ export function SlideEditOverlay({ fps }: SlideEditOverlayProps) {
     <EditFourUpPanels
       leftPanel={leftPanel}
       rightPanel={rightPanel}
-      topLeftCorner={{
-        item: slidItem,
-        sourceTime: firstFrameInfo.sourceTime,
-        timecode: firstFrameInfo.timecode,
-        label: '',
-      }}
-      topRightCorner={{
-        item: slidItem,
-        sourceTime: lastFrameInfo.sourceTime,
-        timecode: lastFrameInfo.timecode,
-        label: '',
-      }}
+      topLeftCorner={topLeftCorner}
+      topRightCorner={topRightCorner}
     />
   );
 }
