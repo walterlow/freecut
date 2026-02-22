@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { useSequenceContext } from '@/features/player/composition';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
@@ -28,6 +28,7 @@ const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
  * Split clips from the same source share video elements for efficiency.
  */
 const NativePreviewVideo: React.FC<{
+  poolClipId: string;
   itemId: string;
   src: string;
   safeTrimBefore: number;
@@ -37,7 +38,7 @@ const NativePreviewVideo: React.FC<{
   audioVolume: number;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ itemId, src, safeTrimBefore, sequenceFrameOffset = 0, sourceFps, playbackRate, audioVolume, onError, containerRef }) => {
+}> = ({ poolClipId, itemId, src, safeTrimBefore, sequenceFrameOffset = 0, sourceFps, playbackRate, audioVolume, onError, containerRef }) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
   const sequenceContext = useSequenceContext();
@@ -49,10 +50,12 @@ const NativePreviewVideo: React.FC<{
   const preWarmTimerRef = useRef<number | null>(null);
   const preWarmGenRef = useRef(0);
   const audioVolumeRef = useRef(audioVolume);
+  const onErrorRef = useRef(onError);
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
   audioVolumeRef.current = audioVolume;
+  onErrorRef.current = onError;
 
   // Clock instance for imperative access in rVFC callback
   const clock = useClock();
@@ -85,13 +88,23 @@ const NativePreviewVideo: React.FC<{
     sequenceFrameOffset
   );
 
-  const shortId = itemId?.slice(0, 8) ?? 'no-id';
+  const shortId = poolClipId?.slice(0, 8) ?? 'no-id';
+
+  // Segment boundary resync:
+  // With stable pool identities, split clips no longer remount/reacquire.
+  // When the active segment switches (itemId changes), source mapping can jump
+  // discontinuously (especially around transition overlaps), so force an
+  // immediate sync on the next playback tick.
+  useEffect(() => {
+    needsInitialSyncRef.current = true;
+    lastSyncTimeRef.current = 0;
+  }, [itemId]);
 
   // Acquire element from pool on mount
   useEffect(() => {
-    // Guard: itemId and src are required
-    if (!itemId || !src) {
-      console.error('[NativePreviewVideo] Missing itemId or src');
+    // Guard: poolClipId and src are required
+    if (!poolClipId || !src) {
+      console.error('[NativePreviewVideo] Missing poolClipId or src');
       return;
     }
 
@@ -111,9 +124,9 @@ const NativePreviewVideo: React.FC<{
     });
 
     // Acquire element for this clip
-    const element = pool.acquireForClip(itemId, src);
+    const element = pool.acquireForClip(poolClipId, src);
     if (!element) {
-      console.error(`[NativePreviewVideo] Failed to acquire element for ${itemId}`);
+      console.error(`[NativePreviewVideo] Failed to acquire element for ${poolClipId}`);
       return;
     }
 
@@ -177,7 +190,7 @@ const NativePreviewVideo: React.FC<{
     };
     const handleError = () => {
       const error = new Error(`Video error: ${element.error?.message || 'Unknown'}`);
-      onError(error);
+      onErrorRef.current(error);
     };
     // Prevent black frames when video reaches its natural end
     // Seek back slightly to show the last frame
@@ -203,7 +216,7 @@ const NativePreviewVideo: React.FC<{
       element.style.position = 'absolute';
       element.style.top = '0';
       element.style.left = '0';
-      element.id = `pooled-video-${itemId}`;
+      element.id = `pooled-video-${poolClipId}`;
       container.appendChild(element);
 
       videoLog.debug(`[${shortId}] mounted to container`);
@@ -285,16 +298,65 @@ const NativePreviewVideo: React.FC<{
       }
 
       // Release back to pool
-      pool.releaseClip(itemId);
+      pool.releaseClip(poolClipId);
       elementRef.current = null;
 
       videoLog.debug(`[${shortId}] released`);
     };
     // Note: frame, fps, targetTime intentionally NOT in deps - we only want to acquire once on mount
     // Ongoing seeking is handled by the separate sync effect
-  }, [itemId, src, pool, onError, containerRef, shortId]);
+  }, [poolClipId, src, pool, containerRef, shortId]);
 
   // Sync video playback with timeline
+  // Layout pass handles immediate seeks before paint to avoid one-frame stale
+  // content during segment/transition boundary handoffs.
+  useLayoutEffect(() => {
+    const video = elementRef.current;
+    if (!video) return;
+
+    video.playbackRate = playbackRate;
+
+    const relativeFrame = frame - sequenceFrameOffset;
+    const isPremounted = relativeFrame < 0;
+    const canSeek = video.readyState >= 1;
+
+    const effectiveTargetTime = isPremounted
+      ? (safeTrimBefore / sourceFps)
+      : targetTime;
+    const videoDuration = video.duration || Infinity;
+    const clampedTargetTime = Math.min(Math.max(0, effectiveTargetTime), videoDuration - 0.05);
+
+    if (!canSeek) return;
+
+    if (isPremounted) {
+      if (!video.paused) {
+        video.pause();
+      }
+      if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+        try {
+          video.currentTime = clampedTargetTime;
+        } catch {
+          // Seek failed - element may still be initializing
+        }
+      }
+      return;
+    }
+
+    const mustHardSync = needsInitialSyncRef.current;
+    if (mustHardSync || (!isPlaying && Math.abs(video.currentTime - clampedTargetTime) > 0.016)) {
+      try {
+        video.currentTime = clampedTargetTime;
+        lastSyncTimeRef.current = Date.now();
+        if (mustHardSync) {
+          needsInitialSyncRef.current = false;
+        }
+      } catch {
+        // Seek failed - element may still be initializing
+      }
+    }
+  }, [frame, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
+
+  // Runtime playback control + drift correction
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
@@ -384,7 +446,9 @@ const NativePreviewVideo: React.FC<{
         const timeSinceLastSync = now - lastSyncTimeRef.current;
         const videoBehind = drift < -0.2;
         const videoFarAhead = drift > 0.5;
-        if ((videoFarAhead || (videoBehind && timeSinceLastSync > 500)) && canSeek) {
+        // Keep correction responsive for segment/transition boundaries.
+        // A 500ms backoff can leak stale frames in preview.
+        if ((videoFarAhead || (videoBehind && timeSinceLastSync > 80)) && canSeek) {
           try {
             video.currentTime = clampedTargetTime;
             lastSyncTimeRef.current = now;
@@ -489,7 +553,7 @@ const NativePreviewVideo: React.FC<{
       const now = Date.now();
       const timeSinceLastSync = now - lastSyncTimeRef.current;
 
-      if (drift > 0.5 || (drift < -0.2 && timeSinceLastSync > 500)) {
+      if (drift > 0.5 || (drift < -0.2 && timeSinceLastSync > 80)) {
         if (v.readyState >= 1) {
           try {
             v.currentTime = clamped;
@@ -507,7 +571,7 @@ const NativePreviewVideo: React.FC<{
     return () => {
       video.cancelVideoFrameCallback(handle);
     };
-  }, [isPlaying, itemId, clock]);
+  }, [isPlaying, poolClipId, clock]);
 
   // Keep volume/gain in sync for pooled element.
   useEffect(() => {
@@ -553,7 +617,7 @@ const NativePreviewVideo: React.FC<{
  * Uses native HTML5 video for both preview and export (via Canvas + WebCodecs).
  */
 export const VideoContent: React.FC<{
-  item: VideoItem & { _sequenceFrameOffset?: number };
+  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
   muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
@@ -593,6 +657,7 @@ export const VideoContent: React.FC<{
   // Export uses Canvas + WebCodecs (client-render-engine.ts), not Composition's renderer
   return (
     <NativePreviewVideo
+      poolClipId={item._poolClipId ?? item.id}
       itemId={item.id}
       src={item.src!}
       safeTrimBefore={safeTrimBefore}

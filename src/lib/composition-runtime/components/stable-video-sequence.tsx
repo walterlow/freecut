@@ -22,6 +22,7 @@ export type StableVideoSequenceItem = VideoItem & {
   trackOrder: number;
   trackVisible: boolean;
   _sequenceFrameOffset?: number;
+  _poolClipId?: string;
 };
 
 interface StableVideoSequenceProps {
@@ -60,7 +61,24 @@ function findActiveItemIndex(items: StableVideoSequenceItem[], frame: number): n
       continue;
     }
 
-    return mid;
+    // Overlap-aware tie-break:
+    // If multiple clips are active at this frame (transition overlap), prefer
+    // the right-most active clip (latest start). This prevents a base-layer
+    // left->right handoff exactly at transition exit, which can leak as a
+    // one-frame flicker if the transition overlay drops a frame.
+    let rightmost = mid;
+    while (rightmost + 1 < items.length) {
+      const next = items[rightmost + 1]!;
+      const nextStart = next.from;
+      const nextEnd = next.from + next.durationInFrames;
+      if (frame >= nextStart && frame < nextEnd) {
+        rightmost += 1;
+        continue;
+      }
+      break;
+    }
+
+    return rightmost;
   }
 
   return -1;
@@ -256,6 +274,9 @@ const GroupRenderer: React.FC<{
       // Without this, useCurrentFrame() returns the frame relative to the shared Sequence,
       // not relative to this specific item, causing fades to misbehave on split clips
       _sequenceFrameOffset: itemOffset,
+      // Keep a stable pool identity across split boundaries so preview video
+      // playback does not release/reacquire the element on item.id changes.
+      _poolClipId: `group-${group.originKey}`,
     };
   }, [activeItem, group.minFrom]);
 
