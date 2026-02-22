@@ -401,7 +401,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // the same store so the new right edge can be computed from frames — the same
   // rounding path downstream items use — preventing Math.round(A)+Math.round(B)
   // ≠ Math.round(A+B) gaps.
-  const rippleTrimDelta = useRippleEditPreviewStore(
+  const rippleEdgeDelta = useRippleEditPreviewStore(
     useCallback((s) => {
       if (s.trimmedItemId !== item.id) return 0;
       return s.delta;
@@ -462,10 +462,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // Ripple edit: compute the new right edge from frames — the SAME rounding
     // path that downstream items use for their `left` — so both edges go through
     // a single Math.round(timeToPixels(totalFrames / fps)) and can never diverge
-    // by even 1 px.  `rippleTrimDelta` equals the downstream `rippleEditOffset`.
-    if (rippleTrimDelta !== 0) {
+    // by even 1 px.  `rippleEdgeDelta` equals the downstream `rippleEditOffset`.
+    if (rippleEdgeDelta !== 0) {
       const newRight = Math.round(
-        timeToPixels((item.from + item.durationInFrames + rippleTrimDelta - overlapRight) / fps)
+        timeToPixels((item.from + item.durationInFrames + rippleEdgeDelta - overlapRight) / fps)
       );
       trimVisualWidth = newRight - trimVisualLeft;
     } else if (isTrimming) {
@@ -534,7 +534,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       stretchVisualWidth = stretchVisualRight - stretchVisualLeft;
     }
 
-    const isActive = rippleTrimDelta !== 0 || isTrimming || rollingEditDelta !== 0;
+    const isActive = rippleEdgeDelta !== 0 || isTrimming || rollingEditDelta !== 0;
     return {
       visualLeft: isStretching ? stretchVisualLeft : isActive ? trimVisualLeft : left,
       visualWidth: isStretching ? stretchVisualWidth : isActive ? trimVisualWidth : width,
@@ -543,7 +543,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
     canExtendInfinitely, currentSourceStart, currentSpeed, effectiveSourceFps, item.from, item.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
-    subCompDuration, rollingEditDelta, rollingEditHandle, rippleTrimDelta, overlapRight
+    subCompDuration, rollingEditDelta, rollingEditHandle, rippleEdgeDelta, overlapRight
   ]);
 
   // Get color based on item type - memoized

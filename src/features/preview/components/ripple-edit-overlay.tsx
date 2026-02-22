@@ -92,11 +92,15 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
     [trimmedItem, handle, downstreamItems],
   );
 
-  const prevItem = useMemo(() => {
-    if (!trimmedItem || !trackId || handle !== 'start') return null;
-    const sameTrack = items.filter((item) => item.trackId === trackId);
-    return pickPrevItem(trimmedItem, sameTrack);
-  }, [trimmedItem, trackId, handle, items]);
+  const sameTrackItems = useMemo(
+    () => (trackId ? items.filter((item) => item.trackId === trackId) : []),
+    [items, trackId],
+  );
+
+  const prevItem = useMemo(
+    () => (trimmedItem && handle === 'start' ? pickPrevItem(trimmedItem, sameTrackItems) : null),
+    [trimmedItem, handle, sameTrackItems],
+  );
 
   if (!trimmedItem || !handle) return null;
 
