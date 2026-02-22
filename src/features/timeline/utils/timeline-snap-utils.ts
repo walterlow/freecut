@@ -33,6 +33,7 @@ export function getFilteredItemSnapEdges(
   excludeItemIds?: string[],
 ): ItemSnapEdge[] {
   const edges: ItemSnapEdge[] = [];
+  const excludedIds = excludeItemIds ? new Set(excludeItemIds) : null;
 
   // Index items by ID for O(1) lookup in the transitions loop below
   const itemById = new Map(items.map((i) => [i.id, i]));
@@ -45,18 +46,29 @@ export function getFilteredItemSnapEdges(
     suppressEnd.add(t.leftClipId);
     suppressStart.add(t.rightClipId);
 
-    // Add transition visual midpoint (only for visible tracks)
+    // Add transition visual midpoint (only for visible tracks).
+    // Tag with rightClipId so it can be excluded during drag filtering.
+    // If either side of the transition is excluded, skip midpoint entirely
+    // to avoid leaked "phantom" snap points from excluded segment families.
+    const leftClip = itemById.get(t.leftClipId);
     const rightClip = itemById.get(t.rightClipId);
-    if (rightClip && visibleTrackIds.has(rightClip.trackId)) {
+    if (
+      leftClip &&
+      rightClip &&
+      visibleTrackIds.has(leftClip.trackId) &&
+      visibleTrackIds.has(rightClip.trackId) &&
+      !(excludedIds?.has(leftClip.id)) &&
+      !(excludedIds?.has(rightClip.id))
+    ) {
       const midpoint = rightClip.from + Math.ceil(t.durationInFrames / 2);
-      edges.push({ frame: midpoint, type: 'item-start' });
+      edges.push({ frame: midpoint, type: 'item-start', itemId: t.rightClipId });
     }
   }
 
-  // Item edges — filtered by visible tracks, transition suppression, and exclusions
+  // Item edges - filtered by visible tracks, transition suppression, and exclusions
   for (const item of items) {
     if (!visibleTrackIds.has(item.trackId)) continue;
-    if (excludeItemIds && excludeItemIds.includes(item.id)) continue;
+    if (excludedIds?.has(item.id)) continue;
 
     if (!suppressStart.has(item.id)) {
       edges.push({ frame: item.from, type: 'item-start', itemId: item.id });

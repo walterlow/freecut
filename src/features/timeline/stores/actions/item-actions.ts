@@ -578,10 +578,16 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
     }
 
     if (shiftAmount !== 0) {
-      // Shift all items on the same track that are downstream of the trimmed item's original end
+      // Shift all items on the same track that are downstream of the trimmed item's original end.
+      // Also include transition-connected neighbors whose `from` may be before oldEnd (overlap model).
       const freshItems = useItemsStore.getState().items;
+      const transitionNeighborIds = new Set<string>();
+      for (const t of useTransitionsStore.getState().transitions) {
+        if (t.leftClipId === id) transitionNeighborIds.add(t.rightClipId);
+      }
       const downstream = freshItems.filter(
-        (i) => i.id !== id && i.trackId === item.trackId && i.from >= oldEnd
+        (i) => i.id !== id && i.trackId === item.trackId &&
+          (i.from >= oldEnd || transitionNeighborIds.has(i.id))
       );
 
       if (downstream.length > 0) {

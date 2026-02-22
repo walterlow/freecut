@@ -150,7 +150,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const { isDragging, dragOffset, handleDragStart } = useTimelineDrag(item, timelineDuration, trackLocked, transformRef);
 
   // Trim functionality - disabled if track is locked
-  const { isTrimming, trimHandle, trimDelta, isRippleEdit, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
+  const { isTrimming, trimHandle, trimDelta, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
 
   // Rate stretch functionality - disabled if track is locked
   const { isStretching, stretchHandle, handleStretchStart, getVisualFeedback } = useRateStretch(item, timelineDuration, trackLocked);
@@ -391,12 +391,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Ripple edit preview: downstream items shift by delta during ripple trim
   const rippleEditOffset = useRippleEditPreviewStore(
     useCallback((s) => {
-      if (!s.trimmedItemId || s.trackId !== item.trackId) return 0;
-      if (item.id === s.trimmedItemId) return 0;
-      // Items at or after the trimmed item's original end are downstream
-      if (item.from >= s.trimmedItemEnd) return s.delta;
+      if (!s.trimmedItemId) return 0;
+      if (s.downstreamItemIds.has(item.id)) return s.delta;
       return 0;
-    }, [item.id, item.trackId, item.from])
+    }, [item.id])
+  );
+
+  // Ripple edit preview: trimmed item reads the downstream shift (delta) from
+  // the same store so the new right edge can be computed from frames — the same
+  // rounding path downstream items use — preventing Math.round(A)+Math.round(B)
+  // ≠ Math.round(A+B) gaps.
+  const rippleTrimDelta = useRippleEditPreviewStore(
+    useCallback((s) => {
+      if (s.trimmedItemId !== item.id) return 0;
+      return s.delta;
+    }, [item.id])
   );
 
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
@@ -439,6 +448,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const currentSourceStart = item.sourceStart || 0;
   const sourceDuration = item.sourceDuration || (item.durationInFrames * currentSpeed);
   const currentSourceEnd = item.sourceEnd || sourceDuration;
+  // Source FPS for converting source frames → timeline frames (sourceStart etc. are in source-native FPS)
+  const effectiveSourceFps = item.sourceFps ?? fps;
 
   // Items that can extend infinitely
   const canExtendInfinitely = item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment';
@@ -448,15 +459,27 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     let trimVisualLeft = left;
     let trimVisualWidth = width;
 
-    if (isTrimming) {
+    // Ripple edit: compute the new right edge from frames — the SAME rounding
+    // path that downstream items use for their `left` — so both edges go through
+    // a single Math.round(timeToPixels(totalFrames / fps)) and can never diverge
+    // by even 1 px.  `rippleTrimDelta` equals the downstream `rippleEditOffset`.
+    if (rippleTrimDelta !== 0) {
+      const newRight = Math.round(
+        timeToPixels((item.from + item.durationInFrames + rippleTrimDelta - overlapRight) / fps)
+      );
+      trimVisualWidth = newRight - trimVisualLeft;
+      console.error('[RIPPLE_VIS]', item.id, 'delta=', rippleTrimDelta, 'newRight=', newRight, 'width=', trimVisualWidth);
+    } else if (isTrimming) {
+      if (rippleEditOffset !== 0) {
+        console.error('[RIPPLE_BUG] downstream shifting but trimmed item NOT in ripple path!', item.id, 'rippleEditOffset=', rippleEditOffset, 'rippleTrimDelta=', rippleTrimDelta, 'isTrimming=', isTrimming);
+      }
       if (trimHandle === 'start') {
         const maxExtendBySource = canExtendInfinitely
           ? Infinity
           : subCompDuration !== null
             ? Math.max(0, subCompDuration - item.durationInFrames)
-            : (currentSourceStart / currentSpeed);
-        // In ripple mode, clip stays in place — no timeline position limit
-        const maxExtendByTimeline = isRippleEdit ? Infinity : item.from;
+            : Math.floor((currentSourceStart / effectiveSourceFps * fps) / currentSpeed);
+        const maxExtendByTimeline = item.from;
         const maxExtendTimelineFrames = Math.min(maxExtendBySource, maxExtendByTimeline);
         const maxExtendPixels = canExtendInfinitely ? Infinity : timeToPixels(maxExtendTimelineFrames / fps);
         const maxTrimPixels = width - minWidthPixels;
@@ -466,13 +489,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           Math.min(maxTrimPixels, trimDeltaPixels)
         );
 
-        if (isRippleEdit) {
-          // Ripple: left edge stays fixed, only width changes from the right
-          trimVisualWidth = Math.round(width - clampedDelta);
-        } else {
-          trimVisualLeft = Math.round(left + clampedDelta);
-          trimVisualWidth = Math.round(width - clampedDelta);
-        }
+        trimVisualLeft = Math.round(left + clampedDelta);
+        trimVisualWidth = Math.round(width - clampedDelta);
       } else {
         const maxExtendSourceFrames = canExtendInfinitely
           ? Infinity
@@ -481,7 +499,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             : (sourceDuration - currentSourceEnd);
         const maxExtendTimelineFrames = subCompDuration !== null
           ? maxExtendSourceFrames
-          : maxExtendSourceFrames / currentSpeed;
+          : Math.floor((maxExtendSourceFrames / effectiveSourceFps * fps) / currentSpeed);
         const maxExtendPixels = canExtendInfinitely ? Infinity : timeToPixels(maxExtendTimelineFrames / fps);
         const maxTrimPixels = width - minWidthPixels;
 
@@ -520,15 +538,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       stretchVisualWidth = stretchVisualRight - stretchVisualLeft;
     }
 
+    const isActive = rippleTrimDelta !== 0 || isTrimming || rollingEditDelta !== 0;
     return {
-      visualLeft: isStretching ? stretchVisualLeft : (isTrimming || rollingEditDelta !== 0) ? trimVisualLeft : left,
-      visualWidth: isStretching ? stretchVisualWidth : (isTrimming || rollingEditDelta !== 0) ? trimVisualWidth : width,
+      visualLeft: isStretching ? stretchVisualLeft : isActive ? trimVisualLeft : left,
+      visualWidth: isStretching ? stretchVisualWidth : isActive ? trimVisualWidth : width,
     };
   }, [
     left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
-    canExtendInfinitely, currentSourceStart, currentSpeed, item.from, item.durationInFrames,
+    canExtendInfinitely, currentSourceStart, currentSpeed, effectiveSourceFps, item.from, item.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
-    subCompDuration, rollingEditDelta, rollingEditHandle, isRippleEdit
+    subCompDuration, rollingEditDelta, rollingEditHandle, rippleTrimDelta, overlapRight
   ]);
 
   // Get color based on item type - memoized

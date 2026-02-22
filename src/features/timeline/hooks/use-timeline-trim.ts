@@ -47,7 +47,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
   // Use snap calculator - pass item.id to exclude self from magnetic snaps
   // Only use magnetic snap targets (item edges), not grid lines
-  const { magneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(
+  const { getMagneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(
     timelineDuration,
     item.id
   );
@@ -81,16 +81,23 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
    * @param excludeItemId - Optional item ID to exclude from snap targets (e.g. rolling edit neighbor)
    */
   const findSnapForFrame = useCallback(
-    (targetFrame: number, excludeItemId?: string): { snappedFrame: number; snapTarget: SnapTarget | null } => {
-      if (!snapEnabled || magneticSnapTargets.length === 0) {
+    (targetFrame: number, excludeItemIds?: Set<string>): { snappedFrame: number; snapTarget: SnapTarget | null } => {
+      if (!snapEnabled) {
+        return { snappedFrame: targetFrame, snapTarget: null };
+      }
+
+      // Read fresh targets from store — the memoized magneticSnapTargets can be
+      // stale after previous edits that shifted items (e.g. ripple edit).
+      const targets = getMagneticSnapTargets();
+      if (targets.length === 0) {
         return { snappedFrame: targetFrame, snapTarget: null };
       }
 
       let nearestTarget: SnapTarget | null = null;
       let minDistance = snapThresholdFrames;
 
-      for (const target of magneticSnapTargets) {
-        if (excludeItemId && target.itemId === excludeItemId) continue;
+      for (const target of targets) {
+        if (excludeItemIds && target.itemId && excludeItemIds.has(target.itemId)) continue;
         const distance = Math.abs(targetFrame - target.frame);
         if (distance < minDistance) {
           nearestTarget = target;
@@ -104,7 +111,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       return { snappedFrame: targetFrame, snapTarget: null };
     },
-    [snapEnabled, magneticSnapTargets, snapThresholdFrames]
+    [snapEnabled, getMagneticSnapTargets, snapThresholdFrames]
   );
 
   // Mouse move handler - only updates local state for visual feedback
@@ -118,10 +125,13 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       const { handle, initialFrom, initialDuration } = trimStateRef.current;
 
-      // Detect edit modes
+      // Detect edit modes.
+      // Explicit tool selection takes precedence over modifier keys.
       const activeTool = useSelectionStore.getState().activeTool;
-      const isRollingEdit = altKeyRef.current || activeTool === 'rolling-edit';
-      const isRippleEdit = shiftKeyRef.current || activeTool === 'ripple-edit';
+      const explicitRolling = activeTool === 'rolling-edit';
+      const explicitRipple = activeTool === 'ripple-edit';
+      const isRollingEdit = explicitRolling || (!explicitRipple && altKeyRef.current && !shiftKeyRef.current);
+      const isRippleEdit = explicitRipple || (!explicitRolling && shiftKeyRef.current);
       const allItems = useTimelineStore.getState().items;
       const currentItem = getItemFromStore();
       let neighborId: string | null = null;
@@ -145,25 +155,63 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
 
       // Calculate the target edge position and apply snapping
-      // During rolling edit, exclude the neighbor from snap targets
-      let targetEdgeFrame: number;
-      if (handle === 'start') {
-        // For start handle, we're moving the start position
-        targetEdgeFrame = initialFrom + deltaFrames;
-      } else {
-        // For end handle, we're moving the end position
-        targetEdgeFrame = initialFrom + initialDuration + deltaFrames;
+      // During rolling edit, exclude the neighbor from snap targets.
+      // During ripple edit, exclude downstream same-track items — their positions
+      // are stale because they will shift by the trim amount on commit.
+      const snapExcludeIds = new Set<string>([currentItem.id]);
+      if (neighborId) snapExcludeIds.add(neighborId);
+      if (isRippleEdit) {
+        // Split segments from the same origin can create self-referential
+        // snap targets during ripple drags; exclude the whole segment family.
+        if (currentItem.originId) {
+          for (const other of allItems) {
+            if (
+              other.id !== currentItem.id &&
+              other.trackId === currentItem.trackId &&
+              other.originId === currentItem.originId
+            ) {
+              snapExcludeIds.add(other.id);
+            }
+          }
+        }
+
+        const currentEnd = currentItem.from + currentItem.durationInFrames;
+        for (const other of allItems) {
+          if (other.id !== currentItem.id && other.trackId === currentItem.trackId && other.from >= currentEnd) {
+            snapExcludeIds.add(other.id);
+          }
+        }
+        // Also exclude transition-connected neighbors in both directions — in
+        // the overlap model, their `from` can be before currentEnd, but their
+        // edges/midpoints still sit on the active edit region.
+        const transitions = useTransitionsStore.getState().transitions;
+        for (const t of transitions) {
+          if (t.leftClipId === currentItem.id) snapExcludeIds.add(t.rightClipId);
+          if (t.rightClipId === currentItem.id) snapExcludeIds.add(t.leftClipId);
+        }
       }
 
+      const initialEnd = initialFrom + initialDuration;
+
+      // Snap the edge the user is dragging — always the handle edge,
+      // regardless of edit mode. Ripple commit logic (anchor from, move end,
+      // shift downstream) is separate from the snap target.
+      const targetEdgeFrame = handle === 'start'
+        ? initialFrom + deltaFrames
+        : initialEnd + deltaFrames;
+
       // Find snap target for the edge being trimmed
-      const { snappedFrame, snapTarget } = findSnapForFrame(targetEdgeFrame, neighborId ?? undefined);
+      const { snappedFrame, snapTarget } = findSnapForFrame(
+        targetEdgeFrame,
+        snapExcludeIds.size > 0 ? snapExcludeIds : undefined
+      );
 
       // If snapped, adjust deltaFrames accordingly
       if (snapTarget) {
         if (handle === 'start') {
           deltaFrames = snappedFrame - initialFrom;
         } else {
-          deltaFrames = snappedFrame - (initialFrom + initialDuration);
+          deltaFrames = snappedFrame - initialEnd;
         }
       }
 
@@ -231,33 +279,47 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         }
       }
 
-      // Update ripple edit preview store for downstream item visual feedback
+      // Update ripple edit preview store for downstream item visual feedback.
+      // Both the trimmed item's delta and the downstream shift are stored in the
+      // same Zustand store so they commit in a single render — preventing a
+      // one-frame gap between the extending clip and the shifting neighbours.
       if (isRippleEdit) {
         // Calculate the shift that downstream items would experience
         let rippleShift = 0;
         if (handle === 'end') {
-          // End handle: extending right pushes downstream, shrinking left pulls them
           rippleShift = deltaFrames;
         } else {
-          // Start handle: extending left (negative delta) pushes downstream right (no shift),
-          // shrinking right (positive delta) pulls downstream left
-          // Actually for start handle: the item's end doesn't change position,
-          // but the item's start moves. The key insight is that ripple edit on start handle
-          // shifts downstream by -deltaFrames (trim start right = clip shrinks = pull downstream left)
+          // Start handle: anchor-from model — downstream shifts by -delta
           rippleShift = -deltaFrames;
         }
 
+        console.error('[RIPPLE_HOOK]', 'handle=', handle, 'deltaFrames=', deltaFrames, 'rippleShift=', rippleShift, 'itemId=', item.id);
         const rippleStore = useRippleEditPreviewStore.getState();
         if (!rippleStore.trimmedItemId) {
+          // Compute downstream item IDs once — includes transition-connected
+          // neighbors whose `from` may be before the trimmed clip's end (overlap model).
+          const currentEnd = currentItem.from + currentItem.durationInFrames;
+          const dsIds = new Set<string>();
+          for (const other of allItems) {
+            if (other.id !== currentItem.id && other.trackId === currentItem.trackId && other.from >= currentEnd) {
+              dsIds.add(other.id);
+            }
+          }
+          // Transition-connected neighbors in the overlap model
+          const transitions = useTransitionsStore.getState().transitions;
+          for (const t of transitions) {
+            if (t.leftClipId === currentItem.id) dsIds.add(t.rightClipId);
+          }
           rippleStore.setPreview({
             trimmedItemId: item.id,
             handle: handle!,
             trackId: currentItem.trackId,
-            trimmedItemEnd: currentItem.from + currentItem.durationInFrames,
+            downstreamItemIds: dsIds,
             delta: rippleShift,
+            trimDelta: deltaFrames,
           });
         } else {
-          rippleStore.setDelta(rippleShift);
+          rippleStore.setDeltas(rippleShift, deltaFrames);
         }
       } else {
         // Clear ripple preview when Shift is released or not in ripple mode

@@ -1,5 +1,5 @@
 /**
- * Tool shortcuts: V (Select), C (Razor), Shift+C (Split at cursor), R (Rate Stretch), N (Rolling Edit).
+ * Tool shortcuts: V (Select), C (Razor), Shift+C (Split at cursor), R (Rate Stretch), N (Rolling Edit), B (Ripple Edit).
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';

@@ -181,6 +181,7 @@ export function useSnapCalculator(
   return {
     calculateSnap,
     magneticSnapTargets,
+    getMagneticSnapTargets,
     snapThresholdFrames,
     snapEnabled,
   };
