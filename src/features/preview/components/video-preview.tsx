@@ -15,8 +15,12 @@ import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-uti
 import { GizmoOverlay } from './gizmo-overlay';
 import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
+import { SlipEditOverlay } from './slip-edit-overlay';
+import { SlideEditOverlay } from './slide-edit-overlay';
 import { useRollingEditPreviewStore } from '@/features/timeline/stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '@/features/timeline/stores/ripple-edit-preview-store';
+import { useSlipEditPreviewStore } from '@/features/timeline/stores/slip-edit-preview-store';
+import { useSlideEditPreviewStore } from '@/features/timeline/stores/slide-edit-preview-store';
 import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
@@ -245,6 +249,8 @@ export const VideoPreview = memo(function VideoPreview({
     (s) => Boolean(s.trimmedItemId && s.neighborItemId && s.handle),
   );
   const hasRipple2Up = useRippleEditPreviewStore((s) => Boolean(s.trimmedItemId && s.handle));
+  const hasSlip4Up = useSlipEditPreviewStore((s) => Boolean(s.itemId));
+  const hasSlide4Up = useSlideEditPreviewStore((s) => Boolean(s.itemId));
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -754,11 +760,15 @@ export const VideoPreview = memo(function VideoPreview({
               <MainComposition {...inputProps} />
             </Player>
 
-            {/* Edit 2-up frame comparison */}
+            {/* Edit frame comparison overlays */}
             {hasRolling2Up ? (
               <RollingEditOverlay fps={fps} />
             ) : hasRipple2Up ? (
               <RippleEditOverlay fps={fps} />
+            ) : hasSlip4Up ? (
+              <SlipEditOverlay fps={fps} />
+            ) : hasSlide4Up ? (
+              <SlideEditOverlay fps={fps} />
             ) : null}
           </div>
 

@@ -4,6 +4,10 @@ import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 
+const ZOOM_SETTLE_MS = 80;
+const MAX_DEFER_LAG_RATIO = 0.12;
+const MAX_DEFER_LAG_PX = 180;
+
 interface ClipFilmstripProps {
   /** Media ID from the timeline item */
   mediaId: string;
@@ -23,6 +27,8 @@ interface ClipFilmstripProps {
   isVisible: boolean;
   /** Pixels per second from parent (avoids redundant zoom subscription) */
   pixelsPerSecond: number;
+  /** Disable deferred width/zoom while active edit previews are running */
+  preferImmediateRendering?: boolean;
 }
 
 /**
@@ -103,7 +109,8 @@ const FilmstripTile = memo(function FilmstripTile({
  * Clip Filmstrip Component
  *
  * Renders video frame thumbnails as a tiled filmstrip.
- * Uses useDeferredValue to keep zoom interactions responsive.
+ * Uses adaptive defer during active zoom to keep interactions responsive
+ * without prolonged catch-up lag once zoom settles.
  * Auto-fills container height.
  */
 export const ClipFilmstrip = memo(function ClipFilmstrip({
@@ -115,10 +122,13 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   speed,
   isVisible,
   pixelsPerSecond,
+  preferImmediateRendering = false,
 }: ClipFilmstripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Measure container height
   useEffect(() => {
@@ -148,6 +158,64 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   // Defer zoom values to keep zoom slider responsive
   const deferredPixelsPerSecond = useDeferredValue(pixelsPerSecond);
   const deferredClipWidth = useDeferredValue(clipWidth);
+  const ppsLagRatio = Math.abs(deferredPixelsPerSecond - pixelsPerSecond) / Math.max(1, pixelsPerSecond);
+  const widthLagPx = Math.abs(deferredClipWidth - clipWidth);
+  const lagTooHigh = ppsLagRatio > MAX_DEFER_LAG_RATIO || widthLagPx > MAX_DEFER_LAG_PX;
+  const useDeferredForZoom = !preferImmediateRendering && isZooming && !lagTooHigh;
+  const renderPixelsPerSecond = useDeferredForZoom ? deferredPixelsPerSecond : pixelsPerSecond;
+  const renderClipWidth = useDeferredForZoom ? deferredClipWidth : clipWidth;
+  const effectiveStart = Math.max(0, sourceStart + trimStart);
+
+  // Track active zoom interaction from pps changes and drop defer shortly
+  // after changes stop to avoid visible catch-up.
+  const lastPpsRef = useRef(pixelsPerSecond);
+  useEffect(() => {
+    if (preferImmediateRendering) return;
+    if (lastPpsRef.current === pixelsPerSecond) return;
+    lastPpsRef.current = pixelsPerSecond;
+
+    setIsZooming(true);
+    if (zoomSettleTimeoutRef.current) {
+      clearTimeout(zoomSettleTimeoutRef.current);
+    }
+    zoomSettleTimeoutRef.current = setTimeout(() => {
+      setIsZooming(false);
+      zoomSettleTimeoutRef.current = null;
+    }, ZOOM_SETTLE_MS);
+  }, [pixelsPerSecond, preferImmediateRendering]);
+
+  useEffect(() => {
+    return () => {
+      if (zoomSettleTimeoutRef.current) {
+        clearTimeout(zoomSettleTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // During active edit previews, prioritize extracting the currently requested
+  // source window first so expanding clips show thumbnails sooner.
+  const priorityWindow = useMemo(() => {
+    if (sourceDuration <= 0 || renderPixelsPerSecond <= 0 || renderClipWidth <= 0) {
+      return null;
+    }
+
+    const visibleSpanSeconds = (renderClipWidth / renderPixelsPerSecond) * speed;
+    const padSeconds = 0.75;
+    const startTime = Math.max(0, effectiveStart - padSeconds);
+    const endTime = Math.min(sourceDuration, effectiveStart + visibleSpanSeconds + padSeconds);
+
+    if (endTime <= startTime) {
+      return null;
+    }
+
+    return { startTime, endTime };
+  }, [
+    sourceDuration,
+    renderPixelsPerSecond,
+    renderClipWidth,
+    speed,
+    effectiveStart,
+  ]);
 
   // Load blob URL for the media
   useEffect(() => {
@@ -183,20 +251,20 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     duration: sourceDuration,
     isVisible,
     enabled: isVisible && !!blobUrl && sourceDuration > 0,
+    priorityWindow,
   });
 
   // Calculate tiles - maps each tile position to the best frame
   // Browser's native loading="lazy" handles performance optimization
   const tiles = useMemo(() => {
-    if (!frames || frames.length === 0 || thumbnailWidth === 0) return [];
+    if (!frames || frames.length === 0 || thumbnailWidth === 0 || renderPixelsPerSecond <= 0) return [];
 
-    const effectiveStart = sourceStart + trimStart;
-    const tileCount = Math.ceil(deferredClipWidth / thumbnailWidth);
+    const tileCount = Math.ceil(renderClipWidth / thumbnailWidth);
     const result: { tileIndex: number; frame: FilmstripFrame; x: number }[] = [];
 
     for (let tile = 0; tile < tileCount; tile++) {
       const tileX = tile * thumbnailWidth;
-      const tileTime = effectiveStart + (tileX / deferredPixelsPerSecond) * speed;
+      const tileTime = effectiveStart + (tileX / renderPixelsPerSecond) * speed;
       const frame = findClosestFrame(frames, tileTime);
 
       if (frame) {
@@ -205,7 +273,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     }
 
     return result;
-  }, [frames, deferredClipWidth, deferredPixelsPerSecond, sourceStart, trimStart, speed, thumbnailWidth]);
+  }, [frames, renderClipWidth, renderPixelsPerSecond, effectiveStart, speed, thumbnailWidth]);
 
   if (error) {
     return null;
@@ -232,10 +300,10 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       <div
         className="absolute left-0 top-0 overflow-hidden pointer-events-none"
         style={{
-          width: deferredClipWidth,
+          width: renderClipWidth,
           height,
           contentVisibility: 'auto',
-          containIntrinsicSize: `${deferredClipWidth}px ${height}px`,
+          containIntrinsicSize: `${renderClipWidth}px ${height}px`,
         }}
       >
         {tiles.map(({ tileIndex, frame, x }) => (

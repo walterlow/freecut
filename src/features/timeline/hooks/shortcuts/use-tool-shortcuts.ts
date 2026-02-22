@@ -1,5 +1,5 @@
 /**
- * Tool shortcuts: V (Select), C (Razor), Shift+C (Split at cursor), R (Rate Stretch), N (Rolling Edit), B (Ripple Edit).
+ * Tool shortcuts: V (Select), C (Razor), Shift+C (Split at cursor), R (Rate Stretch), N (Rolling Edit), B (Ripple Edit), Y (Slip), U (Slide).
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -87,6 +87,28 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
     (event) => {
       event.preventDefault();
       setActiveTool(activeTool === 'ripple-edit' ? 'select' : 'ripple-edit');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
+
+  // Tool: Y - Toggle Slip Tool
+  useHotkeys(
+    HOTKEYS.SLIP_TOOL,
+    (event) => {
+      event.preventDefault();
+      setActiveTool(activeTool === 'slip' ? 'select' : 'slip');
+    },
+    HOTKEY_OPTIONS,
+    [activeTool, setActiveTool]
+  );
+
+  // Tool: U - Toggle Slide Tool
+  useHotkeys(
+    HOTKEYS.SLIDE_TOOL,
+    (event) => {
+      event.preventDefault();
+      setActiveTool(activeTool === 'slide' ? 'select' : 'slide');
     },
     HOTKEY_OPTIONS,
     [activeTool, setActiveTool]

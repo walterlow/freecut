@@ -27,6 +27,7 @@ export interface ExtractRequest {
   width: number;
   height: number;
   skipIndices?: number[]; // Indices to skip (already extracted)
+  priorityIndices?: number[]; // Indices to extract first (within the assigned range)
   // For parallel extraction - each worker handles a range
   startIndex?: number; // Start frame index (inclusive)
   endIndex?: number; // End frame index (exclusive)
@@ -110,7 +111,7 @@ async function extractAndSave(
   state: { aborted: boolean }
 ): Promise<void> {
   const {
-    requestId, mediaId, blobUrl, duration, width, height, skipIndices,
+    requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices,
     startIndex, endIndex, totalFrames: totalFramesOverride
   } = request;
 
@@ -120,11 +121,18 @@ async function extractAndSave(
   const rangeEnd = endIndex ?? allFrames;
   const totalFrames = totalFramesOverride ?? allFrames;
   const skipSet = new Set(skipIndices || []);
+  const prioritySet = new Set(priorityIndices || []);
 
-  // Generate timestamps for frames we need to extract (within our range)
+  // Build extraction order: requested priority window first, then background remainder.
   const framesToExtract: { index: number; timestamp: number }[] = [];
+  for (const index of prioritySet) {
+    if (index >= rangeStart && index < rangeEnd && !skipSet.has(index)) {
+      framesToExtract.push({ index, timestamp: index / FRAME_RATE });
+    }
+  }
+
   for (let i = rangeStart; i < rangeEnd; i++) {
-    if (!skipSet.has(i)) {
+    if (!skipSet.has(i) && !prioritySet.has(i)) {
       framesToExtract.push({ index: i, timestamp: i / FRAME_RATE });
     }
   }
@@ -247,10 +255,14 @@ async function extractAndSave(
 
     // Save final metadata - only mark complete when this worker range is fully covered.
     if (!state.aborted) {
-      const newExtracted = extractedCount - skipSet.size;
-      const expectedTotalFrames = rangeEnd - rangeStart;
-      const actuallyComplete = extractedCount === expectedTotalFrames;
-      void newExtracted;
+      // Count only skip indices within this worker's range for accurate completion check
+      let skippedInRange = 0;
+      for (const idx of skipSet) {
+        if (idx >= rangeStart && idx < rangeEnd) skippedInRange++;
+      }
+      const framesExtractedThisRun = extractedCount - skipSet.size;
+      const expectedToExtract = (rangeEnd - rangeStart) - skippedInRange;
+      const actuallyComplete = framesExtractedThisRun >= expectedToExtract;
 
       await saveMetadata(dir, {
         width,

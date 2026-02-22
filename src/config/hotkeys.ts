@@ -44,6 +44,8 @@ export const HOTKEYS = {
   RATE_STRETCH_TOOL: 'r',
   ROLLING_EDIT_TOOL: 'n',
   RIPPLE_EDIT_TOOL: 'b',
+  SLIP_TOOL: 'y',
+  SLIDE_TOOL: 'u',
 
   // Project
   SAVE: 'mod+s',
@@ -120,6 +122,8 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RATE_STRETCH_TOOL: 'Rate stretch tool',
   ROLLING_EDIT_TOOL: 'Rolling edit tool',
   RIPPLE_EDIT_TOOL: 'Ripple edit tool',
+  SLIP_TOOL: 'Slip tool',
+  SLIDE_TOOL: 'Slide tool',
 
   // Project
   SAVE: 'Save project',

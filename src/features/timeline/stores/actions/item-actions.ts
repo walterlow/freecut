@@ -642,3 +642,105 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
     useTimelineSettingsStore.getState().markDirty();
   }, { leftId, rightId, editPointDelta });
 }
+
+/**
+ * Slip edit: shift the source window (sourceStart/sourceEnd) within a clip
+ * without changing its position or duration on the timeline.
+ *
+ * Only works on video/audio items that have explicit source bounds.
+ *
+ * @param id - ID of the clip to slip
+ * @param slipDelta - Frames to shift the source window (positive = later in source, negative = earlier)
+ */
+export function slipItem(id: string, slipDelta: number): void {
+  if (slipDelta === 0) return;
+
+  execute('SLIP_EDIT', () => {
+    const items = useItemsStore.getState().items;
+    const item = items.find((i) => i.id === id);
+    if (!item) return;
+    if (item.type !== 'video' && item.type !== 'audio') return;
+
+    const sourceStart = item.sourceStart ?? 0;
+    const sourceEnd = item.sourceEnd;
+    const sourceDuration = item.sourceDuration;
+
+    if (sourceEnd === undefined) return;
+
+    let clamped = slipDelta;
+
+    // Clamp: sourceStart + delta >= 0
+    if (sourceStart + clamped < 0) {
+      clamped = -sourceStart;
+    }
+
+    // Clamp: sourceEnd + delta <= sourceDuration
+    if (sourceDuration !== undefined && sourceEnd + clamped > sourceDuration) {
+      clamped = sourceDuration - sourceEnd;
+    }
+
+    if (clamped === 0) return;
+
+    useItemsStore.getState()._updateItem(id, {
+      sourceStart: sourceStart + clamped,
+      sourceEnd: sourceEnd + clamped,
+    });
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { id, slipDelta });
+}
+
+/**
+ * Slide edit: move a clip on the timeline while adjusting its neighboring clips.
+ * The left neighbor's end extends/shrinks and the right neighbor's start extends/shrinks,
+ * keeping total timeline duration unchanged.
+ *
+ * @param id - ID of the clip being slid
+ * @param slideDelta - Frames to slide (positive = right, negative = left)
+ * @param leftNeighborId - ID of the left adjacent clip (null if none)
+ * @param rightNeighborId - ID of the right adjacent clip (null if none)
+ */
+export function slideItem(
+  id: string,
+  slideDelta: number,
+  leftNeighborId: string | null,
+  rightNeighborId: string | null,
+): void {
+  if (slideDelta === 0) return;
+
+  execute('SLIDE_EDIT', () => {
+    // Verify the target clip exists before mutating neighbors
+    const item = useItemsStore.getState().items.find((i) => i.id === id);
+    if (!item) return;
+
+    // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
+    if (slideDelta > 0) {
+      // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
+      if (rightNeighborId) {
+        useItemsStore.getState()._trimItemStart(rightNeighborId, slideDelta, { skipAdjacentClamp: true });
+      }
+      if (leftNeighborId) {
+        useItemsStore.getState()._trimItemEnd(leftNeighborId, slideDelta, { skipAdjacentClamp: true });
+      }
+    } else {
+      // Sliding left: left neighbor shrinks end (frees space), right neighbor extends start
+      if (leftNeighborId) {
+        useItemsStore.getState()._trimItemEnd(leftNeighborId, slideDelta, { skipAdjacentClamp: true });
+      }
+      if (rightNeighborId) {
+        useItemsStore.getState()._trimItemStart(rightNeighborId, slideDelta, { skipAdjacentClamp: true });
+      }
+    }
+
+    // Move the slid clip
+    useItemsStore.getState()._moveItem(id, item.from + slideDelta);
+
+    // Repair transitions for all affected items
+    const affectedIds = [id];
+    if (leftNeighborId) affectedIds.push(leftNeighborId);
+    if (rightNeighborId) affectedIds.push(rightNeighborId);
+    applyTransitionRepairs(affectedIds);
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { id, slideDelta, leftNeighborId, rightNeighborId });
+}

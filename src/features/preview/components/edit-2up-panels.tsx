@@ -153,7 +153,7 @@ interface VideoFrameProps {
   sourceTime: number;
 }
 
-function VideoFrame({ item, sourceTime }: VideoFrameProps) {
+export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -217,6 +217,8 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     if (!video || !blobUrl) return;
 
     const targetTime = Math.max(0, sourceTime);
+    // Tolerance for comparing fractional video timestamps.
+    const tolerance = 0.001;
 
     const handleSeeked = () => {
       seekingRef.current = false;
@@ -232,7 +234,7 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     // Fallback for seeking to time 0 on a new video: currentTime is already 0
     // so the browser won't fire 'seeked'. Draw once data is available instead.
     const handleLoadedData = () => {
-      if (video.currentTime === targetTime) {
+      if (Math.abs(video.currentTime - targetTime) < tolerance) {
         drawFrame();
       }
     };
@@ -242,6 +244,10 @@ function VideoFrame({ item, sourceTime }: VideoFrameProps) {
 
     if (seekingRef.current) {
       pendingTimeRef.current = targetTime;
+    } else if (Math.abs(video.currentTime - targetTime) < tolerance) {
+      // Near-equal to current time — the browser won't fire 'seeked'.
+      // Draw immediately if data is available; otherwise handleLoadedData will draw.
+      drawFrame();
     } else {
       seekingRef.current = true;
       video.currentTime = targetTime;
@@ -266,7 +272,7 @@ interface ImageFrameProps {
   item: TimelineItem;
 }
 
-function ImageFrame({ item }: ImageFrameProps) {
+export function ImageFrame({ item }: ImageFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
@@ -310,7 +316,7 @@ function ImageFrame({ item }: ImageFrameProps) {
   );
 }
 
-function TypePlaceholder({ type, text }: { type: string; text: string }) {
+export function TypePlaceholder({ type, text }: { type: string; text: string }) {
   const color = TYPE_PLACEHOLDER_COLORS[type] ?? '#6b7280';
   return (
     <div

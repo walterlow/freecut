@@ -16,6 +16,7 @@ interface ClipContentProps {
   fps: number;
   isClipVisible: boolean;
   pixelsPerSecond: number;
+  preferImmediateRendering?: boolean;
 }
 
 /**
@@ -33,6 +34,7 @@ export const ClipContent = memo(function ClipContent({
   fps,
   isClipVisible,
   pixelsPerSecond,
+  preferImmediateRendering = false,
 }: ClipContentProps) {
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
@@ -116,6 +118,7 @@ export const ClipContent = memo(function ClipContent({
               fps={fps}
               isVisible={isClipVisible}
               pixelsPerSecond={pixelsPerSecond}
+              preferImmediateRendering={preferImmediateRendering}
             />
           )}
         </div>
@@ -207,6 +210,7 @@ export const ClipContent = memo(function ClipContent({
                 fps={fps}
                 isVisible={isClipVisible}
                 pixelsPerSecond={pixelsPerSecond}
+                preferImmediateRendering={preferImmediateRendering}
               />
             )}
           </div>

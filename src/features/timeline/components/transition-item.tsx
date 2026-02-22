@@ -1,6 +1,10 @@
 import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Transition } from '@/types/transition';
+import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
+import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
+import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTransitionResize } from '../hooks/use-transition-resize';
@@ -15,6 +19,10 @@ import {
 } from '@/components/ui/context-menu';
 import { cn } from '@/lib/utils';
 import { Trash2 } from 'lucide-react';
+import {
+  applyPreviewGeometryToClip,
+  getTransitionBridgeBounds,
+} from '../utils/transition-preview-geometry';
 
 interface TransitionItemProps {
   transition: Transition;
@@ -72,6 +80,106 @@ export const TransitionItem = memo(function TransitionItem({
   const { isResizing, resizeHandle, handleResizeStart, previewDuration } =
     useTransitionResize(transition);
 
+  // Rolling preview (only when this transition's clips are involved)
+  const rollingPreview = useRollingEditPreviewStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          const touches =
+            s.trimmedItemId === transition.leftClipId ||
+            s.trimmedItemId === transition.rightClipId ||
+            s.neighborItemId === transition.leftClipId ||
+            s.neighborItemId === transition.rightClipId;
+
+          if (!touches) {
+            return {
+              trimmedItemId: null as string | null,
+              neighborItemId: null as string | null,
+              handle: null as 'start' | 'end' | null,
+              delta: 0,
+            };
+          }
+
+          return {
+            trimmedItemId: s.trimmedItemId,
+            neighborItemId: s.neighborItemId,
+            handle: s.handle,
+            delta: s.neighborDelta,
+          };
+        },
+        [transition.leftClipId, transition.rightClipId],
+      ),
+    ),
+  );
+
+  // Slide preview (only when this transition's clips are involved)
+  const slidePreview = useSlideEditPreviewStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          const touches =
+            s.itemId === transition.leftClipId ||
+            s.itemId === transition.rightClipId ||
+            s.leftNeighborId === transition.leftClipId ||
+            s.leftNeighborId === transition.rightClipId ||
+            s.rightNeighborId === transition.leftClipId ||
+            s.rightNeighborId === transition.rightClipId;
+
+          if (!touches) {
+            return {
+              itemId: null as string | null,
+              leftNeighborId: null as string | null,
+              rightNeighborId: null as string | null,
+              delta: 0,
+            };
+          }
+
+          return {
+            itemId: s.itemId,
+            leftNeighborId: s.leftNeighborId,
+            rightNeighborId: s.rightNeighborId,
+            delta: s.slideDelta,
+          };
+        },
+        [transition.leftClipId, transition.rightClipId],
+      ),
+    ),
+  );
+
+  // Ripple preview (trimmed item + downstream shifts)
+  const ripplePreview = useRippleEditPreviewStore(
+    useShallow(
+      useCallback(
+        (s) => {
+          const leftDownstream = s.downstreamItemIds.has(transition.leftClipId);
+          const rightDownstream = s.downstreamItemIds.has(transition.rightClipId);
+          const touches =
+            s.trimmedItemId === transition.leftClipId ||
+            s.trimmedItemId === transition.rightClipId ||
+            leftDownstream ||
+            rightDownstream;
+
+          if (!touches) {
+            return {
+              trimmedItemId: null as string | null,
+              delta: 0,
+              leftDownstream: false,
+              rightDownstream: false,
+            };
+          }
+
+          return {
+            trimmedItemId: s.trimmedItemId,
+            delta: s.delta,
+            leftDownstream,
+            rightDownstream,
+          };
+        },
+        [transition.leftClipId, transition.rightClipId],
+      ),
+    ),
+  );
+
   // Track hovered edge for showing resize handles
   const [hoveredEdge, setHoveredEdge] = useState<'left' | 'right' | null>(null);
 
@@ -122,18 +230,57 @@ export const TransitionItem = memo(function TransitionItem({
       }
     };
   }, [transition.leftClipId, transition.rightClipId]);
-
   // Calculate position and size for the transition indicator.
   // The bridge covers the actual overlap region: from (leftEnd - duration) to leftEnd.
   // The right edge is anchored at leftEnd (the left clip's end); the left edge moves
-  // as the duration changes.  The left handle tracks the cursor 1:1.
-  const position = useMemo(() => {
-    if (!leftClip || !rightClip) return null;
+  // as the duration changes. The left handle tracks the cursor 1:1.
+  const effectiveLeftClip = useMemo(() => {
+    if (!leftClip) return null;
+    return applyPreviewGeometryToClip(
+      leftClip.id,
+      leftClip.from,
+      leftClip.durationInFrames,
+      {
+        rolling: rollingPreview,
+        slide: slidePreview,
+        ripple: {
+          trimmedItemId: ripplePreview.trimmedItemId,
+          delta: ripplePreview.delta,
+          isDownstream: ripplePreview.leftDownstream,
+        },
+      },
+    );
+  }, [leftClip, rollingPreview, slidePreview, ripplePreview]);
 
-    const leftEnd = leftClip.from + leftClip.durationInFrames;
-    // Round each edge independently — same pixel grid as timeline items
-    const bridgeRight = Math.round(frameToPixels(leftEnd));
-    const bridgeLeft = Math.round(frameToPixels(leftEnd - previewDuration));
+  const effectiveRightClip = useMemo(() => {
+    if (!rightClip) return null;
+    return applyPreviewGeometryToClip(
+      rightClip.id,
+      rightClip.from,
+      rightClip.durationInFrames,
+      {
+        rolling: rollingPreview,
+        slide: slidePreview,
+        ripple: {
+          trimmedItemId: ripplePreview.trimmedItemId,
+          delta: ripplePreview.delta,
+          isDownstream: ripplePreview.rightDownstream,
+        },
+      },
+    );
+  }, [rightClip, rollingPreview, slidePreview, ripplePreview]);
+
+  const position = useMemo(() => {
+    if (!effectiveLeftClip || !effectiveRightClip) return null;
+
+    const bridge = getTransitionBridgeBounds(
+      effectiveLeftClip.from,
+      effectiveLeftClip.durationInFrames,
+      previewDuration,
+    );
+    // Round each edge independently - same pixel grid as timeline items
+    const bridgeRight = Math.round(frameToPixels(bridge.rightFrame));
+    const bridgeLeft = Math.round(frameToPixels(bridge.leftFrame));
     const naturalWidth = bridgeRight - bridgeLeft;
 
     // Minimum width for visibility
@@ -145,7 +292,7 @@ export const TransitionItem = memo(function TransitionItem({
       : bridgeLeft - (minWidth - naturalWidth) / 2;
 
     return { left, width: effectiveWidth };
-  }, [leftClip, rightClip, frameToPixels, previewDuration]);
+  }, [effectiveLeftClip, effectiveRightClip, frameToPixels, previewDuration]);
 
   // Duration in seconds for display (use previewDuration for visual feedback)
   const durationSec = useMemo(() => {
@@ -210,7 +357,7 @@ export const TransitionItem = memo(function TransitionItem({
     removeTransition(transition.id);
   }, [transition.id, removeTransition]);
 
-  if (!position || !leftClip || !rightClip) {
+  if (!position || !effectiveLeftClip || !effectiveRightClip) {
     return null;
   }
 
@@ -316,3 +463,4 @@ export const TransitionItem = memo(function TransitionItem({
     </ContextMenu>
   );
 });
+
