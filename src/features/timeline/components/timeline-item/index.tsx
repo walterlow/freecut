@@ -602,6 +602,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     effectiveSourceFps,
   ]);
 
+  // During edit previews, prioritize visual sync over deferred rendering so
+  // filmstrip growth keeps up with the edit gesture.
+  const preferImmediateContentRendering =
+    isTrimming
+    || isSlipSlideActive
+    || rollingEditDelta !== 0
+    || rippleEditOffset !== 0
+    || rippleEdgeDelta !== 0
+    || slideEditOffset !== 0
+    || slideNeighborDelta !== 0;
+
   // Items that can extend infinitely
   const canExtendInfinitely = item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment';
 
@@ -1108,6 +1119,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 fps={fps}
                 isClipVisible={isClipVisible}
                 pixelsPerSecond={pixelsPerSecond}
+                preferImmediateRendering={preferImmediateContentRendering}
               />
             </div>
           ) : (
@@ -1117,6 +1129,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               fps={fps}
               isClipVisible={isClipVisible}
               pixelsPerSecond={pixelsPerSecond}
+              preferImmediateRendering={preferImmediateContentRendering}
             />
           )}
 

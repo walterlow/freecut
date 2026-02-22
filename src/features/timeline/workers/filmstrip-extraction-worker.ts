@@ -27,6 +27,7 @@ export interface ExtractRequest {
   width: number;
   height: number;
   skipIndices?: number[]; // Indices to skip (already extracted)
+  priorityIndices?: number[]; // Indices to extract first (within the assigned range)
   // For parallel extraction - each worker handles a range
   startIndex?: number; // Start frame index (inclusive)
   endIndex?: number; // End frame index (exclusive)
@@ -110,7 +111,7 @@ async function extractAndSave(
   state: { aborted: boolean }
 ): Promise<void> {
   const {
-    requestId, mediaId, blobUrl, duration, width, height, skipIndices,
+    requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices,
     startIndex, endIndex, totalFrames: totalFramesOverride
   } = request;
 
@@ -120,11 +121,18 @@ async function extractAndSave(
   const rangeEnd = endIndex ?? allFrames;
   const totalFrames = totalFramesOverride ?? allFrames;
   const skipSet = new Set(skipIndices || []);
+  const prioritySet = new Set(priorityIndices || []);
 
-  // Generate timestamps for frames we need to extract (within our range)
+  // Build extraction order: requested priority window first, then background remainder.
   const framesToExtract: { index: number; timestamp: number }[] = [];
+  for (const index of prioritySet) {
+    if (index >= rangeStart && index < rangeEnd && !skipSet.has(index)) {
+      framesToExtract.push({ index, timestamp: index / FRAME_RATE });
+    }
+  }
+
   for (let i = rangeStart; i < rangeEnd; i++) {
-    if (!skipSet.has(i)) {
+    if (!skipSet.has(i) && !prioritySet.has(i)) {
       framesToExtract.push({ index: i, timestamp: i / FRAME_RATE });
     }
   }

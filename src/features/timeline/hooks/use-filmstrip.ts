@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useEffectEvent } from 'react';
+import { useState, useEffect, useRef, useEffectEvent, useMemo } from 'react';
 import { filmstripCache, type Filmstrip, type FilmstripFrame } from '../services/filmstrip-cache';
 
 export type { FilmstripFrame };
@@ -14,6 +14,8 @@ interface UseFilmstripOptions {
   isVisible: boolean;
   /** Whether to enable filmstrip (allows conditional disabling) */
   enabled?: boolean;
+  /** Source window to prioritize for extraction (seconds) */
+  priorityWindow?: { startTime: number; endTime: number } | null;
 }
 
 interface UseFilmstripResult {
@@ -41,6 +43,7 @@ export function useFilmstrip({
   duration,
   isVisible,
   enabled = true,
+  priorityWindow = null,
 }: UseFilmstripOptions): UseFilmstripResult {
   // Initialize from cache to avoid flash on remount
   const [filmstrip, setFilmstrip] = useState<Filmstrip | null>(() => {
@@ -74,6 +77,19 @@ export function useFilmstrip({
   const onProgress = useEffectEvent((p: number) => {
     setProgress(p);
   });
+
+  // Filmstrip extraction runs at 1fps, so quantize the requested source
+  // window to frame indices before passing it to the cache.
+  const priorityRange = useMemo(() => {
+    if (!priorityWindow) return null;
+
+    const startIndex = Math.max(0, Math.floor(priorityWindow.startTime));
+    const endIndex = Math.max(startIndex + 1, Math.ceil(priorityWindow.endTime));
+    return { startIndex, endIndex };
+  }, [priorityWindow]);
+  const priorityRangeKey = priorityRange
+    ? `${priorityRange.startIndex}-${priorityRange.endIndex}`
+    : 'none';
 
   // Subscribe to progressive updates
   useEffect(() => {
@@ -109,7 +125,7 @@ export function useFilmstrip({
     setError(null);
 
     filmstripCache
-      .getFilmstrip(mediaId, blobUrl, duration, onProgress)
+      .getFilmstrip(mediaId, blobUrl, duration, onProgress, priorityRange ?? undefined)
       .then((result) => {
         setFilmstrip(result);
         setProgress(result.progress);
@@ -124,7 +140,7 @@ export function useFilmstrip({
       .finally(() => {
         isGeneratingRef.current = false;
       });
-  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete]);
+  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, priorityRange, priorityRangeKey]);
 
   return {
     frames: filmstrip?.frames || null,

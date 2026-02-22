@@ -58,6 +58,7 @@ interface PendingExtraction {
   blobUrl: string;
   duration: number;
   skipIndices: number[];
+  priorityRange: PriorityFrameRange | null;
   forceSingleWorker: boolean;
   fallbackAttempted: boolean;
   isVideoFallback: boolean;
@@ -69,6 +70,11 @@ interface PendingExtraction {
   extractedFrames: Map<number, FilmstripFrame>;
   lastNotifyAt: number;
   lastNotifiedFrameCount: number;
+}
+
+interface PriorityFrameRange {
+  startIndex: number;
+  endIndex: number;
 }
 
 class FilmstripCacheService {
@@ -122,12 +128,22 @@ class FilmstripCacheService {
     mediaId: string,
     blobUrl: string,
     duration: number,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    priorityRange?: PriorityFrameRange
   ): Promise<Filmstrip> {
     // Return cached if complete
     const cached = this.cache.get(mediaId);
     if (cached?.isComplete && !cached.isExtracting) {
       return cached;
+    }
+
+    const pending = this.pendingExtractions.get(mediaId);
+    if (pending) {
+      pending.priorityRange = this.normalizePriorityRange(priorityRange, pending.totalFrames);
+      const current = this.cache.get(mediaId);
+      if (current) {
+        return current;
+      }
     }
 
     // Check for pending load
@@ -136,7 +152,7 @@ class FilmstripCacheService {
       return loading;
     }
 
-    const promise = this.loadAndExtract(mediaId, blobUrl, duration, onProgress);
+    const promise = this.loadAndExtract(mediaId, blobUrl, duration, onProgress, priorityRange);
     this.loadingPromises.set(mediaId, promise);
 
     try {
@@ -150,7 +166,8 @@ class FilmstripCacheService {
     mediaId: string,
     blobUrl: string,
     duration: number,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    priorityRange?: PriorityFrameRange
   ): Promise<Filmstrip> {
     // Try loading from storage
     const stored = await filmstripOPFSStorage.load(mediaId);
@@ -180,7 +197,16 @@ class FilmstripCacheService {
     this.notifyUpdate(mediaId, initialFilmstrip);
 
     // Start extraction (pass existing frames to avoid reloading)
-    this.startExtraction(mediaId, blobUrl, duration, existingIndices, existingFrames, onProgress);
+    this.startExtraction(
+      mediaId,
+      blobUrl,
+      duration,
+      existingIndices,
+      existingFrames,
+      onProgress,
+      false,
+      priorityRange,
+    );
 
     return initialFilmstrip;
   }
@@ -192,7 +218,8 @@ class FilmstripCacheService {
     skipIndices: number[],
     existingFrames: FilmstripFrame[],
     onProgress?: (progress: number) => void,
-    forceSingleWorker = false
+    forceSingleWorker = false,
+    priorityRange?: PriorityFrameRange
   ): void {
     // Check if already extracting
     if (this.pendingExtractions.has(mediaId)) {
@@ -216,6 +243,7 @@ class FilmstripCacheService {
       blobUrl,
       duration,
       skipIndices,
+      priorityRange: this.normalizePriorityRange(priorityRange, totalFrames),
       forceSingleWorker,
       fallbackAttempted: false,
       isVideoFallback: false,
@@ -300,6 +328,40 @@ class FilmstripCacheService {
     this.startWorkerExtraction(pending);
   }
 
+  private normalizePriorityRange(
+    priorityRange: PriorityFrameRange | undefined,
+    totalFrames: number,
+  ): PriorityFrameRange | null {
+    if (!priorityRange || totalFrames <= 0) return null;
+
+    const startIndex = Math.max(0, Math.min(totalFrames - 1, priorityRange.startIndex));
+    const endIndex = Math.max(startIndex + 1, Math.min(totalFrames, priorityRange.endIndex));
+
+    return { startIndex, endIndex };
+  }
+
+  private getPriorityIndicesForRange(
+    pending: PendingExtraction,
+    rangeStart: number,
+    rangeEnd: number,
+    rangeSkipIndices: number[],
+  ): number[] {
+    if (!pending.priorityRange) return [];
+
+    const start = Math.max(rangeStart, pending.priorityRange.startIndex);
+    const end = Math.min(rangeEnd, pending.priorityRange.endIndex);
+    if (end <= start) return [];
+
+    const skipSet = new Set(rangeSkipIndices);
+    const indices: number[] = [];
+    for (let i = start; i < end; i++) {
+      if (!skipSet.has(i)) {
+        indices.push(i);
+      }
+    }
+    return indices;
+  }
+
   private startWorkerExtraction(pending: PendingExtraction): void {
     const { mediaId, blobUrl, duration, skipIndices, forceSingleWorker, totalFrames } = pending;
     const skipSet = new Set(skipIndices);
@@ -334,6 +396,12 @@ class FilmstripCacheService {
         { type: 'module' }
       );
       const rangeSkipIndices = skipIndices.filter(idx => idx >= startIndex && idx < endIndex);
+      const priorityIndices = this.getPriorityIndicesForRange(
+        pending,
+        startIndex,
+        endIndex,
+        rangeSkipIndices,
+      );
 
       const workerState: WorkerState = {
         worker,
@@ -430,6 +498,7 @@ class FilmstripCacheService {
         width: THUMBNAIL_WIDTH,
         height: THUMBNAIL_HEIGHT,
         skipIndices: rangeSkipIndices,
+        priorityIndices,
         startIndex,
         endIndex,
         totalFrames,
@@ -558,7 +627,8 @@ class FilmstripCacheService {
     duration: number,
     skipIndices: number[],
     existingFrames: FilmstripFrame[],
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    priorityRange?: PriorityFrameRange,
   ): void {
     if (this.pendingExtractions.has(mediaId)) {
       return;
@@ -575,6 +645,7 @@ class FilmstripCacheService {
       blobUrl,
       duration,
       skipIndices,
+      priorityRange: this.normalizePriorityRange(priorityRange, totalFrames),
       forceSingleWorker: true,
       fallbackAttempted: true,
       isVideoFallback: true,
@@ -640,14 +711,17 @@ class FilmstripCacheService {
         frameCount: pending.extractedFrames.size,
       });
 
-      for (let i = 0; i < totalFrames; i++) {
+      const priorityIndices = this.getPriorityIndicesForRange(pending, 0, totalFrames, Array.from(skipSet));
+      const prioritySet = new Set(priorityIndices);
+      const extractionOrder = [
+        ...priorityIndices,
+        ...Array.from({ length: totalFrames }, (_, i) => i).filter((i) => !skipSet.has(i) && !prioritySet.has(i)),
+      ];
+
+      for (const i of extractionOrder) {
         const currentPending = this.pendingExtractions.get(mediaId);
         if (!currentPending || !currentPending.isVideoFallback) {
           return;
-        }
-
-        if (skipSet.has(i)) {
-          continue;
         }
 
         const maxSeekTime = Math.max(0, video.duration - 0.01);
@@ -826,7 +900,8 @@ class FilmstripCacheService {
         skipIndices,
         currentFrames,
         pending.onProgress,
-        true
+        true,
+        pending.priorityRange ?? undefined,
       );
       return;
     }
@@ -846,7 +921,8 @@ class FilmstripCacheService {
         pending.duration,
         skipIndices,
         currentFrames,
-        pending.onProgress
+        pending.onProgress,
+        pending.priorityRange ?? undefined,
       );
       return;
     }
