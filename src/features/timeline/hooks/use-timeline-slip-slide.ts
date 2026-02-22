@@ -164,17 +164,17 @@ export function useTimelineSlipSlide(
         }
       } else if (mode === 'slide') {
         const { leftNeighborId, rightNeighborId } = stateRef.current;
+        const storeItem = getItemFromStore();
 
         // Apply snapping for slide (clip edges snap to items/playhead/grid)
         if (snapEnabled) {
-          const currentItem = getItemFromStore();
           const targets = getMagneticSnapTargets();
           const excludeIds = new Set<string>([item.id]);
           if (leftNeighborId) excludeIds.add(leftNeighborId);
           if (rightNeighborId) excludeIds.add(rightNeighborId);
 
-          const newStart = currentItem.from + deltaFrames;
-          const newEnd = newStart + currentItem.durationInFrames;
+          const newStart = storeItem.from + deltaFrames;
+          const newEnd = newStart + storeItem.durationInFrames;
 
           let bestSnap: { frame: number; offset: number } | null = null;
 
@@ -210,7 +210,7 @@ export function useTimelineSlipSlide(
         if (!previewStore.itemId) {
           previewStore.setPreview({
             itemId: item.id,
-            trackId: getItemFromStore().trackId,
+            trackId: storeItem.trackId,
             leftNeighborId,
             rightNeighborId,
             slideDelta: clamped,

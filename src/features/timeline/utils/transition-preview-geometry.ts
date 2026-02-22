@@ -76,7 +76,7 @@ export function applyPreviewGeometryToClip(
   if (ripple.trimmedItemId === clipId) {
     durationInFrames += ripple.delta;
   }
-  if (ripple.isDownstream && ripple.trimmedItemId !== clipId) {
+  if (ripple.isDownstream && ripple.trimmedItemId != null && ripple.trimmedItemId !== clipId) {
     from += ripple.delta;
   }
 

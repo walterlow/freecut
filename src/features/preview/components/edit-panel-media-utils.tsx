@@ -25,7 +25,7 @@ export function computeFittedMediaSize(panelWidth: number, areaHeight: number, a
   };
 }
 
-interface PanelMediaRenderers {
+export interface PanelMediaRenderers {
   renderVideo: (item: TimelineItem, sourceTime: number) => ReactNode;
   renderImage: (item: TimelineItem) => ReactNode;
   renderPlaceholder: (type: string, text: string) => ReactNode;

@@ -185,6 +185,10 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     }, ZOOM_SETTLE_MS);
   }, [pixelsPerSecond, preferImmediateRendering]);
 
+  // Keep unmount cleanup separate: the zoom-tracking effect above intentionally
+  // handles dependency-change behavior (including early returns), and returning
+  // cleanup there would run on every change. This effect only clears a pending
+  // timeout on unmount so it cannot leak during a settle window.
   useEffect(() => {
     return () => {
       if (zoomSettleTimeoutRef.current) {

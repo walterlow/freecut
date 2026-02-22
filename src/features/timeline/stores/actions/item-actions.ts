@@ -665,6 +665,7 @@ export function slipItem(id: string, slipDelta: number): void {
     const sourceStart = item.sourceStart ?? 0;
     const sourceEnd = item.sourceEnd;
     const sourceDuration = item.sourceDuration;
+    if (sourceEnd === undefined) return;
 
     const clamped = computeClampedSlipDelta(sourceStart, sourceEnd, sourceDuration, slipDelta);
 
