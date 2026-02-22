@@ -21,7 +21,7 @@ FreeCut is a browser-based multi-track video editor. No installation, no uploads
 - Filmstrip thumbnails and audio waveform visualization
 - Pre-compositions (nested compositions, 1 level deep)
 - Markers for organizing your edit
-- Source monitor with mark in/out and insert/overwrite edits
+- Source monitor with mark in/out via playhead or skimmer and insert/overwrite edits
 - Undo/redo with configurable history depth
 
 ### Effects & Animation

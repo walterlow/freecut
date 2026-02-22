@@ -139,7 +139,9 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     element.currentTime = Math.max(0, clampedTime);
 
     // Force a frame render — some browsers need play/pause after seek
+    let forceFrameTimer: ReturnType<typeof setTimeout> | null = null;
     const forceFrameRender = () => {
+      if (elementRef.current !== element) return;
       if (element.paused && element.readyState >= 2) {
         element.play().then(() => {
           element.pause();
@@ -148,9 +150,13 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
         });
       }
     };
-    setTimeout(forceFrameRender, 100);
+    forceFrameTimer = setTimeout(forceFrameRender, 100);
 
     return () => {
+      if (forceFrameTimer !== null) {
+        clearTimeout(forceFrameTimer);
+        forceFrameTimer = null;
+      }
       element.pause();
       if (element.parentElement) {
         element.parentElement.removeChild(element);
@@ -629,7 +635,8 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     // The transition overlay and regular Sequence both start at the same
     // timeline position, so no playback rate compensation is needed.
     const incomingTransitionRate = rightClip.speed ?? 1;
-    // Preview-only guard frame at transition exit.
+    // Player preview path guard frame at transition exit.
+    // This renderer is only used by MainComposition in the player runtime.
     // Keeps the fully-resolved incoming overlay visible for one extra frame
     // to hide occasional decoder handoff flicker in the underlying base clip.
     const exitGuardFrames = 1;

@@ -301,7 +301,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       }
 
       // 'Shift+I' key - Set in-point at skimmer playhead when available
-      if (key === 'i' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
+      else if (key === 'i' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
         e.preventDefault();
         const { previewFrame, currentFrame } = usePlaybackStore.getState();
         useTimelineStore.getState().setInPoint(previewFrame ?? currentFrame);
@@ -315,7 +315,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       }
 
       // 'Shift+O' key - Set out-point at skimmer playhead when available
-      if (key === 'o' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
+      else if (key === 'o' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
         e.preventDefault();
         const { previewFrame, currentFrame } = usePlaybackStore.getState();
         useTimelineStore.getState().setOutPoint(previewFrame ?? currentFrame);

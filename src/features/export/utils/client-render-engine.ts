@@ -995,18 +995,13 @@ export async function createCompositionRenderer(
       mediabunnyFailureCountByItem.clear();
       mediabunnyDisabledItems.clear();
 
-      // Clean up fallback video elements/pool
+      // Clean up fallback video pool and references.
+      // In this renderer, fallback video elements are only bound when a DOM is
+      // available, which is also when fallbackVideoPool exists.
       if (fallbackVideoPool) {
         fallbackVideoPool.dispose();
-        fallbackVideoBySrc.clear();
-      } else {
-        for (const video of videoElements.values()) {
-          video.pause();
-          video.onerror = null;
-          video.removeAttribute('src');
-          video.load();
-        }
       }
+      fallbackVideoBySrc.clear();
       videoElements.clear();
       for (const image of imageElements.values()) {
         if ('close' in image.source && typeof image.source.close === 'function') {
