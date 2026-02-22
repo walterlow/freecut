@@ -6,6 +6,7 @@ import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
+import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
 import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
@@ -413,6 +414,38 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Slide edit preview: real-time visual offsets during slide drag.
+  // - Slid clip: position shifts by slideDelta
+  // - Left neighbor: end extends/shrinks by slideDelta (width change only)
+  // - Right neighbor: start extends/shrinks by slideDelta (position + width change)
+  const slideEditOffset = useSlideEditPreviewStore(
+    useCallback((s) => {
+      if (!s.itemId) return 0;
+      if (s.itemId === item.id) return s.slideDelta;
+      return 0;
+    }, [item.id])
+  );
+
+  const slideNeighborDelta = useSlideEditPreviewStore(
+    useCallback((s) => {
+      if (!s.itemId) return 0;
+      // Left neighbor: end edge moves by slideDelta
+      if (s.leftNeighborId === item.id) return s.slideDelta;
+      // Right neighbor: start edge moves by slideDelta
+      if (s.rightNeighborId === item.id) return s.slideDelta;
+      return 0;
+    }, [item.id])
+  );
+
+  const slideNeighborSide = useSlideEditPreviewStore(
+    useCallback((s): 'left' | 'right' | null => {
+      if (!s.itemId) return null;
+      if (s.leftNeighborId === item.id) return 'left';
+      if (s.rightNeighborId === item.id) return 'right';
+      return null;
+    }, [item.id])
+  );
+
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
   const overlapRight = useMemo(() => {
     if (previewOverlapRight > 0) return previewOverlapRight;
@@ -433,11 +466,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Calculate position and width (convert frames to seconds, then to pixels)
   // Display width hides overlap from both edges so the visual junction is centered.
-  // Fold overlap + ripple into the frame value BEFORE rounding so both clip edges
+  // Fold overlap + ripple + slide into the frame value BEFORE rounding so both clip edges
   // derive from a single Math.round — avoids 1px gaps from independent rounding
   // (Math.round(A) + Math.round(B) ≠ Math.round(A + B)).
-  const left = Math.round(timeToPixels((item.from + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames - overlapRight + rippleOffsetFrames + rippleEditOffset) / fps));
+  //
+  // Slide edit: the slid clip shifts by slideEditOffset. Neighbors adjust edges:
+  // - Left neighbor (slideNeighborSide==='left'): end edge extends/shrinks by slideNeighborDelta
+  // - Right neighbor (slideNeighborSide==='right'): start edge shifts by slideNeighborDelta
+  const slideFromOffset = slideEditOffset
+    + (slideNeighborSide === 'right' ? slideNeighborDelta : 0);
+  const slideDurationOffset =
+    (slideNeighborSide === 'left' ? slideNeighborDelta : 0)
+    + (slideNeighborSide === 'right' ? -slideNeighborDelta : 0);
+
+  const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleOffsetFrames + rippleEditOffset) / fps));
   const width = right - left;
   // Full untrimmed clip width — used to offset inner content when left-trimmed
   const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
