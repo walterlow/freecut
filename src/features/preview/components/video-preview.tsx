@@ -14,6 +14,9 @@ import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePoo
 import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import { GizmoOverlay } from './gizmo-overlay';
 import { RollingEditOverlay } from './rolling-edit-overlay';
+import { RippleEditOverlay } from './ripple-edit-overlay';
+import { useRollingEditPreviewStore } from '@/features/timeline/stores/rolling-edit-preview-store';
+import { useRippleEditPreviewStore } from '@/features/timeline/stores/ripple-edit-preview-store';
 import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 
@@ -238,6 +241,10 @@ export const VideoPreview = memo(function VideoPreview({
   const tracks = useTimelineStore((s) => s.tracks);
   const items = useTimelineStore((s) => s.items);
   const transitions = useTimelineStore((s) => s.transitions);
+  const hasRolling2Up = useRollingEditPreviewStore(
+    (s) => Boolean(s.trimmedItemId && s.neighborItemId && s.handle),
+  );
+  const hasRipple2Up = useRippleEditPreviewStore((s) => Boolean(s.trimmedItemId));
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -747,8 +754,12 @@ export const VideoPreview = memo(function VideoPreview({
               <MainComposition {...inputProps} />
             </Player>
 
-            {/* Rolling edit 2-up frame comparison */}
-            <RollingEditOverlay fps={fps} />
+            {/* Edit 2-up frame comparison */}
+            {hasRolling2Up ? (
+              <RollingEditOverlay fps={fps} />
+            ) : hasRipple2Up ? (
+              <RippleEditOverlay fps={fps} />
+            ) : null}
           </div>
 
           {!suspendOverlay && (
