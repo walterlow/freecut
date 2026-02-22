@@ -180,7 +180,6 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         // Also exclude transition-connected neighbors in both directions — in
         // the overlap model, their `from` can be before currentEnd, but their
         // edges/midpoints still sit on the active edit region.
-        const transitions = useTransitionsStore.getState().transitions;
         for (const t of transitions) {
           if (t.leftClipId === currentItem.id) snapExcludeIds.add(t.rightClipId);
           if (t.rightClipId === currentItem.id) snapExcludeIds.add(t.leftClipId);
@@ -219,7 +218,6 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // Clamp to adjacent items on the same track (allow overlap with transition-linked clips)
       // During ripple edit, skip adjacency clamping — downstream clips shift with the trim.
       if (!isRippleEdit) {
-        const transitions = useTransitionsStore.getState().transitions;
         const transitionLinkedIds = new Set<string>();
         for (const t of transitions) {
           if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
@@ -301,7 +299,6 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             }
           }
           // Transition-connected neighbors in the overlap model
-          const transitions = useTransitionsStore.getState().transitions;
           for (const t of transitions) {
             if (t.leftClipId === currentItem.id) dsIds.add(t.rightClipId);
           }

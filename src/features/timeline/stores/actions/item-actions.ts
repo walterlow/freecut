@@ -709,7 +709,11 @@ export function slideItem(
   if (slideDelta === 0) return;
 
   execute('SLIDE_EDIT', () => {
-    // Adjust neighbors first (order: shrink first, then extend — same as rolling edit)
+    // Verify the target clip exists before mutating neighbors
+    const item = useItemsStore.getState().items.find((i) => i.id === id);
+    if (!item) return;
+
+    // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
     if (slideDelta > 0) {
       // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
       if (rightNeighborId) {
@@ -729,10 +733,7 @@ export function slideItem(
     }
 
     // Move the slid clip
-    const item = useItemsStore.getState().items.find((i) => i.id === id);
-    if (item) {
-      useItemsStore.getState()._moveItem(id, item.from + slideDelta);
-    }
+    useItemsStore.getState()._moveItem(id, item.from + slideDelta);
 
     // Repair transitions for all affected items
     const affectedIds = [id];
@@ -741,5 +742,5 @@ export function slideItem(
     applyTransitionRepairs(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
-  }, { id, slideDelta });
+  }, { id, slideDelta, leftNeighborId, rightNeighborId });
 }

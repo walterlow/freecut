@@ -168,8 +168,11 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
   // Track active zoom interaction from pps changes and drop defer shortly
   // after changes stop to avoid visible catch-up.
+  const lastPpsRef = useRef(pixelsPerSecond);
   useEffect(() => {
     if (preferImmediateRendering) return;
+    if (lastPpsRef.current === pixelsPerSecond) return;
+    lastPpsRef.current = pixelsPerSecond;
 
     setIsZooming(true);
     if (zoomSettleTimeoutRef.current) {

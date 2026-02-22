@@ -87,10 +87,6 @@ export function useFilmstrip({
     const endIndex = Math.max(startIndex + 1, Math.ceil(priorityWindow.endTime));
     return { startIndex, endIndex };
   }, [priorityWindow]);
-  const priorityRangeKey = priorityRange
-    ? `${priorityRange.startIndex}-${priorityRange.endIndex}`
-    : 'none';
-
   // Subscribe to progressive updates
   useEffect(() => {
     if (!enabled || !blobUrl || !duration || duration <= 0) {
@@ -140,7 +136,7 @@ export function useFilmstrip({
       .finally(() => {
         isGeneratingRef.current = false;
       });
-  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, priorityRange, priorityRangeKey]);
+  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, priorityRange]);
 
   return {
     frames: filmstrip?.frames || null,

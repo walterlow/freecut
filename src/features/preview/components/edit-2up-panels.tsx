@@ -217,6 +217,8 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     if (!video || !blobUrl) return;
 
     const targetTime = Math.max(0, sourceTime);
+    // Tolerance for comparing fractional video timestamps.
+    const tolerance = 0.001;
 
     const handleSeeked = () => {
       seekingRef.current = false;
@@ -232,7 +234,7 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     // Fallback for seeking to time 0 on a new video: currentTime is already 0
     // so the browser won't fire 'seeked'. Draw once data is available instead.
     const handleLoadedData = () => {
-      if (video.currentTime === targetTime) {
+      if (Math.abs(video.currentTime - targetTime) < tolerance) {
         drawFrame();
       }
     };
@@ -242,8 +244,8 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
 
     if (seekingRef.current) {
       pendingTimeRef.current = targetTime;
-    } else if (video.currentTime === targetTime) {
-      // Seeking to the current time is a no-op — the browser won't fire 'seeked'.
+    } else if (Math.abs(video.currentTime - targetTime) < tolerance) {
+      // Near-equal to current time — the browser won't fire 'seeked'.
       // Draw immediately if data is available; otherwise handleLoadedData will draw.
       drawFrame();
     } else {

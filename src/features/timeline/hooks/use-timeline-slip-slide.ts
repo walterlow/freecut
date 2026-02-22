@@ -244,29 +244,31 @@ export function useTimelineSlipSlide(
 
     const { mode, currentDelta, leftNeighborId, rightNeighborId } = stateRef.current;
 
-    if (currentDelta !== 0) {
-      if (mode === 'slip') {
-        slipItem(item.id, currentDelta);
-      } else if (mode === 'slide') {
-        slideItem(item.id, currentDelta, leftNeighborId, rightNeighborId);
+    try {
+      if (currentDelta !== 0) {
+        if (mode === 'slip') {
+          slipItem(item.id, currentDelta);
+        } else if (mode === 'slide') {
+          slideItem(item.id, currentDelta, leftNeighborId, rightNeighborId);
+        }
       }
+    } finally {
+      // Clear preview stores
+      useSlipEditPreviewStore.getState().clearPreview();
+      useSlideEditPreviewStore.getState().clearPreview();
+
+      // Clear drag state
+      setDragState(null);
+
+      setState({
+        isActive: false,
+        mode: null,
+        startX: 0,
+        currentDelta: 0,
+        leftNeighborId: null,
+        rightNeighborId: null,
+      });
     }
-
-    // Clear preview stores
-    useSlipEditPreviewStore.getState().clearPreview();
-    useSlideEditPreviewStore.getState().clearPreview();
-
-    // Clear drag state
-    setDragState(null);
-
-    setState({
-      isActive: false,
-      mode: null,
-      startX: 0,
-      currentDelta: 0,
-      leftNeighborId: null,
-      rightNeighborId: null,
-    });
   }, [item.id, setDragState]);
 
   // Setup/cleanup mouse event listeners
@@ -278,9 +280,15 @@ export function useTimelineSlipSlide(
       return () => {
         window.removeEventListener('mousemove', handleMouseMove);
         window.removeEventListener('mouseup', handleMouseUp);
+        // If unmounting mid-drag, clear preview and drag state
+        if (stateRef.current.isActive) {
+          useSlipEditPreviewStore.getState().clearPreview();
+          useSlideEditPreviewStore.getState().clearPreview();
+          setDragState(null);
+        }
       };
     }
-  }, [state.isActive, handleMouseMove, handleMouseUp]);
+  }, [state.isActive, handleMouseMove, handleMouseUp, setDragState]);
 
   // Start slip/slide drag
   const handleSlipSlideStart = useCallback(

@@ -51,6 +51,10 @@ export function EditFourUpPanels({
     return () => ro.disconnect();
   }, []);
 
+  if (containerSize.width <= 0 || containerSize.height <= 0) {
+    return <div ref={containerRef} className="absolute inset-0 z-30 bg-black" />;
+  }
+
   const panelWidth = (containerSize.width - GAP) / 2;
   const maxAreaHeight = containerSize.height - TEXT_SPACE;
 

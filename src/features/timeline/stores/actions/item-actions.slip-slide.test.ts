@@ -198,6 +198,85 @@ describe('slideItem', () => {
     expect(updatedRight.durationInFrames).toBe(80);
   });
 
+  it('moves clip and adjusts adjacent neighbors correctly (slide left)', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+    const middle = makeVideoItem({
+      id: 'middle',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 200,
+      sourceFps: 30,
+      mediaId: 'media-2',
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 200,
+      durationInFrames: 100,
+      sourceStart: 50,
+      sourceEnd: 150,
+      sourceDuration: 200,
+      sourceFps: 30,
+      mediaId: 'media-3',
+    });
+
+    useItemsStore.getState().setItems([left, middle, right]);
+
+    // Slide middle clip left by 20 frames
+    slideItem('middle', -20, 'left', 'right');
+
+    const items = useItemsStore.getState().items;
+    const updatedLeft = items.find((i) => i.id === 'left')!;
+    const updatedMiddle = items.find((i) => i.id === 'middle')!;
+    const updatedRight = items.find((i) => i.id === 'right')!;
+
+    // Middle clip moved left by 20
+    expect(updatedMiddle.from).toBe(80);
+    expect(updatedMiddle.durationInFrames).toBe(100);
+
+    // Left neighbor shrunk by 20
+    expect(updatedLeft.from).toBe(0);
+    expect(updatedLeft.durationInFrames).toBe(80);
+
+    // Right neighbor extended from start by 20 (has sourceStart=50, room to extend)
+    expect(updatedRight.from).toBe(180);
+    expect(updatedRight.durationInFrames).toBe(120);
+  });
+
+  it('slides with null neighbors without errors', () => {
+    const solo = makeVideoItem({
+      id: 'solo',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 200,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+
+    useItemsStore.getState().setItems([solo]);
+
+    // Slide with no neighbors
+    slideItem('solo', 30, null, null);
+
+    const updated = useItemsStore.getState().items.find((i) => i.id === 'solo')!;
+    expect(updated.from).toBe(130);
+    expect(updated.durationInFrames).toBe(100);
+  });
+
   it('does nothing when slideDelta is 0', () => {
     const left = makeVideoItem({
       id: 'left',

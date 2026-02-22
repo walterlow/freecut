@@ -255,10 +255,14 @@ async function extractAndSave(
 
     // Save final metadata - only mark complete when this worker range is fully covered.
     if (!state.aborted) {
-      const newExtracted = extractedCount - skipSet.size;
-      const expectedTotalFrames = rangeEnd - rangeStart;
-      const actuallyComplete = extractedCount === expectedTotalFrames;
-      void newExtracted;
+      // Count only skip indices within this worker's range for accurate completion check
+      let skippedInRange = 0;
+      for (const idx of skipSet) {
+        if (idx >= rangeStart && idx < rangeEnd) skippedInRange++;
+      }
+      const framesExtractedThisRun = extractedCount - skipSet.size;
+      const expectedToExtract = (rangeEnd - rangeStart) - skippedInRange;
+      const actuallyComplete = framesExtractedThisRun >= expectedToExtract;
 
       await saveMetadata(dir, {
         width,
