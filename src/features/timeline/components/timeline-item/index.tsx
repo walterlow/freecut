@@ -284,7 +284,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         }, 100);
       }
 
-      const isParticipating = state.dragState?.isDragging && state.dragState.draggedItemIds.includes(item.id);
+      // Slip/slide use dragState as a gesture lifecycle signal, but should not
+      // enter visual "drag ghost + dimmed opacity" mode.
+      const isSlipOrSlideEdit = state.activeTool === 'slip' || state.activeTool === 'slide';
+      const isParticipating = !isSlipOrSlideEdit
+        && state.dragState?.isDragging
+        && state.dragState.draggedItemIds.includes(item.id);
       const isAlt = isParticipating && state.dragState?.isAltDrag;
       const newParticipation = isParticipating ? (isAlt ? 2 : 1) : 0;
       const oldParticipation = dragParticipationRef.current;
