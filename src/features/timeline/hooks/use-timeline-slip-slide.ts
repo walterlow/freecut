@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { toast } from 'sonner';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
@@ -15,7 +14,7 @@ import {
   timelineToSourceFrames,
 } from '../utils/source-calculations';
 import { clampTrimAmount } from '../utils/trim-utils';
-import { hasAnyTransitionBridge } from '../utils/transition-edit-guards';
+import { findEditNeighborsWithTransitions } from '../utils/transition-linked-neighbors';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -65,37 +64,14 @@ export function useTimelineSlipSlide(
   }, [item.id]);
 
   /**
-   * Find immediate left and right neighbors on the same track.
+   * Find immediate edit neighbors on the same track.
+   * Prefers strict adjacency, falls back to transition-linked neighbors.
    */
   const findNeighbors = useCallback(() => {
     const allItems = useTimelineStore.getState().items;
     const currentItem = getItemFromStore();
-    const itemEnd = currentItem.from + currentItem.durationInFrames;
-
-    let leftNeighbor: TimelineItem | null = null;
-    let rightNeighbor: TimelineItem | null = null;
-
-    for (const other of allItems) {
-      if (other.id === currentItem.id || other.trackId !== currentItem.trackId) continue;
-
-      const otherEnd = other.from + other.durationInFrames;
-
-      // Left neighbor: ends exactly at our start
-      if (otherEnd === currentItem.from) {
-        if (!leftNeighbor || other.from > leftNeighbor.from) {
-          leftNeighbor = other;
-        }
-      }
-
-      // Right neighbor: starts exactly at our end
-      if (other.from === itemEnd) {
-        if (!rightNeighbor || other.from < rightNeighbor.from) {
-          rightNeighbor = other;
-        }
-      }
-    }
-
-    return { leftNeighbor, rightNeighbor };
+    const transitions = useTransitionsStore.getState().transitions;
+    return findEditNeighborsWithTransitions(currentItem, allItems, transitions);
   }, [getItemFromStore]);
 
   /**
@@ -317,20 +293,6 @@ export function useTimelineSlipSlide(
       e.preventDefault();
 
       const { leftNeighbor, rightNeighbor } = findNeighbors();
-
-      if (mode === 'slide') {
-        const transitions = useTransitionsStore.getState().transitions;
-        const relatedIds = [item.id];
-        if (leftNeighbor) relatedIds.push(leftNeighbor.id);
-        if (rightNeighbor) relatedIds.push(rightNeighbor.id);
-
-        if (hasAnyTransitionBridge(transitions, relatedIds)) {
-          toast.warning('Slide edit is blocked on transition-linked clips', {
-            description: 'Remove transition bridges first, then slide.',
-          });
-          return;
-        }
-      }
 
       // Signal drag start so other components can detect active drag
       setDragState({
