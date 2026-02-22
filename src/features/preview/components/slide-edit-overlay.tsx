@@ -66,11 +66,13 @@ export function SlideEditOverlay({ fps }: SlideEditOverlayProps) {
       };
 
   // --- Center-right (IN): right neighbor's new first frame ---
-  // The right neighbor's start is trimmed by slideDelta (its source-visible
-  // region shifts forward). The new first visible frame is at local slideDelta.
+  // The right neighbor's start is trimmed by slideDelta. When positive,
+  // the start shrinks (later source content). When negative, the start
+  // extends (earlier source content). Local frame = slideDelta in both cases;
+  // getSourceFrameInfo + VideoFrame handle sub-zero source times via clamping.
   const rightPanel = rightNeighbor
     ? (() => {
-        const inLocalFrame = Math.max(0, slideDelta);
+        const inLocalFrame = slideDelta;
         const inInfo = getSourceFrameInfo(rightNeighbor, inLocalFrame, fps);
         return {
           item: rightNeighbor,

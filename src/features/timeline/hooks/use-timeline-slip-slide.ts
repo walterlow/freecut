@@ -9,8 +9,8 @@ import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
 import { slipItem, slideItem } from '../stores/actions/item-actions';
 import {
   getSourceProperties,
-  timelineToSourceFrames,
   isMediaItem,
+  timelineToSourceFrames,
 } from '../utils/source-calculations';
 import { clampTrimAmount } from '../utils/trim-utils';
 
@@ -308,12 +308,19 @@ export function useTimelineSlipSlide(
     (e: React.MouseEvent, mode: 'slip' | 'slide') => {
       if (e.button !== 0) return;
       if (trackLocked) return;
-      if (!isMediaItem(item)) return;
+      if (item.type !== 'video' && item.type !== 'audio') return;
 
       e.stopPropagation();
       e.preventDefault();
 
       const { leftNeighbor, rightNeighbor } = findNeighbors();
+
+      // Signal drag start so other components can detect active drag
+      setDragState({
+        isDragging: true,
+        draggedItemIds: [item.id],
+        offset: { x: 0, y: 0 },
+      });
 
       setState({
         isActive: true,
@@ -324,7 +331,7 @@ export function useTimelineSlipSlide(
         rightNeighborId: rightNeighbor?.id ?? null,
       });
     },
-    [item, trackLocked, findNeighbors],
+    [item.id, item.type, trackLocked, findNeighbors, setDragState],
   );
 
   return {
