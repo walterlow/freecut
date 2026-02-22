@@ -6,6 +6,7 @@ import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
+import { useSlipEditPreviewStore } from '../../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useEditorStore } from '@/features/editor/stores/editor-store';
@@ -39,6 +40,7 @@ import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
+import { timelineToSourceFrames } from '../../utils/source-calculations';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -414,6 +416,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Slip edit preview: source window shift for the active slipped clip.
+  // Used to update filmstrip/waveform source alignment during drag.
+  const slipEditDelta = useSlipEditPreviewStore(
+    useCallback((s) => {
+      if (s.itemId !== item.id) return 0;
+      return s.slipDelta;
+    }, [item.id])
+  );
+
   // Slide edit preview: real-time visual offsets during slide drag.
   // - Slid clip: position shifts by slideDelta
   // - Left neighbor: end extends/shrinks by slideDelta (width change only)
@@ -498,6 +509,47 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const currentSourceEnd = item.sourceEnd || sourceDuration;
   // Source FPS for converting source frames → timeline frames (sourceStart etc. are in source-native FPS)
   const effectiveSourceFps = item.sourceFps ?? fps;
+
+  // Preview item for clip internals (filmstrip/waveform) during slip/slide drags.
+  const contentPreviewItem = useMemo<TimelineItemType>(() => {
+    let nextItem = item;
+
+    if ((item.type === 'video' || item.type === 'audio') && slipEditDelta !== 0) {
+      const nextSourceStart = Math.max(0, (nextItem.sourceStart ?? 0) + slipEditDelta);
+      const nextSourceEnd = nextItem.sourceEnd !== undefined
+        ? Math.max(nextSourceStart + 1, nextItem.sourceEnd + slipEditDelta)
+        : undefined;
+
+      nextItem = {
+        ...nextItem,
+        sourceStart: nextSourceStart,
+        sourceEnd: nextSourceEnd,
+      };
+    }
+
+    if ((item.type === 'video' || item.type === 'audio') && slideNeighborSide === 'right' && slideNeighborDelta !== 0) {
+      const sourceFramesDelta = timelineToSourceFrames(
+        slideNeighborDelta,
+        nextItem.speed ?? 1,
+        fps,
+        effectiveSourceFps,
+      );
+      nextItem = {
+        ...nextItem,
+        sourceStart: Math.max(0, (nextItem.sourceStart ?? 0) + sourceFramesDelta),
+      };
+    }
+
+    if (slideNeighborSide && slideNeighborDelta !== 0) {
+      const durationDelta = slideNeighborSide === 'left' ? slideNeighborDelta : -slideNeighborDelta;
+      nextItem = {
+        ...nextItem,
+        durationInFrames: Math.max(1, nextItem.durationInFrames + durationDelta),
+      };
+    }
+
+    return nextItem;
+  }, [item, slipEditDelta, slideNeighborSide, slideNeighborDelta, fps, effectiveSourceFps]);
 
   // Items that can extend infinitely
   const canExtendInfinitely = item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment';
@@ -1000,7 +1052,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           {overlapLeftPixels > 0 ? (
             <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: fullWidthPixels }}>
               <ClipContent
-                item={item}
+                item={contentPreviewItem}
                 clipWidth={fullWidthPixels}
                 fps={fps}
                 isClipVisible={isClipVisible}
@@ -1009,7 +1061,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             </div>
           ) : (
             <ClipContent
-              item={item}
+              item={contentPreviewItem}
               clipWidth={visualWidth}
               fps={fps}
               isClipVisible={isClipVisible}
