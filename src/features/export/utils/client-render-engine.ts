@@ -142,28 +142,33 @@ export async function createCompositionRenderer(
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
   const fallbackVideoPool = hasDom ? new VideoSourcePool() : null;
-  const fallbackVideoBySrc = new Map<string, { clipId: string; element: HTMLVideoElement }>();
+  const fallbackVideoBySrc = new Set<string>();
+  const fallbackVideoClipIdByItem = new Map<string, string>();
   let fallbackVideoClipCounter = 0;
 
   const bindFallbackVideoElement = (itemId: string, src: string): void => {
     if (!fallbackVideoPool) return;
 
-    let entry = fallbackVideoBySrc.get(src);
-    if (!entry) {
-      const clipId = `export-fallback-${++fallbackVideoClipCounter}`;
-      fallbackVideoPool.preloadSource(src).catch(() => {});
-
-      const element = fallbackVideoPool.acquireForClip(clipId, src);
-      if (!element) return;
-
-      element.muted = true;
-      element.preload = 'auto';
-      element.crossOrigin = 'anonymous';
-      entry = { clipId, element };
-      fallbackVideoBySrc.set(src, entry);
+    let clipId = fallbackVideoClipIdByItem.get(itemId);
+    if (!clipId) {
+      clipId = `export-fallback-${++fallbackVideoClipCounter}-${itemId}`;
+      fallbackVideoClipIdByItem.set(itemId, clipId);
     }
 
-    videoElements.set(itemId, entry.element);
+    const element = fallbackVideoPool.acquireForClip(clipId, src);
+    if (!element) return;
+
+    // Configure element immediately after acquire, then warm shared source preload.
+    element.crossOrigin = 'anonymous';
+    element.muted = true;
+    element.preload = 'auto';
+
+    if (!fallbackVideoBySrc.has(src)) {
+      fallbackVideoBySrc.add(src);
+      fallbackVideoPool.preloadSource(src).catch(() => {});
+    }
+
+    videoElements.set(itemId, element);
   };
 
   for (const track of tracks) {
@@ -1002,6 +1007,7 @@ export async function createCompositionRenderer(
         fallbackVideoPool.dispose();
       }
       fallbackVideoBySrc.clear();
+      fallbackVideoClipIdByItem.clear();
       videoElements.clear();
       for (const image of imageElements.values()) {
         if ('close' in image.source && typeof image.source.close === 'function') {

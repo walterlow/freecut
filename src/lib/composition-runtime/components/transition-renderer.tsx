@@ -144,7 +144,9 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
       if (elementRef.current !== element) return;
       if (element.paused && element.readyState >= 2) {
         element.play().then(() => {
-          element.pause();
+          if (elementRef.current === element) {
+            element.pause();
+          }
         }).catch(() => {
           // Autoplay blocked — fine for muted transition video
         });
@@ -745,3 +747,4 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
     </>
   );
 });
+
