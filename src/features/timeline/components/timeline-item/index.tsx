@@ -14,6 +14,7 @@ import { useMediaLibraryStore } from '@/features/media-library/stores/media-libr
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
+import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
@@ -154,6 +155,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Rate stretch functionality - disabled if track is locked
   const { isStretching, stretchHandle, handleStretchStart, getVisualFeedback } = useRateStretch(item, timelineDuration, trackLocked);
+
+  // Slip/Slide functionality - disabled if track is locked
+  const { isSlipSlideActive, handleSlipSlideStart } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
+
   const wasDraggingRef = useRef(false);
 
   // Track drag participation via ref subscription - NO RE-RENDERS on drag state changes
@@ -697,6 +702,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-gauge'
     : activeTool === 'rolling-edit' || activeTool === 'ripple-edit'
     ? 'cursor-ew-resize'
+    : activeTool === 'slip' || activeTool === 'slide'
+    ? (item.type === 'video' || item.type === 'audio' ? 'cursor-ew-resize' : 'cursor-not-allowed')
     : isBeingDragged
     ? 'cursor-grabbing'
     : 'cursor-grab';
@@ -848,6 +855,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, [item]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Slip/Slide tool: initiate on clip body for media items
+    if ((activeTool === 'slip' || activeTool === 'slide') && !trackLocked) {
+      if (item.type === 'video' || item.type === 'audio') {
+        handleSlipSlideStart(e, activeTool);
+      } else {
+        // Show blocked tooltip for non-media items (same pattern as rate-stretch)
+        setDragBlockedTooltip({ x: e.clientX, y: e.clientY });
+      }
+      return;
+    }
     // Show blocked tooltip when trying to drag in rate-stretch mode
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -860,9 +877,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
     // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
-    if (trackLocked || isTrimming || isStretching || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || hoveredEdge !== null) return;
+    if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
     handleDragStart(e);
-  }, [activeTool, trackLocked, isStretching, isTrimming, hoveredEdge, handleDragStart]);
+  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type]);
 
   // Track which edge is closer when right-clicking for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
