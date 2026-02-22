@@ -153,7 +153,7 @@ interface VideoFrameProps {
   sourceTime: number;
 }
 
-function VideoFrame({ item, sourceTime }: VideoFrameProps) {
+export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -266,7 +266,7 @@ interface ImageFrameProps {
   item: TimelineItem;
 }
 
-function ImageFrame({ item }: ImageFrameProps) {
+export function ImageFrame({ item }: ImageFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
@@ -310,7 +310,7 @@ function ImageFrame({ item }: ImageFrameProps) {
   );
 }
 
-function TypePlaceholder({ type, text }: { type: string; text: string }) {
+export function TypePlaceholder({ type, text }: { type: string; text: string }) {
   const color = TYPE_PLACEHOLDER_COLORS[type] ?? '#6b7280';
   return (
     <div
