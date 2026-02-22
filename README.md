@@ -123,7 +123,8 @@ Brave disables the File System Access API by default. To enable it:
 | Add keyframe | `K` |
 | Toggle keyframe editor | `Ctrl+K` |
 | Group / Ungroup tracks | `Ctrl+G` / `Ctrl+Shift+G` |
-| Mark In / Out | `I` / `O` |
+| Mark In / Out (playhead) | `I` / `O` |
+| Mark In / Out (skimmer) | `Shift+I` / `Shift+O` |
 | Insert / Overwrite edit | `,` / `.` |
 | Save | `Ctrl+S` |
 | Export | `Ctrl+E` |

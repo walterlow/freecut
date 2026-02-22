@@ -863,12 +863,12 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       {/* Draggable in/out strip */}
       {inPoint !== null && outPoint !== null && (
         <div
-          className="absolute top-0 bottom-0 cursor-move"
+          className="absolute cursor-move"
           onMouseDown={handleRangeMouseDown}
           style={{
             left: `${timeToPixels(inPoint / fps)}px`,
-            top: '23px',
-            height: '20px',
+            bottom: '0px',
+            height: '14px',
             width: `${Math.max(2, timeToPixels((outPoint - inPoint) / fps))}px`,
             background:
               'linear-gradient(to bottom, var(--color-timeline-io-range-fill), color-mix(in oklch, var(--color-timeline-io-range-fill) 82%, black))',

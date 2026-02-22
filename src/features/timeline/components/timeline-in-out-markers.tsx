@@ -120,8 +120,8 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
   }, [isDraggingOut]);
 
   const ioHandleColor = 'var(--color-timeline-io-handle)';
-  const ioLaneTop = 23;
-  const ioLaneHeight = 20;
+  const ioLaneHeight = 14;
+  const ioHitAreaHeight = ioLaneHeight + 6;
   const ioHandleWidth = 6;
   const ioHandleInset = 0;
 
@@ -143,13 +143,13 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
       }}
     >
       {/* Side grip handle aligned to range edge */}
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          top: `${ioLaneTop}px`,
-          left: side === 'in' ? `${ioHandleInset}px` : `${-ioHandleWidth}px`,
-          width: `${ioHandleWidth}px`,
-          height: `${ioLaneHeight}px`,
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            bottom: '0px',
+            left: side === 'in' ? `${ioHandleInset}px` : `${-ioHandleWidth}px`,
+            width: `${ioHandleWidth}px`,
+            height: `${ioLaneHeight}px`,
           borderRadius: '2px',
           background: `linear-gradient(to bottom, ${ioHandleColor}, color-mix(in oklch, ${ioHandleColor} 75%, black))`,
           boxShadow: `0 0 6px color-mix(in oklch, ${ioHandleColor} 55%, transparent)`,
@@ -160,8 +160,8 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
       <div
         className="absolute pointer-events-auto"
         style={{
-          top: 0,
-          bottom: 0,
+          bottom: '0px',
+          height: `${ioHitAreaHeight}px`,
           left: '-8px',
           width: '18px',
           cursor: 'col-resize',

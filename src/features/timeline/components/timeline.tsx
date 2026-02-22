@@ -293,15 +293,29 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         }
       }
 
-      // 'I' key - Set in-point at gray playhead (preview) or main playhead
+      // 'I' key - Set in-point at main playhead
       if (key === 'i' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        const { currentFrame } = usePlaybackStore.getState();
+        useTimelineStore.getState().setInPoint(currentFrame);
+      }
+
+      // 'Shift+I' key - Set in-point at skimmer playhead when available
+      if (key === 'i' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
         e.preventDefault();
         const { previewFrame, currentFrame } = usePlaybackStore.getState();
         useTimelineStore.getState().setInPoint(previewFrame ?? currentFrame);
       }
 
-      // 'O' key - Set out-point at gray playhead (preview) or main playhead
+      // 'O' key - Set out-point at main playhead
       if (key === 'o' && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        const { currentFrame } = usePlaybackStore.getState();
+        useTimelineStore.getState().setOutPoint(currentFrame);
+      }
+
+      // 'Shift+O' key - Set out-point at skimmer playhead when available
+      if (key === 'o' && !e.metaKey && !e.ctrlKey && e.shiftKey && !e.altKey) {
         e.preventDefault();
         const { previewFrame, currentFrame } = usePlaybackStore.getState();
         useTimelineStore.getState().setOutPoint(previewFrame ?? currentFrame);
