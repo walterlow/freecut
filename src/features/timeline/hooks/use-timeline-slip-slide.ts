@@ -1,0 +1,336 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+import type { TimelineItem } from '@/types/timeline';
+import { useTimelineStore } from '../stores/timeline-store';
+import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useTimelineZoom } from './use-timeline-zoom';
+import { useSnapCalculator } from './use-snap-calculator';
+import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
+import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
+import { slipItem, slideItem } from '../stores/actions/item-actions';
+import {
+  getSourceProperties,
+  timelineToSourceFrames,
+  isMediaItem,
+} from '../utils/source-calculations';
+import { clampTrimAmount } from '../utils/trim-utils';
+
+interface SlipSlideState {
+  isActive: boolean;
+  mode: 'slip' | 'slide' | null;
+  startX: number;
+  currentDelta: number;
+  leftNeighborId: string | null;
+  rightNeighborId: string | null;
+}
+
+/**
+ * Hook for handling slip and slide editing on timeline items.
+ *
+ * Slip: shifts source content within a fixed clip window.
+ * Slide: moves clip on timeline, adjusting adjacent neighbors.
+ *
+ * Only operates on video/audio items.
+ */
+export function useTimelineSlipSlide(
+  item: TimelineItem,
+  timelineDuration: number,
+  trackLocked: boolean = false,
+) {
+  const { pixelsToTime } = useTimelineZoom();
+  const fps = useTimelineStore((s) => s.fps);
+  const setDragState = useSelectionStore((s) => s.setDragState);
+
+  const { getMagneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(
+    timelineDuration,
+    item.id,
+  );
+
+  const [state, setState] = useState<SlipSlideState>({
+    isActive: false,
+    mode: null,
+    startX: 0,
+    currentDelta: 0,
+    leftNeighborId: null,
+    rightNeighborId: null,
+  });
+
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const getItemFromStore = useCallback(() => {
+    return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
+  }, [item.id]);
+
+  /**
+   * Find immediate left and right neighbors on the same track.
+   */
+  const findNeighbors = useCallback(() => {
+    const allItems = useTimelineStore.getState().items;
+    const currentItem = getItemFromStore();
+    const itemEnd = currentItem.from + currentItem.durationInFrames;
+
+    let leftNeighbor: TimelineItem | null = null;
+    let rightNeighbor: TimelineItem | null = null;
+
+    for (const other of allItems) {
+      if (other.id === currentItem.id || other.trackId !== currentItem.trackId) continue;
+
+      const otherEnd = other.from + other.durationInFrames;
+
+      // Left neighbor: ends exactly at our start
+      if (otherEnd === currentItem.from) {
+        if (!leftNeighbor || other.from > leftNeighbor.from) {
+          leftNeighbor = other;
+        }
+      }
+
+      // Right neighbor: starts exactly at our end
+      if (other.from === itemEnd) {
+        if (!rightNeighbor || other.from < rightNeighbor.from) {
+          rightNeighbor = other;
+        }
+      }
+    }
+
+    return { leftNeighbor, rightNeighbor };
+  }, [getItemFromStore]);
+
+  /**
+   * Clamp slip delta to source boundaries.
+   * slipDelta is in source-native frames.
+   */
+  const clampSlipDelta = useCallback((delta: number): number => {
+    const currentItem = getItemFromStore();
+    if (!isMediaItem(currentItem)) return 0;
+
+    const { sourceStart, sourceEnd, sourceDuration } = getSourceProperties(currentItem);
+    if (sourceEnd === undefined) return 0;
+
+    let clamped = delta;
+
+    // Can't go below sourceStart=0
+    if (sourceStart + clamped < 0) {
+      clamped = -sourceStart;
+    }
+
+    // Can't exceed sourceDuration
+    if (sourceDuration !== undefined && sourceEnd + clamped > sourceDuration) {
+      clamped = sourceDuration - sourceEnd;
+    }
+
+    return clamped;
+  }, [getItemFromStore]);
+
+  /**
+   * Clamp slide delta to neighbor source boundaries and timeline start.
+   */
+  const clampSlideDelta = useCallback((delta: number, leftNeighborId: string | null, rightNeighborId: string | null): number => {
+    const currentItem = getItemFromStore();
+    let clamped = delta;
+
+    // Can't slide past timeline start
+    if (currentItem.from + clamped < 0) {
+      clamped = -currentItem.from;
+    }
+
+    const allItems = useTimelineStore.getState().items;
+
+    // Left neighbor: clamp by how much its end can extend/shrink
+    if (leftNeighborId) {
+      const leftNeighbor = allItems.find((i) => i.id === leftNeighborId);
+      if (leftNeighbor) {
+        const { clampedAmount } = clampTrimAmount(leftNeighbor, 'end', clamped, fps);
+        if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+          clamped = clampedAmount;
+        }
+      }
+    }
+
+    // Right neighbor: clamp by how much its start can extend/shrink
+    if (rightNeighborId) {
+      const rightNeighbor = allItems.find((i) => i.id === rightNeighborId);
+      if (rightNeighbor) {
+        const { clampedAmount } = clampTrimAmount(rightNeighbor, 'start', clamped, fps);
+        if (Math.abs(clampedAmount) < Math.abs(clamped)) {
+          clamped = clampedAmount;
+        }
+      }
+    }
+
+    return clamped;
+  }, [getItemFromStore, fps]);
+
+  // Mouse move handler
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!stateRef.current.isActive || trackLocked) return;
+
+      const deltaX = e.clientX - stateRef.current.startX;
+      const deltaTime = pixelsToTime(deltaX);
+      let deltaFrames = Math.round(deltaTime * fps);
+      const mode = stateRef.current.mode;
+
+      if (mode === 'slip') {
+        // Convert timeline frame delta to source frame delta
+        const currentItem = getItemFromStore();
+        const { speed, sourceFps } = getSourceProperties(currentItem);
+        const effectiveSourceFps = sourceFps ?? fps;
+        const sourceFramesDelta = timelineToSourceFrames(deltaFrames, speed, fps, effectiveSourceFps);
+
+        const clamped = clampSlipDelta(sourceFramesDelta);
+
+        // Update preview store
+        const previewStore = useSlipEditPreviewStore.getState();
+        if (!previewStore.itemId) {
+          previewStore.setPreview({
+            itemId: item.id,
+            trackId: currentItem.trackId,
+            slipDelta: clamped,
+          });
+        } else {
+          previewStore.setSlipDelta(clamped);
+        }
+
+        if (clamped !== stateRef.current.currentDelta) {
+          setState((prev) => ({ ...prev, currentDelta: clamped }));
+        }
+      } else if (mode === 'slide') {
+        const { leftNeighborId, rightNeighborId } = stateRef.current;
+
+        // Apply snapping for slide (clip edges snap to items/playhead/grid)
+        if (snapEnabled) {
+          const currentItem = getItemFromStore();
+          const targets = getMagneticSnapTargets();
+          const excludeIds = new Set<string>([item.id]);
+          if (leftNeighborId) excludeIds.add(leftNeighborId);
+          if (rightNeighborId) excludeIds.add(rightNeighborId);
+
+          const newStart = currentItem.from + deltaFrames;
+          const newEnd = newStart + currentItem.durationInFrames;
+
+          let bestSnap: { frame: number; offset: number } | null = null;
+
+          for (const target of targets) {
+            if (target.itemId && excludeIds.has(target.itemId)) continue;
+
+            // Snap start edge
+            const startDist = Math.abs(newStart - target.frame);
+            if (startDist < snapThresholdFrames) {
+              if (!bestSnap || startDist < Math.abs(bestSnap.offset)) {
+                bestSnap = { frame: target.frame, offset: target.frame - newStart };
+              }
+            }
+
+            // Snap end edge
+            const endDist = Math.abs(newEnd - target.frame);
+            if (endDist < snapThresholdFrames) {
+              if (!bestSnap || endDist < Math.abs(bestSnap.offset)) {
+                bestSnap = { frame: target.frame, offset: target.frame - newEnd };
+              }
+            }
+          }
+
+          if (bestSnap) {
+            deltaFrames += bestSnap.offset;
+          }
+        }
+
+        const clamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+
+        // Update preview store
+        const previewStore = useSlideEditPreviewStore.getState();
+        if (!previewStore.itemId) {
+          previewStore.setPreview({
+            itemId: item.id,
+            trackId: getItemFromStore().trackId,
+            leftNeighborId,
+            rightNeighborId,
+            slideDelta: clamped,
+          });
+        } else {
+          previewStore.setSlideDelta(clamped);
+        }
+
+        if (clamped !== stateRef.current.currentDelta) {
+          setState((prev) => ({ ...prev, currentDelta: clamped }));
+        }
+      }
+    },
+    [pixelsToTime, fps, trackLocked, item.id, getItemFromStore, clampSlipDelta, clampSlideDelta, snapEnabled, getMagneticSnapTargets, snapThresholdFrames],
+  );
+
+  // Mouse up handler — commits changes
+  const handleMouseUp = useCallback(() => {
+    if (!stateRef.current.isActive) return;
+
+    const { mode, currentDelta, leftNeighborId, rightNeighborId } = stateRef.current;
+
+    if (currentDelta !== 0) {
+      if (mode === 'slip') {
+        slipItem(item.id, currentDelta);
+      } else if (mode === 'slide') {
+        slideItem(item.id, currentDelta, leftNeighborId, rightNeighborId);
+      }
+    }
+
+    // Clear preview stores
+    useSlipEditPreviewStore.getState().clearPreview();
+    useSlideEditPreviewStore.getState().clearPreview();
+
+    // Clear drag state
+    setDragState(null);
+
+    setState({
+      isActive: false,
+      mode: null,
+      startX: 0,
+      currentDelta: 0,
+      leftNeighborId: null,
+      rightNeighborId: null,
+    });
+  }, [item.id, setDragState]);
+
+  // Setup/cleanup mouse event listeners
+  useEffect(() => {
+    if (state.isActive) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [state.isActive, handleMouseMove, handleMouseUp]);
+
+  // Start slip/slide drag
+  const handleSlipSlideStart = useCallback(
+    (e: React.MouseEvent, mode: 'slip' | 'slide') => {
+      if (e.button !== 0) return;
+      if (trackLocked) return;
+      if (!isMediaItem(item)) return;
+
+      e.stopPropagation();
+      e.preventDefault();
+
+      const { leftNeighbor, rightNeighbor } = findNeighbors();
+
+      setState({
+        isActive: true,
+        mode,
+        startX: e.clientX,
+        currentDelta: 0,
+        leftNeighborId: leftNeighbor?.id ?? null,
+        rightNeighborId: rightNeighbor?.id ?? null,
+      });
+    },
+    [item, trackLocked, findNeighbors],
+  );
+
+  return {
+    isSlipSlideActive: state.isActive,
+    slipSlideMode: state.mode,
+    slipSlideDelta: state.currentDelta,
+    handleSlipSlideStart,
+  };
+}
