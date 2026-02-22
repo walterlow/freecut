@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { AbsoluteFill } from '@/features/player/composition';
 import { useBridgedTimelineContext } from '@/features/player/clock';
 import { useVideoConfig } from '@/features/player/video-config';
+import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import { FileAudio } from 'lucide-react';
 
 interface SourceCompositionProps {
@@ -9,6 +10,8 @@ interface SourceCompositionProps {
   mediaType: 'video' | 'audio' | 'image';
   fileName: string;
 }
+
+let sourceMonitorVideoInstanceCounter = 0;
 
 export function SourceComposition({ src, mediaType, fileName }: SourceCompositionProps) {
   if (mediaType === 'video') {
@@ -21,10 +24,52 @@ export function SourceComposition({ src, mediaType, fileName }: SourceCompositio
 }
 
 function VideoSource({ src }: { src: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const poolRef = useRef(getGlobalVideoSourcePool());
+  const poolClipIdRef = useRef<string>(`source-monitor-${++sourceMonitorVideoInstanceCounter}`);
   const { frame, playing, playbackRate } = useBridgedTimelineContext();
   const { fps } = useVideoConfig();
   const lastFrameRef = useRef(frame);
+
+  // Acquire/release pooled element when source changes.
+  useEffect(() => {
+    if (!src) return;
+
+    const pool = poolRef.current;
+    const clipId = poolClipIdRef.current;
+
+    pool.preloadSource(src).catch(() => {});
+    const video = pool.acquireForClip(clipId, src);
+    if (!video) return;
+
+    video.muted = false;
+    video.volume = 1;
+    video.playsInline = true;
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'contain';
+    video.style.display = 'block';
+    video.style.position = 'absolute';
+    video.style.top = '0';
+    video.style.left = '0';
+
+    const container = videoContainerRef.current;
+    if (container && video.parentElement !== container) {
+      container.appendChild(video);
+    }
+
+    videoRef.current = video;
+
+    return () => {
+      video.pause();
+      if (video.parentElement) {
+        video.parentElement.removeChild(video);
+      }
+      pool.releaseClip(clipId);
+      videoRef.current = null;
+    };
+  }, [src]);
 
   // Sync video currentTime — always when paused, on seeks when playing
   useEffect(() => {
@@ -66,12 +111,9 @@ function VideoSource({ src }: { src: string }) {
 
   return (
     <AbsoluteFill>
-      <video
-        ref={videoRef}
-        src={src}
-        preload="auto"
-        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-        playsInline
+      <div
+        ref={videoContainerRef}
+        style={{ width: '100%', height: '100%', position: 'relative' }}
       />
     </AbsoluteFill>
   );
