@@ -41,6 +41,7 @@ import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
+import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -462,6 +463,27 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // For the actively slid item, read neighbor IDs from preview store so we can
+  // mirror commit-time source continuity logic in filmstrip/waveform preview.
+  const slideLeftNeighborIdForSlidItem = useSlideEditPreviewStore(
+    useCallback((s) => (s.itemId === item.id ? s.leftNeighborId : null), [item.id])
+  );
+  const slideRightNeighborIdForSlidItem = useSlideEditPreviewStore(
+    useCallback((s) => (s.itemId === item.id ? s.rightNeighborId : null), [item.id])
+  );
+  const slideLeftNeighborForSlidItem = useTimelineStore(
+    useCallback((s) => {
+      if (!slideLeftNeighborIdForSlidItem) return null;
+      return s.items.find((i) => i.id === slideLeftNeighborIdForSlidItem) ?? null;
+    }, [slideLeftNeighborIdForSlidItem])
+  );
+  const slideRightNeighborForSlidItem = useTimelineStore(
+    useCallback((s) => {
+      if (!slideRightNeighborIdForSlidItem) return null;
+      return s.items.find((i) => i.id === slideRightNeighborIdForSlidItem) ?? null;
+    }, [slideRightNeighborIdForSlidItem])
+  );
+
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
   const overlapRight = useMemo(() => {
     if (previewOverlapRight > 0) return previewOverlapRight;
@@ -498,8 +520,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
   const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleOffsetFrames + rippleEditOffset) / fps));
   const width = right - left;
-  // Full untrimmed clip width — used to offset inner content when left-trimmed
-  const fullWidthPixels = Math.round(timeToPixels(item.durationInFrames / fps));
   // Pixel offset for inner content shift (filmstrip alignment) — independent rounding is fine
   // here since it only affects content within this clip, not cross-clip alignment.
   const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
@@ -553,6 +573,25 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
     }
 
+    // Slide continuity preview for split-contiguous chains:
+    // match slideItem commit logic so playback continuity stays correct in-drag.
+    if ((nextItem.type === 'video' || nextItem.type === 'audio') && slideEditOffset !== 0) {
+      const sourceDelta = computeSlideContinuitySourceDelta(
+        nextItem,
+        slideLeftNeighborForSlidItem,
+        slideRightNeighborForSlidItem,
+        slideEditOffset,
+        fps,
+      );
+      if (sourceDelta !== 0 && nextItem.sourceEnd !== undefined) {
+        nextItem = {
+          ...nextItem,
+          sourceStart: (nextItem.sourceStart ?? 0) + sourceDelta,
+          sourceEnd: nextItem.sourceEnd + sourceDelta,
+        };
+      }
+    }
+
     if ((item.type === 'video' || item.type === 'audio') && slipEditDelta !== 0) {
       const nextSourceStart = Math.max(0, (nextItem.sourceStart ?? 0) + slipEditDelta);
       const nextSourceEnd = nextItem.sourceEnd !== undefined
@@ -596,11 +635,20 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     rollingEditDelta,
     rollingEditHandle,
     slipEditDelta,
+    slideEditOffset,
     slideNeighborSide,
     slideNeighborDelta,
+    slideLeftNeighborForSlidItem,
+    slideRightNeighborForSlidItem,
     fps,
     effectiveSourceFps,
   ]);
+
+  // Use preview duration for overlapped content width so filmstrip/waveform
+  // resizing stays in sync for transition-bridge clips during edit previews.
+  const previewFullWidthPixels = Math.round(
+    timeToPixels(contentPreviewItem.durationInFrames / fps),
+  );
 
   // During edit previews, prioritize visual sync over deferred rendering so
   // filmstrip growth keeps up with the edit gesture.
@@ -1112,10 +1160,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
           {/* Clip visual content — offset when left-trimmed so filmstrip aligns correctly */}
           {overlapLeftPixels > 0 ? (
-            <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: fullWidthPixels }}>
+            <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
               <ClipContent
                 item={contentPreviewItem}
-                clipWidth={fullWidthPixels}
+                clipWidth={previewFullWidthPixels}
                 fps={fps}
                 isClipVisible={isClipVisible}
                 pixelsPerSecond={pixelsPerSecond}

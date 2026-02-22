@@ -309,4 +309,115 @@ describe('slideItem', () => {
     expect(items.find((i) => i.id === 'right')!.from).toBe(200);
     expect(items.find((i) => i.id === 'right')!.durationInFrames).toBe(100);
   });
+
+  it('preserves source continuity for split-contiguous A-B-C chains', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      originId: 'origin-1',
+      mediaId: 'media-1',
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+    const middle = makeVideoItem({
+      id: 'middle',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      originId: 'origin-1',
+      mediaId: 'media-1',
+      sourceStart: 100,
+      sourceEnd: 200,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 200,
+      durationInFrames: 100,
+      originId: 'origin-1',
+      mediaId: 'media-1',
+      sourceStart: 200,
+      sourceEnd: 300,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+
+    useItemsStore.getState().setItems([left, middle, right]);
+
+    slideItem('middle', 20, 'left', 'right');
+
+    const items = useItemsStore.getState().items;
+    const updatedLeft = items.find((i) => i.id === 'left') as VideoItem;
+    const updatedMiddle = items.find((i) => i.id === 'middle') as VideoItem;
+    const updatedRight = items.find((i) => i.id === 'right') as VideoItem;
+
+    expect(updatedMiddle.from).toBe(120);
+    expect(updatedMiddle.sourceStart).toBe(120);
+    expect(updatedMiddle.sourceEnd).toBe(220);
+
+    // Continuity at both edit points should remain intact.
+    expect(updatedLeft.sourceEnd).toBe(updatedMiddle.sourceStart);
+    expect(updatedMiddle.sourceEnd).toBe(updatedRight.sourceStart);
+  });
+
+  it('keeps default slide semantics for non-split chains', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      originId: 'left-origin',
+      mediaId: 'media-1',
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+    const middle = makeVideoItem({
+      id: 'middle',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      originId: 'middle-origin',
+      mediaId: 'media-2',
+      sourceStart: 50,
+      sourceEnd: 150,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 200,
+      durationInFrames: 100,
+      originId: 'right-origin',
+      mediaId: 'media-3',
+      sourceStart: 25,
+      sourceEnd: 125,
+      sourceDuration: 400,
+      sourceFps: 30,
+      speed: 1,
+    });
+
+    useItemsStore.getState().setItems([left, middle, right]);
+
+    slideItem('middle', 20, 'left', 'right');
+
+    const updatedMiddle = useItemsStore.getState().items.find((i) => i.id === 'middle') as VideoItem;
+    expect(updatedMiddle.from).toBe(120);
+    // Middle clip source window remains unchanged when clips are not a split-contiguous chain.
+    expect(updatedMiddle.sourceStart).toBe(50);
+    expect(updatedMiddle.sourceEnd).toBe(150);
+  });
 });

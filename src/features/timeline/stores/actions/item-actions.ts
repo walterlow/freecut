@@ -14,6 +14,7 @@ import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
+import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 
 export function addItem(item: TimelineItem): void {
   execute('ADD_ITEM', () => {
@@ -699,9 +700,22 @@ export function slideItem(
   if (slideDelta === 0) return;
 
   execute('SLIDE_EDIT', () => {
+    const items = useItemsStore.getState().items;
     // Verify the target clip exists before mutating neighbors
-    const item = useItemsStore.getState().items.find((i) => i.id === id);
+    const item = items.find((i) => i.id === id);
     if (!item) return;
+    const leftNeighbor = leftNeighborId ? (items.find((i) => i.id === leftNeighborId) ?? null) : null;
+    const rightNeighbor = rightNeighborId ? (items.find((i) => i.id === rightNeighborId) ?? null) : null;
+
+    // For split-contiguous A-B-C chains, preserve source continuity by shifting
+    // the slid clip's source window by the same source-space delta as slide.
+    const continuitySourceDelta = computeSlideContinuitySourceDelta(
+      item,
+      leftNeighbor,
+      rightNeighbor,
+      slideDelta,
+      useTimelineSettingsStore.getState().fps,
+    );
 
     // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
     if (slideDelta > 0) {
@@ -724,6 +738,16 @@ export function slideItem(
 
     // Move the slid clip
     useItemsStore.getState()._moveItem(id, item.from + slideDelta);
+    if (
+      continuitySourceDelta !== 0
+      && (item.type === 'video' || item.type === 'audio')
+      && item.sourceEnd !== undefined
+    ) {
+      useItemsStore.getState()._updateItem(id, {
+        sourceStart: (item.sourceStart ?? 0) + continuitySourceDelta,
+        sourceEnd: item.sourceEnd + continuitySourceDelta,
+      });
+    }
 
     // Repair transitions for all affected items
     const affectedIds = [id];
