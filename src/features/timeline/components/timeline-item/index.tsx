@@ -510,9 +510,43 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Source FPS for converting source frames → timeline frames (sourceStart etc. are in source-native FPS)
   const effectiveSourceFps = item.sourceFps ?? fps;
 
-  // Preview item for clip internals (filmstrip/waveform) during slip/slide drags.
+  // Preview item for clip internals (filmstrip/waveform) during edit drags.
   const contentPreviewItem = useMemo<TimelineItemType>(() => {
     let nextItem = item;
+    let previewStartTrimDelta = 0;
+    let previewDurationDelta = 0;
+
+    // Active local trim (normal / rolling / ripple on trimmed item).
+    if (isTrimming && trimHandle) {
+      if (trimHandle === 'start') {
+        previewStartTrimDelta += trimDelta;
+        previewDurationDelta += -trimDelta;
+      } else {
+        previewDurationDelta += trimDelta;
+      }
+    }
+
+    // Rolling neighbor preview (this item is the inverse-adjusted neighbor).
+    if (rollingEditDelta !== 0) {
+      if (rollingEditHandle === 'end') {
+        // Neighbor start handle equivalent.
+        previewStartTrimDelta += rollingEditDelta;
+        previewDurationDelta += -rollingEditDelta;
+      } else if (rollingEditHandle === 'start') {
+        // Neighbor end handle equivalent.
+        previewDurationDelta += rollingEditDelta;
+      }
+    }
+
+    // Slide neighbor preview (left adjusts end, right adjusts start).
+    if (slideNeighborSide && slideNeighborDelta !== 0) {
+      if (slideNeighborSide === 'right') {
+        previewStartTrimDelta += slideNeighborDelta;
+        previewDurationDelta += -slideNeighborDelta;
+      } else {
+        previewDurationDelta += slideNeighborDelta;
+      }
+    }
 
     if ((item.type === 'video' || item.type === 'audio') && slipEditDelta !== 0) {
       const nextSourceStart = Math.max(0, (nextItem.sourceStart ?? 0) + slipEditDelta);
@@ -527,9 +561,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       };
     }
 
-    if ((item.type === 'video' || item.type === 'audio') && slideNeighborSide === 'right' && slideNeighborDelta !== 0) {
+    // Start-trim equivalents shift sourceStart in source-frame units.
+    if ((item.type === 'video' || item.type === 'audio') && previewStartTrimDelta !== 0) {
       const sourceFramesDelta = timelineToSourceFrames(
-        slideNeighborDelta,
+        previewStartTrimDelta,
         nextItem.speed ?? 1,
         fps,
         effectiveSourceFps,
@@ -540,16 +575,27 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       };
     }
 
-    if (slideNeighborSide && slideNeighborDelta !== 0) {
-      const durationDelta = slideNeighborSide === 'left' ? slideNeighborDelta : -slideNeighborDelta;
+    if (previewDurationDelta !== 0) {
       nextItem = {
         ...nextItem,
-        durationInFrames: Math.max(1, nextItem.durationInFrames + durationDelta),
+        durationInFrames: Math.max(1, nextItem.durationInFrames + previewDurationDelta),
       };
     }
 
     return nextItem;
-  }, [item, slipEditDelta, slideNeighborSide, slideNeighborDelta, fps, effectiveSourceFps]);
+  }, [
+    item,
+    isTrimming,
+    trimHandle,
+    trimDelta,
+    rollingEditDelta,
+    rollingEditHandle,
+    slipEditDelta,
+    slideNeighborSide,
+    slideNeighborDelta,
+    fps,
+    effectiveSourceFps,
+  ]);
 
   // Items that can extend infinitely
   const canExtendInfinitely = item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment';
