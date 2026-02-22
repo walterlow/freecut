@@ -242,6 +242,10 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
 
     if (seekingRef.current) {
       pendingTimeRef.current = targetTime;
+    } else if (video.currentTime === targetTime) {
+      // Seeking to the current time is a no-op — the browser won't fire 'seeked'.
+      // Draw immediately if data is available; otherwise handleLoadedData will draw.
+      drawFrame();
     } else {
       seekingRef.current = true;
       video.currentTime = targetTime;
