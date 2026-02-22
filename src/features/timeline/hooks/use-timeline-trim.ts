@@ -255,14 +255,18 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // Update rolling edit preview store
       if (neighborId) {
         const previewStore = useRollingEditPreviewStore.getState();
-        if (!previewStore.trimmedItemId) {
+        if (
+          previewStore.trimmedItemId !== item.id
+          || previewStore.neighborItemId !== neighborId
+          || previewStore.handle !== handle
+        ) {
           previewStore.setPreview({
             trimmedItemId: item.id,
             neighborItemId: neighborId,
             handle: handle!,
             neighborDelta: deltaFrames,
           });
-        } else {
+        } else if (previewStore.neighborDelta !== deltaFrames) {
           previewStore.setNeighborDelta(deltaFrames);
         }
       } else {
@@ -288,7 +292,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         }
 
         const rippleStore = useRippleEditPreviewStore.getState();
-        if (!rippleStore.trimmedItemId) {
+        if (
+          rippleStore.trimmedItemId !== item.id
+          || rippleStore.handle !== handle
+          || rippleStore.trackId !== currentItem.trackId
+        ) {
           // Compute downstream item IDs once — includes transition-connected
           // neighbors whose `from` may be before the trimmed clip's end (overlap model).
           const currentEnd = currentItem.from + currentItem.durationInFrames;
@@ -310,7 +318,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             delta: rippleShift,
             trimDelta: deltaFrames,
           });
-        } else {
+        } else if (
+          rippleStore.delta !== rippleShift
+          || rippleStore.trimDelta !== deltaFrames
+        ) {
           rippleStore.setDeltas(rippleShift, deltaFrames);
         }
       } else {

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import type { TimelineItem } from '@/types/timeline';
-import { resolveMediaUrl } from '../utils/media-resolver';
+import { usePlaybackStore } from '../stores/playback-store';
+import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import {
-  getItemAspectRatio,
   computeFittedMediaSize,
+  getItemAspectRatio,
   renderPanelMedia,
 } from './edit-panel-media-utils';
 
@@ -19,6 +21,7 @@ const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
 
 const TEXT_SPACE = 56;
 const GAP = 8;
+let previewVideoInstanceCounter = 0;
 
 export interface EditTwoUpPanelData {
   item: TimelineItem | null;
@@ -138,16 +141,29 @@ interface VideoFrameProps {
   sourceTime: number;
 }
 
-export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
+function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const poolRef = useRef(getGlobalVideoSourcePool());
+  const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const useProxy = usePlaybackStore((s) => s.useProxy);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const seekingRef = useRef(false);
   const pendingTimeRef = useRef<number | null>(null);
+  const latestTargetTimeRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     if (!item.mediaId) return;
+
+    if (useProxy) {
+      const proxyUrl = resolveProxyUrl(item.mediaId);
+      if (proxyUrl) {
+        setBlobUrl(proxyUrl);
+        return;
+      }
+    }
 
     resolveMediaUrl(item.mediaId).then((url) => {
       if (!cancelled && url) setBlobUrl(url);
@@ -156,38 +172,19 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     return () => {
       cancelled = true;
     };
-  }, [item.mediaId]);
-
-  useEffect(() => {
-    if (!blobUrl) return;
-
-    seekingRef.current = false;
-    pendingTimeRef.current = null;
-
-    const video = document.createElement('video');
-    video.preload = 'auto';
-    video.muted = true;
-    video.playsInline = true;
-    video.src = blobUrl;
-    videoRef.current = video;
-
-    return () => {
-      video.pause();
-      video.removeAttribute('src');
-      video.load();
-      videoRef.current = null;
-      seekingRef.current = false;
-      pendingTimeRef.current = null;
-    };
-  }, [blobUrl]);
+  }, [item.mediaId, useProxy]);
 
   const drawFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || video.readyState < 2) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    let ctx = contextRef.current;
+    if (!ctx) {
+      ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      contextRef.current = ctx;
+    }
 
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
       canvas.width = video.videoWidth || 280;
@@ -197,29 +194,58 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   }, []);
 
-  useEffect(() => {
+  const requestSeek = useCallback((targetTime: number) => {
     const video = videoRef.current;
-    if (!video || !blobUrl) return;
+    if (!video) return;
 
-    const targetTime = Math.max(0, sourceTime);
-    // 1ms tolerance for comparing fractional video timestamps.
     const tolerance = 0.001;
+    if (seekingRef.current) {
+      pendingTimeRef.current = targetTime;
+      return;
+    }
+
+    if (Math.abs(video.currentTime - targetTime) < tolerance) {
+      drawFrame();
+      return;
+    }
+
+    seekingRef.current = true;
+    video.currentTime = targetTime;
+  }, [drawFrame]);
+
+  useEffect(() => {
+    if (!blobUrl) return;
+
+    const pool = poolRef.current;
+    const clipId = poolClipIdRef.current;
+    seekingRef.current = false;
+    pendingTimeRef.current = null;
+
+    pool.preloadSource(blobUrl).catch(() => {});
+
+    const video = pool.acquireForClip(clipId, blobUrl);
+    if (!video) return;
+
+    video.preload = 'auto';
+    video.muted = true;
+    video.playsInline = true;
+    videoRef.current = video;
 
     const handleSeeked = () => {
       seekingRef.current = false;
       drawFrame();
+
       if (pendingTimeRef.current !== null) {
         const next = pendingTimeRef.current;
         pendingTimeRef.current = null;
-        seekingRef.current = true;
-        video.currentTime = next;
+        requestSeek(next);
       }
     };
 
-    // Fallback for seeking to time 0 on a new video: currentTime is already 0
-    // so the browser won't fire 'seeked'. Draw once data is available instead.
+    // Fallback for seeking to time 0 on a new video: currentTime is already 0,
+    // so browsers may not dispatch "seeked". Draw once data is available.
     const handleLoadedData = () => {
-      if (Math.abs(video.currentTime - targetTime) < tolerance) {
+      if (Math.abs(video.currentTime - latestTargetTimeRef.current) < 0.001) {
         drawFrame();
       }
     };
@@ -227,22 +253,25 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
     video.addEventListener('seeked', handleSeeked);
     video.addEventListener('loadeddata', handleLoadedData);
 
-    if (seekingRef.current) {
-      pendingTimeRef.current = targetTime;
-    } else if (Math.abs(video.currentTime - targetTime) < tolerance) {
-      // Near-equal to current time — the browser won't fire 'seeked'.
-      // Draw immediately if data is available; otherwise handleLoadedData will draw.
-      drawFrame();
-    } else {
-      seekingRef.current = true;
-      video.currentTime = targetTime;
-    }
-
     return () => {
       video.removeEventListener('seeked', handleSeeked);
       video.removeEventListener('loadeddata', handleLoadedData);
+      video.pause();
+      videoRef.current = null;
+      seekingRef.current = false;
+      pendingTimeRef.current = null;
+      pool.releaseClip(clipId);
     };
-  }, [sourceTime, blobUrl, drawFrame]);
+  }, [blobUrl, drawFrame, requestSeek]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !blobUrl) return;
+
+    const targetTime = Math.max(0, sourceTime);
+    latestTargetTimeRef.current = targetTime;
+    requestSeek(targetTime);
+  }, [sourceTime, blobUrl, requestSeek]);
 
   return (
     <canvas
@@ -253,11 +282,19 @@ export function VideoFrame({ item, sourceTime }: VideoFrameProps) {
   );
 }
 
+const areVideoFramePropsEqual = (prev: VideoFrameProps, next: VideoFrameProps) => (
+  prev.sourceTime === next.sourceTime
+  && prev.item.id === next.item.id
+  && prev.item.mediaId === next.item.mediaId
+);
+
+export const VideoFrame = memo(VideoFrameImpl, areVideoFramePropsEqual);
+
 interface ImageFrameProps {
   item: TimelineItem;
 }
 
-export function ImageFrame({ item }: ImageFrameProps) {
+function ImageFrameImpl({ item }: ImageFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
@@ -300,6 +337,13 @@ export function ImageFrame({ item }: ImageFrameProps) {
     />
   );
 }
+
+const areImageFramePropsEqual = (prev: ImageFrameProps, next: ImageFrameProps) => (
+  prev.item.id === next.item.id
+  && prev.item.mediaId === next.item.mediaId
+);
+
+export const ImageFrame = memo(ImageFrameImpl, areImageFramePropsEqual);
 
 export function TypePlaceholder({ type, text }: { type: string; text: string }) {
   const color = TYPE_PLACEHOLDER_COLORS[type] ?? '#6b7280';

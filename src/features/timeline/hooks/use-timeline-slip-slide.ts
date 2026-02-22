@@ -148,13 +148,16 @@ export function useTimelineSlipSlide(
 
         // Update preview store
         const previewStore = useSlipEditPreviewStore.getState();
-        if (!previewStore.itemId) {
+        if (
+          previewStore.itemId !== item.id
+          || previewStore.trackId !== currentItem.trackId
+        ) {
           previewStore.setPreview({
             itemId: item.id,
             trackId: currentItem.trackId,
             slipDelta: clamped,
           });
-        } else {
+        } else if (previewStore.slipDelta !== clamped) {
           previewStore.setSlipDelta(clamped);
         }
 
@@ -207,7 +210,12 @@ export function useTimelineSlipSlide(
 
         // Update preview store
         const previewStore = useSlideEditPreviewStore.getState();
-        if (!previewStore.itemId) {
+        if (
+          previewStore.itemId !== item.id
+          || previewStore.trackId !== storeItem.trackId
+          || previewStore.leftNeighborId !== leftNeighborId
+          || previewStore.rightNeighborId !== rightNeighborId
+        ) {
           previewStore.setPreview({
             itemId: item.id,
             trackId: storeItem.trackId,
@@ -215,7 +223,7 @@ export function useTimelineSlipSlide(
             rightNeighborId,
             slideDelta: clamped,
           });
-        } else {
+        } else if (previewStore.slideDelta !== clamped) {
           previewStore.setSlideDelta(clamped);
         }
 
