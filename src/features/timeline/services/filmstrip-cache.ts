@@ -225,6 +225,11 @@ class FilmstripCacheService {
     this.allWorkers.delete(worker);
   }
 
+  /**
+   * `performance.memory` is Chrome-only.
+   * On browsers without it (e.g. Firefox/Safari), `isSoftMemoryPressure`/`isHardMemoryPressure`
+   * use cache-bytes-only heuristics, so external tab/browser memory pressure is not observable.
+   */
   private getUsedJsHeapBytes(): number | null {
     if (typeof performance === 'undefined') return null;
     const withMemory = performance as Performance & {
@@ -559,6 +564,14 @@ class FilmstripCacheService {
       return Array.from(target).sort((a, b) => a - b);
     }
 
+    const budget = this.getTargetFrameBudget(totalFrames);
+    if (budget >= totalFrames) {
+      for (let i = 0; i < totalFrames; i++) {
+        target.add(i);
+      }
+      return Array.from(target).sort((a, b) => a - b);
+    }
+
     // Adaptive background sampling:
     // - Keep priority range dense.
     // - Sample the non-priority tail with a duration-based stride.
@@ -571,7 +584,6 @@ class FilmstripCacheService {
       }
     }
 
-    const budget = this.getTargetFrameBudget(totalFrames);
     const remainingBudget = Math.max(0, budget - target.size);
     if (remainingBudget === 0 || backgroundCandidates.length === 0) {
       return Array.from(target).sort((a, b) => a - b);
@@ -950,6 +962,11 @@ class FilmstripCacheService {
 
     this.enforceMemoryBudget();
     if (this.isHardMemoryPressure() && !this.hasSubscribers(mediaId)) {
+      logger.debug('Deferring filmstrip extraction under hard memory pressure (no subscribers)', {
+        mediaId,
+        cacheBytes: this.cacheBytes,
+        usedHeapBytes: this.getUsedJsHeapBytes(),
+      });
       this.finalizeExtractionMetrics(pending.metrics, 'aborted', pending.extractedFrames.size);
       this.cleanupExtraction(mediaId);
       return;

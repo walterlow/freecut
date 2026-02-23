@@ -5,6 +5,12 @@ import type { TimelineItem } from '@/types/timeline';
  * Pure functions for overlap detection and push-forward calculations
  */
 
+export interface CollisionRect {
+  trackId: string;
+  from: number;
+  durationInFrames: number;
+}
+
 /**
  * Check if two time ranges overlap
  *
@@ -35,7 +41,7 @@ function rangesOverlap(
 function hasAvailableSpace(
   position: number,
   durationInFrames: number,
-  trackItems: TimelineItem[]
+  trackItems: ReadonlyArray<CollisionRect>
 ): boolean {
   const testEnd = position + durationInFrames;
   return !trackItems.some(item => {
@@ -55,7 +61,7 @@ function hasAvailableSpace(
 function findSpaceBackward(
   proposedFrom: number,
   durationInFrames: number,
-  trackItems: TimelineItem[]
+  trackItems: ReadonlyArray<CollisionRect>
 ): number | null {
   // Find the item we're colliding with
   const proposedEnd = proposedFrom + durationInFrames;
@@ -96,7 +102,7 @@ function findSpaceBackward(
 function findSpaceForward(
   proposedFrom: number,
   durationInFrames: number,
-  trackItems: TimelineItem[]
+  trackItems: ReadonlyArray<CollisionRect>
 ): number | null {
   let testPosition = proposedFrom;
   const MAX_ITERATIONS = 1000;
@@ -138,7 +144,7 @@ export function findNearestAvailableSpace(
   proposedFrom: number,
   durationInFrames: number,
   trackId: string,
-  allItems: TimelineItem[]
+  allItems: ReadonlyArray<CollisionRect | TimelineItem>
 ): number | null {
   // Get all items on this track, sorted by start frame
   const trackItems = allItems

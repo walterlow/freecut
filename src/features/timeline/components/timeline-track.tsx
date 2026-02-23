@@ -14,11 +14,12 @@ import { useMediaLibraryStore } from '@/features/media-library/stores/media-libr
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { findNearestAvailableSpace } from '../utils/collision-utils';
+import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
 import { getMediaDragData, type CompositionDragData } from '@/features/media-library/utils/drag-data-cache';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { computeInitialTransform } from '../utils/transform-init';
+import { toast } from 'sonner';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -342,7 +343,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
             });
           }
           let currentPosition = Math.max(0, dropFrame);
-          const tempItems: Array<{ from: number; durationInFrames: number; trackId: string }> = [];
+          const tempItems: CollisionRect[] = [];
 
           for (const item of validItems) {
             const durationInFrames = Math.round(item.duration * fps);
@@ -350,7 +351,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
             // Find collision-free position - read items from store directly to avoid subscription
             const storeItems = useTimelineStore.getState().items;
-            const itemsToCheck = [...storeItems, ...tempItems as unknown as TimelineItemType[]];
+            const itemsToCheck: CollisionRect[] = [...storeItems, ...tempItems];
             const finalPosition = findNearestAvailableSpace(currentPosition, itemDuration, track.id, itemsToCheck);
 
             if (finalPosition !== null) {
@@ -485,7 +486,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         let currentPosition = Math.max(0, dropFrame);
         const mediaById = new Map(getMedia.map((media) => [media.id, media]));
         const storeItems = useTimelineStore.getState().items;
-        const reservedRanges: Array<{ from: number; durationInFrames: number; trackId: string }> = [];
+        const reservedRanges: CollisionRect[] = [];
         const plannedItems: PlannedDroppedMediaItem[] = [];
 
         for (const dragItem of validItems) {
@@ -498,7 +499,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
           const durationInFrames = Math.round(duration * fps);
           const itemDuration = durationInFrames > 0 ? durationInFrames : (mediaType === 'image' ? fps * 3 : fps);
-          const itemsToCheck = [...storeItems, ...reservedRanges as unknown as TimelineItemType[]];
+          const itemsToCheck: CollisionRect[] = [...storeItems, ...reservedRanges];
           const finalPosition = findNearestAvailableSpace(
             currentPosition,
             itemDuration,
@@ -597,6 +598,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         const timelineItemsToAdd = resolvedTimelineItems.filter(
           (timelineItem): timelineItem is TimelineItemType => timelineItem !== null
         );
+
+        if (timelineItemsToAdd.length === 0 && plannedItems.length > 0) {
+          logger.error('Failed to resolve URLs for all dropped media items', {
+            plannedCount: plannedItems.length,
+          });
+          toast.error('Unable to add dropped media items');
+          return;
+        }
 
         if (timelineItemsToAdd.length > 0) {
           addItems(timelineItemsToAdd);

@@ -21,6 +21,7 @@ const FRAME_RATE = 1; // Must match worker - 1fps for filmstrip thumbnails
 const PRIMARY_FRAME_EXT = 'jpg';
 const LEGACY_FRAME_EXT = 'webp';
 const FRAME_EXTENSIONS = new Set([PRIMARY_FRAME_EXT, LEGACY_FRAME_EXT]);
+const VALIDATION_TTL_MS = 10_000;
 
 function parseFrameFileName(name: string): number | null {
   const dotIndex = name.lastIndexOf('.');
@@ -51,6 +52,11 @@ interface LoadedFilmstrip {
   existingIndices: number[];
 }
 
+interface MediaDirCacheEntry {
+  handle: FileSystemDirectoryHandle;
+  lastValidated: number;
+}
+
 /**
  * OPFS Filmstrip Storage Service
  */
@@ -58,7 +64,7 @@ class FilmstripOPFSStorage {
   private dirHandle: FileSystemDirectoryHandle | null = null;
   private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
   private objectUrls = new Map<string, Map<number, string>>(); // mediaId -> frameIndex -> url
-  private mediaDirCache = new Map<string, FileSystemDirectoryHandle>();
+  private mediaDirCache = new Map<string, MediaDirCacheEntry>();
 
   private scheduleRevoke(urls: string[]): void {
     if (urls.length === 0) return;
@@ -157,22 +163,36 @@ class FilmstripOPFSStorage {
     const dir = await this.ensureDirectory();
 
     if (cached) {
+      if (Date.now() - cached.lastValidated <= VALIDATION_TTL_MS) {
+        return cached.handle;
+      }
+
       try {
         // Probe the cached handle. If the underlying directory was removed,
         // OPFS access will throw and we'll invalidate + recover below.
-        const iterator = cached.values();
+        const iterator = cached.handle.values();
         await iterator.next();
-        return cached;
+        this.mediaDirCache.set(mediaId, {
+          handle: cached.handle,
+          lastValidated: Date.now(),
+        });
+        return cached.handle;
       } catch {
         this.mediaDirCache.delete(mediaId);
         try {
           const reopened = await dir.getDirectoryHandle(mediaId);
-          this.mediaDirCache.set(mediaId, reopened);
+          this.mediaDirCache.set(mediaId, {
+            handle: reopened,
+            lastValidated: Date.now(),
+          });
           return reopened;
         } catch {
           try {
             const recreated = await dir.getDirectoryHandle(mediaId, { create: true });
-            this.mediaDirCache.set(mediaId, recreated);
+            this.mediaDirCache.set(mediaId, {
+              handle: recreated,
+              lastValidated: Date.now(),
+            });
             return recreated;
           } catch {
             return null;
@@ -183,7 +203,10 @@ class FilmstripOPFSStorage {
 
     try {
       const mediaDir = await dir.getDirectoryHandle(mediaId);
-      this.mediaDirCache.set(mediaId, mediaDir);
+      this.mediaDirCache.set(mediaId, {
+        handle: mediaDir,
+        lastValidated: Date.now(),
+      });
       return mediaDir;
     } catch {
       return null;
@@ -196,7 +219,10 @@ class FilmstripOPFSStorage {
   private async getOrCreateMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
     const dir = await this.ensureDirectory();
     const mediaDir = await dir.getDirectoryHandle(mediaId, { create: true });
-    this.mediaDirCache.set(mediaId, mediaDir);
+    this.mediaDirCache.set(mediaId, {
+      handle: mediaDir,
+      lastValidated: Date.now(),
+    });
     return mediaDir;
   }
 
