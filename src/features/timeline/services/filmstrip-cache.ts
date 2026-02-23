@@ -243,6 +243,9 @@ class FilmstripCacheService {
   }
 
   private isSoftMemoryPressure(): boolean {
+    // `usedJSHeapSize` is process-wide JS heap, not filmstrip-only memory. Unrelated
+    // allocations can trigger this branch, which intentionally throttles extraction
+    // concurrency in `getMaxConcurrentExtractions()` even when `cacheBytes` is low.
     const usedHeap = this.getUsedJsHeapBytes();
     if (usedHeap !== null && usedHeap >= MEMORY_SOFT_LIMIT_BYTES) {
       return true;
@@ -251,6 +254,8 @@ class FilmstripCacheService {
   }
 
   private isHardMemoryPressure(): boolean {
+    // Same caveat as soft pressure: a large non-filmstrip heap spike can trip this
+    // check and defer work in `startPendingExtraction()` until pressure clears.
     const usedHeap = this.getUsedJsHeapBytes();
     if (usedHeap !== null && usedHeap >= MEMORY_TARGET_BYTES) {
       return true;
@@ -879,7 +884,6 @@ class FilmstripCacheService {
       ),
     };
     this.pendingExtractions.set(mediaId, pending);
-    this.metricsTotals.started++;
 
     if (framesToExtract === 0) {
       const targetFrames = [...existingFrames].sort((a, b) => a.index - b.index);
@@ -894,6 +898,8 @@ class FilmstripCacheService {
       this.cleanupExtraction(mediaId);
       return;
     }
+
+    this.metricsTotals.started++;
 
     // Persist extraction session metadata once. Workers should focus on frame
     // writes; centralizing meta writes avoids cross-worker file contention.
@@ -966,6 +972,22 @@ class FilmstripCacheService {
         mediaId,
         cacheBytes: this.cacheBytes,
         usedHeapBytes: this.getUsedJsHeapBytes(),
+      });
+      const frames = Array.from(pending.extractedFrames.values())
+        .sort((a, b) => a.index - b.index);
+      const targetSet = new Set(pending.targetIndices);
+      const extractedTargetCount = frames.reduce(
+        (count, frame) => (targetSet.has(frame.index) ? count + 1 : count),
+        0
+      );
+      const progress = pending.progressFrames > 0
+        ? Math.min(99, Math.round((extractedTargetCount / pending.progressFrames) * 100))
+        : 0;
+      this.notifyUpdate(mediaId, {
+        frames,
+        isComplete: false,
+        isExtracting: false,
+        progress,
       });
       this.finalizeExtractionMetrics(pending.metrics, 'aborted', pending.extractedFrames.size);
       this.cleanupExtraction(mediaId);

@@ -187,16 +187,7 @@ class FilmstripOPFSStorage {
           });
           return reopened;
         } catch {
-          try {
-            const recreated = await dir.getDirectoryHandle(mediaId, { create: true });
-            this.mediaDirCache.set(mediaId, {
-              handle: recreated,
-              lastValidated: Date.now(),
-            });
-            return recreated;
-          } catch {
-            return null;
-          }
+          return null;
         }
       }
     }

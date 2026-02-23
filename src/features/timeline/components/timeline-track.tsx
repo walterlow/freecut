@@ -16,6 +16,7 @@ import { mediaLibraryService } from '@/features/media-library/services/media-lib
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
 import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
 import { getMediaDragData, type CompositionDragData } from '@/features/media-library/utils/drag-data-cache';
+import { mapWithConcurrency } from '@/lib/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { computeInitialTransform } from '../utils/transform-init';
@@ -118,37 +119,6 @@ function buildTimelineBaseItem(params: {
     trimStart: 0,
     trimEnd: 0,
   };
-}
-
-async function mapWithConcurrency<T, U>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T, index: number) => Promise<U>
-): Promise<Array<U | null>> {
-  const results: Array<U | null> = new Array(items.length).fill(null);
-  const workerCount = Math.max(1, Math.min(concurrency, items.length));
-  let nextIndex = 0;
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const currentIndex = nextIndex++;
-        if (currentIndex >= items.length) return;
-        try {
-          const mappedValue = await mapper(items[currentIndex]!, currentIndex);
-          results[currentIndex] = mappedValue;
-        } catch (error) {
-          logger.warn('mapWithConcurrency mapper failed', {
-            index: currentIndex,
-            error,
-          });
-          results[currentIndex] = null;
-        }
-      }
-    })
-  );
-
-  return results;
 }
 
 /**
@@ -598,8 +568,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         const timelineItemsToAdd = resolvedTimelineItems.filter(
           (timelineItem): timelineItem is TimelineItemType => timelineItem !== null
         );
+        const resolvedCount = timelineItemsToAdd.length;
 
-        if (timelineItemsToAdd.length === 0 && plannedItems.length > 0) {
+        if (resolvedCount === 0 && plannedItems.length > 0) {
           logger.error('Failed to resolve URLs for all dropped media items', {
             plannedCount: plannedItems.length,
           });
@@ -607,7 +578,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           return;
         }
 
-        if (timelineItemsToAdd.length > 0) {
+        if (resolvedCount < plannedItems.length) {
+          const failedCount = plannedItems.length - resolvedCount;
+          logger.warn('Some dropped media items could not be resolved', {
+            plannedCount: plannedItems.length,
+            resolvedCount,
+          });
+          toast.warning(`Some dropped media items could not be added: ${failedCount} failed`);
+        }
+
+        if (resolvedCount > 0) {
           addItems(timelineItemsToAdd);
         }
         return;
@@ -670,7 +650,10 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       }
 
       // Get thumbnail URL if available
-      const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(mediaId);
+      const needsThumbnail = mediaType === 'video' || mediaType === 'image';
+      const thumbnailUrl = needsThumbnail
+        ? await mediaLibraryService.getThumbnailBlobUrl(mediaId)
+        : null;
 
       // Create timeline item at the collision-free position.
       // source* fields are stored in source-native frame units.

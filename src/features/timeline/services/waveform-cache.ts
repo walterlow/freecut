@@ -816,6 +816,11 @@ class WaveformCacheService {
       logger.warn(`Waveform worker failed for ${mediaId}, falling back to AudioContext`, err);
       // Worker may fail in some environments - fallback to AudioContext
       const controller = new AbortController();
+      // Fallback stores an abort trigger (not a direct Promise rejector): callers may invoke
+      // `workerRejectors.get(requestId)?.(new AbortError())`, but that argument is ignored and
+      // we abort via signal instead. `generateWaveformFallback` observes `controller.signal`
+      // (fetch/decode) and throws AbortError from there. This differs from the worker path,
+      // where the stored rejector directly rejects the pending Promise.
       const fallbackRejector = () => controller.abort();
       this.fallbackAbortControllers.set(requestId, controller);
       this.workerRejectors.set(requestId, fallbackRejector);

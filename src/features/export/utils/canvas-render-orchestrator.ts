@@ -417,20 +417,24 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
 
   // Use the SAME renderer as export – single source of truth
   const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx);
-  await renderer.preload();
-  await renderer.renderFrame(frame);
+  try {
+    await renderer.preload();
+    await renderer.renderFrame(frame);
 
-  // Scale down to thumbnail size
-  const thumbnailCanvas = new OffscreenCanvas(width, height);
-  const thumbnailCtx = thumbnailCanvas.getContext('2d');
-  if (!thumbnailCtx) {
-    throw new Error('Failed to get thumbnail 2d context');
+    // Scale down to thumbnail size
+    const thumbnailCanvas = new OffscreenCanvas(width, height);
+    const thumbnailCtx = thumbnailCanvas.getContext('2d');
+    if (!thumbnailCtx) {
+      throw new Error('Failed to get thumbnail 2d context');
+    }
+
+    thumbnailCtx.drawImage(renderCanvas, 0, 0, width, height);
+
+    const blob = await thumbnailCanvas.convertToBlob({ type: format, quality });
+    return blob;
+  } finally {
+    renderer.dispose();
   }
-
-  thumbnailCtx.drawImage(renderCanvas, 0, 0, width, height);
-
-  const blob = await thumbnailCanvas.convertToBlob({ type: format, quality });
-  return blob;
 }
 
 // ---------------------------------------------------------------------------
