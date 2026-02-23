@@ -4,6 +4,7 @@ import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, 
 import { mediaLibraryService } from '../services/media-library-service';
 import { createLogger } from '@/lib/logger';
 import { proxyService } from '../services/proxy-service';
+import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
 import { createDeleteActions } from './media-delete-actions';
 import { createRelinkingActions } from './media-relinking-actions';
@@ -53,12 +54,19 @@ export const useMediaLibraryStore = create<
 
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
+        const previousMediaIds = get().mediaItems.map((item) => item.id);
+        for (const mediaId of previousMediaIds) {
+          proxyService.clearProxyKey(mediaId);
+        }
+
         // Clear items and set loading state immediately to prevent flash
         set({
           currentProjectId: projectId,
           mediaItems: [],
           selectedMediaIds: [],
           isLoading: !!projectId, // Set loading if switching to a project
+          proxyStatus: new Map(),
+          proxyProgress: new Map(),
         });
         // Note: loadMediaItems is triggered by the component's useEffect
         // Don't call it here to avoid double loading
@@ -92,6 +100,10 @@ export const useMediaLibraryStore = create<
             );
 
             if (videoItems.length > 0) {
+              for (const item of videoItems) {
+                proxyService.setProxyKey(item.id, getSharedProxyKey(item));
+              }
+
               const videoIds = videoItems.map((m) => m.id);
               const staleProxyIds = await proxyService.loadExistingProxies(videoIds);
 
@@ -120,7 +132,13 @@ export const useMediaLibraryStore = create<
                   }
 
                   try {
-                    proxyService.generateProxy(item.id, blobUrl, item.width, item.height);
+                    proxyService.generateProxy(
+                      item.id,
+                      blobUrl,
+                      item.width,
+                      item.height,
+                      getSharedProxyKey(item)
+                    );
                   } catch (error) {
                     logger.warn(`[MediaLibraryStore] Failed to enqueue stale proxy regeneration for ${item.id}:`, error);
                   }

@@ -28,6 +28,11 @@ export interface MediaMetadata {
    * Only computed when needed for dedup checks
    */
   contentHash?: string;
+  /**
+   * Last modified timestamp from source file (File.lastModified).
+   * Used as part of source identity for shared proxy reuse.
+   */
+  fileLastModified?: number;
   fileName: string;
   fileSize: number;
   mimeType: string;

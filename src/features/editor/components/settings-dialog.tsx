@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import type { MediaMetadata } from '@/types/storage';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { RotateCcw, Trash2, Loader2, Check, ImagePlus, Film } from 'lucide-react';
 import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('SettingsDialog');
@@ -78,20 +80,22 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
   log.info(`Cleared caches for ${mediaIds.length} media items`);
 }
 
-/** Delete all proxy videos for the given media IDs and clear their store status. */
-async function clearProjectProxies(mediaIds: string[]): Promise<void> {
-  if (mediaIds.length === 0) return;
+/** Delete all proxy videos for the given media items and clear their store status. */
+async function clearProjectProxies(
+  mediaItems: MediaMetadata[]
+): Promise<void> {
+  if (mediaItems.length === 0) return;
 
   const { proxyService } = await import('@/features/media-library/services/proxy-service');
 
-  for (const id of mediaIds) {
+  for (const media of mediaItems) {
     try {
-      await proxyService.deleteProxy(id);
-      useMediaLibraryStore.getState().clearProxyStatus(id);
+      await proxyService.deleteProxy(media.id, getSharedProxyKey(media));
+      useMediaLibraryStore.getState().clearProxyStatus(media.id);
     } catch { /* already absent */ }
   }
 
-  log.info(`Cleared proxies for ${mediaIds.length} media items`);
+  log.info(`Cleared proxies for ${mediaItems.length} media items`);
 }
 
 /**
@@ -208,8 +212,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const handleClearProxies = useCallback(async () => {
     setProxyState('clearing');
     try {
-      const ids = mediaItems.map((m) => m.id);
-      await clearProjectProxies(ids);
+      await clearProjectProxies(mediaItems);
       setProxyState('done');
       setTimeout(() => setProxyState('idle'), 2000);
     } catch (err) {

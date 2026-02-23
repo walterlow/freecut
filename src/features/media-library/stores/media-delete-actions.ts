@@ -1,5 +1,6 @@
 import type { MediaLibraryState, MediaLibraryActions } from '../types';
 import { mediaLibraryService } from '../services/media-library-service';
+import { proxyService } from '../services/proxy-service';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 
 type Set = (
@@ -39,6 +40,7 @@ export function createDeleteActions(
 
         // Release cached blob URL for deleted media
         blobUrlManager.release(id);
+        proxyService.clearProxyKey(id);
       } catch (error) {
         // Rollback on error
         set({
@@ -78,6 +80,7 @@ export function createDeleteActions(
         // Release cached blob URLs for deleted media
         for (const id of ids) {
           blobUrlManager.release(id);
+          proxyService.clearProxyKey(id);
         }
       } catch (error) {
         // Rollback on error

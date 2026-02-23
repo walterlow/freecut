@@ -1,7 +1,9 @@
 import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
+import { proxyService } from '../services/proxy-service';
 import { getMimeType } from '../utils/validation';
+import { getSharedProxyKey } from '../utils/proxy-key';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('MediaImportActions');
@@ -74,6 +76,7 @@ export function createImportActions(
             fileHandle: handle,
             fileName: file.name,
             fileSize: file.size,
+            fileLastModified: file.lastModified,
             mimeType: getMimeType(file),
             duration: 0,
             width: 0,
@@ -131,6 +134,10 @@ export function createImportActions(
                 ),
                 importingIds: state.importingIds.filter((id) => id !== tempId),
               }));
+
+              if (metadata.mimeType.startsWith('video/')) {
+                proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+              }
               results.push(metadata);
 
               // Track unsupported codec files (check happens in worker now)
@@ -217,6 +224,7 @@ export function createImportActions(
           fileHandle: handle,
           fileName: file.name,
           fileSize: file.size,
+          fileLastModified: file.lastModified,
           mimeType: getMimeType(file),
           duration: 0,
           width: 0,
@@ -287,6 +295,10 @@ export function createImportActions(
               ),
               importingIds: state.importingIds.filter((id) => id !== tempId),
             }));
+
+            if (metadata.mimeType.startsWith('video/')) {
+              proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+            }
             results.push(metadata);
 
             // Track unsupported codec files (check happens in worker now)

@@ -26,7 +26,7 @@ interface MediabunnySample {
 interface MediabunnyInput {
   getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>;
   computeDuration(): Promise<number>;
-  close(): void;
+  dispose(): void;
 }
 
 interface MediabunnyVideoTrack {
@@ -106,7 +106,9 @@ export class VideoFrameExtractor {
       this.duration = await this.input!.computeDuration();
 
       // Create video sample sink for frame extraction
-      this.sink = new mb.VideoSampleSink(this.videoTrack as any);
+      this.sink = new mb.VideoSampleSink(
+        this.videoTrack as unknown as ConstructorParameters<typeof mb.VideoSampleSink>[0]
+      );
 
       this.ready = true;
       log.debug('Initialized', {
@@ -408,9 +410,10 @@ export class VideoFrameExtractor {
     this.closeStreamState();
 
     try {
-      this.input?.close();
+      // mediabunny Input lifecycle API is dispose(); close() is not guaranteed.
+      this.input?.dispose();
     } catch {
-      // Ignore close errors
+      // Ignore dispose errors
     }
     this.sink = null;
     this.input = null;

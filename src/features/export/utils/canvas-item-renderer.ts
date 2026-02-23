@@ -96,6 +96,7 @@ export interface ItemRenderContext {
   canvasSettings: CanvasSettings;
   canvasPool: CanvasPool;
   textMeasureCache: TextMeasurementCache;
+  renderMode: 'export' | 'preview';
 
   // Video state
   videoExtractors: Map<string, VideoFrameExtractor>;
@@ -216,6 +217,7 @@ async function renderVideoItem(
   sourceFrameOffset: number = 0,
 ): Promise<void> {
   const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
+  const isPreviewMode = rctx.renderMode === 'preview';
 
   // Calculate source time
   const localFrame = frame - item.from;
@@ -304,29 +306,33 @@ async function renderVideoItem(
 
   const clampedTime = Math.max(0, Math.min(sourceTime, video.duration - 0.01));
 
-  const SEEK_TOLERANCE = 0.034;
-  const SEEK_TIMEOUT = 150;
-  const READY_TIMEOUT = 300;
+  const SEEK_TOLERANCE = isPreviewMode ? 0.05 : 0.034;
+  const SEEK_TIMEOUT = isPreviewMode ? 24 : 150;
+  const READY_TIMEOUT = isPreviewMode ? 40 : 300;
 
   const needsSeek = Math.abs(video.currentTime - clampedTime) > SEEK_TOLERANCE;
   if (needsSeek) {
     video.currentTime = clampedTime;
 
-    await new Promise<void>((resolve) => {
-      const onSeeked = () => {
-        video.removeEventListener('seeked', onSeeked);
-        resolve();
-      };
-      video.addEventListener('seeked', onSeeked);
-      setTimeout(() => {
-        video.removeEventListener('seeked', onSeeked);
-        resolve();
-      }, SEEK_TIMEOUT);
-    });
+    if (!isPreviewMode) {
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        };
+        video.addEventListener('seeked', onSeeked);
+        setTimeout(() => {
+          video.removeEventListener('seeked', onSeeked);
+          resolve();
+        }, SEEK_TIMEOUT);
+      });
+    }
   }
 
   // Wait for video to have enough data to draw
   if (video.readyState < 2) {
+    if (isPreviewMode) return;
+
     await new Promise<void>((resolve) => {
       const checkReady = () => {
         if (video.readyState >= 2) {

@@ -9,7 +9,7 @@
  * - Clean up proxies when media is deleted
  *
  * Storage structure (OPFS):
- *   proxies/{mediaId}/
+ *   proxies/{proxyKey}/
  *     proxy.mp4
  *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
@@ -36,14 +36,21 @@ interface ProxyMetadata {
   createdAt: number;
 }
 
-type ProxyStatusListener = (mediaId: string, status: 'generating' | 'ready' | 'error', progress?: number) => void;
+type ProxyStatusListener = (
+  mediaId: string,
+  status: 'generating' | 'ready' | 'error',
+  progress?: number
+) => void;
 
 class ProxyService {
   private worker: Worker | null = null;
-  private blobUrlCache = new Map<string, string>();
-  private sourceBlobUrlByMediaId = new Map<string, string>();
+  private proxyBlobUrlByKey = new Map<string, string>();
+  private sourceBlobUrlByProxyKey = new Map<string, string>();
+  private proxyKeyByMediaId = new Map<string, string>();
+  private mediaIdsByProxyKey = new Map<string, Set<string>>();
+  private progressByProxyKey = new Map<string, number>();
   private statusListener: ProxyStatusListener | null = null;
-  private generatingSet = new Set<string>();
+  private generatingProxyKeys = new Set<string>();
   private isRefreshing = false;
 
   /**
@@ -51,6 +58,58 @@ class ProxyService {
    */
   onStatusChange(listener: ProxyStatusListener): void {
     this.statusListener = listener;
+  }
+
+  /**
+   * Register media -> proxy identity mapping so multiple media items can
+   * share one physical proxy file.
+   */
+  setProxyKey(mediaId: string, proxyKey: string): void {
+    const existingKey = this.proxyKeyByMediaId.get(mediaId);
+    if (existingKey === proxyKey) {
+      return;
+    }
+
+    if (existingKey) {
+      const existingSet = this.mediaIdsByProxyKey.get(existingKey);
+      existingSet?.delete(mediaId);
+      if (existingSet && existingSet.size === 0) {
+        this.mediaIdsByProxyKey.delete(existingKey);
+      }
+    }
+
+    this.proxyKeyByMediaId.set(mediaId, proxyKey);
+
+    let mediaIds = this.mediaIdsByProxyKey.get(proxyKey);
+    if (!mediaIds) {
+      mediaIds = new Set<string>();
+      this.mediaIdsByProxyKey.set(proxyKey, mediaIds);
+    }
+    mediaIds.add(mediaId);
+
+    // Immediately synchronize status for newly mapped aliases.
+    if (this.proxyBlobUrlByKey.has(proxyKey)) {
+      this.statusListener?.(mediaId, 'ready');
+    } else if (this.generatingProxyKeys.has(proxyKey)) {
+      this.statusListener?.(mediaId, 'generating', this.progressByProxyKey.get(proxyKey) ?? 0);
+    }
+  }
+
+  /**
+   * Remove media -> proxy identity mapping.
+   */
+  clearProxyKey(mediaId: string): void {
+    const proxyKey = this.proxyKeyByMediaId.get(mediaId);
+    if (!proxyKey) {
+      return;
+    }
+
+    this.proxyKeyByMediaId.delete(mediaId);
+    const mediaIds = this.mediaIdsByProxyKey.get(proxyKey);
+    mediaIds?.delete(mediaId);
+    if (mediaIds && mediaIds.size === 0) {
+      this.mediaIdsByProxyKey.delete(proxyKey);
+    }
   }
 
   /**
@@ -64,22 +123,43 @@ class ProxyService {
   /**
    * Start proxy generation for a media item
    */
-  generateProxy(mediaId: string, blobUrl: string, sourceWidth: number, sourceHeight: number): void {
-    if (this.generatingSet.has(mediaId)) return;
+  generateProxy(
+    mediaId: string,
+    blobUrl: string,
+    sourceWidth: number,
+    sourceHeight: number,
+    proxyKey?: string
+  ): void {
+    const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
 
-    const previousSourceBlobUrl = this.sourceBlobUrlByMediaId.get(mediaId);
+    if (this.proxyBlobUrlByKey.has(resolvedProxyKey)) {
+      this.emitStatusForProxyKey(resolvedProxyKey, 'ready');
+      return;
+    }
+
+    if (this.generatingProxyKeys.has(resolvedProxyKey)) {
+      this.emitStatusForProxyKey(
+        resolvedProxyKey,
+        'generating',
+        this.progressByProxyKey.get(resolvedProxyKey) ?? 0
+      );
+      return;
+    }
+
+    const previousSourceBlobUrl = this.sourceBlobUrlByProxyKey.get(resolvedProxyKey);
     if (previousSourceBlobUrl && previousSourceBlobUrl !== blobUrl) {
       URL.revokeObjectURL(previousSourceBlobUrl);
     }
-    this.sourceBlobUrlByMediaId.set(mediaId, blobUrl);
+    this.sourceBlobUrlByProxyKey.set(resolvedProxyKey, blobUrl);
 
-    this.generatingSet.add(mediaId);
-    this.statusListener?.(mediaId, 'generating', 0);
+    this.generatingProxyKeys.add(resolvedProxyKey);
+    this.progressByProxyKey.set(resolvedProxyKey, 0);
+    this.emitStatusForProxyKey(resolvedProxyKey, 'generating', 0);
 
     const worker = this.getWorker();
     worker.postMessage({
       type: 'generate',
-      mediaId,
+      mediaId: resolvedProxyKey,
       blobUrl,
       sourceWidth,
       sourceHeight,
@@ -89,52 +169,58 @@ class ProxyService {
   /**
    * Cancel proxy generation for a media item
    */
-  cancelProxy(mediaId: string): void {
-    if (!this.generatingSet.has(mediaId)) return;
+  cancelProxy(mediaId: string, proxyKey?: string): void {
+    const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
+    if (!this.generatingProxyKeys.has(resolvedProxyKey)) return;
 
-    this.generatingSet.delete(mediaId);
+    this.generatingProxyKeys.delete(resolvedProxyKey);
+    this.progressByProxyKey.delete(resolvedProxyKey);
     const worker = this.getWorker();
     worker.postMessage({
       type: 'cancel',
-      mediaId,
+      mediaId: resolvedProxyKey,
     } as ProxyWorkerRequest);
   }
 
   /**
    * Get proxy blob URL if available
    */
-  getProxyBlobUrl(mediaId: string): string | null {
-    return this.blobUrlCache.get(mediaId) ?? null;
+  getProxyBlobUrl(mediaId: string, proxyKey?: string): string | null {
+    const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
+    return this.proxyBlobUrlByKey.get(resolvedProxyKey) ?? null;
   }
 
   /**
    * Check if proxy exists and is ready
    */
-  hasProxy(mediaId: string): boolean {
-    return this.blobUrlCache.has(mediaId);
+  hasProxy(mediaId: string, proxyKey?: string): boolean {
+    const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
+    return this.proxyBlobUrlByKey.has(resolvedProxyKey);
   }
 
   /**
    * Delete proxy for a media item (OPFS + cache)
    */
-  async deleteProxy(mediaId: string): Promise<void> {
+  async deleteProxy(mediaId: string, proxyKey?: string): Promise<void> {
+    const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
+
     // Cancel if generating
-    this.cancelProxy(mediaId);
-    this.revokeTrackedSourceBlobUrl(mediaId);
+    this.cancelProxy(mediaId, resolvedProxyKey);
+    this.revokeTrackedSourceBlobUrl(resolvedProxyKey);
 
     // Revoke blob URL
-    const url = this.blobUrlCache.get(mediaId);
+    const url = this.proxyBlobUrlByKey.get(resolvedProxyKey);
     if (url) {
       URL.revokeObjectURL(url);
-      this.blobUrlCache.delete(mediaId);
+      this.proxyBlobUrlByKey.delete(resolvedProxyKey);
     }
 
     // Remove from OPFS
     try {
       const root = await navigator.storage.getDirectory();
       const proxyRoot = await root.getDirectoryHandle(PROXY_DIR);
-      await proxyRoot.removeEntry(mediaId, { recursive: true });
-      logger.debug(`Deleted proxy for ${mediaId}`);
+      await proxyRoot.removeEntry(resolvedProxyKey, { recursive: true });
+      logger.debug(`Deleted proxy for ${resolvedProxyKey}`);
     } catch {
       // Directory may not exist
     }
@@ -155,16 +241,19 @@ class ProxyService {
         return staleProxyIds; // No proxies directory yet
       }
 
-      const mediaIdSet = new Set(mediaIds);
+      const requestedProxyKeys = new Set<string>();
+      for (const mediaId of mediaIds) {
+        requestedProxyKeys.add(this.resolveProxyKey(mediaId));
+      }
 
       for await (const entry of proxyRoot.values()) {
         if (entry.kind !== 'directory') continue;
-        if (!mediaIdSet.has(entry.name)) continue;
+        if (!requestedProxyKeys.has(entry.name)) continue;
 
-        const mediaId = entry.name;
+        const proxyKey = entry.name;
 
         try {
-          const mediaDir = await proxyRoot.getDirectoryHandle(mediaId);
+          const mediaDir = await proxyRoot.getDirectoryHandle(proxyKey);
 
           // Check metadata
           const metaHandle = await mediaDir.getFileHandle('meta.json');
@@ -176,13 +265,18 @@ class ProxyService {
           // Invalidate stale proxy formats to avoid aspect distortion from
           // legacy fixed-1280x720 transcodes.
           if (metadata.version !== PROXY_SCHEMA_VERSION) {
-            staleProxyIds.push(mediaId);
+            const mappedMediaIds = this.mediaIdsByProxyKey.get(proxyKey);
+            if (mappedMediaIds && mappedMediaIds.size > 0) {
+              staleProxyIds.push(...mappedMediaIds);
+            } else {
+              staleProxyIds.push(proxyKey);
+            }
 
             try {
-              await proxyRoot.removeEntry(mediaId, { recursive: true });
-              logger.debug(`Removed stale proxy (schema mismatch) for ${mediaId}`);
+              await proxyRoot.removeEntry(proxyKey, { recursive: true });
+              logger.debug(`Removed stale proxy (schema mismatch) for ${proxyKey}`);
             } catch (error) {
-              logger.error(`Failed to remove stale proxy for ${mediaId}:`, error);
+              logger.error(`Failed to remove stale proxy for ${proxyKey}:`, error);
             }
 
             continue;
@@ -195,10 +289,10 @@ class ProxyService {
           if (proxyFile.size === 0) continue;
 
           const blobUrl = URL.createObjectURL(proxyFile);
-          this.blobUrlCache.set(mediaId, blobUrl);
-          this.statusListener?.(mediaId, 'ready');
+          this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
+          this.emitStatusForProxyKey(proxyKey, 'ready');
 
-          logger.debug(`Loaded existing proxy for ${mediaId}`);
+          logger.debug(`Loaded existing proxy for ${proxyKey}`);
         } catch {
           // Skip invalid proxy entries
         }
@@ -235,25 +329,31 @@ class ProxyService {
    * Handle messages from the worker
    */
   private handleWorkerMessage(message: ProxyWorkerResponse): void {
+    // Worker uses `mediaId` field as proxyKey for storage identity.
+    const proxyKey = message.mediaId;
+
     switch (message.type) {
       case 'progress': {
-        this.statusListener?.(message.mediaId, 'generating', message.progress);
+        this.progressByProxyKey.set(proxyKey, message.progress);
+        this.emitStatusForProxyKey(proxyKey, 'generating', message.progress);
         break;
       }
 
       case 'complete': {
-        this.generatingSet.delete(message.mediaId);
-        this.revokeTrackedSourceBlobUrl(message.mediaId);
+        this.generatingProxyKeys.delete(proxyKey);
+        this.progressByProxyKey.delete(proxyKey);
+        this.revokeTrackedSourceBlobUrl(proxyKey);
         // Load the completed proxy from OPFS
-        void this.loadCompletedProxy(message.mediaId);
+        void this.loadCompletedProxy(proxyKey);
         break;
       }
 
       case 'error': {
-        this.generatingSet.delete(message.mediaId);
-        this.revokeTrackedSourceBlobUrl(message.mediaId);
-        logger.error(`Proxy generation failed for ${message.mediaId}:`, message.error);
-        this.statusListener?.(message.mediaId, 'error');
+        this.generatingProxyKeys.delete(proxyKey);
+        this.progressByProxyKey.delete(proxyKey);
+        this.revokeTrackedSourceBlobUrl(proxyKey);
+        logger.error(`Proxy generation failed for ${proxyKey}:`, message.error);
+        this.emitStatusForProxyKey(proxyKey, 'error');
         break;
       }
     }
@@ -262,32 +362,32 @@ class ProxyService {
   /**
    * Load a freshly completed proxy from OPFS and cache its blob URL
    */
-  private async loadCompletedProxy(mediaId: string): Promise<void> {
+  private async loadCompletedProxy(proxyKey: string): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory();
       const proxyRoot = await root.getDirectoryHandle(PROXY_DIR);
-      const mediaDir = await proxyRoot.getDirectoryHandle(mediaId);
+      const mediaDir = await proxyRoot.getDirectoryHandle(proxyKey);
       const proxyHandle = await mediaDir.getFileHandle('proxy.mp4');
       const proxyFile = await proxyHandle.getFile();
 
       if (proxyFile.size === 0) {
-        this.statusListener?.(mediaId, 'error');
+        this.emitStatusForProxyKey(proxyKey, 'error');
         return;
       }
 
-      const previousBlobUrl = this.blobUrlCache.get(mediaId);
+      const previousBlobUrl = this.proxyBlobUrlByKey.get(proxyKey);
       if (previousBlobUrl) {
         URL.revokeObjectURL(previousBlobUrl);
       }
 
       const blobUrl = URL.createObjectURL(proxyFile);
-      this.blobUrlCache.set(mediaId, blobUrl);
-      this.statusListener?.(mediaId, 'ready');
+      this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
+      this.emitStatusForProxyKey(proxyKey, 'ready');
 
-      logger.debug(`Proxy ready for ${mediaId}`);
+      logger.debug(`Proxy ready for ${proxyKey}`);
     } catch (error) {
-      logger.error(`Failed to load completed proxy for ${mediaId}:`, error);
-      this.statusListener?.(mediaId, 'error');
+      logger.error(`Failed to load completed proxy for ${proxyKey}:`, error);
+      this.emitStatusForProxyKey(proxyKey, 'error');
     }
   }
 
@@ -301,8 +401,8 @@ class ProxyService {
   async refreshAllBlobUrls(): Promise<number> {
     if (this.isRefreshing) return 0;
 
-    const mediaIds = [...this.blobUrlCache.keys()];
-    if (mediaIds.length === 0) return 0;
+    const proxyKeys = [...this.proxyBlobUrlByKey.keys()];
+    if (proxyKeys.length === 0) return 0;
 
     this.isRefreshing = true;
     let refreshed = 0;
@@ -316,39 +416,39 @@ class ProxyService {
         return 0;
       }
 
-      for (const mediaId of mediaIds) {
+      for (const proxyKey of proxyKeys) {
         try {
-          const mediaDir = await proxyRoot.getDirectoryHandle(mediaId);
+          const mediaDir = await proxyRoot.getDirectoryHandle(proxyKey);
           const proxyHandle = await mediaDir.getFileHandle('proxy.mp4');
           const proxyFile = await proxyHandle.getFile();
 
           if (proxyFile.size === 0) {
             // Revoke stale cache entry for empty proxy file
-            const oldUrl = this.blobUrlCache.get(mediaId);
+            const oldUrl = this.proxyBlobUrlByKey.get(proxyKey);
             if (oldUrl) {
               URL.revokeObjectURL(oldUrl);
             }
-            this.blobUrlCache.delete(mediaId);
+            this.proxyBlobUrlByKey.delete(proxyKey);
             continue;
           }
 
           // Revoke old blob URL
-          const oldUrl = this.blobUrlCache.get(mediaId);
+          const oldUrl = this.proxyBlobUrlByKey.get(proxyKey);
           if (oldUrl) {
             URL.revokeObjectURL(oldUrl);
           }
 
           // Create fresh blob URL from OPFS
           const freshUrl = URL.createObjectURL(proxyFile);
-          this.blobUrlCache.set(mediaId, freshUrl);
+          this.proxyBlobUrlByKey.set(proxyKey, freshUrl);
           refreshed++;
         } catch {
-          // Proxy file may have been deleted — remove stale cache entry
-          const oldUrl = this.blobUrlCache.get(mediaId);
+          // Proxy file may have been deleted - remove stale cache entry
+          const oldUrl = this.proxyBlobUrlByKey.get(proxyKey);
           if (oldUrl) {
             URL.revokeObjectURL(oldUrl);
           }
-          this.blobUrlCache.delete(mediaId);
+          this.proxyBlobUrlByKey.delete(proxyKey);
         }
       }
     } catch (error) {
@@ -364,16 +464,42 @@ class ProxyService {
     return refreshed;
   }
 
-  private revokeTrackedSourceBlobUrl(mediaId: string): void {
-    const sourceBlobUrl = this.sourceBlobUrlByMediaId.get(mediaId);
+  private revokeTrackedSourceBlobUrl(proxyKey: string): void {
+    const sourceBlobUrl = this.sourceBlobUrlByProxyKey.get(proxyKey);
     if (!sourceBlobUrl) {
       return;
     }
 
     URL.revokeObjectURL(sourceBlobUrl);
-    this.sourceBlobUrlByMediaId.delete(mediaId);
+    this.sourceBlobUrlByProxyKey.delete(proxyKey);
+  }
+
+  private resolveProxyKey(mediaId: string, explicitProxyKey?: string): string {
+    if (explicitProxyKey) {
+      this.setProxyKey(mediaId, explicitProxyKey);
+      return explicitProxyKey;
+    }
+    return this.proxyKeyByMediaId.get(mediaId) ?? mediaId;
+  }
+
+  private emitStatusForProxyKey(
+    proxyKey: string,
+    status: 'generating' | 'ready' | 'error',
+    progress?: number
+  ): void {
+    const mediaIds = this.mediaIdsByProxyKey.get(proxyKey);
+    if (mediaIds && mediaIds.size > 0) {
+      for (const mediaId of mediaIds) {
+        this.statusListener?.(mediaId, status, progress);
+      }
+      return;
+    }
+
+    // Fallback for legacy/unmapped calls where proxyKey == mediaId.
+    this.statusListener?.(proxyKey, status, progress);
   }
 }
 
 // Singleton
 export const proxyService = new ProxyService();
+

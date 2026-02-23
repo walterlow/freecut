@@ -26,6 +26,7 @@ import { gifFrameCache } from '@/features/timeline/services/gif-frame-cache';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { validateMediaFile, getMimeType } from '../utils/validation';
+import { getSharedProxyKey } from '../utils/proxy-key';
 import { mediaProcessorService } from './media-processor-service';
 /**
  * Check and request permission for a file handle
@@ -176,6 +177,7 @@ class MediaLibraryService {
       fileHandle: handle,
       fileName: file.name,
       fileSize: file.size,
+      fileLastModified: file.lastModified,
       mimeType: resolvedMimeType,
       duration: 'duration' in metadata ? metadata.duration : 0,
       width: 'width' in metadata ? metadata.width : 0,
@@ -302,9 +304,21 @@ class MediaLibraryService {
 
       // Delete proxy video if exists
       try {
-        await proxyService.deleteProxy(mediaId);
+        const allMedia = await getAllMediaDB();
+        const sharedProxyKey = getSharedProxyKey(media);
+        const hasSharedAlias = allMedia.some(
+          (entry) => entry.id !== mediaId && getSharedProxyKey(entry) === sharedProxyKey
+        );
+
+        if (hasSharedAlias) {
+          proxyService.clearProxyKey(mediaId);
+        } else {
+          await proxyService.deleteProxy(mediaId, sharedProxyKey);
+        }
       } catch (error) {
         logger.warn('Failed to delete proxy:', error);
+      } finally {
+        proxyService.clearProxyKey(mediaId);
       }
 
       // For OPFS storage, handle content reference counting
@@ -432,6 +446,14 @@ class MediaLibraryService {
       await deleteThumbnailsByMediaId(id);
     } catch (error) {
       logger.warn('Failed to delete thumbnails:', error);
+    }
+
+    try {
+      await proxyService.deleteProxy(id, getSharedProxyKey(media));
+    } catch (error) {
+      logger.warn('Failed to delete proxy:', error);
+    } finally {
+      proxyService.clearProxyKey(id);
     }
 
     await deleteMediaDB(id);
@@ -655,6 +677,7 @@ class MediaLibraryService {
       fileHandle: newHandle,
       fileName: file.name,
       fileSize: file.size,
+      fileLastModified: file.lastModified,
       updatedAt: Date.now(),
     });
 

@@ -23,9 +23,16 @@ import { useSlipEditPreviewStore } from '@/features/timeline/stores/slip-edit-pr
 import { useSlideEditPreviewStore } from '@/features/timeline/stores/slide-edit-preview-store';
 import type { CompositionInputProps } from '@/types/export';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
+import { createCompositionRenderer } from '@/features/export/utils/client-render-engine';
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
+const FAST_SCRUB_RENDERER_ENABLED = true;
+const FAST_SCRUB_PRELOAD_BUDGET_MS = 180;
+const FAST_SCRUB_BOUNDARY_PREWARM_WINDOW_SECONDS = 0.5;
+const FAST_SCRUB_MAX_PREWARM_FRAMES = 256;
+
+type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
 
 interface VideoPreviewProps {
   project: {
@@ -52,6 +59,7 @@ interface VideoPreviewProps {
  */
 function useCustomPlayer(
   playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
+  bypassPreviewSeekRef?: React.RefObject<boolean>,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
 
@@ -205,11 +213,12 @@ function useCustomPlayer(
       if (!playerRef.current) return;
       if (state.isPlaying) return;
       if (state.previewFrame === prev.previewFrame) return;
+      if (state.previewFrame !== null && bypassPreviewSeekRef?.current) return;
 
       const targetFrame = state.previewFrame ?? state.currentFrame;
       seekPlayerToFrame(targetFrame);
     });
-  }, [playerReady, playerRef, seekPlayerToFrame]);
+  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef]);
 
   return { ignorePlayerUpdatesRef };
 }
@@ -233,6 +242,21 @@ export const VideoPreview = memo(function VideoPreview({
 }: VideoPreviewProps) {
   const playerRef = useRef<PlayerRef>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
+  const bypassPreviewSeekRef = useRef(false);
+  const scrubRendererRef = useRef<CompositionRenderer | null>(null);
+  const scrubInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
+  const scrubPreloadPromiseRef = useRef<Promise<void> | null>(null);
+  const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
+  const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
+  const scrubRenderInFlightRef = useRef(false);
+  const scrubRequestedFrameRef = useRef<number | null>(null);
+  const scrubPrewarmQueueRef = useRef<number[]>([]);
+  const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
+  const scrubPrewarmedFramesRef = useRef<number[]>([]);
+  const scrubPrewarmedFrameSetRef = useRef<Set<number>>(new Set());
+  const scrubMountedRef = useRef(true);
+  const [showFastScrubOverlay, setShowFastScrubOverlay] = useState(false);
 
   // State for gizmo overlay positioning
   const [playerContainerRect, setPlayerContainerRect] = useState<DOMRect | null>(null);
@@ -269,7 +293,7 @@ export const VideoPreview = memo(function VideoPreview({
   });
 
   // Custom Player integration (hook handles bidirectional sync)
-  const { ignorePlayerUpdatesRef } = useCustomPlayer(playerRef);
+  const { ignorePlayerUpdatesRef } = useCustomPlayer(playerRef, bypassPreviewSeekRef);
 
   // Register frame capture function for project thumbnail generation and split transitions
   const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
@@ -326,6 +350,39 @@ export const VideoPreview = memo(function VideoPreview({
       }),
     }));
   }, [combinedTracks, resolvedUrls, useProxy, proxyReadyCount]);
+
+  // Fast-scrub renderer prefers proxy video whenever available, even if
+  // normal playback is currently set to original sources.
+  const fastScrubTracks = useMemo(() => {
+    return combinedTracks.map((track) => ({
+      ...track,
+      items: track.items.map((item) => {
+        if (item.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
+          const resolvedSrc = resolvedUrls.get(item.mediaId);
+          if (item.type === 'video') {
+            const proxyUrl = resolveProxyUrl(item.mediaId);
+            return { ...item, src: proxyUrl || resolvedSrc || '' };
+          }
+          return { ...item, src: resolvedSrc ?? '' };
+        }
+        return item;
+      }),
+    }));
+  }, [combinedTracks, resolvedUrls, proxyReadyCount]);
+
+  const fastScrubBoundaryFrames = useMemo(() => {
+    const boundarySet = new Set<number>();
+
+    for (const track of fastScrubTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video' || item.durationInFrames <= 0) continue;
+        boundarySet.add(item.from);
+        boundarySet.add(item.from + item.durationInFrames);
+      }
+    }
+
+    return [...boundarySet].sort((a, b) => a - b);
+  }, [fastScrubTracks]);
 
   // Create a stable fingerprint for media resolution using derived selector
   // Includes media from both main timeline items AND sub-composition items
@@ -458,7 +515,7 @@ export const VideoPreview = memo(function VideoPreview({
         if (item.type === 'video' && item.mediaId) {
           // When proxy is enabled, the video element uses the proxy URL.
           // Include both so pruneUnused doesn't discard active elements.
-          if (useProxy) {
+          if (useProxy || FAST_SCRUB_RENDERER_ENABLED) {
             const proxyUrl = resolveProxyUrl(item.mediaId);
             if (proxyUrl) activeVideoSrcs.add(proxyUrl);
           }
@@ -472,7 +529,7 @@ export const VideoPreview = memo(function VideoPreview({
     for (const comp of compositions) {
       for (const subItem of comp.items) {
         if (subItem.type === 'video' && subItem.mediaId) {
-          if (useProxy) {
+          if (useProxy || FAST_SCRUB_RENDERER_ENABLED) {
             const proxyUrl = resolveProxyUrl(subItem.mediaId);
             if (proxyUrl) activeVideoSrcs.add(proxyUrl);
           }
@@ -524,6 +581,302 @@ export const VideoPreview = memo(function VideoPreview({
     transitions,
     backgroundColor: project.backgroundColor,
   }), [fps, tracksFingerprint, transitions, project.backgroundColor]);
+
+  const fastScrubTracksFingerprint = useMemo(() => {
+    return fastScrubTracks.map(track => ({
+      id: track.id,
+      order: track.order,
+      visible: track.visible,
+      solo: track.solo,
+      muted: track.muted,
+      items: track.items.map(item => {
+        const src = 'src' in item ? item.src : undefined;
+        return {
+          id: item.id,
+          type: item.type,
+          from: item.from,
+          durationInFrames: item.durationInFrames,
+          src,
+          mediaId: item.mediaId,
+          speed: item.speed,
+          volume: item.volume,
+          sourceStart: item.sourceStart,
+          sourceEnd: item.sourceEnd,
+        };
+      })
+    }));
+  }, [fastScrubTracks]);
+
+  const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
+    fps,
+    tracks: fastScrubTracks as CompositionInputProps['tracks'],
+    transitions,
+    backgroundColor: project.backgroundColor,
+  }), [fps, fastScrubTracksFingerprint, transitions, project.backgroundColor]);
+
+  // Keep fast scrub canvas dimensions in sync with project dimensions.
+  useLayoutEffect(() => {
+    const canvas = scrubCanvasRef.current;
+    if (!canvas) return;
+    if (canvas.width !== project.width) canvas.width = project.width;
+    if (canvas.height !== project.height) canvas.height = project.height;
+  }, [project.width, project.height]);
+
+  const disposeFastScrubRenderer = useCallback(() => {
+    scrubInitPromiseRef.current = null;
+    scrubPreloadPromiseRef.current = null;
+    scrubRequestedFrameRef.current = null;
+    scrubRenderInFlightRef.current = false;
+    scrubPrewarmQueueRef.current = [];
+    scrubPrewarmQueuedSetRef.current.clear();
+    scrubPrewarmedFramesRef.current = [];
+    scrubPrewarmedFrameSetRef.current.clear();
+    bypassPreviewSeekRef.current = false;
+
+    if (scrubRendererRef.current) {
+      try {
+        scrubRendererRef.current.dispose();
+      } catch (error) {
+        console.warn('[FastScrub] Failed to dispose renderer:', error);
+      }
+      scrubRendererRef.current = null;
+    }
+
+    scrubOffscreenCanvasRef.current = null;
+    scrubOffscreenCtxRef.current = null;
+  }, []);
+
+  const ensureFastScrubRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
+    if (!FAST_SCRUB_RENDERER_ENABLED) return null;
+    if (typeof OffscreenCanvas === 'undefined') return null;
+    if (isResolving) return null;
+    if (scrubRendererRef.current) return scrubRendererRef.current;
+    if (scrubInitPromiseRef.current) return scrubInitPromiseRef.current;
+
+    scrubInitPromiseRef.current = (async () => {
+      try {
+        const offscreen = new OffscreenCanvas(project.width, project.height);
+        const offscreenCtx = offscreen.getContext('2d');
+        if (!offscreenCtx) return null;
+
+        const renderer = await createCompositionRenderer(fastScrubInputProps, offscreen, offscreenCtx, { mode: 'preview' });
+        const preloadPromise = renderer.preload()
+          .catch((error) => {
+            console.warn('[FastScrub] Renderer preload failed:', error);
+          })
+          .finally(() => {
+            if (scrubPreloadPromiseRef.current === preloadPromise) {
+              scrubPreloadPromiseRef.current = null;
+            }
+          });
+        scrubPreloadPromiseRef.current = preloadPromise;
+
+        await Promise.race([
+          preloadPromise,
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, FAST_SCRUB_PRELOAD_BUDGET_MS);
+          }),
+        ]);
+
+        scrubOffscreenCanvasRef.current = offscreen;
+        scrubOffscreenCtxRef.current = offscreenCtx;
+        scrubRendererRef.current = renderer;
+        return renderer;
+      } catch (error) {
+        console.warn('[FastScrub] Failed to initialize renderer, falling back to Player seeks:', error);
+        scrubRendererRef.current = null;
+        scrubOffscreenCanvasRef.current = null;
+        scrubOffscreenCtxRef.current = null;
+        return null;
+      } finally {
+        scrubInitPromiseRef.current = null;
+      }
+    })();
+
+    return scrubInitPromiseRef.current;
+  }, [fastScrubInputProps, isResolving, project.height, project.width]);
+
+  // Dispose/recreate fast scrub renderer when composition inputs change.
+  useEffect(() => {
+    disposeFastScrubRenderer();
+  }, [disposeFastScrubRenderer, fastScrubInputProps, project.height, project.width]);
+
+  // Background warm-up so first scrub has lower startup latency.
+  useEffect(() => {
+    if (!FAST_SCRUB_RENDERER_ENABLED || isResolving) return;
+    if (scrubRendererRef.current || scrubInitPromiseRef.current) return;
+
+    let cancelled = false;
+    const warmup = () => {
+      if (cancelled || scrubRendererRef.current || scrubInitPromiseRef.current) return;
+      void ensureFastScrubRenderer();
+    };
+
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as Window & { requestIdleCallback: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number })
+        .requestIdleCallback(() => warmup(), { timeout: 400 });
+    } else {
+      timeoutId = setTimeout(warmup, 120);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [ensureFastScrubRenderer, isResolving]);
+
+  // Drive full-composition fast scrub rendering from previewFrame.
+  useEffect(() => {
+    scrubMountedRef.current = true;
+
+    const drawToDisplay = () => {
+      const displayCanvas = scrubCanvasRef.current;
+      const offscreen = scrubOffscreenCanvasRef.current;
+      if (!displayCanvas || !offscreen) return;
+
+      const displayCtx = displayCanvas.getContext('2d');
+      if (!displayCtx) return;
+      displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+      displayCtx.drawImage(offscreen, 0, 0, displayCanvas.width, displayCanvas.height);
+    };
+
+    const pumpRenderLoop = async () => {
+      if (scrubRenderInFlightRef.current) return;
+      scrubRenderInFlightRef.current = true;
+
+      try {
+        const enqueuePrewarmFrame = (frame: number) => {
+          if (frame < 0) return;
+          if (scrubPrewarmQueuedSetRef.current.has(frame)) return;
+          if (scrubPrewarmedFrameSetRef.current.has(frame)) return;
+          scrubPrewarmQueuedSetRef.current.add(frame);
+          scrubPrewarmQueueRef.current.push(frame);
+        };
+
+        const markPrewarmed = (frame: number) => {
+          if (scrubPrewarmedFrameSetRef.current.has(frame)) return;
+          scrubPrewarmedFrameSetRef.current.add(frame);
+          scrubPrewarmedFramesRef.current.push(frame);
+
+          if (scrubPrewarmedFramesRef.current.length > FAST_SCRUB_MAX_PREWARM_FRAMES) {
+            const dropped = scrubPrewarmedFramesRef.current.shift();
+            if (dropped !== undefined) {
+              scrubPrewarmedFrameSetRef.current.delete(dropped);
+            }
+          }
+        };
+
+        const enqueueBoundaryPrewarm = (targetFrame: number) => {
+          if (fastScrubBoundaryFrames.length === 0) return;
+
+          const windowFrames = Math.max(
+            4,
+            Math.round(fps * FAST_SCRUB_BOUNDARY_PREWARM_WINDOW_SECONDS)
+          );
+          const minFrame = targetFrame - windowFrames;
+          const maxFrame = targetFrame + windowFrames;
+
+          for (const boundary of fastScrubBoundaryFrames) {
+            if (boundary < minFrame) continue;
+            if (boundary > maxFrame) break;
+            enqueuePrewarmFrame(Math.max(0, boundary - 1));
+            enqueuePrewarmFrame(boundary);
+            enqueuePrewarmFrame(boundary + 1);
+          }
+        };
+
+        while (scrubMountedRef.current) {
+          const targetFrame = scrubRequestedFrameRef.current;
+          const isPriorityFrame = targetFrame !== null;
+          const frameToRender = isPriorityFrame
+            ? targetFrame
+            : (scrubPrewarmQueueRef.current.shift() ?? null);
+
+          if (frameToRender === null) break;
+
+          if (isPriorityFrame) {
+            scrubRequestedFrameRef.current = null;
+          } else {
+            scrubPrewarmQueuedSetRef.current.delete(frameToRender);
+            // Skip stale prewarm if a newer scrub frame is pending.
+            if (scrubRequestedFrameRef.current !== null) {
+              continue;
+            }
+          }
+
+          const renderer = await ensureFastScrubRenderer();
+          if (!renderer || !scrubMountedRef.current) {
+            setShowFastScrubOverlay(false);
+            bypassPreviewSeekRef.current = false;
+            break;
+          }
+
+          await renderer.renderFrame(frameToRender);
+          if (!scrubMountedRef.current) break;
+
+          if (isPriorityFrame) {
+            drawToDisplay();
+            setShowFastScrubOverlay(true);
+            bypassPreviewSeekRef.current = true;
+            enqueueBoundaryPrewarm(frameToRender);
+          } else {
+            markPrewarmed(frameToRender);
+          }
+        }
+      } catch (error) {
+        console.warn('[FastScrub] Render failed, using Player seek fallback:', error);
+        setShowFastScrubOverlay(false);
+        bypassPreviewSeekRef.current = false;
+        disposeFastScrubRenderer();
+      } finally {
+        scrubRenderInFlightRef.current = false;
+      }
+    };
+
+    const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
+      if (state.isPlaying) {
+        scrubRequestedFrameRef.current = null;
+        setShowFastScrubOverlay(false);
+        bypassPreviewSeekRef.current = false;
+        return;
+      }
+
+      if (state.previewFrame === prev.previewFrame) return;
+
+      if (state.previewFrame === null) {
+        scrubRequestedFrameRef.current = null;
+        setShowFastScrubOverlay(false);
+        bypassPreviewSeekRef.current = false;
+        // Ensure the Player lands on the actual playhead after overlay scrub.
+        try {
+          playerRef.current?.seekTo(state.currentFrame);
+        } catch {
+          // Fallback path remains active via useCustomPlayer subscription.
+        }
+        return;
+      }
+
+      if (scrubRequestedFrameRef.current === state.previewFrame) {
+        return;
+      }
+
+      scrubRequestedFrameRef.current = state.previewFrame;
+      void pumpRenderLoop();
+    });
+
+    return () => {
+      scrubMountedRef.current = false;
+      unsubscribe();
+    };
+  }, [disposeFastScrubRenderer, ensureFastScrubRenderer, fastScrubBoundaryFrames, fps]);
 
   // Preload media files ahead of the current playhead to reduce buffering
   useEffect(() => {
@@ -611,6 +964,13 @@ export const VideoPreview = memo(function VideoPreview({
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      scrubMountedRef.current = false;
+      disposeFastScrubRenderer();
+    };
+  }, [disposeFastScrubRenderer]);
 
   // Calculate player size based on zoom mode
   const playerSize = useMemo(() => {
@@ -764,6 +1124,19 @@ export const VideoPreview = memo(function VideoPreview({
             >
               <MainComposition {...inputProps} />
             </Player>
+
+            {FAST_SCRUB_RENDERER_ENABLED && (
+              <canvas
+                ref={scrubCanvasRef}
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  zIndex: 4,
+                  visibility: showFastScrubOverlay ? 'visible' : 'hidden',
+                }}
+              />
+            )}
 
             {/* Edit frame comparison overlays */}
             {hasRolling2Up ? (

@@ -27,7 +27,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import { createLogger } from '@/lib/logger';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { VideoSourcePool } from '@/features/player/video/VideoSourcePool';
+import { VideoSourcePool, getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
@@ -109,6 +109,7 @@ export async function createCompositionRenderer(
   composition: CompositionInputProps,
   canvas: OffscreenCanvas,
   ctx: OffscreenCanvasRenderingContext2D,
+  options: { mode?: 'export' | 'preview' } = {},
 ) {
   const {
     fps,
@@ -117,6 +118,7 @@ export async function createCompositionRenderer(
     backgroundColor = '#000000',
     keyframes = [],
   } = composition;
+  const renderMode = options.mode ?? 'export';
   const hasDom = typeof document !== 'undefined';
 
   const canvasSettings: CanvasSettings = {
@@ -141,7 +143,11 @@ export async function createCompositionRenderer(
   const videoExtractors = new Map<string, VideoFrameExtractor>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
-  const fallbackVideoPool = hasDom ? new VideoSourcePool() : null;
+  const useSharedPreviewVideoPool = hasDom && renderMode === 'preview';
+  const fallbackVideoPool = hasDom
+    ? (useSharedPreviewVideoPool ? getGlobalVideoSourcePool() : new VideoSourcePool())
+    : null;
+  const ownsFallbackVideoPool = hasDom && !useSharedPreviewVideoPool;
   const fallbackVideoBySrc = new Set<string>();
   const fallbackVideoClipIdByItem = new Map<string, string>();
   let fallbackVideoClipCounter = 0;
@@ -317,6 +323,7 @@ export async function createCompositionRenderer(
     canvasSettings,
     canvasPool,
     textMeasureCache,
+    renderMode,
     videoExtractors,
     videoElements,
     useMediabunny,
@@ -1004,7 +1011,12 @@ export async function createCompositionRenderer(
       // In this renderer, fallback video elements are only bound when a DOM is
       // available, which is also when fallbackVideoPool exists.
       if (fallbackVideoPool) {
-        fallbackVideoPool.dispose();
+        for (const clipId of fallbackVideoClipIdByItem.values()) {
+          fallbackVideoPool.releaseClip(clipId);
+        }
+        if (ownsFallbackVideoPool) {
+          fallbackVideoPool.dispose();
+        }
       }
       fallbackVideoBySrc.clear();
       fallbackVideoClipIdByItem.clear();

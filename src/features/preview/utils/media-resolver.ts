@@ -1,6 +1,7 @@
 import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { proxyService } from '@/features/media-library/services/proxy-service';
+import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import type { TimelineTrack } from '@/types/timeline';
 
@@ -80,6 +81,13 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
  * Returns null if no proxy exists (caller should fall back to full-res).
  */
 export function resolveProxyUrl(mediaId: string): string | null {
+  const media = useMediaLibraryStore.getState().mediaItems.find((item) => item.id === mediaId);
+  if (media) {
+    const proxyKey = getSharedProxyKey(media);
+    proxyService.setProxyKey(mediaId, proxyKey);
+    return proxyService.getProxyBlobUrl(mediaId, proxyKey);
+  }
+
   return proxyService.getProxyBlobUrl(mediaId);
 }
 

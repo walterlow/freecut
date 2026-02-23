@@ -41,6 +41,7 @@ import { useProjectStore } from '@/features/projects/stores/project-store';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
 import { validateMediaFile } from '../utils/validation';
+import { getSharedProxyKey } from '../utils/proxy-key';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -364,7 +365,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     selectedItems.forEach((item, i) => {
       const blobUrl = urls[i];
       if (blobUrl) {
-        proxyService.generateProxy(item.id, blobUrl, item.width, item.height);
+        const proxyKey = getSharedProxyKey(item);
+        proxyService.setProxyKey(item.id, proxyKey);
+        proxyService.generateProxy(item.id, blobUrl, item.width, item.height, proxyKey);
       }
     });
   };

@@ -6,7 +6,7 @@
  * — preview uses the proxy while export uses the original full-res source.
  *
  * Storage structure:
- *   proxies/{mediaId}/
+ *   proxies/{proxyKey}/
  *     proxy.mp4
  *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
@@ -20,7 +20,7 @@ const PROXY_HEIGHT = 720;
 // Message types
 export interface ProxyGenerateRequest {
   type: 'generate';
-  mediaId: string;
+  mediaId: string; // proxyKey (kept as mediaId for message compatibility)
   blobUrl: string;
   sourceWidth: number;
   sourceHeight: number;
@@ -28,7 +28,7 @@ export interface ProxyGenerateRequest {
 
 export interface ProxyCancelRequest {
   type: 'cancel';
-  mediaId: string;
+  mediaId: string; // proxyKey (kept as mediaId for message compatibility)
 }
 
 export interface ProxyProgressResponse {
@@ -169,6 +169,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         fit: 'contain',
         codec: 'avc',
         bitrate: QUALITY_MEDIUM,
+        // Short GOP to speed up random-access decode during scrubbing.
+        keyFrameInterval: 1,
       },
       audio: {
         codec: 'aac',
