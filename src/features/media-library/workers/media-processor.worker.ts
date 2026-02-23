@@ -81,6 +81,7 @@ export interface VideoMetadata {
 export interface AudioMetadata {
   type: 'audio';
   duration: number;
+  codec?: string;
   channels?: number;
   sampleRate?: number;
   bitrate?: number;
@@ -183,6 +184,7 @@ async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
   return {
     type: 'audio',
     duration: duration || 0,
+    codec: audioTrack?.codec,
     channels: audioTrack?.channels,
     sampleRate: audioTrack?.sampleRate,
     bitrate: 0,

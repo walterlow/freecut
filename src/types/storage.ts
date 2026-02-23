@@ -130,7 +130,7 @@ export interface WaveformBin {
 
 export type WaveformRecord = WaveformData | WaveformMeta | WaveformBin;
 
-// Decoded preview audio for AC-3/E-AC-3 codecs (persisted across refresh)
+// Decoded preview audio for custom-decoded codecs (persisted across refresh)
 // Stored as 30-second bins (Int16 @ 22050 Hz stereo ≈ 2.5 MB/bin)
 
 export interface DecodedPreviewAudioMeta {

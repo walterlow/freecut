@@ -181,7 +181,11 @@ class MediaLibraryService {
       width: 'width' in metadata ? metadata.width : 0,
       height: 'height' in metadata ? metadata.height : 0,
       fps: metadata.type === 'video' ? metadata.fps : 30,
-      codec: metadata.type === 'video' ? metadata.codec : 'unknown',
+      codec: metadata.type === 'video'
+        ? metadata.codec
+        : metadata.type === 'audio'
+          ? (metadata.codec || 'unknown')
+          : 'unknown',
       bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
       audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
       audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,

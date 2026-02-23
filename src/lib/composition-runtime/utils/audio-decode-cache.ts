@@ -1,7 +1,7 @@
 /**
  * Preview Audio Decode Cache
  *
- * Caches decoded AudioBuffers for AC-3/E-AC-3 audio tracks so that
+ * Caches decoded AudioBuffers for custom-decoded audio tracks so that
  * split clips from the same source share a single decode.
  *
  * Storage: Decoded audio is persisted to IndexedDB in 30-second bins

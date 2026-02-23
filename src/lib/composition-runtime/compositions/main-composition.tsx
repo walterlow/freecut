@@ -898,7 +898,9 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
       return true;
     }
 
-    return needsCustomAudioDecoder(media.audioCodec);
+    // Video assets usually expose audio codec in media.audioCodec.
+    // Audio-only assets persist their codec in media.codec.
+    return needsCustomAudioDecoder(media.audioCodec ?? media.codec);
   }, [mediaById]);
 
   // Active masks: shapes with isMask: true
@@ -1015,7 +1017,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
 
         {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
         {/* Video audio is decoupled from visual video elements for transition stability */}
-        {/* AC-3/E-AC-3 segments use CustomDecoderAudio (mediabunny WASM decode) instead of native <audio> */}
+        {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
         {videoAudioSegments.map((segment) => {
           const useCustomDecoder = shouldUseCustomDecoder(segment);
           const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
