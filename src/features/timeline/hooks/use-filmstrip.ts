@@ -112,30 +112,50 @@ export function useFilmstrip({
       return;
     }
 
-    if (filmstrip?.isComplete) {
+    const needsPriorityRefinement = filmstripCache.needsPriorityRefinement(
+      mediaId,
+      duration,
+      priorityRange
+    );
+
+    if (filmstrip?.isComplete && !needsPriorityRefinement) {
       return;
     }
 
     isGeneratingRef.current = true;
     setIsLoading(true);
     setError(null);
+    let cancelled = false;
+    const requestMediaId = mediaId;
 
     filmstripCache
       .getFilmstrip(mediaId, blobUrl, duration, onProgress, priorityRange ?? undefined)
       .then((result) => {
+        if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+          return;
+        }
         setFilmstrip(result);
         setProgress(result.progress);
         setIsLoading(result.isExtracting);
       })
       .catch((err) => {
+        if (cancelled || lastMediaIdRef.current !== requestMediaId) {
+          return;
+        }
         if (err.message !== 'Aborted') {
           setError(err.message || 'Failed to generate filmstrip');
         }
         setIsLoading(false);
       })
       .finally(() => {
-        isGeneratingRef.current = false;
+        if (lastMediaIdRef.current === requestMediaId) {
+          isGeneratingRef.current = false;
+        }
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, priorityRange]);
 
   return {

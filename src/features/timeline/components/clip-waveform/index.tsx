@@ -3,6 +3,8 @@ import { TiledCanvas } from '../clip-filmstrip/tiled-canvas';
 import { WaveformSkeleton } from './waveform-skeleton';
 import { useWaveform } from '../../hooks/use-waveform';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
+import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
+import { blobUrlManager, useBlobUrlVersion } from '@/lib/blob-url-manager';
 import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
@@ -50,9 +52,10 @@ export const ClipWaveform = memo(function ClipWaveform({
   void fps;
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(() => blobUrlManager.get(mediaId));
   const hasStartedLoadingRef = useRef(false);
   const lastMediaIdRef = useRef<string | null>(null);
+  const blobUrlVersion = useBlobUrlVersion();
 
   // Measure container height
   useEffect(() => {
@@ -81,15 +84,31 @@ export const ClipWaveform = memo(function ClipWaveform({
     if (lastMediaIdRef.current !== null && lastMediaIdRef.current !== mediaId) {
       // Media ID changed - reset to allow fresh loading
       hasStartedLoadingRef.current = false;
-      setBlobUrl(null);
+      setBlobUrl(blobUrlManager.get(mediaId));
     }
     lastMediaIdRef.current = mediaId;
   }, [mediaId]);
 
+  // Keep local URL state aligned with centralized blob URL invalidations.
+  useEffect(() => {
+    const cached = blobUrlManager.get(mediaId);
+    if (cached) {
+      if (cached !== blobUrl) {
+        setBlobUrl(cached);
+      }
+      return;
+    }
+
+    if (blobUrl !== null) {
+      hasStartedLoadingRef.current = false;
+      setBlobUrl(null);
+    }
+  }, [mediaId, blobUrlVersion, blobUrl]);
+
   // Track if audio codec is supported for waveform generation
   const [audioCodecSupported, setAudioCodecSupported] = useState(true);
 
-  // Load blob URL for the media - only once when first visible
+  // Load blob URL for the media when visible, including post-invalidation retries.
   useEffect(() => {
     // Skip if already started loading (prevents re-triggering on visibility changes)
     if (hasStartedLoadingRef.current) {
@@ -122,7 +141,7 @@ export const ClipWaveform = memo(function ClipWaveform({
           return;
         }
 
-        const url = await mediaLibraryService.getMediaBlobUrl(mediaId);
+        const url = await resolveMediaUrl(mediaId);
         if (mounted && url) {
           setBlobUrl(url);
         }
@@ -136,7 +155,7 @@ export const ClipWaveform = memo(function ClipWaveform({
     return () => {
       mounted = false;
     };
-  }, [mediaId, isVisible]);
+  }, [mediaId, isVisible, blobUrlVersion]);
 
   // Use waveform hook - enabled once we have blobUrl (independent of visibility after that)
   const { peaks, duration, sampleRate, isLoading, progress, error } = useWaveform({

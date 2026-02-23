@@ -13,6 +13,7 @@ import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
+import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getMediaDragData, type CompositionDragData } from '@/features/media-library/utils/drag-data-cache';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
@@ -445,7 +446,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
             const { dragItem, media, finalPosition, itemDuration } = planned;
             const needsThumbnail = dragItem.mediaType === 'video' || dragItem.mediaType === 'image';
             const [blobUrl, thumbnailUrl] = await Promise.all([
-              mediaLibraryService.getMediaBlobUrl(dragItem.mediaId),
+              resolveMediaUrl(dragItem.mediaId),
               needsThumbnail
                 ? mediaLibraryService.getThumbnailBlobUrl(dragItem.mediaId)
                 : Promise.resolve(null),
@@ -579,7 +580,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         calculatedSeconds: offsetX / 100,
       });
 
-      const blobUrl = await mediaLibraryService.getMediaBlobUrl(mediaId);
+      const blobUrl = await resolveMediaUrl(mediaId);
       if (!blobUrl) {
         logger.error('Failed to get media blob URL');
         return;

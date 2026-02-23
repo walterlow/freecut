@@ -7,7 +7,7 @@
  * Storage structure:
  *   filmstrips/{mediaId}/
  *     meta.json - { width, height, isComplete, frameCount }
- *     0.webp, 1.webp, 2.webp, ...
+ *     0.jpg, 1.jpg, 2.jpg, ... (legacy caches may still use .webp)
  */
 
 import { createLogger } from '@/lib/logger';
@@ -18,6 +18,18 @@ const logger = createLogger('FilmstripOPFS');
 
 const FILMSTRIP_DIR = 'filmstrips';
 const FRAME_RATE = 1; // Must match worker - 1fps for filmstrip thumbnails
+const PRIMARY_FRAME_EXT = 'jpg';
+const LEGACY_FRAME_EXT = 'webp';
+const FRAME_EXTENSIONS = new Set([PRIMARY_FRAME_EXT, LEGACY_FRAME_EXT]);
+
+function parseFrameFileName(name: string): number | null {
+  const dotIndex = name.lastIndexOf('.');
+  if (dotIndex <= 0) return null;
+  const ext = name.slice(dotIndex + 1).toLowerCase();
+  if (!FRAME_EXTENSIONS.has(ext)) return null;
+  const index = parseInt(name.slice(0, dotIndex), 10);
+  return Number.isNaN(index) ? null : index;
+}
 
 interface FilmstripMetadata {
   width: number;
@@ -45,6 +57,7 @@ class FilmstripOPFSStorage {
   private dirHandle: FileSystemDirectoryHandle | null = null;
   private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
   private objectUrls = new Map<string, string[]>(); // mediaId -> urls for cleanup
+  private mediaDirCache = new Map<string, FileSystemDirectoryHandle>();
 
   /**
    * Initialize OPFS directory
@@ -88,9 +101,14 @@ class FilmstripOPFSStorage {
    * Get media directory handle
    */
   private async getMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle | null> {
+    const cached = this.mediaDirCache.get(mediaId);
+    if (cached) return cached;
+
     const dir = await this.ensureDirectory();
     try {
-      return await dir.getDirectoryHandle(mediaId);
+      const mediaDir = await dir.getDirectoryHandle(mediaId);
+      this.mediaDirCache.set(mediaId, mediaDir);
+      return mediaDir;
     } catch {
       return null;
     }
@@ -101,7 +119,9 @@ class FilmstripOPFSStorage {
    */
   private async getOrCreateMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
     const dir = await this.ensureDirectory();
-    return dir.getDirectoryHandle(mediaId, { create: true });
+    const mediaDir = await dir.getDirectoryHandle(mediaId, { create: true });
+    this.mediaDirCache.set(mediaId, mediaDir);
+    return mediaDir;
   }
 
   /**
@@ -122,7 +142,7 @@ class FilmstripOPFSStorage {
    */
   async saveFrameBlob(mediaId: string, index: number, blob: Blob): Promise<void> {
     const mediaDir = await this.getOrCreateMediaDir(mediaId);
-    const fileHandle = await mediaDir.getFileHandle(`${index}.webp`, { create: true });
+    const fileHandle = await mediaDir.getFileHandle(`${index}.${PRIMARY_FRAME_EXT}`, { create: true });
     const writable = await fileHandle.createWritable();
     await safeWrite(writable, blob);
   }
@@ -148,18 +168,17 @@ class FilmstripOPFSStorage {
       // Collect frame files
       const frameFiles: { index: number; file: File }[] = [];
       for await (const entry of mediaDir.values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
-          const index = parseInt(entry.name.replace('.webp', ''), 10);
-          if (!isNaN(index)) {
-            try {
-              const fileHandle = entry as FileSystemFileHandle;
-              const file = await fileHandle.getFile();
-              if (file.size > 0) {
-                frameFiles.push({ index, file });
-              }
-            } catch {
-              // Skip unreadable files
+        if (entry.kind !== 'file') continue;
+        const index = parseFrameFileName(entry.name);
+        if (index !== null) {
+          try {
+            const fileHandle = entry as FileSystemFileHandle;
+            const file = await fileHandle.getFile();
+            if (file.size > 0) {
+              frameFiles.push({ index, file });
             }
+          } catch {
+            // Skip unreadable files
           }
         }
       }
@@ -225,24 +244,23 @@ class FilmstripOPFSStorage {
 
       const indices: number[] = [];
       for await (const entry of mediaDir.values()) {
-        if (entry.kind === 'file' && entry.name.endsWith('.webp')) {
-          const index = parseInt(entry.name.replace('.webp', ''), 10);
-          if (!isNaN(index)) {
-            if (typeof startIndex === 'number' && index < startIndex) {
-              continue;
+        if (entry.kind !== 'file') continue;
+        const index = parseFrameFileName(entry.name);
+        if (index !== null) {
+          if (typeof startIndex === 'number' && index < startIndex) {
+            continue;
+          }
+          if (typeof endIndex === 'number' && index >= endIndex) {
+            continue;
+          }
+          try {
+            const fileHandle = entry as FileSystemFileHandle;
+            const file = await fileHandle.getFile();
+            if (file.size > 0) {
+              indices.push(index);
             }
-            if (typeof endIndex === 'number' && index >= endIndex) {
-              continue;
-            }
-            try {
-              const fileHandle = entry as FileSystemFileHandle;
-              const file = await fileHandle.getFile();
-              if (file.size > 0) {
-                indices.push(index);
-              }
-            } catch {
-              // Skip
-            }
+          } catch {
+            // Skip
           }
         }
       }
@@ -261,9 +279,19 @@ class FilmstripOPFSStorage {
       const mediaDir = await this.getMediaDir(mediaId);
       if (!mediaDir) return null;
 
-      const fileHandle = await mediaDir.getFileHandle(`${index}.webp`);
-      const file = await fileHandle.getFile();
-      if (file.size === 0) return null;
+      let file: File | null = null;
+      try {
+        const primaryHandle = await mediaDir.getFileHandle(`${index}.${PRIMARY_FRAME_EXT}`);
+        file = await primaryHandle.getFile();
+      } catch {
+        try {
+          const legacyHandle = await mediaDir.getFileHandle(`${index}.${LEGACY_FRAME_EXT}`);
+          file = await legacyHandle.getFile();
+        } catch {
+          return null;
+        }
+      }
+      if (!file || file.size === 0) return null;
 
       const url = URL.createObjectURL(file);
 
@@ -280,6 +308,27 @@ class FilmstripOPFSStorage {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Create an in-memory frame URL from a worker-provided blob.
+   * Used for progressive UI updates to avoid immediate OPFS read-after-write.
+   */
+  createFrameFromBlob(mediaId: string, index: number, blob: Blob): FilmstripFrame | null {
+    if (!blob || blob.size === 0) {
+      return null;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const urls = this.objectUrls.get(mediaId) || [];
+    urls.push(url);
+    this.objectUrls.set(mediaId, urls);
+
+    return {
+      index,
+      timestamp: index / FRAME_RATE,
+      url,
+    };
   }
 
   /**
@@ -304,6 +353,7 @@ class FilmstripOPFSStorage {
    */
   async delete(mediaId: string): Promise<void> {
     this.revokeUrls(mediaId);
+    this.mediaDirCache.delete(mediaId);
     try {
       const dir = await this.ensureDirectory();
       await dir.removeEntry(mediaId, { recursive: true });
@@ -334,6 +384,7 @@ class FilmstripOPFSStorage {
     for (const mediaId of this.objectUrls.keys()) {
       this.revokeUrls(mediaId);
     }
+    this.mediaDirCache.clear();
 
     try {
       const dir = await this.ensureDirectory();

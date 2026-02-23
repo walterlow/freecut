@@ -2,19 +2,20 @@
  * Filmstrip Extraction Worker
  *
  * Extracts video frames using mediabunny's CanvasSink and saves
- * directly to OPFS as webp files. All heavy work happens in the worker.
+ * directly to OPFS. All heavy work happens in the worker.
  *
  * Storage structure:
  *   filmstrips/{mediaId}/
  *     meta.json - { width, height, isComplete, frameCount }
- *     0.webp, 1.webp, 2.webp, ...
+ *     0.jpg, 1.jpg, 2.jpg, ... (legacy caches may still include .webp)
  */
 
 import { safeWrite } from '../utils/opfs-safe-write';
 
 const FILMSTRIP_DIR = 'filmstrips';
-const IMAGE_FORMAT = 'image/webp';
-const IMAGE_QUALITY = 0.6; // Slightly lower for faster encoding
+const IMAGE_FORMAT = 'image/jpeg';
+const IMAGE_QUALITY = 0.7; // JPEG is substantially faster to encode for tiny thumbnails
+const FRAME_FILE_EXT = 'jpg';
 const FRAME_RATE = 1; // 1fps for filmstrip thumbnails
 
 // Message types
@@ -28,6 +29,7 @@ export interface ExtractRequest {
   height: number;
   skipIndices?: number[]; // Indices to skip (already extracted)
   priorityIndices?: number[]; // Indices to extract first (within the assigned range)
+  targetIndices?: number[]; // Optional explicit extraction indices for this worker
   // For parallel extraction - each worker handles a range
   startIndex?: number; // Start frame index (inclusive)
   endIndex?: number; // End frame index (exclusive)
@@ -46,6 +48,11 @@ export interface ProgressResponse {
   frameIndex: number;
   frameCount: number;
   progress: number;
+  savedFrames: Array<{
+    index: number;
+    blob: Blob;
+  }>;
+  savedIndices: number[];
 }
 
 export interface CompleteResponse {
@@ -86,21 +93,9 @@ async function saveFrame(
   index: number,
   blob: Blob
 ): Promise<void> {
-  const fileHandle = await dir.getFileHandle(`${index}.webp`, { create: true });
+  const fileHandle = await dir.getFileHandle(`${index}.${FRAME_FILE_EXT}`, { create: true });
   const writable = await fileHandle.createWritable();
   await safeWrite(writable, blob);
-}
-
-/**
- * Save metadata to OPFS
- */
-async function saveMetadata(
-  dir: FileSystemDirectoryHandle,
-  metadata: { width: number; height: number; isComplete: boolean; frameCount: number }
-): Promise<void> {
-  const fileHandle = await dir.getFileHandle('meta.json', { create: true });
-  const writable = await fileHandle.createWritable();
-  await safeWrite(writable, JSON.stringify(metadata));
 }
 
 /**
@@ -111,7 +106,7 @@ async function extractAndSave(
   state: { aborted: boolean }
 ): Promise<void> {
   const {
-    requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices,
+    requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices, targetIndices,
     startIndex, endIndex, totalFrames: totalFramesOverride
   } = request;
 
@@ -125,15 +120,37 @@ async function extractAndSave(
 
   // Build extraction order: requested priority window first, then background remainder.
   const framesToExtract: { index: number; timestamp: number }[] = [];
+
+  const hasExplicitTargets = Array.isArray(targetIndices) && targetIndices.length > 0;
+  const explicitTargets = hasExplicitTargets
+    ? targetIndices
+      .filter((index) => index >= rangeStart && index < rangeEnd)
+      .sort((a, b) => a - b)
+    : [];
+  const targetSet = new Set(explicitTargets);
+  const initialCompletedCount = hasExplicitTargets
+    ? explicitTargets.reduce((count, index) => (skipSet.has(index) ? count + 1 : count), 0)
+    : skipSet.size;
+
   for (const index of prioritySet) {
-    if (index >= rangeStart && index < rangeEnd && !skipSet.has(index)) {
+    const inRange = index >= rangeStart && index < rangeEnd;
+    const inTarget = !hasExplicitTargets || targetSet.has(index);
+    if (inRange && inTarget && !skipSet.has(index)) {
       framesToExtract.push({ index, timestamp: index / FRAME_RATE });
     }
   }
 
-  for (let i = rangeStart; i < rangeEnd; i++) {
-    if (!skipSet.has(i) && !prioritySet.has(i)) {
-      framesToExtract.push({ index: i, timestamp: i / FRAME_RATE });
+  if (hasExplicitTargets) {
+    for (const index of explicitTargets) {
+      if (!skipSet.has(index) && !prioritySet.has(index)) {
+        framesToExtract.push({ index, timestamp: index / FRAME_RATE });
+      }
+    }
+  } else {
+    for (let i = rangeStart; i < rangeEnd; i++) {
+      if (!skipSet.has(i) && !prioritySet.has(i)) {
+        framesToExtract.push({ index: i, timestamp: i / FRAME_RATE });
+      }
     }
   }
 
@@ -142,16 +159,13 @@ async function extractAndSave(
     self.postMessage({
       type: 'complete',
       requestId,
-      frameCount: skipSet.size,
+      frameCount: initialCompletedCount,
     } as CompleteResponse);
     return;
   }
 
   // Get OPFS directory
   const dir = await getFilmstripDir(mediaId);
-
-  // Save initial metadata
-  await saveMetadata(dir, { width, height, isComplete: false, frameCount: skipSet.size });
 
   // Load mediabunny
   const { Input, UrlSource, CanvasSink, ALL_FORMATS } = await loadMediabunny();
@@ -182,8 +196,9 @@ async function extractAndSave(
     });
 
     // Track extracted frames
-    let extractedCount = skipSet.size;
+    let extractedCount = initialCompletedCount;
     let frameListIndex = 0;
+    let savedSinceLastReport: Array<{ index: number; blob: Blob }> = [];
 
     // Generator for timestamps
     async function* timestampGenerator(): AsyncGenerator<number> {
@@ -209,7 +224,7 @@ async function extractAndSave(
         continue;
       }
 
-      // Convert canvas to webp blob (must await - need canvas before it's reused)
+      // Convert canvas to image blob (must await - need canvas before it's reused)
       const canvas = wrapped.canvas as OffscreenCanvas;
       const blob = await canvas.convertToBlob({
         type: IMAGE_FORMAT,
@@ -222,6 +237,7 @@ async function extractAndSave(
         // Remove from pending when done
         const idx = pendingSaves.indexOf(savePromise);
         if (idx > -1) pendingSaves.splice(idx, 1);
+        savedSinceLastReport.push({ index: frameIndex, blob });
       });
       pendingSaves.push(savePromise);
 
@@ -237,6 +253,9 @@ async function extractAndSave(
       const shouldReport = extractedCount <= 3 || extractedCount % 10 === 0;
       if (shouldReport) {
         const progress = Math.round((extractedCount / totalFrames) * 100);
+        const savedFrames = savedSinceLastReport;
+        savedSinceLastReport = [];
+        const savedIndices = savedFrames.map((entry) => entry.index);
 
         self.postMessage({
           type: 'progress',
@@ -244,6 +263,8 @@ async function extractAndSave(
           frameIndex,
           frameCount: extractedCount,
           progress: Math.min(progress, 99),
+          savedFrames,
+          savedIndices,
         } as ProgressResponse);
       }
     }
@@ -253,24 +274,26 @@ async function extractAndSave(
       await Promise.all(pendingSaves);
     }
 
-    // Save final metadata - only mark complete when this worker range is fully covered.
-    if (!state.aborted) {
-      // Count only skip indices within this worker's range for accurate completion check
-      let skippedInRange = 0;
-      for (const idx of skipSet) {
-        if (idx >= rangeStart && idx < rangeEnd) skippedInRange++;
-      }
-      const framesExtractedThisRun = extractedCount - skipSet.size;
-      const expectedToExtract = (rangeEnd - rangeStart) - skippedInRange;
-      const actuallyComplete = framesExtractedThisRun >= expectedToExtract;
-
-      await saveMetadata(dir, {
-        width,
-        height,
-        isComplete: actuallyComplete,
+    // Emit any saved frames that completed after the final progress report.
+    if (savedSinceLastReport.length > 0) {
+      const progress = Math.round((extractedCount / totalFrames) * 100);
+      const savedFrames = savedSinceLastReport;
+      const savedIndices = savedFrames.map((entry) => entry.index);
+      self.postMessage({
+        type: 'progress',
+        requestId,
+        frameIndex: framesToExtract[Math.max(0, frameListIndex - 1)]?.index ?? rangeStart,
         frameCount: extractedCount,
-      });
+        progress: Math.min(progress, 99),
+        savedFrames,
+        savedIndices,
+      } as ProgressResponse);
+      savedSinceLastReport = [];
+    }
 
+    // Main thread is responsible for writing final "isComplete=true" metadata once
+    // all workers finish to avoid cross-worker completion races.
+    if (!state.aborted) {
       self.postMessage({
         type: 'complete',
         requestId,
@@ -279,7 +302,7 @@ async function extractAndSave(
     }
   } finally {
     // Clean up mediabunny resources to free memory
-    (sink as any)?.dispose?.();
+    (sink as unknown as { dispose?: () => void } | null)?.dispose?.();
     input?.dispose();
   }
 }
