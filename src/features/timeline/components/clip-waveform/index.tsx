@@ -4,7 +4,7 @@ import { WaveformSkeleton } from './waveform-skeleton';
 import { useWaveform } from '../../hooks/use-waveform';
 import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { blobUrlManager, useBlobUrlVersion } from '@/lib/blob-url-manager';
+import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
@@ -52,10 +52,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   void fps;
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
-  const [blobUrl, setBlobUrl] = useState<string | null>(() => blobUrlManager.get(mediaId));
-  const hasStartedLoadingRef = useRef(false);
-  const lastMediaIdRef = useRef<string | null>(null);
-  const blobUrlVersion = useBlobUrlVersion();
+  const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
 
   // Measure container height
   useEffect(() => {
@@ -78,32 +75,6 @@ export const ClipWaveform = memo(function ClipWaveform({
 
     return () => resizeObserver.disconnect();
   }, []);
-
-  // Reset loading state when mediaId changes (e.g., after relinking)
-  useEffect(() => {
-    if (lastMediaIdRef.current !== null && lastMediaIdRef.current !== mediaId) {
-      // Media ID changed - reset to allow fresh loading
-      hasStartedLoadingRef.current = false;
-      setBlobUrl(blobUrlManager.get(mediaId));
-    }
-    lastMediaIdRef.current = mediaId;
-  }, [mediaId]);
-
-  // Keep local URL state aligned with centralized blob URL invalidations.
-  useEffect(() => {
-    const cached = blobUrlManager.get(mediaId);
-    if (cached) {
-      if (cached !== blobUrl) {
-        setBlobUrl(cached);
-      }
-      return;
-    }
-
-    if (blobUrl !== null) {
-      hasStartedLoadingRef.current = false;
-      setBlobUrl(null);
-    }
-  }, [mediaId, blobUrlVersion, blobUrl]);
 
   // Track if audio codec is supported for waveform generation
   const [audioCodecSupported, setAudioCodecSupported] = useState(true);

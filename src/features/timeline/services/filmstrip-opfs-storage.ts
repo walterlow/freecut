@@ -154,9 +154,33 @@ class FilmstripOPFSStorage {
    */
   private async getMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle | null> {
     const cached = this.mediaDirCache.get(mediaId);
-    if (cached) return cached;
-
     const dir = await this.ensureDirectory();
+
+    if (cached) {
+      try {
+        // Probe the cached handle. If the underlying directory was removed,
+        // OPFS access will throw and we'll invalidate + recover below.
+        const iterator = cached.values();
+        await iterator.next();
+        return cached;
+      } catch {
+        this.mediaDirCache.delete(mediaId);
+        try {
+          const reopened = await dir.getDirectoryHandle(mediaId);
+          this.mediaDirCache.set(mediaId, reopened);
+          return reopened;
+        } catch {
+          try {
+            const recreated = await dir.getDirectoryHandle(mediaId, { create: true });
+            this.mediaDirCache.set(mediaId, recreated);
+            return recreated;
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+
     try {
       const mediaDir = await dir.getDirectoryHandle(mediaId);
       this.mediaDirCache.set(mediaId, mediaDir);

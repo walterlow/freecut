@@ -873,11 +873,13 @@ class WaveformCacheService {
    */
   dispose(): void {
     this.clearAll();
+    // Clear queue first so abort-triggered processGenerationQueue cannot start
+    // new work while we're disposing.
+    this.generationQueue = [];
     const pendingIds = Array.from(this.pendingRequests.keys());
     for (const mediaId of pendingIds) {
       this.abort(mediaId);
     }
-    this.generationQueue = [];
     this.activeGenerations.clear();
     this.workerRejectors.clear();
     this.pendingRequests.clear();

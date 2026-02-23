@@ -74,6 +74,12 @@ export type WorkerResponse = ProgressResponse | CompleteResponse | ErrorResponse
 // Track active requests for abort support
 const activeRequests = new Map<string, { aborted: boolean }>();
 
+function getRequestIdFromMessage(data: unknown): string {
+  if (!data || typeof data !== 'object') return 'unknown';
+  const maybe = data as { requestId?: unknown };
+  return typeof maybe.requestId === 'string' ? maybe.requestId : 'unknown';
+}
+
 // Dynamically import mediabunny
 const loadMediabunny = () => import('mediabunny');
 
@@ -253,6 +259,10 @@ async function extractAndSave(
       extractedCount++;
       frameListIndex++;
 
+      // extractedCount tracks decoded/extracted frames immediately, while
+      // savedFrames/savedIndices only include writes that have finished.
+      // pendingSaves + Promise.race throttle OPFS writes, so progress reflects
+      // extraction and persistence completion can lag briefly behind it.
       // Batch progress updates - report first 3, then every 10 frames
       const shouldReport = extractedCount <= 3 || extractedCount % 10 === 0;
       if (shouldReport) {
@@ -347,7 +357,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         throw new Error(`Unknown message type: ${type}`);
     }
   } catch (error) {
-    const requestId = (event.data as ExtractRequest).requestId;
+    const requestId = getRequestIdFromMessage(event.data);
     self.postMessage({
       type: 'error',
       requestId,

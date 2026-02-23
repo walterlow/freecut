@@ -41,7 +41,6 @@ const MIN_FILMSTRIP_TARGET_FRAMES = 90;
 const MAX_FILMSTRIP_TARGET_FRAMES = 300;
 const TARGET_FRAME_BUDGET_SCALE = 8;
 const MAX_PRIORITY_DENSE_FRAMES = 180;
-const PRIORITY_FIRST_MIN_EXTRA_FRAMES = 24;
 const BACKGROUND_STRIDE_MEDIUM = 2; // 0.5fps equivalent outside priority range
 const BACKGROUND_STRIDE_LONG = 3;
 const BACKGROUND_STRIDE_VERY_LONG = 4;
@@ -87,8 +86,7 @@ interface PendingExtraction {
   totalFrames: number;
   progressFrames: number;
   targetIndices: number[];
-  phase: 'priority' | 'full';
-  continueToFull: boolean;
+  priorityOnly: boolean;
   completedWorkers: number;
   onProgress?: (progress: number) => void;
   // Track frames incrementally during extraction
@@ -357,10 +355,7 @@ class FilmstripCacheService {
       });
 
     for (const [mediaId] of evictable) {
-      if (
-        this.cacheBytes <= MEMORY_SOFT_LIMIT_BYTES
-        && (!usedHeap || usedHeap <= MEMORY_SOFT_LIMIT_BYTES)
-      ) {
+      if (this.cacheBytes <= MEMORY_SOFT_LIMIT_BYTES) {
         break;
       }
 
@@ -433,29 +428,6 @@ class FilmstripCacheService {
     if (totalFrames <= LONG_CLIP_FRAME_THRESHOLD) return BACKGROUND_STRIDE_MEDIUM;
     if (totalFrames <= VERY_LONG_CLIP_FRAME_THRESHOLD) return BACKGROUND_STRIDE_LONG;
     return BACKGROUND_STRIDE_VERY_LONG;
-  }
-
-  private shouldUsePriorityFirst(
-    totalFrames: number,
-    priorityRange: PriorityFrameRange | null,
-    skipSet: Set<number>
-  ): boolean {
-    if (!priorityRange) return false;
-
-    const priorityIndices = this.buildPriorityIndices(totalFrames, priorityRange);
-    if (priorityIndices.length === 0) return false;
-
-    const fullTargetIndices = this.buildTargetIndices(totalFrames, priorityRange);
-    const remainingFull = fullTargetIndices.reduce(
-      (count, index) => (skipSet.has(index) ? count : count + 1),
-      0
-    );
-    const remainingPriority = priorityIndices.reduce(
-      (count, index) => (skipSet.has(index) ? count : count + 1),
-      0
-    );
-
-    return (remainingFull - remainingPriority) >= PRIORITY_FIRST_MIN_EXTRA_FRAMES;
   }
 
   private createExtractionMetrics(
@@ -729,7 +701,7 @@ class FilmstripCacheService {
         onProgress,
         false,
         normalizedPriorityRange ?? undefined,
-        { priorityOnly: true, continueToFull: false }
+        { priorityOnly: true }
       );
 
       const refining = { ...cached, isExtracting: true };
@@ -822,9 +794,7 @@ class FilmstripCacheService {
       onProgress,
       false,
       priorityRange,
-      this.shouldUsePriorityFirst(totalFrames, priorityRange ?? null, new Set(existingIndices))
-        ? { priorityOnly: true, continueToFull: true }
-        : undefined,
+      undefined,
     );
 
     return initialFilmstrip;
@@ -841,7 +811,6 @@ class FilmstripCacheService {
     priorityRange?: PriorityFrameRange,
     options?: {
       priorityOnly?: boolean;
-      continueToFull?: boolean;
     }
   ): void {
     // Check if already extracting
@@ -854,44 +823,14 @@ class FilmstripCacheService {
     const skipSet = new Set(skipIndices);
     const normalizedPriorityRange = this.normalizePriorityRange(priorityRange, totalFrames);
     const requestedPriorityOnly = options?.priorityOnly ?? false;
-    const requestedContinueToFull = options?.continueToFull ?? false;
-    const fullTargetIndicesForProgress = (requestedPriorityOnly && requestedContinueToFull)
-      ? this.buildTargetIndices(totalFrames, normalizedPriorityRange)
-      : null;
-    let phase: 'priority' | 'full' = requestedPriorityOnly ? 'priority' : 'full';
-    let continueToFull = requestedContinueToFull && requestedPriorityOnly;
-    let targetIndices = requestedPriorityOnly
+    const targetIndices = requestedPriorityOnly
       ? this.buildPriorityIndices(totalFrames, normalizedPriorityRange)
       : this.buildTargetIndices(totalFrames, normalizedPriorityRange);
-    let existingTargetCount = targetIndices.reduce(
+    const existingTargetCount = targetIndices.reduce(
       (count, index) => (skipSet.has(index) ? count + 1 : count),
       0
     );
-    let existingProgressCount = fullTargetIndicesForProgress
-      ? fullTargetIndicesForProgress.reduce(
-        (count, index) => (skipSet.has(index) ? count + 1 : count),
-        0
-      )
-      : existingTargetCount;
-    let framesToExtract = Math.max(0, targetIndices.length - existingTargetCount);
-
-    // Two-phase edge case: if priority phase is already fully cached, continue
-    // straight into full phase instead of incorrectly finalizing early.
-    if (framesToExtract === 0 && phase === 'priority' && continueToFull && fullTargetIndicesForProgress) {
-      const existingFullCount = fullTargetIndicesForProgress.reduce(
-        (count, index) => (skipSet.has(index) ? count + 1 : count),
-        0
-      );
-      const fullFramesToExtract = Math.max(0, fullTargetIndicesForProgress.length - existingFullCount);
-      if (fullFramesToExtract > 0) {
-        phase = 'full';
-        continueToFull = false;
-        targetIndices = fullTargetIndicesForProgress;
-        existingTargetCount = existingFullCount;
-        existingProgressCount = existingFullCount;
-        framesToExtract = fullFramesToExtract;
-      }
-    }
+    const framesToExtract = Math.max(0, targetIndices.length - existingTargetCount);
 
     // Initialize with existing frames
     const extractedFrames = new Map<number, FilmstripFrame>();
@@ -913,13 +852,12 @@ class FilmstripCacheService {
       totalFrames,
       progressFrames: Math.max(1, targetIndices.length),
       targetIndices,
-      phase,
-      continueToFull,
+      priorityOnly: requestedPriorityOnly,
       completedWorkers: 0,
       onProgress,
       extractedFrames,
       lastNotifyAt: 0,
-      lastNotifiedFrameCount: existingProgressCount,
+      lastNotifiedFrameCount: existingTargetCount,
       metrics: this.createExtractionMetrics(
         mediaId,
         totalFrames,
@@ -1077,61 +1015,6 @@ class FilmstripCacheService {
     return indices;
   }
 
-  private continueWithFullPhase(mediaId: string, pending: PendingExtraction): boolean {
-    if (pending.phase !== 'priority' || !pending.continueToFull) {
-      return false;
-    }
-
-    const fullTargetIndices = this.buildTargetIndices(pending.totalFrames, pending.priorityRange);
-    const existingIndices = new Set([
-      ...pending.skipIndices,
-      ...Array.from(pending.extractedFrames.keys()),
-    ]);
-    const existingFullCount = fullTargetIndices.reduce(
-      (count, index) => (existingIndices.has(index) ? count + 1 : count),
-      0
-    );
-
-    if (existingFullCount >= fullTargetIndices.length) {
-      return false;
-    }
-
-    for (const workerState of pending.workers) {
-      this.releaseWorker(workerState.worker);
-    }
-
-    pending.phase = 'full';
-    pending.continueToFull = false;
-    pending.skipIndices = Array.from(existingIndices);
-    pending.targetIndices = fullTargetIndices;
-    pending.progressFrames = Math.max(1, fullTargetIndices.length);
-    pending.workers = [];
-    pending.completedWorkers = 0;
-    pending.lastNotifyAt = Date.now();
-    pending.lastNotifiedFrameCount = existingFullCount;
-
-    // Promote metrics to full-phase totals while preserving first-frame timing.
-    pending.metrics.targetFrames = fullTargetIndices.length;
-    pending.metrics.framesToExtract = Math.max(
-      0,
-      fullTargetIndices.length - pending.metrics.existingTargetFrames
-    );
-
-    const frames = Array.from(pending.extractedFrames.values())
-      .sort((a, b) => a.index - b.index);
-    const progress = Math.round((existingFullCount / pending.progressFrames) * 100);
-    this.notifyUpdate(mediaId, {
-      frames,
-      isComplete: false,
-      isExtracting: true,
-      progress,
-    });
-    pending.onProgress?.(progress);
-
-    this.startWorkerExtraction(pending);
-    return true;
-  }
-
   private startWorkerExtraction(pending: PendingExtraction): void {
     this.enforceMemoryBudget();
     const {
@@ -1269,10 +1152,6 @@ class FilmstripCacheService {
 
           // Check if all workers are done
           if (pending.completedWorkers === pending.workers.length) {
-            if (this.continueWithFullPhase(mediaId, pending)) {
-              return;
-            }
-
             // All workers done - finalize directly from in-memory extracted frames
             // to avoid an extra full OPFS directory scan and URL recreation pass.
             const finalFrames = Array.from(pending.extractedFrames.values())
@@ -1493,8 +1372,7 @@ class FilmstripCacheService {
       totalFrames,
       progressFrames: Math.max(1, targetIndices.length),
       targetIndices,
-      phase: 'full',
-      continueToFull: false,
+      priorityOnly: false,
       completedWorkers: 0,
       onProgress,
       extractedFrames,
@@ -1777,8 +1655,7 @@ class FilmstripCacheService {
         true,
         pending.priorityRange ?? undefined,
         {
-          priorityOnly: pending.phase === 'priority',
-          continueToFull: pending.continueToFull,
+          priorityOnly: pending.priorityOnly,
         }
       );
       return;

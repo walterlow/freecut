@@ -2,7 +2,7 @@ import { memo, useEffect, useState, useMemo, useDeferredValue, useCallback, useR
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { blobUrlManager, useBlobUrlVersion } from '@/lib/blob-url-manager';
+import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 
 const ZOOM_SETTLE_MS = 80;
@@ -129,12 +129,9 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 }: ClipFilmstripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
-  const [blobUrl, setBlobUrl] = useState<string | null>(() => blobUrlManager.get(mediaId));
+  const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
   const [isZooming, setIsZooming] = useState(false);
   const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasStartedLoadingRef = useRef(false);
-  const lastMediaIdRef = useRef<string | null>(mediaId);
-  const blobUrlVersion = useBlobUrlVersion();
 
   // Measure container height
   useEffect(() => {
@@ -229,31 +226,6 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     speed,
     effectiveStart,
   ]);
-
-  // Reset loading state when mediaId changes.
-  useEffect(() => {
-    if (lastMediaIdRef.current !== mediaId) {
-      lastMediaIdRef.current = mediaId;
-      hasStartedLoadingRef.current = false;
-      setBlobUrl(blobUrlManager.get(mediaId));
-    }
-  }, [mediaId]);
-
-  // Keep local state aligned with centralized blob URL invalidations.
-  useEffect(() => {
-    const cached = blobUrlManager.get(mediaId);
-    if (cached) {
-      if (cached !== blobUrl) {
-        setBlobUrl(cached);
-      }
-      return;
-    }
-
-    if (blobUrl !== null) {
-      hasStartedLoadingRef.current = false;
-      setBlobUrl(null);
-    }
-  }, [mediaId, blobUrlVersion, blobUrl]);
 
   // Load blob URL lazily when visible, and retry after global invalidation.
   useEffect(() => {

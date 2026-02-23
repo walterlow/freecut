@@ -46,6 +46,22 @@ interface DragMediaItem {
   duration: number;
 }
 
+interface TimelineBaseItem {
+  id: string;
+  trackId: string;
+  from: number;
+  durationInFrames: number;
+  label: string;
+  mediaId: string;
+  originId: string;
+  sourceStart: number;
+  sourceEnd: number;
+  sourceDuration: number;
+  sourceFps: number;
+  trimStart: number;
+  trimEnd: number;
+}
+
 interface PlannedDroppedMediaItem {
   dragItem: DragMediaItem;
   media: MediaMetadata;
@@ -54,6 +70,54 @@ interface PlannedDroppedMediaItem {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isValidDragMediaItem(value: unknown): value is DragMediaItem {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<DragMediaItem>;
+  return isNonEmptyString(candidate.mediaId)
+    && isNonEmptyString(candidate.mediaType)
+    && isNonEmptyString(candidate.fileName)
+    && typeof candidate.duration === 'number'
+    && Number.isFinite(candidate.duration);
+}
+
+function buildTimelineBaseItem(params: {
+  media: MediaMetadata;
+  mediaId: string;
+  label: string;
+  trackId: string;
+  from: number;
+  durationInFrames: number;
+  timelineFps: number;
+}): TimelineBaseItem {
+  const { media, mediaId, label, trackId, from, durationInFrames, timelineFps } = params;
+  const sourceFps = media.fps || timelineFps;
+  const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
+  const sourceFramesForItemDuration = Math.min(
+    actualSourceDurationFrames,
+    Math.round(durationInFrames * sourceFps / timelineFps)
+  );
+
+  return {
+    id: crypto.randomUUID(),
+    trackId,
+    from,
+    durationInFrames,
+    label,
+    mediaId,
+    originId: crypto.randomUUID(),
+    sourceStart: 0,
+    sourceEnd: sourceFramesForItemDuration,
+    sourceDuration: actualSourceDurationFrames,
+    sourceFps,
+    trimStart: 0,
+    trimEnd: 0,
+  };
+}
 
 async function mapWithConcurrency<T, U>(
   items: T[],
@@ -270,10 +334,17 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
         if (data.type === 'media-items' && data.items) {
           // Multi-item drop
+          const rawItems = Array.isArray(data.items) ? data.items : [];
+          const validItems = rawItems.filter(isValidDragMediaItem);
+          if (validItems.length !== rawItems.length) {
+            logger.warn('Skipping invalid media-items preview payload entries', {
+              invalidCount: rawItems.length - validItems.length,
+            });
+          }
           let currentPosition = Math.max(0, dropFrame);
           const tempItems: Array<{ from: number; durationInFrames: number; trackId: string }> = [];
 
-          for (const item of data.items) {
+          for (const item of validItems) {
             const durationInFrames = Math.round(item.duration * fps);
             const itemDuration = durationInFrames > 0 ? durationInFrames : (item.mediaType === 'image' ? fps * 3 : fps);
 
@@ -400,9 +471,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
       // Handle multi-item drop (media-items)
       if (data.type === 'media-items') {
-        const items = data.items as DragMediaItem[];
-        if (!Array.isArray(items) || items.length === 0) {
+        const rawItems = Array.isArray(data.items) ? data.items : [];
+        const validItems = rawItems.filter(isValidDragMediaItem);
+        if (validItems.length === 0) {
           return;
+        }
+        if (validItems.length !== rawItems.length) {
+          logger.warn('Skipping invalid media-items payload entries', {
+            invalidCount: rawItems.length - validItems.length,
+          });
         }
 
         let currentPosition = Math.max(0, dropFrame);
@@ -411,7 +488,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         const reservedRanges: Array<{ from: number; durationInFrames: number; trackId: string }> = [];
         const plannedItems: PlannedDroppedMediaItem[] = [];
 
-        for (const dragItem of items) {
+        for (const dragItem of validItems) {
           const { mediaId, mediaType, fileName, duration } = dragItem;
           const media = mediaById.get(mediaId);
           if (!media) {
@@ -466,27 +543,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
               return null;
             }
 
-            const sourceFps = media.fps || fps;
-            const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
-            const sourceFramesForItemDuration = Math.min(
-              actualSourceDurationFrames,
-              Math.round(itemDuration * sourceFps / fps)
-            );
-            const baseItem = {
-              id: crypto.randomUUID(),
+            const baseItem = buildTimelineBaseItem({
+              media,
+              mediaId: dragItem.mediaId,
+              label: dragItem.fileName,
               trackId: track.id,
               from: finalPosition,
               durationInFrames: itemDuration,
-              label: dragItem.fileName,
-              mediaId: dragItem.mediaId,
-              originId: crypto.randomUUID(),
-              sourceStart: 0,
-              sourceEnd: sourceFramesForItemDuration,
-              sourceDuration: actualSourceDurationFrames,
-              sourceFps,
-              trimStart: 0,
-              trimEnd: 0,
-            };
+              timelineFps: fps,
+            });
 
             if (dragItem.mediaType === 'video') {
               const sourceW = media.width || canvasWidth;
@@ -600,29 +665,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
       // Create timeline item at the collision-free position.
       // source* fields are stored in source-native frame units.
-      const sourceFps = media.fps || fps;
-      const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
-      const sourceFramesForItemDuration = Math.min(
-        actualSourceDurationFrames,
-        Math.round(itemDuration * sourceFps / fps)
-      );
       let timelineItem: TimelineItemType;
-      const baseItem = {
-        id: crypto.randomUUID(),
+      const baseItem = buildTimelineBaseItem({
+        media,
+        mediaId,
+        label: fileName,
         trackId: track.id,
         from: finalPosition,
         durationInFrames: itemDuration,
-        label: fileName,
-        mediaId: mediaId,
-        originId: crypto.randomUUID(), // Unique origin for stable React keys
-        // Initialize trim/source properties for new items
-        sourceStart: 0,
-        sourceEnd: sourceFramesForItemDuration,
-        sourceDuration: actualSourceDurationFrames,
-        sourceFps,
-        trimStart: 0,
-        trimEnd: 0,
-      };
+        timelineFps: fps,
+      });
 
       if (mediaType === 'video') {
         const sourceW = media.width || canvasWidth;
