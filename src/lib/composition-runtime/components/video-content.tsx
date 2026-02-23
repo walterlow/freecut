@@ -471,41 +471,48 @@ const NativePreviewVideo: React.FC<{
       if (!video.paused) {
         video.pause();
       }
+      const isPreviewScrubbing = usePlaybackStore.getState().previewFrame !== null;
       // Only seek when paused if frame actually changed (user is scrubbing)
       if (frameChanged && canSeek) {
-        try {
-          video.currentTime = clampedTargetTime;
-        } catch {
-          // Seek failed - video may not be ready yet
+        // Layout sync already applies seeks before paint; skip duplicate runtime seek
+        // unless the element still has meaningful drift.
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed - video may not be ready yet
+          }
         }
 
         // Pre-warm decoder at the new position (debounced). A brief muted
         // play/pause fills the decode buffer so playback starts without
         // stutter when the user presses play. Short debounce avoids
         // thrashing during rapid scrubbing while keeping warm-up fast.
-        if (preWarmTimerRef.current !== null) {
-          clearTimeout(preWarmTimerRef.current);
-        }
-        preWarmGenRef.current += 1;
-        const gen = preWarmGenRef.current;
-        preWarmTimerRef.current = window.setTimeout(() => {
-          preWarmTimerRef.current = null;
-          const v = elementRef.current;
-          if (v && v.paused && v.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
-            v.muted = true;
-            v.play().then(() => {
-              // Only pause if this pre-warm is still current and playback hasn't started
-              if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
-                v.pause();
-              }
-              // Always unmute — if playback started or another scrub superseded
-              // this pre-warm, leaving muted=true causes silent playback.
-              v.muted = false;
-            }).catch(() => {
-              v.muted = false;
-            });
+        if (!isPreviewScrubbing) {
+          if (preWarmTimerRef.current !== null) {
+            clearTimeout(preWarmTimerRef.current);
           }
-        }, 50);
+          preWarmGenRef.current += 1;
+          const gen = preWarmGenRef.current;
+          preWarmTimerRef.current = window.setTimeout(() => {
+            preWarmTimerRef.current = null;
+            const v = elementRef.current;
+            if (v && v.paused && v.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
+              v.muted = true;
+              v.play().then(() => {
+                // Only pause if this pre-warm is still current and playback hasn't started
+                if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
+                  v.pause();
+                }
+                // Always unmute — if playback started or another scrub superseded
+                // this pre-warm, leaving muted=true causes silent playback.
+                v.muted = false;
+              }).catch(() => {
+                v.muted = false;
+              });
+            }
+          }, 50);
+        }
       }
     }
   }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);

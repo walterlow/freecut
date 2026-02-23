@@ -57,6 +57,7 @@ function useCustomPlayer(
 
   const [playerReady, setPlayerReady] = useState(false);
   const lastSyncedFrameRef = useRef<number>(0);
+  const lastSeekTargetRef = useRef<number | null>(null);
   const ignorePlayerUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
 
@@ -64,6 +65,31 @@ function useCustomPlayer(
     const frame = playerRef.current?.getCurrentFrame();
     return Number.isFinite(frame) ? Math.round(frame!) : null;
   }, [playerRef]);
+
+  const seekPlayerToFrame = useCallback((targetFrame: number) => {
+    if (!playerRef.current) return;
+    if (lastSeekTargetRef.current === targetFrame) return;
+
+    const playerFrame = getPlayerFrame();
+    if (playerFrame !== null && playerFrame === targetFrame) {
+      lastSyncedFrameRef.current = targetFrame;
+      lastSeekTargetRef.current = targetFrame;
+      return;
+    }
+
+    ignorePlayerUpdatesRef.current = true;
+    try {
+      playerRef.current.seekTo(targetFrame);
+      lastSyncedFrameRef.current = targetFrame;
+      lastSeekTargetRef.current = targetFrame;
+    } catch (error) {
+      console.error('Failed to seek Player:', error);
+    }
+
+    requestAnimationFrame(() => {
+      ignorePlayerUpdatesRef.current = false;
+    });
+  }, [playerRef, getPlayerFrame]);
 
   // Detect when Player becomes ready
   useEffect(() => {
@@ -102,6 +128,7 @@ function useCustomPlayer(
           ignorePlayerUpdatesRef.current = true;
           playerRef.current.seekTo(currentFrame);
           lastSyncedFrameRef.current = currentFrame;
+          lastSeekTargetRef.current = currentFrame;
         }
         setPreviewFrame(null);
 
@@ -134,6 +161,7 @@ function useCustomPlayer(
     const initialFrame = usePlaybackStore.getState().currentFrame;
     lastSyncedFrameRef.current = initialFrame;
     playerRef.current.seekTo(initialFrame);
+    lastSeekTargetRef.current = initialFrame;
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!playerRef.current) return;
@@ -156,26 +184,18 @@ function useCustomPlayer(
         }
       }
 
-      lastSyncedFrameRef.current = currentFrame;
-      ignorePlayerUpdatesRef.current = true;
-
-      try {
-        playerRef.current.seekTo(currentFrame);
-        requestAnimationFrame(() => {
-          const actualFrame = playerRef.current?.getCurrentFrame();
-          if (actualFrame !== undefined) {
-            lastSyncedFrameRef.current = actualFrame;
-          }
-          ignorePlayerUpdatesRef.current = false;
-        });
-      } catch (error) {
-        console.error('Failed to seek Player:', error);
-        ignorePlayerUpdatesRef.current = false;
+      // During paused scrubbing, previewFrame drives visible seeking.
+      // Skip the currentFrame seek path to avoid duplicate seekTo() calls.
+      if (!state.isPlaying && state.previewFrame !== null) {
+        lastSyncedFrameRef.current = currentFrame;
+        return;
       }
+
+      seekPlayerToFrame(currentFrame);
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame]);
+  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
@@ -186,25 +206,10 @@ function useCustomPlayer(
       if (state.isPlaying) return;
       if (state.previewFrame === prev.previewFrame) return;
 
-      ignorePlayerUpdatesRef.current = true;
-      try {
-        if (state.previewFrame !== null) {
-          // Seek to preview position
-          playerRef.current.seekTo(state.previewFrame);
-        } else {
-          // Preview ended — seek back to actual playback position
-          playerRef.current.seekTo(state.currentFrame);
-        }
-      } catch (err) {
-        console.error('[VideoPreview] Seek failed:', err);
-      }
-      // Always schedule reset, even if seekTo threw, so the flag
-      // never stays stuck at true (which would freeze the playhead).
-      requestAnimationFrame(() => {
-        ignorePlayerUpdatesRef.current = false;
-      });
+      const targetFrame = state.previewFrame ?? state.currentFrame;
+      seekPlayerToFrame(targetFrame);
     });
-  }, [playerReady, playerRef]);
+  }, [playerReady, playerRef, seekPlayerToFrame]);
 
   return { ignorePlayerUpdatesRef };
 }

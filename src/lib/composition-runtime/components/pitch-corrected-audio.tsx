@@ -87,6 +87,13 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   const lastFrameRef = useRef<number>(-1);
   const preWarmTimerRef = useRef<number | null>(null);
 
+  // Force a hard resync on resume after paused scrubbing/skimming.
+  useEffect(() => {
+    if (playing) {
+      needsInitialSyncRef.current = true;
+    }
+  }, [playing]);
+
   // Read preview values from unified preview system
   const itemPreview = useGizmoStore(
     useCallback((s) => s.preview?.[itemId], [itemId])
@@ -374,8 +381,9 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       if (!audio.paused) {
         audio.pause();
       }
+      const isPreviewScrubbing = usePlaybackStore.getState().previewFrame !== null;
       // Only seek when paused if frame actually changed (user is scrubbing) and audio is ready
-      if (frameChanged && canSeek) {
+      if (frameChanged && canSeek && !isPreviewScrubbing) {
         try {
           audio.currentTime = targetTimeSeconds;
         } catch {
