@@ -131,7 +131,10 @@ async function extractAndSave(
   const targetSet = new Set(explicitTargets);
   const initialCompletedCount = hasExplicitTargets
     ? explicitTargets.reduce((count, index) => (skipSet.has(index) ? count + 1 : count), 0)
-    : skipSet.size;
+    : Array.from(skipSet).reduce(
+      (count, index) => (index >= rangeStart && index < rangeEnd ? count + 1 : count),
+      0
+    );
 
   for (const index of prioritySet) {
     const inRange = index >= rangeStart && index < rangeEnd;
