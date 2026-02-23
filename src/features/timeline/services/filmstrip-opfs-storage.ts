@@ -42,6 +42,7 @@ export interface FilmstripFrame {
   index: number;
   timestamp: number;
   url: string; // Object URL for img src
+  byteSize?: number;
 }
 
 interface LoadedFilmstrip {
@@ -56,8 +57,59 @@ interface LoadedFilmstrip {
 class FilmstripOPFSStorage {
   private dirHandle: FileSystemDirectoryHandle | null = null;
   private initPromise: Promise<FileSystemDirectoryHandle> | null = null;
-  private objectUrls = new Map<string, string[]>(); // mediaId -> urls for cleanup
+  private objectUrls = new Map<string, Map<number, string>>(); // mediaId -> frameIndex -> url
   private mediaDirCache = new Map<string, FileSystemDirectoryHandle>();
+
+  private scheduleRevoke(urls: string[]): void {
+    if (urls.length === 0) return;
+
+    const revoke = () => {
+      for (const url of urls) {
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(revoke, { timeout: 10_000 });
+      return;
+    }
+
+    setTimeout(revoke, 0);
+  }
+
+  private setFrameUrl(mediaId: string, index: number, url: string): void {
+    const urlsByIndex = this.objectUrls.get(mediaId) ?? new Map<number, string>();
+    const previous = urlsByIndex.get(index);
+    urlsByIndex.set(index, url);
+    this.objectUrls.set(mediaId, urlsByIndex);
+
+    if (previous && previous !== url) {
+      this.scheduleRevoke([previous]);
+    }
+  }
+
+  private replaceAllFrameUrls(
+    mediaId: string,
+    entries: Array<{ index: number; url: string }>
+  ): void {
+    const previous = this.objectUrls.get(mediaId);
+    const next = new Map<number, string>();
+    for (const entry of entries) {
+      next.set(entry.index, entry.url);
+    }
+    this.objectUrls.set(mediaId, next);
+
+    if (!previous) return;
+
+    const toRevoke: string[] = [];
+    for (const [index, url] of previous) {
+      const nextUrl = next.get(index);
+      if (nextUrl !== url) {
+        toRevoke.push(url);
+      }
+    }
+    this.scheduleRevoke(toRevoke);
+  }
 
   /**
    * Initialize OPFS directory
@@ -186,31 +238,19 @@ class FilmstripOPFSStorage {
       // Sort by index
       frameFiles.sort((a, b) => a.index - b.index);
 
-      // Don't revoke URLs here - they may still be in use by displayed components.
-      // URLs are only cleaned up when filmstrip is explicitly deleted or cleared.
-
       // Create object URLs
-      const urls: string[] = [];
+      const nextUrls: Array<{ index: number; url: string }> = [];
       const frames: FilmstripFrame[] = frameFiles.map(({ index, file }) => {
         const url = URL.createObjectURL(file);
-        urls.push(url);
+        nextUrls.push({ index, url });
         return {
           index,
           timestamp: index / FRAME_RATE,
           url,
+          byteSize: file.size,
         };
       });
-
-      const previousUrls = this.objectUrls.get(mediaId) || [];
-      this.objectUrls.set(mediaId, urls);
-      if (previousUrls.length > 0) {
-        // Revoke during idle so in-flight renders can swap to new URLs first
-        requestIdleCallback(() => {
-          for (const url of previousUrls) {
-            URL.revokeObjectURL(url);
-          }
-        }, { timeout: 10_000 });
-      }
+      this.replaceAllFrameUrls(mediaId, nextUrls);
 
       const existingIndices = frameFiles.map(f => f.index);
 
@@ -294,16 +334,13 @@ class FilmstripOPFSStorage {
       if (!file || file.size === 0) return null;
 
       const url = URL.createObjectURL(file);
-
-      // Track this URL for cleanup
-      const urls = this.objectUrls.get(mediaId) || [];
-      urls.push(url);
-      this.objectUrls.set(mediaId, urls);
+      this.setFrameUrl(mediaId, index, url);
 
       return {
         index,
         timestamp: index / FRAME_RATE,
         url,
+        byteSize: file.size,
       };
     } catch {
       return null;
@@ -320,14 +357,13 @@ class FilmstripOPFSStorage {
     }
 
     const url = URL.createObjectURL(blob);
-    const urls = this.objectUrls.get(mediaId) || [];
-    urls.push(url);
-    this.objectUrls.set(mediaId, urls);
+    this.setFrameUrl(mediaId, index, url);
 
     return {
       index,
       timestamp: index / FRAME_RATE,
       url,
+      byteSize: blob.size,
     };
   }
 
@@ -367,9 +403,9 @@ class FilmstripOPFSStorage {
    * Revoke object URLs for a media
    */
   revokeUrls(mediaId: string): void {
-    const urls = this.objectUrls.get(mediaId);
-    if (urls) {
-      for (const url of urls) {
+    const urlsByIndex = this.objectUrls.get(mediaId);
+    if (urlsByIndex) {
+      for (const url of urlsByIndex.values()) {
         URL.revokeObjectURL(url);
       }
       this.objectUrls.delete(mediaId);

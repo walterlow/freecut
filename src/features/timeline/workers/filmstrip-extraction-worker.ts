@@ -35,6 +35,7 @@ export interface ExtractRequest {
   endIndex?: number; // End frame index (exclusive)
   totalFrames?: number; // Total frames across all workers (for progress)
   workerId?: number; // Worker identifier for debugging
+  maxParallelSaves?: number; // Optional memory-pressure throttle from main thread
 }
 
 export interface AbortRequest {
@@ -107,7 +108,7 @@ async function extractAndSave(
 ): Promise<void> {
   const {
     requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices, targetIndices,
-    startIndex, endIndex, totalFrames: totalFramesOverride
+    startIndex, endIndex, totalFrames: totalFramesOverride, maxParallelSaves
   } = request;
 
   // Calculate frame range - support both full extraction and chunked
@@ -210,7 +211,7 @@ async function extractAndSave(
 
     // Extract and save each frame with parallel writes
     const pendingSaves: Promise<void>[] = [];
-    const MAX_PARALLEL_SAVES = 4;
+    const MAX_PARALLEL_SAVES = Math.max(1, Math.min(6, maxParallelSaves ?? 4));
 
     for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
       if (state.aborted) break;

@@ -41,17 +41,26 @@ const MIN_FILMSTRIP_TARGET_FRAMES = 90;
 const MAX_FILMSTRIP_TARGET_FRAMES = 300;
 const TARGET_FRAME_BUDGET_SCALE = 8;
 const MAX_PRIORITY_DENSE_FRAMES = 180;
+const PRIORITY_FIRST_MIN_EXTRA_FRAMES = 24;
 const BACKGROUND_STRIDE_MEDIUM = 2; // 0.5fps equivalent outside priority range
 const BACKGROUND_STRIDE_LONG = 3;
 const BACKGROUND_STRIDE_VERY_LONG = 4;
 const MEDIUM_CLIP_FRAME_THRESHOLD = 300;
 const LONG_CLIP_FRAME_THRESHOLD = 1200;
 const VERY_LONG_CLIP_FRAME_THRESHOLD = 2400;
+const CACHE_EVICT_IDLE_MS = 15_000;
+const MEMORY_TARGET_BYTES = 500 * 1024 * 1024;
+const MEMORY_SOFT_LIMIT_BYTES = 420 * 1024 * 1024;
 const METRICS_HISTORY_LIMIT = 120;
 const PROGRESS_NOTIFY_INTERVAL_MS = 200;
 const PROGRESS_NOTIFY_FRAME_DELTA = 4;
 const IMAGE_FORMAT = 'image/jpeg';
 const IMAGE_QUALITY = 0.7;
+const FRAME_MEMORY_FALLBACK_BYTES = THUMBNAIL_WIDTH * THUMBNAIL_HEIGHT * 4;
+const MAX_IDLE_WORKERS_BASE = 2;
+const WORKER_PARALLEL_SAVES_BASE = 4;
+const WORKER_PARALLEL_SAVES_MEMORY_PRESSURE = 2;
+const MEMORY_CHECK_INTERVAL_MS = 500;
 
 interface WorkerState {
   worker: Worker;
@@ -78,6 +87,8 @@ interface PendingExtraction {
   totalFrames: number;
   progressFrames: number;
   targetIndices: number[];
+  phase: 'priority' | 'full';
+  continueToFull: boolean;
   completedWorkers: number;
   onProgress?: (progress: number) => void;
   // Track frames incrementally during extraction
@@ -137,11 +148,27 @@ export interface FilmstripMetricsSnapshot {
     timeToFirstFrameMs: number;
     extractFramesPerSecond: number;
   };
+  memory: {
+    cacheBytes: number;
+    cacheEntries: number;
+    activeExtractions: number;
+    queuedExtractions: number;
+    usedJSHeapBytes: number | null;
+    maxConcurrentExtractions: number;
+  };
   recent: ExtractionMetricSample[];
+}
+
+interface CacheEntryMeta {
+  sizeBytes: number;
+  lastAccessedAt: number;
 }
 
 class FilmstripCacheService {
   private cache = new Map<string, Filmstrip>();
+  private cacheMeta = new Map<string, CacheEntryMeta>();
+  private cacheBytes = 0;
+  private idleEvictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pendingExtractions = new Map<string, PendingExtraction>();
   private updateCallbacks = new Map<string, Set<FilmstripUpdateCallback>>();
   private loadingPromises = new Map<string, Promise<Filmstrip>>();
@@ -156,6 +183,7 @@ class FilmstripCacheService {
     aborted: 0,
   };
   private metricsHistory: ExtractionMetricSample[] = [];
+  private lastMemoryCheckAt = 0;
 
   private createWorker(): Worker {
     const worker = new Worker(
@@ -176,9 +204,19 @@ class FilmstripCacheService {
     return this.workerPool.pop() ?? this.createWorker();
   }
 
+  private getMaxIdleWorkers(): number {
+    if (this.isHardMemoryPressure()) return 0;
+    if (this.isSoftMemoryPressure()) return 1;
+    return MAX_IDLE_WORKERS_BASE;
+  }
+
   private releaseWorker(worker: Worker): void {
     worker.onmessage = null;
     worker.onerror = null;
+    if (this.workerPool.length >= this.getMaxIdleWorkers()) {
+      this.terminateWorker(worker);
+      return;
+    }
     this.workerPool.push(worker);
   }
 
@@ -189,12 +227,164 @@ class FilmstripCacheService {
     this.allWorkers.delete(worker);
   }
 
+  private getUsedJsHeapBytes(): number | null {
+    if (typeof performance === 'undefined') return null;
+    const withMemory = performance as Performance & {
+      memory?: { usedJSHeapSize?: number };
+    };
+    const used = withMemory.memory?.usedJSHeapSize;
+    if (typeof used !== 'number' || !Number.isFinite(used) || used <= 0) {
+      return null;
+    }
+    return used;
+  }
+
+  private isSoftMemoryPressure(): boolean {
+    const usedHeap = this.getUsedJsHeapBytes();
+    if (usedHeap !== null && usedHeap >= MEMORY_SOFT_LIMIT_BYTES) {
+      return true;
+    }
+    return this.cacheBytes >= MEMORY_SOFT_LIMIT_BYTES;
+  }
+
+  private isHardMemoryPressure(): boolean {
+    const usedHeap = this.getUsedJsHeapBytes();
+    if (usedHeap !== null && usedHeap >= MEMORY_TARGET_BYTES) {
+      return true;
+    }
+    return this.cacheBytes >= MEMORY_TARGET_BYTES;
+  }
+
+  private estimateFilmstripBytes(frames: FilmstripFrame[]): number {
+    let total = 0;
+    for (const frame of frames) {
+      total += frame.byteSize && frame.byteSize > 0
+        ? frame.byteSize
+        : FRAME_MEMORY_FALLBACK_BYTES;
+    }
+    return total;
+  }
+
+  private updateCacheMeta(mediaId: string, filmstrip: Filmstrip): void {
+    const nextSize = this.estimateFilmstripBytes(filmstrip.frames);
+    const previous = this.cacheMeta.get(mediaId);
+    if (previous) {
+      this.cacheBytes = Math.max(0, this.cacheBytes - previous.sizeBytes);
+    }
+    this.cacheBytes += nextSize;
+    this.cacheMeta.set(mediaId, {
+      sizeBytes: nextSize,
+      lastAccessedAt: Date.now(),
+    });
+  }
+
+  private touchCacheEntry(mediaId: string): void {
+    const entry = this.cacheMeta.get(mediaId);
+    if (entry) {
+      entry.lastAccessedAt = Date.now();
+      return;
+    }
+    const cached = this.cache.get(mediaId);
+    if (!cached) return;
+    this.updateCacheMeta(mediaId, cached);
+  }
+
+  private clearCacheMeta(mediaId: string): void {
+    const previous = this.cacheMeta.get(mediaId);
+    if (!previous) return;
+    this.cacheBytes = Math.max(0, this.cacheBytes - previous.sizeBytes);
+    this.cacheMeta.delete(mediaId);
+  }
+
+  private clearIdleEvictionTimer(mediaId: string): void {
+    const timer = this.idleEvictionTimers.get(mediaId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.idleEvictionTimers.delete(mediaId);
+  }
+
+  private scheduleIdleEviction(mediaId: string): void {
+    this.clearIdleEvictionTimer(mediaId);
+    if (this.pendingExtractions.has(mediaId)) return;
+    if (this.hasSubscribers(mediaId)) return;
+    if (!this.cache.has(mediaId)) return;
+
+    const timer = setTimeout(() => {
+      this.idleEvictionTimers.delete(mediaId);
+      this.tryEvictMedia(mediaId, 'idle-timeout');
+    }, CACHE_EVICT_IDLE_MS);
+    this.idleEvictionTimers.set(mediaId, timer);
+  }
+
+  private hasSubscribers(mediaId: string): boolean {
+    const callbacks = this.updateCallbacks.get(mediaId);
+    return !!callbacks && callbacks.size > 0;
+  }
+
+  private tryEvictMedia(mediaId: string, reason: string): boolean {
+    if (this.pendingExtractions.has(mediaId)) return false;
+    if (this.hasSubscribers(mediaId)) return false;
+    if (!this.cache.has(mediaId)) return false;
+
+    this.cache.delete(mediaId);
+    this.clearCacheMeta(mediaId);
+    filmstripOPFSStorage.revokeUrls(mediaId);
+    this.clearIdleEvictionTimer(mediaId);
+    logger.debug(`Evicted in-memory filmstrip ${mediaId} (${reason})`);
+    return true;
+  }
+
+  private enforceMemoryBudget(force = false): void {
+    const now = Date.now();
+    if (!force && now - this.lastMemoryCheckAt < MEMORY_CHECK_INTERVAL_MS) {
+      return;
+    }
+    this.lastMemoryCheckAt = now;
+
+    const usedHeap = this.getUsedJsHeapBytes();
+    const shouldTrim = force
+      || this.cacheBytes > MEMORY_SOFT_LIMIT_BYTES
+      || (usedHeap !== null && usedHeap > MEMORY_SOFT_LIMIT_BYTES);
+    if (!shouldTrim) return;
+
+    const evictable = Array.from(this.cacheMeta.entries())
+      .filter(([mediaId]) => !this.pendingExtractions.has(mediaId))
+      .sort((a, b) => {
+        const aSubscribed = this.hasSubscribers(a[0]) ? 1 : 0;
+        const bSubscribed = this.hasSubscribers(b[0]) ? 1 : 0;
+        if (aSubscribed !== bSubscribed) return aSubscribed - bSubscribed;
+        return a[1].lastAccessedAt - b[1].lastAccessedAt;
+      });
+
+    for (const [mediaId] of evictable) {
+      if (
+        this.cacheBytes <= MEMORY_SOFT_LIMIT_BYTES
+        && (!usedHeap || usedHeap <= MEMORY_SOFT_LIMIT_BYTES)
+      ) {
+        break;
+      }
+
+      const evicted = this.tryEvictMedia(mediaId, 'memory-pressure');
+      if (!evicted && !force) {
+        continue;
+      }
+    }
+  }
+
   private getMaxConcurrentExtractions(): number {
-    if (typeof navigator === 'undefined') return MAX_CONCURRENT_EXTRACTIONS_BASE;
-    const cores = navigator.hardwareConcurrency || 4;
-    return cores >= HIGH_CORE_THRESHOLD
-      ? MAX_CONCURRENT_EXTRACTIONS_HIGH_CORE
-      : MAX_CONCURRENT_EXTRACTIONS_BASE;
+    const base = typeof navigator === 'undefined'
+      ? MAX_CONCURRENT_EXTRACTIONS_BASE
+      : (navigator.hardwareConcurrency || 4) >= HIGH_CORE_THRESHOLD
+        ? MAX_CONCURRENT_EXTRACTIONS_HIGH_CORE
+        : MAX_CONCURRENT_EXTRACTIONS_BASE;
+
+    if (this.isHardMemoryPressure()) {
+      return 1;
+    }
+    if (this.isSoftMemoryPressure()) {
+      return Math.min(base, 2);
+    }
+    return base;
   }
 
   private buildPriorityIndices(
@@ -243,6 +433,29 @@ class FilmstripCacheService {
     if (totalFrames <= LONG_CLIP_FRAME_THRESHOLD) return BACKGROUND_STRIDE_MEDIUM;
     if (totalFrames <= VERY_LONG_CLIP_FRAME_THRESHOLD) return BACKGROUND_STRIDE_LONG;
     return BACKGROUND_STRIDE_VERY_LONG;
+  }
+
+  private shouldUsePriorityFirst(
+    totalFrames: number,
+    priorityRange: PriorityFrameRange | null,
+    skipSet: Set<number>
+  ): boolean {
+    if (!priorityRange) return false;
+
+    const priorityIndices = this.buildPriorityIndices(totalFrames, priorityRange);
+    if (priorityIndices.length === 0) return false;
+
+    const fullTargetIndices = this.buildTargetIndices(totalFrames, priorityRange);
+    const remainingFull = fullTargetIndices.reduce(
+      (count, index) => (skipSet.has(index) ? count : count + 1),
+      0
+    );
+    const remainingPriority = priorityIndices.reduce(
+      (count, index) => (skipSet.has(index) ? count : count + 1),
+      0
+    );
+
+    return (remainingFull - remainingPriority) >= PRIORITY_FIRST_MIN_EXTRA_FRAMES;
   }
 
   private createExtractionMetrics(
@@ -312,18 +525,22 @@ class FilmstripCacheService {
   getMetricsSnapshot(): FilmstripMetricsSnapshot {
     const recent = [...this.metricsHistory];
     const completed = recent.filter((sample) => sample.outcome === 'completed');
-    const durationAvg = completed.length > 0
-      ? completed.reduce((sum, sample) => sum + sample.durationMs, 0) / completed.length
+    const completedForAverages = completed.filter(
+      (sample) => sample.framesToExtract > 1 && sample.durationMs >= 250
+    );
+    const averageSamples = completedForAverages.length > 0 ? completedForAverages : completed;
+    const durationAvg = averageSamples.length > 0
+      ? averageSamples.reduce((sum, sample) => sum + sample.durationMs, 0) / averageSamples.length
       : 0;
-    const ttfpSamples = completed.filter((sample) => sample.timeToFirstFrameMs !== null);
+    const ttfpSamples = averageSamples.filter((sample) => sample.timeToFirstFrameMs !== null);
     const ttfpAvg = ttfpSamples.length > 0
       ? ttfpSamples.reduce((sum, sample) => sum + (sample.timeToFirstFrameMs ?? 0), 0) / ttfpSamples.length
       : 0;
-    const throughputAvg = completed.length > 0
-      ? completed.reduce((sum, sample) => {
+    const throughputAvg = averageSamples.length > 0
+      ? averageSamples.reduce((sum, sample) => {
         const seconds = Math.max(0.001, sample.durationMs / 1000);
         return sum + (sample.framesToExtract / seconds);
-      }, 0) / completed.length
+      }, 0) / averageSamples.length
       : 0;
 
     return {
@@ -332,6 +549,14 @@ class FilmstripCacheService {
         durationMs: Math.round(durationAvg),
         timeToFirstFrameMs: Math.round(ttfpAvg),
         extractFramesPerSecond: Math.round(throughputAvg * 100) / 100,
+      },
+      memory: {
+        cacheBytes: this.cacheBytes,
+        cacheEntries: this.cache.size,
+        activeExtractions: this.activeExtractions.size,
+        queuedExtractions: this.extractionQueue.length,
+        usedJSHeapBytes: this.getUsedJsHeapBytes(),
+        maxConcurrentExtractions: this.getMaxConcurrentExtractions(),
       },
       recent,
     };
@@ -425,6 +650,7 @@ class FilmstripCacheService {
    * Subscribe to filmstrip updates
    */
   subscribe(mediaId: string, callback: FilmstripUpdateCallback): () => void {
+    this.clearIdleEvictionTimer(mediaId);
     if (!this.updateCallbacks.has(mediaId)) {
       this.updateCallbacks.set(mediaId, new Set());
     }
@@ -433,6 +659,7 @@ class FilmstripCacheService {
     // Immediately call with current state if available
     const current = this.cache.get(mediaId);
     if (current) {
+      this.touchCacheEntry(mediaId);
       callback(current);
     }
 
@@ -442,18 +669,25 @@ class FilmstripCacheService {
         callbacks.delete(callback);
         if (callbacks.size === 0) {
           this.updateCallbacks.delete(mediaId);
+          this.scheduleIdleEviction(mediaId);
         }
       }
     };
   }
 
   private notifyUpdate(mediaId: string, filmstrip: Filmstrip): void {
+    this.clearIdleEvictionTimer(mediaId);
     this.cache.set(mediaId, filmstrip);
+    this.updateCacheMeta(mediaId, filmstrip);
+    this.enforceMemoryBudget();
     const callbacks = this.updateCallbacks.get(mediaId);
     if (callbacks) {
       for (const callback of callbacks) {
         callback(filmstrip);
       }
+    }
+    if (!this.hasSubscribers(mediaId) && !filmstrip.isExtracting) {
+      this.scheduleIdleEviction(mediaId);
     }
   }
 
@@ -467,6 +701,7 @@ class FilmstripCacheService {
     onProgress?: (progress: number) => void,
     priorityRange?: PriorityFrameRange
   ): Promise<Filmstrip> {
+    this.clearIdleEvictionTimer(mediaId);
     const totalFrames = Math.ceil(duration * FRAME_RATE);
     const normalizedPriorityRange = this.normalizePriorityRange(priorityRange, totalFrames);
 
@@ -479,6 +714,7 @@ class FilmstripCacheService {
         normalizedPriorityRange
       );
       if (!needsRefinement) {
+        this.touchCacheEntry(mediaId);
         return cached;
       }
 
@@ -493,7 +729,7 @@ class FilmstripCacheService {
         onProgress,
         false,
         normalizedPriorityRange ?? undefined,
-        true
+        { priorityOnly: true, continueToFull: false }
       );
 
       const refining = { ...cached, isExtracting: true };
@@ -506,6 +742,7 @@ class FilmstripCacheService {
       pending.priorityRange = this.normalizePriorityRange(priorityRange, pending.totalFrames);
       const current = this.cache.get(mediaId);
       if (current) {
+        this.touchCacheEntry(mediaId);
         return current;
       }
     }
@@ -585,6 +822,9 @@ class FilmstripCacheService {
       onProgress,
       false,
       priorityRange,
+      this.shouldUsePriorityFirst(totalFrames, priorityRange ?? null, new Set(existingIndices))
+        ? { priorityOnly: true, continueToFull: true }
+        : undefined,
     );
 
     return initialFilmstrip;
@@ -599,7 +839,10 @@ class FilmstripCacheService {
     onProgress?: (progress: number) => void,
     forceSingleWorker = false,
     priorityRange?: PriorityFrameRange,
-    priorityOnly = false
+    options?: {
+      priorityOnly?: boolean;
+      continueToFull?: boolean;
+    }
   ): void {
     // Check if already extracting
     if (this.pendingExtractions.has(mediaId)) {
@@ -610,14 +853,45 @@ class FilmstripCacheService {
     const totalFrames = Math.ceil(duration * FRAME_RATE);
     const skipSet = new Set(skipIndices);
     const normalizedPriorityRange = this.normalizePriorityRange(priorityRange, totalFrames);
-    const targetIndices = priorityOnly
+    const requestedPriorityOnly = options?.priorityOnly ?? false;
+    const requestedContinueToFull = options?.continueToFull ?? false;
+    const fullTargetIndicesForProgress = (requestedPriorityOnly && requestedContinueToFull)
+      ? this.buildTargetIndices(totalFrames, normalizedPriorityRange)
+      : null;
+    let phase: 'priority' | 'full' = requestedPriorityOnly ? 'priority' : 'full';
+    let continueToFull = requestedContinueToFull && requestedPriorityOnly;
+    let targetIndices = requestedPriorityOnly
       ? this.buildPriorityIndices(totalFrames, normalizedPriorityRange)
       : this.buildTargetIndices(totalFrames, normalizedPriorityRange);
-    const existingTargetCount = targetIndices.reduce(
+    let existingTargetCount = targetIndices.reduce(
       (count, index) => (skipSet.has(index) ? count + 1 : count),
       0
     );
-    const framesToExtract = Math.max(0, targetIndices.length - existingTargetCount);
+    let existingProgressCount = fullTargetIndicesForProgress
+      ? fullTargetIndicesForProgress.reduce(
+        (count, index) => (skipSet.has(index) ? count + 1 : count),
+        0
+      )
+      : existingTargetCount;
+    let framesToExtract = Math.max(0, targetIndices.length - existingTargetCount);
+
+    // Two-phase edge case: if priority phase is already fully cached, continue
+    // straight into full phase instead of incorrectly finalizing early.
+    if (framesToExtract === 0 && phase === 'priority' && continueToFull && fullTargetIndicesForProgress) {
+      const existingFullCount = fullTargetIndicesForProgress.reduce(
+        (count, index) => (skipSet.has(index) ? count + 1 : count),
+        0
+      );
+      const fullFramesToExtract = Math.max(0, fullTargetIndicesForProgress.length - existingFullCount);
+      if (fullFramesToExtract > 0) {
+        phase = 'full';
+        continueToFull = false;
+        targetIndices = fullTargetIndicesForProgress;
+        existingTargetCount = existingFullCount;
+        existingProgressCount = existingFullCount;
+        framesToExtract = fullFramesToExtract;
+      }
+    }
 
     // Initialize with existing frames
     const extractedFrames = new Map<number, FilmstripFrame>();
@@ -639,11 +913,13 @@ class FilmstripCacheService {
       totalFrames,
       progressFrames: Math.max(1, targetIndices.length),
       targetIndices,
+      phase,
+      continueToFull,
       completedWorkers: 0,
       onProgress,
       extractedFrames,
       lastNotifyAt: 0,
-      lastNotifiedFrameCount: existingTargetCount,
+      lastNotifiedFrameCount: existingProgressCount,
       metrics: this.createExtractionMetrics(
         mediaId,
         totalFrames,
@@ -680,10 +956,12 @@ class FilmstripCacheService {
       logger.warn(`Failed to persist extraction metadata for ${mediaId}:`, error);
     });
 
+    this.enforceMemoryBudget();
     this.enqueueExtraction(mediaId);
   }
 
   private enqueueExtraction(mediaId: string): void {
+    this.enforceMemoryBudget();
     if (this.activeExtractions.has(mediaId)) {
       return;
     }
@@ -729,6 +1007,13 @@ class FilmstripCacheService {
     if (!pending) {
       this.activeExtractions.delete(mediaId);
       this.startNextQueuedExtraction();
+      return;
+    }
+
+    this.enforceMemoryBudget();
+    if (this.isHardMemoryPressure() && !this.hasSubscribers(mediaId)) {
+      this.finalizeExtractionMetrics(pending.metrics, 'aborted', pending.extractedFrames.size);
+      this.cleanupExtraction(mediaId);
       return;
     }
 
@@ -792,7 +1077,63 @@ class FilmstripCacheService {
     return indices;
   }
 
+  private continueWithFullPhase(mediaId: string, pending: PendingExtraction): boolean {
+    if (pending.phase !== 'priority' || !pending.continueToFull) {
+      return false;
+    }
+
+    const fullTargetIndices = this.buildTargetIndices(pending.totalFrames, pending.priorityRange);
+    const existingIndices = new Set([
+      ...pending.skipIndices,
+      ...Array.from(pending.extractedFrames.keys()),
+    ]);
+    const existingFullCount = fullTargetIndices.reduce(
+      (count, index) => (existingIndices.has(index) ? count + 1 : count),
+      0
+    );
+
+    if (existingFullCount >= fullTargetIndices.length) {
+      return false;
+    }
+
+    for (const workerState of pending.workers) {
+      this.releaseWorker(workerState.worker);
+    }
+
+    pending.phase = 'full';
+    pending.continueToFull = false;
+    pending.skipIndices = Array.from(existingIndices);
+    pending.targetIndices = fullTargetIndices;
+    pending.progressFrames = Math.max(1, fullTargetIndices.length);
+    pending.workers = [];
+    pending.completedWorkers = 0;
+    pending.lastNotifyAt = Date.now();
+    pending.lastNotifiedFrameCount = existingFullCount;
+
+    // Promote metrics to full-phase totals while preserving first-frame timing.
+    pending.metrics.targetFrames = fullTargetIndices.length;
+    pending.metrics.framesToExtract = Math.max(
+      0,
+      fullTargetIndices.length - pending.metrics.existingTargetFrames
+    );
+
+    const frames = Array.from(pending.extractedFrames.values())
+      .sort((a, b) => a.index - b.index);
+    const progress = Math.round((existingFullCount / pending.progressFrames) * 100);
+    this.notifyUpdate(mediaId, {
+      frames,
+      isComplete: false,
+      isExtracting: true,
+      progress,
+    });
+    pending.onProgress?.(progress);
+
+    this.startWorkerExtraction(pending);
+    return true;
+  }
+
   private startWorkerExtraction(pending: PendingExtraction): void {
+    this.enforceMemoryBudget();
     const {
       mediaId,
       blobUrl,
@@ -810,9 +1151,12 @@ class FilmstripCacheService {
     const hardwareConcurrency = typeof navigator !== 'undefined'
       ? (navigator.hardwareConcurrency || 4)
       : 4;
+    const memoryConstrained = this.isSoftMemoryPressure();
 
     // Determine workers per extraction based on hardware and frame count
-    const maxWorkers = forceSingleWorker || hardwareConcurrency < MIN_CORES_FOR_PARALLEL_WORKERS
+    const maxWorkers = forceSingleWorker
+      || memoryConstrained
+      || hardwareConcurrency < MIN_CORES_FOR_PARALLEL_WORKERS
       ? 1
       : MAX_WORKERS;
     const workerCount = Math.min(
@@ -925,6 +1269,10 @@ class FilmstripCacheService {
 
           // Check if all workers are done
           if (pending.completedWorkers === pending.workers.length) {
+            if (this.continueWithFullPhase(mediaId, pending)) {
+              return;
+            }
+
             // All workers done - finalize directly from in-memory extracted frames
             // to avoid an extra full OPFS directory scan and URL recreation pass.
             const finalFrames = Array.from(pending.extractedFrames.values())
@@ -986,6 +1334,9 @@ class FilmstripCacheService {
         endIndex,
         totalFrames: progressFrames,
         workerId: i,
+        maxParallelSaves: memoryConstrained
+          ? WORKER_PARALLEL_SAVES_MEMORY_PRESSURE
+          : WORKER_PARALLEL_SAVES_BASE,
       };
       worker.postMessage(request);
     }
@@ -1142,6 +1493,8 @@ class FilmstripCacheService {
       totalFrames,
       progressFrames: Math.max(1, targetIndices.length),
       targetIndices,
+      phase: 'full',
+      continueToFull: false,
       completedWorkers: 0,
       onProgress,
       extractedFrames,
@@ -1423,12 +1776,38 @@ class FilmstripCacheService {
         pending.onProgress,
         true,
         pending.priorityRange ?? undefined,
+        {
+          priorityOnly: pending.phase === 'priority',
+          continueToFull: pending.continueToFull,
+        }
       );
       return;
     }
 
     if (pending.forceSingleWorker && !pending.isVideoFallback && this.shouldRetryWithSingleWorker(error)) {
       logger.warn(`Single-worker decode failed for ${mediaId}; switching to video element fallback`);
+
+      const skipIndices = Array.from(new Set([
+        ...pending.skipIndices,
+        ...currentFrames.map(frame => frame.index),
+      ]));
+
+      this.finalizeExtractionMetrics(pending.metrics, 'failed', currentFrames.length);
+      this.cleanupExtraction(mediaId);
+      this.startVideoElementFallback(
+        mediaId,
+        pending.blobUrl,
+        pending.duration,
+        skipIndices,
+        currentFrames,
+        pending.onProgress,
+        pending.priorityRange ?? undefined,
+      );
+      return;
+    }
+
+    if (!pending.isVideoFallback && !pending.fallbackAttempted) {
+      logger.warn(`Worker extraction failed for ${mediaId}; switching to video fallback`);
 
       const skipIndices = Array.from(new Set([
         ...pending.skipIndices,
@@ -1484,6 +1863,11 @@ class FilmstripCacheService {
       this.pendingExtractions.delete(mediaId);
     }
 
+    if (!this.hasSubscribers(mediaId)) {
+      this.scheduleIdleEviction(mediaId);
+    }
+    this.enforceMemoryBudget();
+
     if (wasActive) {
       this.startNextQueuedExtraction();
     }
@@ -1512,7 +1896,12 @@ class FilmstripCacheService {
    * Get synchronously from cache (for avoiding flash on remount)
    */
   getFromCacheSync(mediaId: string): Filmstrip | null {
-    return this.cache.get(mediaId) || null;
+    const cached = this.cache.get(mediaId) || null;
+    if (cached) {
+      this.clearIdleEvictionTimer(mediaId);
+      this.touchCacheEntry(mediaId);
+    }
+    return cached;
   }
 
   /**
@@ -1520,7 +1909,10 @@ class FilmstripCacheService {
    */
   async clearMedia(mediaId: string): Promise<void> {
     this.abort(mediaId);
+    this.clearIdleEvictionTimer(mediaId);
     this.cache.delete(mediaId);
+    this.clearCacheMeta(mediaId);
+    filmstripOPFSStorage.revokeUrls(mediaId);
     await filmstripOPFSStorage.delete(mediaId);
   }
 
@@ -1531,7 +1923,13 @@ class FilmstripCacheService {
     for (const mediaId of this.pendingExtractions.keys()) {
       this.abort(mediaId);
     }
+    for (const timer of this.idleEvictionTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.idleEvictionTimers.clear();
     this.cache.clear();
+    this.cacheMeta.clear();
+    this.cacheBytes = 0;
     await filmstripOPFSStorage.clearAll();
   }
 
@@ -1549,7 +1947,13 @@ class FilmstripCacheService {
     for (const worker of Array.from(this.allWorkers)) {
       this.terminateWorker(worker);
     }
+    for (const timer of this.idleEvictionTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.idleEvictionTimers.clear();
     this.cache.clear();
+    this.cacheMeta.clear();
+    this.cacheBytes = 0;
     this.clearMetrics();
     this.updateCallbacks.clear();
     this.loadingPromises.clear();
