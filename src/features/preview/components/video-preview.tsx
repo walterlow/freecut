@@ -31,8 +31,15 @@ const FAST_SCRUB_RENDERER_ENABLED = true;
 const FAST_SCRUB_PRELOAD_BUDGET_MS = 180;
 const FAST_SCRUB_BOUNDARY_PREWARM_WINDOW_SECONDS = 0.5;
 const FAST_SCRUB_MAX_PREWARM_FRAMES = 256;
+const FAST_SCRUB_SOURCE_PREWARM_WINDOW_SECONDS = 1.0;
+const SOURCE_WARM_PLAYHEAD_WINDOW_SECONDS = 8;
+const SOURCE_WARM_SCRUB_WINDOW_SECONDS = 3;
+const SOURCE_WARM_MAX_SOURCES = 20;
+const SOURCE_WARM_STICKY_MS = 2500;
+const SOURCE_WARM_TICK_MS = 300;
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
+type VideoSourceSpan = { src: string; startFrame: number; endFrame: number };
 
 interface VideoPreviewProps {
   project: {
@@ -255,6 +262,7 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
   const scrubPrewarmedFramesRef = useRef<number[]>([]);
   const scrubPrewarmedFrameSetRef = useRef<Set<number>>(new Set());
+  const scrubPrewarmedSourcesRef = useRef<Set<string>>(new Set());
   const scrubMountedRef = useRef(true);
   const [showFastScrubOverlay, setShowFastScrubOverlay] = useState(false);
 
@@ -384,6 +392,39 @@ export const VideoPreview = memo(function VideoPreview({
     return [...boundarySet].sort((a, b) => a - b);
   }, [fastScrubTracks]);
 
+  const fastScrubBoundarySources = useMemo(() => {
+    const boundarySources = new Map<number, Set<string>>();
+
+    for (const track of fastScrubTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video') continue;
+        const src = 'src' in item ? (item.src ?? '') : '';
+        if (!src) continue;
+
+        const startFrame = item.from;
+        const endFrame = item.from + item.durationInFrames;
+
+        let startSet = boundarySources.get(startFrame);
+        if (!startSet) {
+          startSet = new Set<string>();
+          boundarySources.set(startFrame, startSet);
+        }
+        startSet.add(src);
+
+        let endSet = boundarySources.get(endFrame);
+        if (!endSet) {
+          endSet = new Set<string>();
+          boundarySources.set(endFrame, endSet);
+        }
+        endSet.add(src);
+      }
+    }
+
+    return [...boundarySources.entries()]
+      .map(([frame, srcSet]) => ({ frame, srcs: [...srcSet] }))
+      .sort((a, b) => a.frame - b.frame);
+  }, [fastScrubTracks]);
+
   // Create a stable fingerprint for media resolution using derived selector
   // Includes media from both main timeline items AND sub-composition items
   const mainMediaFingerprint = useTimelineStore((s) =>
@@ -497,56 +538,158 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [mediaFingerprint, urlRefreshVersion]);
 
-  // Eagerly preload all video sources into the VideoSourcePool.
-  // This creates and warms up <video> elements for every unique source
-  // so the decoder is ready before the user presses play or seeks.
-  // Also prunes elements for sources no longer on the timeline to free memory.
-  // Memory cost: ~one <video> element per unique source file on the timeline.
-  // Includes sub-composition video sources for precomp playback.
-  const compositions = useCompositionsStore((s) => s.compositions);
+  // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
+  // This avoids memory blowups on large projects while keeping nearby clips hot.
+  const playbackVideoSourceSpans = useMemo<VideoSourceSpan[]>(() => {
+    const spans: VideoSourceSpan[] = [];
+    for (const track of resolvedTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video') continue;
+        const src = 'src' in item ? item.src : '';
+        if (!src) continue;
+        spans.push({
+          src,
+          startFrame: item.from,
+          endFrame: item.from + item.durationInFrames,
+        });
+      }
+    }
+    return spans;
+  }, [resolvedTracks]);
+
+  const scrubVideoSourceSpans = useMemo<VideoSourceSpan[]>(() => {
+    const spans: VideoSourceSpan[] = [];
+    for (const track of fastScrubTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video') continue;
+        const src = 'src' in item ? item.src : '';
+        if (!src) continue;
+        spans.push({
+          src,
+          startFrame: item.from,
+          endFrame: item.from + item.durationInFrames,
+        });
+      }
+    }
+    return spans;
+  }, [fastScrubTracks]);
+
   useEffect(() => {
     if (resolvedUrls.size === 0) return;
 
     const pool = getGlobalVideoSourcePool();
-    const activeVideoSrcs = new Set<string>();
+    const recentTouches = new Map<string, number>();
+    let rafId: number | null = null;
 
-    for (const track of combinedTracks) {
-      for (const item of track.items) {
-        if (item.type === 'video' && item.mediaId) {
-          // When proxy is enabled, the video element uses the proxy URL.
-          // Include both so pruneUnused doesn't discard active elements.
-          if (useProxy || FAST_SCRUB_RENDERER_ENABLED) {
-            const proxyUrl = resolveProxyUrl(item.mediaId);
-            if (proxyUrl) activeVideoSrcs.add(proxyUrl);
-          }
-          const src = resolvedUrls.get(item.mediaId);
-          if (src) activeVideoSrcs.add(src);
+    const collectCandidates = (
+      spans: VideoSourceSpan[],
+      anchorFrame: number,
+      windowFrames: number,
+      baseScore: number,
+      candidateScores: Map<string, number>
+    ) => {
+      const minFrame = anchorFrame - windowFrames;
+      const maxFrame = anchorFrame + windowFrames;
+
+      for (const span of spans) {
+        if (span.endFrame < minFrame || span.startFrame > maxFrame) continue;
+
+        const distance = anchorFrame < span.startFrame
+          ? (span.startFrame - anchorFrame)
+          : anchorFrame > span.endFrame
+            ? (anchorFrame - span.endFrame)
+            : 0;
+
+        const score = baseScore + distance;
+        const existing = candidateScores.get(span.src);
+        if (existing === undefined || score < existing) {
+          candidateScores.set(span.src, score);
         }
       }
-    }
+    };
 
-    // Include video sources from sub-compositions
-    for (const comp of compositions) {
-      for (const subItem of comp.items) {
-        if (subItem.type === 'video' && subItem.mediaId) {
-          if (useProxy || FAST_SCRUB_RENDERER_ENABLED) {
-            const proxyUrl = resolveProxyUrl(subItem.mediaId);
-            if (proxyUrl) activeVideoSrcs.add(proxyUrl);
-          }
-          const src = resolvedUrls.get(subItem.mediaId);
-          if (src) activeVideoSrcs.add(src);
+    const refreshWarmSet = () => {
+      const now = performance.now();
+      const playback = usePlaybackStore.getState();
+      const candidateScores = new Map<string, number>();
+      const playheadWindowFrames = Math.max(12, Math.round(fps * SOURCE_WARM_PLAYHEAD_WINDOW_SECONDS));
+      const scrubWindowFrames = Math.max(8, Math.round(fps * SOURCE_WARM_SCRUB_WINDOW_SECONDS));
+
+      collectCandidates(
+        playbackVideoSourceSpans,
+        playback.currentFrame,
+        playheadWindowFrames,
+        100,
+        candidateScores
+      );
+
+      if (playback.previewFrame !== null) {
+        collectCandidates(
+          scrubVideoSourceSpans,
+          playback.previewFrame,
+          scrubWindowFrames,
+          0,
+          candidateScores
+        );
+      }
+
+      const selectedSources = [...candidateScores.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, SOURCE_WARM_MAX_SOURCES)
+        .map(([src]) => src);
+
+      for (const src of selectedSources) {
+        recentTouches.set(src, now);
+        pool.preloadSource(src).catch(() => {});
+      }
+
+      const keepWarm = new Set<string>(selectedSources);
+      const stickySources = [...recentTouches.entries()]
+        .filter(([src, touchedAt]) =>
+          !keepWarm.has(src) && (now - touchedAt) <= SOURCE_WARM_STICKY_MS
+        )
+        .sort((a, b) => b[1] - a[1]);
+
+      for (const [src] of stickySources) {
+        if (keepWarm.size >= SOURCE_WARM_MAX_SOURCES) break;
+        keepWarm.add(src);
+      }
+
+      for (const [src, touchedAt] of recentTouches.entries()) {
+        if ((now - touchedAt) > SOURCE_WARM_STICKY_MS) {
+          recentTouches.delete(src);
         }
       }
-    }
 
-    // Preload all active sources (no-op if already loaded)
-    for (const src of activeVideoSrcs) {
-      pool.preloadSource(src).catch(() => {});
-    }
+      pool.pruneUnused(keepWarm);
+    };
 
-    // Release elements for sources removed from the timeline
-    pool.pruneUnused(activeVideoSrcs);
-  }, [resolvedUrls, combinedTracks, compositions, useProxy]);
+    refreshWarmSet();
+    const intervalId = setInterval(refreshWarmSet, SOURCE_WARM_TICK_MS);
+    const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
+      if (
+        state.currentFrame !== prev.currentFrame
+        || state.previewFrame !== prev.previewFrame
+        || state.isPlaying !== prev.isPlaying
+      ) {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          refreshWarmSet();
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      clearInterval(intervalId);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [resolvedUrls, playbackVideoSourceSpans, scrubVideoSourceSpans, fps]);
 
   // Create a stable fingerprint for tracks to detect meaningful changes
   const tracksFingerprint = useMemo(() => {
@@ -631,6 +774,7 @@ export const VideoPreview = memo(function VideoPreview({
     scrubPrewarmQueuedSetRef.current.clear();
     scrubPrewarmedFramesRef.current = [];
     scrubPrewarmedFrameSetRef.current.clear();
+    scrubPrewarmedSourcesRef.current.clear();
     bypassPreviewSeekRef.current = false;
 
     if (scrubRendererRef.current) {
@@ -793,6 +937,29 @@ export const VideoPreview = memo(function VideoPreview({
           }
         };
 
+        const enqueueBoundarySourcePrewarm = (targetFrame: number) => {
+          if (fastScrubBoundarySources.length === 0) return;
+
+          const pool = getGlobalVideoSourcePool();
+          const windowFrames = Math.max(
+            8,
+            Math.round(fps * FAST_SCRUB_SOURCE_PREWARM_WINDOW_SECONDS)
+          );
+          const minFrame = targetFrame - windowFrames;
+          const maxFrame = targetFrame + windowFrames;
+
+          for (const entry of fastScrubBoundarySources) {
+            if (entry.frame < minFrame) continue;
+            if (entry.frame > maxFrame) break;
+
+            for (const src of entry.srcs) {
+              if (scrubPrewarmedSourcesRef.current.has(src)) continue;
+              scrubPrewarmedSourcesRef.current.add(src);
+              pool.preloadSource(src).catch(() => {});
+            }
+          }
+        };
+
         while (scrubMountedRef.current) {
           const targetFrame = scrubRequestedFrameRef.current;
           const isPriorityFrame = targetFrame !== null;
@@ -819,7 +986,11 @@ export const VideoPreview = memo(function VideoPreview({
             break;
           }
 
-          await renderer.renderFrame(frameToRender);
+          if (isPriorityFrame || !('prewarmFrame' in renderer) || typeof renderer.prewarmFrame !== 'function') {
+            await renderer.renderFrame(frameToRender);
+          } else {
+            await renderer.prewarmFrame(frameToRender);
+          }
           if (!scrubMountedRef.current) break;
 
           if (isPriorityFrame) {
@@ -827,6 +998,7 @@ export const VideoPreview = memo(function VideoPreview({
             setShowFastScrubOverlay(true);
             bypassPreviewSeekRef.current = true;
             enqueueBoundaryPrewarm(frameToRender);
+            enqueueBoundarySourcePrewarm(frameToRender);
           } else {
             markPrewarmed(frameToRender);
           }
@@ -876,7 +1048,7 @@ export const VideoPreview = memo(function VideoPreview({
       scrubMountedRef.current = false;
       unsubscribe();
     };
-  }, [disposeFastScrubRenderer, ensureFastScrubRenderer, fastScrubBoundaryFrames, fps]);
+  }, [disposeFastScrubRenderer, ensureFastScrubRenderer, fastScrubBoundaryFrames, fastScrubBoundarySources, fps]);
 
   // Preload media files ahead of the current playhead to reduce buffering
   useEffect(() => {

@@ -218,6 +218,7 @@ async function renderVideoItem(
 ): Promise<void> {
   const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
   const isPreviewMode = rctx.renderMode === 'preview';
+  const allowVideoElementFallback = !isPreviewMode;
 
   // Calculate source time
   const localFrame = frame - item.from;
@@ -298,6 +299,10 @@ async function renderVideoItem(
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
+  if (!allowVideoElementFallback) {
+    return;
+  }
+
   const video = videoElements.get(item.id);
   if (!video) {
     log.warn('Video element not found', { itemId: item.id, frame });

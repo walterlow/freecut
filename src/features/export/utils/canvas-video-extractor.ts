@@ -130,7 +130,7 @@ export class VideoFrameExtractor {
    * Properly manages VideoSample lifecycle by closing immediately after draw.
    */
   async drawFrame(
-    ctx: OffscreenCanvasRenderingContext2D,
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
     timestamp: number,
     x: number,
     y: number,
@@ -259,7 +259,7 @@ export class VideoFrameExtractor {
   }
 
   private drawCurrentSample(
-    ctx: OffscreenCanvasRenderingContext2D,
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
     x: number,
     y: number,
     width: number,

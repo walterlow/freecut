@@ -27,7 +27,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import { createLogger } from '@/lib/logger';
 import { blobUrlManager } from '@/lib/blob-url-manager';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { VideoSourcePool, getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
+import { VideoSourcePool } from '@/features/player/video/VideoSourcePool';
 
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
@@ -120,6 +120,7 @@ export async function createCompositionRenderer(
   } = composition;
   const renderMode = options.mode ?? 'export';
   const hasDom = typeof document !== 'undefined';
+  const previewStrictDecode = renderMode === 'preview';
 
   const canvasSettings: CanvasSettings = {
     width: canvas.width,
@@ -143,11 +144,7 @@ export async function createCompositionRenderer(
   const videoExtractors = new Map<string, VideoFrameExtractor>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
-  const useSharedPreviewVideoPool = hasDom && renderMode === 'preview';
-  const fallbackVideoPool = hasDom
-    ? (useSharedPreviewVideoPool ? getGlobalVideoSourcePool() : new VideoSourcePool())
-    : null;
-  const ownsFallbackVideoPool = hasDom && !useSharedPreviewVideoPool;
+  const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
   const fallbackVideoBySrc = new Set<string>();
   const fallbackVideoClipIdByItem = new Map<string, string>();
   let fallbackVideoClipCounter = 0;
@@ -192,7 +189,7 @@ export async function createCompositionRenderer(
           videoExtractors.set(item.id, extractor);
 
           // Also create fallback video element in case mediabunny fails (main thread only).
-          if (hasDom) {
+          if (hasDom && !previewStrictDecode) {
             bindFallbackVideoElement(item.id, videoItem.src);
           }
         }
@@ -316,6 +313,9 @@ export async function createCompositionRenderer(
 
   // Pre-computed sub-composition render data (populated during preload)
   const subCompRenderData = new Map<string, SubCompRenderData>();
+  const PREWARM_DECODE_MAX_ITEMS = 6;
+  let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
+  let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
 
   // Build the shared ItemRenderContext used by canvas-item-renderer functions
   const itemRenderContext: ItemRenderContext = {
@@ -334,6 +334,27 @@ export async function createCompositionRenderer(
     keyframesMap,
     adjustmentLayers,
     subCompRenderData,
+  };
+
+  const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
+    if (prewarmCtx) return prewarmCtx;
+
+    if (typeof OffscreenCanvas !== 'undefined') {
+      prewarmCanvas = new OffscreenCanvas(1, 1);
+      prewarmCtx = prewarmCanvas.getContext('2d');
+      return prewarmCtx;
+    }
+
+    if (typeof document !== 'undefined') {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = 1;
+      canvasEl.height = 1;
+      prewarmCanvas = canvasEl;
+      prewarmCtx = canvasEl.getContext('2d');
+      return prewarmCtx;
+    }
+
+    return null;
   };
 
   return {
@@ -380,6 +401,13 @@ export async function createCompositionRenderer(
         fallback: videoExtractors.size - useMediabunny.size,
       });
 
+      if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
+        const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
+        throw new Error(
+          `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
+        );
+      }
+
       // === Preload ALL fallback video elements ===
       // Load every video element (not just those that failed mediabunny init)
       // so the HTML5 fallback is ready if mediabunny fails mid-export.
@@ -391,7 +419,7 @@ export async function createCompositionRenderer(
         throw new Error('WORKER_REQUIRES_MAIN_THREAD:video-fallback');
       }
 
-      if (hasDom && allVideoIds.length > 0) {
+      if (hasDom && !previewStrictDecode && allVideoIds.length > 0) {
         const uniqueVideoEntries = new Map<HTMLVideoElement, string>();
         for (const [itemId, video] of videoElements.entries()) {
           if (!uniqueVideoEntries.has(video)) {
@@ -593,15 +621,22 @@ export async function createCompositionRenderer(
                 }
               })
             );
-            if (hasDom) {
+            if (hasDom && !previewStrictDecode) {
               bindFallbackVideoElement(subItem.id, src);
             }
           }
         }
         await Promise.all(subExtractorPromises);
 
+        if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
+          const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
+          throw new Error(
+            `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
+          );
+        }
+
         // Load fallback video elements for sub-comp items that failed mediabunny init
-        if (hasDom) {
+        if (hasDom && !previewStrictDecode) {
           const subFallbackVideoIds = subCompMediaItems
             .filter(({ subItem }) => subItem.type === 'video' && !useMediabunny.has(subItem.id))
             .map(({ subItem }) => subItem.id);
@@ -997,6 +1032,54 @@ export async function createCompositionRenderer(
       canvasPool.release(contentCanvas);
     },
 
+    async prewarmFrame(frame: number) {
+      // Lightweight decoder warm-up path for scrubbing:
+      // decode only nearby video items into a 1x1 target without running full composition.
+      const ctx2d = getPrewarmContext();
+      if (!ctx2d) return;
+
+      const candidates: VideoItem[] = [];
+      const minFrame = frame - 1;
+      const maxFrame = frame + 1;
+
+      for (const track of tracks) {
+        if (track.visible === false) continue;
+        for (const item of track.items ?? []) {
+          if (item.type !== 'video') continue;
+          if (item.from > maxFrame || (item.from + item.durationInFrames) < minFrame) continue;
+          candidates.push(item as VideoItem);
+          if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
+        }
+        if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
+      }
+
+      for (const item of candidates) {
+        if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue;
+        const extractor = videoExtractors.get(item.id);
+        if (!extractor) continue;
+
+        const localFrame = frame - item.from;
+        const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+        const sourceFps = item.sourceFps ?? fps;
+        const speed = item.speed ?? 1;
+        const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+        const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
+
+        try {
+          await extractor.drawFrame(
+            ctx2d,
+            clampedTime,
+            0,
+            0,
+            1,
+            1,
+          );
+        } catch {
+          // Best-effort warmup only.
+        }
+      }
+    },
+
     dispose() {
       // Clean up mediabunny video extractors
       for (const extractor of videoExtractors.values()) {
@@ -1014,9 +1097,7 @@ export async function createCompositionRenderer(
         for (const clipId of fallbackVideoClipIdByItem.values()) {
           fallbackVideoPool.releaseClip(clipId);
         }
-        if (ownsFallbackVideoPool) {
-          fallbackVideoPool.dispose();
-        }
+        fallbackVideoPool.dispose();
       }
       fallbackVideoBySrc.clear();
       fallbackVideoClipIdByItem.clear();
@@ -1029,6 +1110,8 @@ export async function createCompositionRenderer(
       imageElements.clear();
       gifFramesMap.clear(); // Clear GIF frame references (actual frames are managed by gifFrameCache)
       subCompRenderData.clear(); // Release sub-composition render data references
+      prewarmCtx = null;
+      prewarmCanvas = null;
 
       // === PERFORMANCE: Clean up optimization resources ===
       canvasPool.dispose();
