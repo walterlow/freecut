@@ -121,6 +121,57 @@ function buildTimelineBaseItem(params: {
   };
 }
 
+function buildTypedTimelineItem(params: {
+  baseItem: TimelineBaseItem;
+  mediaType: string;
+  blobUrl: string;
+  thumbnailUrl: string | null;
+  media: MediaMetadata;
+  canvasWidth: number;
+  canvasHeight: number;
+}): TimelineItemType | null {
+  const { baseItem, mediaType, blobUrl, thumbnailUrl, media, canvasWidth, canvasHeight } = params;
+
+  if (mediaType === 'video') {
+    const sourceW = media.width || canvasWidth;
+    const sourceH = media.height || canvasHeight;
+    return {
+      ...baseItem,
+      type: 'video',
+      src: blobUrl,
+      thumbnailUrl: thumbnailUrl || undefined,
+      sourceWidth: media.width || undefined,
+      sourceHeight: media.height || undefined,
+      transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
+    } as VideoItem;
+  }
+
+  if (mediaType === 'audio') {
+    return {
+      ...baseItem,
+      type: 'audio',
+      src: blobUrl,
+    } as AudioItem;
+  }
+
+  if (mediaType === 'image') {
+    const sourceW = media.width || canvasWidth;
+    const sourceH = media.height || canvasHeight;
+    return {
+      ...baseItem,
+      type: 'image',
+      src: blobUrl,
+      thumbnailUrl: thumbnailUrl || undefined,
+      sourceWidth: media.width || undefined,
+      sourceHeight: media.height || undefined,
+      transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
+    } as ImageItem;
+  }
+
+  logger.warn('Unsupported media type:', mediaType);
+  return null;
+}
+
 /**
  * Custom equality for TimelineTrack memo - compares track and width only
  * Items are fetched from store internally, so we don't compare them here
@@ -523,45 +574,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
               durationInFrames: itemDuration,
               timelineFps: fps,
             });
-
-            if (dragItem.mediaType === 'video') {
-              const sourceW = media.width || canvasWidth;
-              const sourceH = media.height || canvasHeight;
-              return {
-                ...baseItem,
-                type: 'video',
-                src: blobUrl,
-                thumbnailUrl: thumbnailUrl || undefined,
-                sourceWidth: media.width || undefined,
-                sourceHeight: media.height || undefined,
-                transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-              } as VideoItem;
-            }
-
-            if (dragItem.mediaType === 'audio') {
-              return {
-                ...baseItem,
-                type: 'audio',
-                src: blobUrl,
-              } as AudioItem;
-            }
-
-            if (dragItem.mediaType === 'image') {
-              const sourceW = media.width || canvasWidth;
-              const sourceH = media.height || canvasHeight;
-              return {
-                ...baseItem,
-                type: 'image',
-                src: blobUrl,
-                thumbnailUrl: thumbnailUrl || undefined,
-                sourceWidth: media.width || undefined,
-                sourceHeight: media.height || undefined,
-                transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-              } as ImageItem;
-            }
-
-            logger.warn('Unsupported media type:', dragItem.mediaType);
-            return null;
+            return buildTypedTimelineItem({
+              baseItem,
+              mediaType: dragItem.mediaType,
+              blobUrl,
+              thumbnailUrl,
+              media,
+              canvasWidth,
+              canvasHeight,
+            });
           }
         );
 
@@ -657,7 +678,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
       // Create timeline item at the collision-free position.
       // source* fields are stored in source-native frame units.
-      let timelineItem: TimelineItemType;
       const baseItem = buildTimelineBaseItem({
         media,
         mediaId,
@@ -667,39 +687,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         durationInFrames: itemDuration,
         timelineFps: fps,
       });
-
-      if (mediaType === 'video') {
-        const sourceW = media.width || canvasWidth;
-        const sourceH = media.height || canvasHeight;
-        timelineItem = {
-          ...baseItem,
-          type: 'video',
-          src: blobUrl,
-          thumbnailUrl: thumbnailUrl || undefined,
-          sourceWidth: media.width || undefined,
-          sourceHeight: media.height || undefined,
-          transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-        } as VideoItem;
-      } else if (mediaType === 'audio') {
-        timelineItem = {
-          ...baseItem,
-          type: 'audio',
-          src: blobUrl,
-        } as AudioItem;
-      } else if (mediaType === 'image') {
-        const sourceW = media.width || canvasWidth;
-        const sourceH = media.height || canvasHeight;
-        timelineItem = {
-          ...baseItem,
-          type: 'image',
-          src: blobUrl,
-          thumbnailUrl: thumbnailUrl || undefined,
-          sourceWidth: media.width || undefined,
-          sourceHeight: media.height || undefined,
-          transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-        } as ImageItem;
-      } else {
-        logger.warn('Unsupported media type:', mediaType);
+      const timelineItem = buildTypedTimelineItem({
+        baseItem,
+        mediaType,
+        blobUrl,
+        thumbnailUrl,
+        media,
+        canvasWidth,
+        canvasHeight,
+      });
+      if (!timelineItem) {
         return;
       }
 

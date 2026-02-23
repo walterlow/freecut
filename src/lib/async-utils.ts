@@ -8,7 +8,10 @@ export async function mapWithConcurrency<T, U>(
   mapper: (item: T, index: number) => Promise<U>
 ): Promise<Array<U | null>> {
   const results: Array<U | null> = new Array(items.length).fill(null);
-  const workerCount = Math.max(1, Math.min(concurrency, items.length));
+  const safeConcurrency = Number.isFinite(concurrency)
+    ? Math.max(1, Math.floor(concurrency))
+    : 1;
+  const workerCount = Math.max(1, Math.min(safeConcurrency, items.length));
   let nextIndex = 0;
 
   await Promise.all(

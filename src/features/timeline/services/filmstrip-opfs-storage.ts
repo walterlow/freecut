@@ -23,13 +23,19 @@ const LEGACY_FRAME_EXT = 'webp';
 const FRAME_EXTENSIONS = new Set([PRIMARY_FRAME_EXT, LEGACY_FRAME_EXT]);
 const VALIDATION_TTL_MS = 10_000;
 
-function parseFrameFileName(name: string): number | null {
+function parseFrameFileNameParts(name: string): { index: number; ext: string } | null {
   const dotIndex = name.lastIndexOf('.');
   if (dotIndex <= 0) return null;
   const ext = name.slice(dotIndex + 1).toLowerCase();
   if (!FRAME_EXTENSIONS.has(ext)) return null;
   const index = parseInt(name.slice(0, dotIndex), 10);
-  return Number.isNaN(index) ? null : index;
+  if (Number.isNaN(index)) return null;
+  return { index, ext };
+}
+
+function parseFrameFileName(name: string): number | null {
+  const parsed = parseFrameFileNameParts(name);
+  return parsed?.index ?? null;
 }
 
 interface FilmstripMetadata {
@@ -208,6 +214,11 @@ class FilmstripOPFSStorage {
    * Get or create media directory handle
    */
   private async getOrCreateMediaDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
+    const cached = this.mediaDirCache.get(mediaId);
+    if (cached && Date.now() - cached.lastValidated <= VALIDATION_TTL_MS) {
+      return cached.handle;
+    }
+
     const dir = await this.ensureDirectory();
     const mediaDir = await dir.getDirectoryHandle(mediaId, { create: true });
     this.mediaDirCache.set(mediaId, {
@@ -258,26 +269,31 @@ class FilmstripOPFSStorage {
         return null;
       }
 
-      // Collect frame files
-      const frameFiles: { index: number; file: File }[] = [];
+      // Collect frame files (dedupe by frame index, prefer primary extension).
+      const frameFilesByIndex = new Map<number, { file: File; ext: string }>();
       for await (const entry of mediaDir.values()) {
         if (entry.kind !== 'file') continue;
-        const index = parseFrameFileName(entry.name);
-        if (index !== null) {
-          try {
-            const fileHandle = entry as FileSystemFileHandle;
-            const file = await fileHandle.getFile();
-            if (file.size > 0) {
-              frameFiles.push({ index, file });
-            }
-          } catch {
-            // Skip unreadable files
+        const parsed = parseFrameFileNameParts(entry.name);
+        if (!parsed) continue;
+        try {
+          const fileHandle = entry as FileSystemFileHandle;
+          const file = await fileHandle.getFile();
+          if (file.size <= 0) continue;
+
+          const existing = frameFilesByIndex.get(parsed.index);
+          const shouldReplace = !existing
+            || (parsed.ext === PRIMARY_FRAME_EXT && existing.ext !== PRIMARY_FRAME_EXT);
+          if (shouldReplace) {
+            frameFilesByIndex.set(parsed.index, { file, ext: parsed.ext });
           }
+        } catch {
+          // Skip unreadable files
         }
       }
 
-      // Sort by index
-      frameFiles.sort((a, b) => a.index - b.index);
+      const frameFiles = Array.from(frameFilesByIndex.entries())
+        .map(([index, value]) => ({ index, file: value.file }))
+        .sort((a, b) => a.index - b.index);
 
       // Create object URLs
       const nextUrls: Array<{ index: number; url: string }> = [];
@@ -323,7 +339,7 @@ class FilmstripOPFSStorage {
       const mediaDir = await this.getMediaDir(mediaId);
       if (!mediaDir) return [];
 
-      const indices: number[] = [];
+      const indices = new Set<number>();
       for await (const entry of mediaDir.values()) {
         if (entry.kind !== 'file') continue;
         const index = parseFrameFileName(entry.name);
@@ -338,7 +354,7 @@ class FilmstripOPFSStorage {
             const fileHandle = entry as FileSystemFileHandle;
             const file = await fileHandle.getFile();
             if (file.size > 0) {
-              indices.push(index);
+              indices.add(index);
             }
           } catch {
             // Skip
@@ -346,7 +362,7 @@ class FilmstripOPFSStorage {
         }
       }
 
-      return indices.sort((a, b) => a - b);
+      return Array.from(indices).sort((a, b) => a - b);
     } catch {
       return [];
     }

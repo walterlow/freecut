@@ -616,6 +616,9 @@ class WaveformCacheService {
               }
 
               await Promise.all(pendingBinWrites);
+              if (settled) {
+                break;
+              }
               await saveWaveformMetaToIndexedDB({
                 id: mediaId,
                 mediaId,

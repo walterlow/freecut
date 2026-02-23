@@ -57,7 +57,7 @@ window.addEventListener('vite:preloadError', () => {
 
 // Cleanup filmstrip workers on page unload
 window.addEventListener('beforeunload', () => {
-  filmstripCache.dispose();
+  void filmstripCache.dispose();
 });
 
 const rootElement = document.getElementById('root');

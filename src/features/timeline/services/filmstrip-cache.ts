@@ -369,10 +369,7 @@ class FilmstripCacheService {
         break;
       }
 
-      const evicted = this.tryEvictMedia(mediaId, 'memory-pressure');
-      if (!evicted && !force) {
-        continue;
-      }
+      this.tryEvictMedia(mediaId, 'memory-pressure');
     }
   }
 
@@ -886,6 +883,7 @@ class FilmstripCacheService {
     this.pendingExtractions.set(mediaId, pending);
 
     if (framesToExtract === 0) {
+      this.metricsTotals.started++;
       const targetFrames = [...existingFrames].sort((a, b) => a.index - b.index);
       this.notifyUpdate(mediaId, {
         frames: targetFrames,
@@ -1158,14 +1156,38 @@ class FilmstripCacheService {
               && !pending.extractedFrames.has(index)
             );
             if (newIndices.length > 0) {
-              await this.loadNewFrames(mediaId, newIndices);
+              try {
+                await this.loadNewFrames(mediaId, newIndices);
+              } catch (error) {
+                logger.error('Failed to load saved filmstrip frames from OPFS', {
+                  mediaId,
+                  requestId: workerState.requestId,
+                  range: [workerState.startIndex, workerState.endIndex],
+                  newIndicesCount: newIndices.length,
+                  error,
+                });
+                this.handleWorkerError(mediaId, 'Failed to load saved frames from OPFS');
+                return;
+              }
             }
             workerState.lastLoadedCount = Math.max(workerState.lastLoadedCount, response.frameCount);
           } else {
             // Backward-compatible fallback for workers without savedIndices.
             const newFrameCount = Math.max(0, response.frameCount - workerState.lastLoadedCount);
             if (newFrameCount > 0) {
-              await this.flushWorkerRangeLoads(mediaId, workerState);
+              try {
+                await this.flushWorkerRangeLoads(mediaId, workerState);
+              } catch (error) {
+                logger.error('Failed to flush worker frame range loads from OPFS', {
+                  mediaId,
+                  requestId: workerState.requestId,
+                  range: [workerState.startIndex, workerState.endIndex],
+                  newFrameCount,
+                  error,
+                });
+                this.handleWorkerError(mediaId, 'Failed to refresh worker frame range from OPFS');
+                return;
+              }
             }
           }
 
@@ -1799,6 +1821,22 @@ class FilmstripCacheService {
       for (const workerState of pending.workers) {
         workerState.worker.postMessage({ type: 'abort', requestId: workerState.requestId });
       }
+      const frames = Array.from(pending.extractedFrames.values())
+        .sort((a, b) => a.index - b.index);
+      const targetSet = new Set(pending.targetIndices);
+      const extractedTargetCount = frames.reduce(
+        (count, frame) => (targetSet.has(frame.index) ? count + 1 : count),
+        0
+      );
+      const progress = pending.progressFrames > 0
+        ? Math.min(99, Math.round((extractedTargetCount / pending.progressFrames) * 100))
+        : 0;
+      this.notifyUpdate(mediaId, {
+        frames,
+        isComplete: false,
+        isExtracting: false,
+        progress,
+      });
       this.finalizeExtractionMetrics(
         pending.metrics,
         'aborted',
@@ -1852,7 +1890,7 @@ class FilmstripCacheService {
   /**
    * Dispose
    */
-  dispose(): void {
+  async dispose(): Promise<void> {
     for (const mediaId of this.pendingExtractions.keys()) {
       this.abort(mediaId);
     }
@@ -1866,10 +1904,12 @@ class FilmstripCacheService {
     for (const timer of this.idleEvictionTimers.values()) {
       clearTimeout(timer);
     }
+    await filmstripOPFSStorage.clearAll();
     this.idleEvictionTimers.clear();
     this.cache.clear();
     this.cacheMeta.clear();
     this.cacheBytes = 0;
+    this.pendingExtractions.clear();
     this.clearMetrics();
     this.updateCallbacks.clear();
     this.loadingPromises.clear();

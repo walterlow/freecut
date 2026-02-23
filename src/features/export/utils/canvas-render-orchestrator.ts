@@ -433,7 +433,11 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
     const blob = await thumbnailCanvas.convertToBlob({ type: format, quality });
     return blob;
   } finally {
-    renderer.dispose();
+    try {
+      renderer.dispose();
+    } catch (error) {
+      log.warn('Failed to dispose single-frame renderer', { error });
+    }
   }
 }
 
