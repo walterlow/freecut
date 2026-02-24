@@ -44,9 +44,9 @@ function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean)
 
   useEffect(() => {
     let cancelled = false;
+    setBlobUrl(null);
 
     if (!mediaId) {
-      setBlobUrl(null);
       return () => {
         cancelled = true;
       };
@@ -62,10 +62,15 @@ function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean)
       }
     }
 
-    resolveMediaUrl(mediaId).then((url) => {
-      if (cancelled) return;
-      setBlobUrl(url || null);
-    });
+    resolveMediaUrl(mediaId)
+      .then((url) => {
+        if (cancelled) return;
+        setBlobUrl(url || null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setBlobUrl(null);
+      });
 
     return () => {
       cancelled = true;
