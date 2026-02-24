@@ -25,6 +25,8 @@ interface SourceLane {
   extractor: VideoFrameExtractor;
   initialized: boolean;
   initPromise: Promise<boolean> | null;
+  /** Serializes drawFrame calls to prevent concurrent mutable-state corruption. */
+  drawLock: Promise<void> | null;
 }
 
 interface SourceState {
@@ -166,14 +168,15 @@ export class SharedVideoExtractorPool {
     }
     if (!laneReady) return false;
 
-    return state.lanes[laneIndex]!.extractor.drawFrame(
-      ctx,
-      timestamp,
-      x,
-      y,
-      width,
-      height
+    // Serialize drawFrame calls per lane to prevent concurrent mutable-state corruption
+    // inside VideoFrameExtractor (ensureSampleForTimestamp / recoverAndPrime).
+    const lane = state.lanes[laneIndex]!;
+    const prev = lane.drawLock ?? Promise.resolve();
+    const result = prev.then(() =>
+      lane.extractor.drawFrame(ctx, timestamp, x, y, width, height)
     );
+    lane.drawLock = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   getItemLastFailureKind(itemId: string, src: string): VideoFrameFailureKind {
@@ -230,6 +233,7 @@ export class SharedVideoExtractorPool {
       extractor: new VideoFrameExtractor(src, extractorId),
       initialized: false,
       initPromise: null,
+      drawLock: null,
     };
   }
 

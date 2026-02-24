@@ -185,13 +185,17 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     };
 
     const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
+    let writable: FileSystemWritableFileStream | undefined;
     try {
-      const writable = await fileHandle.createWritable();
+      writable = await fileHandle.createWritable();
       const streamTarget = new StreamTarget(writable);
       streamedToFile = true;
       conversion = await buildConversion(streamTarget);
     } catch {
-      // Fallback path for environments where stream-backed target isn't available.
+      // Close leaked writable before falling back to buffer target.
+      if (writable) {
+        try { await writable.abort(); } catch { /* best-effort cleanup */ }
+      }
       streamedToFile = false;
       bufferTarget = new BufferTarget();
       conversion = await buildConversion(bufferTarget);

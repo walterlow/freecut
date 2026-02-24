@@ -26,7 +26,7 @@ export function needsCustomAudioDecoder(audioCodec: string | undefined): boolean
 
   // Some containers expose human-readable codec labels instead of short IDs.
   const separatorNormalized = normalized.replace(/[_-]+/g, ' ');
-  if (normalized.includes('dolby digital')) return true;
+  if (separatorNormalized.includes('dolby digital')) return true;
   if (
     normalized.includes('pcm')
     && (

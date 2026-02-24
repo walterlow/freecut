@@ -1218,11 +1218,15 @@ export async function createCompositionRenderer(
           if (success) {
             mediabunnyFailureCountByItem.set(item.id, 0);
           } else {
-            const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
-            mediabunnyFailureCountByItem.set(item.id, failures);
-            if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {
-              mediabunnyDisabledItems.add(item.id);
-              useMediabunny.delete(item.id);
+            // Skip transient "no-sample" misses (same guard as renderVideoItem).
+            const failureKind = extractor.getLastFailureKind();
+            if (failureKind !== 'no-sample') {
+              const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
+              mediabunnyFailureCountByItem.set(item.id, failures);
+              if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {
+                mediabunnyDisabledItems.add(item.id);
+                useMediabunny.delete(item.id);
+              }
             }
           }
         } catch (error) {

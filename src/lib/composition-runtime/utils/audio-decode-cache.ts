@@ -132,8 +132,9 @@ async function loadPartialFromBins(
   minSeconds: number,
 ): Promise<AudioBuffer | null> {
   const metaRecord = await getDecodedPreviewAudio(mediaId);
-  const storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta')
-    ? Math.max(1, metaRecord.sampleRate)
+  const storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta'
+    && Number.isFinite(metaRecord.sampleRate) && metaRecord.sampleRate > 0)
+    ? metaRecord.sampleRate
     : STORAGE_SAMPLE_RATE;
   const minFrames = Math.max(1, Math.floor(minSeconds * storedSampleRate));
   const bins: DecodedPreviewAudioBin[] = [];
@@ -261,7 +262,7 @@ async function loadOrDecodeAudio(mediaId: string, src: string): Promise<AudioBuf
 async function loadFromBins(meta: DecodedPreviewAudioMeta): Promise<AudioBuffer> {
   const { mediaId, sampleRate, totalFrames, binCount } = meta;
 
-  if (sampleRate <= 0 || totalFrames <= 0 || binCount <= 0) {
+  if (!Number.isFinite(sampleRate) || sampleRate <= 0 || !Number.isFinite(totalFrames) || totalFrames <= 0 || binCount <= 0) {
     throw new Error('Invalid decoded preview audio meta');
   }
 

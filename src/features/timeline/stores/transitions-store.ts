@@ -107,11 +107,11 @@ function buildTransitionOverlapByItemId(
     const overlapOnRight = transition.durationInFrames - overlapOnLeft;
 
     const leftOverlap = draft[transition.leftClipId] ?? { left: 0, right: 0 };
-    leftOverlap.right = Math.max(leftOverlap.right, overlapOnRight);
+    leftOverlap.right = Math.max(leftOverlap.right, overlapOnLeft);
     draft[transition.leftClipId] = leftOverlap;
 
     const rightOverlap = draft[transition.rightClipId] ?? { left: 0, right: 0 };
-    rightOverlap.left = Math.max(rightOverlap.left, overlapOnLeft);
+    rightOverlap.left = Math.max(rightOverlap.left, overlapOnRight);
     draft[transition.rightClipId] = rightOverlap;
   }
 

@@ -88,13 +88,13 @@ async function clearProjectProxies(
 
   const { proxyService } = await import('@/features/media-library/services/proxy-service');
 
-  for (const media of mediaItems) {
+  await Promise.all(mediaItems.map(async (media) => {
     try {
       await proxyService.deleteProxy(media.id, getSharedProxyKey(media));
-      useMediaLibraryStore.getState().clearProxyStatus(media.id);
-      proxyService.clearProxyKey(media.id);
     } catch { /* already absent */ }
-  }
+    useMediaLibraryStore.getState().clearProxyStatus(media.id);
+    proxyService.clearProxyKey(media.id);
+  }));
 
   log.info(`Cleared proxies for ${mediaItems.length} media items`);
 }
