@@ -49,12 +49,14 @@ async function generateVideoThumbnail(
     }
 
     // Calculate dimensions preserving aspect ratio - larger dimension = maxSize
-    const width = videoTrack.displayWidth > videoTrack.displayHeight
+    const dw = videoTrack.displayWidth || 1;
+    const dh = videoTrack.displayHeight || 1;
+    const width = dw > dh
       ? opts.maxSize
-      : Math.floor(opts.maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
-    const height = videoTrack.displayHeight > videoTrack.displayWidth
+      : Math.floor(opts.maxSize * dw / dh);
+    const height = dh > dw
       ? opts.maxSize
-      : Math.floor(opts.maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
+      : Math.floor(opts.maxSize * dh / dw);
 
     sink = new CanvasSink(videoTrack, {
       width,

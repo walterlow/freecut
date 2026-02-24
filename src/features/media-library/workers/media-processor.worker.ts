@@ -119,9 +119,17 @@ function isAudioCodecSupported(codec: string | undefined): boolean {
 let mediabunnyModule: MediabunnyModule | null = null;
 async function getMediabunny(): Promise<MediabunnyModule> {
   if (!mediabunnyModule) {
-    mediabunnyModule = await import('mediabunny') as unknown as MediabunnyModule;
+    const mb = await import('mediabunny') as unknown as MediabunnyModule;
     const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    registerAc3Decoder();
+    try {
+      registerAc3Decoder();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/already registered/i.test(message)) {
+        throw err;
+      }
+    }
+    mediabunnyModule = mb;
   }
   return mediabunnyModule;
 }
@@ -239,12 +247,14 @@ async function generateVideoThumbnail(
     }
 
     // Calculate dimensions preserving aspect ratio
-    const width = videoTrack.displayWidth > videoTrack.displayHeight
+    const dw = videoTrack.displayWidth || 1;
+    const dh = videoTrack.displayHeight || 1;
+    const width = dw > dh
       ? maxSize
-      : Math.floor(maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
-    const height = videoTrack.displayHeight > videoTrack.displayWidth
+      : Math.floor(maxSize * dw / dh);
+    const height = dh > dw
       ? maxSize
-      : Math.floor(maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
+      : Math.floor(maxSize * dh / dw);
 
     sink = new mb.CanvasSink(videoTrack, {
       width,

@@ -474,7 +474,14 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
   const mb = await import('mediabunny');
   if (!ac3Registered) {
     const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    registerAc3Decoder();
+    try {
+      registerAc3Decoder();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/already registered/i.test(message)) {
+        throw err;
+      }
+    }
     ac3Registered = true;
   }
 

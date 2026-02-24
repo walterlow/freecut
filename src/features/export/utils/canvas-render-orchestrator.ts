@@ -22,6 +22,7 @@ import { processAudio, createAudioBuffer, hasAudioContent, clearAudioDecodeCache
 import { createCompositionRenderer } from './client-render-engine';
 
 const log = createLogger('CanvasRenderOrchestrator');
+let ac3DecoderRegistered = false;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,6 +127,8 @@ function getPacketRemuxPlan(
   if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null;
   if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null;
 
+  // Require clip to start at source frame 0 — a trimmed-from-middle clip can't be
+  // remuxed directly and must fall back to frame-by-frame rendering.
   const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0;
   if (Math.abs(sourceStartFrames) > EPSILON) return null;
   const trimStartSeconds = Math.max(0, sourceStartFrames / sourceFps);
@@ -162,11 +165,6 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
     getSupportedVideoCodecs?: () => string[];
     getSupportedAudioCodecs?: () => string[];
   };
-  const target = new BufferTarget();
-  const output = new Output({
-    format: format as unknown as ConstructorParameters<typeof Output>[0]['format'],
-    target,
-  });
 
   const input = new Input({
     formats: ALL_FORMATS,
@@ -219,6 +217,13 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
       progress: 5,
       totalFrames: durationInFrames,
       message: 'Preparing packet remux...',
+    });
+
+    // Create output resources only after all validation checks pass.
+    const target = new BufferTarget();
+    const output = new Output({
+      format: format as unknown as ConstructorParameters<typeof Output>[0]['format'],
+      target,
     });
 
     conversion = await Conversion.init({
@@ -350,8 +355,18 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   // Dynamically import mediabunny + register AC-3 decoder for source audio
   const mediabunny: MediabunnyModule = await import('mediabunny');
-  const { registerAc3Decoder } = await import('@mediabunny/ac3');
-  registerAc3Decoder();
+  if (!ac3DecoderRegistered) {
+    const { registerAc3Decoder } = await import('@mediabunny/ac3');
+    try {
+      registerAc3Decoder();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/already registered/i.test(message)) {
+        throw err;
+      }
+    }
+    ac3DecoderRegistered = true;
+  }
   const { Output, BufferTarget, VideoSampleSource, VideoSample, AudioBufferSource } = mediabunny;
 
   onProgress({
