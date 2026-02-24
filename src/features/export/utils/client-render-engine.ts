@@ -337,12 +337,15 @@ export async function createCompositionRenderer(
   const mediabunnyFailureCountByItem = new Map<string, number>();
   const mediabunnyInitFailureCountByItem = new Map<string, number>();
   const mediabunnyDisabledItems = new Set<string>();
+  const MEDIABUNNY_DISABLE_THRESHOLD = 4;
+  const PREWARM_FAILURE_DISABLE_THRESHOLD = 3;
 
   // Pre-computed sub-composition render data (populated during preload)
   const subCompRenderData = new Map<string, SubCompRenderData>();
   const PREWARM_DECODE_MAX_ITEMS = 6;
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
+  let prewarmAttempted = false;
 
   // Build the shared ItemRenderContext used by canvas-item-renderer functions
   const itemRenderContext: ItemRenderContext = {
@@ -364,7 +367,9 @@ export async function createCompositionRenderer(
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
+    if (prewarmAttempted) return prewarmCtx;
     if (prewarmCtx) return prewarmCtx;
+    prewarmAttempted = true;
 
     if (typeof OffscreenCanvas !== 'undefined') {
       prewarmCanvas = new OffscreenCanvas(1, 1);
@@ -405,6 +410,8 @@ export async function createCompositionRenderer(
 
     await Promise.all([...bySource.entries()].map(async ([src, ids]) => {
         const success = await sharedVideoExtractors.initSource(src);
+        // Intentional side effect: decode readiness is tracked per shared source,
+        // while itemResult only reports back for the explicitly requested ids.
         const allItemsForSource = videoItemIdsBySource.get(src) ?? new Set(ids);
         for (const itemId of allItemsForSource) {
           if (success) {
@@ -459,7 +466,7 @@ export async function createCompositionRenderer(
 
     const failures = (mediabunnyInitFailureCountByItem.get(itemId) ?? 0) + 1;
     mediabunnyInitFailureCountByItem.set(itemId, failures);
-    if (failures >= 2) {
+    if (failures >= MEDIABUNNY_DISABLE_THRESHOLD) {
       mediabunnyDisabledItems.add(itemId);
     }
     return false;
@@ -470,7 +477,7 @@ export async function createCompositionRenderer(
     if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
       const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
       throw new Error(
-        `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
+        `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable (failed: ${failedItemIds.join(', ')})`
       );
     }
   };
@@ -1200,7 +1207,7 @@ export async function createCompositionRenderer(
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
 
         try {
-          await extractor.drawFrame(
+          const success = await extractor.drawFrame(
             ctx2d,
             clampedTime,
             0,
@@ -1208,14 +1215,33 @@ export async function createCompositionRenderer(
             1,
             1,
           );
-        } catch {
-          // Best-effort warmup only.
+          if (success) {
+            mediabunnyFailureCountByItem.set(item.id, 0);
+          } else {
+            const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
+            mediabunnyFailureCountByItem.set(item.id, failures);
+            if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {
+              mediabunnyDisabledItems.add(item.id);
+              useMediabunny.delete(item.id);
+            }
+          }
+        } catch (error) {
+          const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
+          mediabunnyFailureCountByItem.set(item.id, failures);
+          log.warn('Prewarm decode failed', { itemId: item.id, frame, failures, error });
+          if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {
+            mediabunnyDisabledItems.add(item.id);
+            useMediabunny.delete(item.id);
+          }
         }
       }
     },
 
     dispose() {
       // Clean up mediabunny video extractors
+      for (const itemId of videoExtractors.keys()) {
+        sharedVideoExtractors.releaseItem(itemId);
+      }
       sharedVideoExtractors.dispose();
       videoExtractors.clear();
       videoSourceByItemId.clear();
@@ -1247,6 +1273,7 @@ export async function createCompositionRenderer(
       subCompRenderData.clear(); // Release sub-composition render data references
       prewarmCtx = null;
       prewarmCanvas = null;
+      prewarmAttempted = false;
 
       // === PERFORMANCE: Clean up optimization resources ===
       canvasPool.dispose();

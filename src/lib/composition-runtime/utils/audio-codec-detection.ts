@@ -25,8 +25,15 @@ export function needsCustomAudioDecoder(audioCodec: string | undefined): boolean
   if (PCM_ALIAS_CODEC_PATTERN.test(normalized)) return true;
 
   // Some containers expose human-readable codec labels instead of short IDs.
+  const separatorNormalized = normalized.replace(/[_-]+/g, ' ');
   if (normalized.includes('dolby digital')) return true;
-  if (normalized.includes('pcm') && (normalized.includes('little-endian') || normalized.includes('big-endian'))) {
+  if (
+    normalized.includes('pcm')
+    && (
+      separatorNormalized.includes('little endian')
+      || separatorNormalized.includes('big endian')
+    )
+  ) {
     return true;
   }
 

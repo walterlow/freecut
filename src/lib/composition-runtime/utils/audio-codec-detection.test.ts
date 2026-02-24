@@ -12,6 +12,7 @@ describe('needsCustomAudioDecoder', () => {
     expect(needsCustomAudioDecoder('pcm-s16be')).toBe(true);
     expect(needsCustomAudioDecoder('pcm-s24le')).toBe(true);
     expect(needsCustomAudioDecoder('pcm-f64be')).toBe(true);
+    expect(needsCustomAudioDecoder('PCM Little Endian')).toBe(true);
   });
 
   it('detects common quicktime/aiff pcm aliases', () => {

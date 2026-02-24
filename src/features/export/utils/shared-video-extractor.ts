@@ -96,7 +96,7 @@ export class SharedVideoExtractorPool {
     }
 
     if (existingSrc && existingSrc !== src) {
-      this.unassignItem(itemId, existingSrc);
+      this.releaseItem(itemId);
     }
 
     this.itemSources.set(itemId, src);
@@ -115,14 +115,32 @@ export class SharedVideoExtractorPool {
 
     state.sourceInitPromise = (async () => {
       const ready = await this.ensureLaneInitialized(state, 0);
-      state.sourceInitAttempted = true;
-      state.sourceReady = ready;
+      if (ready) {
+        state.sourceInitAttempted = true;
+        state.sourceReady = true;
+      } else {
+        state.sourceInitAttempted = false;
+        state.sourceReady = false;
+      }
       return ready;
     })().finally(() => {
       state.sourceInitPromise = null;
     });
 
     return state.sourceInitPromise;
+  }
+
+  releaseItem(itemId: string): void {
+    const src = this.itemSources.get(itemId);
+    if (src) {
+      this.unassignItem(itemId, src);
+    }
+
+    const wrapper = this.itemWrappers.get(itemId);
+    wrapper?.dispose();
+
+    this.itemSources.delete(itemId);
+    this.itemWrappers.delete(itemId);
   }
 
   async drawItemFrame(

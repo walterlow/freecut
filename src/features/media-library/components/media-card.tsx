@@ -95,6 +95,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       for (const item of store.mediaItems) {
         if (item.mimeType.startsWith('video/') && getSharedProxyKey(item) === sharedProxyKey) {
           store.clearProxyStatus(item.id);
+          proxyService.clearProxyKey(item.id);
         }
       }
     } catch {

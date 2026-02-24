@@ -169,27 +169,25 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         video: {
           width: proxyDimensions.width,
           height: proxyDimensions.height,
-        fit: 'contain',
-        codec: 'avc',
-        // Faster proxy generation preset.
-        bitrate: QUALITY_LOW,
-        hardwareAcceleration: 'prefer-hardware',
-        // Short GOP to speed up random-access decode during scrubbing.
-        keyFrameInterval: 1,
-      },
-      audio: {
-        // Scrub proxy is video-only for faster generation and smaller files.
-        discard: true,
-      },
-    });
+          fit: 'contain',
+          codec: 'avc',
+          // Faster proxy generation preset.
+          bitrate: QUALITY_LOW,
+          hardwareAcceleration: 'prefer-hardware',
+          // Short GOP to speed up random-access decode during scrubbing.
+          keyFrameInterval: 1,
+        },
+        audio: {
+          // Scrub proxy is video-only for faster generation and smaller files.
+          discard: true,
+        },
+      });
     };
 
     const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
     try {
       const writable = await fileHandle.createWritable();
-      const streamTarget = new StreamTarget(
-        writable as unknown as WritableStream<{ type: 'write'; data: Uint8Array; position: number }>
-      );
+      const streamTarget = new StreamTarget(writable);
       streamedToFile = true;
       conversion = await buildConversion(streamTarget);
     } catch {
@@ -230,7 +228,6 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         throw new Error('Conversion produced no output buffer');
       }
 
-      const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
       const writable = await fileHandle.createWritable();
       try {
         await writable.write(buffer);

@@ -102,15 +102,16 @@ function buildTransitionOverlapByItemId(
   const draft: Record<string, TransitionOverlap> = {};
 
   for (const transition of transitions) {
-    const overlapRight = Math.ceil(transition.durationInFrames / 2);
-    const overlapLeft = Math.floor(transition.durationInFrames / 2);
+    const alignment = Math.min(1, Math.max(0, transition.alignment ?? 0.5));
+    const overlapOnLeft = Math.floor(transition.durationInFrames * alignment);
+    const overlapOnRight = transition.durationInFrames - overlapOnLeft;
 
     const leftOverlap = draft[transition.leftClipId] ?? { left: 0, right: 0 };
-    leftOverlap.right = Math.max(leftOverlap.right, overlapRight);
+    leftOverlap.right = Math.max(leftOverlap.right, overlapOnRight);
     draft[transition.leftClipId] = leftOverlap;
 
     const rightOverlap = draft[transition.rightClipId] ?? { left: 0, right: 0 };
-    rightOverlap.left = Math.max(rightOverlap.left, overlapLeft);
+    rightOverlap.left = Math.max(rightOverlap.left, overlapOnLeft);
     draft[transition.rightClipId] = rightOverlap;
   }
 

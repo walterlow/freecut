@@ -32,6 +32,24 @@ const PROXY_PRIORITY_AUDIO_CODECS = new Set([
   'eac3',
   'e-ac-3',
   'dts',
+  'pcm-s16be',
+  'pcm-s16le',
+  'pcm-s24be',
+  'pcm-s24le',
+  'pcm-s32be',
+  'pcm-s32le',
+  's16be',
+  's16le',
+  's24be',
+  's24le',
+  's32be',
+  's32le',
+  's16',
+  's24',
+  's32',
+  'twos',
+  'sowt',
+  'lpcm',
 ]);
 
 interface ProxyMetadata {
@@ -120,6 +138,10 @@ class ProxyService {
     }
   }
 
+  getProxyKey(mediaId: string): string | undefined {
+    return this.proxyKeyByMediaId.get(mediaId);
+  }
+
   /**
    * Check if a video qualifies for proxy generation.
    * - Always true for heavy/problematic audio codecs (e.g. E-AC3/AC3/DTS)
@@ -144,6 +166,9 @@ class ProxyService {
     sourceHeight: number,
     proxyKey?: string
   ): void {
+    if (proxyKey) {
+      this.setProxyKey(mediaId, proxyKey);
+    }
     const resolvedProxyKey = this.resolveProxyKey(mediaId, proxyKey);
 
     if (this.proxyBlobUrlByKey.has(resolvedProxyKey)) {
@@ -283,7 +308,7 @@ class ProxyService {
             if (mappedMediaIds && mappedMediaIds.size > 0) {
               staleProxyIds.push(...mappedMediaIds);
             } else {
-              staleProxyIds.push(proxyKey);
+              logger.debug(`Stale proxy ${proxyKey} has no mapped media ids; deleting stale file only`);
             }
 
             try {
@@ -490,7 +515,6 @@ class ProxyService {
 
   private resolveProxyKey(mediaId: string, explicitProxyKey?: string): string {
     if (explicitProxyKey) {
-      this.setProxyKey(mediaId, explicitProxyKey);
       return explicitProxyKey;
     }
     return this.proxyKeyByMediaId.get(mediaId) ?? mediaId;

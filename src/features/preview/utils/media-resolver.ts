@@ -81,10 +81,13 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
  * Returns null if no proxy exists (caller should fall back to full-res).
  */
 export function resolveProxyUrl(mediaId: string): string | null {
-  const media = useMediaLibraryStore.getState().mediaItems.find((item) => item.id === mediaId);
+  const media = useMediaLibraryStore.getState().mediaById[mediaId];
   if (media) {
     const proxyKey = getSharedProxyKey(media);
-    proxyService.setProxyKey(mediaId, proxyKey);
+    // Safety net for legacy state restores where the mapping may be missing.
+    if (proxyService.getProxyKey(mediaId) !== proxyKey) {
+      proxyService.setProxyKey(mediaId, proxyKey);
+    }
     return proxyService.getProxyBlobUrl(mediaId, proxyKey);
   }
 

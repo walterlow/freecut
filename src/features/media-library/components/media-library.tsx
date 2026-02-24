@@ -96,6 +96,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
+  const mediaById = useMediaLibraryStore((s) => s.mediaById);
   const clearSelection = useMediaLibraryStore((s) => s.clearSelection);
   const error = useMediaLibraryStore((s) => s.error);
   const errorLink = useMediaLibraryStore((s) => s.errorLink);
@@ -155,8 +156,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   // Resolve the selected media item for the info panel (single selection only)
   const selectedMediaForInfo = useMemo(() => {
     if (selectedMediaIds.length !== 1 || infoPanelDismissed) return null;
-    return mediaItems.find((m) => m.id === selectedMediaIds[0]) ?? null;
-  }, [selectedMediaIds, mediaItems, infoPanelDismissed]);
+    return mediaById[selectedMediaIds[0]!] ?? null;
+  }, [selectedMediaIds, mediaById, infoPanelDismissed]);
 
   // Track focus and clear selection when clicking outside the media library
   useEffect(() => {
@@ -352,7 +353,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
-      .map((id) => mediaItems.find((m) => m.id === id))
+      .map((id) => mediaById[id])
       .filter((m): m is typeof mediaItems[number] =>
         m !== undefined
         && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
@@ -375,13 +376,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   // Count selected items that are eligible for proxy generation
   const selectedProxyEligibleCount = useMemo(() => {
     return selectedMediaIds.filter((id) => {
-      const m = mediaItems.find((item) => item.id === id);
+      const m = mediaById[id];
       return m
         && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
         && proxyStatus.get(id) !== 'ready'
         && proxyStatus.get(id) !== 'generating';
     }).length;
-  }, [selectedMediaIds, mediaItems, proxyStatus]);
+  }, [selectedMediaIds, mediaById, proxyStatus]);
 
   // Find timeline items that reference the media being deleted (for batch delete from selection)
   // Read from store directly to avoid subscribing to items array

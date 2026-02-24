@@ -220,6 +220,7 @@ async function renderVideoItem(
   const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
   const isPreviewMode = rctx.renderMode === 'preview';
   const allowVideoElementFallback = !isPreviewMode;
+  let mediabunnyFailedThisFrame = false;
 
   // Calculate source time
   const localFrame = frame - item.from;
@@ -279,6 +280,7 @@ async function renderVideoItem(
         mediabunnyFailureCountByItem.set(item.id, 0);
         return;
       }
+      mediabunnyFailedThisFrame = true;
 
       // Distinguish transient misses from decode failures.
       const failureKind = extractor.getLastFailureKind();
@@ -313,7 +315,9 @@ async function renderVideoItem(
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
-  if (!allowVideoElementFallback) {
+  const allowPreviewFallback = isPreviewMode
+    && (mediabunnyFailedThisFrame || !useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id));
+  if (!allowVideoElementFallback && !allowPreviewFallback) {
     return;
   }
 

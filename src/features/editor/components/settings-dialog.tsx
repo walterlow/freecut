@@ -92,6 +92,7 @@ async function clearProjectProxies(
     try {
       await proxyService.deleteProxy(media.id, getSharedProxyKey(media));
       useMediaLibraryStore.getState().clearProxyStatus(media.id);
+      proxyService.clearProxyKey(media.id);
     } catch { /* already absent */ }
   }
 

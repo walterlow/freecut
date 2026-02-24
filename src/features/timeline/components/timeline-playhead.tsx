@@ -185,11 +185,17 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
     };
 
     const handleMouseUp = () => {
+      const pendingFrame = pendingFrameRef.current;
       // Cancel any pending RAF before clearing preview to prevent resurrection
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
+
+      if (pendingFrame !== null) {
+        setCurrentFrameRef.current(pendingFrame);
+      }
+
       pendingFrameRef.current = null;
       pendingPointerXRef.current = null;
       setPreviewFrameRef.current(null);

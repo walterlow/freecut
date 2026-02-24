@@ -4,12 +4,12 @@
  * Caches decoded AudioBuffers for custom-decoded audio tracks so that
  * split clips from the same source share a single decode.
  *
- * Storage: Decoded audio is persisted to IndexedDB in 30-second bins
- * (Int16 @ 22050 Hz stereo ≈ 2.5 MB/bin). This avoids large single
+ * Storage: Decoded audio is persisted to IndexedDB in 10-second bins
+ * (Int16 @ 22050 Hz stereo ~ 0.84 MB/bin). This avoids large single
  * records and allows progressive persistence during decode.
  *
  * On refresh, bins are loaded from IndexedDB in parallel and
- * reassembled into an AudioBuffer — no re-decode needed.
+ * reassembled into an AudioBuffer with no re-decode needed.
  *
  * Surround (5.1/7.1) sources are downmixed to stereo during decode
  * to keep memory reasonable.
@@ -31,14 +31,14 @@ let ac3Registered = false;
 const PLAYABLE_PARTIAL_POLL_MS = 150;
 const PLAYABLE_PARTIAL_TIMEOUT_MS = 8000;
 
-/** Sample rate for IndexedDB storage — 22050 Hz is sufficient for preview. */
+/** Sample rate for IndexedDB storage; 22050 Hz is sufficient for preview. */
 const STORAGE_SAMPLE_RATE = 22050;
 
 /** Bin duration in seconds for chunked IndexedDB storage. */
 const BIN_DURATION_SEC = 10;
 
 // ---------------------------------------------------------------------------
-// Int16 ↔ Float32 conversion
+// Int16 <-> Float32 conversion
 // ---------------------------------------------------------------------------
 
 function float32ToInt16(float32: Float32Array): Int16Array {
@@ -53,7 +53,8 @@ function float32ToInt16(float32: Float32Array): Int16Array {
 function int16ToFloat32(int16: Int16Array): Float32Array {
   const float32 = new Float32Array(int16.length);
   for (let i = 0; i < int16.length; i++) {
-    float32[i] = int16[i]! / (int16[i]! < 0 ? 0x8000 : 0x7FFF);
+    const s = int16[i]!;
+    float32[i] = s / (s < 0 ? 0x8000 : 0x7FFF);
   }
   return float32;
 }
@@ -95,7 +96,7 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Get a cached AudioBuffer or decode one via mediabunny.
- * Checks: memory cache → IndexedDB bins → decode (persists bins progressively).
+ * Checks: memory cache -> IndexedDB bins -> decode (persists bins progressively).
  * Concurrent calls for the same mediaId share a single promise.
  */
 function ensureDecodeStarted(mediaId: string, src: string): Promise<AudioBuffer> {
@@ -130,7 +131,11 @@ async function loadPartialFromBins(
   mediaId: string,
   minSeconds: number,
 ): Promise<AudioBuffer | null> {
-  const minFrames = Math.max(1, Math.floor(minSeconds * STORAGE_SAMPLE_RATE));
+  const metaRecord = await getDecodedPreviewAudio(mediaId);
+  const storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta')
+    ? Math.max(1, metaRecord.sampleRate)
+    : STORAGE_SAMPLE_RATE;
+  const minFrames = Math.max(1, Math.floor(minSeconds * storedSampleRate));
   const bins: DecodedPreviewAudioBin[] = [];
   let totalFrames = 0;
 
@@ -157,8 +162,8 @@ async function loadPartialFromBins(
     return null;
   }
 
-  const offlineCtx = new OfflineAudioContext(2, totalFrames, STORAGE_SAMPLE_RATE);
-  const buffer = offlineCtx.createBuffer(2, totalFrames, STORAGE_SAMPLE_RATE);
+  const offlineCtx = new OfflineAudioContext(2, totalFrames, storedSampleRate);
+  const buffer = offlineCtx.createBuffer(2, totalFrames, storedSampleRate);
   const leftChannel = buffer.getChannelData(0);
   const rightChannel = buffer.getChannelData(1);
 
@@ -314,7 +319,7 @@ async function loadFromBins(meta: DecodedPreviewAudioMeta): Promise<AudioBuffer>
 }
 
 // ---------------------------------------------------------------------------
-// Downmix surround → stereo (ITU-R BS.775)
+// Downmix surround -> stereo (ITU-R BS.775)
 // ---------------------------------------------------------------------------
 
 /**
@@ -363,7 +368,7 @@ function downmixToStereo(
       l += c;
       r += c;
     }
-    if (LFE) {
+    if (lfeGain !== 0 && LFE) {
       const lfe = LFE[i]! * lfeGain;
       l += lfe;
       r += lfe;
@@ -409,6 +414,7 @@ async function persistBin(
 ): Promise<{
   binIndex: number;
   frames: number;
+  sampleRate: number;
   left: Int16Array;
   right: Int16Array;
 }> {
@@ -440,6 +446,7 @@ async function persistBin(
   return {
     binIndex: binIdx,
     frames: downsampled.length,
+    sampleRate: downsampled.sampleRate,
     left: leftInt16,
     right: rightInt16,
   };
@@ -482,6 +489,7 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
   const binFlushPromises: Array<Promise<{
     binIndex: number;
     frames: number;
+    sampleRate: number;
     left: Int16Array;
     right: Int16Array;
   }>> = [];
@@ -531,8 +539,9 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
   persistedBins.sort((a, b) => a.binIndex - b.binIndex);
 
   const storedTotalFrames = persistedBins.reduce((sum, b) => sum + b.frames, 0);
-  const outCtx = new OfflineAudioContext(2, storedTotalFrames, STORAGE_SAMPLE_RATE);
-  const combined = outCtx.createBuffer(2, storedTotalFrames, STORAGE_SAMPLE_RATE);
+  const storedSampleRate = persistedBins[0]?.sampleRate ?? STORAGE_SAMPLE_RATE;
+  const outCtx = new OfflineAudioContext(2, storedTotalFrames, storedSampleRate);
+  const combined = outCtx.createBuffer(2, storedTotalFrames, storedSampleRate);
   const outLeft = combined.getChannelData(0);
   const outRight = combined.getChannelData(1);
 
@@ -548,7 +557,7 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
 
   log.info('Audio decoded for preview', {
     mediaId,
-    sampleRate: STORAGE_SAMPLE_RATE,
+    sampleRate: storedSampleRate,
     duration: combined.duration.toFixed(2),
     bins: totalBins,
     sizeMB: ((storedTotalFrames * 2 * 2) / (1024 * 1024)).toFixed(1),
@@ -559,7 +568,7 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
     id: mediaId,
     mediaId,
     kind: 'meta',
-    sampleRate: STORAGE_SAMPLE_RATE,
+    sampleRate: storedSampleRate,
     totalFrames: storedTotalFrames,
     binCount: totalBins,
     binDurationSec: BIN_DURATION_SEC,
