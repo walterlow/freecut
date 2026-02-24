@@ -132,13 +132,13 @@ async function loadPartialFromBins(
   minSeconds: number,
 ): Promise<AudioBuffer | null> {
   const metaRecord = await getDecodedPreviewAudio(mediaId);
-  const storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta'
+  let storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta'
     && Number.isFinite(metaRecord.sampleRate) && metaRecord.sampleRate > 0)
     ? metaRecord.sampleRate
-    : STORAGE_SAMPLE_RATE;
-  const minFrames = Math.max(1, Math.floor(minSeconds * storedSampleRate));
+    : 0;
   const bins: DecodedPreviewAudioBin[] = [];
   let totalFrames = 0;
+  let minFrames = storedSampleRate > 0 ? Math.max(1, Math.floor(minSeconds * storedSampleRate)) : 0;
 
   // Load contiguous bins from the beginning until we have enough playable audio.
   for (let i = 0; i < 512; i++) {
@@ -152,11 +152,21 @@ async function loadPartialFromBins(
       break;
     }
 
+    // Derive sample rate from first bin when meta is unavailable
+    if (storedSampleRate <= 0 && bin.sampleRate && Number.isFinite(bin.sampleRate) && bin.sampleRate > 0) {
+      storedSampleRate = bin.sampleRate;
+      minFrames = Math.max(1, Math.floor(minSeconds * storedSampleRate));
+    }
+
     bins.push(bin);
     totalFrames += bin.frames;
-    if (totalFrames >= minFrames) {
+    if (minFrames > 0 && totalFrames >= minFrames) {
       break;
     }
+  }
+
+  if (storedSampleRate <= 0) {
+    storedSampleRate = STORAGE_SAMPLE_RATE;
   }
 
   if (bins.length === 0 || totalFrames <= 0) {
@@ -441,6 +451,7 @@ async function persistBin(
     left: leftInt16.buffer as ArrayBuffer,
     right: rightInt16.buffer as ArrayBuffer,
     frames: downsampled.length,
+    sampleRate: downsampled.sampleRate,
     createdAt: Date.now(),
   });
 

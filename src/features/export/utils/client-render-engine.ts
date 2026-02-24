@@ -1191,7 +1191,7 @@ export async function createCompositionRenderer(
         if (track.visible === false) continue;
         for (const item of track.items ?? []) {
           if (item.type !== 'video') continue;
-          if (item.from > maxFrame || (item.from + item.durationInFrames) < minFrame) continue;
+          if (item.from > maxFrame || (item.from + item.durationInFrames) <= minFrame) continue;
           candidates.push(item as VideoItem);
           if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
         }
@@ -1241,6 +1241,7 @@ export async function createCompositionRenderer(
             }
           }
         } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') continue;
           const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
           mediabunnyFailureCountByItem.set(item.id, failures);
           log.warn('Prewarm decode failed', { itemId: item.id, frame, failures, error });

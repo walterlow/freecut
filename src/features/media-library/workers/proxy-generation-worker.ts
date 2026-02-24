@@ -293,8 +293,8 @@ self.onmessage = async (event: MessageEvent<ProxyWorkerRequest>) => {
         const { mediaId } = event.data as ProxyCancelRequest;
         const active = activeConversions.get(mediaId);
         if (active) {
-          await active.cancel();
           activeConversions.delete(mediaId);
+          await active.cancel();
         }
         break;
       }

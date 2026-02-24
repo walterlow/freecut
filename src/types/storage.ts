@@ -157,6 +157,7 @@ export interface DecodedPreviewAudioBin {
   left: ArrayBuffer; // Int16 PCM
   right: ArrayBuffer; // Int16 PCM
   frames: number; // Actual frame count (last bin may be shorter)
+  sampleRate?: number; // Stored sample rate (may differ from STORAGE_SAMPLE_RATE for low-rate sources)
   createdAt?: number;
 }
 
