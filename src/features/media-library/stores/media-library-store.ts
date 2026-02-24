@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, BrokenMediaInfo, UnsupportedCodecFile } from '../types';
+import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { createLogger } from '@/lib/logger';
 import { proxyService } from '../services/proxy-service';
@@ -14,6 +15,14 @@ const logger = createLogger('MediaLibraryStore');
 /** Tracked timeout for notification auto-clear */
 let notificationTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+function buildMediaById(mediaItems: MediaMetadata[]): Record<string, MediaMetadata> {
+  const mediaById: Record<string, MediaMetadata> = {};
+  for (const item of mediaItems) {
+    mediaById[item.id] = item;
+  }
+  return mediaById;
+}
+
 export const useMediaLibraryStore = create<
   MediaLibraryState & MediaLibraryActions
 >()(
@@ -22,6 +31,7 @@ export const useMediaLibraryStore = create<
       // Initial state
       currentProjectId: null, // v3: Project context
       mediaItems: [],
+      mediaById: {},
       isLoading: false, // Only load once a project context is available
       importingIds: [],
       error: null,
@@ -63,6 +73,7 @@ export const useMediaLibraryStore = create<
         set({
           currentProjectId: projectId,
           mediaItems: [],
+          mediaById: {},
           selectedMediaIds: [],
           isLoading: !!projectId, // Set loading if switching to a project
           proxyStatus: new Map(),
@@ -90,6 +101,7 @@ export const useMediaLibraryStore = create<
 
           set({
             mediaItems,
+            mediaById: buildMediaById(mediaItems),
             isLoading: false,
           });
 
@@ -263,6 +275,16 @@ export const useMediaLibraryStore = create<
     }
   )
 );
+
+// Keep mediaById synchronized even when action modules update mediaItems directly.
+let prevMediaItemsRef = useMediaLibraryStore.getState().mediaItems;
+useMediaLibraryStore.subscribe((state) => {
+  if (state.mediaItems === prevMediaItemsRef) {
+    return;
+  }
+  prevMediaItemsRef = state.mediaItems;
+  useMediaLibraryStore.setState({ mediaById: buildMediaById(state.mediaItems) });
+});
 
 // Wire up proxy service status listener to update store state
 proxyService.onStatusChange((mediaId, status, progress) => {

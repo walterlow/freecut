@@ -117,6 +117,20 @@ function buildItemById(
   return next;
 }
 
+function buildItemsMediaDependencyIds(items: TimelineItem[]): string[] {
+  const mediaIds = new Set<string>();
+  for (const item of items) {
+    if (item.mediaId) {
+      mediaIds.add(item.mediaId);
+    }
+  }
+  return [...mediaIds].sort();
+}
+
+function buildMediaDependencyKey(mediaDependencyIds: string[]): string {
+  return mediaDependencyIds.join('|');
+}
+
 function withItemIndexes(
   items: TimelineItem[],
   previous: Pick<ItemsState, 'itemsByTrackId' | 'itemById'>
@@ -153,6 +167,8 @@ interface ItemsState {
   items: TimelineItem[];
   itemsByTrackId: Record<string, TimelineItem[]>;
   itemById: Record<string, TimelineItem>;
+  mediaDependencyIds: string[];
+  mediaDependencyVersion: number;
   tracks: TimelineTrack[];
 }
 
@@ -199,6 +215,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     items: [],
     itemsByTrackId: {},
     itemById: {},
+    mediaDependencyIds: [],
+    mediaDependencyVersion: 0,
     tracks: [],
 
     // Bulk setters
@@ -755,3 +773,24 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     }),
   })
 );
+
+let prevItemsRef = useItemsStore.getState().items;
+let prevItemsMediaDependencyIds = useItemsStore.getState().mediaDependencyIds;
+let prevItemsMediaDependencyKey = buildMediaDependencyKey(prevItemsMediaDependencyIds);
+useItemsStore.subscribe((state) => {
+  if (state.items === prevItemsRef) {
+    return;
+  }
+  prevItemsRef = state.items;
+  const nextMediaDependencyIds = buildItemsMediaDependencyIds(state.items);
+  const nextMediaDependencyKey = buildMediaDependencyKey(nextMediaDependencyIds);
+  if (nextMediaDependencyKey === prevItemsMediaDependencyKey) {
+    return;
+  }
+  prevItemsMediaDependencyIds = nextMediaDependencyIds;
+  prevItemsMediaDependencyKey = nextMediaDependencyKey;
+  useItemsStore.setState({
+    mediaDependencyIds: prevItemsMediaDependencyIds,
+    mediaDependencyVersion: state.mediaDependencyVersion + 1,
+  });
+});

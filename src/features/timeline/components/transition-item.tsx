@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Transition } from '@/types/transition';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useItemsStore } from '../stores/items-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
@@ -52,17 +53,11 @@ export const TransitionItem = memo(function TransitionItem({
   );
 
   // Get the clips involved in this transition
-  const leftClip = useTimelineStore(
-    useCallback(
-      (s: TimelineState) => s.items.find((i) => i.id === transition.leftClipId),
-      [transition.leftClipId]
-    )
+  const leftClip = useItemsStore(
+    useCallback((s) => s.itemById[transition.leftClipId], [transition.leftClipId])
   );
-  const rightClip = useTimelineStore(
-    useCallback(
-      (s: TimelineState) => s.items.find((i) => i.id === transition.rightClipId),
-      [transition.rightClipId]
-    )
+  const rightClip = useItemsStore(
+    useCallback((s) => s.itemById[transition.rightClipId], [transition.rightClipId])
   );
 
   // Check if transition is selected

@@ -22,8 +22,27 @@ export interface SubComposition {
   backgroundColor?: string;
 }
 
+function buildCompositionsMediaDependencyIds(compositions: SubComposition[]): string[] {
+  const mediaIds = new Set<string>();
+  for (const composition of compositions) {
+    for (const item of composition.items) {
+      if (item.mediaId) {
+        mediaIds.add(item.mediaId);
+      }
+    }
+  }
+  return [...mediaIds].sort();
+}
+
+function buildMediaDependencyKey(mediaDependencyIds: string[]): string {
+  return mediaDependencyIds.join('|');
+}
+
 interface CompositionsState {
   compositions: SubComposition[];
+  compositionById: Record<string, SubComposition>;
+  mediaDependencyIds: string[];
+  mediaDependencyVersion: number;
 }
 
 interface CompositionsActions {
@@ -37,6 +56,9 @@ interface CompositionsActions {
 export const useCompositionsStore = create<CompositionsState & CompositionsActions>()(
   (set, get) => ({
     compositions: [],
+    compositionById: {},
+    mediaDependencyIds: [],
+    mediaDependencyVersion: 0,
 
     addComposition: (composition) =>
       set((state) => ({
@@ -55,8 +77,33 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
         compositions: state.compositions.filter((c) => c.id !== id),
       })),
 
-    getComposition: (id) => get().compositions.find((c) => c.id === id),
+    getComposition: (id) => get().compositionById[id],
 
     setCompositions: (compositions) => set({ compositions }),
   })
 );
+
+let prevCompositionsRef = useCompositionsStore.getState().compositions;
+let prevCompositionsMediaDependencyIds = useCompositionsStore.getState().mediaDependencyIds;
+let prevCompositionsMediaDependencyKey = buildMediaDependencyKey(prevCompositionsMediaDependencyIds);
+useCompositionsStore.subscribe((state) => {
+  if (state.compositions === prevCompositionsRef) {
+    return;
+  }
+  prevCompositionsRef = state.compositions;
+  const compositionById: Record<string, SubComposition> = {};
+  for (const composition of state.compositions) {
+    compositionById[composition.id] = composition;
+  }
+  const nextMediaDependencyIds = buildCompositionsMediaDependencyIds(state.compositions);
+  const nextMediaDependencyKey = buildMediaDependencyKey(nextMediaDependencyIds);
+  const mediaDependencyIds = nextMediaDependencyKey === prevCompositionsMediaDependencyKey
+    ? state.mediaDependencyIds
+    : nextMediaDependencyIds;
+  const mediaDependencyVersion = nextMediaDependencyKey === prevCompositionsMediaDependencyKey
+    ? state.mediaDependencyVersion
+    : state.mediaDependencyVersion + 1;
+  prevCompositionsMediaDependencyIds = mediaDependencyIds;
+  prevCompositionsMediaDependencyKey = nextMediaDependencyKey;
+  useCompositionsStore.setState({ compositionById, mediaDependencyIds: prevCompositionsMediaDependencyIds, mediaDependencyVersion });
+});

@@ -48,7 +48,7 @@ export const ClipContent = memo(function ClipContent({
   const compTopVideoMediaId = useCompositionsStore(
     useCallback((s) => {
       if (!compositionId) return null;
-      const comp = s.compositions.find((c) => c.id === compositionId);
+      const comp = s.compositionById[compositionId];
       if (!comp) return null;
       const trackOrderMap = new Map(comp.tracks.map((t) => [t.id, t.order ?? 0]));
       let topMediaId: string | null = null;
@@ -73,14 +73,14 @@ export const ClipContent = memo(function ClipContent({
   const sourceFps = useMediaLibraryStore(
     useCallback((s) => {
       if (!effectiveMediaId) return fps;
-      const media = s.mediaItems.find((m) => m.id === effectiveMediaId);
+      const media = s.mediaById[effectiveMediaId];
       return media?.fps || fps;
     }, [effectiveMediaId, fps])
   );
   const mediaDuration = useMediaLibraryStore(
     useCallback((s) => {
       if (!effectiveMediaId) return 0;
-      const media = s.mediaItems.find((m) => m.id === effectiveMediaId);
+      const media = s.mediaById[effectiveMediaId];
       return media?.duration || 0;
     }, [effectiveMediaId])
   );

@@ -45,6 +45,7 @@ export interface OrphanedClipInfo {
 export interface MediaLibraryState {
   currentProjectId: string | null; // v3: Project context for scoped operations
   mediaItems: MediaMetadata[];
+  mediaById: Record<string, MediaMetadata>;
   isLoading: boolean;
   importingIds: string[]; // IDs of media items currently being imported
   error: string | null;

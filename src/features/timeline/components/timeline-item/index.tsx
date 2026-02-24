@@ -91,23 +91,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     )
   );
 
-  // Granular selector: check if this item has keyframes and get keyframed properties
-  const itemKeyframeData = useTimelineStore(
+  // Selector returns stable item keyframe entry reference when unrelated store
+  // state updates occur, avoiding object-allocation churn in selectors.
+  const itemKeyframes = useTimelineStore(
     useCallback(
       (s) => {
-        const itemKeyframes = s.keyframes.find((k) => k.itemId === item.id);
-        if (!itemKeyframes) return { hasKeyframes: false, properties: [] };
-        const propertiesWithKeyframes = itemKeyframes.properties.filter((p) => p.keyframes.length > 0);
-        return {
-          hasKeyframes: propertiesWithKeyframes.length > 0,
-          properties: propertiesWithKeyframes,
-        };
+        return s.keyframes.find((k) => k.itemId === item.id) ?? null;
       },
       [item.id]
     )
   );
-  const hasKeyframes = itemKeyframeData.hasKeyframes;
-  const keyframedProperties = itemKeyframeData.properties;
+  const keyframedProperties = useMemo(
+    () => itemKeyframes?.properties.filter((p) => p.keyframes.length > 0) ?? [],
+    [itemKeyframes]
+  );
+  const hasKeyframes = keyframedProperties.length > 0;
 
   // Granular selector: sub-composition duration for trim clamping on composition items
   const compositionId = item.type === 'composition' ? item.compositionId : undefined;
@@ -115,7 +113,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     useCallback(
       (s) => {
         if (!compositionId) return null;
-        return s.compositions.find((c) => c.id === compositionId)?.durationInFrames ?? null;
+        return s.compositionById[compositionId]?.durationInFrames ?? null;
       },
       [compositionId]
     )
@@ -320,9 +318,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const isPartOfMultiDrag = dragParticipationRef.current > 0;
   const isAltDrag = dragParticipationRef.current === 2;
   const isPartOfDrag = isPartOfMultiDrag && !isDragging;
-
-  // Visibility detection for lazy filmstrip loading
-  const clipVisibility = useClipVisibility(transformRef);
 
   // Disable transition when anchor item drag ends to avoid animation
   useEffect(() => {
@@ -747,6 +742,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
     subCompDuration, rollingEditDelta, rollingEditHandle, rippleEdgeDelta, overlapRight
   ]);
+
+  // Visibility detection for lazy filmstrip loading (shared viewport state)
+  const clipVisibility = useClipVisibility(visualLeft, visualWidth);
 
   // Get color based on item type - memoized
   const itemColorClasses = useMemo(() => {

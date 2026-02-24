@@ -2,11 +2,13 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, mem
 import { Player, type PlayerRef } from '@/features/player';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import { useItemsStore } from '@/features/timeline/stores/items-store';
+import { useTransitionsStore } from '@/features/timeline/stores/transitions-store';
 import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
+import { useMediaDependencyStore } from '@/features/timeline/stores/media-dependency-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { MainComposition } from '@/lib/composition-runtime/compositions/main-composition';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
-import { useCompositionsStore } from '@/features/timeline/stores/compositions-store';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
 import { proxyService } from '@/features/media-library/services/proxy-service';
 import { blobUrlManager } from '@/lib/blob-url-manager';
@@ -27,6 +29,9 @@ import { createCompositionRenderer } from '@/features/export/utils/client-render
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
+const PRELOAD_MAX_IDS_PER_TICK_PLAYING = 10;
+const PRELOAD_MAX_IDS_PER_TICK_IDLE = 6;
+const PRELOAD_MAX_IDS_PER_TICK_SCRUB = 3;
 const FAST_SCRUB_RENDERER_ENABLED = true;
 const FAST_SCRUB_PRELOAD_BUDGET_MS = 180;
 const FAST_SCRUB_BOUNDARY_PREWARM_WINDOW_SECONDS = 0.5;
@@ -37,9 +42,39 @@ const SOURCE_WARM_SCRUB_WINDOW_SECONDS = 3;
 const SOURCE_WARM_MAX_SOURCES = 20;
 const SOURCE_WARM_STICKY_MS = 2500;
 const SOURCE_WARM_TICK_MS = 300;
+const RESOLVE_RETRY_MIN_MS = 400;
+const RESOLVE_RETRY_MAX_MS = 8000;
+const RESOLVE_MAX_CONCURRENCY = 6;
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
 type VideoSourceSpan = { src: string; startFrame: number; endFrame: number };
+type FastScrubBoundarySource = { frame: number; srcs: string[] };
+
+function toTrackFingerprint(tracks: CompositionInputProps['tracks']): string {
+  const parts: string[] = [];
+  for (const track of tracks) {
+    parts.push(
+      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}`
+    );
+    for (const item of track.items) {
+      const src = 'src' in item ? (item.src ?? '') : '';
+      parts.push(
+        `i:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}`
+      );
+    }
+  }
+  return parts.join('|');
+}
+
+function getPreloadBudget(isPlaying: boolean, previewFrame: number | null): number {
+  if (!isPlaying && previewFrame !== null) {
+    return PRELOAD_MAX_IDS_PER_TICK_SCRUB;
+  }
+  if (isPlaying) {
+    return PRELOAD_MAX_IDS_PER_TICK_PLAYING;
+  }
+  return PRELOAD_MAX_IDS_PER_TICK_IDLE;
+}
 
 interface VideoPreviewProps {
   project: {
@@ -280,8 +315,10 @@ export const VideoPreview = memo(function VideoPreview({
   // Granular selectors - avoid subscribing to currentFrame here to prevent re-renders
   const fps = useTimelineStore((s) => s.fps);
   const tracks = useTimelineStore((s) => s.tracks);
-  const items = useTimelineStore((s) => s.items);
-  const transitions = useTimelineStore((s) => s.transitions);
+  const items = useItemsStore((s) => s.items);
+  const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
+  const mediaDependencyVersion = useMediaDependencyStore((s) => s.mediaDependencyVersion);
+  const transitions = useTransitionsStore((s) => s.transitions);
   const hasRolling2Up = useRollingEditPreviewStore(
     (s) => Boolean(s.trimmedItemId && s.neighborItemId && s.handle),
   );
@@ -325,130 +362,309 @@ export const VideoPreview = memo(function VideoPreview({
   const [isResolving, setIsResolving] = useState(false);
   // Bumped on tab wake-up to force re-resolution of media URLs
   const [urlRefreshVersion, setUrlRefreshVersion] = useState(0);
+  const [resolveRetryTick, setResolveRetryTick] = useState(0);
+  const unresolvedMediaIdsRef = useRef<string[]>([]);
+  const unresolvedMediaIdSetRef = useRef<Set<string>>(new Set());
+  const pendingResolvePromisesRef = useRef<Map<string, Promise<string | null>>>(new Map());
+  const preloadResolveInFlightRef = useRef(false);
+  const resolveFailureCountRef = useRef<Map<string, number>>(new Map());
+  const resolveRetryAfterRef = useRef<Map<string, number>>(new Map());
+  const resolveRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSyncedMediaDependencyVersionRef = useRef<number>(-1);
+
+  const rebuildUnresolvedMediaIds = useCallback((resolvedMap: Map<string, string>) => {
+    const mediaIds = useMediaDependencyStore.getState().mediaIds;
+    const unresolvedSet = new Set<string>();
+    for (const mediaId of mediaIds) {
+      if (!resolvedMap.has(mediaId)) {
+        unresolvedSet.add(mediaId);
+      }
+    }
+    unresolvedMediaIdSetRef.current = unresolvedSet;
+    unresolvedMediaIdsRef.current = [...unresolvedSet];
+    return unresolvedMediaIdsRef.current;
+  }, []);
+
+  const addUnresolvedMediaIds = useCallback((mediaIds: string[]) => {
+    if (mediaIds.length === 0) return;
+    const activeMediaIds = useMediaDependencyStore.getState().mediaIds;
+    const activeMediaIdSet = new Set(activeMediaIds);
+    const unresolvedSet = unresolvedMediaIdSetRef.current;
+    let changed = false;
+
+    for (const mediaId of mediaIds) {
+      if (!activeMediaIdSet.has(mediaId)) continue;
+      if (!unresolvedSet.has(mediaId)) {
+        unresolvedSet.add(mediaId);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      unresolvedMediaIdsRef.current = [...unresolvedSet];
+    }
+  }, []);
+
+  const removeUnresolvedMediaIds = useCallback((mediaIds: string[]) => {
+    if (mediaIds.length === 0) return;
+    const unresolvedSet = unresolvedMediaIdSetRef.current;
+    let changed = false;
+
+    for (const mediaId of mediaIds) {
+      if (unresolvedSet.delete(mediaId)) {
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      unresolvedMediaIdsRef.current = [...unresolvedSet];
+    }
+  }, []);
+
+  const clearResolveRetryState = useCallback((mediaIds: string[]) => {
+    if (mediaIds.length === 0) return;
+    for (const mediaId of mediaIds) {
+      resolveFailureCountRef.current.delete(mediaId);
+      resolveRetryAfterRef.current.delete(mediaId);
+    }
+  }, []);
+
+  const pruneResolveRetryState = useCallback((activeMediaIdSet: Set<string>) => {
+    for (const mediaId of resolveFailureCountRef.current.keys()) {
+      if (!activeMediaIdSet.has(mediaId)) {
+        resolveFailureCountRef.current.delete(mediaId);
+      }
+    }
+    for (const mediaId of resolveRetryAfterRef.current.keys()) {
+      if (!activeMediaIdSet.has(mediaId)) {
+        resolveRetryAfterRef.current.delete(mediaId);
+      }
+    }
+  }, []);
+
+  const markResolveFailures = useCallback((mediaIds: string[]): number | null => {
+    if (mediaIds.length === 0) return null;
+    const now = Date.now();
+    let earliestRetryAt: number | null = null;
+
+    for (const mediaId of mediaIds) {
+      const nextFailures = (resolveFailureCountRef.current.get(mediaId) ?? 0) + 1;
+      resolveFailureCountRef.current.set(mediaId, nextFailures);
+
+      const exponent = Math.min(nextFailures - 1, 6);
+      const retryDelayMs = Math.min(
+        RESOLVE_RETRY_MAX_MS,
+        RESOLVE_RETRY_MIN_MS * Math.pow(2, exponent)
+      );
+      const retryAt = now + retryDelayMs;
+      resolveRetryAfterRef.current.set(mediaId, retryAt);
+      if (earliestRetryAt === null || retryAt < earliestRetryAt) {
+        earliestRetryAt = retryAt;
+      }
+    }
+
+    return earliestRetryAt;
+  }, []);
+
+  const getResolveRetryAt = useCallback((mediaId: string): number => {
+    return resolveRetryAfterRef.current.get(mediaId) ?? 0;
+  }, []);
+
+  const scheduleResolveRetryWake = useCallback((retryAt: number | null) => {
+    if (resolveRetryTimerRef.current) {
+      clearTimeout(resolveRetryTimerRef.current);
+      resolveRetryTimerRef.current = null;
+    }
+    if (retryAt === null) return;
+
+    const delayMs = Math.max(0, retryAt - Date.now());
+    resolveRetryTimerRef.current = setTimeout(() => {
+      resolveRetryTimerRef.current = null;
+      setResolveRetryTick((v) => v + 1);
+    }, delayMs);
+  }, []);
+
+  const resetResolveRetryState = useCallback(() => {
+    resolveFailureCountRef.current.clear();
+    resolveRetryAfterRef.current.clear();
+    if (resolveRetryTimerRef.current) {
+      clearTimeout(resolveRetryTimerRef.current);
+      resolveRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const resolveMediaUrlDeduped = useCallback((mediaId: string): Promise<string | null> => {
+    const pendingMap = pendingResolvePromisesRef.current;
+    const existingPromise = pendingMap.get(mediaId);
+    if (existingPromise) {
+      return existingPromise;
+    }
+
+    const promise = resolveMediaUrl(mediaId)
+      .then((url) => url ?? null)
+      .catch(() => null)
+      .finally(() => {
+        pendingMap.delete(mediaId);
+      });
+
+    pendingMap.set(mediaId, promise);
+    return promise;
+  }, []);
+
+  const resolveMediaBatch = useCallback(async (mediaIds: string[]): Promise<{
+    resolvedEntries: Array<{ mediaId: string; url: string }>;
+    failedIds: string[];
+  }> => {
+    if (mediaIds.length === 0) {
+      return { resolvedEntries: [], failedIds: [] };
+    }
+
+    const resolvedEntries: Array<{ mediaId: string; url: string }> = [];
+    const failedIds: string[] = [];
+    let cursor = 0;
+    const workerCount = Math.min(RESOLVE_MAX_CONCURRENCY, mediaIds.length);
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (true) {
+          const index = cursor;
+          cursor += 1;
+          if (index >= mediaIds.length) break;
+          const mediaId = mediaIds[index]!;
+          const url = await resolveMediaUrlDeduped(mediaId);
+          if (url) {
+            resolvedEntries.push({ mediaId, url });
+          } else {
+            failedIds.push(mediaId);
+          }
+        }
+      })
+    );
+
+    return { resolvedEntries, failedIds };
+  }, [resolveMediaUrlDeduped]);
 
   // Combine tracks and items into TimelineTrack format
   // resolveEffectiveTrackStates applies parent group gate behavior (mute/hide/lock)
   // and filters out group container tracks (which hold no items)
   const combinedTracks = useMemo(() => {
-    const effectiveTracks = resolveEffectiveTrackStates(tracks);
-    return effectiveTracks
-      .map((track) => ({
-        ...track,
-        items: items.filter((item) => item.trackId === track.id),
-      }))
-      .toSorted((a, b) => b.order - a.order);
-  }, [tracks, items]);
-
-  // Create resolved tracks by merging cached URLs with current items
-  // When useProxy is enabled, substitute proxy URLs for video items
-  const resolvedTracks = useMemo(() => {
-    return combinedTracks.map((track) => ({
+    const effectiveTracks = resolveEffectiveTrackStates(tracks).toSorted((a, b) => b.order - a.order);
+    return effectiveTracks.map((track) => ({
       ...track,
-      items: track.items.map((item) => {
-        if (item.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
-          const resolvedSrc = resolvedUrls.get(item.mediaId);
-          // Substitute proxy URL for video items when proxy playback is enabled
-          if (useProxy && item.type === 'video') {
-            const proxyUrl = resolveProxyUrl(item.mediaId);
-            return { ...item, src: proxyUrl || resolvedSrc || '' };
-          }
-          return { ...item, src: resolvedSrc ?? '' };
-        }
-        return item;
-      }),
+      items: itemsByTrackId[track.id] ?? [],
     }));
-  }, [combinedTracks, resolvedUrls, useProxy, proxyReadyCount]);
+  }, [tracks, itemsByTrackId]);
 
-  // Fast-scrub renderer prefers proxy video whenever available, even if
-  // normal playback is currently set to original sources.
-  const fastScrubTracks = useMemo(() => {
-    return combinedTracks.map((track) => ({
-      ...track,
-      items: track.items.map((item) => {
-        if (item.mediaId && (item.type === 'video' || item.type === 'audio' || item.type === 'image')) {
-          const resolvedSrc = resolvedUrls.get(item.mediaId);
-          if (item.type === 'video') {
-            const proxyUrl = resolveProxyUrl(item.mediaId);
-            return { ...item, src: proxyUrl || resolvedSrc || '' };
-          }
-          return { ...item, src: resolvedSrc ?? '' };
-        }
-        return item;
-      }),
-    }));
-  }, [combinedTracks, resolvedUrls, proxyReadyCount]);
-
-  const fastScrubBoundaryFrames = useMemo(() => {
-    const boundarySet = new Set<number>();
-
-    for (const track of fastScrubTracks) {
-      for (const item of track.items) {
-        if (item.type !== 'video' || item.durationInFrames <= 0) continue;
-        boundarySet.add(item.from);
-        boundarySet.add(item.from + item.durationInFrames);
-      }
-    }
-
-    return [...boundarySet].sort((a, b) => a - b);
-  }, [fastScrubTracks]);
-
-  const fastScrubBoundarySources = useMemo(() => {
+  const {
+    resolvedTracks,
+    fastScrubTracks,
+    playbackVideoSourceSpans,
+    scrubVideoSourceSpans,
+    fastScrubBoundaryFrames,
+    fastScrubBoundarySources,
+    resolvedTracksFingerprint,
+    fastScrubTracksFingerprint,
+  } = useMemo(() => {
+    const resolvedTrackList: CompositionInputProps['tracks'] = [];
+    const fastScrubTrackList: CompositionInputProps['tracks'] = [];
+    const playbackSpans: VideoSourceSpan[] = [];
+    const scrubSpans: VideoSourceSpan[] = [];
+    const boundaryFrames = new Set<number>();
     const boundarySources = new Map<number, Set<string>>();
 
-    for (const track of fastScrubTracks) {
+    for (const track of combinedTracks) {
+      const resolvedItems: typeof track.items = [];
+      const fastScrubItems: typeof track.items = [];
+
       for (const item of track.items) {
-        if (item.type !== 'video') continue;
-        const src = 'src' in item ? (item.src ?? '') : '';
-        if (!src) continue;
-
-        const startFrame = item.from;
-        const endFrame = item.from + item.durationInFrames;
-
-        let startSet = boundarySources.get(startFrame);
-        if (!startSet) {
-          startSet = new Set<string>();
-          boundarySources.set(startFrame, startSet);
+        if (!item.mediaId || (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image')) {
+          resolvedItems.push(item);
+          fastScrubItems.push(item);
+          continue;
         }
-        startSet.add(src);
 
-        let endSet = boundarySources.get(endFrame);
-        if (!endSet) {
-          endSet = new Set<string>();
-          boundarySources.set(endFrame, endSet);
+        const sourceUrl = resolvedUrls.get(item.mediaId) ?? '';
+        const proxyUrl = item.type === 'video'
+          ? (resolveProxyUrl(item.mediaId) || sourceUrl)
+          : sourceUrl;
+        const resolvedSrc = useProxy && item.type === 'video' ? proxyUrl : sourceUrl;
+        const fastScrubSrc = item.type === 'video' ? proxyUrl : sourceUrl;
+
+        const resolvedItem = ('src' in item && item.src === resolvedSrc)
+          ? item
+          : { ...item, src: resolvedSrc };
+        const fastScrubItem = ('src' in item && item.src === fastScrubSrc)
+          ? item
+          : { ...item, src: fastScrubSrc };
+
+        resolvedItems.push(resolvedItem);
+        fastScrubItems.push(fastScrubItem);
+
+        if (resolvedItem.type === 'video' && resolvedSrc) {
+          playbackSpans.push({
+            src: resolvedSrc,
+            startFrame: resolvedItem.from,
+            endFrame: resolvedItem.from + resolvedItem.durationInFrames,
+          });
         }
-        endSet.add(src);
+
+        if (fastScrubItem.type === 'video' && fastScrubSrc) {
+          scrubSpans.push({
+            src: fastScrubSrc,
+            startFrame: fastScrubItem.from,
+            endFrame: fastScrubItem.from + fastScrubItem.durationInFrames,
+          });
+          if (fastScrubItem.durationInFrames > 0) {
+            const startFrame = fastScrubItem.from;
+            const endFrame = fastScrubItem.from + fastScrubItem.durationInFrames;
+            boundaryFrames.add(startFrame);
+            boundaryFrames.add(endFrame);
+
+            let startSet = boundarySources.get(startFrame);
+            if (!startSet) {
+              startSet = new Set<string>();
+              boundarySources.set(startFrame, startSet);
+            }
+            startSet.add(fastScrubSrc);
+
+            let endSet = boundarySources.get(endFrame);
+            if (!endSet) {
+              endSet = new Set<string>();
+              boundarySources.set(endFrame, endSet);
+            }
+            endSet.add(fastScrubSrc);
+          }
+        }
       }
+
+      resolvedTrackList.push({ ...track, items: resolvedItems });
+      fastScrubTrackList.push({ ...track, items: fastScrubItems });
     }
 
-    return [...boundarySources.entries()]
+    const sortedBoundaryFrames = [...boundaryFrames].sort((a, b) => a - b);
+    const sortedBoundarySources: FastScrubBoundarySource[] = [...boundarySources.entries()]
       .map(([frame, srcSet]) => ({ frame, srcs: [...srcSet] }))
       .sort((a, b) => a.frame - b.frame);
-  }, [fastScrubTracks]);
 
-  // Create a stable fingerprint for media resolution using derived selector
-  // Includes media from both main timeline items AND sub-composition items
-  const mainMediaFingerprint = useTimelineStore((s) =>
-    s.items
-      .filter((item) => item.mediaId)
-      .map((item) => item.mediaId!)
-      .toSorted()
-      .join('|')
-  );
-  const compMediaFingerprint = useCompositionsStore((s) =>
-    s.compositions
-      .flatMap((c) => c.items)
-      .filter((item) => item.mediaId)
-      .map((item) => item.mediaId!)
-      .toSorted()
-      .join('|')
-  );
+    return {
+      resolvedTracks: resolvedTrackList,
+      fastScrubTracks: fastScrubTrackList,
+      playbackVideoSourceSpans: playbackSpans,
+      scrubVideoSourceSpans: scrubSpans,
+      fastScrubBoundaryFrames: sortedBoundaryFrames,
+      fastScrubBoundarySources: sortedBoundarySources,
+      resolvedTracksFingerprint: toTrackFingerprint(resolvedTrackList),
+      fastScrubTracksFingerprint: toTrackFingerprint(fastScrubTrackList),
+    };
+  }, [combinedTracks, resolvedUrls, useProxy, proxyReadyCount]);
+
   // Track broken media count so relinking (which removes entries) re-triggers resolution
   const brokenMediaCount = useMediaLibraryStore((s) => s.brokenMediaIds.length);
-  const mediaFingerprint = mainMediaFingerprint + '||' + compMediaFingerprint + '||broken:' + brokenMediaCount;
 
-  // Calculate total frames using derived selector for furthest item end
-  const furthestItemEndFrame = useTimelineStore((s) =>
-    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
+  // Calculate total frames from item data in local memoized pass.
+  const furthestItemEndFrame = useMemo(
+    () => items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0),
+    [items]
   );
   const totalFrames = useMemo(() => {
     if (furthestItemEndFrame === 0) return 900; // Default 30s at 30fps
@@ -465,6 +681,8 @@ export const VideoPreview = memo(function VideoPreview({
     // Find IDs that were broken but are now healthy (relinked)
     const relinkedIds = prev.filter((id) => !brokenMediaIds.includes(id));
     if (relinkedIds.length > 0) {
+      clearResolveRetryState(relinkedIds);
+      addUnresolvedMediaIds(relinkedIds);
       setResolvedUrls((prevUrls) => {
         const next = new Map(prevUrls);
         let changed = false;
@@ -474,32 +692,76 @@ export const VideoPreview = memo(function VideoPreview({
         return changed ? next : prevUrls;
       });
     }
-  }, [brokenMediaIds]);
+  }, [addUnresolvedMediaIds, brokenMediaIds, clearResolveRetryState]);
 
-  // Resolve media URLs when media fingerprint changes (not on transform changes)
+  // Resolve media URLs when media dependencies change (not on transform changes)
   useEffect(() => {
     let isCancelled = false;
 
     async function resolve() {
-      // Collect media IDs from both main timeline and sub-compositions
-      const mainMediaIds = items
-        .filter((item) => item.mediaId)
-        .map((item) => item.mediaId!);
-      const compMediaIds = useCompositionsStore.getState().compositions
-        .flatMap((c) => c.items)
-        .filter((item) => item.mediaId)
-        .map((item) => item.mediaId!);
-      const uniqueMediaIds = [...new Set([...mainMediaIds, ...compMediaIds])];
+      const mediaIds = useMediaDependencyStore.getState().mediaIds;
 
-      if (uniqueMediaIds.length === 0) {
+      if (mediaIds.length === 0) {
+        unresolvedMediaIdSetRef.current.clear();
+        unresolvedMediaIdsRef.current = [];
+        resetResolveRetryState();
         setResolvedUrls(new Map());
         setIsResolving(false);
         return;
       }
 
-      const unresolved = uniqueMediaIds.filter((id) => !resolvedUrls.has(id));
+      const activeMediaIdSet = new Set(mediaIds);
+      pruneResolveRetryState(activeMediaIdSet);
+      let effectiveResolvedUrls = resolvedUrls;
+      let unresolved = unresolvedMediaIdsRef.current;
 
-      if (unresolved.length > 0 && resolvedUrls.size === 0) {
+      if (lastSyncedMediaDependencyVersionRef.current !== mediaDependencyVersion) {
+        lastSyncedMediaDependencyVersionRef.current = mediaDependencyVersion;
+        if (resolvedUrls.size > 0) {
+          const prunedUrls = new Map<string, string>();
+          for (const [mediaId, url] of resolvedUrls.entries()) {
+            if (activeMediaIdSet.has(mediaId)) {
+              prunedUrls.set(mediaId, url);
+            }
+          }
+          effectiveResolvedUrls = prunedUrls;
+          if (prunedUrls.size !== resolvedUrls.size) {
+            setResolvedUrls(prunedUrls);
+          }
+        }
+        unresolved = rebuildUnresolvedMediaIds(effectiveResolvedUrls);
+      } else if (unresolved.length === 0) {
+        unresolved = rebuildUnresolvedMediaIds(effectiveResolvedUrls);
+      }
+
+      if (unresolved.length === 0) {
+        scheduleResolveRetryWake(null);
+        setIsResolving(false);
+        return;
+      }
+
+      const now = Date.now();
+      let earliestRetryAt: number | null = null;
+      const readyToResolve: string[] = [];
+      for (const mediaId of unresolved) {
+        const retryAt = getResolveRetryAt(mediaId);
+        if (retryAt > now) {
+          if (earliestRetryAt === null || retryAt < earliestRetryAt) {
+            earliestRetryAt = retryAt;
+          }
+          continue;
+        }
+        readyToResolve.push(mediaId);
+      }
+
+      if (readyToResolve.length === 0) {
+        scheduleResolveRetryWake(earliestRetryAt);
+        setIsResolving(false);
+        return;
+      }
+      scheduleResolveRetryWake(null);
+
+      if (effectiveResolvedUrls.size === 0) {
         setIsResolving(true);
         await new Promise(r => setTimeout(r, 150));
       }
@@ -507,17 +769,18 @@ export const VideoPreview = memo(function VideoPreview({
       if (isCancelled) return;
 
       try {
-        const newUrls = new Map(resolvedUrls);
-        await Promise.all(
-          uniqueMediaIds.map(async (mediaId) => {
-            if (!newUrls.has(mediaId)) {
-              const url = await resolveMediaUrl(mediaId);
-              if (url) {
-                newUrls.set(mediaId, url);
-              }
-            }
-          })
-        );
+        const newUrls = new Map(effectiveResolvedUrls);
+        const { resolvedEntries, failedIds } = await resolveMediaBatch(readyToResolve);
+        const resolvedNow = resolvedEntries.map((entry) => entry.mediaId);
+        for (const entry of resolvedEntries) {
+          newUrls.set(entry.mediaId, entry.url);
+        }
+        clearResolveRetryState(resolvedNow);
+        const retryAt = markResolveFailures(failedIds);
+        if (retryAt !== null) {
+          scheduleResolveRetryWake(retryAt);
+        }
+        removeUnresolvedMediaIds(resolvedNow);
 
         if (!isCancelled) {
           setResolvedUrls(newUrls);
@@ -536,44 +799,24 @@ export const VideoPreview = memo(function VideoPreview({
     return () => {
       isCancelled = true;
     };
-  }, [mediaFingerprint, urlRefreshVersion]);
+  }, [
+    clearResolveRetryState,
+    getResolveRetryAt,
+    markResolveFailures,
+    pruneResolveRetryState,
+    rebuildUnresolvedMediaIds,
+    removeUnresolvedMediaIds,
+    resetResolveRetryState,
+    resolveMediaBatch,
+    resolveRetryTick,
+    scheduleResolveRetryWake,
+    mediaDependencyVersion,
+    brokenMediaCount,
+    urlRefreshVersion,
+  ]);
 
   // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
   // This avoids memory blowups on large projects while keeping nearby clips hot.
-  const playbackVideoSourceSpans = useMemo<VideoSourceSpan[]>(() => {
-    const spans: VideoSourceSpan[] = [];
-    for (const track of resolvedTracks) {
-      for (const item of track.items) {
-        if (item.type !== 'video') continue;
-        const src = 'src' in item ? item.src : '';
-        if (!src) continue;
-        spans.push({
-          src,
-          startFrame: item.from,
-          endFrame: item.from + item.durationInFrames,
-        });
-      }
-    }
-    return spans;
-  }, [resolvedTracks]);
-
-  const scrubVideoSourceSpans = useMemo<VideoSourceSpan[]>(() => {
-    const spans: VideoSourceSpan[] = [];
-    for (const track of fastScrubTracks) {
-      for (const item of track.items) {
-        if (item.type !== 'video') continue;
-        const src = 'src' in item ? item.src : '';
-        if (!src) continue;
-        spans.push({
-          src,
-          startFrame: item.from,
-          endFrame: item.from + item.durationInFrames,
-        });
-      }
-    }
-    return spans;
-  }, [fastScrubTracks]);
-
   useEffect(() => {
     if (resolvedUrls.size === 0) return;
 
@@ -691,64 +934,13 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [resolvedUrls, playbackVideoSourceSpans, scrubVideoSourceSpans, fps]);
 
-  // Create a stable fingerprint for tracks to detect meaningful changes
-  const tracksFingerprint = useMemo(() => {
-    return resolvedTracks.map(track => ({
-      id: track.id,
-      order: track.order,
-      visible: track.visible,
-      solo: track.solo,
-      muted: track.muted,
-      items: track.items.map(item => {
-        const src = 'src' in item ? item.src : undefined;
-        return {
-          id: item.id,
-          type: item.type,
-          from: item.from,
-          durationInFrames: item.durationInFrames,
-          src,
-          mediaId: item.mediaId,
-          speed: item.speed,
-          volume: item.volume,
-          sourceStart: item.sourceStart,
-          sourceEnd: item.sourceEnd,
-        };
-      })
-    }));
-  }, [resolvedTracks]);
-
   // Memoize inputProps to prevent Player from re-rendering
   const inputProps: CompositionInputProps = useMemo(() => ({
     fps,
     tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, tracksFingerprint, transitions, project.backgroundColor]);
-
-  const fastScrubTracksFingerprint = useMemo(() => {
-    return fastScrubTracks.map(track => ({
-      id: track.id,
-      order: track.order,
-      visible: track.visible,
-      solo: track.solo,
-      muted: track.muted,
-      items: track.items.map(item => {
-        const src = 'src' in item ? item.src : undefined;
-        return {
-          id: item.id,
-          type: item.type,
-          from: item.from,
-          durationInFrames: item.durationInFrames,
-          src,
-          mediaId: item.mediaId,
-          speed: item.speed,
-          volume: item.volume,
-          sourceStart: item.sourceStart,
-          sourceEnd: item.sourceEnd,
-        };
-      })
-    }));
-  }, [fastScrubTracks]);
+  }), [fps, resolvedTracksFingerprint, transitions, project.backgroundColor]);
 
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
@@ -1059,33 +1251,98 @@ export const VideoPreview = memo(function VideoPreview({
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const preloadMedia = () => {
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const preloadEndFrame = currentFrame + (fps * PRELOAD_AHEAD_SECONDS);
+    const preloadMedia = async () => {
+      if (preloadResolveInFlightRef.current) return;
+      const playbackState = usePlaybackStore.getState();
+      const anchorFrame = (!playbackState.isPlaying && playbackState.previewFrame !== null)
+        ? playbackState.previewFrame
+        : playbackState.currentFrame;
+      const preloadEndFrame = anchorFrame + (fps * PRELOAD_AHEAD_SECONDS);
+      const maxIdsPerTick = getPreloadBudget(playbackState.isPlaying, playbackState.previewFrame);
+      const now = Date.now();
+      const unresolvedSet = unresolvedMediaIdSetRef.current;
 
-      const mediaToPreload = new Set<string>();
+      const mediaToPreloadScores = new Map<string, number>();
       for (const track of combinedTracks) {
         for (const item of track.items) {
           if (!item.mediaId) continue;
           const itemEnd = item.from + item.durationInFrames;
-          if (item.from <= preloadEndFrame && itemEnd >= currentFrame) {
-            if (!resolvedUrls.has(item.mediaId)) {
-              mediaToPreload.add(item.mediaId);
+          if (item.from <= preloadEndFrame && itemEnd >= anchorFrame) {
+            if (
+              unresolvedSet.has(item.mediaId)
+              && getResolveRetryAt(item.mediaId) <= now
+            ) {
+              const distanceToPlayhead = anchorFrame < item.from
+                ? item.from - anchorFrame
+                : anchorFrame > itemEnd
+                  ? anchorFrame - itemEnd
+                  : 0;
+              const previousScore = mediaToPreloadScores.get(item.mediaId);
+              if (previousScore === undefined || distanceToPlayhead < previousScore) {
+                mediaToPreloadScores.set(item.mediaId, distanceToPlayhead);
+              }
             }
           }
         }
       }
 
-      for (const mediaId of mediaToPreload) {
-        resolveMediaUrl(mediaId).catch(() => {});
+      if (mediaToPreloadScores.size === 0) {
+        return;
+      }
+
+      const mediaToPreload = [...mediaToPreloadScores.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, maxIdsPerTick)
+        .map(([mediaId]) => mediaId);
+
+      preloadResolveInFlightRef.current = true;
+      try {
+        const { resolvedEntries, failedIds } = await resolveMediaBatch(mediaToPreload);
+        if (resolvedEntries.length > 0) {
+          const resolvedNow: string[] = [];
+          const applicableEntries: Array<{ mediaId: string; url: string }> = [];
+          for (const entry of resolvedEntries) {
+            if (!unresolvedMediaIdSetRef.current.has(entry.mediaId)) continue;
+            resolvedNow.push(entry.mediaId);
+            applicableEntries.push(entry);
+          }
+          setResolvedUrls((prevUrls) => {
+            const nextUrls = new Map(prevUrls);
+            let changed = false;
+            for (const entry of applicableEntries) {
+              if (nextUrls.get(entry.mediaId) === entry.url) continue;
+              nextUrls.set(entry.mediaId, entry.url);
+              changed = true;
+            }
+            return changed ? nextUrls : prevUrls;
+          });
+          clearResolveRetryState(resolvedNow);
+          removeUnresolvedMediaIds(resolvedNow);
+        }
+        if (failedIds.length > 0) {
+          const retryAt = markResolveFailures(failedIds);
+          if (retryAt !== null) {
+            scheduleResolveRetryWake(retryAt);
+          }
+        }
+      } finally {
+        preloadResolveInFlightRef.current = false;
       }
     };
 
-    preloadMedia();
+    void preloadMedia();
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (state.isPlaying && !prevState.isPlaying) {
-        intervalId = setInterval(preloadMedia, 1000);
+        intervalId = setInterval(() => {
+          void preloadMedia();
+        }, 1000);
+      } else if (
+        !state.isPlaying
+        && state.previewFrame !== null
+        && state.previewFrame !== prevState.previewFrame
+      ) {
+        void preloadMedia();
       } else if (!state.isPlaying && prevState.isPlaying) {
         if (intervalId) {
           clearInterval(intervalId);
@@ -1100,7 +1357,16 @@ export const VideoPreview = memo(function VideoPreview({
         clearInterval(intervalId);
       }
     };
-  }, [fps, combinedTracks, resolvedUrls]);
+  }, [
+    clearResolveRetryState,
+    fps,
+    combinedTracks,
+    getResolveRetryAt,
+    markResolveFailures,
+    resolveMediaBatch,
+    removeUnresolvedMediaIds,
+    scheduleResolveRetryWake,
+  ]);
 
   // Refresh blob URLs on tab wake-up to recover from stale URLs.
   // After extended inactivity, browsers may reclaim memory backing blob URLs
@@ -1132,7 +1398,10 @@ export const VideoPreview = memo(function VideoPreview({
       blobUrlManager.invalidateAll();
 
       // 3. Clear resolved URL cache and bump version to trigger re-resolution
-      setResolvedUrls(new Map());
+      const clearedUrls = new Map<string, string>();
+      resetResolveRetryState();
+      setResolvedUrls(clearedUrls);
+      rebuildUnresolvedMediaIds(clearedUrls);
       setUrlRefreshVersion((v) => v + 1);
     };
 
@@ -1140,14 +1409,15 @@ export const VideoPreview = memo(function VideoPreview({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [rebuildUnresolvedMediaIds, resetResolveRetryState]);
 
   useEffect(() => {
     return () => {
       scrubMountedRef.current = false;
+      resetResolveRetryState();
       disposeFastScrubRenderer();
     };
-  }, [disposeFastScrubRenderer]);
+  }, [disposeFastScrubRenderer, resetResolveRetryState]);
 
   // Calculate player size based on zoom mode
   const playerSize = useMemo(() => {
