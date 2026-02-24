@@ -117,13 +117,8 @@ export class SharedVideoExtractorPool {
 
     state.sourceInitPromise = (async () => {
       const ready = await this.ensureLaneInitialized(state, 0);
-      if (ready) {
-        state.sourceInitAttempted = true;
-        state.sourceReady = true;
-      } else {
-        state.sourceInitAttempted = false;
-        state.sourceReady = false;
-      }
+      state.sourceInitAttempted = true;
+      state.sourceReady = ready;
       return ready;
     })().finally(() => {
       state.sourceInitPromise = null;
