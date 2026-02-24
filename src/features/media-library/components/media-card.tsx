@@ -37,7 +37,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
 
   const mediaType = getMediaType(media.mimeType);
   const isImporting = importingIds.includes(media.id);
-  const canGenerateProxy = proxyService.needsProxy(media.width, media.height, media.mimeType);
+  const canGenerateProxy = proxyService.needsProxy(
+    media.width,
+    media.height,
+    media.mimeType,
+    media.audioCodec
+  );
   const hasProxy = proxyStatus === 'ready';
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)

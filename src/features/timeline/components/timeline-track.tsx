@@ -1,13 +1,15 @@
 import { useState, useRef, memo, useCallback, useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem, CompositionItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
+import type { Transition } from '@/types/transition';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useItemsStore } from '../stores/items-store';
+import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
@@ -72,6 +74,8 @@ interface PlannedDroppedMediaItem {
 }
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
+const EMPTY_TRACK_ITEMS: TimelineItemType[] = [];
+const EMPTY_TRACK_TRANSITIONS: Transition[] = [];
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -200,15 +204,11 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const [menuKey, setMenuKey] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
 
-  // Store selectors - avoid subscribing to full items array to prevent re-renders
-  // Use derived selector: only returns items for THIS track (changes only when track items change)
-  // useShallow prevents infinite loops from array reference changes and enables shallow comparison
-  const trackItems = useTimelineStore(
-    useShallow((s) => s.items.filter((item) => item.trackId === track.id))
-  );
+  // Store selectors - use indexed lookups so unrelated tracks don't re-render.
+  const trackItems = useItemsStore((s) => s.itemsByTrackId[track.id] ?? EMPTY_TRACK_ITEMS);
   // Get transitions for this track
-  const trackTransitions = useTimelineStore(
-    useShallow((s) => s.transitions.filter((t) => t.trackId === track.id))
+  const trackTransitions = useTransitionsStore(
+    (s) => s.transitionsByTrackId[track.id] ?? EMPTY_TRACK_TRANSITIONS
   );
   const addItem = useTimelineStore((s) => s.addItem);
   const addItems = useTimelineStore((s) => s.addItems);

@@ -355,7 +355,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       .map((id) => mediaItems.find((m) => m.id === id))
       .filter((m): m is typeof mediaItems[number] =>
         m !== undefined
-        && proxyService.needsProxy(m.width, m.height, m.mimeType)
+        && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
         && proxyStatus.get(m.id) !== 'ready'
         && proxyStatus.get(m.id) !== 'generating'
       );
@@ -377,7 +377,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return selectedMediaIds.filter((id) => {
       const m = mediaItems.find((item) => item.id === id);
       return m
-        && proxyService.needsProxy(m.width, m.height, m.mimeType)
+        && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
         && proxyStatus.get(id) !== 'ready'
         && proxyStatus.get(id) !== 'generating';
     }).length;

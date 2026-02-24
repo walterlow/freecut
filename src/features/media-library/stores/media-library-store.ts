@@ -96,7 +96,8 @@ export const useMediaLibraryStore = create<
           // Load existing proxies from OPFS and regenerate stale entries in the background.
           try {
             const videoItems = mediaItems.filter(
-              (m) => m.mimeType.startsWith('video/') && proxyService.needsProxy(m.width, m.height, m.mimeType)
+              (m) => m.mimeType.startsWith('video/')
+                && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
             );
 
             if (videoItems.length > 0) {

@@ -21,7 +21,8 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
 describe('slipItem', () => {
   beforeEach(() => {
     useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.setState({ items: [], tracks: [] });
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
   });
 
   it('shifts sourceStart and sourceEnd by slipDelta', () => {
@@ -139,7 +140,8 @@ describe('slipItem', () => {
 describe('slideItem', () => {
   beforeEach(() => {
     useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.setState({ items: [], tracks: [] });
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
   });
 
   it('moves clip and adjusts adjacent neighbors correctly (slide right)', () => {

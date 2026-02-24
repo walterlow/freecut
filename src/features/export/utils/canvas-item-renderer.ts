@@ -36,7 +36,7 @@ import {
 import { renderShape } from './canvas-shapes';
 import { gifFrameCache, type CachedGifFrames } from '../../timeline/services/gif-frame-cache';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
-import type { VideoFrameExtractor } from './canvas-video-extractor';
+import type { VideoFrameSource } from './shared-video-extractor';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -99,11 +99,12 @@ export interface ItemRenderContext {
   renderMode: 'export' | 'preview';
 
   // Video state
-  videoExtractors: Map<string, VideoFrameExtractor>;
+  videoExtractors: Map<string, VideoFrameSource>;
   videoElements: Map<string, HTMLVideoElement>;
   useMediabunny: Set<string>;
   mediabunnyDisabledItems: Set<string>;
   mediabunnyFailureCountByItem: Map<string, number>;
+  ensureVideoItemReady?: (itemId: string) => Promise<boolean>;
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>;
@@ -231,6 +232,19 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+
+  if (
+    isPreviewMode
+    && !useMediabunny.has(item.id)
+    && !mediabunnyDisabledItems.has(item.id)
+    && rctx.ensureVideoItemReady
+  ) {
+    try {
+      await rctx.ensureVideoItemReady(item.id);
+    } catch {
+      // Best effort in preview path; fallback behavior handled below.
+    }
+  }
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
   // With the overlap model, source times are always valid during transitions

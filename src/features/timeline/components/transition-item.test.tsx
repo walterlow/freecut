@@ -40,7 +40,8 @@ describe('TransitionItem preview bridge motion', () => {
   beforeEach(() => {
     useTimelineSettingsStore.setState({ fps: 30 });
     useZoomStore.getState().setZoomLevelImmediate(1);
-    useItemsStore.setState({ items: [], tracks: [] });
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
     useSelectionStore.setState({ selectedTransitionId: null, dragState: null });
     useRollingEditPreviewStore.getState().clearPreview();
     useSlideEditPreviewStore.getState().clearPreview();

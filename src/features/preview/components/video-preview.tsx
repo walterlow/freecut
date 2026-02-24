@@ -804,7 +804,12 @@ export const VideoPreview = memo(function VideoPreview({
         if (!offscreenCtx) return null;
 
         const renderer = await createCompositionRenderer(fastScrubInputProps, offscreen, offscreenCtx, { mode: 'preview' });
-        const preloadPromise = renderer.preload()
+        const preloadPriorityFrame = usePlaybackStore.getState().previewFrame
+          ?? usePlaybackStore.getState().currentFrame;
+        const preloadPromise = renderer.preload({
+          priorityFrame: preloadPriorityFrame,
+          priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
+        })
           .catch((error) => {
             console.warn('[FastScrub] Renderer preload failed:', error);
           })
@@ -838,7 +843,7 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, isResolving, project.height, project.width]);
+  }, [fastScrubInputProps, fps, isResolving, project.height, project.width]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {

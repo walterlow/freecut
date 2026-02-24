@@ -77,6 +77,57 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   return normalized;
 }
 
+function areItemArraysEqual(a: TimelineItem[] | undefined, b: TimelineItem[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < b.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function buildItemsByTrackId(
+  items: TimelineItem[],
+  previous: Record<string, TimelineItem[]>
+): Record<string, TimelineItem[]> {
+  const grouped: Record<string, TimelineItem[]> = {};
+  for (const item of items) {
+    (grouped[item.trackId] ??= []).push(item);
+  }
+
+  const next: Record<string, TimelineItem[]> = {};
+  for (const [trackId, trackItems] of Object.entries(grouped)) {
+    const previousTrackItems = previous[trackId];
+    next[trackId] = previousTrackItems && areItemArraysEqual(previousTrackItems, trackItems)
+      ? previousTrackItems
+      : trackItems;
+  }
+
+  return next;
+}
+
+function buildItemById(
+  items: TimelineItem[],
+  previous: Record<string, TimelineItem>
+): Record<string, TimelineItem> {
+  const next: Record<string, TimelineItem> = {};
+  for (const item of items) {
+    const previousItem = previous[item.id];
+    next[item.id] = previousItem !== undefined && previousItem === item ? previousItem : item;
+  }
+  return next;
+}
+
+function withItemIndexes(
+  items: TimelineItem[],
+  previous: Pick<ItemsState, 'itemsByTrackId' | 'itemById'>
+): Pick<ItemsState, 'items' | 'itemsByTrackId' | 'itemById'> {
+  return {
+    items,
+    itemsByTrackId: buildItemsByTrackId(items, previous.itemsByTrackId),
+    itemById: buildItemById(items, previous.itemById),
+  };
+}
+
 /**
  * Get IDs of clips that have a transition with the given item.
  * These clips are allowed to overlap during trim operations.
@@ -100,6 +151,8 @@ function getTransitionLinkedIds(itemId: string): Set<string> {
 
 interface ItemsState {
   items: TimelineItem[];
+  itemsByTrackId: Record<string, TimelineItem[]>;
+  itemById: Record<string, TimelineItem>;
   tracks: TimelineTrack[];
 }
 
@@ -144,40 +197,47 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
   (set, get) => ({
     // State
     items: [],
+    itemsByTrackId: {},
+    itemById: {},
     tracks: [],
 
     // Bulk setters
-    setItems: (items) => set({ items: items.map((item) => normalizeFrameFields(item)) }),
+    setItems: (items) => set((state) => {
+      const normalizedItems = items.map((item) => normalizeFrameFields(item));
+      return withItemIndexes(normalizedItems, state);
+    }),
     setTracks: (tracks) => set({
       tracks: [...tracks].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     }),
 
     // Add item
-    _addItem: (item) => set((state) => ({
-      items: [...state.items, normalizeFrameFields(item)],
-    })),
+    _addItem: (item) => set((state) => {
+      const nextItems = [...state.items, normalizeFrameFields(item)];
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Add multiple items in one mutation
-    _addItems: (items) => set((state) => ({
-      items: [...state.items, ...items.map((item) => normalizeFrameFields(item))],
-    })),
+    _addItems: (items) => set((state) => {
+      const nextItems = [...state.items, ...items.map((item) => normalizeFrameFields(item))];
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Update item
     _updateItem: (id, updates) => {
       const normalizedUpdates = normalizeItemUpdates(updates);
-      return set((state) => ({
-      items: state.items.map((i) =>
-        i.id === id ? normalizeFrameFields({ ...i, ...normalizedUpdates } as typeof i) : i
-      ),
-      }));
+      return set((state) => {
+        const nextItems = state.items.map((i) =>
+          i.id === id ? normalizeFrameFields({ ...i, ...normalizedUpdates } as typeof i) : i
+        );
+        return withItemIndexes(nextItems, state);
+      });
     },
 
     // Remove items (simple - cascade handled by timeline-actions)
     _removeItems: (ids) => set((state) => {
       const idsSet = new Set(ids);
-      return {
-        items: state.items.filter((i) => !idsSet.has(i.id)),
-      };
+      const nextItems = state.items.filter((i) => !idsSet.has(i.id));
+      return withItemIndexes(nextItems, state);
     }),
 
     // Ripple delete: remove items AND shift subsequent items to close gaps
@@ -197,7 +257,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           return shiftAmount > 0 ? { ...item, from: item.from - shiftAmount } : item;
         });
 
-      return { items: newItems };
+      return withItemIndexes(newItems, state);
     }),
 
     // Close gap at position
@@ -230,26 +290,26 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         return item;
       });
 
-      return { items: newItems };
+      return withItemIndexes(newItems, state);
     }),
 
     // Move single item
     _moveItem: (id, newFrom, newTrackId) => {
       const normalizedFrom = roundFrame(newFrom);
-      return set((state) => ({
-      items: state.items.map((item) =>
-        item.id === id
-          ? normalizeFrameFields({ ...item, from: normalizedFrom, ...(newTrackId && { trackId: newTrackId }) })
-          : item
-      ),
-      }));
+      return set((state) => {
+        const nextItems = state.items.map((item) =>
+          item.id === id
+            ? normalizeFrameFields({ ...item, from: normalizedFrom, ...(newTrackId && { trackId: newTrackId }) })
+            : item
+        );
+        return withItemIndexes(nextItems, state);
+      });
     },
 
     // Move multiple items
     _moveItems: (updates) => set((state) => {
       const updateMap = new Map(updates.map((u) => [u.id, { ...u, from: roundFrame(u.from) }]));
-      return {
-        items: state.items.map((item) => {
+      const nextItems = state.items.map((item) => {
           const update = updateMap.get(item.id);
           if (!update) return item;
           return normalizeFrameFields({
@@ -257,8 +317,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
             from: update.from,
             ...(update.trackId && { trackId: update.trackId }),
           });
-        }),
-      };
+        });
+      return withItemIndexes(nextItems, state);
     }),
 
     // Duplicate items
@@ -289,13 +349,16 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         newItems.push(normalizeFrameFields(duplicate));
       }
 
-      set((state) => ({ items: [...state.items, ...newItems] }));
+      set((state) => {
+        const nextItems = [...state.items, ...newItems];
+        return withItemIndexes(nextItems, state);
+      });
       return newItems;
     },
 
     // Trim item start
-    _trimItemStart: (id, trimAmount, options) => set((state) => ({
-      items: state.items.map((item) => {
+    _trimItemStart: (id, trimAmount, options) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== id) return item;
 
         // Clamp trim amount to source boundaries and minimum duration
@@ -321,12 +384,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Trim item end
-    _trimItemEnd: (id, trimAmount, options) => set((state) => ({
-      items: state.items.map((item) => {
+    _trimItemEnd: (id, trimAmount, options) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== id) return item;
 
         // Clamp trim amount to source boundaries and minimum duration
@@ -349,8 +413,9 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           durationInFrames: roundDuration(newDuration),
           ...sourceUpdate,
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Split item at frame
     _splitItem: (id, splitFrame) => {
@@ -417,11 +482,12 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         log.debug(`_splitItem: boundaries.right.sourceStart:${boundaries.right.sourceStart} rightItem.sourceStart:${(rightItem as typeof item).sourceStart}`);
       }
 
-      set((state) => ({
-        items: state.items
+      set((state) => {
+        const nextItems = state.items
           .map((i) => (i.id === id ? normalizeFrameFields(leftItem) : i))
-          .concat(normalizeFrameFields(rightItem)),
-      }));
+          .concat(normalizeFrameFields(rightItem));
+        return withItemIndexes(nextItems, state);
+      });
 
       return { leftItem: normalizeFrameFields(leftItem), rightItem: normalizeFrameFields(rightItem) };
     },
@@ -460,16 +526,15 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
       // Remove all but first (by timeline position), update first
       const idsToRemove = new Set(itemsToJoin.slice(1).map((i) => i.id));
-      return {
-        items: state.items
-          .filter((i) => !idsToRemove.has(i.id))
-          .map((i) => (i.id === firstItem.id ? normalizeFrameFields(joinedItem) : i)),
-      };
+      const nextItems = state.items
+        .filter((i) => !idsToRemove.has(i.id))
+        .map((i) => (i.id === firstItem.id ? normalizeFrameFields(joinedItem) : i));
+      return withItemIndexes(nextItems, state);
     }),
 
     // Rate stretch item (video, audio, or GIF)
-    _rateStretchItem: (id, newFrom, newDuration, newSpeed) => set((state) => ({
-      items: state.items.map((item) => {
+    _rateStretchItem: (id, newFrom, newDuration, newSpeed) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== id) return item;
         // Allow video, audio, and GIF images (detected by .gif extension)
         const isGif = item.type === 'image' && item.label?.toLowerCase().endsWith('.gif');
@@ -514,12 +579,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
         }
 
         return updatedItem;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Update item transform
-    _updateItemTransform: (id, transform) => set((state) => ({
-      items: state.items.map((item) => {
+    _updateItemTransform: (id, transform) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== id) return item;
         if (!('transform' in item)) return item;
 
@@ -527,13 +593,14 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           ...item,
           transform: { ...item.transform, ...transform },
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Reset item transform
     // Note: opacity is intentionally omitted - undefined means "use default (1.0)"
-    _resetItemTransform: (id) => set((state) => ({
-      items: state.items.map((item) => {
+    _resetItemTransform: (id) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== id) return item;
         if (!('transform' in item)) return item;
 
@@ -548,14 +615,14 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           },
         };
         return updatedItem as TimelineItem;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Update multiple items' transforms
     _updateItemsTransform: (ids, transform) => set((state) => {
       const idsSet = new Set(ids);
-      return {
-        items: state.items.map((item) => {
+      const nextItems = state.items.map((item) => {
           if (!idsSet.has(item.id)) return item;
           if (!('transform' in item)) return item;
 
@@ -563,13 +630,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
             ...item,
             transform: { ...item.transform, ...transform },
           } as typeof item;
-        }),
-      };
+        });
+      return withItemIndexes(nextItems, state);
     }),
 
     // Update transforms from map
-    _updateItemsTransformMap: (transformsMap) => set((state) => ({
-      items: state.items.map((item) => {
+    _updateItemsTransformMap: (transformsMap) => set((state) => {
+      const nextItems = state.items.map((item) => {
         const transform = transformsMap.get(item.id);
         if (!transform) return item;
         if (!('transform' in item)) return item;
@@ -578,12 +645,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           ...item,
           transform: { ...item.transform, ...transform },
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Add effect to item
-    _addEffect: (itemId, effect) => set((state) => ({
-      items: state.items.map((item) => {
+    _addEffect: (itemId, effect) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== itemId) return item;
         // Audio items don't support visual effects
         if (item.type === 'audio') return item;
@@ -599,15 +667,15 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           ...item,
           effects: [...effects, newEffect],
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Add effects to multiple items
     _addEffects: (updates) => set((state) => {
       const updateMap = new Map(updates.map((u) => [u.itemId, u.effects]));
 
-      return {
-        items: state.items.map((item) => {
+      const nextItems = state.items.map((item) => {
           const effectsToAdd = updateMap.get(item.id);
           if (!effectsToAdd) return item;
           // Audio items don't support visual effects
@@ -624,13 +692,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
             ...item,
             effects: [...currentEffects, ...newEffects],
           } as typeof item;
-        }),
-      };
+        });
+      return withItemIndexes(nextItems, state);
     }),
 
     // Update effect
-    _updateEffect: (itemId, effectId, updates) => set((state) => ({
-      items: state.items.map((item) => {
+    _updateEffect: (itemId, effectId, updates) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== itemId) return item;
         // Audio items don't support visual effects
         if (item.type === 'audio') return item;
@@ -648,12 +716,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
               : e
           ),
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Remove effect
-    _removeEffect: (itemId, effectId) => set((state) => ({
-      items: state.items.map((item) => {
+    _removeEffect: (itemId, effectId) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== itemId) return item;
         // Audio items don't support visual effects
         if (item.type === 'audio') return item;
@@ -663,12 +732,13 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           ...item,
           effects: effects.filter((e) => e.id !== effectId),
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
 
     // Toggle effect
-    _toggleEffect: (itemId, effectId) => set((state) => ({
-      items: state.items.map((item) => {
+    _toggleEffect: (itemId, effectId) => set((state) => {
+      const nextItems = state.items.map((item) => {
         if (item.id !== itemId) return item;
         // Audio items don't support visual effects
         if (item.type === 'audio') return item;
@@ -680,7 +750,8 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
             e.id === effectId ? { ...e, enabled: !e.enabled } : e
           ),
         } as typeof item;
-      }),
-    })),
+      });
+      return withItemIndexes(nextItems, state);
+    }),
   })
 );

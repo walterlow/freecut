@@ -16,8 +16,15 @@ import { TRANSITION_CONFIGS } from '@/types/transition';
  * pendingBreakages is ephemeral - not tracked in undo/redo.
  */
 
+interface TransitionOverlap {
+  left: number;
+  right: number;
+}
+
 interface TransitionsState {
   transitions: Transition[];
+  transitionsByTrackId: Record<string, Transition[]>;
+  transitionOverlapByItemId: Record<string, TransitionOverlap>;
   pendingBreakages: TransitionBreakage[];
 }
 
@@ -60,14 +67,93 @@ function normalizeTransition(transition: Transition): Transition {
   };
 }
 
+function areTransitionArraysEqual(a: Transition[] | undefined, b: Transition[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < b.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function buildTransitionsByTrackId(
+  transitions: Transition[],
+  previous: Record<string, Transition[]>
+): Record<string, Transition[]> {
+  const grouped: Record<string, Transition[]> = {};
+  for (const transition of transitions) {
+    (grouped[transition.trackId] ??= []).push(transition);
+  }
+
+  const next: Record<string, Transition[]> = {};
+  for (const [trackId, trackTransitions] of Object.entries(grouped)) {
+    const previousTrackTransitions = previous[trackId];
+    next[trackId] = previousTrackTransitions && areTransitionArraysEqual(previousTrackTransitions, trackTransitions)
+      ? previousTrackTransitions
+      : trackTransitions;
+  }
+
+  return next;
+}
+
+function buildTransitionOverlapByItemId(
+  transitions: Transition[],
+  previous: Record<string, TransitionOverlap>
+): Record<string, TransitionOverlap> {
+  const draft: Record<string, TransitionOverlap> = {};
+
+  for (const transition of transitions) {
+    const overlapRight = Math.ceil(transition.durationInFrames / 2);
+    const overlapLeft = Math.floor(transition.durationInFrames / 2);
+
+    const leftOverlap = draft[transition.leftClipId] ?? { left: 0, right: 0 };
+    leftOverlap.right = Math.max(leftOverlap.right, overlapRight);
+    draft[transition.leftClipId] = leftOverlap;
+
+    const rightOverlap = draft[transition.rightClipId] ?? { left: 0, right: 0 };
+    rightOverlap.left = Math.max(rightOverlap.left, overlapLeft);
+    draft[transition.rightClipId] = rightOverlap;
+  }
+
+  const next: Record<string, TransitionOverlap> = {};
+  for (const [itemId, overlap] of Object.entries(draft)) {
+    const previousOverlap = previous[itemId];
+    next[itemId] = previousOverlap &&
+      previousOverlap.left === overlap.left &&
+      previousOverlap.right === overlap.right
+      ? previousOverlap
+      : overlap;
+  }
+
+  return next;
+}
+
+function withTransitionIndexes(
+  transitions: Transition[],
+  previous: Pick<TransitionsState, 'transitionsByTrackId' | 'transitionOverlapByItemId'>
+): Pick<TransitionsState, 'transitions' | 'transitionsByTrackId' | 'transitionOverlapByItemId'> {
+  return {
+    transitions,
+    transitionsByTrackId: buildTransitionsByTrackId(transitions, previous.transitionsByTrackId),
+    transitionOverlapByItemId: buildTransitionOverlapByItemId(
+      transitions,
+      previous.transitionOverlapByItemId
+    ),
+  };
+}
+
 export const useTransitionsStore = create<TransitionsState & TransitionsActions>()(
   (set) => ({
     // State
     transitions: [],
+    transitionsByTrackId: {},
+    transitionOverlapByItemId: {},
     pendingBreakages: [],
 
     // Bulk setters
-    setTransitions: (transitions) => set({ transitions: transitions.map((transition) => normalizeTransition(transition)) }),
+    setTransitions: (transitions) => set((state) => {
+      const normalizedTransitions = transitions.map((transition) => normalizeTransition(transition));
+      return withTransitionIndexes(normalizedTransitions, state);
+    }),
     setPendingBreakages: (breakages) => set({ pendingBreakages: breakages }),
 
     // Add transition
@@ -97,16 +183,17 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
         direction,
       };
 
-      set((state) => ({
-        transitions: [...state.transitions, newTransition],
-      }));
+      set((state) => {
+        const nextTransitions = [...state.transitions, newTransition];
+        return withTransitionIndexes(nextTransitions, state);
+      });
 
       return id;
     },
 
     // Update transition
-    _updateTransition: (id, updates) => set((state) => ({
-      transitions: state.transitions.map((t) => {
+    _updateTransition: (id, updates) => set((state) => {
+      const nextTransitions = state.transitions.map((t) => {
         if (t.id !== id) return t;
         const normalizedUpdates = updates.durationInFrames === undefined
           ? updates
@@ -115,30 +202,30 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
               durationInFrames: normalizeTransitionDuration(updates.durationInFrames),
             };
         return normalizeTransition({ ...t, ...normalizedUpdates });
-      }),
-    })),
+      });
+      return withTransitionIndexes(nextTransitions, state);
+    }),
 
     // Remove single transition
-    _removeTransition: (id) => set((state) => ({
-      transitions: state.transitions.filter((t) => t.id !== id),
-    })),
+    _removeTransition: (id) => set((state) => {
+      const nextTransitions = state.transitions.filter((t) => t.id !== id);
+      return withTransitionIndexes(nextTransitions, state);
+    }),
 
     // Remove multiple transitions
     _removeTransitions: (ids) => set((state) => {
       const idsSet = new Set(ids);
-      return {
-        transitions: state.transitions.filter((t) => !idsSet.has(t.id)),
-      };
+      const nextTransitions = state.transitions.filter((t) => !idsSet.has(t.id));
+      return withTransitionIndexes(nextTransitions, state);
     }),
 
     // Remove transitions referencing deleted items (cascade delete)
     _removeTransitionsForItems: (itemIds) => set((state) => {
       const idsSet = new Set(itemIds);
-      return {
-        transitions: state.transitions.filter(
-          (t) => !idsSet.has(t.leftClipId) && !idsSet.has(t.rightClipId)
-        ),
-      };
+      const nextTransitions = state.transitions.filter(
+        (t) => !idsSet.has(t.leftClipId) && !idsSet.has(t.rightClipId)
+      );
+      return withTransitionIndexes(nextTransitions, state);
     }),
 
     // Clear pending breakages

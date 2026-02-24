@@ -25,6 +25,14 @@ const logger = createLogger('ProxyService');
 
 const MIN_WIDTH_THRESHOLD = 1920;
 const MIN_HEIGHT_THRESHOLD = 1080;
+const PROXY_PRIORITY_AUDIO_CODECS = new Set([
+  'ac-3',
+  'ac3',
+  'ec-3',
+  'eac3',
+  'e-ac-3',
+  'dts',
+]);
 
 interface ProxyMetadata {
   version?: number;
@@ -113,10 +121,16 @@ class ProxyService {
   }
 
   /**
-   * Check if a video qualifies for proxy generation (above 1080p)
+   * Check if a video qualifies for proxy generation.
+   * - Always true for heavy/problematic audio codecs (e.g. E-AC3/AC3/DTS)
+   * - Otherwise true for sources above 1080p thresholds
    */
-  needsProxy(width: number, height: number, mimeType: string): boolean {
+  needsProxy(width: number, height: number, mimeType: string, audioCodec?: string): boolean {
     if (!mimeType.startsWith('video/')) return false;
+    const normalizedAudioCodec = (audioCodec ?? '').toLowerCase();
+    if (PROXY_PRIORITY_AUDIO_CODECS.has(normalizedAudioCodec)) {
+      return true;
+    }
     return width > MIN_WIDTH_THRESHOLD || height > MIN_HEIGHT_THRESHOLD;
   }
 
@@ -502,4 +516,3 @@ class ProxyService {
 
 // Singleton
 export const proxyService = new ProxyService();
-

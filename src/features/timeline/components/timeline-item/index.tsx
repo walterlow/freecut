@@ -2,6 +2,7 @@ import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
+import { useItemsStore } from '../../stores/items-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
@@ -352,11 +353,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Get FPS for frame-to-time conversion
   const fps = useTimelineStore((s) => s.fps);
 
-  // Compute overlap hidden at the clip's tail (this clip is the LEFT clip in a transition).
-  // In the overlap model, the right clip slides left by D frames, creating physical overlap.
-  // We split the visual trim equally: D/2 from the left clip's right edge, D/2 from the
-  // right clip's left edge. This centers the visual junction at the overlap midpoint (FCP-style).
-  const transitions = useTransitionsStore((s) => s.transitions);
+  // Committed transition overlap for this item (store-indexed lookup).
+  // right: this item is LEFT in a transition, left: this item is RIGHT.
+  const committedOverlapRight = useTransitionsStore(
+    useCallback((s) => s.transitionOverlapByItemId[item.id]?.right ?? 0, [item.id])
+  );
+  const committedOverlapLeft = useTransitionsStore(
+    useCallback((s) => s.transitionOverlapByItemId[item.id]?.left ?? 0, [item.id])
+  );
 
   // Smart per-concern selectors for transition resize preview.
   // Return primitives so unaffected clips always get 0 (stable, no re-render).
@@ -471,36 +475,24 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const slideRightNeighborIdForSlidItem = useSlideEditPreviewStore(
     useCallback((s) => (s.itemId === item.id ? s.rightNeighborId : null), [item.id])
   );
-  const slideLeftNeighborForSlidItem = useTimelineStore(
+  const slideLeftNeighborForSlidItem = useItemsStore(
     useCallback((s) => {
       if (!slideLeftNeighborIdForSlidItem) return null;
-      return s.items.find((i) => i.id === slideLeftNeighborIdForSlidItem) ?? null;
+      return s.itemById[slideLeftNeighborIdForSlidItem] ?? null;
     }, [slideLeftNeighborIdForSlidItem])
   );
-  const slideRightNeighborForSlidItem = useTimelineStore(
+  const slideRightNeighborForSlidItem = useItemsStore(
     useCallback((s) => {
       if (!slideRightNeighborIdForSlidItem) return null;
-      return s.items.find((i) => i.id === slideRightNeighborIdForSlidItem) ?? null;
+      return s.itemById[slideRightNeighborIdForSlidItem] ?? null;
     }, [slideRightNeighborIdForSlidItem])
   );
 
   // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
-  const overlapRight = useMemo(() => {
-    if (previewOverlapRight > 0) return previewOverlapRight;
-    for (const t of transitions) {
-      if (t.leftClipId === item.id) return Math.ceil(t.durationInFrames / 2);
-    }
-    return 0;
-  }, [transitions, item.id, previewOverlapRight]);
+  const overlapRight = previewOverlapRight > 0 ? previewOverlapRight : committedOverlapRight;
 
   // Merge preview + committed overlap for the left edge (this clip is RIGHT in a transition)
-  const overlapLeft = useMemo(() => {
-    if (previewOverlapLeft > 0) return previewOverlapLeft;
-    for (const t of transitions) {
-      if (t.rightClipId === item.id) return Math.floor(t.durationInFrames / 2);
-    }
-    return 0;
-  }, [transitions, item.id, previewOverlapLeft]);
+  const overlapLeft = previewOverlapLeft > 0 ? previewOverlapLeft : committedOverlapLeft;
 
   // Calculate position and width (convert frames to seconds, then to pixels)
   // Display width hides overlap from both edges so the visual junction is centered.

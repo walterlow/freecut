@@ -53,7 +53,7 @@ import { type CachedGifFrames } from '../../timeline/services/gif-frame-cache';
 import { gifFrameCache } from '../../timeline/services/gif-frame-cache';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
-import { VideoFrameExtractor } from './canvas-video-extractor';
+import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { useCompositionsStore } from '../../timeline/stores/compositions-store';
 
 // Item renderer
@@ -141,13 +141,40 @@ export async function createCompositionRenderer(
 
   // === PERFORMANCE OPTIMIZATION: Use mediabunny for video decoding ===
   // VideoFrameExtractor provides precise frame access without seek delays
-  const videoExtractors = new Map<string, VideoFrameExtractor>();
+  const sharedVideoExtractors = new SharedVideoExtractorPool({
+    // Same-source transitions and overlaps can require multiple concurrent decode
+    // timelines. Keep a small fixed lane cap to prevent per-clip duplication.
+    maxLanesPerSource: 4,
+  });
+  const videoExtractors = new Map<string, VideoFrameSource>();
+  const videoSourceByItemId = new Map<string, string>();
+  const videoItemIdsBySource = new Map<string, Set<string>>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
   const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
   const fallbackVideoBySrc = new Set<string>();
   const fallbackVideoClipIdByItem = new Map<string, string>();
   let fallbackVideoClipCounter = 0;
+
+  const registerVideoItem = (itemId: string, src: string): void => {
+    if (!src) return;
+    const prevSrc = videoSourceByItemId.get(itemId);
+    if (prevSrc && prevSrc !== src) {
+      const prevSet = videoItemIdsBySource.get(prevSrc);
+      prevSet?.delete(itemId);
+      if (prevSet && prevSet.size === 0) {
+        videoItemIdsBySource.delete(prevSrc);
+      }
+    }
+    videoSourceByItemId.set(itemId, src);
+    let ids = videoItemIdsBySource.get(src);
+    if (!ids) {
+      ids = new Set<string>();
+      videoItemIdsBySource.set(src, ids);
+    }
+    ids.add(itemId);
+    videoExtractors.set(itemId, sharedVideoExtractors.getOrCreateItemExtractor(itemId, src));
+  };
 
   const bindFallbackVideoElement = (itemId: string, src: string): void => {
     if (!fallbackVideoPool) return;
@@ -179,14 +206,13 @@ export async function createCompositionRenderer(
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
         if (videoItem.src) {
-          log.debug('Creating VideoFrameExtractor', {
+          log.debug('Registering shared video extractor', {
             itemId: item.id,
             src: videoItem.src.substring(0, 80),
           });
 
-          // Create mediabunny extractor (primary)
-          const extractor = new VideoFrameExtractor(videoItem.src, item.id);
-          videoExtractors.set(item.id, extractor);
+          // Create item-bound wrapper backed by a shared per-source extractor pool.
+          registerVideoItem(item.id, videoItem.src);
 
           // Also create fallback video element in case mediabunny fails (main thread only).
           if (hasDom && !previewStrictDecode) {
@@ -309,6 +335,7 @@ export async function createCompositionRenderer(
   const useMediabunny = new Set<string>();
   // Track persistent mediabunny failures and disable extractor after repeated errors.
   const mediabunnyFailureCountByItem = new Map<string, number>();
+  const mediabunnyInitFailureCountByItem = new Map<string, number>();
   const mediabunnyDisabledItems = new Set<string>();
 
   // Pre-computed sub-composition render data (populated during preload)
@@ -357,8 +384,99 @@ export async function createCompositionRenderer(
     return null;
   };
 
+  const initializeMediabunnyForItems = async (itemIds: string[]): Promise<Map<string, boolean>> => {
+    const itemResult = new Map<string, boolean>();
+    if (itemIds.length === 0) return itemResult;
+
+    const bySource = new Map<string, string[]>();
+    for (const itemId of itemIds) {
+      const src = videoSourceByItemId.get(itemId);
+      if (!src) {
+        itemResult.set(itemId, false);
+        continue;
+      }
+      let ids = bySource.get(src);
+      if (!ids) {
+        ids = [];
+        bySource.set(src, ids);
+      }
+      ids.push(itemId);
+    }
+
+    await Promise.all([...bySource.entries()].map(async ([src, ids]) => {
+        const success = await sharedVideoExtractors.initSource(src);
+        const allItemsForSource = videoItemIdsBySource.get(src) ?? new Set(ids);
+        for (const itemId of allItemsForSource) {
+          if (success) {
+            useMediabunny.add(itemId);
+          } else {
+            useMediabunny.delete(itemId);
+          }
+        }
+        for (const itemId of ids) {
+          itemResult.set(itemId, success);
+        }
+      }));
+
+    return itemResult;
+  };
+
+  const collectPriorityVideoItemIds = (
+    targetFrame: number,
+    windowFrames: number
+  ): string[] => {
+    const minFrame = targetFrame - windowFrames;
+    const maxFrame = targetFrame + windowFrames;
+    const ids: string[] = [];
+
+    for (const track of tracks) {
+      if (track.visible === false) continue;
+      for (const item of track.items ?? []) {
+        if (item.type !== 'video') continue;
+        const start = item.from;
+        const end = item.from + item.durationInFrames;
+        if (end < minFrame || start > maxFrame) continue;
+        if (videoExtractors.has(item.id)) {
+          ids.push(item.id);
+        }
+      }
+    }
+
+    return ids;
+  };
+
+  const ensureVideoItemReady = async (itemId: string): Promise<boolean> => {
+    if (useMediabunny.has(itemId)) return true;
+    if (mediabunnyDisabledItems.has(itemId)) return false;
+    if (!videoExtractors.has(itemId)) return false;
+
+    const result = await initializeMediabunnyForItems([itemId]);
+    const ok = result.get(itemId) === true;
+    if (ok) {
+      mediabunnyInitFailureCountByItem.delete(itemId);
+      return true;
+    }
+
+    const failures = (mediabunnyInitFailureCountByItem.get(itemId) ?? 0) + 1;
+    mediabunnyInitFailureCountByItem.set(itemId, failures);
+    if (failures >= 2) {
+      mediabunnyDisabledItems.add(itemId);
+    }
+    return false;
+  };
+  itemRenderContext.ensureVideoItemReady = ensureVideoItemReady;
+
+  const assertPreviewStrictDecode = () => {
+    if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
+      const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
+      throw new Error(
+        `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
+      );
+    }
+  };
+
   return {
-    async preload() {
+    async preload(options: { priorityFrame?: number; priorityWindowFrames?: number } = {}) {
       // Composition items require the compositions store which only exists on main thread.
       // Workers get a fresh, empty Zustand store, so sub-comp data can never be resolved.
       // Bail early to trigger the main-thread fallback path.
@@ -369,8 +487,20 @@ export async function createCompositionRenderer(
         throw new Error('WORKER_REQUIRES_MAIN_THREAD:composition');
       }
 
+      const priorityFrame = Number.isFinite(options.priorityFrame)
+        ? Math.round(options.priorityFrame!)
+        : null;
+      const priorityWindowFrames = Math.max(
+        4,
+        Math.round(options.priorityWindowFrames ?? fps * 4)
+      );
+      const prioritizedMainVideoIds = priorityFrame === null
+        ? []
+        : collectPriorityVideoItemIds(priorityFrame, priorityWindowFrames);
+
       log.debug('Preloading media', {
         videoCount: videoExtractors.size,
+        videoSourceCount: new Set(videoSourceByItemId.values()).size,
         imageCount: imageElements.size,
       });
 
@@ -382,31 +512,23 @@ export async function createCompositionRenderer(
       }
 
       // === Initialize mediabunny video extractors (primary method) ===
-      const extractorInitPromises = Array.from(videoExtractors.entries()).map(
-        async ([itemId, extractor]) => {
-          const success = await extractor.init();
-          if (success) {
-            useMediabunny.add(itemId);
-            log.info('Using mediabunny for video', { itemId: itemId.substring(0, 8) });
-          } else {
-            log.warn('Falling back to HTML5 video', { itemId: itemId.substring(0, 8) });
-          }
-        }
+      if (prioritizedMainVideoIds.length > 0) {
+        await initializeMediabunnyForItems(prioritizedMainVideoIds);
+      }
+      const remainingMainVideoIds = [...videoExtractors.keys()].filter(
+        (itemId) => !prioritizedMainVideoIds.includes(itemId)
       );
-
-      await Promise.all(extractorInitPromises);
+      if (remainingMainVideoIds.length > 0) {
+        await initializeMediabunnyForItems(remainingMainVideoIds);
+      }
 
       log.info('Video initialization complete', {
         mediabunny: useMediabunny.size,
         fallback: videoExtractors.size - useMediabunny.size,
+        uniqueSources: new Set(videoSourceByItemId.values()).size,
       });
 
-      if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
-        const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
-        throw new Error(
-          `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
-        );
-      }
+      assertPreviewStrictDecode();
 
       // === Preload ALL fallback video elements ===
       // Load every video element (not just those that failed mediabunny init)
@@ -509,6 +631,7 @@ export async function createCompositionRenderer(
       // sorting, filtering, and linear searches in renderCompositionItem.
       const subCompMediaItems: Array<{ subItem: TimelineItem; src: string }> = [];
       const pendingResolutions: Array<{ subItem: TimelineItem; mediaId: string }> = [];
+      const prioritySubCompVideoItemIds = new Set<string>();
 
       for (const track of tracks) {
         for (const item of track.items ?? []) {
@@ -571,8 +694,14 @@ export async function createCompositionRenderer(
           // Sub-comp items were moved out of the main timeline, so resolveMediaUrls
           // (which runs on main comp tracks) never acquires their blob URLs.
           // We must resolve via blobUrlManager (shared mediaId) or resolveMediaUrl (OPFS).
+          const subCompIsPriority = priorityFrame !== null
+            && (compItem.from <= priorityFrame + priorityWindowFrames)
+            && (compItem.from + compItem.durationInFrames >= priorityFrame - priorityWindowFrames);
           for (const subItem of subComp.items) {
             if (subItem.type !== 'video' && subItem.type !== 'image') continue;
+            if (subCompIsPriority && subItem.type === 'video') {
+              prioritySubCompVideoItemIds.add(subItem.id);
+            }
             if (subItem.mediaId) {
               // Prefer fresh blob URL from manager (may already be acquired for shared media)
               const src = blobUrlManager.get(subItem.mediaId);
@@ -608,32 +737,30 @@ export async function createCompositionRenderer(
         log.debug('Preloading sub-composition media', { count: subCompMediaItems.length });
 
         // Preload sub-comp video extractors
-        const subExtractorPromises: Promise<void>[] = [];
+        const subVideoItemIds: string[] = [];
         for (const { subItem, src } of subCompMediaItems) {
           if (subItem.type === 'video' && !videoExtractors.has(subItem.id)) {
-            const extractor = new VideoFrameExtractor(src, subItem.id);
-            videoExtractors.set(subItem.id, extractor);
-            subExtractorPromises.push(
-              extractor.init().then(success => {
-                if (success) {
-                  useMediabunny.add(subItem.id);
-                  log.debug('Sub-comp video using mediabunny', { itemId: subItem.id.substring(0, 8) });
-                }
-              })
-            );
+            registerVideoItem(subItem.id, src);
+            subVideoItemIds.push(subItem.id);
             if (hasDom && !previewStrictDecode) {
               bindFallbackVideoElement(subItem.id, src);
             }
           }
         }
-        await Promise.all(subExtractorPromises);
-
-        if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
-          const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
-          throw new Error(
-            `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable`
-          );
+        const prioritizedSubVideoItemIds = subVideoItemIds.filter((itemId) =>
+          prioritySubCompVideoItemIds.has(itemId)
+        );
+        if (prioritizedSubVideoItemIds.length > 0) {
+          await initializeMediabunnyForItems(prioritizedSubVideoItemIds);
         }
+        const remainingSubVideoItemIds = subVideoItemIds.filter(
+          (itemId) => !prioritySubCompVideoItemIds.has(itemId)
+        );
+        if (remainingSubVideoItemIds.length > 0) {
+          await initializeMediabunnyForItems(remainingSubVideoItemIds);
+        }
+
+        assertPreviewStrictDecode();
 
         // Load fallback video elements for sub-comp items that failed mediabunny init
         if (hasDom && !previewStrictDecode) {
@@ -1053,6 +1180,13 @@ export async function createCompositionRenderer(
         if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
       }
 
+      const missingCandidateItemIds = candidates
+        .map((item) => item.id)
+        .filter((itemId) => !useMediabunny.has(itemId) && !mediabunnyDisabledItems.has(itemId));
+      if (missingCandidateItemIds.length > 0) {
+        await initializeMediabunnyForItems(missingCandidateItemIds);
+      }
+
       for (const item of candidates) {
         if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue;
         const extractor = videoExtractors.get(item.id);
@@ -1082,12 +1216,13 @@ export async function createCompositionRenderer(
 
     dispose() {
       // Clean up mediabunny video extractors
-      for (const extractor of videoExtractors.values()) {
-        extractor.dispose();
-      }
+      sharedVideoExtractors.dispose();
       videoExtractors.clear();
+      videoSourceByItemId.clear();
+      videoItemIdsBySource.clear();
       useMediabunny.clear();
       mediabunnyFailureCountByItem.clear();
+      mediabunnyInitFailureCountByItem.clear();
       mediabunnyDisabledItems.clear();
 
       // Clean up fallback video pool and references.

@@ -22,7 +22,8 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
 describe('items-store rate stretch', () => {
   beforeEach(() => {
     useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.setState({ items: [], tracks: [] });
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
   });
 
   it('preserves explicit source bounds for split clips', () => {
@@ -214,7 +215,8 @@ describe('items-store rate stretch', () => {
 describe('rolling edit', () => {
   beforeEach(() => {
     useTimelineSettingsStore.setState({ fps: 30 });
-    useItemsStore.setState({ items: [], tracks: [] });
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
   });
 
   it('moves edit point right between adjacent same-track clips (positive delta)', () => {

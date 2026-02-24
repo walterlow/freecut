@@ -3,6 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
+import { useItemsStore } from '../stores/items-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { registerZoomTo100 } from '../stores/zoom-store';
 import { usePlaybackStore } from '@/features/preview/stores/playback-store';
@@ -155,20 +156,26 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
         return;
       }
 
-      // Get the selected items - read on-demand to avoid subscription
-      const items = useTimelineStore.getState().items;
-      const selectedItems = items.filter(item => selectedItemIds.includes(item.id));
-      if (selectedItems.length === 0) {
+      // Read selected items by ID map to avoid O(n) scan per playback tick.
+      const itemById = useItemsStore.getState().itemById;
+      let hasExistingSelection = false;
+      let isWithinSelectedItems = false;
+      for (const selectedId of selectedItemIds) {
+        const item = itemById[selectedId];
+        if (!item) continue;
+        hasExistingSelection = true;
+        const itemStart = item.from;
+        const itemEnd = item.from + item.durationInFrames;
+        if (currentFrame >= itemStart && currentFrame < itemEnd) {
+          isWithinSelectedItems = true;
+          break;
+        }
+      }
+
+      if (!hasExistingSelection) {
         prevFrame = currentFrame;
         return;
       }
-
-      // Check if playhead is still within ANY of the selected items
-      const isWithinSelectedItems = selectedItems.some(item => {
-        const itemStart = item.from;
-        const itemEnd = item.from + item.durationInFrames;
-        return currentFrame >= itemStart && currentFrame < itemEnd;
-      });
 
       // If playhead moved outside all selected items, clear selection
       if (!isWithinSelectedItems) {
@@ -303,7 +310,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   // Marquee selection - create items array for getBoundingRect lookups
   // Use derived selector for item IDs only (doesn't re-render when positions change)
   // useShallow prevents infinite loops from array reference changes
-  const itemIds = useTimelineStore(useShallow((s) => s.items.map((item) => item.id)));
+  const itemIds = useItemsStore(useShallow((s) => s.items.map((item) => item.id)));
 
   const marqueeItems = useMemo(
     () =>
