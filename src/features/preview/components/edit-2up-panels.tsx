@@ -1,4 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  SharedVideoExtractorPool,
+  type VideoFrameSource,
+} from '@/features/export/utils/shared-video-extractor';
 import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '../stores/playback-store';
@@ -21,7 +25,55 @@ const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
 
 const TEXT_SPACE = 56;
 const GAP = 8;
+const FALLBACK_CANVAS_WIDTH = 280;
+const FALLBACK_CANVAS_HEIGHT = 158;
+const STRICT_DECODE_FALLBACK_FAILURES = 2;
 let previewVideoInstanceCounter = 0;
+let strictDecodeInstanceCounter = 0;
+let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
+
+function getEditOverlayDecoderPool(): SharedVideoExtractorPool {
+  if (!globalEditOverlayDecoderPool) {
+    globalEditOverlayDecoderPool = new SharedVideoExtractorPool();
+  }
+  return globalEditOverlayDecoderPool;
+}
+
+function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean): string | null {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!mediaId) {
+      setBlobUrl(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (useProxy) {
+      const proxyUrl = resolveProxyUrl(mediaId);
+      if (proxyUrl) {
+        setBlobUrl(proxyUrl);
+        return () => {
+          cancelled = true;
+        };
+      }
+    }
+
+    resolveMediaUrl(mediaId).then((url) => {
+      if (cancelled) return;
+      setBlobUrl(url || null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaId, useProxy]);
+
+  return blobUrl;
+}
 
 export interface EditTwoUpPanelData {
   item: TimelineItem | null;
@@ -142,37 +194,191 @@ interface VideoFrameProps {
 }
 
 function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
+  const [useLegacyFallback, setUseLegacyFallback] = useState(false);
+
+  useEffect(() => {
+    setUseLegacyFallback(false);
+  }, [item.id, item.mediaId]);
+
+  const handleStrictDecodeFailure = useCallback(() => {
+    setUseLegacyFallback((prev) => (prev ? prev : true));
+  }, []);
+
+  if (useLegacyFallback) {
+    return <LegacySeekVideoFrame item={item} sourceTime={sourceTime} />;
+  }
+
+  return (
+    <StrictDecodedVideoFrame
+      item={item}
+      sourceTime={sourceTime}
+      onDecodeFailure={handleStrictDecodeFailure}
+    />
+  );
+}
+
+interface StrictDecodedVideoFrameProps extends VideoFrameProps {
+  onDecodeFailure: () => void;
+}
+
+function StrictDecodedVideoFrame({
+  item,
+  sourceTime,
+  onDecodeFailure,
+}: StrictDecodedVideoFrameProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const decoderPoolRef = useRef(getEditOverlayDecoderPool());
+  const decodeLaneRef = useRef<string>(`edit-preview-strict-${++strictDecodeInstanceCounter}`);
+  const extractorRef = useRef<VideoFrameSource | null>(null);
+  const mountedRef = useRef(true);
+  const decoderReadyRef = useRef(false);
+  const renderInFlightRef = useRef(false);
+  const pendingTimeRef = useRef<number | null>(null);
+  const consecutiveDecodeFailuresRef = useRef(0);
+  const latestTargetTimeRef = useRef(Math.max(0, sourceTime));
+  const useProxy = usePlaybackStore((s) => s.useProxy);
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
+  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
+  const decoderItemId = `${item.id}:${decodeLaneRef.current}`;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const drawFrame = useCallback(async (targetTime: number) => {
+    const extractor = extractorRef.current;
+    const canvas = canvasRef.current;
+    if (!extractor || !canvas) return false;
+
+    let ctx = contextRef.current;
+    if (!ctx) {
+      ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+      contextRef.current = ctx;
+    }
+
+    const { width: decodedWidth, height: decodedHeight } = extractor.getDimensions();
+    const targetWidth = Math.max(1, Math.round(decodedWidth || FALLBACK_CANVAS_WIDTH));
+    const targetHeight = Math.max(1, Math.round(decodedHeight || FALLBACK_CANVAS_HEIGHT));
+
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    return extractor.drawFrame(ctx, Math.max(0, targetTime), 0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const pumpLatestFrame = useCallback(() => {
+    if (renderInFlightRef.current) return;
+    renderInFlightRef.current = true;
+
+    const run = async () => {
+      try {
+        while (decoderReadyRef.current && pendingTimeRef.current !== null && mountedRef.current) {
+          const targetTime = pendingTimeRef.current;
+          pendingTimeRef.current = null;
+
+          const didDraw = await drawFrame(targetTime).catch(() => false);
+          if (didDraw) {
+            consecutiveDecodeFailuresRef.current = 0;
+            continue;
+          }
+
+          const failureKind = extractorRef.current?.getLastFailureKind() ?? 'decode-error';
+          if (failureKind === 'decode-error') {
+            consecutiveDecodeFailuresRef.current += 1;
+            if (consecutiveDecodeFailuresRef.current >= STRICT_DECODE_FALLBACK_FAILURES) {
+              onDecodeFailure();
+              return;
+            }
+          }
+        }
+      } finally {
+        renderInFlightRef.current = false;
+        if (decoderReadyRef.current && pendingTimeRef.current !== null && mountedRef.current) {
+          queueMicrotask(() => {
+            if (!mountedRef.current) return;
+            pumpLatestFrame();
+          });
+        }
+      }
+    };
+
+    void run();
+  }, [drawFrame, onDecodeFailure]);
+
+  useEffect(() => {
+    decoderReadyRef.current = false;
+    extractorRef.current = null;
+    pendingTimeRef.current = null;
+    consecutiveDecodeFailuresRef.current = 0;
+    contextRef.current = null;
+
+    if (!blobUrl) return;
+
+    const pool = decoderPoolRef.current;
+    const extractor = pool.getOrCreateItemExtractor(decoderItemId, blobUrl);
+    extractorRef.current = extractor;
+
+    let cancelled = false;
+    void extractor
+      .init()
+      .then((ready) => {
+        if (cancelled || !mountedRef.current) return;
+        if (!ready) {
+          onDecodeFailure();
+          return;
+        }
+        decoderReadyRef.current = true;
+        pendingTimeRef.current = latestTargetTimeRef.current;
+        pumpLatestFrame();
+      })
+      .catch(() => {
+        if (cancelled || !mountedRef.current) return;
+        onDecodeFailure();
+      });
+
+    return () => {
+      cancelled = true;
+      decoderReadyRef.current = false;
+      extractorRef.current = null;
+      pendingTimeRef.current = null;
+      pool.releaseItem(decoderItemId);
+    };
+  }, [blobUrl, decoderItemId, onDecodeFailure, pumpLatestFrame]);
+
+  useEffect(() => {
+    latestTargetTimeRef.current = Math.max(0, sourceTime);
+    pendingTimeRef.current = latestTargetTimeRef.current;
+    if (decoderReadyRef.current) {
+      pumpLatestFrame();
+    }
+  }, [sourceTime, pumpLatestFrame]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full object-contain"
+      style={{ imageRendering: 'auto' }}
+    />
+  );
+}
+
+function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poolRef = useRef(getGlobalVideoSourcePool());
   const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const useProxy = usePlaybackStore((s) => s.useProxy);
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const seekingRef = useRef(false);
   const pendingTimeRef = useRef<number | null>(null);
   const latestTargetTimeRef = useRef(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!item.mediaId) return;
-
-    if (useProxy) {
-      const proxyUrl = resolveProxyUrl(item.mediaId);
-      if (proxyUrl) {
-        setBlobUrl(proxyUrl);
-        return;
-      }
-    }
-
-    resolveMediaUrl(item.mediaId).then((url) => {
-      if (!cancelled && url) setBlobUrl(url);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item.mediaId, useProxy]);
 
   const drawFrame = useCallback(() => {
     const video = videoRef.current;
@@ -187,8 +393,8 @@ function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
     }
 
     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || 280;
-      canvas.height = video.videoHeight || 158;
+      canvas.width = video.videoWidth || FALLBACK_CANVAS_WIDTH;
+      canvas.height = video.videoHeight || FALLBACK_CANVAS_HEIGHT;
     }
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
