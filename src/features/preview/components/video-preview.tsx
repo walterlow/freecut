@@ -32,6 +32,7 @@ const PRELOAD_AHEAD_SECONDS = 5;
 const PRELOAD_MAX_IDS_PER_TICK_PLAYING = 10;
 const PRELOAD_MAX_IDS_PER_TICK_IDLE = 6;
 const PRELOAD_MAX_IDS_PER_TICK_SCRUB = 3;
+const PRELOAD_SCAN_TIME_BUDGET_MS = 6;
 const FAST_SCRUB_RENDERER_ENABLED = true;
 const FAST_SCRUB_PRELOAD_BUDGET_MS = 180;
 const FAST_SCRUB_BOUNDARY_PREWARM_WINDOW_SECONDS = 0.5;
@@ -45,10 +46,37 @@ const SOURCE_WARM_TICK_MS = 300;
 const RESOLVE_RETRY_MIN_MS = 400;
 const RESOLVE_RETRY_MAX_MS = 8000;
 const RESOLVE_MAX_CONCURRENCY = 6;
+const RESOLVE_MAX_IDS_PER_PASS_PLAYING = 12;
+const RESOLVE_MAX_IDS_PER_PASS_IDLE = 8;
+const RESOLVE_MAX_IDS_PER_PASS_SCRUB = 4;
+const PREVIEW_PERF_PUBLISH_INTERVAL_MS = 750;
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
 type VideoSourceSpan = { src: string; startFrame: number; endFrame: number };
 type FastScrubBoundarySource = { frame: number; srcs: string[] };
+type PreviewPerfSnapshot = {
+  ts: number;
+  unresolvedQueue: number;
+  pendingResolves: number;
+  resolveAvgMs: number;
+  resolveMsPerId: number;
+  resolveLastMs: number;
+  resolveLastIds: number;
+  preloadScanAvgMs: number;
+  preloadScanLastMs: number;
+  preloadBatchAvgMs: number;
+  preloadBatchLastMs: number;
+  preloadBatchLastIds: number;
+  scrubDroppedFrames: number;
+  scrubUpdates: number;
+};
+
+declare global {
+  interface Window {
+    __PREVIEW_PERF__?: PreviewPerfSnapshot;
+    __PREVIEW_PERF_LOG__?: boolean;
+  }
+}
 
 function toTrackFingerprint(tracks: CompositionInputProps['tracks']): string {
   const parts: string[] = [];
@@ -74,6 +102,74 @@ function getPreloadBudget(isPlaying: boolean, previewFrame: number | null): numb
     return PRELOAD_MAX_IDS_PER_TICK_PLAYING;
   }
   return PRELOAD_MAX_IDS_PER_TICK_IDLE;
+}
+
+function getResolvePassBudget(isPlaying: boolean, previewFrame: number | null): number {
+  if (!isPlaying && previewFrame !== null) {
+    return RESOLVE_MAX_IDS_PER_PASS_SCRUB;
+  }
+  if (isPlaying) {
+    return RESOLVE_MAX_IDS_PER_PASS_PLAYING;
+  }
+  return RESOLVE_MAX_IDS_PER_PASS_IDLE;
+}
+
+function getCodecCost(codec: string | undefined): number {
+  if (!codec) return 0;
+  const normalized = codec.toLowerCase();
+  if (normalized.includes('ec-3') || normalized.includes('eac3') || normalized.includes('ac-3') || normalized.includes('ac3')) {
+    return 5;
+  }
+  if (normalized.includes('avc') || normalized.includes('h264')) {
+    return 2;
+  }
+  if (normalized.includes('hevc') || normalized.includes('h265')) {
+    return 3;
+  }
+  return 1;
+}
+
+function getMediaResolveCost(media: {
+  mimeType: string;
+  width: number;
+  height: number;
+  codec?: string;
+  audioCodec?: string;
+} | undefined): number {
+  if (!media) return 1;
+
+  let cost = 1;
+  if (media.mimeType.startsWith('video/')) {
+    const pixels = Math.max(0, media.width) * Math.max(0, media.height);
+    if (pixels >= 3840 * 2160) {
+      cost += 6;
+    } else if (pixels >= 2560 * 1440) {
+      cost += 4;
+    } else if (pixels >= 1920 * 1080) {
+      cost += 3;
+    } else if (pixels >= 1280 * 720) {
+      cost += 2;
+    }
+    cost += getCodecCost(media.codec);
+    cost += getCodecCost(media.audioCodec);
+  } else if (media.mimeType.startsWith('audio/')) {
+    cost += getCodecCost(media.audioCodec);
+  }
+
+  return Math.max(1, cost);
+}
+
+function getCostAdjustedBudget(baseBudget: number, maxWindowCost: number): number {
+  if (maxWindowCost >= 10) {
+    return Math.max(1, baseBudget - 5);
+  }
+  if (maxWindowCost >= 7) {
+    return Math.max(1, baseBudget - 3);
+  }
+  if (maxWindowCost >= 4) {
+    return Math.max(1, baseBudget - 1);
+  }
+  return baseBudget;
 }
 
 interface VideoPreviewProps {
@@ -319,6 +415,7 @@ export const VideoPreview = memo(function VideoPreview({
   const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
   const mediaDependencyVersion = useMediaDependencyStore((s) => s.mediaDependencyVersion);
   const transitions = useTransitionsStore((s) => s.transitions);
+  const mediaById = useMediaLibraryStore((s) => s.mediaById);
   const hasRolling2Up = useRollingEditPreviewStore(
     (s) => Boolean(s.trimmedItemId && s.neighborItemId && s.handle),
   );
@@ -367,9 +464,27 @@ export const VideoPreview = memo(function VideoPreview({
   const unresolvedMediaIdSetRef = useRef<Set<string>>(new Set());
   const pendingResolvePromisesRef = useRef<Map<string, Promise<string | null>>>(new Map());
   const preloadResolveInFlightRef = useRef(false);
+  const preloadScanTrackCursorRef = useRef(0);
+  const preloadScanItemCursorRef = useRef(0);
   const resolveFailureCountRef = useRef<Map<string, number>>(new Map());
   const resolveRetryAfterRef = useRef<Map<string, number>>(new Map());
   const resolveRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewPerfRef = useRef({
+    resolveSamples: 0,
+    resolveTotalMs: 0,
+    resolveTotalIds: 0,
+    resolveLastMs: 0,
+    resolveLastIds: 0,
+    preloadScanSamples: 0,
+    preloadScanTotalMs: 0,
+    preloadScanLastMs: 0,
+    preloadBatchSamples: 0,
+    preloadBatchTotalMs: 0,
+    preloadBatchLastMs: 0,
+    preloadBatchLastIds: 0,
+    scrubDroppedFrames: 0,
+    scrubUpdates: 0,
+  });
   const lastSyncedMediaDependencyVersionRef = useRef<number>(-1);
 
   const rebuildUnresolvedMediaIds = useCallback((resolvedMap: Map<string, string>) => {
@@ -554,6 +669,14 @@ export const VideoPreview = memo(function VideoPreview({
       items: itemsByTrackId[track.id] ?? [],
     }));
   }, [tracks, itemsByTrackId]);
+
+  const mediaResolveCostById = useMemo(() => {
+    const costs = new Map<string, number>();
+    for (const [mediaId, media] of Object.entries(mediaById)) {
+      costs.set(mediaId, getMediaResolveCost(media));
+    }
+    return costs;
+  }, [mediaById]);
 
   const {
     resolvedTracks,
@@ -740,9 +863,44 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
+      const unresolvedSet = new Set(unresolved);
       const now = Date.now();
       let earliestRetryAt: number | null = null;
-      const readyToResolve: string[] = [];
+      const playbackState = usePlaybackStore.getState();
+      const anchorFrame = (!playbackState.isPlaying && playbackState.previewFrame !== null)
+        ? playbackState.previewFrame
+        : playbackState.currentFrame;
+      const costPenaltyFrames = Math.max(12, Math.round(fps * 0.6));
+      const activeWindowFrames = Math.max(24, Math.round(fps * PRELOAD_AHEAD_SECONDS));
+      const minActiveWindowFrame = anchorFrame - activeWindowFrames;
+      const maxActiveWindowFrame = anchorFrame + activeWindowFrames;
+      const priorityByMediaId = new Map<string, number>();
+      let maxActiveWindowCost = 0;
+
+      for (const track of combinedTracks) {
+        for (const item of track.items) {
+          if (!item.mediaId || !unresolvedSet.has(item.mediaId)) continue;
+          const itemEndFrame = item.from + item.durationInFrames;
+          const distanceToAnchor = anchorFrame < item.from
+            ? item.from - anchorFrame
+            : anchorFrame > itemEndFrame
+              ? anchorFrame - itemEndFrame
+              : 0;
+          const mediaCost = mediaResolveCostById.get(item.mediaId) ?? 1;
+          const score = distanceToAnchor + (mediaCost * costPenaltyFrames);
+          const previousScore = priorityByMediaId.get(item.mediaId);
+          if (previousScore === undefined || score < previousScore) {
+            priorityByMediaId.set(item.mediaId, score);
+          }
+          if (!(itemEndFrame < minActiveWindowFrame || item.from > maxActiveWindowFrame)) {
+            if (mediaCost > maxActiveWindowCost) {
+              maxActiveWindowCost = mediaCost;
+            }
+          }
+        }
+      }
+
+      const readyCandidates: Array<{ mediaId: string; score: number }> = [];
       for (const mediaId of unresolved) {
         const retryAt = getResolveRetryAt(mediaId);
         if (retryAt > now) {
@@ -751,14 +909,31 @@ export const VideoPreview = memo(function VideoPreview({
           }
           continue;
         }
-        readyToResolve.push(mediaId);
+
+        const mediaCost = mediaResolveCostById.get(mediaId) ?? 1;
+        const fallbackScore = (activeWindowFrames * 4) + (mediaCost * costPenaltyFrames);
+        readyCandidates.push({
+          mediaId,
+          score: priorityByMediaId.get(mediaId) ?? fallbackScore,
+        });
       }
 
-      if (readyToResolve.length === 0) {
+      if (readyCandidates.length === 0) {
         scheduleResolveRetryWake(earliestRetryAt);
         setIsResolving(false);
         return;
       }
+
+      const resolvePassBudget = getCostAdjustedBudget(
+        getResolvePassBudget(playbackState.isPlaying, playbackState.previewFrame),
+        maxActiveWindowCost
+      );
+      const readyToResolve = readyCandidates
+        .toSorted((a, b) => a.score - b.score)
+        .slice(0, resolvePassBudget)
+        .map((candidate) => candidate.mediaId);
+      const hasMoreReadyCandidates = readyCandidates.length > readyToResolve.length;
+
       scheduleResolveRetryWake(null);
 
       if (effectiveResolvedUrls.size === 0) {
@@ -770,7 +945,14 @@ export const VideoPreview = memo(function VideoPreview({
 
       try {
         const newUrls = new Map(effectiveResolvedUrls);
+        const resolveBatchStartMs = performance.now();
         const { resolvedEntries, failedIds } = await resolveMediaBatch(readyToResolve);
+        const resolveBatchDurationMs = performance.now() - resolveBatchStartMs;
+        previewPerfRef.current.resolveSamples += 1;
+        previewPerfRef.current.resolveTotalMs += resolveBatchDurationMs;
+        previewPerfRef.current.resolveTotalIds += readyToResolve.length;
+        previewPerfRef.current.resolveLastMs = resolveBatchDurationMs;
+        previewPerfRef.current.resolveLastIds = readyToResolve.length;
         const resolvedNow = resolvedEntries.map((entry) => entry.mediaId);
         for (const entry of resolvedEntries) {
           newUrls.set(entry.mediaId, entry.url);
@@ -779,6 +961,9 @@ export const VideoPreview = memo(function VideoPreview({
         const retryAt = markResolveFailures(failedIds);
         if (retryAt !== null) {
           scheduleResolveRetryWake(retryAt);
+        }
+        if (hasMoreReadyCandidates) {
+          scheduleResolveRetryWake(Date.now() + 16);
         }
         removeUnresolvedMediaIds(resolvedNow);
 
@@ -801,8 +986,11 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [
     clearResolveRetryState,
+    combinedTracks,
+    fps,
     getResolveRetryAt,
     markResolveFailures,
+    mediaResolveCostById,
     pruneResolveRetryState,
     rebuildUnresolvedMediaIds,
     removeUnresolvedMediaIds,
@@ -814,6 +1002,42 @@ export const VideoPreview = memo(function VideoPreview({
     brokenMediaCount,
     urlRefreshVersion,
   ]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+
+    const publish = () => {
+      const stats = previewPerfRef.current;
+      const snapshot: PreviewPerfSnapshot = {
+        ts: Date.now(),
+        unresolvedQueue: unresolvedMediaIdsRef.current.length,
+        pendingResolves: pendingResolvePromisesRef.current.size,
+        resolveAvgMs: stats.resolveSamples > 0 ? stats.resolveTotalMs / stats.resolveSamples : 0,
+        resolveMsPerId: stats.resolveTotalIds > 0 ? stats.resolveTotalMs / stats.resolveTotalIds : 0,
+        resolveLastMs: stats.resolveLastMs,
+        resolveLastIds: stats.resolveLastIds,
+        preloadScanAvgMs: stats.preloadScanSamples > 0 ? stats.preloadScanTotalMs / stats.preloadScanSamples : 0,
+        preloadScanLastMs: stats.preloadScanLastMs,
+        preloadBatchAvgMs: stats.preloadBatchSamples > 0 ? stats.preloadBatchTotalMs / stats.preloadBatchSamples : 0,
+        preloadBatchLastMs: stats.preloadBatchLastMs,
+        preloadBatchLastIds: stats.preloadBatchLastIds,
+        scrubDroppedFrames: stats.scrubDroppedFrames,
+        scrubUpdates: stats.scrubUpdates,
+      };
+
+      window.__PREVIEW_PERF__ = snapshot;
+      if (window.__PREVIEW_PERF_LOG__) {
+        console.warn('[PreviewPerf]', snapshot);
+      }
+    };
+
+    publish();
+    const intervalId = setInterval(publish, PREVIEW_PERF_PUBLISH_INTERVAL_MS);
+    return () => {
+      clearInterval(intervalId);
+      window.__PREVIEW_PERF__ = undefined;
+    };
+  }, []);
 
   // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
   // This avoids memory blowups on large projects while keeping nearby clips hot.
@@ -1220,6 +1444,14 @@ export const VideoPreview = memo(function VideoPreview({
 
       if (state.previewFrame === prev.previewFrame) return;
 
+       if (state.previewFrame !== null && prev.previewFrame !== null) {
+        const deltaFrames = Math.abs(state.previewFrame - prev.previewFrame);
+        previewPerfRef.current.scrubUpdates += 1;
+        if (deltaFrames > 1) {
+          previewPerfRef.current.scrubDroppedFrames += (deltaFrames - 1);
+        }
+      }
+
       if (state.previewFrame === null) {
         scrubRequestedFrameRef.current = null;
         setShowFastScrubOverlay(false);
@@ -1250,21 +1482,43 @@ export const VideoPreview = memo(function VideoPreview({
   // Preload media files ahead of the current playhead to reduce buffering
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
+    let continuationTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const schedulePreloadContinuation = () => {
+      if (continuationTimeoutId !== null) return;
+      continuationTimeoutId = setTimeout(() => {
+        continuationTimeoutId = null;
+        void preloadMedia();
+      }, 16);
+    };
 
     const preloadMedia = async () => {
       if (preloadResolveInFlightRef.current) return;
+      if (combinedTracks.length === 0) return;
+
       const playbackState = usePlaybackStore.getState();
       const anchorFrame = (!playbackState.isPlaying && playbackState.previewFrame !== null)
         ? playbackState.previewFrame
         : playbackState.currentFrame;
       const preloadEndFrame = anchorFrame + (fps * PRELOAD_AHEAD_SECONDS);
-      const maxIdsPerTick = getPreloadBudget(playbackState.isPlaying, playbackState.previewFrame);
+      const baseMaxIdsPerTick = getPreloadBudget(playbackState.isPlaying, playbackState.previewFrame);
       const now = Date.now();
       const unresolvedSet = unresolvedMediaIdSetRef.current;
+      const costPenaltyFrames = Math.max(8, Math.round(fps * 0.6));
+      const scanStartTime = performance.now();
+      let maxActiveWindowCost = 0;
+      let reachedScanTimeBudget = false;
+      let trackIndex = ((preloadScanTrackCursorRef.current % combinedTracks.length) + combinedTracks.length) % combinedTracks.length;
+      let itemIndex = Math.max(0, preloadScanItemCursorRef.current);
 
       const mediaToPreloadScores = new Map<string, number>();
-      for (const track of combinedTracks) {
-        for (const item of track.items) {
+      for (let trackCount = 0; trackCount < combinedTracks.length; trackCount++) {
+        const track = combinedTracks[trackIndex]!;
+        const trackItems = track.items;
+        const startItemIndex = trackCount === 0 ? itemIndex : 0;
+
+        for (let localItemIndex = startItemIndex; localItemIndex < trackItems.length; localItemIndex++) {
+          const item = trackItems[localItemIndex]!;
           if (!item.mediaId) continue;
           const itemEnd = item.from + item.durationInFrames;
           if (item.from <= preloadEndFrame && itemEnd >= anchorFrame) {
@@ -1272,24 +1526,61 @@ export const VideoPreview = memo(function VideoPreview({
               unresolvedSet.has(item.mediaId)
               && getResolveRetryAt(item.mediaId) <= now
             ) {
+              const mediaCost = mediaResolveCostById.get(item.mediaId) ?? 1;
+              if (mediaCost > maxActiveWindowCost) {
+                maxActiveWindowCost = mediaCost;
+              }
               const distanceToPlayhead = anchorFrame < item.from
                 ? item.from - anchorFrame
                 : anchorFrame > itemEnd
                   ? anchorFrame - itemEnd
                   : 0;
+              const score = distanceToPlayhead + (mediaCost * costPenaltyFrames);
               const previousScore = mediaToPreloadScores.get(item.mediaId);
-              if (previousScore === undefined || distanceToPlayhead < previousScore) {
-                mediaToPreloadScores.set(item.mediaId, distanceToPlayhead);
+              if (previousScore === undefined || score < previousScore) {
+                mediaToPreloadScores.set(item.mediaId, score);
               }
             }
           }
+
+          if ((performance.now() - scanStartTime) >= PRELOAD_SCAN_TIME_BUDGET_MS) {
+            let nextTrackIndex = trackIndex;
+            let nextItemIndex = localItemIndex + 1;
+            if (nextItemIndex >= trackItems.length) {
+              nextTrackIndex = (trackIndex + 1) % combinedTracks.length;
+              nextItemIndex = 0;
+            }
+            preloadScanTrackCursorRef.current = nextTrackIndex;
+            preloadScanItemCursorRef.current = nextItemIndex;
+            reachedScanTimeBudget = true;
+            break;
+          }
         }
+
+        if (reachedScanTimeBudget) break;
+
+        trackIndex = (trackIndex + 1) % combinedTracks.length;
+        itemIndex = 0;
       }
 
+      if (!reachedScanTimeBudget) {
+        preloadScanTrackCursorRef.current = trackIndex;
+        preloadScanItemCursorRef.current = 0;
+      }
+
+      const scanDurationMs = performance.now() - scanStartTime;
+      previewPerfRef.current.preloadScanSamples += 1;
+      previewPerfRef.current.preloadScanTotalMs += scanDurationMs;
+      previewPerfRef.current.preloadScanLastMs = scanDurationMs;
+
       if (mediaToPreloadScores.size === 0) {
+        if (reachedScanTimeBudget) {
+          schedulePreloadContinuation();
+        }
         return;
       }
 
+      const maxIdsPerTick = getCostAdjustedBudget(baseMaxIdsPerTick, maxActiveWindowCost);
       const mediaToPreload = [...mediaToPreloadScores.entries()]
         .sort((a, b) => a[1] - b[1])
         .slice(0, maxIdsPerTick)
@@ -1297,7 +1588,13 @@ export const VideoPreview = memo(function VideoPreview({
 
       preloadResolveInFlightRef.current = true;
       try {
+        const preloadBatchStartMs = performance.now();
         const { resolvedEntries, failedIds } = await resolveMediaBatch(mediaToPreload);
+        const preloadBatchDurationMs = performance.now() - preloadBatchStartMs;
+        previewPerfRef.current.preloadBatchSamples += 1;
+        previewPerfRef.current.preloadBatchTotalMs += preloadBatchDurationMs;
+        previewPerfRef.current.preloadBatchLastMs = preloadBatchDurationMs;
+        previewPerfRef.current.preloadBatchLastIds = mediaToPreload.length;
         if (resolvedEntries.length > 0) {
           const resolvedNow: string[] = [];
           const applicableEntries: Array<{ mediaId: string; url: string }> = [];
@@ -1327,6 +1624,9 @@ export const VideoPreview = memo(function VideoPreview({
         }
       } finally {
         preloadResolveInFlightRef.current = false;
+        if (reachedScanTimeBudget) {
+          schedulePreloadContinuation();
+        }
       }
     };
 
@@ -1356,6 +1656,9 @@ export const VideoPreview = memo(function VideoPreview({
       if (intervalId) {
         clearInterval(intervalId);
       }
+      if (continuationTimeoutId !== null) {
+        clearTimeout(continuationTimeoutId);
+      }
     };
   }, [
     clearResolveRetryState,
@@ -1363,6 +1666,7 @@ export const VideoPreview = memo(function VideoPreview({
     combinedTracks,
     getResolveRetryAt,
     markResolveFailures,
+    mediaResolveCostById,
     resolveMediaBatch,
     removeUnresolvedMediaIds,
     scheduleResolveRetryWake,

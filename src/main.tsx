@@ -25,8 +25,9 @@ window.addEventListener('error', (event) => {
 // Prompt the user to save before reloading so they don't lose work.
 window.addEventListener('vite:preloadError', () => {
   const projectIdMatch = window.location.pathname.match(/\/editor\/([^/]+)/);
+  const projectId = projectIdMatch?.[1];
 
-  if (projectIdMatch) {
+  if (projectId) {
     toast.error('A new version is available. Save your work and reload.', {
       duration: Infinity,
       action: {
@@ -36,7 +37,7 @@ window.addEventListener('vite:preloadError', () => {
             const { useTimelineStore } = await import(
               '@/features/timeline/stores/timeline-store-facade'
             );
-            await useTimelineStore.getState().saveTimeline(projectIdMatch[1]);
+            await useTimelineStore.getState().saveTimeline(projectId);
           } catch (e) {
             log.error('Failed to save before reload:', e);
           }
