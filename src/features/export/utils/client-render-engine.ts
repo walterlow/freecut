@@ -165,6 +165,7 @@ export async function createCompositionRenderer(
       if (prevSet && prevSet.size === 0) {
         videoItemIdsBySource.delete(prevSrc);
       }
+      sharedVideoExtractors.releaseItem(itemId);
     }
     videoSourceByItemId.set(itemId, src);
     let ids = videoItemIdsBySource.get(src);
@@ -339,6 +340,7 @@ export async function createCompositionRenderer(
   const mediabunnyDisabledItems = new Set<string>();
   const MEDIABUNNY_DISABLE_THRESHOLD = 4;
   const PREWARM_FAILURE_DISABLE_THRESHOLD = 3;
+  const inFlightInitByItem = new Map<string, Promise<boolean>>();
 
   // Pre-computed sub-composition render data (populated during preload)
   const subCompRenderData = new Map<string, SubCompRenderData>();
@@ -368,7 +370,6 @@ export async function createCompositionRenderer(
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
     if (prewarmAttempted) return prewarmCtx;
-    if (prewarmCtx) return prewarmCtx;
     prewarmAttempted = true;
 
     if (typeof OffscreenCanvas !== 'undefined') {
@@ -457,19 +458,28 @@ export async function createCompositionRenderer(
     if (mediabunnyDisabledItems.has(itemId)) return false;
     if (!videoExtractors.has(itemId)) return false;
 
-    const result = await initializeMediabunnyForItems([itemId]);
-    const ok = result.get(itemId) === true;
-    if (ok) {
-      mediabunnyInitFailureCountByItem.delete(itemId);
-      return true;
-    }
+    const existing = inFlightInitByItem.get(itemId);
+    if (existing) return existing;
 
-    const failures = (mediabunnyInitFailureCountByItem.get(itemId) ?? 0) + 1;
-    mediabunnyInitFailureCountByItem.set(itemId, failures);
-    if (failures >= MEDIABUNNY_DISABLE_THRESHOLD) {
-      mediabunnyDisabledItems.add(itemId);
-    }
-    return false;
+    const promise = initializeMediabunnyForItems([itemId]).then((result) => {
+      const ok = result.get(itemId) === true;
+      if (ok) {
+        mediabunnyInitFailureCountByItem.delete(itemId);
+        return true;
+      }
+
+      const failures = (mediabunnyInitFailureCountByItem.get(itemId) ?? 0) + 1;
+      mediabunnyInitFailureCountByItem.set(itemId, failures);
+      if (failures >= MEDIABUNNY_DISABLE_THRESHOLD) {
+        mediabunnyDisabledItems.add(itemId);
+      }
+      return false;
+    }).finally(() => {
+      inFlightInitByItem.delete(itemId);
+    });
+
+    inFlightInitByItem.set(itemId, promise);
+    return promise;
   };
   itemRenderContext.ensureVideoItemReady = ensureVideoItemReady;
 
@@ -522,8 +532,9 @@ export async function createCompositionRenderer(
       if (prioritizedMainVideoIds.length > 0) {
         await initializeMediabunnyForItems(prioritizedMainVideoIds);
       }
+      const prioritizedMainSet = new Set(prioritizedMainVideoIds);
       const remainingMainVideoIds = [...videoExtractors.keys()].filter(
-        (itemId) => !prioritizedMainVideoIds.includes(itemId)
+        (itemId) => !prioritizedMainSet.has(itemId)
       );
       if (remainingMainVideoIds.length > 0) {
         await initializeMediabunnyForItems(remainingMainVideoIds);
@@ -1176,7 +1187,7 @@ export async function createCompositionRenderer(
       const minFrame = frame - 1;
       const maxFrame = frame + 1;
 
-      for (const track of tracks) {
+      for (const track of tracksTopToBottom) {
         if (track.visible === false) continue;
         for (const item of track.items ?? []) {
           if (item.type !== 'video') continue;

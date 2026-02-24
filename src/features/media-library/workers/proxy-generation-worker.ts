@@ -156,10 +156,12 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   let bufferTarget: InstanceType<typeof BufferTarget> | null = null;
 
   try {
-    const buildConversion = async (outputTarget: InstanceType<typeof StreamTarget> | InstanceType<typeof BufferTarget>) => {
+    const buildConversion = async (
+      outputTarget: InstanceType<typeof StreamTarget> | InstanceType<typeof BufferTarget>,
+      useInMemoryFastStart: boolean,
+    ) => {
       const output = new Output({
-        // Stream mode can write directly without in-memory fast-start relocation.
-        format: new Mp4OutputFormat({ fastStart: streamedToFile ? false : 'in-memory' }),
+        format: new Mp4OutputFormat({ fastStart: useInMemoryFastStart ? 'in-memory' : false }),
         target: outputTarget,
       });
 
@@ -190,7 +192,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       writable = await fileHandle.createWritable();
       const streamTarget = new StreamTarget(writable);
       streamedToFile = true;
-      conversion = await buildConversion(streamTarget);
+      conversion = await buildConversion(streamTarget, false);
     } catch {
       // Close leaked writable before falling back to buffer target.
       if (writable) {
@@ -198,7 +200,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       }
       streamedToFile = false;
       bufferTarget = new BufferTarget();
-      conversion = await buildConversion(bufferTarget);
+      conversion = await buildConversion(bufferTarget, true);
     }
 
     // Store cancel handle
@@ -215,9 +217,20 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       } as ProxyProgressResponse);
     };
 
-    await conversion.execute();
+    try {
+      await conversion.execute();
+    } catch (execError) {
+      // If cancel() was invoked, activeConversions entry is already deleted.
+      if (!activeConversions.has(mediaId)) {
+        if (streamedToFile) {
+          await dir.removeEntry('proxy.mp4').catch(() => undefined);
+        }
+        return;
+      }
+      throw execError;
+    }
 
-    // Check if cancelled during execution
+    // Check if cancelled during execution (resolved without throwing)
     if (!activeConversions.has(mediaId)) {
       if (streamedToFile) {
         await dir.removeEntry('proxy.mp4').catch(() => undefined);
@@ -232,12 +245,12 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
         throw new Error('Conversion produced no output buffer');
       }
 
-      const writable = await fileHandle.createWritable();
+      const bufferWritable = await fileHandle.createWritable();
       try {
-        await writable.write(buffer);
-        await writable.close();
+        await bufferWritable.write(buffer);
+        await bufferWritable.close();
       } catch (error) {
-        await writable.abort().catch(() => undefined);
+        await bufferWritable.abort().catch(() => undefined);
         throw error;
       }
     }

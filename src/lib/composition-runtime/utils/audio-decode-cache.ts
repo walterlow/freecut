@@ -540,6 +540,10 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
   persistedBins.sort((a, b) => a.binIndex - b.binIndex);
 
   const storedTotalFrames = persistedBins.reduce((sum, b) => sum + b.frames, 0);
+  if (persistedBins.length === 0 || storedTotalFrames === 0) {
+    throw new Error(`Audio decode produced no output for media ${mediaId}`);
+  }
+
   const storedSampleRate = persistedBins[0]?.sampleRate ?? STORAGE_SAMPLE_RATE;
   const outCtx = new OfflineAudioContext(2, storedTotalFrames, storedSampleRate);
   const combined = outCtx.createBuffer(2, storedTotalFrames, storedSampleRate);
