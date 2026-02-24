@@ -154,6 +154,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   let conversion: ConversionType | null = null;
   let streamedToFile = false;
   let bufferTarget: InstanceType<typeof BufferTarget> | null = null;
+  let writable: FileSystemWritableFileStream | undefined;
 
   try {
     const buildConversion = async (
@@ -187,7 +188,6 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     };
 
     const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
-    let writable: FileSystemWritableFileStream | undefined;
     try {
       writable = await fileHandle.createWritable();
       const streamTarget = new StreamTarget(writable);
@@ -201,6 +201,13 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
       streamedToFile = false;
       bufferTarget = new BufferTarget();
       conversion = await buildConversion(bufferTarget, true);
+    }
+
+    if (!conversion.isValid) {
+      const reasons = conversion.discardedTracks.map(
+        (d) => `${d.track.type ?? 'unknown'}: ${d.reason}`
+      ).join('; ');
+      throw new Error(`Proxy conversion invalid: ${reasons || 'no usable tracks'}`);
     }
 
     // Store cancel handle
@@ -272,6 +279,9 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     } as ProxyCompleteResponse);
   } finally {
     activeConversions.delete(mediaId);
+    if (writable) {
+      try { await writable.abort(); } catch { /* may already be closed/aborted */ }
+    }
     input.dispose();
   }
 }

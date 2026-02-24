@@ -341,6 +341,7 @@ export async function createCompositionRenderer(
   const MEDIABUNNY_DISABLE_THRESHOLD = 4;
   const PREWARM_FAILURE_DISABLE_THRESHOLD = 3;
   const inFlightInitByItem = new Map<string, Promise<boolean>>();
+  let isDisposed = false;
 
   // Pre-computed sub-composition render data (populated during preload)
   const subCompRenderData = new Map<string, SubCompRenderData>();
@@ -411,6 +412,7 @@ export async function createCompositionRenderer(
 
     await Promise.all([...bySource.entries()].map(async ([src, ids]) => {
         const success = await sharedVideoExtractors.initSource(src);
+        if (isDisposed) return;
         // Intentional side effect: decode readiness is tracked per shared source,
         // while itemResult only reports back for the explicitly requested ids.
         const allItemsForSource = videoItemIdsBySource.get(src) ?? new Set(ids);
@@ -462,6 +464,7 @@ export async function createCompositionRenderer(
     if (existing) return existing;
 
     const promise = initializeMediabunnyForItems([itemId]).then((result) => {
+      if (isDisposed) return false;
       const ok = result.get(itemId) === true;
       if (ok) {
         mediabunnyInitFailureCountByItem.delete(itemId);
@@ -1254,6 +1257,9 @@ export async function createCompositionRenderer(
     },
 
     dispose() {
+      isDisposed = true;
+      inFlightInitByItem.clear();
+
       // Clean up mediabunny video extractors
       for (const itemId of videoExtractors.keys()) {
         sharedVideoExtractors.releaseItem(itemId);
