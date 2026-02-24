@@ -322,7 +322,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const isPartOfDrag = isPartOfMultiDrag && !isDragging;
 
   // Visibility detection for lazy filmstrip loading
-  const isClipVisible = useClipVisibility(transformRef);
+  const clipVisibility = useClipVisibility(transformRef);
 
   // Disable transition when anchor item drag ends to avoid animation
   useEffect(() => {
@@ -1157,7 +1157,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 item={contentPreviewItem}
                 clipWidth={previewFullWidthPixels}
                 fps={fps}
-                isClipVisible={isClipVisible}
+                isClipVisible={clipVisibility.isVisible}
+                visibleStartRatio={clipVisibility.visibleStartRatio}
+                visibleEndRatio={clipVisibility.visibleEndRatio}
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateContentRendering}
               />
@@ -1167,7 +1169,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               item={contentPreviewItem}
               clipWidth={visualWidth}
               fps={fps}
-              isClipVisible={isClipVisible}
+              isClipVisible={clipVisibility.isVisible}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
               preferImmediateRendering={preferImmediateContentRendering}
             />

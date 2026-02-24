@@ -15,6 +15,8 @@ interface ClipContentProps {
   clipWidth: number;
   fps: number;
   isClipVisible: boolean;
+  visibleStartRatio?: number;
+  visibleEndRatio?: number;
   pixelsPerSecond: number;
   preferImmediateRendering?: boolean;
 }
@@ -33,6 +35,8 @@ export const ClipContent = memo(function ClipContent({
   clipWidth,
   fps,
   isClipVisible,
+  visibleStartRatio = 0,
+  visibleEndRatio = 1,
   pixelsPerSecond,
   preferImmediateRendering = false,
 }: ClipContentProps) {
@@ -117,6 +121,8 @@ export const ClipContent = memo(function ClipContent({
               speed={speed}
               fps={fps}
               isVisible={isClipVisible}
+              visibleStartRatio={visibleStartRatio}
+              visibleEndRatio={visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
               preferImmediateRendering={preferImmediateRendering}
             />
@@ -209,6 +215,8 @@ export const ClipContent = memo(function ClipContent({
                 speed={1}
                 fps={fps}
                 isVisible={isClipVisible}
+                visibleStartRatio={visibleStartRatio}
+                visibleEndRatio={visibleEndRatio}
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateRendering}
               />
