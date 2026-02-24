@@ -26,6 +26,7 @@ const log = createLogger('CanvasAudio');
  * Key: source URL, Value: decoded audio data
  */
 const audioDecodeCache = new Map<string, DecodedAudio>();
+let ac3DecoderRegistered = false;
 
 /**
  * Clear the audio decode cache (call after export completes)
@@ -499,89 +500,145 @@ async function decodeAudioFromSource(
   try {
     // Try mediabunny first for efficient range extraction
     const mb = await import('mediabunny');
-    const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    registerAc3Decoder();
-
-    // Fetch and create input
-    const response = await fetch(src);
-    const blob = await response.blob();
+    if (!ac3DecoderRegistered) {
+      const { registerAc3Decoder } = await import('@mediabunny/ac3');
+      try {
+        registerAc3Decoder();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/already registered/i.test(message)) {
+          throw err;
+        }
+      }
+      ac3DecoderRegistered = true;
+    }
 
     const input = new mb.Input({
       formats: mb.ALL_FORMATS,
-      source: new mb.BlobSource(blob),
+      source: new mb.UrlSource(src),
     });
-
-    const audioTrack = await input.getPrimaryAudioTrack();
-    if (!audioTrack) {
-      throw new Error('No audio track found');
-    }
-
-    const duration = await input.computeDuration();
-    const actualStartTime = startTime ?? 0;
-    const actualEndTime = endTime ?? duration;
-
-    log.debug('Extracting audio range', {
-      itemId,
-      startTime: actualStartTime,
-      endTime: actualEndTime,
-      totalDuration: duration,
-    });
-
-    // Create audio sample sink and extract only needed range
-    const sink = new mb.AudioSampleSink(audioTrack);
-
-    // Collect audio samples for the range
-    const audioBuffers: AudioBuffer[] = [];
-    let totalFrames = 0;
-    let sampleRate = 48000;
-    let channels = 2;
-
-    for await (const sample of sink.samples(actualStartTime, actualEndTime)) {
-      const audioBuffer = sample.toAudioBuffer();
-      audioBuffers.push(audioBuffer);
-      totalFrames += audioBuffer.length;
-      sampleRate = audioBuffer.sampleRate;
-      channels = audioBuffer.numberOfChannels;
-      sample.close();
-    }
-
-    // Combine all audio buffers into single Float32Arrays
-    const samples: Float32Array[] = [];
-    for (let c = 0; c < channels; c++) {
-      samples.push(new Float32Array(totalFrames));
-    }
-
-    let offset = 0;
-    for (const buffer of audioBuffers) {
-      for (let c = 0; c < channels; c++) {
-        const channelData = buffer.getChannelData(c % buffer.numberOfChannels);
-        samples[c]!.set(channelData, offset);
+    try {
+      const audioTrack = await input.getPrimaryAudioTrack();
+      if (!audioTrack) {
+        throw new Error('No audio track found');
       }
-      offset += buffer.length;
+
+      const duration = await input.computeDuration();
+      const actualStartTime = startTime ?? 0;
+      const actualEndTime = endTime ?? duration;
+
+      log.debug('Extracting audio range', {
+        itemId,
+        startTime: actualStartTime,
+        endTime: actualEndTime,
+        totalDuration: duration,
+      });
+
+      // Create audio sample sink and extract only needed range
+      const sink = new mb.AudioSampleSink(audioTrack);
+
+      // Collect planar sample chunks per output channel.
+      const channelChunks: Float32Array[][] = [];
+      let totalFrames = 0;
+      let sampleRate = 48000;
+      let channels = 0;
+
+      for await (const sample of sink.samples(actualStartTime, actualEndTime)) {
+        try {
+          const sampleData = sample as {
+            numberOfFrames?: number;
+            numberOfChannels?: number;
+            sampleRate?: number;
+            copyTo: (destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) => void;
+          };
+          const frameCount = Math.max(0, sampleData.numberOfFrames ?? 0);
+          const sampleChannels = Math.max(1, sampleData.numberOfChannels ?? 1);
+          if (frameCount === 0) {
+            continue;
+          }
+
+          if (channels === 0) {
+            channels = sampleChannels;
+            for (let c = 0; c < channels; c++) {
+              channelChunks.push([]);
+            }
+          } else if (sampleChannels > channels) {
+            // Rare container edge case: if channel count increases mid-stream,
+            // backfill earlier timeline with silence for newly seen channels.
+            for (let c = channels; c < sampleChannels; c++) {
+              const chunks: Float32Array[] = [];
+              if (totalFrames > 0) {
+                chunks.push(new Float32Array(totalFrames));
+              }
+              channelChunks.push(chunks);
+            }
+            channels = sampleChannels;
+          } else if (sampleChannels < channels) {
+            log.warn('Inconsistent channel count during mediabunny audio decode', {
+              itemId,
+              expectedChannels: channels,
+              actualChannels: sampleChannels,
+            });
+          }
+
+          const outputChannels = channels || sampleChannels;
+          for (let c = 0; c < outputChannels; c++) {
+            const planeIndex = Math.min(c, sampleChannels - 1);
+            const channelData = new Float32Array(frameCount);
+            sampleData.copyTo(channelData, { planeIndex, format: 'f32-planar' });
+            channelChunks[c]!.push(channelData);
+          }
+
+          totalFrames += frameCount;
+          if (sampleData.sampleRate && sampleData.sampleRate > 0) {
+            sampleRate = sampleData.sampleRate;
+          }
+        } finally {
+          sample.close();
+        }
+      }
+
+      if (channels === 0 || totalFrames === 0) {
+        throw new Error('Audio decode produced no output');
+      }
+
+      // Combine chunks into contiguous per-channel arrays.
+      const samples: Float32Array[] = [];
+      for (let c = 0; c < channels; c++) {
+        const merged = new Float32Array(totalFrames);
+        let offset = 0;
+        for (const chunk of channelChunks[c] ?? []) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        samples.push(merged);
+      }
+
+      const result: DecodedAudio = {
+        itemId,
+        sampleRate,
+        channels,
+        samples,
+        duration: actualEndTime - actualStartTime,
+      };
+
+      log.debug('Decoded audio with mediabunny', {
+        itemId,
+        sampleRate,
+        channels,
+        duration: result.duration,
+        samples: samples[0]?.length,
+      });
+
+      // Cache if full file decode
+      if (startTime === undefined && endTime === undefined) {
+        audioDecodeCache.set(src, result);
+      }
+
+      return result;
+    } finally {
+      input.dispose();
     }
-
-    const result: DecodedAudio = {
-      itemId,
-      sampleRate,
-      channels,
-      samples,
-      duration: actualEndTime - actualStartTime,
-    };
-
-    log.debug('Decoded audio with mediabunny', {
-      itemId,
-      sampleRate,
-      channels,
-      duration: result.duration,
-      samples: samples[0]?.length,
-    });
-
-    // Cache if full file decode
-    if (startTime === undefined && endTime === undefined) {
-      audioDecodeCache.set(src, result);
-    }
-
-    return result;
   } catch (error) {
     // Fall back to Web Audio API for full decode
     log.warn('Mediabunny audio decode failed, using fallback', { itemId, error });

@@ -482,118 +482,137 @@ async function decodeFullAudio(mediaId: string, src: string): Promise<AudioBuffe
     formats: mb.ALL_FORMATS,
     source: new mb.UrlSource(src),
   });
-
-  const audioTrack = await input.getPrimaryAudioTrack();
-  if (!audioTrack) {
-    throw new Error(`No audio track found for media ${mediaId}`);
-  }
-
-  const duration = await input.computeDuration();
-  const sink = new mb.AudioSampleSink(audioTrack);
-
-  let sampleRate = 48000;
-
-  // Per-bin accumulation for progressive persistence
-  let binLeftChunks: Float32Array[] = [];
-  let binRightChunks: Float32Array[] = [];
-  let binAccumFrames = 0;
-  let binIndex = 0;
-  const binFlushPromises: Array<Promise<{
-    binIndex: number;
-    frames: number;
-    sampleRate: number;
-    left: Int16Array;
-    right: Int16Array;
-  }>> = [];
-
-  for await (const sample of sink.samples(0, duration)) {
-    const buf = sample.toAudioBuffer();
-    sampleRate = buf.sampleRate;
-
-    // Extract channels and downmix to stereo immediately
-    const channels: Float32Array[] = [];
-    for (let c = 0; c < buf.numberOfChannels; c++) {
-      channels.push(new Float32Array(buf.getChannelData(c)));
+  try {
+    const audioTrack = await input.getPrimaryAudioTrack();
+    if (!audioTrack) {
+      throw new Error(`No audio track found for media ${mediaId}`);
     }
-    const { left, right } = downmixToStereo(channels, buf.length);
 
-    // Accumulate for current bin
-    binLeftChunks.push(left);
-    binRightChunks.push(right);
-    binAccumFrames += buf.length;
+    const duration = await input.computeDuration();
+    const sink = new mb.AudioSampleSink(audioTrack);
 
-    // Flush bin when it reaches the target duration
-    const binFramesAtSource = BIN_DURATION_SEC * sampleRate;
-    if (binAccumFrames >= binFramesAtSource) {
+    let sampleRate = 48000;
+
+    // Per-bin accumulation for progressive persistence
+    let binLeftChunks: Float32Array[] = [];
+    let binRightChunks: Float32Array[] = [];
+    let binAccumFrames = 0;
+    let binIndex = 0;
+    const binFlushPromises: Array<Promise<{
+      binIndex: number;
+      frames: number;
+      sampleRate: number;
+      left: Int16Array;
+      right: Int16Array;
+    }>> = [];
+
+    for await (const sample of sink.samples(0, duration)) {
+      try {
+        const sampleData = sample as {
+          numberOfFrames?: number;
+          numberOfChannels?: number;
+          sampleRate?: number;
+          copyTo: (destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) => void;
+        };
+        const frameCount = Math.max(0, sampleData.numberOfFrames ?? 0);
+        const channelCount = Math.max(1, sampleData.numberOfChannels ?? 1);
+        if (frameCount === 0) {
+          continue;
+        }
+        if (sampleData.sampleRate && sampleData.sampleRate > 0) {
+          sampleRate = sampleData.sampleRate;
+        }
+
+        // Extract channels and downmix to stereo immediately.
+        const channels: Float32Array[] = [];
+        for (let c = 0; c < channelCount; c++) {
+          const channelData = new Float32Array(frameCount);
+          sampleData.copyTo(channelData, { planeIndex: c, format: 'f32-planar' });
+          channels.push(channelData);
+        }
+        const { left, right } = downmixToStereo(channels, frameCount);
+
+        // Accumulate for current bin
+        binLeftChunks.push(left);
+        binRightChunks.push(right);
+        binAccumFrames += frameCount;
+
+        // Flush bin when it reaches the target duration
+        const binFramesAtSource = BIN_DURATION_SEC * sampleRate;
+        if (binAccumFrames >= binFramesAtSource) {
+          binFlushPromises.push(
+            persistBin(mediaId, binIndex, binLeftChunks, binRightChunks, binAccumFrames, sampleRate)
+          );
+          binIndex++;
+          binLeftChunks = [];
+          binRightChunks = [];
+          binAccumFrames = 0;
+        }
+      } finally {
+        sample.close();
+      }
+    }
+
+    // Flush final partial bin
+    if (binAccumFrames > 0) {
       binFlushPromises.push(
         persistBin(mediaId, binIndex, binLeftChunks, binRightChunks, binAccumFrames, sampleRate)
       );
       binIndex++;
-      binLeftChunks = [];
-      binRightChunks = [];
-      binAccumFrames = 0;
     }
 
-    sample.close();
+    // Wait for all bins and assemble playback buffer from downsampled bins.
+    const totalBins = binIndex;
+    const persistedBins = await Promise.all(binFlushPromises);
+    persistedBins.sort((a, b) => a.binIndex - b.binIndex);
+
+    const storedTotalFrames = persistedBins.reduce((sum, b) => sum + b.frames, 0);
+    if (persistedBins.length === 0 || storedTotalFrames === 0) {
+      throw new Error(`Audio decode produced no output for media ${mediaId}`);
+    }
+
+    const storedSampleRate = persistedBins[0]?.sampleRate ?? STORAGE_SAMPLE_RATE;
+    const outCtx = new OfflineAudioContext(2, storedTotalFrames, storedSampleRate);
+    const combined = outCtx.createBuffer(2, storedTotalFrames, storedSampleRate);
+    const outLeft = combined.getChannelData(0);
+    const outRight = combined.getChannelData(1);
+
+    let offset = 0;
+    for (const bin of persistedBins) {
+      outLeft.set(int16ToFloat32(bin.left), offset);
+      outRight.set(int16ToFloat32(bin.right), offset);
+      offset += bin.frames;
+    }
+    if (offset !== storedTotalFrames) {
+      throw new Error(`Decoded audio assembly mismatch: ${offset}/${storedTotalFrames} frames`);
+    }
+
+    log.info('Audio decoded for preview', {
+      mediaId,
+      sampleRate: storedSampleRate,
+      duration: combined.duration.toFixed(2),
+      bins: totalBins,
+      sizeMB: ((storedTotalFrames * 2 * 2) / (1024 * 1024)).toFixed(1),
+    });
+
+    // Save meta last as the decode-complete marker.
+    void saveDecodedPreviewAudio({
+      id: mediaId,
+      mediaId,
+      kind: 'meta',
+      sampleRate: storedSampleRate,
+      totalFrames: storedTotalFrames,
+      binCount: totalBins,
+      binDurationSec: BIN_DURATION_SEC,
+      createdAt: Date.now(),
+    }).then(() => {
+      log.info('All bins persisted to IndexedDB', { mediaId, binCount: totalBins });
+    }).catch((err) => {
+      log.warn('Failed to persist bins to IndexedDB', { mediaId, err });
+    });
+
+    return combined;
+  } finally {
+    input.dispose();
   }
-
-  // Flush final partial bin
-  if (binAccumFrames > 0) {
-    binFlushPromises.push(
-      persistBin(mediaId, binIndex, binLeftChunks, binRightChunks, binAccumFrames, sampleRate)
-    );
-    binIndex++;
-  }
-
-  // Wait for all bins and assemble playback buffer from downsampled bins.
-  const totalBins = binIndex;
-  const persistedBins = await Promise.all(binFlushPromises);
-  persistedBins.sort((a, b) => a.binIndex - b.binIndex);
-
-  const storedTotalFrames = persistedBins.reduce((sum, b) => sum + b.frames, 0);
-  if (persistedBins.length === 0 || storedTotalFrames === 0) {
-    throw new Error(`Audio decode produced no output for media ${mediaId}`);
-  }
-
-  const storedSampleRate = persistedBins[0]?.sampleRate ?? STORAGE_SAMPLE_RATE;
-  const outCtx = new OfflineAudioContext(2, storedTotalFrames, storedSampleRate);
-  const combined = outCtx.createBuffer(2, storedTotalFrames, storedSampleRate);
-  const outLeft = combined.getChannelData(0);
-  const outRight = combined.getChannelData(1);
-
-  let offset = 0;
-  for (const bin of persistedBins) {
-    outLeft.set(int16ToFloat32(bin.left), offset);
-    outRight.set(int16ToFloat32(bin.right), offset);
-    offset += bin.frames;
-  }
-  if (offset !== storedTotalFrames) {
-    throw new Error(`Decoded audio assembly mismatch: ${offset}/${storedTotalFrames} frames`);
-  }
-
-  log.info('Audio decoded for preview', {
-    mediaId,
-    sampleRate: storedSampleRate,
-    duration: combined.duration.toFixed(2),
-    bins: totalBins,
-    sizeMB: ((storedTotalFrames * 2 * 2) / (1024 * 1024)).toFixed(1),
-  });
-
-  // Save meta last as the decode-complete marker.
-  void saveDecodedPreviewAudio({
-    id: mediaId,
-    mediaId,
-    kind: 'meta',
-    sampleRate: storedSampleRate,
-    totalFrames: storedTotalFrames,
-    binCount: totalBins,
-    binDurationSec: BIN_DURATION_SEC,
-    createdAt: Date.now(),
-  }).then(() => {
-    log.info('All bins persisted to IndexedDB', { mediaId, binCount: totalBins });
-  }).catch((err) => {
-    log.warn('Failed to persist bins to IndexedDB', { mediaId, err });
-  });
-
-  return combined;
 }

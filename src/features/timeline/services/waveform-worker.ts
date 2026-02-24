@@ -95,6 +95,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
   const state = { aborted: false };
   activeRequests.set(requestId, state);
 
+  let disposeInput: { dispose?: () => void } | null = null;
+
   try {
     // Send initial progress
     self.postMessage({ type: 'progress', requestId, progress: 5 } as WaveformProgressResponse);
@@ -110,6 +112,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
       source: new UrlSource(blobUrl),
       formats: ALL_FORMATS,
     });
+    disposeInput = input as { dispose?: () => void };
 
     // Get primary audio track
     const audioTrack = await input.getPrimaryAudioTrack();
@@ -268,6 +271,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
       self.postMessage({ type: 'error', requestId, error } as WaveformErrorResponse);
     }
   } finally {
+    disposeInput?.dispose?.();
     activeRequests.delete(requestId);
   }
 };

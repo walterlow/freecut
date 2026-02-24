@@ -28,6 +28,7 @@ interface MediabunnyInput {
   computeDuration(): Promise<number>;
   getPrimaryVideoTrack(): Promise<MediabunnyVideoTrack | null>;
   getPrimaryAudioTrack(): Promise<MediabunnyAudioTrack | null>;
+  dispose(): void;
 }
 
 interface CanvasWrapper {
@@ -36,6 +37,7 @@ interface CanvasWrapper {
 
 interface MediabunnyCanvasSink {
   getCanvas(timestamp: number): Promise<CanvasWrapper | null>;
+  dispose?(): void;
 }
 
 interface MediabunnyModule {
@@ -135,34 +137,38 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
     source: new mb.BlobSource(file),
   });
 
-  // Get all metadata in one pass (no duplicate parsing!)
-  const [duration, videoTrack, audioTrack] = await Promise.all([
-    input.computeDuration(),
-    input.getPrimaryVideoTrack(),
-    input.getPrimaryAudioTrack(),
-  ]);
+  try {
+    // Get all metadata in one pass (no duplicate parsing!)
+    const [duration, videoTrack, audioTrack] = await Promise.all([
+      input.computeDuration(),
+      input.getPrimaryVideoTrack(),
+      input.getPrimaryAudioTrack(),
+    ]);
 
-  if (!videoTrack) {
-    throw new Error('No video track found in file');
+    if (!videoTrack) {
+      throw new Error('No video track found in file');
+    }
+
+    // Get FPS from packet stats
+    const packetStats = await videoTrack.computePacketStats(50);
+
+    const audioCodec = audioTrack?.codec;
+    const audioCodecSupported = isAudioCodecSupported(audioCodec);
+
+    return {
+      type: 'video',
+      duration: duration || 0,
+      width: videoTrack.displayWidth || 1920,
+      height: videoTrack.displayHeight || 1080,
+      fps: packetStats?.averagePacketRate || 30,
+      codec: videoTrack.codec || 'unknown',
+      bitrate: 0,
+      audioCodec,
+      audioCodecSupported,
+    };
+  } finally {
+    input.dispose();
   }
-
-  // Get FPS from packet stats
-  const packetStats = await videoTrack.computePacketStats(50);
-
-  const audioCodec = audioTrack?.codec;
-  const audioCodecSupported = isAudioCodecSupported(audioCodec);
-
-  return {
-    type: 'video',
-    duration: duration || 0,
-    width: videoTrack.displayWidth || 1920,
-    height: videoTrack.displayHeight || 1080,
-    fps: packetStats?.averagePacketRate || 30,
-    codec: videoTrack.codec || 'unknown',
-    bitrate: 0,
-    audioCodec,
-    audioCodecSupported,
-  };
 }
 
 /**
@@ -176,19 +182,23 @@ async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
     source: new mb.BlobSource(file),
   });
 
-  const [duration, audioTrack] = await Promise.all([
-    input.computeDuration(),
-    input.getPrimaryAudioTrack(),
-  ]);
+  try {
+    const [duration, audioTrack] = await Promise.all([
+      input.computeDuration(),
+      input.getPrimaryAudioTrack(),
+    ]);
 
-  return {
-    type: 'audio',
-    duration: duration || 0,
-    codec: audioTrack?.codec,
-    channels: audioTrack?.channels,
-    sampleRate: audioTrack?.sampleRate,
-    bitrate: 0,
-  };
+    return {
+      type: 'audio',
+      duration: duration || 0,
+      codec: audioTrack?.codec,
+      channels: audioTrack?.channels,
+      sampleRate: audioTrack?.sampleRate,
+      bitrate: 0,
+    };
+  } finally {
+    input.dispose();
+  }
 }
 
 /**
@@ -220,37 +230,43 @@ async function generateVideoThumbnail(
     source: new mb.BlobSource(file),
     formats: mb.ALL_FORMATS,
   });
+  let sink: MediabunnyCanvasSink | null = null;
 
-  const videoTrack = await input.getPrimaryVideoTrack();
-  if (!videoTrack) {
-    throw new Error('No video track found');
+  try {
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) {
+      throw new Error('No video track found');
+    }
+
+    // Calculate dimensions preserving aspect ratio
+    const width = videoTrack.displayWidth > videoTrack.displayHeight
+      ? maxSize
+      : Math.floor(maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
+    const height = videoTrack.displayHeight > videoTrack.displayWidth
+      ? maxSize
+      : Math.floor(maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
+
+    sink = new mb.CanvasSink(videoTrack, {
+      width,
+      height,
+      fit: 'fill',
+    });
+
+    // Clamp timestamp to valid range
+    const duration = await input.computeDuration();
+    const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1));
+
+    const wrapped = await sink.getCanvas(clampedTimestamp);
+    if (!wrapped) {
+      throw new Error('Failed to extract frame from video');
+    }
+
+    const canvas = wrapped.canvas as OffscreenCanvas;
+    return canvas.convertToBlob({ type: 'image/webp', quality });
+  } finally {
+    sink?.dispose?.();
+    input.dispose();
   }
-
-  // Calculate dimensions preserving aspect ratio
-  const width = videoTrack.displayWidth > videoTrack.displayHeight
-    ? maxSize
-    : Math.floor(maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
-  const height = videoTrack.displayHeight > videoTrack.displayWidth
-    ? maxSize
-    : Math.floor(maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
-
-  const sink = new mb.CanvasSink(videoTrack, {
-    width,
-    height,
-    fit: 'fill',
-  });
-
-  // Clamp timestamp to valid range
-  const duration = await input.computeDuration();
-  const clampedTimestamp = Math.min(timestamp, Math.max(0, duration - 0.1));
-
-  const wrapped = await sink.getCanvas(clampedTimestamp);
-  if (!wrapped) {
-    throw new Error('Failed to extract frame from video');
-  }
-
-  const canvas = wrapped.canvas as OffscreenCanvas;
-  return canvas.convertToBlob({ type: 'image/webp', quality });
 }
 
 /**

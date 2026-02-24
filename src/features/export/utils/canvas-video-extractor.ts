@@ -19,6 +19,13 @@ interface MediabunnySink {
 
 interface MediabunnySample {
   timestamp: number;
+  draw?: (
+    context: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ) => void;
   toVideoFrame(): VideoFrame | null;
   close(): void;
 }
@@ -75,14 +82,10 @@ export class VideoFrameExtractor {
     try {
       const mb = await import('mediabunny');
 
-      // Fetch the video data from blob URL
-      const response = await fetch(this.src);
-      const blob = await response.blob();
-
-      // Create input from blob
+      // Create input directly from source URL/blob URL.
       this.input = new mb.Input({
         formats: mb.ALL_FORMATS,
-        source: new mb.BlobSource(blob),
+        source: new mb.UrlSource(this.src),
       }) as unknown as MediabunnyInput;
 
       // Get video track
@@ -272,6 +275,11 @@ export class VideoFrameExtractor {
     }
 
     try {
+      if (typeof sample.draw === 'function') {
+        sample.draw(ctx, x, y, width, height);
+        return true;
+      }
+
       // Reuse cached VideoFrame if we're drawing the same sample again.
       // This is critical for transitions: the outgoing clip is rendered past
       // its timeline end, which means the sample iterator is exhausted and

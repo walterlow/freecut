@@ -12,6 +12,7 @@
  */
 
 import type { CompositionInputProps } from '@/types/export';
+import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer';
 import { createOutputFormat, getMimeType } from './client-renderer';
 import { createLogger } from '@/lib/logger';
@@ -50,6 +51,252 @@ interface SingleFrameOptions {
   height?: number;
   quality?: number;
   format?: 'image/jpeg' | 'image/png' | 'image/webp';
+}
+
+interface PacketRemuxPlan {
+  src: string;
+  trimStartSeconds: number;
+  trimEndSeconds: number;
+  includeAudio: boolean;
+}
+
+const EPSILON = 1e-6;
+
+function isIdentityTransform(item: VideoItem): boolean {
+  const transform = item.transform;
+  if (!transform) return true;
+
+  if (transform.width !== undefined || transform.height !== undefined) return false;
+  if (transform.x !== undefined && Math.abs(transform.x) > EPSILON) return false;
+  if (transform.y !== undefined && Math.abs(transform.y) > EPSILON) return false;
+  if (transform.rotation !== undefined && Math.abs(transform.rotation) > EPSILON) return false;
+  if (transform.cornerRadius !== undefined && Math.abs(transform.cornerRadius) > EPSILON) return false;
+  if (transform.opacity !== undefined && Math.abs(transform.opacity - 1) > EPSILON) return false;
+  return true;
+}
+
+function getPacketRemuxPlan(
+  settings: ClientExportSettings,
+  composition: CompositionInputProps
+): PacketRemuxPlan | null {
+  if (settings.mode !== 'video') return null;
+  if (composition.durationInFrames === undefined || composition.durationInFrames <= 0) return null;
+  if ((composition.transitions?.length ?? 0) > 0) return null;
+  if ((composition.keyframes?.length ?? 0) > 0) return null;
+
+  const tracks: TimelineTrack[] = (composition.tracks ?? []).filter((track) => track.visible !== false);
+  const items: Array<{ item: TimelineItem; track: TimelineTrack }> = [];
+
+  for (const track of tracks) {
+    for (const item of track.items ?? []) {
+      if (item.durationInFrames > 0) {
+        items.push({ item, track });
+      }
+    }
+  }
+
+  if (items.length !== 1) return null;
+
+  const { item, track } = items[0]!;
+  if (item.type !== 'video') return null;
+
+  const videoItem = item as VideoItem;
+  if (!videoItem.src) return null;
+  if (videoItem.from !== 0) return null;
+  if (videoItem.durationInFrames !== composition.durationInFrames) return null;
+  if ((videoItem.effects?.length ?? 0) > 0) return null;
+  if (!isIdentityTransform(videoItem)) return null;
+
+  const speed = videoItem.speed ?? 1;
+  if (Math.abs(speed - 1) > EPSILON) return null;
+
+  const hasVisualFades = Math.abs(videoItem.fadeIn ?? 0) > EPSILON
+    || Math.abs(videoItem.fadeOut ?? 0) > EPSILON;
+  if (hasVisualFades) return null;
+
+  const includeAudio = track.muted !== true;
+  if (includeAudio) {
+    const hasAudioAdjustments = Math.abs(videoItem.volume ?? 0) > EPSILON
+      || Math.abs(videoItem.audioFadeIn ?? 0) > EPSILON
+      || Math.abs(videoItem.audioFadeOut ?? 0) > EPSILON;
+    if (hasAudioAdjustments) return null;
+  }
+
+  const sourceFps = videoItem.sourceFps ?? composition.fps;
+  if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null;
+  if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null;
+
+  const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0;
+  if (Math.abs(sourceStartFrames) > EPSILON) return null;
+  const trimStartSeconds = Math.max(0, sourceStartFrames / sourceFps);
+  const clipDurationSeconds = videoItem.durationInFrames / composition.fps;
+  if (!Number.isFinite(clipDurationSeconds) || clipDurationSeconds <= 0) return null;
+
+  const trimEndSeconds = trimStartSeconds + clipDurationSeconds;
+  if (!Number.isFinite(trimEndSeconds) || trimEndSeconds <= trimStartSeconds) return null;
+
+  return {
+    src: videoItem.src,
+    trimStartSeconds,
+    trimEndSeconds,
+    includeAudio,
+  };
+}
+
+async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<ClientRenderResult | null> {
+  const { settings, composition, onProgress, signal } = options;
+  const durationInFrames = composition.durationInFrames ?? 0;
+  const fps = composition.fps;
+  const durationSeconds = durationInFrames / Math.max(fps, 1);
+
+  const plan = getPacketRemuxPlan(settings, composition);
+  if (!plan) return null;
+  if (signal?.aborted) {
+    throw new DOMException('Render cancelled', 'AbortError');
+  }
+
+  const mediabunny: MediabunnyModule = await import('mediabunny');
+  const { Input, UrlSource, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny;
+
+  const format = await createOutputFormat(settings.container, { fastStart: true }) as {
+    getSupportedVideoCodecs?: () => string[];
+    getSupportedAudioCodecs?: () => string[];
+  };
+  const target = new BufferTarget();
+  const output = new Output({
+    format: format as unknown as ConstructorParameters<typeof Output>[0]['format'],
+    target,
+  });
+
+  const input = new Input({
+    formats: ALL_FORMATS,
+    source: new UrlSource(plan.src),
+  });
+
+  let conversion: {
+    cancel: () => Promise<void>;
+    isValid: boolean;
+    onProgress?: (progress: number) => unknown;
+    execute: () => Promise<void>;
+  } | null = null;
+  const cancelConversion = () => {
+    if (!conversion) return;
+    void conversion.cancel().catch(() => undefined);
+  };
+
+  signal?.addEventListener('abort', cancelConversion, { once: true });
+
+  try {
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack?.codec) {
+      return null;
+    }
+
+    const supportedVideoCodecs = format.getSupportedVideoCodecs?.() ?? [];
+    if (!supportedVideoCodecs.includes(videoTrack.codec) || videoTrack.codec !== settings.codec) {
+      return null;
+    }
+
+    if (
+      videoTrack.displayWidth !== settings.resolution.width
+      || videoTrack.displayHeight !== settings.resolution.height
+    ) {
+      return null;
+    }
+
+    if (plan.includeAudio) {
+      const audioTrack = await input.getPrimaryAudioTrack();
+      if (audioTrack?.codec) {
+        const supportedAudioCodecs = format.getSupportedAudioCodecs?.() ?? [];
+        if (!supportedAudioCodecs.includes(audioTrack.codec)) {
+          return null;
+        }
+      }
+    }
+
+    onProgress({
+      phase: 'preparing',
+      progress: 5,
+      totalFrames: durationInFrames,
+      message: 'Preparing packet remux...',
+    });
+
+    conversion = await Conversion.init({
+      input,
+      output,
+      trim: {
+        start: plan.trimStartSeconds,
+        end: plan.trimEndSeconds,
+      },
+      video: {
+        codec: settings.codec,
+        forceTranscode: false,
+      },
+      audio: plan.includeAudio
+        ? { forceTranscode: false }
+        : { discard: true },
+      showWarnings: false,
+    });
+
+    if (!conversion.isValid) {
+      return null;
+    }
+
+    conversion.onProgress = (progress: number) => {
+      const clamped = Math.max(0, Math.min(1, progress));
+      onProgress({
+        phase: 'encoding',
+        progress: Math.round(clamped * 90),
+        currentFrame: Math.round(clamped * durationInFrames),
+        totalFrames: durationInFrames,
+        message: 'Remuxing packets...',
+      });
+    };
+
+    await conversion.execute();
+
+    const buffer = target.buffer;
+    if (!buffer) {
+      throw new Error('No output buffer generated');
+    }
+
+    const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
+
+    onProgress({
+      phase: 'finalizing',
+      progress: 100,
+      currentFrame: durationInFrames,
+      totalFrames: durationInFrames,
+      message: 'Complete!',
+    });
+
+    log.info('Packet remux export completed', {
+      durationSeconds,
+      fileSize: blob.size,
+      container: settings.container,
+      codec: settings.codec,
+      includeAudio: plan.includeAudio,
+    });
+
+    return {
+      blob,
+      mimeType: getMimeType(settings.container, settings.codec),
+      duration: durationSeconds,
+      fileSize: blob.size,
+    };
+  } catch (error) {
+    const isCanceled = signal?.aborted
+      || (error instanceof Error && error.name === 'ConversionCanceledError');
+    if (isCanceled) {
+      throw new DOMException('Render cancelled', 'AbortError');
+    }
+
+    log.warn('Packet remux path failed; falling back to frame render', { error });
+    return null;
+  } finally {
+    signal?.removeEventListener('abort', cancelConversion);
+    input.dispose();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +340,12 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   // Check for abort
   if (signal?.aborted) {
     throw new DOMException('Render cancelled', 'AbortError');
+  }
+
+  // Fast path: when the timeline is a single unmodified clip, remux packets directly.
+  const remuxResult = await tryPacketRemuxComposition(options);
+  if (remuxResult) {
+    return remuxResult;
   }
 
   // Dynamically import mediabunny + register AC-3 decoder for source audio

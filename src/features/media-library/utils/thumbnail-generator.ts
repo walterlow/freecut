@@ -34,60 +34,67 @@ async function generateVideoThumbnail(
   const opts = { ...DEFAULT_THUMBNAIL_OPTIONS, ...options };
 
   const { Input, BlobSource, CanvasSink, ALL_FORMATS } = await loadMediabunny();
+  let input: InstanceType<typeof Input> | null = null;
+  let sink: InstanceType<typeof CanvasSink> | null = null;
 
-  const input = new Input({
-    source: new BlobSource(file),
-    formats: ALL_FORMATS,
-  });
+  try {
+    input = new Input({
+      source: new BlobSource(file),
+      formats: ALL_FORMATS,
+    });
 
-  const videoTrack = await input.getPrimaryVideoTrack();
-  if (!videoTrack) {
-    throw new Error('No video track found');
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) {
+      throw new Error('No video track found');
+    }
+
+    // Calculate dimensions preserving aspect ratio - larger dimension = maxSize
+    const width = videoTrack.displayWidth > videoTrack.displayHeight
+      ? opts.maxSize
+      : Math.floor(opts.maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
+    const height = videoTrack.displayHeight > videoTrack.displayWidth
+      ? opts.maxSize
+      : Math.floor(opts.maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
+
+    sink = new CanvasSink(videoTrack, {
+      width,
+      height,
+      fit: 'fill',
+    });
+
+    // Get timestamp, clamped to valid range
+    const duration = await input.computeDuration();
+    const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1));
+
+    const wrapped = await sink.getCanvas(timestamp);
+    if (!wrapped) {
+      throw new Error('Failed to extract frame from video');
+    }
+
+    const canvas = wrapped.canvas as OffscreenCanvas | HTMLCanvasElement;
+
+    // Convert to blob
+    if ('convertToBlob' in canvas) {
+      return canvas.convertToBlob({ type: 'image/webp', quality: opts.quality });
+    }
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob);
+            return;
+          }
+          reject(new Error('Failed to create blob'));
+        },
+        'image/webp',
+        opts.quality
+      );
+    });
+  } finally {
+    (sink as unknown as { dispose?: () => void } | null)?.dispose?.();
+    input?.dispose?.();
   }
-
-  // Calculate dimensions preserving aspect ratio - larger dimension = maxSize
-  const width = videoTrack.displayWidth > videoTrack.displayHeight
-    ? opts.maxSize
-    : Math.floor(opts.maxSize * videoTrack.displayWidth / videoTrack.displayHeight);
-  const height = videoTrack.displayHeight > videoTrack.displayWidth
-    ? opts.maxSize
-    : Math.floor(opts.maxSize * videoTrack.displayHeight / videoTrack.displayWidth);
-
-  const sink = new CanvasSink(videoTrack, {
-    width,
-    height,
-    fit: 'fill',
-  });
-
-  // Get timestamp, clamped to valid range
-  const duration = await input.computeDuration();
-  const timestamp = Math.min(opts.timestamp, Math.max(0, duration - 0.1));
-
-  const wrapped = await sink.getCanvas(timestamp);
-  if (!wrapped) {
-    throw new Error('Failed to extract frame from video');
-  }
-
-  const canvas = wrapped.canvas as OffscreenCanvas | HTMLCanvasElement;
-
-  // Convert to blob
-  if ('convertToBlob' in canvas) {
-    return canvas.convertToBlob({ type: 'image/webp', quality: opts.quality });
-  }
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-          return;
-        }
-        reject(new Error('Failed to create blob'));
-      },
-      'image/webp',
-      opts.quality
-    );
-  });
 }
 
 /**
