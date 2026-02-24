@@ -226,69 +226,73 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
       target,
     });
 
-    conversion = await Conversion.init({
-      input,
-      output,
-      trim: {
-        start: plan.trimStartSeconds,
-        end: plan.trimEndSeconds,
-      },
-      video: {
-        codec: settings.codec,
-        forceTranscode: false,
-      },
-      audio: plan.includeAudio
-        ? { forceTranscode: false }
-        : { discard: true },
-      showWarnings: false,
-    });
-
-    if (!conversion.isValid) {
-      return null;
-    }
-
-    conversion.onProgress = (progress: number) => {
-      const clamped = Math.max(0, Math.min(1, progress));
-      onProgress({
-        phase: 'encoding',
-        progress: Math.round(clamped * 90),
-        currentFrame: Math.round(clamped * durationInFrames),
-        totalFrames: durationInFrames,
-        message: 'Remuxing packets...',
+    try {
+      conversion = await Conversion.init({
+        input,
+        output,
+        trim: {
+          start: plan.trimStartSeconds,
+          end: plan.trimEndSeconds,
+        },
+        video: {
+          codec: settings.codec,
+          forceTranscode: false,
+        },
+        audio: plan.includeAudio
+          ? { forceTranscode: false }
+          : { discard: true },
+        showWarnings: false,
       });
-    };
 
-    await conversion.execute();
+      if (!conversion.isValid) {
+        return null;
+      }
 
-    const buffer = target.buffer;
-    if (!buffer) {
-      throw new Error('No output buffer generated');
+      conversion.onProgress = (progress: number) => {
+        const clamped = Math.max(0, Math.min(1, progress));
+        onProgress({
+          phase: 'encoding',
+          progress: Math.round(clamped * 90),
+          currentFrame: Math.round(clamped * durationInFrames),
+          totalFrames: durationInFrames,
+          message: 'Remuxing packets...',
+        });
+      };
+
+      await conversion.execute();
+
+      const buffer = target.buffer;
+      if (!buffer) {
+        throw new Error('No output buffer generated');
+      }
+
+      const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
+
+      onProgress({
+        phase: 'finalizing',
+        progress: 100,
+        currentFrame: durationInFrames,
+        totalFrames: durationInFrames,
+        message: 'Complete!',
+      });
+
+      log.info('Packet remux export completed', {
+        durationSeconds,
+        fileSize: blob.size,
+        container: settings.container,
+        codec: settings.codec,
+        includeAudio: plan.includeAudio,
+      });
+
+      return {
+        blob,
+        mimeType: getMimeType(settings.container, settings.codec),
+        duration: durationSeconds,
+        fileSize: blob.size,
+      };
+    } finally {
+      (output as unknown as { dispose?: () => void }).dispose?.();
     }
-
-    const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
-
-    onProgress({
-      phase: 'finalizing',
-      progress: 100,
-      currentFrame: durationInFrames,
-      totalFrames: durationInFrames,
-      message: 'Complete!',
-    });
-
-    log.info('Packet remux export completed', {
-      durationSeconds,
-      fileSize: blob.size,
-      container: settings.container,
-      codec: settings.codec,
-      includeAudio: plan.includeAudio,
-    });
-
-    return {
-      blob,
-      mimeType: getMimeType(settings.container, settings.codec),
-      duration: durationSeconds,
-      fileSize: blob.size,
-    };
   } catch (error) {
     const isCanceled = signal?.aborted
       || (error instanceof Error && error.name === 'ConversionCanceledError');
@@ -751,8 +755,18 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
 
   // Dynamically import mediabunny + register AC-3 decoder for source audio
   const mediabunny = await import('mediabunny');
-  const { registerAc3Decoder } = await import('@mediabunny/ac3');
-  registerAc3Decoder();
+  if (!ac3DecoderRegistered) {
+    const { registerAc3Decoder } = await import('@mediabunny/ac3');
+    try {
+      registerAc3Decoder();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!/already registered/i.test(message)) {
+        throw err;
+      }
+    }
+    ac3DecoderRegistered = true;
+  }
   const { Output, BufferTarget, AudioBufferSource } = mediabunny;
 
   // Register MP3 encoder if exporting to MP3
