@@ -7,6 +7,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
+import { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle';
 
 interface TimelinePlayheadProps {
   inRuler?: boolean; // If true, shows diamond indicator for ruler
@@ -25,7 +26,7 @@ interface TimelinePlayheadProps {
 export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayheadProps) {
   // Don't subscribe to currentFrame - use ref + manual subscription instead
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-  const { frameToPixels, pixelsToFrame } = useTimelineZoomContext();
+  const { frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isExternalDrag, setIsExternalDrag] = useState(false);
@@ -45,10 +46,16 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   const setCurrentFrameRef = useRef(setCurrentFrame);
   const maxFrameRef = useRef(maxFrame);
   const frameToPixelsRef = useRef(frameToPixels);
+  const pixelsPerSecondRef = useRef(pixelsPerSecond);
 
   // RAF throttling refs for smooth scrubbing without excessive state updates
   const pendingFrameRef = useRef<number | null>(null);
+  const pendingPointerXRef = useRef<number | null>(null);
   const rafIdRef = useRef<number | null>(null);
+  const scrubThrottleStateRef = useRef(createScrubThrottleState({
+    frame: usePlaybackStore.getState().currentFrame,
+    nowMs: performance.now(),
+  }));
   const setPreviewFrameRef = useRef(usePlaybackStore.getState().setPreviewFrame);
   useEffect(() => {
     return usePlaybackStore.subscribe((state) => {
@@ -62,7 +69,8 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
     setCurrentFrameRef.current = setCurrentFrame;
     maxFrameRef.current = maxFrame;
     frameToPixelsRef.current = frameToPixels;
-  }, [pixelsToFrame, setCurrentFrame, maxFrame, frameToPixels]);
+    pixelsPerSecondRef.current = pixelsPerSecond;
+  }, [pixelsToFrame, setCurrentFrame, maxFrame, frameToPixels, pixelsPerSecond]);
 
   // Subscribe to currentFrame changes and update position directly (no React re-renders)
   useEffect(() => {
@@ -109,8 +117,18 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const container = inRuler
+      ? playheadRef.current?.closest('.timeline-ruler')
+      : playheadRef.current?.closest('.timeline-tracks');
+    const rect = container?.getBoundingClientRect();
+    const pointerX = rect ? e.clientX - rect.left : frameToPixelsRef.current(usePlaybackStore.getState().currentFrame);
+    scrubThrottleStateRef.current = createScrubThrottleState({
+      pointerX,
+      frame: usePlaybackStore.getState().currentFrame,
+      nowMs: performance.now(),
+    });
     setIsDragging(true);
-  }, []);
+  }, [inRuler]);
 
   // Handle dragging
   useEffect(() => {
@@ -143,13 +161,24 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
 
       // RAF throttling: batch frame updates to max 60fps to reduce state updates
       pendingFrameRef.current = frame;
+      pendingPointerXRef.current = x;
 
       if (rafIdRef.current === null) {
         rafIdRef.current = requestAnimationFrame(() => {
           rafIdRef.current = null;
-          if (pendingFrameRef.current !== null) {
-            setCurrentFrameRef.current(pendingFrameRef.current);
-            setPreviewFrameRef.current(pendingFrameRef.current);
+          if (pendingFrameRef.current !== null && pendingPointerXRef.current !== null) {
+            const targetFrame = pendingFrameRef.current;
+            const pointerX = pendingPointerXRef.current;
+            if (shouldCommitScrubFrame({
+              state: scrubThrottleStateRef.current,
+              pointerX,
+              targetFrame,
+              pixelsPerSecond: pixelsPerSecondRef.current,
+              nowMs: performance.now(),
+            })) {
+              setCurrentFrameRef.current(targetFrame);
+              setPreviewFrameRef.current(targetFrame);
+            }
           }
         });
       }
@@ -162,6 +191,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
         rafIdRef.current = null;
       }
       pendingFrameRef.current = null;
+      pendingPointerXRef.current = null;
       setPreviewFrameRef.current(null);
       setIsDragging(false);
     };

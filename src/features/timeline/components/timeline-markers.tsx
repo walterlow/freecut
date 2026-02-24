@@ -13,6 +13,7 @@ import { TimelineProjectMarkers } from './timeline-project-markers';
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { formatTimecode, secondsToFrames } from '@/utils/time-utils';
+import { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle';
 
 // Edge-scrolling configuration
 const EDGE_SCROLL_MAX_SPEED = 20; // Max pixels per frame at max distance
@@ -303,6 +304,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const markDirtyRef = useRef(markDirty);
   const pauseRef = useRef(pause);
   const fpsRef = useRef(fps);
+  const pixelsPerSecondRef = useRef(pixelsPerSecond);
   const durationRef = useRef(duration);
   const inPointRef = useRef(inPoint);
   const outPointRef = useRef(outPoint);
@@ -318,10 +320,11 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     markDirtyRef.current = markDirty;
     pauseRef.current = pause;
     fpsRef.current = fps;
+    pixelsPerSecondRef.current = pixelsPerSecond;
     durationRef.current = duration;
     inPointRef.current = inPoint;
     outPointRef.current = outPoint;
-  }, [pixelsToFrame, setCurrentFrame, markDirty, pause, fps, duration, inPoint, outPoint]);
+  }, [pixelsToFrame, setCurrentFrame, markDirty, pause, fps, pixelsPerSecond, duration, inPoint, outPoint]);
 
   // Track viewport and scroll
   const scrollLeftRef = useRef(0);
@@ -332,6 +335,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const scrubMouseClientXRef = useRef<number>(0);
   const scrubRAFIdRef = useRef<number | null>(null);
   const isScrubActiveRef = useRef(false);
+  const scrubThrottleStateRef = useRef(createScrubThrottleState());
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -644,9 +648,17 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     const maxFrame = Math.floor(durationRef.current * fpsRef.current);
     const frame = Math.min(maxFrame, Math.max(0, Math.round(pixelsToFrameRef.current(x))));
 
-    // Update playhead and gray playhead
-    setCurrentFrameRef.current(frame);
-    setPreviewFrameRef.current(frame);
+    const nowMs = performance.now();
+    if (shouldCommitScrubFrame({
+      state: scrubThrottleStateRef.current,
+      pointerX: x,
+      targetFrame: frame,
+      pixelsPerSecond: pixelsPerSecondRef.current,
+      nowMs,
+    })) {
+      setCurrentFrameRef.current(frame);
+      setPreviewFrameRef.current(frame);
+    }
 
     // --- STEP 3: Continue loop while scrubbing ---
     scrubRAFIdRef.current = requestAnimationFrame(runUnifiedScrubLoop);
@@ -715,6 +727,11 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     const frame = Math.min(maxFrame, Math.max(0, Math.round(pixelsToFrameRef.current(x))));
     setCurrentFrameRef.current(frame);
     setPreviewFrameRef.current(frame);
+    scrubThrottleStateRef.current = createScrubThrottleState({
+      pointerX: x,
+      frame,
+      nowMs: performance.now(),
+    });
 
     setIsDragging(true);
 
