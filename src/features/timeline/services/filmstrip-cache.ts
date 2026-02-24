@@ -1889,6 +1889,12 @@ class FilmstripCacheService {
 
   /**
    * Dispose
+   *
+   * IMPORTANT:
+   * - This is runtime cleanup only (workers, timers, in-memory URLs/cache).
+   * - Do NOT clear OPFS filmstrip files here.
+   *   Persistent filmstrip data must survive page refresh so F5 can reuse cache.
+   * - Use clearAll()/clearMedia() only for explicit user/debug cache reset flows.
    */
   async dispose(): Promise<void> {
     for (const mediaId of this.pendingExtractions.keys()) {
@@ -1904,7 +1910,10 @@ class FilmstripCacheService {
     for (const timer of this.idleEvictionTimers.values()) {
       clearTimeout(timer);
     }
-    await filmstripOPFSStorage.clearAll();
+    // Revoke in-memory object URLs only; keep persisted OPFS filmstrip files.
+    for (const mediaId of this.cache.keys()) {
+      filmstripOPFSStorage.revokeUrls(mediaId);
+    }
     this.idleEvictionTimers.clear();
     this.cache.clear();
     this.cacheMeta.clear();

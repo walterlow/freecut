@@ -127,8 +127,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const { mediaId, blobUrl, sourceWidth, sourceHeight } = request;
 
   const {
-    Input, UrlSource, Output, Mp4OutputFormat, BufferTarget, Conversion,
-    QUALITY_MEDIUM, MP4, WEBM, MATROSKA,
+    Input, UrlSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
+    QUALITY_LOW, MP4, WEBM, MATROSKA,
   } = await loadMediabunny();
 
   const dir = await getProxyDir(mediaId);
@@ -151,32 +151,53 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     formats: [MP4, WEBM, MATROSKA],
   });
 
-  const target = new BufferTarget();
-  const output = new Output({
-    format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
-    target,
-  });
-
   let conversion: ConversionType | null = null;
+  let streamedToFile = false;
+  let bufferTarget: InstanceType<typeof BufferTarget> | null = null;
 
   try {
-    conversion = await Conversion.init({
-      input,
-      output,
-      video: {
-        width: proxyDimensions.width,
-        height: proxyDimensions.height,
+    const buildConversion = async (outputTarget: InstanceType<typeof StreamTarget> | InstanceType<typeof BufferTarget>) => {
+      const output = new Output({
+        // Stream mode can write directly without in-memory fast-start relocation.
+        format: new Mp4OutputFormat({ fastStart: streamedToFile ? false : 'in-memory' }),
+        target: outputTarget,
+      });
+
+      return Conversion.init({
+        input,
+        output,
+        video: {
+          width: proxyDimensions.width,
+          height: proxyDimensions.height,
         fit: 'contain',
         codec: 'avc',
-        bitrate: QUALITY_MEDIUM,
+        // Faster proxy generation preset.
+        bitrate: QUALITY_LOW,
+        hardwareAcceleration: 'prefer-hardware',
         // Short GOP to speed up random-access decode during scrubbing.
         keyFrameInterval: 1,
       },
       audio: {
-        codec: 'aac',
-        bitrate: 128_000,
+        // Scrub proxy is video-only for faster generation and smaller files.
+        discard: true,
       },
     });
+    };
+
+    const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
+    try {
+      const writable = await fileHandle.createWritable();
+      const streamTarget = new StreamTarget(
+        writable as unknown as WritableStream<{ type: 'write'; data: Uint8Array; position: number }>
+      );
+      streamedToFile = true;
+      conversion = await buildConversion(streamTarget);
+    } catch {
+      // Fallback path for environments where stream-backed target isn't available.
+      streamedToFile = false;
+      bufferTarget = new BufferTarget();
+      conversion = await buildConversion(bufferTarget);
+    }
 
     // Store cancel handle
     activeConversions.set(mediaId, {
@@ -195,23 +216,29 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     await conversion.execute();
 
     // Check if cancelled during execution
-    if (!activeConversions.has(mediaId)) return;
-
-    // Get the output buffer
-    const buffer = target.buffer;
-    if (!buffer) {
-      throw new Error('Conversion produced no output buffer');
+    if (!activeConversions.has(mediaId)) {
+      if (streamedToFile) {
+        await dir.removeEntry('proxy.mp4').catch(() => undefined);
+      }
+      return;
     }
 
-    // Write proxy video to OPFS
-    const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
-    const writable = await fileHandle.createWritable();
-    try {
-      await writable.write(buffer);
-      await writable.close();
-    } catch (error) {
-      await writable.abort().catch(() => undefined);
-      throw error;
+    if (!streamedToFile) {
+      // Buffer fallback mode: flush conversion result to OPFS.
+      const buffer = bufferTarget?.buffer;
+      if (!buffer) {
+        throw new Error('Conversion produced no output buffer');
+      }
+
+      const fileHandle = await dir.getFileHandle('proxy.mp4', { create: true });
+      const writable = await fileHandle.createWritable();
+      try {
+        await writable.write(buffer);
+        await writable.close();
+      } catch (error) {
+        await writable.abort().catch(() => undefined);
+        throw error;
+      }
     }
 
     // Update metadata

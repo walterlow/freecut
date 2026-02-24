@@ -87,6 +87,8 @@ export const TimelineHeader = memo(function TimelineHeader({
   const lastZoomValueRef = useRef(zoomLevel);
   const lastZoomTimeRef = useRef(0);
   const momentumIdRef = useRef<number | null>(null);
+  const sliderRafIdRef = useRef<number | null>(null);
+  const queuedSliderZoomRef = useRef<number | null>(null);
   const isDraggingRef = useRef(false);
   const zoomLevelRef = useRef(zoomLevel);
   zoomLevelRef.current = zoomLevel;
@@ -160,13 +162,29 @@ export const TimelineHeader = memo(function TimelineHeader({
     lastZoomValueRef.current = newZoom;
     lastZoomTimeRef.current = now;
     isDraggingRef.current = true;
-
-    applyZoom(newZoom);
+    queuedSliderZoomRef.current = newZoom;
+    if (sliderRafIdRef.current === null) {
+      sliderRafIdRef.current = requestAnimationFrame(() => {
+        sliderRafIdRef.current = null;
+        const queuedZoom = queuedSliderZoomRef.current;
+        if (queuedZoom !== null) {
+          applyZoom(queuedZoom);
+        }
+      });
+    }
   }, [applyZoom, sliderToZoom]);
 
   // Handle slider release - start momentum
   const handleSliderCommit = useCallback(() => {
     isDraggingRef.current = false;
+    if (sliderRafIdRef.current !== null) {
+      cancelAnimationFrame(sliderRafIdRef.current);
+      sliderRafIdRef.current = null;
+    }
+    if (queuedSliderZoomRef.current !== null) {
+      applyZoom(queuedSliderZoomRef.current);
+      queuedSliderZoomRef.current = null;
+    }
     // Only start momentum if there's meaningful velocity
     if (Math.abs(zoomVelocityRef.current) > ZOOM_MIN_VELOCITY) {
       startZoomMomentum();
@@ -175,13 +193,16 @@ export const TimelineHeader = memo(function TimelineHeader({
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-  }, [startZoomMomentum]);
+  }, [applyZoom, startZoomMomentum]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (momentumIdRef.current !== null) {
         cancelAnimationFrame(momentumIdRef.current);
+      }
+      if (sliderRafIdRef.current !== null) {
+        cancelAnimationFrame(sliderRafIdRef.current);
       }
     };
   }, []);

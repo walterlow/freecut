@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { App } from './app';
-import { filmstripCache } from '@/features/timeline/services/filmstrip-cache';
 import { initializeDebugUtils } from '@/lib/debug';
 import { createLogger } from '@/lib/logger';
 import './index.css';
@@ -55,10 +54,9 @@ window.addEventListener('vite:preloadError', () => {
   }
 });
 
-// Cleanup filmstrip workers on page unload
-window.addEventListener('beforeunload', () => {
-  void filmstripCache.dispose();
-});
+// IMPORTANT: Intentionally do not dispose filmstrip cache on beforeunload.
+// Filmstrip OPFS data is persistent and should survive refresh/reload.
+// The browser tears down workers/resources on navigation anyway.
 
 const rootElement = document.getElementById('root');
 

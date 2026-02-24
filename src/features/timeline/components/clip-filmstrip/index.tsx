@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo, useDeferredValue, useCallback, useRef } from 'react';
+import { memo, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
@@ -6,10 +6,10 @@ import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 
 const ZOOM_SETTLE_MS = 80;
-const MAX_DEFER_LAG_RATIO = 0.12;
-const MAX_DEFER_LAG_PX = 180;
 const PRIORITY_PAD_SECONDS = 0.75;
 const MAX_PRIORITY_WINDOW_SECONDS = 60;
+const MAX_TILES_DURING_ZOOM = 64;
+const MAX_TILES_IDLE = 220;
 
 interface ClipFilmstripProps {
   /** Media ID from the timeline item */
@@ -65,6 +65,11 @@ function findClosestFrame(frames: FilmstripFrame[], targetTime: number): Filmstr
   return bestFrame;
 }
 
+function getTileStep(tileCount: number, maxTiles: number): number {
+  if (tileCount <= maxTiles) return 1;
+  return Math.ceil(tileCount / maxTiles);
+}
+
 /**
  * Simple filmstrip tile - memoized to prevent unnecessary re-renders
  * Hides itself on error to avoid broken image icons
@@ -74,11 +79,13 @@ const FilmstripTile = memo(function FilmstripTile({
   x,
   height,
   width,
+  sourceWidth,
 }: {
   src: string;
   x: number;
   height: number;
   width: number;
+  sourceWidth: number;
 }) {
   const [errorSrc, setErrorSrc] = useState<string | null>(null);
 
@@ -91,10 +98,30 @@ const FilmstripTile = memo(function FilmstripTile({
     return null;
   }
 
+  const shouldRepeat = width > sourceWidth + 1;
+  if (shouldRepeat) {
+    return (
+      <div
+        aria-hidden
+        className="absolute top-0"
+        style={{
+          left: x,
+          width,
+          height,
+          backgroundImage: `url(${src})`,
+          backgroundRepeat: 'repeat-x',
+          backgroundSize: `${sourceWidth}px ${height}px`,
+          backgroundPosition: 'left top',
+        }}
+      />
+    );
+  }
+
   return (
     <img
       src={src}
       alt=""
+      loading="lazy"
       decoding="async"
       className="absolute top-0"
       onError={handleError}
@@ -112,8 +139,8 @@ const FilmstripTile = memo(function FilmstripTile({
  * Clip Filmstrip Component
  *
  * Renders video frame thumbnails as a tiled filmstrip.
- * Uses adaptive defer during active zoom to keep interactions responsive
- * without prolonged catch-up lag once zoom settles.
+ * Uses adaptive tile density during active zoom to keep interactions responsive
+ * without deferring the zoom state itself.
  * Auto-fills container height.
  */
 export const ClipFilmstrip = memo(function ClipFilmstrip({
@@ -158,15 +185,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   // Calculate thumbnail width based on height (16:9 aspect ratio)
   const thumbnailWidth = Math.round(height * (16 / 9)) || THUMBNAIL_WIDTH;
 
-  // Defer zoom values to keep zoom slider responsive
-  const deferredPixelsPerSecond = useDeferredValue(pixelsPerSecond);
-  const deferredClipWidth = useDeferredValue(clipWidth);
-  const ppsLagRatio = Math.abs(deferredPixelsPerSecond - pixelsPerSecond) / Math.max(1, pixelsPerSecond);
-  const widthLagPx = Math.abs(deferredClipWidth - clipWidth);
-  const lagTooHigh = ppsLagRatio > MAX_DEFER_LAG_RATIO || widthLagPx > MAX_DEFER_LAG_PX;
-  const useDeferredForZoom = !preferImmediateRendering && isZooming && !lagTooHigh;
-  const renderPixelsPerSecond = useDeferredForZoom ? deferredPixelsPerSecond : pixelsPerSecond;
-  const renderClipWidth = useDeferredForZoom ? deferredClipWidth : clipWidth;
+  const renderPixelsPerSecond = pixelsPerSecond;
+  const renderClipWidth = clipWidth;
   const effectiveStart = Math.max(0, sourceStart + trimStart);
 
   // Track active zoom interaction from pps changes and drop defer shortly
@@ -263,26 +283,55 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     priorityWindow,
   });
 
+  const frameByIndex = useMemo(() => {
+    if (!frames || frames.length === 0) return null;
+    const map = new Map<number, FilmstripFrame>();
+    for (const frame of frames) {
+      map.set(frame.index, frame);
+    }
+    return map;
+  }, [frames]);
+
   // Calculate tiles - maps each tile position to the best frame
-  // Browser's native loading="lazy" handles performance optimization
+  // During active zoom, reduce tile density so we keep UI fluid without
+  // deferring zoom updates.
   const tiles = useMemo(() => {
     if (!frames || frames.length === 0 || thumbnailWidth === 0 || renderPixelsPerSecond <= 0) return [];
 
     const tileCount = Math.ceil(renderClipWidth / thumbnailWidth);
-    const result: { tileIndex: number; frame: FilmstripFrame; x: number }[] = [];
+    if (tileCount <= 0) return [];
 
-    for (let tile = 0; tile < tileCount; tile++) {
+    const maxTiles = !preferImmediateRendering && isZooming
+      ? MAX_TILES_DURING_ZOOM
+      : MAX_TILES_IDLE;
+    const tileStep = getTileStep(tileCount, maxTiles);
+    const result: { tileIndex: number; frame: FilmstripFrame; x: number; width: number }[] = [];
+
+    for (let tile = 0; tile < tileCount; tile += tileStep) {
       const tileX = tile * thumbnailWidth;
-      const tileTime = effectiveStart + (tileX / renderPixelsPerSecond) * speed;
-      const frame = findClosestFrame(frames, tileTime);
+      const tileWidth = Math.min(renderClipWidth - tileX, thumbnailWidth * tileStep);
+      const tileCenterX = tileX + tileWidth * 0.5;
+      const tileTime = effectiveStart + (tileCenterX / renderPixelsPerSecond) * speed;
+      const nearestFrameIndex = Math.max(0, Math.round(tileTime));
+      const frame = frameByIndex?.get(nearestFrameIndex) ?? findClosestFrame(frames, tileTime);
 
       if (frame) {
-        result.push({ tileIndex: tile, frame, x: tileX });
+        result.push({ tileIndex: tile, frame, x: tileX, width: tileWidth });
       }
     }
 
     return result;
-  }, [frames, renderClipWidth, renderPixelsPerSecond, effectiveStart, speed, thumbnailWidth]);
+  }, [
+    frames,
+    frameByIndex,
+    renderClipWidth,
+    renderPixelsPerSecond,
+    effectiveStart,
+    speed,
+    thumbnailWidth,
+    isZooming,
+    preferImmediateRendering,
+  ]);
 
   if (error) {
     return null;
@@ -315,8 +364,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           containIntrinsicSize: `${renderClipWidth}px ${height}px`,
         }}
       >
-        {tiles.map(({ tileIndex, frame, x }) => (
-          <FilmstripTile key={tileIndex} src={frame.url} x={x} height={height} width={thumbnailWidth} />
+        {tiles.map(({ tileIndex, frame, x, width }) => (
+          <FilmstripTile
+            key={tileIndex}
+            src={frame.url}
+            x={x}
+            height={height}
+            width={width}
+            sourceWidth={thumbnailWidth}
+          />
         ))}
       </div>
     </div>
