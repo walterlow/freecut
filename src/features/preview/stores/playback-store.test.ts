@@ -13,6 +13,7 @@ describe('playback-store', () => {
       zoom: -1,
       previewFrame: null,
       captureFrame: null,
+      previewQuality: 1,
     });
   });
 
@@ -139,6 +140,20 @@ describe('playback-store', () => {
     it('supports auto-fit value (-1)', () => {
       usePlaybackStore.getState().setZoom(-1);
       expect(usePlaybackStore.getState().zoom).toBe(-1);
+    });
+  });
+
+  describe('preview quality', () => {
+    it('defaults to full quality', () => {
+      expect(usePlaybackStore.getState().previewQuality).toBe(1);
+    });
+
+    it('sets preview quality', () => {
+      usePlaybackStore.getState().setPreviewQuality(0.5);
+      expect(usePlaybackStore.getState().previewQuality).toBe(0.5);
+
+      usePlaybackStore.getState().setPreviewQuality(0.25);
+      expect(usePlaybackStore.getState().previewQuality).toBe(0.25);
     });
   });
 
