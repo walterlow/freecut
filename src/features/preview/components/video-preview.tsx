@@ -424,6 +424,7 @@ export const VideoPreview = memo(function VideoPreview({
   const hasSlide4Up = useSlideEditPreviewStore((s) => Boolean(s.itemId));
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
+  const previewQuality = usePlaybackStore((s) => s.previewQuality);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
   // on every proxyStatus Map recreation (e.g. during progress updates)
   const proxyReadyCount = useMediaLibraryStore((s) => {
@@ -1752,6 +1753,15 @@ export const VideoPreview = memo(function VideoPreview({
     return { width: targetWidth, height: targetHeight };
   }, [project.width, project.height, zoom, containerSize]);
 
+  // Compute scaled render resolution for the Player based on preview quality.
+  // Lower quality means smaller internal DOM resolution — the browser upscales via CSS.
+  const renderSize = useMemo(() => {
+    // Ensure even dimensions (required by some video decoders)
+    const w = Math.round(project.width * previewQuality / 2) * 2;
+    const h = Math.round(project.height * previewQuality / 2) * 2;
+    return { width: Math.max(2, w), height: Math.max(2, h) };
+  }, [project.width, project.height, previewQuality]);
+
   // Check if overflow is needed (video larger than container)
   const needsOverflow = useMemo(() => {
     if (zoom === -1) return false;
@@ -1861,8 +1871,8 @@ export const VideoPreview = memo(function VideoPreview({
               ref={playerRef}
               durationInFrames={totalFrames}
               fps={fps}
-              width={project.width}
-              height={project.height}
+              width={renderSize.width}
+              height={renderSize.height}
               autoPlay={false}
               loop={false}
               controls={false}
