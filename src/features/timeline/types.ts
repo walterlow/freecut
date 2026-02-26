@@ -3,6 +3,7 @@ import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect } from '@/types/effects';
 import type { Transition, TransitionType, TransitionPresentation, WipeDirection, SlideDirection, FlipDirection, TransitionBreakage } from '@/types/transition';
 import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType, EasingConfig } from '@/types/keyframe';
+import type { AutoKeyframeOperation } from '@/features/keyframes/utils/auto-keyframe';
 
 export interface TimelineState {
   tracks: TimelineTrack[];
@@ -77,6 +78,7 @@ export interface TimelineActions {
   addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => string;
   addKeyframes: (payloads: Array<{ itemId: string; property: AnimatableProperty; frame: number; value: number; easing?: EasingType; easingConfig?: EasingConfig }>) => string[];
   updateKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string, updates: Partial<Omit<Keyframe, 'id'>>) => void;
+  applyAutoKeyframeOperations: (operations: AutoKeyframeOperation[]) => void;
   removeKeyframe: (itemId: string, property: AnimatableProperty, keyframeId: string) => void;
   removeKeyframesForItem: (itemId: string) => void;
   removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void;

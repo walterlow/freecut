@@ -543,6 +543,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       addKeyframe: timelineActions.addKeyframe,
       addKeyframes: timelineActions.addKeyframes,
       updateKeyframe: timelineActions.updateKeyframe,
+      applyAutoKeyframeOperations: timelineActions.applyAutoKeyframeOperations,
       removeKeyframe: timelineActions.removeKeyframe,
       removeKeyframesForItem: timelineActions.removeKeyframesForItem,
       removeKeyframesForProperty: timelineActions.removeKeyframesForProperty,

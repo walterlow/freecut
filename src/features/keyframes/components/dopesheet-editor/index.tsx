@@ -1038,7 +1038,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           </div>
           <div
             ref={timelineRef}
-            className="relative border-l border-border cursor-ew-resize"
+            className="relative border-l border-border cursor-ew-resize overflow-hidden"
             style={{ height: RULER_HEIGHT }}
             onPointerDown={handleRulerPointerDown}
             onPointerMove={handleRulerPointerMove}
@@ -1076,7 +1076,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     {PROPERTY_LABELS[row.property]}
                   </div>
                   <div
-                    className="relative border-l border-border/60"
+                    className="relative border-l border-border/60 overflow-hidden"
                     onPointerDown={handleRowPointerDown}
                   >
                     {ticks.map((frame) => (

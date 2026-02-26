@@ -5,7 +5,10 @@ import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
 import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
-import { autoKeyframeProperty } from '@/features/keyframes/utils/auto-keyframe';
+import {
+  getAutoKeyframeOperation,
+  type AutoKeyframeOperation,
+} from '@/features/keyframes/utils/auto-keyframe';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
 import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
 import {
@@ -38,9 +41,8 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Get keyframes for all selected items
   const allKeyframes = useTimelineStore((s) => s.keyframes);
 
-  // Get keyframe actions for auto-keyframing
-  const addKeyframe = useTimelineStore((s) => s.addKeyframe);
-  const updateKeyframe = useTimelineStore((s) => s.updateKeyframe);
+  // Get batched keyframe action for auto-keyframing
+  const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
   const audioItems = useMemo(
     () =>
@@ -81,14 +83,14 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   // Helper: auto-keyframe volume on value change
   const autoKeyframeVolume = useCallback(
-    (itemId: string, value: number): boolean => {
+    (itemId: string, value: number): AutoKeyframeOperation | null => {
       const item = audioItems.find((i) => i.id === itemId);
-      if (!item) return false;
+      if (!item) return null;
 
       const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
-      return autoKeyframeProperty(item, itemKeyframes, 'volume', value, currentFrame, addKeyframe, updateKeyframe);
+      return getAutoKeyframeOperation(item, itemKeyframes, 'volume', value, currentFrame);
     },
-    [audioItems, allKeyframes, currentFrame, addKeyframe, updateKeyframe]
+    [audioItems, allKeyframes, currentFrame]
   );
 
   // Live preview for volume (during drag)
@@ -107,10 +109,17 @@ export function AudioSection({ items }: AudioSectionProps) {
   const handleVolumeChange = useCallback(
     (value: number) => {
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        if (!autoKeyframeVolume(itemId, value)) {
+        const operation = autoKeyframeVolume(itemId, value);
+        if (operation) {
+          autoOps.push(operation);
+        } else {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       if (!allHandled) {
         itemIds.forEach((id) => updateItem(id, { volume: value }));
@@ -118,7 +127,7 @@ export function AudioSection({ items }: AudioSectionProps) {
       // Defer preview clear to next microtask so store update propagates first
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, updateItem, clearPreview, autoKeyframeVolume]
+    [itemIds, updateItem, clearPreview, autoKeyframeVolume, applyAutoKeyframeOperations]
   );
 
   // Live preview for audio fade in (during drag)

@@ -13,7 +13,10 @@ import {
   getSourceDimensions,
 } from '@/lib/composition-runtime/utils/transform-resolver';
 import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
-import { autoKeyframeProperty as autoKeyframeProp } from '@/features/keyframes/utils/auto-keyframe';
+import {
+  getAutoKeyframeOperation as getAutoKeyframeOp,
+  type AutoKeyframeOperation,
+} from '@/features/keyframes/utils/auto-keyframe';
 import {
   PropertySection,
   PropertyRow,
@@ -128,21 +131,23 @@ export const LayoutSection = memo(function LayoutSection({
     return height > 0 ? width / height : 1;
   }, [width, height]);
 
-  // Get keyframe actions for auto-keyframing
-  const addKeyframe = useTimelineStore((s) => s.addKeyframe);
-  const updateKeyframe = useTimelineStore((s) => s.updateKeyframe);
+  // Get batched keyframe action for auto-keyframing
+  const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
-  // Helper: Check if a property has keyframes and auto-keyframe on value change
-  // Returns true if keyframes were handled, false if base transform should be updated
-  const autoKeyframeProperty = useCallback(
-    (itemId: string, property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity', value: number): boolean => {
+  // Helper: Build auto-keyframe operations for properties that are already animated.
+  const getAutoKeyframeOperation = useCallback(
+    (
+      itemId: string,
+      property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity',
+      value: number
+    ): AutoKeyframeOperation | null => {
       const item = items.find((i) => i.id === itemId);
-      if (!item) return false;
+      if (!item) return null;
 
       const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
-      return autoKeyframeProp(item, itemKeyframes, property, value, currentFrame, addKeyframe, updateKeyframe);
+      return getAutoKeyframeOp(item, itemKeyframes, property, value, currentFrame);
     },
-    [items, allKeyframes, currentFrame, addKeyframe, updateKeyframe]
+    [items, allKeyframes, currentFrame]
   );
 
   // Live preview for X position (during scrub)
@@ -162,10 +167,17 @@ export const LayoutSection = memo(function LayoutSection({
     (value: number) => {
       // Try auto-keyframe first for items with keyframes
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        if (!autoKeyframeProperty(itemId, 'x', value)) {
+        const operation = getAutoKeyframeOperation(itemId, 'x', value);
+        if (operation) {
+          autoOps.push(operation);
+        } else {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       // Fall back to base transform for items without keyframes
       if (!allHandled) {
@@ -173,7 +185,7 @@ export const LayoutSection = memo(function LayoutSection({
       }
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, onTransformChange, clearPreview, autoKeyframeProperty]
+    [itemIds, onTransformChange, clearPreview, getAutoKeyframeOperation, applyAutoKeyframeOperations]
   );
 
   // Live preview for Y position (during scrub)
@@ -192,17 +204,24 @@ export const LayoutSection = memo(function LayoutSection({
   const handleYChange = useCallback(
     (value: number) => {
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        if (!autoKeyframeProperty(itemId, 'y', value)) {
+        const operation = getAutoKeyframeOperation(itemId, 'y', value);
+        if (operation) {
+          autoOps.push(operation);
+        } else {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       if (!allHandled) {
         onTransformChange(itemIds, { y: value });
       }
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, onTransformChange, clearPreview, autoKeyframeProperty]
+    [itemIds, onTransformChange, clearPreview, getAutoKeyframeOperation, applyAutoKeyframeOperations]
   );
 
   // Live preview for width (during scrub)
@@ -228,12 +247,20 @@ export const LayoutSection = memo(function LayoutSection({
       const newHeight = aspectLocked && height !== 'mixed' ? Math.round(value / currentAspectRatio) : null;
 
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        const widthHandled = autoKeyframeProperty(itemId, 'width', value);
-        const heightHandled = newHeight !== null ? autoKeyframeProperty(itemId, 'height', newHeight) : true;
+        const widthOperation = getAutoKeyframeOperation(itemId, 'width', value);
+        const heightOperation = newHeight !== null ? getAutoKeyframeOperation(itemId, 'height', newHeight) : null;
+        const widthHandled = Boolean(widthOperation);
+        const heightHandled = newHeight !== null ? Boolean(heightOperation) : true;
+        if (widthOperation) autoOps.push(widthOperation);
+        if (heightOperation) autoOps.push(heightOperation);
         if (!widthHandled || !heightHandled) {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       if (!allHandled) {
         if (newHeight !== null) {
@@ -244,7 +271,16 @@ export const LayoutSection = memo(function LayoutSection({
       }
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, onTransformChange, clearPreview, aspectLocked, height, currentAspectRatio, autoKeyframeProperty]
+    [
+      itemIds,
+      onTransformChange,
+      clearPreview,
+      aspectLocked,
+      height,
+      currentAspectRatio,
+      getAutoKeyframeOperation,
+      applyAutoKeyframeOperations,
+    ]
   );
 
   // Live preview for height (during scrub)
@@ -270,12 +306,20 @@ export const LayoutSection = memo(function LayoutSection({
       const newWidth = aspectLocked && width !== 'mixed' ? Math.round(value * currentAspectRatio) : null;
 
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        const heightHandled = autoKeyframeProperty(itemId, 'height', value);
-        const widthHandled = newWidth !== null ? autoKeyframeProperty(itemId, 'width', newWidth) : true;
+        const heightOperation = getAutoKeyframeOperation(itemId, 'height', value);
+        const widthOperation = newWidth !== null ? getAutoKeyframeOperation(itemId, 'width', newWidth) : null;
+        const heightHandled = Boolean(heightOperation);
+        const widthHandled = newWidth !== null ? Boolean(widthOperation) : true;
+        if (heightOperation) autoOps.push(heightOperation);
+        if (widthOperation) autoOps.push(widthOperation);
         if (!heightHandled || !widthHandled) {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       if (!allHandled) {
         if (newWidth !== null) {
@@ -286,7 +330,16 @@ export const LayoutSection = memo(function LayoutSection({
       }
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, onTransformChange, clearPreview, aspectLocked, width, currentAspectRatio, autoKeyframeProperty]
+    [
+      itemIds,
+      onTransformChange,
+      clearPreview,
+      aspectLocked,
+      width,
+      currentAspectRatio,
+      getAutoKeyframeOperation,
+      applyAutoKeyframeOperations,
+    ]
   );
 
   // Live preview for rotation (during drag)
@@ -305,17 +358,24 @@ export const LayoutSection = memo(function LayoutSection({
   const handleRotationChange = useCallback(
     (value: number) => {
       let allHandled = true;
+      const autoOps: AutoKeyframeOperation[] = [];
       for (const itemId of itemIds) {
-        if (!autoKeyframeProperty(itemId, 'rotation', value)) {
+        const operation = getAutoKeyframeOperation(itemId, 'rotation', value);
+        if (operation) {
+          autoOps.push(operation);
+        } else {
           allHandled = false;
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
       if (!allHandled) {
         onTransformChange(itemIds, { rotation: value });
       }
       queueMicrotask(() => clearPreview());
     },
-    [itemIds, onTransformChange, clearPreview, autoKeyframeProperty]
+    [itemIds, onTransformChange, clearPreview, getAutoKeyframeOperation, applyAutoKeyframeOperations]
   );
 
   // Get media items for fallback source dimensions lookup

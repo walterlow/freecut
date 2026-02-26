@@ -13,7 +13,11 @@ import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-tra
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { useAnimatedTransforms } from '@/features/keyframes/hooks/use-animated-transform';
-import { autoKeyframeProperty, GIZMO_ANIMATABLE_PROPS } from '@/features/keyframes/utils/auto-keyframe';
+import {
+  getAutoKeyframeOperation,
+  GIZMO_ANIMATABLE_PROPS,
+  type AutoKeyframeOperation,
+} from '@/features/keyframes/utils/auto-keyframe';
 import type { TransformAnimatableProperty } from '@/types/keyframe';
 import type { CoordinateParams, Transform, Point } from '../types/gizmo';
 import type { TransformProperties } from '@/types/transform';
@@ -71,8 +75,7 @@ export function GizmoOverlay({
   const keyframes = useTimelineStore((s) => s.keyframes);
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
-  const addKeyframe = useTimelineStore((s) => s.addKeyframe);
-  const updateKeyframe = useTimelineStore((s) => s.updateKeyframe);
+  const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
   // Ref to track if we just finished a drag (to prevent background click from deselecting)
   const justFinishedDragRef = useRef(false);
@@ -285,21 +288,24 @@ export function GizmoOverlay({
 
       // Track which properties were auto-keyframed
       const autoKeyframedProps = new Set<TransformAnimatableProperty>();
+      const autoOps: AutoKeyframeOperation[] = [];
 
       // Auto-keyframe properties that have existing keyframes
       for (const prop of GIZMO_ANIMATABLE_PROPS) {
-        const wasAutoKeyframed = autoKeyframeProperty(
+        const operation = getAutoKeyframeOperation(
           item,
           itemKeyframes,
           prop,
           propValues[prop],
-          currentFrame,
-          addKeyframe,
-          updateKeyframe
+          currentFrame
         );
-        if (wasAutoKeyframed) {
+        if (operation) {
+          autoOps.push(operation);
           autoKeyframedProps.add(prop);
         }
+      }
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
       }
 
       // Update base transform only for non-keyframed properties
@@ -323,7 +329,7 @@ export function GizmoOverlay({
         justFinishedDragRef.current = false;
       }, 100);
     },
-    [visualItems, keyframes, updateItemTransform, addKeyframe, updateKeyframe]
+    [visualItems, keyframes, updateItemTransform, applyAutoKeyframeOperations]
   );
 
   // Handle group transform end - commit transforms for all items as a single undo operation

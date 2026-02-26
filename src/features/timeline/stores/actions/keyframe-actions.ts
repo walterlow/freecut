@@ -4,6 +4,7 @@
 
 import type { AnimatableProperty, EasingType, KeyframeRef } from '@/types/keyframe';
 import type { KeyframeAddPayload } from '../keyframes-store';
+import type { AutoKeyframeOperation } from '@/features/keyframes/utils/auto-keyframe';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { execute, logger, canAddKeyframeAtFrame } from './shared';
@@ -68,6 +69,53 @@ export function updateKeyframe(
     useKeyframesStore.getState()._updateKeyframe(itemId, property, keyframeId, updates);
     useTimelineSettingsStore.getState().markDirty();
   }, { itemId, property, keyframeId });
+}
+
+/**
+ * Apply mixed auto-keyframe operations (adds + updates) in a single undo block.
+ */
+export function applyAutoKeyframeOperations(operations: AutoKeyframeOperation[]): void {
+  if (operations.length === 0) return;
+
+  execute('APPLY_AUTO_KEYFRAME_OPERATIONS', () => {
+    const keyframesStore = useKeyframesStore.getState();
+    let changed = false;
+
+    for (const operation of operations) {
+      if (operation.type === 'update') {
+        keyframesStore._updateKeyframe(
+          operation.itemId,
+          operation.property,
+          operation.keyframeId,
+          operation.updates
+        );
+        changed = true;
+        continue;
+      }
+
+      if (!canAddKeyframeAtFrame(operation.itemId, operation.frame)) {
+        logger.warn('Cannot add auto keyframe in transition region', {
+          itemId: operation.itemId,
+          property: operation.property,
+          frame: operation.frame,
+        });
+        continue;
+      }
+
+      keyframesStore._addKeyframe(
+        operation.itemId,
+        operation.property,
+        operation.frame,
+        operation.value,
+        operation.easing
+      );
+      changed = true;
+    }
+
+    if (changed) {
+      useTimelineSettingsStore.getState().markDirty();
+    }
+  }, { count: operations.length });
 }
 
 export function removeKeyframe(
