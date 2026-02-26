@@ -1,4 +1,4 @@
-import { useState, useRef, memo, useCallback } from 'react';
+import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import { createLogger } from '@/lib/logger';
 
 const logger = createLogger('TimelineTrack');
@@ -219,9 +219,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
   // Get item IDs from the full store (not virtualized subset) so drag detection
   // works even if the source item scrolls out of the visible buffer mid-drag.
-  const trackItemIds = useItemsStore(
-    useCallback((s) => s.itemsByTrackId[track.id]?.map(item => item.id) ?? [], [track.id])
-  );
+  const allTrackItems = useItemsStore((s) => s.itemsByTrackId[track.id]);
+  const trackItemIds = useMemo(() => allTrackItems?.map(item => item.id) ?? [], [allTrackItems]);
 
   // Check if any item on this track is being dragged (granular selector)
   const hasItemBeingDragged = useSelectionStore(
