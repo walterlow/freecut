@@ -7,6 +7,8 @@ export interface CaptureOptions {
   fullResolution?: boolean;
 }
 
+export type PreviewQuality = 1 | 0.5 | 0.25;
+
 export interface PlaybackState {
   currentFrame: number;
   isPlaying: boolean;
@@ -23,6 +25,8 @@ export interface PlaybackState {
   captureFrame: ((options?: CaptureOptions) => Promise<string | null>) | null;
   /** Whether to use proxy videos for preview playback (true = use 720p proxies when available) */
   useProxy: boolean;
+  /** Preview render resolution multiplier (1 = full, 0.5 = half, 0.25 = quarter) */
+  previewQuality: PreviewQuality;
 }
 
 export interface PlaybackActions {
@@ -40,4 +44,6 @@ export interface PlaybackActions {
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
   /** Toggle proxy playback mode */
   toggleUseProxy: () => void;
+  /** Set preview render quality */
+  setPreviewQuality: (quality: PreviewQuality) => void;
 }

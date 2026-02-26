@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PlaybackState, PlaybackActions } from '../types';
+import type { PlaybackState, PlaybackActions, PreviewQuality } from '../types';
 
 function normalizeFrame(frame: number): number {
   if (!Number.isFinite(frame)) return 0;
@@ -22,6 +22,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       previewItemId: null,
       captureFrame: null, // Set by VideoPreview when Player is mounted
       useProxy: true,
+      previewQuality: 1 as PreviewQuality,
 
       // Actions
       setCurrentFrame: (frame) =>
@@ -47,6 +48,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
       toggleUseProxy: () => set((state) => ({ useProxy: !state.useProxy })),
+      setPreviewQuality: (quality) => set({ previewQuality: quality }),
     }),
     {
       name: 'playback-storage',
@@ -57,6 +59,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         playbackRate: state.playbackRate,
         loop: state.loop,
         useProxy: state.useProxy,
+        previewQuality: state.previewQuality,
       }),
     }
   )
