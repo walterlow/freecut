@@ -7,11 +7,11 @@ describe('pipelined frame loop', () => {
     const closedFrames: number[] = [];
 
     const frameRenderer = {
-      renderFrame: vi.fn(async (_frame: number) => {}),
+      renderFrame: vi.fn(async () => {}),
     };
 
     const videoSource = {
-      add: vi.fn(async (sample: { frame: number }, _opts?: { keyFrame?: boolean }) => {
+      add: vi.fn(async (sample: { frame: number }) => {
         encodedFrames.push(sample.frame);
       }),
     };
