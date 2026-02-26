@@ -41,6 +41,7 @@ import { getGlitchFilterString, getScanlinesStyle } from '@/features/effects/uti
 import type { GlitchEffect, ItemEffect } from '@/types/effects';
 import { calculateEasingCurve, calculateTransitionStyles } from '@/lib/transitions/engine';
 import { resolveTransitionWindows, type ResolvedTransitionWindow } from '@/lib/transitions/transition-planner';
+import { useCompositionSpace } from '../contexts/composition-space-context';
 
 // ============================================================================
 // Types
@@ -256,6 +257,11 @@ interface ClipContentProps {
   transitionPlaybackRate?: number;
   canvasWidth: number;
   canvasHeight: number;
+  projectWidth: number;
+  projectHeight: number;
+  renderScaleX: number;
+  renderScaleY: number;
+  renderScale: number;
   fps: number;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
   clipGlobalFrom: number;
@@ -268,6 +274,11 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
   transitionPlaybackRate,
   canvasWidth,
   canvasHeight,
+  projectWidth,
+  projectHeight,
+  renderScaleX,
+  renderScaleY,
+  renderScale,
   fps,
   adjustmentLayers,
   clipGlobalFrom,
@@ -344,10 +355,19 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
   // acquired at frame 0, causing a flash while it loads/decodes.
   const isPremounted = frame < 0;
 
-  const canvas = { width: canvasWidth, height: canvasHeight, fps };
+  const logicalCanvas = { width: projectWidth, height: projectHeight, fps };
+  const renderCanvas = { width: canvasWidth, height: canvasHeight, fps };
   const sourceDimensions = getSourceDimensions(clip);
-  const resolved = resolveTransform(clip, canvas, sourceDimensions);
-  const transformStyle = toTransformStyle(resolved, canvas);
+  const resolved = resolveTransform(clip, logicalCanvas, sourceDimensions);
+  const scaledResolved = {
+    ...resolved,
+    x: resolved.x * renderScaleX,
+    y: resolved.y * renderScaleY,
+    width: resolved.width * renderScaleX,
+    height: resolved.height * renderScaleY,
+    cornerRadius: resolved.cornerRadius * renderScale,
+  };
+  const transformStyle = toTransformStyle(scaledResolved, renderCanvas);
 
   const combinedFilter = [cssFilterString, glitchFilterString].filter(Boolean).join(' ');
   const scanlinesEffect = glitchEffects.find((e) => e.variant === 'scanlines');
@@ -617,6 +637,12 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     adjustmentLayers,
   }) {
     const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
+    const compositionSpace = useCompositionSpace();
+    const projectWidth = compositionSpace?.projectWidth ?? canvasWidth;
+    const projectHeight = compositionSpace?.projectHeight ?? canvasHeight;
+    const renderScaleX = compositionSpace?.scaleX ?? 1;
+    const renderScaleY = compositionSpace?.scaleY ?? 1;
+    const renderScale = compositionSpace?.scale ?? 1;
 
     const premountFrames = Math.round(fps * 2);
     const effectsZIndex = Math.max(leftClip.zIndex, rightClip.zIndex) + 200;
@@ -673,6 +699,11 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
               transitionPlaybackRate={incomingTransitionRate}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
+              projectWidth={projectWidth}
+              projectHeight={projectHeight}
+              renderScaleX={renderScaleX}
+              renderScaleY={renderScaleY}
+              renderScale={renderScale}
               fps={fps}
               adjustmentLayers={adjustmentLayers}
               clipGlobalFrom={rightClipGlobalFrom}
@@ -696,6 +727,11 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
               sourceStartOffset={window.startFrame - leftClip.from}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}
+              projectWidth={projectWidth}
+              projectHeight={projectHeight}
+              renderScaleX={renderScaleX}
+              renderScaleY={renderScaleY}
+              renderScale={renderScale}
               fps={fps}
               adjustmentLayers={adjustmentLayers}
               clipGlobalFrom={leftClipGlobalFrom}

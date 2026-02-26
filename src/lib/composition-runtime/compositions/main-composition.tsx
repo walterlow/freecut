@@ -18,6 +18,7 @@ import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 import { KeyframesProvider } from '../contexts/keyframes-context';
+import { CompositionSpaceProvider } from '../contexts/composition-space-context';
 
 /**
  * A visual item (video/image) with track rendering metadata
@@ -459,8 +460,19 @@ const StableMaskedGroup: React.FC<{
  * 3. Only items BELOW adjustment layer (higher track order) receive effects
  * 4. Adding/removing adjustment layers doesn't change DOM structure
  */
-export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, transitions = [], backgroundColor = '#000000', keyframes }) => {
-  const { fps, width: canvasWidth, height: canvasHeight } = useVideoConfig();
+export const MainComposition: React.FC<CompositionInputProps> = ({
+  tracks,
+  transitions = [],
+  backgroundColor = '#000000',
+  keyframes,
+  width: compositionWidth,
+  height: compositionHeight,
+}) => {
+  const { fps, width: renderWidth, height: renderHeight } = useVideoConfig();
+  const projectWidth = compositionWidth ?? renderWidth;
+  const projectHeight = compositionHeight ?? renderHeight;
+  const canvasWidth = renderWidth;
+  const canvasHeight = renderHeight;
   // NOTE: useCurrentFrame() removed from here to prevent per-frame re-renders.
   // Frame-dependent logic is now isolated in FrameAwareMaskDefinitions and ClearingLayer.
 
@@ -1001,162 +1013,169 @@ export const MainComposition: React.FC<CompositionInputProps> = ({ tracks, trans
 
   return (
     <KeyframesProvider keyframes={keyframes}>
-      <AbsoluteFill>
-        {/* SVG MASK DEFINITIONS - opacity controls activation, no DOM changes */}
-        {/* Uses FrameAwareMaskDefinitions to isolate per-frame re-renders */}
-        <FrameAwareMaskDefinitions
-          masks={activeMasks}
-          hasPotentialMasks={hasActiveMasks}
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-          fps={fps}
-        />
-
-        {/* BACKGROUND LAYER */}
-        <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
-
-        {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
-        {/* Video audio is decoupled from visual video elements for transition stability */}
-        {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
-        {videoAudioSegments.map((segment) => {
-          const useCustomDecoder = shouldUseCustomDecoder(segment);
-          const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
-          return (
-            <Sequence
-              key={segment.key}
-              from={segment.from}
-              durationInFrames={segment.durationInFrames}
-              premountFor={Math.round(fps * 2)}
-            >
-              {useCustomDecoder ? (
-                <CustomDecoderAudio
-                  src={segment.src}
-                  mediaId={decodeMediaId}
-                  itemId={segment.itemId}
-                  trimBefore={segment.trimBefore}
-                  sourceFps={segment.sourceFps}
-                  volume={segment.volumeDb}
-                  playbackRate={segment.playbackRate}
-                  muted={segment.muted}
-                  durationInFrames={segment.durationInFrames}
-                  audioFadeIn={segment.audioFadeIn}
-                  audioFadeOut={segment.audioFadeOut}
-                  crossfadeFadeIn={segment.crossfadeFadeIn}
-                  crossfadeFadeOut={segment.crossfadeFadeOut}
-                />
-              ) : (
-                <PitchCorrectedAudio
-                  src={segment.src}
-                  itemId={segment.itemId}
-                  trimBefore={segment.trimBefore}
-                  sourceFps={segment.sourceFps}
-                  volume={segment.volumeDb}
-                  playbackRate={segment.playbackRate}
-                  muted={segment.muted}
-                  durationInFrames={segment.durationInFrames}
-                  audioFadeIn={segment.audioFadeIn}
-                  audioFadeOut={segment.audioFadeOut}
-                  crossfadeFadeIn={segment.crossfadeFadeIn}
-                  crossfadeFadeOut={segment.crossfadeFadeOut}
-                />
-              )}
-            </Sequence>
-          );
-        })}
-
-        {/* Standalone audio items - merged across split boundaries for stable playback */}
-        {audioSegments.map((segment) => {
-          const useCustomDecoder = shouldUseCustomDecoder(segment);
-          const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
-          return (
-            <Sequence
-              key={segment.key}
-              from={segment.from}
-              durationInFrames={segment.durationInFrames}
-              premountFor={Math.round(fps * 2)}
-            >
-              {useCustomDecoder ? (
-                <CustomDecoderAudio
-                  src={segment.src}
-                  mediaId={decodeMediaId}
-                  itemId={segment.itemId}
-                  trimBefore={segment.trimBefore}
-                  sourceFps={segment.sourceFps}
-                  volume={segment.volumeDb}
-                  playbackRate={segment.playbackRate}
-                  muted={segment.muted}
-                  durationInFrames={segment.durationInFrames}
-                  audioFadeIn={segment.audioFadeIn}
-                  audioFadeOut={segment.audioFadeOut}
-                />
-              ) : (
-                <PitchCorrectedAudio
-                  src={segment.src}
-                  itemId={segment.itemId}
-                  trimBefore={segment.trimBefore}
-                  sourceFps={segment.sourceFps}
-                  volume={segment.volumeDb}
-                  playbackRate={segment.playbackRate}
-                  muted={segment.muted}
-                  durationInFrames={segment.durationInFrames}
-                  audioFadeIn={segment.audioFadeIn}
-                  audioFadeOut={segment.audioFadeOut}
-                />
-              )}
-            </Sequence>
-          );
-        })}
-
-        {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
-        {/* This ensures items from different tracks respect z-index across all types */}
-        <StableMaskedGroup hasMasks={hasActiveMasks}>
-          {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
-          {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
-          <StableVideoSequence
-            items={videoItems}
-            premountFor={Math.round(fps * 1)}
-            renderItem={renderVideoItem}
+      <CompositionSpaceProvider
+        projectWidth={projectWidth}
+        projectHeight={projectHeight}
+        renderWidth={renderWidth}
+        renderHeight={renderHeight}
+      >
+        <AbsoluteFill>
+          {/* SVG MASK DEFINITIONS - opacity controls activation, no DOM changes */}
+          {/* Uses FrameAwareMaskDefinitions to isolate per-frame re-renders */}
+          <FrameAwareMaskDefinitions
+            masks={activeMasks}
+            hasPotentialMasks={hasActiveMasks}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            fps={fps}
           />
 
-          {/* Effects-based transitions - visual effect centered on cut point */}
-          {/* These render ABOVE the normal clips during the transition window */}
-          <OptimizedEffectsBasedTransitionsLayer
-            transitions={transitions}
-            itemsById={itemsById}
-            adjustmentLayers={visibleAdjustmentLayers}
-          />
+          {/* BACKGROUND LAYER */}
+          <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
 
-          {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
-          {/* No more above/below split - items never move between DOM parents */}
-          {nonMediaByTrack
-            .filter((track) => track.items.length > 0)
-            .map((track) => {
-              const trackOrder = track.order ?? 0;
-              return (
-                <AbsoluteFill
-                  key={track.id}
-                  style={{
-                    // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
-                    zIndex: (maxOrder - trackOrder) * 1000 + 100,
-                    visibility: track.trackVisible ? 'visible' : 'hidden',
-                  }}
-                >
-                  {track.items.map((item) => (
-                    <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
-                      <ItemEffectWrapper
-                        itemTrackOrder={trackOrder}
-                        adjustmentLayers={visibleAdjustmentLayers}
-                        sequenceFrom={item.from}
-                      >
-                        <Item item={item} muted={track.muted || !track.trackVisible} masks={[]} />
-                      </ItemEffectWrapper>
-                    </Sequence>
-                  ))}
-                </AbsoluteFill>
-              );
-            })}
-        </StableMaskedGroup>
-      </AbsoluteFill>
+          {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
+          {/* Video audio is decoupled from visual video elements for transition stability */}
+          {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
+          {videoAudioSegments.map((segment) => {
+            const useCustomDecoder = shouldUseCustomDecoder(segment);
+            const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
+            return (
+              <Sequence
+                key={segment.key}
+                from={segment.from}
+                durationInFrames={segment.durationInFrames}
+                premountFor={Math.round(fps * 2)}
+              >
+                {useCustomDecoder ? (
+                  <CustomDecoderAudio
+                    src={segment.src}
+                    mediaId={decodeMediaId}
+                    itemId={segment.itemId}
+                    trimBefore={segment.trimBefore}
+                    sourceFps={segment.sourceFps}
+                    volume={segment.volumeDb}
+                    playbackRate={segment.playbackRate}
+                    muted={segment.muted}
+                    durationInFrames={segment.durationInFrames}
+                    audioFadeIn={segment.audioFadeIn}
+                    audioFadeOut={segment.audioFadeOut}
+                    crossfadeFadeIn={segment.crossfadeFadeIn}
+                    crossfadeFadeOut={segment.crossfadeFadeOut}
+                  />
+                ) : (
+                  <PitchCorrectedAudio
+                    src={segment.src}
+                    itemId={segment.itemId}
+                    trimBefore={segment.trimBefore}
+                    sourceFps={segment.sourceFps}
+                    volume={segment.volumeDb}
+                    playbackRate={segment.playbackRate}
+                    muted={segment.muted}
+                    durationInFrames={segment.durationInFrames}
+                    audioFadeIn={segment.audioFadeIn}
+                    audioFadeOut={segment.audioFadeOut}
+                    crossfadeFadeIn={segment.crossfadeFadeIn}
+                    crossfadeFadeOut={segment.crossfadeFadeOut}
+                  />
+                )}
+              </Sequence>
+            );
+          })}
+
+          {/* Standalone audio items - merged across split boundaries for stable playback */}
+          {audioSegments.map((segment) => {
+            const useCustomDecoder = shouldUseCustomDecoder(segment);
+            const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
+            return (
+              <Sequence
+                key={segment.key}
+                from={segment.from}
+                durationInFrames={segment.durationInFrames}
+                premountFor={Math.round(fps * 2)}
+              >
+                {useCustomDecoder ? (
+                  <CustomDecoderAudio
+                    src={segment.src}
+                    mediaId={decodeMediaId}
+                    itemId={segment.itemId}
+                    trimBefore={segment.trimBefore}
+                    sourceFps={segment.sourceFps}
+                    volume={segment.volumeDb}
+                    playbackRate={segment.playbackRate}
+                    muted={segment.muted}
+                    durationInFrames={segment.durationInFrames}
+                    audioFadeIn={segment.audioFadeIn}
+                    audioFadeOut={segment.audioFadeOut}
+                  />
+                ) : (
+                  <PitchCorrectedAudio
+                    src={segment.src}
+                    itemId={segment.itemId}
+                    trimBefore={segment.trimBefore}
+                    sourceFps={segment.sourceFps}
+                    volume={segment.volumeDb}
+                    playbackRate={segment.playbackRate}
+                    muted={segment.muted}
+                    durationInFrames={segment.durationInFrames}
+                    audioFadeIn={segment.audioFadeIn}
+                    audioFadeOut={segment.audioFadeOut}
+                  />
+                )}
+              </Sequence>
+            );
+          })}
+
+          {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
+          {/* This ensures items from different tracks respect z-index across all types */}
+          <StableMaskedGroup hasMasks={hasActiveMasks}>
+            {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
+            {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
+            <StableVideoSequence
+              items={videoItems}
+              premountFor={Math.round(fps * 1)}
+              renderItem={renderVideoItem}
+            />
+
+            {/* Effects-based transitions - visual effect centered on cut point */}
+            {/* These render ABOVE the normal clips during the transition window */}
+            <OptimizedEffectsBasedTransitionsLayer
+              transitions={transitions}
+              itemsById={itemsById}
+              adjustmentLayers={visibleAdjustmentLayers}
+            />
+
+            {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
+            {/* No more above/below split - items never move between DOM parents */}
+            {nonMediaByTrack
+              .filter((track) => track.items.length > 0)
+              .map((track) => {
+                const trackOrder = track.order ?? 0;
+                return (
+                  <AbsoluteFill
+                    key={track.id}
+                    style={{
+                      // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
+                      zIndex: (maxOrder - trackOrder) * 1000 + 100,
+                      visibility: track.trackVisible ? 'visible' : 'hidden',
+                    }}
+                  >
+                    {track.items.map((item) => (
+                      <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
+                        <ItemEffectWrapper
+                          itemTrackOrder={trackOrder}
+                          adjustmentLayers={visibleAdjustmentLayers}
+                          sequenceFrom={item.from}
+                        >
+                          <Item item={item} muted={track.muted || !track.trackVisible} masks={[]} />
+                        </ItemEffectWrapper>
+                      </Sequence>
+                    ))}
+                  </AbsoluteFill>
+                );
+              })}
+          </StableMaskedGroup>
+        </AbsoluteFill>
+      </CompositionSpaceProvider>
     </KeyframesProvider>
   );
 };

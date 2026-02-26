@@ -11,6 +11,7 @@ import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 import { resolveTransform, getSourceDimensions } from '../utils/transform-resolver';
 import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/keyframes/utils/animated-transform-resolver';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
+import { CompositionSpaceProvider, useCompositionSpace } from '../contexts/composition-space-context';
 import { Item } from './item';
 
 interface CompositionContentProps {
@@ -50,7 +51,12 @@ function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
  */
 export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, renderDepth = 0 }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
-  const { width: canvasWidth, height: canvasHeight, fps: mainFps } = useVideoConfig();
+  const { width: renderWidth, height: renderHeight, fps: mainFps } = useVideoConfig();
+  const compositionSpace = useCompositionSpace();
+  const projectWidth = compositionSpace?.projectWidth ?? renderWidth;
+  const projectHeight = compositionSpace?.projectHeight ?? renderHeight;
+  const renderScaleX = compositionSpace?.scaleX ?? 1;
+  const renderScaleY = compositionSpace?.scaleY ?? 1;
 
   // Re-render when blob URLs are acquired (fixes media not loading on project load)
   const blobUrlVersion = useBlobUrlVersion();
@@ -84,7 +90,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   const relativeFrame = frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0);
 
   const containerDims = useMemo(() => {
-    const canvas = { width: canvasWidth, height: canvasHeight, fps: mainFps };
+    const canvas = { width: projectWidth, height: projectHeight, fps: mainFps };
     const sourceDims = getSourceDimensions(item);
     const baseResolved = resolveTransform(item, canvas, sourceDims);
 
@@ -110,8 +116,23 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       };
     }
 
-    return { width: resolved.width, height: resolved.height };
-  }, [canvasWidth, canvasHeight, mainFps, item, itemKeyframes, relativeFrame, itemPreview, activeGizmo, previewTransform]);
+    return {
+      width: resolved.width * renderScaleX,
+      height: resolved.height * renderScaleY,
+    };
+  }, [
+    projectWidth,
+    projectHeight,
+    mainFps,
+    item,
+    itemKeyframes,
+    relativeFrame,
+    itemPreview,
+    activeGizmo,
+    previewTransform,
+    renderScaleX,
+    renderScaleY,
+  ]);
 
   if (!subComp) {
     return (
@@ -144,30 +165,37 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       overflow: 'hidden',
       position: 'relative',
     }}>
-      <VideoConfigProvider
-        width={subComp.width}
-        height={subComp.height}
-        fps={subComp.fps}
-        durationInFrames={subComp.durationInFrames}
+      <CompositionSpaceProvider
+        projectWidth={subComp.width}
+        projectHeight={subComp.height}
+        renderWidth={subComp.width}
+        renderHeight={subComp.height}
       >
-        <AbsoluteFill>
-          {sortedTracks.map((track) => {
-            if (!track.visible) return null;
+        <VideoConfigProvider
+          width={subComp.width}
+          height={subComp.height}
+          fps={subComp.fps}
+          durationInFrames={subComp.durationInFrames}
+        >
+          <AbsoluteFill>
+            {sortedTracks.map((track) => {
+              if (!track.visible) return null;
 
-            const trackItems = resolvedItems.filter((i) => i.trackId === track.id);
+              const trackItems = resolvedItems.filter((i) => i.trackId === track.id);
 
-            return trackItems.map((subItem) => (
-              <Sequence
-                key={subItem.id}
-                from={subItem.from}
-                durationInFrames={subItem.durationInFrames}
-              >
-                <Item item={subItem} muted={parentMuted || track.muted} masks={[]} renderDepth={renderDepth} />
-              </Sequence>
-            ));
-          })}
-        </AbsoluteFill>
-      </VideoConfigProvider>
+              return trackItems.map((subItem) => (
+                <Sequence
+                  key={subItem.id}
+                  from={subItem.from}
+                  durationInFrames={subItem.durationInFrames}
+                >
+                  <Item item={subItem} muted={parentMuted || track.muted} masks={[]} renderDepth={renderDepth} />
+                </Sequence>
+              ));
+            })}
+          </AbsoluteFill>
+        </VideoConfigProvider>
+      </CompositionSpaceProvider>
     </div>
   );
 });

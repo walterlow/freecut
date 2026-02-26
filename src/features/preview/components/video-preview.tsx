@@ -1162,17 +1162,21 @@ export const VideoPreview = memo(function VideoPreview({
   // Memoize inputProps to prevent Player from re-rendering
   const inputProps: CompositionInputProps = useMemo(() => ({
     fps,
+    width: project.width,
+    height: project.height,
     tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, resolvedTracksFingerprint, transitions, project.backgroundColor]);
+  }), [fps, project.width, project.height, resolvedTracksFingerprint, transitions, project.backgroundColor]);
 
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
+    width: project.width,
+    height: project.height,
     tracks: fastScrubTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, fastScrubTracksFingerprint, transitions, project.backgroundColor]);
+  }), [fps, project.width, project.height, fastScrubTracksFingerprint, transitions, project.backgroundColor]);
 
   // Keep fast scrub canvas dimensions in sync with project dimensions.
   useLayoutEffect(() => {

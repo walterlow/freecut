@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Rect, Circle, Triangle, Ellipse, Star, Polygon, Heart } from '@/lib/shapes';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import type { ShapeItem } from '@/types/timeline';
+import { useCompositionSpace } from '../contexts/composition-space-context';
 
 /**
  * Shape content with live property preview support.
@@ -9,6 +10,11 @@ import type { ShapeItem } from '@/types/timeline';
  * Reads preview values from gizmo store for real-time updates during editing.
  */
 export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
+  const compositionSpace = useCompositionSpace();
+  const renderScaleX = compositionSpace?.scaleX ?? 1;
+  const renderScaleY = compositionSpace?.scaleY ?? 1;
+  const renderScale = compositionSpace?.scale ?? 1;
+
   // Read transform preview from gizmo store for real-time scaling
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
@@ -21,8 +27,8 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
   const shapePropsPreview = itemPreview?.properties;
   const fillColor = shapePropsPreview?.fillColor ?? item.fillColor ?? '#3b82f6';
   const strokeColor = shapePropsPreview?.strokeColor ?? item.strokeColor;
-  const strokeWidth = shapePropsPreview?.strokeWidth ?? item.strokeWidth ?? 0;
-  const cornerRadius = shapePropsPreview?.cornerRadius ?? item.cornerRadius ?? 0;
+  const strokeWidth = (shapePropsPreview?.strokeWidth ?? item.strokeWidth ?? 0) * renderScale;
+  const cornerRadius = (shapePropsPreview?.cornerRadius ?? item.cornerRadius ?? 0) * renderScale;
   const direction = shapePropsPreview?.direction ?? item.direction ?? 'up';
   const points = shapePropsPreview?.points ?? item.points ?? 5;
   const innerRadius = shapePropsPreview?.innerRadius ?? item.innerRadius ?? 0.5;
@@ -30,18 +36,18 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
 
   // Get dimensions with preview support for real-time gizmo scaling
   // Priority: Unified preview (group/properties) > Single gizmo preview > Base transform
-  let width = item.transform?.width ?? 200;
-  let height = item.transform?.height ?? 200;
+  let width = (item.transform?.width ?? 200) * renderScaleX;
+  let height = (item.transform?.height ?? 200) * renderScaleY;
 
   const itemPreviewTransform = itemPreview?.transform;
   const isGizmoPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null;
 
   if (itemPreviewTransform) {
-    width = itemPreviewTransform.width ?? width;
-    height = itemPreviewTransform.height ?? height;
+    width = (itemPreviewTransform.width ?? (width / renderScaleX)) * renderScaleX;
+    height = (itemPreviewTransform.height ?? (height / renderScaleY)) * renderScaleY;
   } else if (isGizmoPreviewActive && previewTransform) {
-    width = previewTransform.width;
-    height = previewTransform.height;
+    width = previewTransform.width * renderScaleX;
+    height = previewTransform.height * renderScaleY;
   }
 
   // Common stroke props

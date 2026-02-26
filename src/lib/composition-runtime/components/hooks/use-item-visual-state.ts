@@ -23,6 +23,7 @@ import {
 import { getScanlinesStyle, getGlitchFilterString } from '@/features/effects/utils/glitch-algorithms';
 import { getShapePath, rotatePath } from '../../utils/shape-path';
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
+import { useCompositionSpace } from '../../contexts/composition-space-context';
 import type { MaskInfo } from '../item';
 import type React from 'react';
 
@@ -85,11 +86,18 @@ export function useItemVisualState(
   item: TimelineItem & { _sequenceFrameOffset?: number },
   masks: MaskInfo[] = []
 ): ItemVisualState {
-  const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
+  const { width: renderWidth, height: renderHeight, fps } = useVideoConfig();
+  const compositionSpace = useCompositionSpace();
+  const projectWidth = compositionSpace?.projectWidth ?? renderWidth;
+  const projectHeight = compositionSpace?.projectHeight ?? renderHeight;
+  const scaleX = compositionSpace?.scaleX ?? 1;
+  const scaleY = compositionSpace?.scaleY ?? 1;
+  const uniformScale = compositionSpace?.scale ?? 1;
   // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
-  const canvas: CanvasSettings = { width: canvasWidth, height: canvasHeight, fps };
+  const logicalCanvas: CanvasSettings = { width: projectWidth, height: projectHeight, fps };
+  const renderCanvas: CanvasSettings = { width: renderWidth, height: renderHeight, fps };
 
   // Calculate frame relative to item start for keyframe interpolation.
   // When items share a Sequence (e.g., split clips via StableVideoSequence),
@@ -133,7 +141,7 @@ export function useItemVisualState(
     const propertiesPreview = itemPreview?.properties;
 
     // Resolve base transform from item
-    const baseResolved = resolveTransform(item, canvas, getSourceDimensions(item));
+    const baseResolved = resolveTransform(item, logicalCanvas, getSourceDimensions(item));
 
     // Apply keyframe animation to base transform
     // Use relativeFrame (relative to item.from) for correct keyframe interpolation
@@ -211,7 +219,16 @@ export function useItemVisualState(
     const computedFinalOpacity = resolved.opacity * computedFadeOpacity;
 
     // Get CSS style with combined opacity
-    const style = toTransformStyle({ ...resolved, opacity: computedFinalOpacity }, canvas);
+    const scaledResolved: ResolvedTransform = {
+      ...resolved,
+      x: resolved.x * scaleX,
+      y: resolved.y * scaleY,
+      width: resolved.width * scaleX,
+      height: resolved.height * scaleY,
+      cornerRadius: resolved.cornerRadius * uniformScale,
+      opacity: computedFinalOpacity,
+    };
+    const style = toTransformStyle(scaledResolved, renderCanvas);
 
     return {
       transform: resolved,
@@ -219,7 +236,20 @@ export function useItemVisualState(
       fadeOpacity: computedFadeOpacity,
       finalOpacity: computedFinalOpacity,
     };
-  }, [activeGizmo, previewTransform, itemPreview, item, canvas, itemKeyframes, relativeFrame, fps]);
+  }, [
+    activeGizmo,
+    previewTransform,
+    itemPreview,
+    item,
+    logicalCanvas,
+    renderCanvas,
+    itemKeyframes,
+    relativeFrame,
+    fps,
+    scaleX,
+    scaleY,
+    uniformScale,
+  ]);
 
   // === EFFECTS COMPUTATION ===
   const { cssFilter, scanlinesEffect, halftoneStyles, vignetteStyle } = useMemo(() => {
@@ -290,7 +320,7 @@ export function useItemVisualState(
     // All masks use the first mask's type settings
     const firstMask = masks[0]!;
     const maskType = firstMask.shape.maskType ?? 'clip';
-    const maskFeather = firstMask.shape.maskFeather ?? 0;
+    const maskFeather = (firstMask.shape.maskFeather ?? 0) * uniformScale;
     const maskInvert = firstMask.shape.maskInvert ?? false;
 
     // Generate paths for all masks with rotation baked in
@@ -304,8 +334,8 @@ export function useItemVisualState(
       let resolvedMaskTransform = {
         x: maskTransform.x ?? 0,
         y: maskTransform.y ?? 0,
-        width: maskTransform.width ?? canvasWidth,
-        height: maskTransform.height ?? canvasHeight,
+        width: maskTransform.width ?? projectWidth,
+        height: maskTransform.height ?? projectHeight,
         rotation: maskTransform.rotation ?? 0,
         opacity: maskTransform.opacity ?? 1,
       };
@@ -322,20 +352,28 @@ export function useItemVisualState(
         };
       }
 
-      let path = getShapePath(shape, resolvedMaskTransform, {
-        canvasWidth,
-        canvasHeight,
+      const scaledMaskTransform = {
+        ...resolvedMaskTransform,
+        x: resolvedMaskTransform.x * scaleX,
+        y: resolvedMaskTransform.y * scaleY,
+        width: resolvedMaskTransform.width * scaleX,
+        height: resolvedMaskTransform.height * scaleY,
+      };
+
+      let path = getShapePath(shape, scaledMaskTransform, {
+        canvasWidth: renderWidth,
+        canvasHeight: renderHeight,
       });
 
       // Bake rotation into path coordinates for CSS clip-path compatibility
       if (resolvedMaskTransform.rotation !== 0) {
-        const centerX = canvasWidth / 2 + resolvedMaskTransform.x;
-        const centerY = canvasHeight / 2 + resolvedMaskTransform.y;
+        const centerX = renderWidth / 2 + scaledMaskTransform.x;
+        const centerY = renderHeight / 2 + scaledMaskTransform.y;
         path = rotatePath(path, resolvedMaskTransform.rotation, centerX, centerY);
       }
 
       // Include stroke width for SVG mask rendering
-      const strokeWidth = shape.strokeWidth ?? 0;
+      const strokeWidth = (shape.strokeWidth ?? 0) * uniformScale;
 
       return { path, strokeWidth };
     });
@@ -363,7 +401,7 @@ export function useItemVisualState(
 
     // For inverted clip without stroke, use CSS clip-path with evenodd
     if (maskType === 'clip' && maskInvert && !hasStroke) {
-      const invertedPath = `M 0 0 L ${canvasWidth} 0 L ${canvasWidth} ${canvasHeight} L 0 ${canvasHeight} Z ${combinedPath}`;
+      const invertedPath = `M 0 0 L ${renderWidth} 0 L ${renderWidth} ${renderHeight} L 0 ${renderHeight} Z ${combinedPath}`;
       return {
         maskClipPath: `path(evenodd, '${invertedPath}')`,
         maskType: 'clip' as const,
@@ -385,7 +423,18 @@ export function useItemVisualState(
       svgMaskId,
       svgMaskPaths: maskPathsWithStroke,
     };
-  }, [masks, activeGizmo, previewTransform, canvasWidth, canvasHeight]);
+  }, [
+    masks,
+    activeGizmo,
+    previewTransform,
+    projectWidth,
+    projectHeight,
+    renderWidth,
+    renderHeight,
+    scaleX,
+    scaleY,
+    uniformScale,
+  ]);
 
   // Properties preview for content components
   const propertiesPreview = itemPreview?.properties;
