@@ -16,15 +16,17 @@ describe('pipelined frame loop', () => {
       }),
     };
 
+    // Mirror the production loop: render first, then await previous encode
     let pendingEncode: Promise<void> | null = null;
 
     for (let frame = 0; frame < totalFrames; frame++) {
-      if (pendingEncode) await pendingEncode;
       await frameRenderer.renderFrame(frame);
+      if (pendingEncode) await pendingEncode;
       const sample = { frame, close: () => { closedFrames.push(frame); } };
+      const isKeyFrame = frame === 0;
       pendingEncode = (async () => {
         try {
-          if (frame === 0) {
+          if (isKeyFrame) {
             await videoSource.add(sample, { keyFrame: true });
           } else {
             await videoSource.add(sample);
@@ -42,42 +44,50 @@ describe('pipelined frame loop', () => {
     expect(videoSource.add.mock.calls[0][1]).toEqual({ keyFrame: true });
   });
 
-  it('all frames are rendered and encoded even with async timing', async () => {
-    const totalFrames = 10;
-    const encodedFrames: number[] = [];
+  it('renderFrame overlaps with previous encode', async () => {
+    const events: string[] = [];
 
     const frameRenderer = {
-      renderFrame: vi.fn(async () => {}),
+      renderFrame: vi.fn(async (frame: number) => {
+        events.push(`render-start-${frame}`);
+        await new Promise((r) => setTimeout(r, 5));
+        events.push(`render-end-${frame}`);
+      }),
     };
 
     const videoSource = {
       add: vi.fn(async (sample: { frame: number }) => {
-        await new Promise((r) => setTimeout(r, 1));
-        encodedFrames.push(sample.frame);
+        events.push(`encode-start-${sample.frame}`);
+        await new Promise((r) => setTimeout(r, 10));
+        events.push(`encode-end-${sample.frame}`);
       }),
     };
 
     let pendingEncode: Promise<void> | null = null;
 
-    for (let frame = 0; frame < totalFrames; frame++) {
-      if (pendingEncode) await pendingEncode;
+    for (let frame = 0; frame < 3; frame++) {
       await frameRenderer.renderFrame(frame);
+      if (pendingEncode) await pendingEncode;
       const sample = { frame, close: () => {} };
-      const isKeyFrame = frame === 0;
       pendingEncode = (async () => {
-        try {
-          if (isKeyFrame) {
-            await videoSource.add(sample, { keyFrame: true });
-          } else {
-            await videoSource.add(sample);
-          }
-        } finally {
-          sample.close();
-        }
+        try { await videoSource.add(sample); }
+        finally { sample.close(); }
       })();
     }
     if (pendingEncode) await pendingEncode;
 
-    expect(encodedFrames).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    // render-start-1 must appear BEFORE encode-end-0 — that's the overlap.
+    // render(1) begins while encode(0) is still in flight.
+    const render1Start = events.indexOf('render-start-1');
+    const encode0End = events.indexOf('encode-end-0');
+    expect(render1Start).toBeLessThan(encode0End);
+
+    // Same for frame 2 vs encode 1
+    const render2Start = events.indexOf('render-start-2');
+    const encode1End = events.indexOf('encode-end-1');
+    expect(render2Start).toBeLessThan(encode1End);
+
+    // All frames complete
+    expect(events.filter(e => e.startsWith('encode-end-')).length).toBe(3);
   });
 });

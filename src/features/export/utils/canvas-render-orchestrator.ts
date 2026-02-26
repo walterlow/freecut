@@ -557,31 +557,32 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
         throw new DOMException('Render cancelled', 'AbortError');
       }
 
-      // Wait for the previous frame's encode to finish before rendering
-      // the next frame. This keeps at most one encode in flight.
-      if (pendingEncode) await pendingEncode;
-
-      // Render frame to canvas (at composition resolution)
+      // Render frame to canvas first — this overlaps with the previous frame's
+      // encode that is still in flight. The previous VideoSample already copied
+      // its pixels, so writing to the canvas here cannot corrupt it.
       await frameRenderer.renderFrame(frame);
 
       // Scale to output resolution if needed
       if (needsScaling) {
-        // Clear output canvas and draw scaled version
         outputCtx.clearRect(0, 0, exportWidth, exportHeight);
         outputCtx.drawImage(renderCanvas, 0, 0, exportWidth, exportHeight);
       }
+
+      // Now wait for the previous encode to finish before capturing a new
+      // VideoSample. This ensures at most one encode is in flight and that
+      // frames are fed to the encoder in order.
+      if (pendingEncode) await pendingEncode;
 
       // Calculate timestamp in seconds
       const timestamp = frame / fps;
       const frameDuration = 1 / fps;
 
-      // Explicitly snapshot canvas pixels into a VideoSample.
-      // VideoSample constructor copies pixel data immediately, preventing any race.
-      // The canvas is safe to reuse for the next frame right after this call.
+      // Snapshot canvas pixels into a VideoSample. The constructor copies
+      // pixel data immediately — the canvas is free for the next render.
       const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration });
 
-      // Kick off encoding in the background. The IIFE is NOT awaited here —
-      // it runs concurrently with the next iteration's renderFrame().
+      // Kick off encoding in the background. NOT awaited here — it runs
+      // concurrently with the next iteration's renderFrame().
       const isKeyFrame = frame === 0;
       pendingEncode = (async () => {
         try {
