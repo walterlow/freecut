@@ -1,3 +1,4 @@
+import { useCallback, useRef } from 'react';
 import {
   Select,
   SelectContent,
@@ -19,16 +20,27 @@ export function PreviewZoomControls() {
   const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
   const previewQuality = usePlaybackStore((s) => s.previewQuality);
   const setPreviewQuality = usePlaybackStore((s) => s.setPreviewQuality);
+  const qualityTriggerRef = useRef<HTMLButtonElement>(null);
+  const zoomTriggerRef = useRef<HTMLButtonElement>(null);
 
   const currentLabel = zoom === -1
     ? 'Auto'
     : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
+
+  const blurQualityTrigger = useCallback(() => {
+    qualityTriggerRef.current?.blur();
+  }, []);
+
+  const blurZoomTrigger = useCallback(() => {
+    zoomTriggerRef.current?.blur();
+  }, []);
 
   const handleValueChange = (value: string) => {
     const preset = zoomPresets.find((p) => p.label === value);
     if (preset) {
       handlePresetZoom(preset);
     }
+    blurZoomTrigger();
   };
 
   const currentQualityLabel = QUALITY_PRESETS.find((p) => p.value === previewQuality)?.label ?? 'Full';
@@ -37,12 +49,22 @@ export function PreviewZoomControls() {
     <div className="flex items-center gap-1">
       <Select
         value={currentQualityLabel}
+        onOpenChange={(open) => {
+          if (!open) {
+            blurQualityTrigger();
+          }
+        }}
         onValueChange={(value) => {
           const preset = QUALITY_PRESETS.find((p) => p.label === value);
           if (preset) setPreviewQuality(preset.value);
+          blurQualityTrigger();
         }}
       >
-        <SelectTrigger className="w-[72px] h-7 text-xs" data-tooltip="Preview Quality">
+        <SelectTrigger
+          ref={qualityTriggerRef}
+          className="w-[72px] h-7 text-xs"
+          data-tooltip="Preview Quality"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -53,8 +75,20 @@ export function PreviewZoomControls() {
           ))}
         </SelectContent>
       </Select>
-      <Select value={currentLabel} onValueChange={handleValueChange}>
-        <SelectTrigger className="w-20 h-7 text-xs" data-tooltip="Preview Zoom">
+      <Select
+        value={currentLabel}
+        onOpenChange={(open) => {
+          if (!open) {
+            blurZoomTrigger();
+          }
+        }}
+        onValueChange={handleValueChange}
+      >
+        <SelectTrigger
+          ref={zoomTriggerRef}
+          className="w-20 h-7 text-xs"
+          data-tooltip="Preview Zoom"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

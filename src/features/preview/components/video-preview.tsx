@@ -24,6 +24,8 @@ import { useRippleEditPreviewStore } from '@/features/timeline/stores/ripple-edi
 import { useSlipEditPreviewStore } from '@/features/timeline/stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '@/features/timeline/stores/slide-edit-preview-store';
 import type { CompositionInputProps } from '@/types/export';
+import type { TimelineItem } from '@/types/timeline';
+import type { ItemEffect } from '@/types/effects';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 import { createCompositionRenderer } from '@/features/export/utils/client-render-engine';
 
@@ -92,6 +94,134 @@ function toTrackFingerprint(tracks: CompositionInputProps['tracks']): string {
     }
   }
   return parts.join('|');
+}
+
+function scaleEffectsForPreview(
+  effects: ItemEffect[] | undefined,
+  uniformScale: number
+): ItemEffect[] | undefined {
+  if (!effects || effects.length === 0) return effects;
+
+  let changed = false;
+  const scaled = effects.map((entry) => {
+    const effect = entry.effect;
+
+    if (effect.type === 'css-filter' && effect.filter === 'blur') {
+      const nextValue = effect.value * uniformScale;
+      if (nextValue !== effect.value) changed = true;
+      return nextValue === effect.value
+        ? entry
+        : { ...entry, effect: { ...effect, value: nextValue } };
+    }
+
+    if (effect.type === 'canvas-effect' && effect.variant === 'halftone') {
+      const nextDotSize = effect.dotSize * uniformScale;
+      const nextSpacing = effect.spacing * uniformScale;
+      if (nextDotSize !== effect.dotSize || nextSpacing !== effect.spacing) changed = true;
+      return (nextDotSize === effect.dotSize && nextSpacing === effect.spacing)
+        ? entry
+        : {
+            ...entry,
+            effect: {
+              ...effect,
+              dotSize: nextDotSize,
+              spacing: nextSpacing,
+            },
+          };
+    }
+
+    return entry;
+  });
+
+  return changed ? scaled : effects;
+}
+
+function scaleItemForPreview(
+  item: TimelineItem,
+  scaleX: number,
+  scaleY: number,
+  uniformScale: number
+): TimelineItem {
+  let scaled = item as TimelineItem;
+  let changed = false;
+
+  if (item.transform) {
+    const nextTransform = {
+      ...item.transform,
+      x: item.transform.x !== undefined ? item.transform.x * scaleX : undefined,
+      y: item.transform.y !== undefined ? item.transform.y * scaleY : undefined,
+      width: item.transform.width !== undefined ? item.transform.width * scaleX : undefined,
+      height: item.transform.height !== undefined ? item.transform.height * scaleY : undefined,
+      cornerRadius: item.transform.cornerRadius !== undefined
+        ? item.transform.cornerRadius * uniformScale
+        : undefined,
+    };
+    scaled = { ...scaled, transform: nextTransform } as TimelineItem;
+    changed = true;
+  }
+
+  switch (item.type) {
+    case 'text': {
+      const nextTextShadow = item.textShadow
+        ? {
+            ...item.textShadow,
+            offsetX: item.textShadow.offsetX * scaleX,
+            offsetY: item.textShadow.offsetY * scaleY,
+            blur: item.textShadow.blur * uniformScale,
+          }
+        : item.textShadow;
+      const nextStroke = item.stroke
+        ? {
+            ...item.stroke,
+            width: item.stroke.width * uniformScale,
+          }
+        : item.stroke;
+
+      scaled = {
+        ...scaled,
+        fontSize: item.fontSize !== undefined ? item.fontSize * uniformScale : undefined,
+        letterSpacing: item.letterSpacing !== undefined ? item.letterSpacing * scaleX : undefined,
+        textShadow: nextTextShadow,
+        stroke: nextStroke,
+      } as TimelineItem;
+      changed = true;
+      break;
+    }
+    case 'shape': {
+      scaled = {
+        ...scaled,
+        strokeWidth: item.strokeWidth !== undefined ? item.strokeWidth * uniformScale : undefined,
+        cornerRadius: item.cornerRadius !== undefined ? item.cornerRadius * uniformScale : undefined,
+        maskFeather: item.maskFeather !== undefined ? item.maskFeather * uniformScale : undefined,
+      } as TimelineItem;
+      changed = true;
+      break;
+    }
+    default:
+      break;
+  }
+
+  const nextEffects = scaleEffectsForPreview(item.effects, uniformScale);
+  if (nextEffects !== item.effects) {
+    scaled = { ...scaled, effects: nextEffects } as TimelineItem;
+    changed = true;
+  }
+
+  return changed ? scaled : item;
+}
+
+function scaleTracksForPreview(
+  tracks: CompositionInputProps['tracks'],
+  scaleX: number,
+  scaleY: number,
+  uniformScale: number
+): CompositionInputProps['tracks'] {
+  return tracks.map((track) => ({
+    ...track,
+    items: track.items.map((item) =>
+      scaleItemForPreview(item, scaleX, scaleY, uniformScale)
+    ),
+  }));
 }
 
 function getPreloadBudget(isPlaying: boolean, previewFrame: number | null): number {
@@ -942,7 +1072,10 @@ export const VideoPreview = memo(function VideoPreview({
         await new Promise(r => setTimeout(r, 150));
       }
 
-      if (isCancelled) return;
+      if (isCancelled) {
+        setIsResolving(false);
+        return;
+      }
 
       try {
         const newUrls = new Map(effectiveResolvedUrls);
@@ -974,9 +1107,7 @@ export const VideoPreview = memo(function VideoPreview({
       } catch (error) {
         console.error('Failed to resolve media URLs:', error);
       } finally {
-        if (!isCancelled) {
-          setIsResolving(false);
-        }
+        setIsResolving(false);
       }
     }
 
@@ -1169,22 +1300,55 @@ export const VideoPreview = memo(function VideoPreview({
     backgroundColor: project.backgroundColor,
   }), [fps, project.width, project.height, resolvedTracksFingerprint, transitions, project.backgroundColor]);
 
+  // Compute scaled render resolution for preview quality.
+  // Keep dimensions even for decoder compatibility.
+  const renderSize = useMemo(() => {
+    const w = Math.round(project.width * previewQuality / 2) * 2;
+    const h = Math.round(project.height * previewQuality / 2) * 2;
+    return { width: Math.max(2, w), height: Math.max(2, h) };
+  }, [project.width, project.height, previewQuality]);
+
+  const fastScrubScaledTracks = useMemo(() => {
+    const tracks = fastScrubTracks as CompositionInputProps['tracks'];
+    if (previewQuality === 1) return tracks;
+
+    const sx = project.width > 0 ? renderSize.width / project.width : 1;
+    const sy = project.height > 0 ? renderSize.height / project.height : 1;
+    const s = Math.min(sx, sy);
+    return scaleTracksForPreview(tracks, sx, sy, s);
+  }, [
+    fastScrubTracks,
+    fastScrubTracksFingerprint,
+    previewQuality,
+    renderSize.width,
+    renderSize.height,
+    project.width,
+    project.height,
+  ]);
+
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
-    width: project.width,
-    height: project.height,
-    tracks: fastScrubTracks as CompositionInputProps['tracks'],
+    width: renderSize.width,
+    height: renderSize.height,
+    tracks: fastScrubScaledTracks,
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, project.width, project.height, fastScrubTracksFingerprint, transitions, project.backgroundColor]);
+  }), [
+    fps,
+    renderSize.width,
+    renderSize.height,
+    fastScrubScaledTracks,
+    transitions,
+    project.backgroundColor,
+  ]);
 
-  // Keep fast scrub canvas dimensions in sync with project dimensions.
+  // Keep fast scrub canvas dimensions in sync with preview render dimensions.
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current;
     if (!canvas) return;
-    if (canvas.width !== project.width) canvas.width = project.width;
-    if (canvas.height !== project.height) canvas.height = project.height;
-  }, [project.width, project.height]);
+    if (canvas.width !== renderSize.width) canvas.width = renderSize.width;
+    if (canvas.height !== renderSize.height) canvas.height = renderSize.height;
+  }, [renderSize.width, renderSize.height]);
 
   const disposeFastScrubRenderer = useCallback(() => {
     scrubInitPromiseRef.current = null;
@@ -1220,7 +1384,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     scrubInitPromiseRef.current = (async () => {
       try {
-        const offscreen = new OffscreenCanvas(project.width, project.height);
+        const offscreen = new OffscreenCanvas(renderSize.width, renderSize.height);
         const offscreenCtx = offscreen.getContext('2d');
         if (!offscreenCtx) return null;
 
@@ -1264,12 +1428,12 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, isResolving, project.height, project.width]);
+  }, [fastScrubInputProps, fps, isResolving, renderSize.height, renderSize.width]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
     disposeFastScrubRenderer();
-  }, [disposeFastScrubRenderer, fastScrubInputProps, project.height, project.width]);
+  }, [disposeFastScrubRenderer, fastScrubInputProps, renderSize.height, renderSize.width]);
 
   // Background warm-up so first scrub has lower startup latency.
   useEffect(() => {
@@ -1756,15 +1920,6 @@ export const VideoPreview = memo(function VideoPreview({
     const targetHeight = project.height * zoom;
     return { width: targetWidth, height: targetHeight };
   }, [project.width, project.height, zoom, containerSize]);
-
-  // Compute scaled render resolution for the Player based on preview quality.
-  // Lower quality means smaller internal DOM resolution — the browser upscales via CSS.
-  const renderSize = useMemo(() => {
-    // Ensure even dimensions (required by some video decoders)
-    const w = Math.round(project.width * previewQuality / 2) * 2;
-    const h = Math.round(project.height * previewQuality / 2) * 2;
-    return { width: Math.max(2, w), height: Math.max(2, h) };
-  }, [project.width, project.height, previewQuality]);
 
   // Check if overflow is needed (video larger than container)
   const needsOverflow = useMemo(() => {
