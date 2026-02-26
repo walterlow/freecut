@@ -6,10 +6,12 @@
  */
 
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ValueGraphEditor } from '@/features/keyframes/components/value-graph-editor';
+import { DopesheetEditor } from '@/features/keyframes/components/dopesheet-editor';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useKeyframesStore } from '../stores/keyframes-store';
@@ -22,6 +24,7 @@ import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import type { AnimatableProperty, KeyframeRef } from '@/types/keyframe';
 import * as timelineActions from '../stores/timeline-actions';
 import { getTransitionBlockedRanges } from '@/features/keyframes/utils/transition-region';
+import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -45,6 +48,21 @@ interface KeyframeGraphPanelProps {
   onToggle: () => void;
   /** Callback to close the panel */
   onClose: () => void;
+}
+
+type KeyframeEditorMode = 'graph' | 'dopesheet' | 'split';
+const KEYFRAME_EDITOR_MODE_STORAGE_KEY = 'timeline:keyframeEditorMode';
+
+function loadKeyframeEditorMode(): KeyframeEditorMode {
+  try {
+    const value = localStorage.getItem(KEYFRAME_EDITOR_MODE_STORAGE_KEY);
+    if (value === 'graph' || value === 'dopesheet' || value === 'split') {
+      return value;
+    }
+  } catch {
+    // ignore localStorage read errors
+  }
+  return 'graph';
 }
 
 /**
@@ -146,12 +164,22 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes);
   const selectKeyframe = useKeyframeSelectionStore((s) => s.selectKeyframe);
   const selectKeyframes = useKeyframeSelectionStore((s) => s.selectKeyframes);
+  const clearKeyframeSelection = useKeyframeSelectionStore((s) => s.clearSelection);
 
   // Playback state
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
 
   // Track selected property for graph editor
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null);
+  const [editorMode, setEditorMode] = useState<KeyframeEditorMode>(() => loadKeyframeEditorMode());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KEYFRAME_EDITOR_MODE_STORAGE_KEY, editorMode);
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [editorMode]);
 
   // Find the first selected item that has keyframes
   const selectedItemWithKeyframes = useMemo(() => {
@@ -260,19 +288,51 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
         }
       }
 
-      if (refs.length === 1 && refs[0]) {
+      if (refs.length === 0) {
+        clearKeyframeSelection();
+      } else if (refs.length === 1 && refs[0]) {
         selectKeyframe(refs[0]);
       } else if (refs.length > 1) {
         selectKeyframes(refs);
       }
     },
-    [selectedItemWithKeyframes, selectKeyframe, selectKeyframes]
+    [selectedItemWithKeyframes, clearKeyframeSelection, selectKeyframe, selectKeyframes]
   );
 
   // Handle property change in graph editor
   const handlePropertyChange = useCallback((property: AnimatableProperty | null) => {
     setSelectedProperty(property);
   }, []);
+
+  useHotkeys(
+    HOTKEYS.KEYFRAME_EDITOR_GRAPH,
+    (event) => {
+      event.preventDefault();
+      setEditorMode('graph');
+    },
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
+  );
+
+  useHotkeys(
+    HOTKEYS.KEYFRAME_EDITOR_DOPESHEET,
+    (event) => {
+      event.preventDefault();
+      setEditorMode('dopesheet');
+    },
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
+  );
+
+  useHotkeys(
+    HOTKEYS.KEYFRAME_EDITOR_SPLIT,
+    (event) => {
+      event.preventDefault();
+      setEditorMode('split');
+    },
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
+  );
 
   // Handle scrubbing in graph editor - convert clip-relative frame to absolute frame
   const handleScrub = useCallback(
@@ -362,6 +422,12 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     ? GRAPH_PANEL_HEADER_HEIGHT + RESIZE_HANDLE_HEIGHT + contentHeight
     : GRAPH_PANEL_HEADER_HEIGHT;
 
+  const editorWidth = Math.max(0, containerWidth - 16);
+  const editorHeight = Math.max(0, contentHeight - 16);
+  const splitGap = 8;
+  const splitLeftWidth = Math.max(0, Math.floor((editorWidth - splitGap) / 2));
+  const splitRightWidth = Math.max(0, editorWidth - splitLeftWidth - splitGap);
+
   return (
     <div
       className={cn(
@@ -395,7 +461,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </Button>
           <span className="text-xs font-medium text-muted-foreground">
-            Keyframe Graph
+            Keyframe Editor
             {selectedItemWithKeyframes && (
               <span className="ml-2 text-foreground">
                 - {selectedItemWithKeyframes.item.label || selectedItemWithKeyframes.item.type}
@@ -407,46 +473,149 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
           </span>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-5 w-5 p-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-        >
-          <X className="w-3 h-3" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant={editorMode === 'graph' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditorMode('graph');
+            }}
+          >
+            Graph
+          </Button>
+          <Button
+            variant={editorMode === 'dopesheet' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditorMode('dopesheet');
+            }}
+          >
+            Sheet
+          </Button>
+          <Button
+            variant={editorMode === 'split' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditorMode('split');
+            }}
+          >
+            Split
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
       </div>
 
-      {/* Graph editor content */}
+      {/* Keyframe editor content */}
       {isOpen && (
         <div ref={containerRef} className="p-2" style={{ height: contentHeight }}>
           {selectedItemWithKeyframes && containerWidth > 0 ? (
-            <ValueGraphEditor
-              itemId={selectedItemWithKeyframes.item.id}
-              keyframesByProperty={keyframesByProperty}
-              selectedProperty={selectedProperty}
-              selectedKeyframeIds={selectedKeyframeIds}
-              currentFrame={relativeFrame}
-              totalFrames={selectedItemWithKeyframes.item.durationInFrames}
-              width={containerWidth - 16} // Full width minus padding
-              height={contentHeight - 16}
-              onKeyframeMove={handleKeyframeMove}
-              onSelectionChange={handleSelectionChange}
-              onPropertyChange={handlePropertyChange}
-              onScrub={handleScrub}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onAddKeyframe={handleAddKeyframe}
-              onRemoveKeyframes={handleRemoveKeyframes}
-              onNavigateToKeyframe={handleNavigateToKeyframe}
-              transitionBlockedRanges={transitionBlockedRanges}
-            />
+            editorMode === 'split' ? (
+              <div className="flex gap-2 h-full min-w-0">
+                <DopesheetEditor
+                  itemId={selectedItemWithKeyframes.item.id}
+                  keyframesByProperty={keyframesByProperty}
+                  selectedProperty={selectedProperty}
+                  selectedKeyframeIds={selectedKeyframeIds}
+                  currentFrame={relativeFrame}
+                  totalFrames={selectedItemWithKeyframes.item.durationInFrames}
+                  width={splitLeftWidth}
+                  height={editorHeight}
+                  className="flex-1 min-w-0"
+                  onKeyframeMove={handleKeyframeMove}
+                  onSelectionChange={handleSelectionChange}
+                  onPropertyChange={handlePropertyChange}
+                  onScrub={handleScrub}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onAddKeyframe={handleAddKeyframe}
+                  onRemoveKeyframes={handleRemoveKeyframes}
+                  onNavigateToKeyframe={handleNavigateToKeyframe}
+                  transitionBlockedRanges={transitionBlockedRanges}
+                />
+                <ValueGraphEditor
+                  itemId={selectedItemWithKeyframes.item.id}
+                  keyframesByProperty={keyframesByProperty}
+                  selectedProperty={selectedProperty}
+                  selectedKeyframeIds={selectedKeyframeIds}
+                  currentFrame={relativeFrame}
+                  totalFrames={selectedItemWithKeyframes.item.durationInFrames}
+                  width={splitRightWidth}
+                  height={editorHeight}
+                  className="flex-1 min-w-0"
+                  onKeyframeMove={handleKeyframeMove}
+                  onSelectionChange={handleSelectionChange}
+                  onPropertyChange={handlePropertyChange}
+                  onScrub={handleScrub}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onAddKeyframe={handleAddKeyframe}
+                  onRemoveKeyframes={handleRemoveKeyframes}
+                  onNavigateToKeyframe={handleNavigateToKeyframe}
+                  transitionBlockedRanges={transitionBlockedRanges}
+                />
+              </div>
+            ) : editorMode === 'dopesheet' ? (
+              <DopesheetEditor
+                itemId={selectedItemWithKeyframes.item.id}
+                keyframesByProperty={keyframesByProperty}
+                selectedProperty={selectedProperty}
+                selectedKeyframeIds={selectedKeyframeIds}
+                currentFrame={relativeFrame}
+                totalFrames={selectedItemWithKeyframes.item.durationInFrames}
+                width={editorWidth}
+                height={editorHeight}
+                onKeyframeMove={handleKeyframeMove}
+                onSelectionChange={handleSelectionChange}
+                onPropertyChange={handlePropertyChange}
+                onScrub={handleScrub}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onAddKeyframe={handleAddKeyframe}
+                onRemoveKeyframes={handleRemoveKeyframes}
+                onNavigateToKeyframe={handleNavigateToKeyframe}
+                transitionBlockedRanges={transitionBlockedRanges}
+              />
+            ) : (
+              <ValueGraphEditor
+                itemId={selectedItemWithKeyframes.item.id}
+                keyframesByProperty={keyframesByProperty}
+                selectedProperty={selectedProperty}
+                selectedKeyframeIds={selectedKeyframeIds}
+                currentFrame={relativeFrame}
+                totalFrames={selectedItemWithKeyframes.item.durationInFrames}
+                width={editorWidth}
+                height={editorHeight}
+                onKeyframeMove={handleKeyframeMove}
+                onSelectionChange={handleSelectionChange}
+                onPropertyChange={handlePropertyChange}
+                onScrub={handleScrub}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onAddKeyframe={handleAddKeyframe}
+                onRemoveKeyframes={handleRemoveKeyframes}
+                onNavigateToKeyframe={handleNavigateToKeyframe}
+                transitionBlockedRanges={transitionBlockedRanges}
+              />
+            )
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              {selectedItemWithKeyframes ? 'Loading...' : 'Select an item with keyframes to view the graph'}
+              {selectedItemWithKeyframes ? 'Loading...' : 'Select an item with keyframes to view the editor'}
             </div>
           )}
         </div>

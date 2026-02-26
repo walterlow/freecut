@@ -54,7 +54,14 @@ const SHORTCUT_CATEGORIES: { name: string; keys: HotkeyKey[]; extra?: { descript
   },
   {
     name: 'Keyframes',
-    keys: ['ADD_KEYFRAME', 'CLEAR_KEYFRAMES', 'TOGGLE_KEYFRAME_EDITOR'],
+    keys: [
+      'ADD_KEYFRAME',
+      'CLEAR_KEYFRAMES',
+      'TOGGLE_KEYFRAME_EDITOR',
+      'KEYFRAME_EDITOR_GRAPH',
+      'KEYFRAME_EDITOR_DOPESHEET',
+      'KEYFRAME_EDITOR_SPLIT',
+    ],
   },
   {
     name: 'Source Monitor',

@@ -64,6 +64,9 @@ export const HOTKEYS = {
   ADD_KEYFRAME: 'k',
   CLEAR_KEYFRAMES: 'shift+k',
   TOGGLE_KEYFRAME_EDITOR: 'mod+k',
+  KEYFRAME_EDITOR_GRAPH: '1',
+  KEYFRAME_EDITOR_DOPESHEET: '2',
+  KEYFRAME_EDITOR_SPLIT: '3',
 
   // Track Groups
   GROUP_TRACKS: 'mod+g',
@@ -142,6 +145,9 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   ADD_KEYFRAME: 'Add keyframe at playhead',
   CLEAR_KEYFRAMES: 'Clear all keyframes from selected items',
   TOGGLE_KEYFRAME_EDITOR: 'Toggle keyframe editor panel',
+  KEYFRAME_EDITOR_GRAPH: 'Switch keyframe editor to graph view',
+  KEYFRAME_EDITOR_DOPESHEET: 'Switch keyframe editor to dopesheet view',
+  KEYFRAME_EDITOR_SPLIT: 'Switch keyframe editor to split view',
 
   // Track Groups
   GROUP_TRACKS: 'Group selected tracks',
