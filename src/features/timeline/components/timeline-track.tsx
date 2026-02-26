@@ -8,6 +8,7 @@ import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useVisibleItems } from '../hooks/use-visible-items';
+import { useItemsStore } from '../stores/items-store';
 import { useSelectionStore } from '@/features/editor/stores/selection-store';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
@@ -202,6 +203,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
   // Virtualized items/transitions — only those overlapping the visible viewport + buffer
   const { visibleItems: trackItems, visibleTransitions: trackTransitions } = useVisibleItems(track.id);
+  // Full item count — used for context menu guard (must not depend on virtualized subset)
+  const hasAnyItems = useItemsStore((s) => (s.itemsByTrackId[track.id]?.length ?? 0) > 0);
   const addItem = useTimelineStore((s) => s.addItem);
   const addItems = useTimelineStore((s) => s.addItems);
   const fps = useTimelineStore((s) => s.fps);
@@ -225,11 +228,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     )
   );
 
-  // Check if a frame position is inside a real gap (between clips, not after the last clip)
+  // Check if a frame position is inside a real gap (between clips, not after the last clip).
+  // Reads full item list from store (not the virtualized subset) so gaps near viewport edges
+  // are detected correctly even when the clip after the gap is outside the visible buffer.
   const isFrameInGap = useCallback((frame: number) => {
-    if (trackItems.length === 0) return false;
+    const allTrackItems = useItemsStore.getState().itemsByTrackId[track.id];
+    if (!allTrackItems || allTrackItems.length === 0) return false;
 
-    const sortedItems = trackItems.toSorted((a, b) => a.from - b.from);
+    const sortedItems = allTrackItems.toSorted((a, b) => a.from - b.from);
 
     // Check if frame is inside any clip
     for (const item of sortedItems) {
@@ -241,7 +247,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     // Check if there's a clip AFTER this frame (otherwise it's just empty space, not a gap)
     const hasClipAfter = sortedItems.some((item) => item.from > frame);
     return hasClipAfter;
-  }, [trackItems]);
+  }, [track.id]);
 
   // Handle context menu on track (for empty space)
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -762,7 +768,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           )}
         </div>
       </ContextMenuTrigger>
-      {trackItems.length > 0 && contextMenuFrame !== null && (
+      {hasAnyItems && contextMenuFrame !== null && (
         <ContextMenuContent>
           <ContextMenuItem onClick={handleCloseGap}>
             Ripple Delete
