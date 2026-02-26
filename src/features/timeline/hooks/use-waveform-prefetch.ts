@@ -76,6 +76,7 @@ export function useWaveformPrefetch() {
       if (itemEnd > visibleStartFrame && item.from < visibleEndFrame) continue;
 
       // Prefetch this clip's waveform if a blob URL is already available
+      if (!item.mediaId) continue;
       const blobUrl = blobUrlManager.get(item.mediaId);
       if (blobUrl) {
         waveformCache.prefetch(item.mediaId, blobUrl);
