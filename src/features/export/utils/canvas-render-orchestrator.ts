@@ -547,9 +547,12 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
     for (let frame = 0; frame < totalFrames; frame++) {
       // Check for abort — drain any in-flight encode first so the encoder
-      // is idle before we cancel the output.
+      // is idle before we cancel the output. Discard encoder errors since
+      // we are aborting anyway and must always surface AbortError.
       if (signal?.aborted) {
-        if (pendingEncode) await pendingEncode;
+        if (pendingEncode) {
+          try { await pendingEncode; } catch { /* discarded — aborting */ }
+        }
         await output.cancel();
         throw new DOMException('Render cancelled', 'AbortError');
       }
