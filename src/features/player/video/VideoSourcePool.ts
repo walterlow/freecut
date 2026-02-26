@@ -14,6 +14,19 @@ interface SourceMetadata {
   height: number;
 }
 
+const VIDEO_POOL_ABORT_PREFIX = 'VIDEO_POOL_ABORT:';
+
+function createVideoPoolAbortError(reason: string): Error {
+  const error = new Error(`${VIDEO_POOL_ABORT_PREFIX}${reason}`);
+  error.name = 'AbortError';
+  return error;
+}
+
+export function isVideoPoolAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === 'AbortError' || error.message.startsWith(VIDEO_POOL_ABORT_PREFIX);
+}
+
 /**
  * SourceController - Manages video elements for a single source URL
  *
@@ -86,10 +99,18 @@ class SourceController {
       };
 
       const onError = () => {
+        const srcAttr = element.getAttribute('src') ?? '';
+        const mediaMessage = element.error?.message || 'Unknown error';
+        if (!srcAttr && /empty\s+src\s+attribute/i.test(mediaMessage)) {
+          cleanup();
+          reject(createVideoPoolAbortError('source-cleared-during-load'));
+          return;
+        }
+
         cleanup();
         reject(
           new Error(
-            `Failed to load video: ${element.error?.message || 'Unknown error'}`
+            `Failed to load video: ${mediaMessage}`
           )
         );
       };
@@ -110,6 +131,12 @@ class SourceController {
       // broken file, browser bug). Without this, the promise hangs forever
       // and blocks subsequent preloadSource() calls for the same URL.
       this._loadTimeoutId = setTimeout(() => {
+        if (!(element.getAttribute('src') ?? '')) {
+          cleanup();
+          reject(createVideoPoolAbortError('source-cleared-before-ready'));
+          return;
+        }
+
         cleanup();
         reject(
           new Error(

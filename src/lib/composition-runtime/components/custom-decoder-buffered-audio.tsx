@@ -9,12 +9,18 @@ import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
 import {
   getOrDecodeAudio,
-  getOrDecodeAudioForPlayback,
   isPreviewAudioDecodePending,
 } from '../utils/audio-decode-cache';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('CustomDecoderBufferedAudio');
+const GAIN_RAMP_SECONDS = 0.008;
+const STOP_GRACE_SECONDS = 0.002;
+const PARTIAL_BUFFER_HEADROOM_SECONDS = 0.25;
+const DRIFT_RESYNC_MIN_ELAPSED_SECONDS = 1.0;
+const DRIFT_RESYNC_POSITIVE_THRESHOLD_SECONDS = 1.25;
+const DRIFT_RESYNC_NEGATIVE_THRESHOLD_SECONDS = -0.75;
+const WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK = true;
 
 let sharedCtx: AudioContext | null = null;
 
@@ -163,8 +169,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
 
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioVolumeRef = useRef<number>(audioVolume);
+  const startRequestIdRef = useRef<number>(0);
+  const lastObservedFrameRef = useRef<number>(frame);
 
-  const lastSyncTimeRef = useRef<number>(0);
+  const lastSyncContextTimeRef = useRef<number>(0);
   const lastStartOffsetRef = useRef<number>(0);
   const lastStartRateRef = useRef<number>(playbackRate);
   const needsInitialSyncRef = useRef<boolean>(true);
@@ -173,44 +182,66 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!mediaId || !src) return;
 
     let cancelled = false;
-    getOrDecodeAudioForPlayback(mediaId, src, {
-      minReadySeconds: 8,
-      waitTimeoutMs: 6000,
-    })
-      .then((buffer) => {
-        if (!cancelled) {
-          setAudioBuffer(buffer);
-          log.info('Initial buffered audio ready', {
-            mediaId,
-            duration: buffer.duration.toFixed(2),
-            sampleRate: buffer.sampleRate,
-            channels: buffer.numberOfChannels,
-          });
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          log.error('Failed to decode buffered audio', { mediaId, err });
-        }
-      });
+    if (WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK) {
+      getOrDecodeAudio(mediaId, src)
+        .then((buffer) => {
+          if (!cancelled) {
+            setAudioBuffer(buffer);
+            log.info('Full buffered audio ready', {
+              mediaId,
+              duration: buffer.duration.toFixed(2),
+              sampleRate: buffer.sampleRate,
+              channels: buffer.numberOfChannels,
+            });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            log.error('Failed to decode buffered audio', { mediaId, err });
+          }
+        });
+    } else {
+      // Legacy low-latency path: start from partial bins, then upgrade to full decode.
+      import('../utils/audio-decode-cache')
+        .then(({ getOrDecodeAudioForPlayback }) => getOrDecodeAudioForPlayback(mediaId, src, {
+          minReadySeconds: 8,
+          waitTimeoutMs: 6000,
+        }))
+        .then((buffer) => {
+          if (!cancelled) {
+            setAudioBuffer(buffer);
+            log.info('Initial buffered audio ready', {
+              mediaId,
+              duration: buffer.duration.toFixed(2),
+              sampleRate: buffer.sampleRate,
+              channels: buffer.numberOfChannels,
+            });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            log.error('Failed to decode buffered audio', { mediaId, err });
+          }
+        });
 
-    // Upgrade to full decoded buffer when background decode/reassembly completes.
-    getOrDecodeAudio(mediaId, src)
-      .then((buffer) => {
-        if (!cancelled) {
-          setAudioBuffer((current) => {
-            if (current && current.length === buffer.length && current.sampleRate === buffer.sampleRate) {
-              return current;
-            }
-            return buffer;
-          });
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          log.error('Failed to finalize buffered audio decode', { mediaId, err });
-        }
-      });
+      // Upgrade to full decoded buffer when background decode/reassembly completes.
+      getOrDecodeAudio(mediaId, src)
+        .then((buffer) => {
+          if (!cancelled) {
+            setAudioBuffer((current) => {
+              if (current && current.length === buffer.length && current.sampleRate === buffer.sampleRate) {
+                return current;
+              }
+              return buffer;
+            });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            log.error('Failed to finalize buffered audio decode', { mediaId, err });
+          }
+        });
+    }
 
     return () => { cancelled = true; };
   }, [mediaId, src]);
@@ -220,6 +251,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!ctx) return;
 
     const gain = ctx.createGain();
+    gain.gain.value = 0;
     gain.connect(ctx.destination);
     gainNodeRef.current = gain;
 
@@ -252,18 +284,43 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, []);
 
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = audioVolume;
-    }
+    const ctx = getSharedAudioContext();
+    const gain = gainNodeRef.current;
+    if (!ctx || !gain) return;
+
+    audioVolumeRef.current = audioVolume;
+    const now = ctx.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setValueAtTime(gain.gain.value, now);
+    gain.gain.linearRampToValueAtTime(Math.max(0, audioVolume), now + GAIN_RAMP_SECONDS);
   }, [audioVolume]);
 
-  const stopSource = () => {
-    if (sourceRef.current) {
-      try { sourceRef.current.stop(); } catch { /* already stopped */ }
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
+  const stopSource = useCallback((fadeOut: boolean = true) => {
+    startRequestIdRef.current += 1;
+
+    const source = sourceRef.current;
+    if (!source) return;
+    sourceRef.current = null;
+
+    const ctx = getSharedAudioContext();
+    const gain = gainNodeRef.current;
+
+    if (fadeOut && ctx && gain) {
+      const now = ctx.currentTime;
+      const stopAt = now + GAIN_RAMP_SECONDS;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, stopAt);
+      try {
+        source.stop(stopAt + STOP_GRACE_SECONDS);
+      } catch {
+        try { source.stop(); } catch { /* already stopped */ }
+      }
+      return;
     }
-  };
+
+    try { source.stop(); } catch { /* already stopped */ }
+  }, []);
 
   useEffect(() => {
     if (!audioBuffer) return;
@@ -276,65 +333,94 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const effectiveSourceFps = sourceFps ?? fps;
     // IMPORTANT: trimBefore is in source FPS frames — must use effectiveSourceFps, not fps
     const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    const frameDelta = frame - lastObservedFrameRef.current;
+    lastObservedFrameRef.current = frame;
+    const frameSeekJumpThreshold = Math.max(8, Math.round(fps * 0.5));
 
     if (isPremounted) {
-      stopSource();
+      stopSource(false);
+      needsInitialSyncRef.current = true;
       return;
     }
 
     if (playing) {
-      const now = Date.now();
-
       let shouldStart = false;
+      const currentSource = sourceRef.current;
 
       if (needsInitialSyncRef.current) {
         shouldStart = true;
-      } else if (!sourceRef.current) {
-        shouldStart = true;
-      } else if (sourceRef.current.buffer !== audioBuffer) {
-        // Audio buffer was upgraded (partial -> full), re-sync with new source.
+      } else if (!currentSource) {
         shouldStart = true;
       } else if (Math.abs(playbackRate - lastStartRateRef.current) > 0.0001) {
         shouldStart = true;
-      } else {
-        const elapsedSec = (now - lastSyncTimeRef.current) / 1000;
-        const estimatedPosition = lastStartOffsetRef.current + elapsedSec * lastStartRateRef.current;
-        const drift = estimatedPosition - targetTime;
-
-        if (drift > 0.5 || drift < -0.2) {
+      } else if (Math.abs(frameDelta) > frameSeekJumpThreshold) {
+        // Treat large frame jumps as explicit seeks and re-sync immediately.
+        shouldStart = true;
+      } else if (currentSource.buffer !== audioBuffer) {
+        // Buffer changed (partial -> full). Avoid immediate restart thrash;
+        // only re-sync if current source is close to running out.
+        const sourceDuration = currentSource.buffer?.duration ?? 0;
+        const remainingCoverage = sourceDuration - targetTime;
+        if (remainingCoverage <= PARTIAL_BUFFER_HEADROOM_SECONDS) {
           shouldStart = true;
+        }
+      } else {
+        // While decode is pending, avoid drift-driven seeks because frame cadence
+        // can be jittery during warm-up and causes audible restart clicks.
+        if (!isPreviewAudioDecodePending(mediaId)) {
+          const elapsedSec = ctx.currentTime - lastSyncContextTimeRef.current;
+          const estimatedPosition = lastStartOffsetRef.current + elapsedSec * lastStartRateRef.current;
+          const drift = estimatedPosition - targetTime;
+
+          if (
+            elapsedSec > DRIFT_RESYNC_MIN_ELAPSED_SECONDS
+            && (drift > DRIFT_RESYNC_POSITIVE_THRESHOLD_SECONDS || drift < DRIFT_RESYNC_NEGATIVE_THRESHOLD_SECONDS)
+          ) {
+            shouldStart = true;
+          }
         }
       }
 
       if (shouldStart) {
         // If we only have a partial decode and timeline position is beyond its duration,
         // wait for more bins/full decode instead of repeatedly starting at partial tail.
-        if (targetTime >= audioBuffer.duration - 0.01 && isPreviewAudioDecodePending(mediaId)) {
+        if (targetTime >= audioBuffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS && isPreviewAudioDecodePending(mediaId)) {
           stopSource();
           return;
         }
 
         stopSource();
+        const startRequestId = ++startRequestIdRef.current;
 
         const resumePromise = ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
         resumePromise.then(() => {
-          if (ctx.state !== 'running' || !gainNodeRef.current) return;
+          if (startRequestId !== startRequestIdRef.current) return;
+
+          const liveGain = gainNodeRef.current;
+          if (ctx.state !== 'running' || !liveGain) return;
 
           const source = ctx.createBufferSource();
           source.buffer = audioBuffer;
           source.playbackRate.value = playbackRate;
-          source.connect(gain);
+          source.connect(liveGain);
           source.onended = () => {
+            source.disconnect();
             if (sourceRef.current === source) {
               sourceRef.current = null;
             }
           };
 
           const clampedOffset = Math.max(0, Math.min(targetTime, audioBuffer.duration - 0.01));
-          source.start(0, clampedOffset);
+          const startAt = ctx.currentTime;
+          const startVolume = Math.max(0, audioVolumeRef.current);
+          liveGain.gain.cancelScheduledValues(startAt);
+          liveGain.gain.setValueAtTime(0, startAt);
+          liveGain.gain.linearRampToValueAtTime(startVolume, startAt + GAIN_RAMP_SECONDS);
+
+          source.start(startAt, clampedOffset);
           sourceRef.current = source;
 
-          lastSyncTimeRef.current = Date.now();
+          lastSyncContextTimeRef.current = startAt;
           lastStartOffsetRef.current = clampedOffset;
           lastStartRateRef.current = playbackRate;
           needsInitialSyncRef.current = false;
@@ -349,7 +435,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       stopSource();
       needsInitialSyncRef.current = true;
     }
-  }, [frame, fps, playing, playbackRate, trimBefore, audioBuffer, mediaId]);
+  }, [frame, fps, playing, playbackRate, trimBefore, audioBuffer, mediaId, sourceFps, stopSource]);
 
   return null;
 });

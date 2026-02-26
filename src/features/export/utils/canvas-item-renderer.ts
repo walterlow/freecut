@@ -220,6 +220,7 @@ async function renderVideoItem(
   const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
   const isPreviewMode = rctx.renderMode === 'preview';
   const allowVideoElementFallback = !isPreviewMode;
+  const hasFallbackVideoElement = videoElements.has(item.id);
   let mediabunnyFailedThisFrame = false;
 
   // Calculate source time
@@ -245,6 +246,14 @@ async function renderVideoItem(
     } catch {
       // Best effort in preview path; fallback behavior handled below.
     }
+  }
+
+  // Preview fast-scrub runs in strict decode mode (no HTML video fallbacks).
+  // During startup/resolution races, mediabunny may not be ready for this frame yet.
+  // In that window, skip drawing this item for the frame instead of logging a
+  // misleading "Video element not found" warning.
+  if (isPreviewMode && !useMediabunny.has(item.id) && !hasFallbackVideoElement) {
+    return;
   }
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
@@ -316,6 +325,7 @@ async function renderVideoItem(
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
   const allowPreviewFallback = isPreviewMode
+    && hasFallbackVideoElement
     && (mediabunnyFailedThisFrame || !useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id));
   if (!allowVideoElementFallback && !allowPreviewFallback) {
     return;

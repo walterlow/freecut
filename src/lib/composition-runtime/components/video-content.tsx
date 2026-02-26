@@ -5,6 +5,7 @@ import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useClock } from '@/features/player/clock/clock-hooks';
 import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/player/video/VideoSourcePoolContext';
+import { isVideoPoolAbortError } from '@/features/player/video/VideoSourcePool';
 import { createLogger } from '@/lib/logger';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
@@ -108,6 +109,8 @@ const NativePreviewVideo: React.FC<{
       return;
     }
 
+    let cancelled = false;
+
     // Reset sync state for the new clip. The component doesn't unmount when
     // crossing split boundaries (React reconciles with new props), so refs
     // retain stale values from the previous clip. Without this reset, the
@@ -120,6 +123,9 @@ const NativePreviewVideo: React.FC<{
 
     // Ensure source is preloaded
     pool.preloadSource(src).catch((error) => {
+      if (cancelled || isVideoPoolAbortError(error)) {
+        return;
+      }
       console.warn(`[NativePreviewVideo] Failed to preload ${src}:`, error);
     });
 
@@ -274,6 +280,7 @@ const NativePreviewVideo: React.FC<{
     }
 
     return () => {
+      cancelled = true;
       element.removeEventListener('canplay', handleCanPlay);
       element.removeEventListener('seeked', handleSeeked);
       element.removeEventListener('error', handleError);
