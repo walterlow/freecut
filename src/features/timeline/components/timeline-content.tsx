@@ -12,6 +12,7 @@ import { useSelectionStore } from '@/features/editor/stores/selection-store';
 
 // Hooks
 import { useMarqueeSelection } from '@/hooks/use-marquee-selection';
+import { useWaveformPrefetch } from '../hooks/use-waveform-prefetch';
 
 // Constants
 import {
@@ -67,6 +68,10 @@ interface TimelineContentProps {
  */
 export const TimelineContent = memo(function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: TimelineContentProps) {
   void duration;
+
+  // Prefetch waveforms for clips approaching the viewport
+  useWaveformPrefetch();
+
   // Use granular selectors - Zustand v5 best practice
   const allTracks = useTimelineStore((s) => s.tracks);
   const fps = useTimelineStore((s) => s.fps);
