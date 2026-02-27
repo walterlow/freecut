@@ -1271,13 +1271,23 @@ export const VideoPreview = memo(function VideoPreview({
         || state.previewFrame !== prev.previewFrame
         || state.isPlaying !== prev.isPlaying
       ) {
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-        }
-        rafId = requestAnimationFrame(() => {
-          rafId = null;
+        // When playback starts, warm sources synchronously so video elements
+        // start loading immediately — don't wait for the next animation frame.
+        if (state.isPlaying && !prev.isPlaying) {
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
           refreshWarmSet();
-        });
+        } else {
+          if (rafId !== null) {
+            cancelAnimationFrame(rafId);
+          }
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            refreshWarmSet();
+          });
+        }
       }
     });
 
@@ -1803,6 +1813,9 @@ export const VideoPreview = memo(function VideoPreview({
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (state.isPlaying && !prevState.isPlaying) {
+        // Kick off an immediate preload pass so the first playback frames
+        // don't stall waiting for the 1-second interval to fire.
+        void preloadMedia();
         intervalId = setInterval(() => {
           void preloadMedia();
         }, 1000);
@@ -1811,6 +1824,13 @@ export const VideoPreview = memo(function VideoPreview({
         && state.previewFrame !== null
         && state.previewFrame !== prevState.previewFrame
       ) {
+        void preloadMedia();
+      } else if (
+        !state.isPlaying
+        && state.currentFrame !== prevState.currentFrame
+      ) {
+        // Ruler click sets currentFrame directly (no previewFrame).
+        // Preload around the new position so sources are warm before play.
         void preloadMedia();
       } else if (!state.isPlaying && prevState.isPlaying) {
         if (intervalId) {
