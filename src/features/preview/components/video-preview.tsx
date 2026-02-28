@@ -819,7 +819,6 @@ export const VideoPreview = memo(function VideoPreview({
     scrubVideoSourceSpans,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
-    resolvedTracksFingerprint,
     fastScrubTracksFingerprint,
   } = useMemo(() => {
     const resolvedTrackList: CompositionInputProps['tracks'] = [];
@@ -910,7 +909,6 @@ export const VideoPreview = memo(function VideoPreview({
       scrubVideoSourceSpans: scrubSpans,
       fastScrubBoundaryFrames: sortedBoundaryFrames,
       fastScrubBoundarySources: sortedBoundarySources,
-      resolvedTracksFingerprint: toTrackFingerprint(resolvedTrackList),
       fastScrubTracksFingerprint: toTrackFingerprint(fastScrubTrackList),
     };
   }, [combinedTracks, resolvedUrls, useProxy, proxyReadyCount]);
@@ -1311,7 +1309,7 @@ export const VideoPreview = memo(function VideoPreview({
     tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, project.width, project.height, resolvedTracksFingerprint, transitions, project.backgroundColor]);
+  }), [fps, project.width, project.height, resolvedTracks, transitions, project.backgroundColor]);
 
   // Compute scaled render resolution for preview quality.
   // Keep dimensions even for decoder compatibility.
