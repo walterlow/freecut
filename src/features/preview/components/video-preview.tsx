@@ -29,6 +29,7 @@ import { SlideEditOverlay } from './slide-edit-overlay';
 import type { CompositionInputProps } from '@/types/export';
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
+import type { ItemKeyframes } from '@/types/keyframe';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 import { createCompositionRenderer } from '@/features/preview/deps/export';
 
@@ -225,6 +226,48 @@ function scaleTracksForPreview(
       scaleItemForPreview(item, scaleX, scaleY, uniformScale)
     ),
   }));
+}
+
+function scaleKeyframesForPreview(
+  keyframes: ItemKeyframes[] | undefined,
+  scaleX: number,
+  scaleY: number,
+  uniformScale: number
+): ItemKeyframes[] | undefined {
+  if (!keyframes || keyframes.length === 0) return keyframes;
+
+  let changed = false;
+  const scaled = keyframes.map((itemKeyframes) => {
+    let itemChanged = false;
+    const nextProperties = itemKeyframes.properties.map((propertyKeyframes) => {
+      const scaleForProperty =
+        propertyKeyframes.property === 'x' || propertyKeyframes.property === 'width'
+          ? scaleX
+          : propertyKeyframes.property === 'y' || propertyKeyframes.property === 'height'
+            ? scaleY
+            : propertyKeyframes.property === 'cornerRadius'
+              ? uniformScale
+              : null;
+
+      if (scaleForProperty === null) return propertyKeyframes;
+      if (scaleForProperty === 1) return propertyKeyframes;
+
+      itemChanged = true;
+      return {
+        ...propertyKeyframes,
+        keyframes: propertyKeyframes.keyframes.map((keyframe) => ({
+          ...keyframe,
+          value: keyframe.value * scaleForProperty,
+        })),
+      };
+    });
+
+    if (!itemChanged) return itemKeyframes;
+    changed = true;
+    return { ...itemKeyframes, properties: nextProperties };
+  });
+
+  return changed ? scaled : keyframes;
 }
 
 function getPreloadBudget(isPlaying: boolean, previewFrame: number | null): number {
@@ -544,6 +587,7 @@ export const VideoPreview = memo(function VideoPreview({
   // Granular selectors - avoid subscribing to currentFrame here to prevent re-renders
   const fps = useTimelineStore((s) => s.fps);
   const tracks = useTimelineStore((s) => s.tracks);
+  const keyframes = useTimelineStore((s) => s.keyframes);
   const items = useItemsStore((s) => s.items);
   const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
   const mediaDependencyVersion = useMediaDependencyStore((s) => s.mediaDependencyVersion);
@@ -1309,7 +1353,8 @@ export const VideoPreview = memo(function VideoPreview({
     tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
     backgroundColor: project.backgroundColor,
-  }), [fps, project.width, project.height, resolvedTracks, transitions, project.backgroundColor]);
+    keyframes,
+  }), [fps, project.width, project.height, resolvedTracks, transitions, project.backgroundColor, keyframes]);
 
   // Compute scaled render resolution for preview quality.
   // Keep dimensions even for decoder compatibility.
@@ -1337,6 +1382,22 @@ export const VideoPreview = memo(function VideoPreview({
     project.height,
   ]);
 
+  const fastScrubScaledKeyframes = useMemo(() => {
+    if (previewQuality === 1) return keyframes;
+
+    const sx = project.width > 0 ? renderSize.width / project.width : 1;
+    const sy = project.height > 0 ? renderSize.height / project.height : 1;
+    const s = Math.min(sx, sy);
+    return scaleKeyframesForPreview(keyframes, sx, sy, s);
+  }, [
+    keyframes,
+    previewQuality,
+    renderSize.width,
+    renderSize.height,
+    project.width,
+    project.height,
+  ]);
+
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
     width: renderSize.width,
@@ -1344,6 +1405,7 @@ export const VideoPreview = memo(function VideoPreview({
     tracks: fastScrubScaledTracks,
     transitions,
     backgroundColor: project.backgroundColor,
+    keyframes: fastScrubScaledKeyframes,
   }), [
     fps,
     renderSize.width,
@@ -1351,6 +1413,7 @@ export const VideoPreview = memo(function VideoPreview({
     fastScrubScaledTracks,
     transitions,
     project.backgroundColor,
+    fastScrubScaledKeyframes,
   ]);
 
   // Keep fast scrub canvas dimensions in sync with preview render dimensions.
@@ -2105,5 +2168,4 @@ export const VideoPreview = memo(function VideoPreview({
     </div>
   );
 });
-
 
