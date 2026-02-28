@@ -1,5 +1,5 @@
-import type { MediaMetadata, ThumbnailData } from '@/types/storage';
-import { createLogger } from '@/lib/logger';
+﻿import type { MediaMetadata, ThumbnailData } from '@/types/storage';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibraryService');
 import {
@@ -21,8 +21,8 @@ import {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
-} from '@/lib/storage/indexeddb';
-import { gifFrameCache } from '@/features/timeline/services/gif-frame-cache';
+} from '@/infrastructure/storage/indexeddb';
+import { gifFrameCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { validateMediaFile, getMimeType } from '../utils/validation';
@@ -796,3 +796,4 @@ class MediaLibraryService {
 
 // Singleton instance
 export const mediaLibraryService = new MediaLibraryService();
+

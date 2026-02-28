@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import { useSettingsStore } from '@/features/settings/stores/settings-store';
-import { createLogger } from '@/lib/logger';
+import { useSettingsStore } from '@/features/editor/deps/settings';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('AutoSave');
 
@@ -74,3 +74,4 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
     };
   }, [autoSaveInterval, isDirty, onSave, enabled]);
 }
+

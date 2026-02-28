@@ -1,5 +1,5 @@
-import { forwardRef, memo } from 'react';
-import { cn } from '@/lib/utils';
+﻿import { forwardRef, memo } from 'react';
+import { cn } from '@/shared/ui/cn';
 
 interface DragGhostsProps {
   isAltDrag: boolean;
@@ -67,3 +67,4 @@ export const FollowerDragGhost = memo(forwardRef<HTMLDivElement, FollowerDragGho
     );
   }
 ));
+

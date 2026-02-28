@@ -18,6 +18,9 @@ export default defineConfig({
   build: {
     target: 'esnext',
     sourcemap: true,
+    // @mediabunny/ac3 is an intentionally large lazy decoder bundle (~1.1 MB minified).
+    // Keep warnings focused on unexpected growth rather than this known outlier.
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
         manualChunks: (id) => {
@@ -25,21 +28,24 @@ export default defineConfig({
           // Without this, Rollup places it in composition-runtime which has a
           // circular import with media-library, causing "Cannot access before
           // initialization" in production builds.
-          if (id.endsWith('src/lib/logger.ts')) {
+          if (id.endsWith('src/shared/logging/logger.ts')) {
             return 'core-logger';
           }
 
           // Application feature chunks
-          if (id.includes('/src/features/timeline/')) {
-            return 'feature-timeline';
-          }
-          if (id.includes('/src/features/media-library/')) {
-            return 'feature-media-library';
+          if (id.includes('/src/features/timeline/') || id.includes('/src/features/media-library/')) {
+            // Split UI from editing domain/runtime modules to reduce initial chunk pressure.
+            // Keep stores/services/utils/deps/contracts together to preserve execution order
+            // for tightly-coupled timeline/media-library integration points.
+            if (id.includes('/components/')) {
+              return 'feature-editing-ui';
+            }
+            return 'feature-editing-core';
           }
           if (id.includes('/src/features/effects/')) {
             return 'feature-effects';
           }
-          if (id.includes('/src/lib/composition-runtime/')) {
+          if (id.includes('/src/features/composition-runtime/')) {
             return 'feature-composition-runtime';
           }
 
@@ -60,6 +66,9 @@ export default defineConfig({
             return 'state-vendor';
           }
           // Media processing - loaded on demand
+          if (id.includes('@mediabunny/ac3')) {
+            return 'media-ac3-decoder';
+          }
           if (id.includes('@mediabunny/mp3-encoder')) {
             return 'media-mp3-encoder';
           }

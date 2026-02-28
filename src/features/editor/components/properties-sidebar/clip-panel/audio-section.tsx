@@ -2,15 +2,15 @@ import { useCallback, useMemo } from 'react';
 import { Volume2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import {
   getAutoKeyframeOperation,
   type AutoKeyframeOperation,
-} from '@/features/keyframes/utils/auto-keyframe';
-import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
-import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
+  getPropertyKeyframes,
+  interpolatePropertyValue,
+  KeyframeToggle,
+} from '@/features/editor/deps/keyframes';
 import {
   PropertySection,
   PropertyRow,
@@ -294,3 +294,4 @@ export function AudioSection({ items }: AudioSectionProps) {
     </PropertySection>
   );
 }
+

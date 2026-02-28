@@ -9,8 +9,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { ShapeItem, ShapeType, TimelineItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
 import {
   PropertySection,
   PropertyRow,
@@ -507,3 +507,4 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     </PropertySection>
   );
 }
+

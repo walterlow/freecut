@@ -3,13 +3,13 @@
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useItemsStore } from '../../stores/items-store';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
+import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import { getVisibleTrackIds } from '../../utils/group-utils';
 

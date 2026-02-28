@@ -1,5 +1,5 @@
 import type { TimelineItem } from '@/types/timeline';
-import { getVideoTargetTimeSeconds } from '@/lib/composition-runtime/utils/video-timing';
+import { getVideoTargetTimeSeconds } from '@/features/preview/deps/composition-runtime';
 import { formatTimecode } from '@/utils/time-utils';
 
 export interface SourceFrameInfo {

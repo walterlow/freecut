@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canvas Transition Rendering System
  *
  * Renders visual transitions between adjacent clips for client-side export.
@@ -7,10 +7,10 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/features/keyframes/utils/easing';
-import { transitionRegistry } from '@/lib/transitions/registry';
-import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
-import { createLogger } from '@/lib/logger';
+import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/animation/easing';
+import { transitionRegistry } from '@/domain/timeline/transitions/registry';
+import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasTransitions');
 
@@ -665,3 +665,4 @@ export function getTransitionClipIds(
   }
   return clipIds;
 }
+

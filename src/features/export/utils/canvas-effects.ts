@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canvas Effects Rendering System
  *
  * Applies visual effects to canvas items for client-side export.
@@ -7,7 +7,7 @@
 
 import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect } from '@/types/effects';
 import type { AdjustmentItem } from '@/types/timeline';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasEffects');
 
@@ -627,3 +627,4 @@ export function applyAllEffects(
     applyVignette(ctx, canvas, vignetteEffect);
   }
 }
+

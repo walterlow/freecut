@@ -1,10 +1,10 @@
-/**
+﻿/**
  * Canvas Render Orchestrator
  *
  * Top-level entry points that drive the full render pipeline:
- * - {@link renderComposition} – renders a full video composition (video + audio)
- * - {@link renderAudioOnly}  – encodes only the audio tracks
- * - {@link renderSingleFrame} – renders one frame to a Blob (thumbnails)
+ * - {@link renderComposition} â€“ renders a full video composition (video + audio)
+ * - {@link renderAudioOnly}  â€“ encodes only the audio tracks
+ * - {@link renderSingleFrame} â€“ renders one frame to a Blob (thumbnails)
  *
  * These functions set up the mediabunny encoder, call into
  * {@link createCompositionRenderer} for per-frame rendering, and handle
@@ -15,14 +15,12 @@ import type { CompositionInputProps } from '@/types/export';
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer';
 import { createOutputFormat, getMimeType } from './client-renderer';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 // Subsystems
-import { processAudio, createAudioBuffer, hasAudioContent, clearAudioDecodeCache } from './canvas-audio';
 import { createCompositionRenderer } from './client-render-engine';
 
 const log = createLogger('CanvasRenderOrchestrator');
-let ac3DecoderRegistered = false;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +28,16 @@ let ac3DecoderRegistered = false;
 
 // Type for mediabunny module (dynamically imported)
 type MediabunnyModule = typeof import('mediabunny');
+type CanvasAudioModule = typeof import('./canvas-audio');
+
+let canvasAudioModulePromise: Promise<CanvasAudioModule> | null = null;
+
+async function loadCanvasAudio(): Promise<CanvasAudioModule> {
+  if (!canvasAudioModulePromise) {
+    canvasAudioModulePromise = import('./canvas-audio');
+  }
+  return canvasAudioModulePromise;
+}
 
 export interface RenderEngineOptions {
   settings: ClientExportSettings;
@@ -127,7 +135,7 @@ function getPacketRemuxPlan(
   if (!Number.isFinite(sourceFps) || sourceFps <= 0) return null;
   if (Math.abs((settings.fps ?? composition.fps) - composition.fps) > EPSILON) return null;
 
-  // Require clip to start at source frame 0 — a trimmed-from-middle clip can't be
+  // Require clip to start at source frame 0 â€” a trimmed-from-middle clip can't be
   // remuxed directly and must fall back to frame-by-frame rendering.
   const sourceStartFrames = videoItem.sourceStart ?? videoItem.trimStart ?? videoItem.offset ?? 0;
   if (Math.abs(sourceStartFrames) > EPSILON) return null;
@@ -313,11 +321,12 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
 // ---------------------------------------------------------------------------
 
 /**
- * Main render function – orchestrates the entire client-side render.
+ * Main render function â€“ orchestrates the entire client-side render.
  */
 export async function renderComposition(options: RenderEngineOptions): Promise<ClientRenderResult> {
   const { settings, composition, onProgress, signal } = options;
   const { fps, durationInFrames = 0 } = composition;
+  const canvasAudio = await loadCanvasAudio();
 
   log.info('Starting enhanced client render', {
     fps,
@@ -357,20 +366,8 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     return remuxResult;
   }
 
-  // Dynamically import mediabunny + register AC-3 decoder for source audio
+  // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
   const mediabunny: MediabunnyModule = await import('mediabunny');
-  if (!ac3DecoderRegistered) {
-    const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    try {
-      registerAc3Decoder();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/already registered/i.test(message)) {
-        throw err;
-      }
-    }
-    ac3DecoderRegistered = true;
-  }
   const { Output, BufferTarget, VideoSampleSource, VideoSample, AudioBufferSource } = mediabunny;
 
   onProgress({
@@ -382,9 +379,9 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   // Process audio in parallel with setup
   let audioData: { samples: Float32Array[]; sampleRate: number; channels: number } | null = null;
-  if (await hasAudioContent(composition)) {
+  if (await canvasAudio.hasAudioContent(composition)) {
     try {
-      audioData = await processAudio(composition, signal);
+      audioData = await canvasAudio.processAudio(composition, signal);
       log.info('Audio processed', {
         hasAudio: !!audioData,
         sampleRate: audioData?.sampleRate,
@@ -414,11 +411,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     target,
   });
 
-  // Get composition (project) resolution – this is what we render at
+  // Get composition (project) resolution â€“ this is what we render at
   const compositionWidth = composition.width ?? settings.resolution.width;
   const compositionHeight = composition.height ?? settings.resolution.height;
 
-  // Export resolution – this is what we output (may be different from composition)
+  // Export resolution â€“ this is what we output (may be different from composition)
   const exportWidth = settings.resolution.width;
   const exportHeight = settings.resolution.height;
 
@@ -480,7 +477,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   if (audioData) {
     try {
       // Create audio buffer from processed samples
-      audioBuffer = createAudioBuffer(audioData);
+      audioBuffer = canvasAudio.createAudioBuffer(audioData);
 
       // Select audio codec based on container
       // WebM only supports opus/vorbis, MP4 supports aac
@@ -546,18 +543,18 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     let pendingEncode: Promise<void> | null = null;
 
     for (let frame = 0; frame < totalFrames; frame++) {
-      // Check for abort — drain any in-flight encode first so the encoder
+      // Check for abort â€” drain any in-flight encode first so the encoder
       // is idle before we cancel the output. Discard encoder errors since
       // we are aborting anyway and must always surface AbortError.
       if (signal?.aborted) {
         if (pendingEncode) {
-          try { await pendingEncode; } catch { /* discarded — aborting */ }
+          try { await pendingEncode; } catch { /* discarded â€” aborting */ }
         }
         await output.cancel();
         throw new DOMException('Render cancelled', 'AbortError');
       }
 
-      // Render frame to canvas first — this overlaps with the previous frame's
+      // Render frame to canvas first â€” this overlaps with the previous frame's
       // encode that is still in flight. The previous VideoSample already copied
       // its pixels, so writing to the canvas here cannot corrupt it.
       await frameRenderer.renderFrame(frame);
@@ -578,10 +575,10 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       const frameDuration = 1 / fps;
 
       // Snapshot canvas pixels into a VideoSample. The constructor copies
-      // pixel data immediately — the canvas is free for the next render.
+      // pixel data immediately â€” the canvas is free for the next render.
       const sample = new VideoSample(outputCanvas, { timestamp, duration: frameDuration });
 
-      // Kick off encoding in the background. NOT awaited here — it runs
+      // Kick off encoding in the background. NOT awaited here â€” it runs
       // concurrently with the next iteration's renderFrame().
       const isKeyFrame = frame === 0;
       pendingEncode = (async () => {
@@ -652,7 +649,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
     // Cleanup
     frameRenderer.dispose();
-    clearAudioDecodeCache();
+    canvasAudio.clearAudioDecodeCache();
 
     return {
       blob,
@@ -663,7 +660,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   } catch (error) {
     // Cleanup on error
     frameRenderer.dispose();
-    clearAudioDecodeCache();
+    canvasAudio.clearAudioDecodeCache();
 
     // Attempt to cancel the output on error
     try {
@@ -708,7 +705,7 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
     throw new Error('Failed to get 2d context');
   }
 
-  // Use the SAME renderer as export – single source of truth
+  // Use the SAME renderer as export â€“ single source of truth
   const renderer = await createCompositionRenderer(composition, renderCanvas, renderCtx);
   try {
     await renderer.preload();
@@ -745,6 +742,7 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
 export async function renderAudioOnly(options: AudioRenderOptions): Promise<ClientRenderResult> {
   const { settings, composition, onProgress, signal } = options;
   const { fps, durationInFrames = 0 } = composition;
+  const canvasAudio = await loadCanvasAudio();
 
   log.info('Starting audio-only render', {
     fps,
@@ -774,20 +772,8 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     throw new DOMException('Render cancelled', 'AbortError');
   }
 
-  // Dynamically import mediabunny + register AC-3 decoder for source audio
+  // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
   const mediabunny = await import('mediabunny');
-  if (!ac3DecoderRegistered) {
-    const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    try {
-      registerAc3Decoder();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/already registered/i.test(message)) {
-        throw err;
-      }
-    }
-    ac3DecoderRegistered = true;
-  }
   const { Output, BufferTarget, AudioBufferSource } = mediabunny;
 
   // Register MP3 encoder if exporting to MP3
@@ -809,11 +795,11 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
   });
 
   // Process audio
-  if (!(await hasAudioContent(composition))) {
+  if (!(await canvasAudio.hasAudioContent(composition))) {
     throw new Error('No audio content found in composition');
   }
 
-  const audioData = await processAudio(composition, signal);
+  const audioData = await canvasAudio.processAudio(composition, signal);
   if (!audioData) {
     throw new Error('Failed to process audio');
   }
@@ -850,7 +836,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
       audioCodec = 'pcm-s16';
   }
 
-  // PCM codecs don't need browser encoding support – they're raw samples
+  // PCM codecs don't need browser encoding support â€“ they're raw samples
   const isPcmCodec = audioCodec === 'pcm-s16';
 
   if (!isPcmCodec) {
@@ -872,7 +858,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
   }
 
   // Create audio buffer from processed samples
-  const audioBuffer = createAudioBuffer(audioData);
+  const audioBuffer = canvasAudio.createAudioBuffer(audioData);
 
   // Create audio source for encoding
   const audioSource = new AudioBufferSource({
@@ -938,3 +924,4 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     fileSize: blob.size,
   };
 }
+

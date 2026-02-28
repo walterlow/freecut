@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Filmstrip Cache Service
  *
  * Simple service that:
@@ -9,7 +9,7 @@
  * No ImageBitmaps in memory - just URLs for <img> tags.
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('FilmstripCache');
 
@@ -1947,3 +1947,4 @@ if (import.meta.env.DEV) {
     clear: () => filmstripCache.clearMetrics(),
   };
 }
+

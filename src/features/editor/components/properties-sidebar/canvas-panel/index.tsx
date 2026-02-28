@@ -2,9 +2,9 @@ import { useCallback, useState, useRef, useEffect, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeftRight, RotateCcw, LayoutDashboard, Clock } from 'lucide-react';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { useProjectStore } from '@/features/editor/deps/projects';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
 import { HexColorPicker } from 'react-colorful';
 import {
   PropertySection,
@@ -271,3 +271,4 @@ export const CanvasPanel = memo(function CanvasPanel() {
     </div>
   );
 });
+

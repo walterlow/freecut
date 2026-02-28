@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+﻿import { cn } from '@/shared/ui/cn';
 
 interface FreeCutLogoProps {
   variant?: 'full' | 'icon';
@@ -60,3 +60,4 @@ export function FreeCutLogo({ variant = 'full', size = 'md', className }: FreeCu
     </div>
   );
 }
+

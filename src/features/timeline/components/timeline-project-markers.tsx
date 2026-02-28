@@ -3,7 +3,7 @@ import { useState, useCallback, useEffect, useRef, memo } from 'react';
 
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';

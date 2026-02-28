@@ -11,7 +11,7 @@ import {
   Volume2,
   Zap,
 } from 'lucide-react';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 interface PlaybackControlsProps {
   totalFrames: number;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canvas Mask Rendering System
  *
  * Applies clip-path and alpha masks to canvas items for client-side export.
@@ -6,9 +6,13 @@
  */
 
 import type { ShapeItem, TimelineTrack } from '@/types/timeline';
-import { getShapePath, rotatePath } from '@/lib/composition-runtime/utils/shape-path';
-import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
-import { createLogger } from '@/lib/logger';
+import {
+  getShapePath,
+  rotatePath,
+  resolveTransform,
+  getSourceDimensions,
+} from '@/features/export/deps/composition-runtime';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasMasks');
 
@@ -382,3 +386,4 @@ export function prepareMasks(
 
   return preparedMasks;
 }
+

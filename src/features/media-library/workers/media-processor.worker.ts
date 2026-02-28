@@ -115,21 +115,12 @@ function isAudioCodecSupported(codec: string | undefined): boolean {
   );
 }
 
-// Lazy load mediabunny + register AC-3 decoder
+// Lazy load mediabunny only.
+// Metadata extraction and video thumbnails do not require AC-3 decoder registration.
 let mediabunnyModule: MediabunnyModule | null = null;
 async function getMediabunny(): Promise<MediabunnyModule> {
   if (!mediabunnyModule) {
-    const mb = await import('mediabunny') as unknown as MediabunnyModule;
-    const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    try {
-      registerAc3Decoder();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/already registered/i.test(message)) {
-        throw err;
-      }
-    }
-    mediabunnyModule = mb;
+    mediabunnyModule = await import('mediabunny') as unknown as MediabunnyModule;
   }
   return mediabunnyModule;
 }

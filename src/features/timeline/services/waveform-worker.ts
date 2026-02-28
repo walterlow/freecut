@@ -6,6 +6,8 @@
  * Sends progressive updates as samples are processed.
  */
 
+import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
+
 export interface WaveformRequest {
   type: 'generate';
   requestId: string;
@@ -58,24 +60,9 @@ export type WaveformWorkerResponse =
 
 // Track active requests for abort support
 const activeRequests = new Map<string, { aborted: boolean }>();
-let ac3Registered = false;
 
-async function getMediabunnyWithAc3() {
-  const mediabunny = await import('mediabunny');
-  if (!ac3Registered) {
-    try {
-      const { registerAc3Decoder } = await import('@mediabunny/ac3');
-      registerAc3Decoder();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/already registered/i.test(message)) {
-        throw err;
-      }
-      // Decoder is already available in this worker context.
-    }
-    ac3Registered = true;
-  }
-  return mediabunny;
+async function getMediabunny() {
+  return import('mediabunny');
 }
 
 self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
@@ -101,8 +88,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     // Send initial progress
     self.postMessage({ type: 'progress', requestId, progress: 5 } as WaveformProgressResponse);
 
-    // Load mediabunny + register AC-3 decoder
-    const mediabunny = await getMediabunnyWithAc3();
+    // Load mediabunny. Register AC-3 decoder lazily only for matching codecs.
+    const mediabunny = await getMediabunny();
     const { Input, UrlSource, AudioSampleSink, ALL_FORMATS } = mediabunny;
 
     if (state.aborted) throw new Error('Aborted');
@@ -118,6 +105,11 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     const audioTrack = await input.getPrimaryAudioTrack();
     if (!audioTrack) {
       throw new Error('No audio track found');
+    }
+
+    const audioCodec = typeof audioTrack.codec === 'string' ? audioTrack.codec : undefined;
+    if (isAc3AudioCodec(audioCodec)) {
+      await ensureAc3DecoderRegistered();
     }
 
     self.postMessage({ type: 'progress', requestId, progress: 10 } as WaveformProgressResponse);

@@ -3,24 +3,23 @@ import { Droplet, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/composition-runtime/utils/transform-resolver';
-import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+} from '@/features/editor/deps/composition-runtime';
 import {
   getAutoKeyframeOperation,
   type AutoKeyframeOperation,
-} from '@/features/keyframes/utils/auto-keyframe';
+  resolveAnimatedTransform,
+  KeyframeToggle,
+} from '@/features/editor/deps/keyframes';
 import {
   PropertySection,
   PropertyRow,
   NumberInput,
 } from '../components';
-import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
 
 interface FillSectionProps {
   items: TimelineItem[];
@@ -277,3 +276,4 @@ export const FillSection = memo(function FillSection({
     </PropertySection>
   );
 });
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * OPFS Waveform Storage
  *
  * Multi-resolution binary format for efficient waveform storage with random access:
@@ -27,8 +27,8 @@
  *   - Level 3: 10 samples/sec (overview)
  */
 
-import { createLogger } from '@/lib/logger';
-import { getCacheMigration } from '@/lib/storage/cache-version';
+import { createLogger } from '@/shared/logging/logger';
+import { getCacheMigration } from '@/infrastructure/storage/cache-version';
 
 const logger = createLogger('WaveformOPFS');
 
@@ -126,7 +126,7 @@ class WaveformOPFSStorage {
         }
 
         migration.markComplete();
-        logger.info(`Waveform cache version updated: v${migration.oldVersion ?? 'none'} → v${migration.newVersion}${entries.length > 0 ? ` (cleared ${entries.length} files)` : ''}`)
+        logger.info(`Waveform cache version updated: v${migration.oldVersion ?? 'none'} â†’ v${migration.newVersion}${entries.length > 0 ? ` (cleared ${entries.length} files)` : ''}`)
       }
 
       this.dirHandle = dir;
@@ -621,3 +621,4 @@ class WaveformOPFSStorage {
 
 // Singleton instance
 export const waveformOPFSStorage = new WaveformOPFSStorage();
+

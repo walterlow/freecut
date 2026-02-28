@@ -6,8 +6,8 @@ import {
   CLIP_LABEL_ROW_HEIGHT,
   VIDEO_WAVEFORM_HEIGHT,
 } from '@/features/timeline/constants';
-import { useSettingsStore } from '@/features/settings/stores/settings-store';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
 
 interface ClipContentProps {

@@ -1,12 +1,12 @@
 import { useMemo, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { useTimelineStore } from '@/features/keyframes/deps/timeline';
+import { usePlaybackStore } from '@/shared/state/playback';
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/composition-runtime/utils/transform-resolver';
+} from '@/features/keyframes/deps/composition-runtime-contract';
 import { resolveAnimatedTransform } from '../utils/animated-transform-resolver';
 
 interface AnimatedTransformResult {

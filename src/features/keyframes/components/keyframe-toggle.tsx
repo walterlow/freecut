@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Keyframe toggle button component.
  * Diamond-shaped button that appears next to animatable properties.
  * - Hollow diamond: No keyframe at current frame (click to add)
@@ -8,9 +8,9 @@
 
 import { useCallback, useMemo } from 'react';
 import { Diamond } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
+import { cn } from '@/shared/ui/cn';
+import { useTimelineStore } from '@/features/keyframes/deps/timeline';
+import { useThrottledFrame } from '@/features/keyframes/deps/preview-contract';
 import type { AnimatableProperty } from '@/types/keyframe';
 import {
   Tooltip,
@@ -183,3 +183,4 @@ export function KeyframeToggle({
     </Tooltip>
   );
 }
+

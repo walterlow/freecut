@@ -2,15 +2,14 @@ import { useMemo } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import type { ItemKeyframes } from '@/types/keyframe';
-import type { TimelineState } from '@/features/timeline/types';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { useTimelineStore, type TimelineState } from '@/features/preview/deps/timeline-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useGizmoStore, isFullTransform } from '@/features/preview/stores/gizmo-store';
 import {
   resolveTransform,
   getSourceDimensions,
-} from '@/lib/composition-runtime/utils/transform-resolver';
-import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+} from '@/features/preview/deps/composition-runtime';
+import { resolveAnimatedTransform } from '@/features/preview/deps/keyframes';
 
 interface ProjectSize {
   width: number;
@@ -89,3 +88,4 @@ export function useVisualTransforms(
     return transforms;
   }, [items, projectSize, allKeyframes, currentFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview]);
 }
+

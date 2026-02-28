@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { createLogger } from '@/lib/logger';
+﻿import { useState, useMemo, useEffect, useCallback } from 'react';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MissingMediaDialog');
 
@@ -22,7 +22,7 @@ import {
   Folder,
 } from 'lucide-react';
 import { useMediaLibraryStore } from '../stores/media-library-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useProjectStore } from '@/features/media-library/deps/projects';
 
 export function MissingMediaDialog() {
   const showDialog = useMediaLibraryStore((s) => s.showMissingMediaDialog);
@@ -333,3 +333,4 @@ export function MissingMediaDialog() {
     </Dialog>
   );
 }
+

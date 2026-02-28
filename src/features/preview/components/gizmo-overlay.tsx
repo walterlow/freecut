@@ -1,9 +1,9 @@
 import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useShallow } from 'zustand/react/shallow';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useTimelineStore } from '@/features/preview/deps/timeline-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { TransformGizmo } from './transform-gizmo';
 import { GroupGizmo } from './group-gizmo';
@@ -12,12 +12,12 @@ import { SnapGuides } from './snap-guides';
 import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-transform';
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
-import { useAnimatedTransforms } from '@/features/keyframes/hooks/use-animated-transform';
+import { useAnimatedTransforms } from '@/features/preview/deps/keyframes';
 import {
   getAutoKeyframeOperation,
   GIZMO_ANIMATABLE_PROPS,
   type AutoKeyframeOperation,
-} from '@/features/keyframes/utils/auto-keyframe';
+} from '@/features/preview/deps/keyframes';
 import type { TransformAnimatableProperty } from '@/types/keyframe';
 import type { CoordinateParams, Transform, Point } from '../types/gizmo';
 import type { TransformProperties } from '@/types/transform';
@@ -651,3 +651,4 @@ export function GizmoOverlay({
     </div>
   );
 }
+

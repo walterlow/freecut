@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Keyframe Graph Panel Component
  *
  * Collapsible panel that shows the value graph editor for selected items.
@@ -8,22 +8,24 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
-import { ValueGraphEditor } from '@/features/keyframes/components/value-graph-editor';
-import { DopesheetEditor } from '@/features/keyframes/components/dopesheet-editor';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import {
+  ValueGraphEditor,
+  DopesheetEditor,
+  getTransitionBlockedRanges,
+} from '@/features/timeline/deps/keyframes';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useKeyframesStore } from '../stores/keyframes-store';
 import { useKeyframeSelectionStore } from '../stores/keyframe-selection-store';
 import { useTimelineCommandStore } from '../stores/timeline-command-store';
 import { captureSnapshot } from '../stores/commands/snapshot';
 import type { TimelineSnapshot } from '../stores/commands/types';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import type { AnimatableProperty, KeyframeRef } from '@/types/keyframe';
 import * as timelineActions from '../stores/timeline-actions';
-import { getTransitionBlockedRanges } from '@/features/keyframes/utils/transition-region';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 /** Height of the panel header bar in pixels */
@@ -725,3 +727,4 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     </div>
   );
 });
+

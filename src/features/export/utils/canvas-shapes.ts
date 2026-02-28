@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canvas Shape Rendering System
  *
  * Renders all shape types with full styling support for client-side export.
@@ -7,9 +7,9 @@
 
 import type { ShapeItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
-import { getShapePath, rotatePath } from '@/lib/composition-runtime/utils/shape-path';
+import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
 import { svgPathToPath2D } from './canvas-masks';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasShapes');
 
@@ -114,3 +114,4 @@ export function renderShape(
     ctx.restore();
   }
 }
+

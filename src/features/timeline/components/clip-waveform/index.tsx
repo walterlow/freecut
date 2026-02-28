@@ -2,10 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TiledCanvas } from '../clip-filmstrip/tiled-canvas';
 import { WaveformSkeleton } from './waveform-skeleton';
 import { useWaveform } from '../../hooks/use-waveform';
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
+import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
+import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
-import { needsCustomAudioDecoder } from '@/lib/composition-runtime/utils/audio-codec-detection';
+import { needsCustomAudioDecoder } from '@/features/timeline/deps/composition-runtime';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 
 // Continuous filled-path waveform styling (NLE-style)

@@ -24,8 +24,8 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
 import {
   ZOOM_FRICTION,
   ZOOM_MIN_VELOCITY,

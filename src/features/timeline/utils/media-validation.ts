@@ -1,7 +1,7 @@
 import type { TimelineItem } from '@/types/timeline';
-import type { OrphanedClipInfo } from '@/features/media-library/types';
+import type { OrphanedClipInfo } from '@/features/timeline/deps/media-library-resolver';
 import type { MediaMetadata } from '@/types/storage';
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
+import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
 
 /**
  * Validates that all timeline items have valid media references.

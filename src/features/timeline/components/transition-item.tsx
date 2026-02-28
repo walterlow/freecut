@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
+﻿import { memo, useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import type { Transition } from '@/types/transition';
 import { useShallow } from 'zustand/react/shallow';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -6,19 +6,19 @@ import { useItemsStore } from '../stores/items-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTransitionResize } from '../hooks/use-transition-resize';
 import { dragOffsetRef } from '../hooks/use-timeline-drag';
 import type { TimelineState, TimelineActions } from '../types';
-import type { SelectionState, SelectionActions } from '@/features/editor/types';
+import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { Trash2 } from 'lucide-react';
 import {
   applyPreviewGeometryToClip,
@@ -458,4 +458,5 @@ export const TransitionItem = memo(function TransitionItem({
     </ContextMenu>
   );
 });
+
 

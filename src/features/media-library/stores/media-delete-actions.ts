@@ -1,7 +1,7 @@
-import type { MediaLibraryState, MediaLibraryActions } from '../types';
+﻿import type { MediaLibraryState, MediaLibraryActions } from '../types';
 import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
-import { blobUrlManager } from '@/lib/blob-url-manager';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 
 type Set = (
   partial:
@@ -94,3 +94,4 @@ export function createDeleteActions(
     },
   };
 }
+

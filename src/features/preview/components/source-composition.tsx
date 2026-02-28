@@ -1,8 +1,14 @@
 import { useRef, useEffect } from 'react';
-import { AbsoluteFill } from '@/features/player/composition';
-import { useBridgedTimelineContext } from '@/features/player/clock';
-import { useVideoConfig } from '@/features/player/video-config';
-import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
+import {
+  AbsoluteFill,
+} from '@/features/preview/deps/player-core';
+import {
+  useBridgedTimelineContext,
+  useVideoConfig,
+} from '@/features/preview/deps/player-context';
+import {
+  getGlobalVideoSourcePool,
+} from '@/features/preview/deps/player-pool';
 import { FileAudio } from 'lucide-react';
 
 interface SourceCompositionProps {

@@ -1,6 +1,6 @@
-import { renderAudioOnly, renderComposition } from '../utils/client-render-engine';
+﻿import { renderAudioOnly, renderComposition } from '../utils/client-render-engine';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import type { ImageItem } from '@/types/timeline';
 import type { RenderProgress } from '../utils/client-renderer';
 import type {
@@ -10,7 +10,8 @@ import type {
 
 // Some third-party browser libs assume `window` exists.
 // In dedicated workers, alias it to `globalThis` to avoid runtime crashes.
-const workerGlobal = globalThis as any;
+type WorkerGlobalWithWindow = typeof globalThis & { window?: typeof globalThis };
+const workerGlobal = globalThis as WorkerGlobalWithWindow;
 if (typeof workerGlobal.window === 'undefined') {
   workerGlobal.window = workerGlobal;
 }
@@ -134,3 +135,4 @@ self.onmessage = async (event: MessageEvent<ExportRenderWorkerRequest>) => {
 };
 
 export {};
+

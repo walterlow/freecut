@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Transition Region Utilities
  *
  * Functions to detect if a frame falls within a transition region for a clip.
@@ -8,7 +8,7 @@
 
 import type { Transition } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { calculateTransitionPortions } from '@/lib/transitions/transition-planner';
+import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 
 /**
  * Frame range representing a blocked region (inclusive start, exclusive end)
@@ -145,3 +145,4 @@ export function getTransitionBlockedMessage(range: BlockedFrameRange): string {
   const position = range.role === 'outgoing' ? 'end' : 'start';
   return `Keyframes cannot be added here. This region is part of a transition at the ${position} of the clip.`;
 }
+

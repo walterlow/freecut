@@ -27,9 +27,9 @@ import {
   VIGNETTE_CONFIG,
   OVERLAY_EFFECT_CONFIGS,
 } from '@/types/effects';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import { PropertySection } from '@/features/editor/components/properties-sidebar/components';
+import { useTimelineStore } from '@/features/effects/deps/timeline-contract';
+import { useGizmoStore } from '@/features/effects/deps/preview-contract';
+import { PropertySection } from '@/shared/ui/property-controls';
 import { CSSFilterPanel, GlitchPanel, HalftonePanel, VignettePanel } from './panels';
 
 interface EffectsSectionProps {

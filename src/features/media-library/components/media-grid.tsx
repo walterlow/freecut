@@ -1,12 +1,12 @@
-import { useState, useMemo, useEffect, useRef, memo } from 'react';
+﻿import { useState, useMemo, useEffect, useRef, memo } from 'react';
 import { Loader2, Upload, AlertTriangle } from 'lucide-react';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaGrid');
 import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useEditorStore } from '@/features/editor/stores/editor-store';
+import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
+import { useEditorStore } from '@/shared/state/editor';
 import { useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import {
@@ -331,3 +331,4 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     </div>
   );
 });
+

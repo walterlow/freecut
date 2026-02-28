@@ -1,20 +1,20 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
 import { useZoomStore } from '../stores/zoom-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import { useItemsStore } from '../stores/items-store';
-import { blobUrlManager } from '@/lib/blob-url-manager';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { waveformCache } from '../services/waveform-cache';
 
 /**
- * Prefetch margin in pixels — how far ahead of the viewport to look for
+ * Prefetch margin in pixels â€” how far ahead of the viewport to look for
  * audio/video clips that need waveforms. Larger than the visibility margin
  * (200px in useClipVisibility) so prefetch starts before clips become visible.
  */
 const PREFETCH_AHEAD_PX = 800;
 
 /**
- * Behind margin — less aggressive, just enough to cover reverse scroll.
+ * Behind margin â€” less aggressive, just enough to cover reverse scroll.
  */
 const PREFETCH_BEHIND_PX = 200;
 
@@ -84,3 +84,4 @@ export function useWaveformPrefetch() {
     }
   }, [scrollLeft, viewportWidth, pixelsPerSecond, fps]);
 }
+

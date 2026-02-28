@@ -1,7 +1,7 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import { Progress } from '@/components/ui/progress';
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { useProjectActions } from '@/features/projects/hooks/use-project-actions';
 import { useProjectsLoading, useProjectsError } from '@/features/projects/hooks/use-project-selectors';
-import { cleanupBlobUrls } from '@/features/preview/utils/media-resolver';
+import { cleanupBlobUrls } from '@/features/media-library/utils/media-resolver';
 import type { Project } from '@/types/project';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
@@ -458,3 +458,4 @@ function ProjectsIndex() {
     </>
   );
 }
+

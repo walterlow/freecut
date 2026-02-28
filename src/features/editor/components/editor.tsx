@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
-import { createLogger } from '@/lib/logger';
+﻿import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
+import { createLogger } from '@/shared/logging/logger';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -12,40 +12,39 @@ import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
 import { ProjectDebugPanel } from './project-debug-panel';
-import { Timeline } from '@/features/timeline/components/timeline';
+import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
-import { BentoLayoutDialog } from '@/features/timeline/components/bento-layout-dialog';
 import { toast } from 'sonner';
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
-import { useTimelineShortcuts } from '@/features/timeline/hooks/use-timeline-shortcuts';
-import { useTransitionBreakageNotifications } from '@/features/timeline/hooks/use-transition-breakage-notifications';
-import { initTransitionChainSubscription } from '@/features/timeline/stores/transition-chain-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { cleanupBlobUrls } from '@/features/preview/utils/media-resolver';
-import { clearPreviewAudioCache } from '@/lib/composition-runtime/utils/audio-decode-cache';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useTimelineShortcuts, useTransitionBreakageNotifications } from '@/features/editor/deps/timeline-hooks';
+import { initTransitionChainSubscription } from '@/features/editor/deps/timeline-subscriptions';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
+import { cleanupBlobUrls, useMediaLibraryStore } from '@/features/editor/deps/media-library';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
+import { useProjectStore } from '@/features/editor/deps/projects';
+import { importExportDialog } from '@/features/editor/deps/export-contract';
 
 const logger = createLogger('Editor');
 const LazyExportDialog = lazy(() =>
-  import('@/features/export/components/export-dialog').then((module) => ({
+  importExportDialog().then((module) => ({
     default: module.ExportDialog,
   }))
 );
 const LazyBundleExportDialog = lazy(() =>
-  import('@/features/project-bundle/components/bundle-export-dialog').then((module) => ({
+  importBundleExportDialog().then((module) => ({
     default: module.BundleExportDialog,
   }))
 );
 
 function preloadExportDialog() {
-  return import('@/features/export/components/export-dialog');
+  return importExportDialog();
 }
 
 function preloadBundleExportDialog() {
-  return import('@/features/project-bundle/components/bundle-export-dialog');
+  return importBundleExportDialog();
 }
 
 /** Project metadata passed from route loader (timeline loaded separately via loadTimeline) */
@@ -81,7 +80,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   const baseTimelineSizeRef = useRef(30); // Store the user's base timeline size
 
   // Initialize transition chain subscription (pre-computes chains from timeline data)
-  // This subscription recomputes chains when items/transitions change — deferred to idle
+  // This subscription recomputes chains when items/transitions change â€” deferred to idle
   // time so it doesn't compete with the initial editor render
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
@@ -195,7 +194,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         });
         setBundleFileHandle(handle);
       } catch {
-        // User cancelled the picker — don't open the dialog
+        // User cancelled the picker â€” don't open the dialog
         return;
       }
     } else {
@@ -333,3 +332,5 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     </div>
   );
 });
+
+

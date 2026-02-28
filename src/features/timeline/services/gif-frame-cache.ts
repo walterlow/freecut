@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GIF Frame Cache Service
  *
  * Manages GIF frame caching with:
@@ -12,8 +12,8 @@ import {
   deleteGifFrames,
   getGifFrames as getGifFramesFromDB,
   saveGifFrames,
-} from '../../../lib/storage/indexeddb';
-import { createLogger } from '@/lib/logger';
+} from '@/infrastructure/storage/indexeddb';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('GifFrameCache');
 import type { GifFrameData } from '../../../types/storage';
@@ -235,7 +235,7 @@ class GifFrameCacheService {
         throw new Error('Failed to get 2D context');
       }
 
-      // Temp canvas for individual frame patches — drawImage composites
+      // Temp canvas for individual frame patches â€” drawImage composites
       // properly (respects alpha blending), unlike putImageData which
       // replaces pixels including alpha and causes flickering on
       // transparent GIFs.
@@ -272,9 +272,9 @@ class GifFrameCacheService {
         // === GIF disposal handling ===
         // Apply disposal from the PREVIOUS frame before drawing current.
         // Disposal types:
-        //   0/1 — no disposal (leave previous frame in place)
-        //   2   — restore to background (clear the previous frame's area)
-        //   3   — restore to previous (revert canvas to saved state)
+        //   0/1 â€” no disposal (leave previous frame in place)
+        //   2   â€” restore to background (clear the previous frame's area)
+        //   3   â€” restore to previous (revert canvas to saved state)
         if (i > 0) {
           if (previousDisposalType === 2) {
             ctx.clearRect(
@@ -289,15 +289,15 @@ class GifFrameCacheService {
         }
 
         // Save canvas state BEFORE drawing this frame if its disposal is
-        // "restore to previous" — we'll need to revert to this state.
+        // "restore to previous" â€” we'll need to revert to this state.
         if (frame.disposalType === 3) {
           savedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         }
 
         // === Draw this frame's patch with proper alpha compositing ===
-        // 1. Put raw pixel data on temp canvas (putImageData is fine here —
+        // 1. Put raw pixel data on temp canvas (putImageData is fine here â€”
         //    we're just transferring raw RGBA to a blank surface).
-        // 2. drawImage from temp → main canvas (this composites correctly,
+        // 2. drawImage from temp â†’ main canvas (this composites correctly,
         //    blending transparent pixels with existing content).
         tempCanvas.width = frame.dims.width;
         tempCanvas.height = frame.dims.height;
@@ -644,7 +644,7 @@ class GifFrameCacheService {
 
   /**
    * Get animated WebP frames for a media item.
-   * Memory-only cache (no IndexedDB persistence — re-extracts on reload).
+   * Memory-only cache (no IndexedDB persistence â€” re-extracts on reload).
    */
   async getWebpFrames(
     mediaId: string,
@@ -758,8 +758,9 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
   window.__clearAllGifCache = async () => {
     gifFrameCache.clearAll();
     // Clear IndexedDB gifFrames store
-    const { clearAllGifFrames } = await import('../../../lib/storage/indexeddb');
+    const { clearAllGifFrames } = await import('@/infrastructure/storage/indexeddb');
     await clearAllGifFrames();
     logger.debug('[GifFrameCache] All caches cleared');
   };
 }
+

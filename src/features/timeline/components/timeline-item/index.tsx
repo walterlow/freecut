@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
+﻿import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
@@ -9,11 +9,11 @@ import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-st
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
 import { useSlipEditPreviewStore } from '../../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { useEditorStore } from '@/features/editor/stores/editor-store';
-import { useSourcePlayerStore } from '@/features/preview/stores/source-player-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useEditorStore } from '@/shared/state/editor';
+import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
@@ -21,7 +21,7 @@ import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
@@ -31,7 +31,7 @@ import { JoinIndicators } from './join-indicators';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
-import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog-store';
+import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
 import type { AnimatableProperty } from '@/types/keyframe';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
@@ -41,6 +41,11 @@ import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
+import { insertFreezeFrame } from '../../stores/actions/item-actions';
+import {
+  createPreComp,
+  dissolvePreComp,
+} from '../../stores/actions/composition-actions';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 
@@ -411,9 +416,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
 
   // Ripple edit preview: trimmed item reads the downstream shift (delta) from
-  // the same store so the new right edge can be computed from frames — the same
-  // rounding path downstream items use — preventing Math.round(A)+Math.round(B)
-  // ≠ Math.round(A+B) gaps.
+  // the same store so the new right edge can be computed from frames - the same
+  // rounding path downstream items use - preventing Math.round(A)+Math.round(B)
+  // != Math.round(A+B) gaps.
   const rippleEdgeDelta = useRippleEditPreviewStore(
     useCallback((s) => {
       if (s.trimmedItemId !== item.id) return 0;
@@ -492,8 +497,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Calculate position and width (convert frames to seconds, then to pixels)
   // Display width hides overlap from both edges so the visual junction is centered.
   // Fold overlap + ripple + slide into the frame value BEFORE rounding so both clip edges
-  // derive from a single Math.round — avoids 1px gaps from independent rounding
-  // (Math.round(A) + Math.round(B) ≠ Math.round(A + B)).
+  // derive from a single Math.round - avoids 1px gaps from independent rounding
+  // (Math.round(A) + Math.round(B) != Math.round(A + B)).
   //
   // Slide edit: the slid clip shifts by slideEditOffset. Neighbors adjust edges:
   // - Left neighbor (slideNeighborSide==='left'): end edge extends/shrinks by slideNeighborDelta
@@ -507,7 +512,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
   const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleOffsetFrames + rippleEditOffset) / fps));
   const width = right - left;
-  // Pixel offset for inner content shift (filmstrip alignment) — independent rounding is fine
+  // Pixel offset for inner content shift (filmstrip alignment) â€” independent rounding is fine
   // here since it only affects content within this clip, not cross-clip alignment.
   const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
 
@@ -519,7 +524,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const currentSourceStart = item.sourceStart || 0;
   const sourceDuration = item.sourceDuration || (item.durationInFrames * currentSpeed);
   const currentSourceEnd = item.sourceEnd || sourceDuration;
-  // Source FPS for converting source frames → timeline frames (sourceStart etc. are in source-native FPS)
+  // Source FPS for converting source frames â†’ timeline frames (sourceStart etc. are in source-native FPS)
   const effectiveSourceFps = item.sourceFps ?? fps;
 
   // Preview item for clip internals (filmstrip/waveform) during edit drags.
@@ -656,8 +661,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     let trimVisualLeft = left;
     let trimVisualWidth = width;
 
-    // Ripple edit: compute the new right edge from frames — the SAME rounding
-    // path that downstream items use for their `left` — so both edges go through
+    // Ripple edit: compute the new right edge from frames â€” the SAME rounding
+    // path that downstream items use for their `left` â€” so both edges go through
     // a single Math.round(timeToPixels(totalFrames / fps)) and can never diverge
     // by even 1 px.  `rippleEdgeDelta` equals the downstream `rippleEditOffset`.
     if (rippleEdgeDelta !== 0) {
@@ -708,15 +713,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // Rolling edit neighbor visual feedback
     if (rollingEditDelta !== 0) {
       if (rollingEditHandle === 'end') {
-        // Trimmed item's end handle was dragged → this neighbor's start adjusts
+        // Trimmed item's end handle was dragged â†’ this neighbor's start adjusts
         // Positive delta = edit point moved right = neighbor shrinks from left
         const deltaPixels = Math.round(timeToPixels(rollingEditDelta / fps));
         trimVisualLeft += deltaPixels;
         trimVisualWidth -= deltaPixels;
       } else if (rollingEditHandle === 'start') {
-        // Trimmed item's start handle was dragged → this neighbor's end adjusts
-        // Positive delta = edit point moved right → neighbor extends from right
-        // Negative delta = edit point moved left → neighbor shrinks from right
+        // Trimmed item's start handle was dragged â†’ this neighbor's end adjusts
+        // Positive delta = edit point moved right â†’ neighbor extends from right
+        // Negative delta = edit point moved left â†’ neighbor shrinks from right
         const deltaPixels = Math.round(timeToPixels(rollingEditDelta / fps));
         trimVisualWidth += deltaPixels;
       }
@@ -1020,9 +1025,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const handleFreezeFrame = useCallback(() => {
     if (item.type !== 'video') return;
     const { currentFrame } = usePlaybackStore.getState();
-    void import('../../stores/actions/item-actions').then(({ insertFreezeFrame }) => {
-      void insertFreezeFrame(item.id, currentFrame);
-    });
+    void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
   // Composition operations
@@ -1030,11 +1033,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
 
   const handleCreatePreComp = useCallback(() => {
-    // Capture selection synchronously — context menu close may clear it before the dynamic import resolves
+    // Capture selection synchronously â€” context menu close may clear it before the dynamic import resolves
     const ids = useSelectionStore.getState().selectedItemIds;
-    void import('../../stores/actions/composition-actions').then(({ createPreComp }) => {
-      createPreComp(undefined, ids);
-    });
+    createPreComp(undefined, ids);
   }, []);
 
   const handleEnterComposition = useCallback(() => {
@@ -1044,9 +1045,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   const handleDissolveComposition = useCallback(() => {
     if (item.type !== 'composition') return;
-    void import('../../stores/actions/composition-actions').then(({ dissolvePreComp }) => {
-      dissolvePreComp(item.id);
-    });
+    dissolvePreComp(item.id);
   }, [item]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -1148,7 +1147,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             <div className="absolute inset-0 rounded pointer-events-none z-20 ring-2 ring-inset ring-primary" />
           )}
 
-          {/* Clip visual content — offset when left-trimmed so filmstrip aligns correctly */}
+          {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
           {overlapLeftPixels > 0 ? (
             <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
               <ClipContent
@@ -1228,7 +1227,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         </div>
       </ItemContextMenu>
 
-      {/* Transition resize ghost overlays — show overlap zones during resize */}
+      {/* Transition resize ghost overlays â€” show overlap zones during resize */}
       {previewOverlapRight > 0 && (
         <div
           className="absolute inset-y-0 rounded-r pointer-events-none"
@@ -1295,3 +1294,4 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevProps.trackHidden === nextProps.trackHidden
   );
 });
+

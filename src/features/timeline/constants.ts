@@ -2,12 +2,18 @@
 // TIMELINE CONSTANTS
 // =============================================================================
 // All timeline-related constants in one place, organized by category.
+import {
+  DEFAULT_TRACK_HEIGHT as SHARED_DEFAULT_TRACK_HEIGHT,
+  DEFAULT_FPS as SHARED_DEFAULT_FPS,
+} from '@/domain/timeline/defaults';
+
+export const DEFAULT_TRACK_HEIGHT = SHARED_DEFAULT_TRACK_HEIGHT;
+export const DEFAULT_FPS = SHARED_DEFAULT_FPS;
 
 // =============================================================================
 // TRACK & CLIP DIMENSIONS
 // =============================================================================
 
-export const DEFAULT_TRACK_HEIGHT = 80;
 export const MIN_TRACK_HEIGHT = 48;
 export const MAX_TRACK_HEIGHT = 200;
 
@@ -35,7 +41,6 @@ export const THUMBNAIL_WIDTH = Math.round(THUMBNAIL_HEIGHT * (16 / 9));
 const MIN_ZOOM_LEVEL = 0.01;
 const MAX_ZOOM_LEVEL = 2; // Capped at 2x for UI performance
 
-export const DEFAULT_FPS = 30;
 export const BASE_SNAP_THRESHOLD_PIXELS = 8; // Base threshold at 1x zoom
 
 export const DRAG_THRESHOLD_PIXELS = 3; // Min movement to start drag

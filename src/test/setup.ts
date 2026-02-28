@@ -1,8 +1,11 @@
 import '@testing-library/jest-dom';
 
 // Mock ImageData for Canvas operations
-if (typeof globalThis.ImageData === 'undefined') {
-  (globalThis as any).ImageData = class ImageData {
+type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData };
+const testGlobal = globalThis as TestGlobalWithImageData;
+
+if (typeof testGlobal.ImageData === 'undefined') {
+  class MockImageData {
     width: number;
     height: number;
     data: Uint8ClampedArray;
@@ -22,5 +25,7 @@ if (typeof globalThis.ImageData === 'undefined') {
         this.height = height ?? Math.floor(dataOrWidth.length / (widthOrHeight * 4));
       }
     }
-  };
+  }
+
+  testGlobal.ImageData = MockImageData as unknown as typeof ImageData;
 }

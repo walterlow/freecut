@@ -52,8 +52,8 @@ import { useItemsStore } from './items-store';
 import { useTransitionsStore } from './transitions-store';
 import { useKeyframesStore } from './keyframes-store';
 import { useCompositionsStore } from './compositions-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 /** Save current items/tracks/transitions/keyframes from domain stores into a stash entry. */
 function captureCurrentTimeline(compositionId: string | null): StashedTimeline {

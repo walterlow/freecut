@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Timeline Store Facade
  *
  * Provides backward-compatible access to the split timeline stores.
@@ -17,7 +17,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
 
 const logger = createLogger('TimelineStore');
@@ -36,16 +36,18 @@ import { useCompositionNavigationStore } from './composition-navigation-store';
 import * as timelineActions from './timeline-actions';
 
 // External dependencies for save/load
-import { getProject, updateProject, saveThumbnail } from '@/lib/storage/indexeddb';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage/indexeddb';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useZoomStore } from './zoom-store';
 import type { ProjectTimeline } from '@/types/project';
-import { renderSingleFrame } from '@/features/export/utils/client-render-engine';
-import { convertTimelineToComposition } from '@/features/export/utils/timeline-to-composition';
-import { resolveMediaUrls } from '@/features/preview/utils/media-resolver';
+import {
+  renderSingleFrame,
+  convertTimelineToComposition,
+} from '@/features/timeline/deps/export-contract';
+import { resolveMediaUrls } from '@/features/timeline/deps/media-library-resolver';
 import { validateMediaReferences } from '@/features/timeline/utils/media-validation';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/lib/migrations';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
 
 
 /**
@@ -602,7 +604,7 @@ type TimelineStoreFacade = {
  * This mimics Zustand's API for backward compatibility.
  */
 function createTimelineStoreFacade(): TimelineStoreFacade {
-  // The main hook function — uses selector memoization so components only
+  // The main hook function â€” uses selector memoization so components only
   // re-render when their *selected* value changes, not on every domain change.
   function useTimelineStore<T>(selector: (state: TimelineState & TimelineActions) => T): T {
     const selectorRef = useRef(selector);
@@ -615,12 +617,12 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
 
     // Stable callback: compares the selected value across snapshot changes.
     // If the selector returns the same value (via Object.is), the previous
-    // reference is returned — useSyncExternalStore sees no change and skips
+    // reference is returned â€” useSyncExternalStore sees no change and skips
     // the re-render for this component.
     const getSelection = useCallback((): T => {
       const snapshot = getSnapshot();
 
-      // Snapshot reference unchanged → selection unchanged
+      // Snapshot reference unchanged â†’ selection unchanged
       if (lastSnapshotRef.current === snapshot && lastSelectionRef.current !== undefined) {
         return lastSelectionRef.current;
       }
@@ -628,7 +630,7 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
       const nextSelection = selectorRef.current(snapshot);
 
       // Selected value unchanged despite new snapshot (e.g. markers changed
-      // but this component only selects items) → reuse previous reference
+      // but this component only selects items) â†’ reuse previous reference
       if (lastSelectionRef.current !== undefined && Object.is(lastSelectionRef.current, nextSelection)) {
         lastSnapshotRef.current = snapshot;
         return lastSelectionRef.current;
@@ -710,3 +712,4 @@ export const useTimelineStore = createTimelineStoreFacade();
 
 // Re-export actions for direct use
 export * from './timeline-actions';
+

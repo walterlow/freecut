@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import { useRollingEditPreviewStore } from '@/features/timeline/stores/rolling-edit-preview-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import {
+  useTimelineStore,
+} from '@/features/preview/deps/timeline-store';
+import { useRollingEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview';
 import { EditTwoUpPanels } from './edit-2up-panels';
 import { getSourceFrameInfo } from './edit-overlay-utils';
 
@@ -56,3 +58,4 @@ export function RollingEditOverlay({ fps }: RollingEditOverlayProps) {
     />
   );
 }
+

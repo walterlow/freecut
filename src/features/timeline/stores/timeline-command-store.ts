@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { TimelineCommand, CommandEntry, TimelineSnapshot } from './commands/types';
 import { captureSnapshot, restoreSnapshot, snapshotsEqual } from './commands/snapshot';
-import { useSettingsStore } from '@/features/settings/stores/settings-store';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
 
 /**
  * Command store state.

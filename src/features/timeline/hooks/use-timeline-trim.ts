@@ -3,7 +3,7 @@ import type { TimelineItem } from '@/types/timeline';
 import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';

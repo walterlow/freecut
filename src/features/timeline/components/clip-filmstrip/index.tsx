@@ -1,7 +1,7 @@
 import { memo, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
-import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
+import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 

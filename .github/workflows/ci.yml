@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check feature boundaries
+        run: npm run check:boundaries
+
+      - name: Check deps contract seams
+        run: npm run check:deps-contracts
+
+      - name: Check legacy lib import migration
+        run: npm run check:legacy-lib-imports
+
+      - name: Check deps wrapper health
+        run: npm run check:deps-wrapper-health
+
+      - name: Generate feature-edge report
+        run: npm run -s report:feature-edges:json > feature-edges-report.json
+
+      - name: Generate deps-wrapper health report
+        run: npm run -s report:deps-wrapper-health:json > deps-wrapper-health-report.json
+
+      - name: Check feature-edge budgets
+        run: npm run check:edge-budgets -- --input feature-edges-report.json
+
+      - name: Upload feature-edge report
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-edges-report
+          path: feature-edges-report.json
+
+      - name: Upload deps-wrapper health report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-wrapper-health-report
+          path: deps-wrapper-health-report.json
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Check bundle budgets
+        run: npm run check:bundle-budgets -- --dist dist/assets

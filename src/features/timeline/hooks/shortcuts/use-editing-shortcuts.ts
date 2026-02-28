@@ -4,17 +4,23 @@
 
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore } from '../../stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useProjectStore } from '@/features/timeline/deps/projects';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
-import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
-import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
+import { insertFreezeFrame } from '../../stores/actions/item-actions';
+import {
+  resolveTransform,
+  getSourceDimensions,
+} from '@/features/timeline/deps/composition-runtime';
+import {
+  resolveAnimatedTransform,
+  isFrameInTransitionRegion,
+} from '@/features/timeline/deps/keyframes';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useClearKeyframesDialogStore } from '@/features/editor/components/clear-keyframes-dialog-store';
+import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
 
 export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
@@ -176,9 +182,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
       if (currentFrame <= selectedItem.from || currentFrame >= selectedItem.from + selectedItem.durationInFrames) return;
 
       event.preventDefault();
-      void import('../../stores/actions/item-actions').then(({ insertFreezeFrame }) => {
-        void insertFreezeFrame(selectedItem.id, currentFrame);
-      });
+      void insertFreezeFrame(selectedItem.id, currentFrame);
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, items]

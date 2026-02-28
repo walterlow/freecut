@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Lightweight JSON Export Service
  *
  * Exports project data as JSON for debugging, testing, and sharing
@@ -14,8 +14,8 @@ import {
   SNAPSHOT_VERSION,
   mediaToSnapshotReference,
 } from '../types/snapshot';
-import { getProject, getProjectMediaIds } from '@/lib/storage/indexeddb';
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
+import { getProject, getProjectMediaIds } from '@/infrastructure/storage/indexeddb';
+import { mediaLibraryService } from '@/features/project-bundle/deps/media-library';
 
 // App version - should be imported from a config
 const APP_VERSION = '1.0.0';
@@ -242,3 +242,4 @@ export function getSnapshotStats(snapshot: ProjectSnapshot): {
     totalDuration: snapshot.project.duration,
   };
 }
+

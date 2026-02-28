@@ -1,11 +1,12 @@
 import { describe, expect, it, beforeEach, vi, type Mock } from 'vitest';
 import { resolveMediaUrl, resolveMediaUrls, cleanupBlobUrls } from './media-resolver';
-import { blobUrlManager } from '@/lib/blob-url-manager';
-import { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { mediaLibraryService, FileAccessError } from '@/features/preview/deps/media-library';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
 
-// Mock dependencies
+const mockMarkMediaBroken = vi.fn();
+
+// Mock dependencies used by the underlying media resolver implementation.
 vi.mock('@/features/media-library/services/media-library-service', () => ({
   mediaLibraryService: {
     getMedia: vi.fn(),
@@ -23,21 +24,20 @@ vi.mock('@/features/media-library/services/media-library-service', () => ({
 
 vi.mock('@/features/media-library/services/proxy-service', () => ({
   proxyService: {
+    getProxyKey: vi.fn(() => undefined),
+    setProxyKey: vi.fn(),
     getProxyBlobUrl: vi.fn(() => null),
   },
 }));
 
-vi.mock('@/features/media-library/stores/media-library-store', () => {
-  const mockMarkMediaBroken = vi.fn();
-  return {
-    useMediaLibraryStore: {
-      getState: () => ({
-        markMediaBroken: mockMarkMediaBroken,
-      }),
-      __mockMarkMediaBroken: mockMarkMediaBroken,
-    },
-  };
-});
+vi.mock('@/features/media-library/stores/media-library-store', () => ({
+  useMediaLibraryStore: {
+    getState: () => ({
+      markMediaBroken: mockMarkMediaBroken,
+      mediaById: {},
+    }),
+  },
+}));
 
 let blobUrlCounter = 0;
 
@@ -102,7 +102,7 @@ describe('resolveMediaUrl', () => {
   });
 
   it('marks media broken on FileAccessError (file_missing)', async () => {
-    const mockError = new (FileAccessError as any)('File not found', 'file_missing');
+    const mockError = new FileAccessError('File not found', 'file_missing');
     (mediaLibraryService.getMedia as Mock)
       .mockResolvedValueOnce({ id: 'media-1', fileName: 'video.mp4' }) // first call in resolve
       .mockResolvedValueOnce({ id: 'media-1', fileName: 'video.mp4' }); // second call in catch
@@ -111,8 +111,7 @@ describe('resolveMediaUrl', () => {
     const url = await resolveMediaUrl('media-1');
 
     expect(url).toBe('');
-    const mockMarkBroken = (useMediaLibraryStore as any).__mockMarkMediaBroken;
-    expect(mockMarkBroken).toHaveBeenCalledWith('media-1', {
+    expect(mockMarkMediaBroken).toHaveBeenCalledWith('media-1', {
       mediaId: 'media-1',
       fileName: 'video.mp4',
       errorType: 'file_missing',
@@ -215,7 +214,7 @@ describe('resolveMediaUrls', () => {
     // Video item should have src resolved
     expect((resolved[0]!.items[0]! as VideoItem).src).toMatch(/^blob:test-/);
     // Text item should be unchanged (no mediaId)
-    expect((resolved[0]!.items[1]! as any).src).toBeUndefined();
+    expect('src' in resolved[0]!.items[1]!).toBe(false);
   });
 
   it('does not mutate original tracks', async () => {
@@ -262,7 +261,7 @@ describe('resolveMediaUrls', () => {
 describe('relinking regression', () => {
   it('resolves URL after failed initial resolution + blobUrlManager invalidation', async () => {
     // Step 1: Initial resolution fails (file missing)
-    const mockError = new (FileAccessError as any)('Not found', 'file_missing');
+    const mockError = new FileAccessError('Not found', 'file_missing');
     (mediaLibraryService.getMedia as Mock).mockResolvedValue({
       id: 'media-1',
       fileName: 'video.mp4',
@@ -273,7 +272,7 @@ describe('relinking regression', () => {
     expect(failedUrl).toBe('');
     expect(blobUrlManager.has('media-1')).toBe(false);
 
-    // Step 2: User relinks — invalidate is called (no-op since nothing cached)
+    // Step 2: User relinks â€” invalidate is called (no-op since nothing cached)
     blobUrlManager.invalidate('media-1');
 
     // Step 3: Re-resolve with the new (working) file handle
@@ -304,7 +303,7 @@ describe('relinking regression', () => {
     blobUrlManager.invalidate('media-1');
     expect(blobUrlManager.has('media-1')).toBe(false);
 
-    // Step 3: Re-resolve — should create new blob URL from new file handle
+    // Step 3: Re-resolve â€” should create new blob URL from new file handle
     (mediaLibraryService.getMediaFile as Mock).mockResolvedValue(
       new Blob(['relinked'])
     );
@@ -314,3 +313,4 @@ describe('relinking regression', () => {
     expect(relinkedUrl).not.toBe(originalUrl);
   });
 });
+

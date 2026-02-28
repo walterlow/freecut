@@ -1,13 +1,13 @@
-/**
+﻿/**
  * Shared helpers for timeline action modules.
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { repairTransitions } from '../../utils/transition-auto-repair';
-import { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
+import { isFrameInTransitionRegion } from '@/features/timeline/deps/keyframes';
 
 export const logger = createLogger('TimelineActions');
 
@@ -66,3 +66,4 @@ export function canAddKeyframeAtFrame(itemId: string, frame: number): boolean {
   const blocked = isFrameInTransitionRegion(frame, itemId, item, transitions);
   return blocked === undefined;
 }
+

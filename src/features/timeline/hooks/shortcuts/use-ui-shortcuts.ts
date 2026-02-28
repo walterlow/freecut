@@ -5,7 +5,7 @@
 import { useHotkeys } from 'react-hotkeys-hook';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useZoomStore, getZoomTo100Handler } from '../../stores/zoom-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 

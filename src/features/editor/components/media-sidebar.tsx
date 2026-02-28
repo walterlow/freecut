@@ -26,14 +26,14 @@ import {
   Grid3X3,
   Blend,
 } from 'lucide-react';
-import { useEditorStore } from '../stores/editor-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '../stores/selection-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import { MediaLibrary } from '@/features/media-library/components/media-library';
+import { useEditorStore } from '@/shared/state/editor';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useProjectStore } from '@/features/editor/deps/projects';
+import { MediaLibrary } from '@/features/editor/deps/media-library';
 import { TransitionsPanel } from './transitions-panel';
-import { findNearestAvailableSpace } from '@/features/timeline/utils/collision-utils';
+import { findNearestAvailableSpace } from '@/features/editor/deps/timeline-utils';
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline';
 import type { VisualEffect, CSSFilterType, GlitchVariant } from '@/types/effects';
 import {
@@ -720,3 +720,4 @@ export const MediaSidebar = memo(function MediaSidebar() {
     </div>
   );
 });
+

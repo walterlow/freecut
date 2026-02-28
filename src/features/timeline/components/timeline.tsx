@@ -5,9 +5,9 @@ import { TimelineContent } from './timeline-content';
 import { TrackHeader } from './track-header';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '../stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 import { Button } from '@/components/ui/button';

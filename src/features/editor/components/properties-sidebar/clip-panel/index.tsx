@@ -2,11 +2,11 @@ import { useMemo, useCallback, memo } from 'react';
 import { Move, Sparkles, Film } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import type { SelectionState, SelectionActions } from '@/features/editor/types';
-import type { TimelineState, TimelineActions } from '@/features/timeline/types';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useProjectStore } from '@/features/editor/deps/projects';
+import type { SelectionState, SelectionActions } from '@/shared/state/selection';
+import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 
@@ -18,7 +18,7 @@ import { GifSection } from './gif-section';
 import { AudioSection } from './audio-section';
 import { TextSection } from './text-section';
 import { ShapeSection } from './shape-section';
-import { EffectsSection } from '@/features/effects/components/effects-section';
+import { EffectsSection } from '@/features/editor/deps/effects-contract';
 
 /**
  * Check if an item is a GIF (image with .gif extension)
@@ -276,3 +276,4 @@ export const ClipPanel = memo(function ClipPanel() {
     </div>
   );
 });
+
