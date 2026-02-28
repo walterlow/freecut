@@ -1658,6 +1658,20 @@ export const VideoPreview = memo(function VideoPreview({
           if (!scrubMountedRef.current) break;
 
           if (isPriorityFrame) {
+            const playbackState = usePlaybackStore.getState();
+            // Guard against stale in-flight renders that finish after scrub has ended.
+            // Without this, a completed old render can re-show the overlay and hide
+            // live Player updates (e.g. ruler click + gizmo interaction).
+            if (
+              playbackState.isPlaying ||
+              playbackState.previewFrame === null ||
+              playbackState.previewFrame !== frameToRender
+            ) {
+              setShowFastScrubOverlay(false);
+              bypassPreviewSeekRef.current = false;
+              continue;
+            }
+
             drawToDisplay();
             setShowFastScrubOverlay(true);
             bypassPreviewSeekRef.current = true;
@@ -2168,4 +2182,3 @@ export const VideoPreview = memo(function VideoPreview({
     </div>
   );
 });
-
