@@ -2,8 +2,8 @@ import { useCallback, useMemo } from 'react';
 import { Image, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, ImageItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import type { TimelineState, TimelineActions } from '@/features/timeline/types';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import {
   PropertySection,
   PropertyRow,
@@ -114,3 +114,4 @@ export function GifSection({ items }: GifSectionProps) {
     </PropertySection>
   );
 }
+

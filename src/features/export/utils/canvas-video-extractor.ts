@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Video frame extractor using mediabunny for precise frame access.
  *
  * This replaces HTML5 video element seeking which is slow and imprecise.
@@ -8,7 +8,7 @@
  * - No 500ms timeout fallbacks needed
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('VideoFrameExtractor');
 
@@ -201,7 +201,7 @@ export class VideoFrameExtractor {
       const candidate = await this.peekNextSample();
       if (!candidate) break;
       if (candidate.timestamp <= timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON) {
-        // Moving to a new sample — release the cached VideoFrame first
+        // Moving to a new sample â€” release the cached VideoFrame first
         // so it's closed before the old sample is closed.
         this.closeCachedVideoFrame();
         this.closeSample(this.currentSample);
@@ -288,7 +288,7 @@ export class VideoFrameExtractor {
       // empty/invalidated frame because the decoded buffer was released.
       let videoFrame = this.cachedVideoFrame;
       if (!videoFrame || this.cachedVideoFrameSample !== sample) {
-        // Different sample — release old cached frame and create new one
+        // Different sample â€” release old cached frame and create new one
         this.closeCachedVideoFrame();
         videoFrame = sample.toVideoFrame();
         if (!videoFrame) {
@@ -303,7 +303,7 @@ export class VideoFrameExtractor {
       ctx.drawImage(videoFrame, x, y, width, height);
       return true;
     } catch (error) {
-      // Draw failed — discard the cached frame so next attempt gets a fresh one
+      // Draw failed â€” discard the cached frame so next attempt gets a fresh one
       this.closeCachedVideoFrame();
       this.sampleLoopError = error;
       this.lastFailureKind = 'decode-error';
@@ -431,3 +431,4 @@ export class VideoFrameExtractor {
     this.lastFailureKind = 'none';
   }
 }
+

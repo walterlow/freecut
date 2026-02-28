@@ -1,10 +1,12 @@
-import type { TimelineTrack, TimelineItem } from '@/types/timeline';
+﻿import type { TimelineTrack, TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import type { CompositionInputProps } from '@/types/export';
 import type { ItemKeyframes, Keyframe, PropertyKeyframes } from '@/types/keyframe';
-import { interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
-import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
-import { createLogger } from '@/lib/logger';
+import {
+  interpolatePropertyValue,
+} from '@/features/export/deps/keyframes';
+import { resolveEffectiveTrackStates } from '@/features/export/deps/timeline';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('TimelineToComposition');
 
@@ -472,3 +474,4 @@ function adjustKeyframesForIOMarkers(
     properties: adjustedProperties,
   };
 }
+

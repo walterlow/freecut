@@ -2,7 +2,7 @@ import { useMemo, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { GizmoHandle, Transform, CoordinateParams } from '../types/gizmo';
 import { useGizmoStore } from '../stores/gizmo-store';
-import { useAnimatedTransform } from '@/features/keyframes/hooks/use-animated-transform';
+import { useAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { useEscapeCancel } from '../hooks/use-drag-interaction';
 import { GizmoHandles } from './gizmo-handles';
 import { transformToScreenBounds, screenToCanvas, getScaleCursor } from '../utils/coordinate-transform';

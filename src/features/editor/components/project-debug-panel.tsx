@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Debug Panel
  *
  * Floating debug panel for project data operations.
@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import {
   Bug,
   Download,
@@ -37,8 +37,13 @@ import {
   Eye,
 } from 'lucide-react';
 import { useDebugStore } from '@/features/editor/stores/debug-store';
-import type { FixtureType } from '@/features/project-bundle/services/test-fixtures';
-import { createProject, getDBStats } from '@/lib/storage/indexeddb';
+import {
+  importJsonExportService,
+  importJsonImportService,
+  importTestFixtures,
+  type FixtureType,
+} from '@/features/editor/deps/project-bundle';
+import { createProject, getDBStats } from '@/infrastructure/storage/indexeddb';
 
 interface DebugAction {
   label: string;
@@ -70,7 +75,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   // Load available fixtures on mount
   useEffect(() => {
     if (import.meta.env.DEV) {
-      import('@/features/project-bundle/services/test-fixtures').then(({ getAvailableFixtures }) => {
+      importTestFixtures().then(({ getAvailableFixtures }) => {
         setAvailableFixtures(getAvailableFixtures());
       });
     }
@@ -97,32 +102,24 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   };
 
   const handleExportJson = useCallback(async () => {
-    const { downloadProjectJson } = await import(
-      '@/features/project-bundle/services/json-export-service'
-    );
+    const { downloadProjectJson } = await importJsonExportService();
     await downloadProjectJson(projectId);
   }, [projectId]);
 
   const handleCopyToClipboard = useCallback(async () => {
-    const { copyProjectToClipboard } = await import(
-      '@/features/project-bundle/services/json-export-service'
-    );
+    const { copyProjectToClipboard } = await importJsonExportService();
     await copyProjectToClipboard(projectId);
   }, [projectId]);
 
   const handleImportFromClipboard = useCallback(async () => {
-    const { importProjectFromClipboard } = await import(
-      '@/features/project-bundle/services/json-import-service'
-    );
+    const { importProjectFromClipboard } = await importJsonImportService();
     const result = await importProjectFromClipboard();
     // Reload to show new project
     window.location.href = `/editor/${result.project.id}`;
   }, []);
 
   const handleImportFromFile = useCallback(async () => {
-    const { showImportFilePicker } = await import(
-      '@/features/project-bundle/services/json-import-service'
-    );
+    const { showImportFilePicker } = await importJsonImportService();
     const result = await showImportFilePicker();
     if (result) {
       // Reload to show new project
@@ -131,9 +128,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   }, []);
 
   const handleLogSnapshot = useCallback(async () => {
-    const { exportProjectJson, getSnapshotStats } = await import(
-      '@/features/project-bundle/services/json-export-service'
-    );
+    const { exportProjectJson, getSnapshotStats } = await importJsonExportService();
     const snapshot = await exportProjectJson(projectId);
     const stats = getSnapshotStats(snapshot);
     console.warn('Project snapshot stats:', stats);
@@ -145,12 +140,8 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   }, []);
 
   const handleValidateProject = useCallback(async () => {
-    const { exportProjectJson } = await import(
-      '@/features/project-bundle/services/json-export-service'
-    );
-    const { validateSnapshotData } = await import(
-      '@/features/project-bundle/services/json-import-service'
-    );
+    const { exportProjectJson } = await importJsonExportService();
+    const { validateSnapshotData } = await importJsonImportService();
     const snapshot = await exportProjectJson(projectId);
     const result = await validateSnapshotData(snapshot);
     if (!result.valid) {
@@ -162,9 +153,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   }, [projectId]);
 
   const handleGenerateFixture = useCallback(async () => {
-    const { generateFixture } = await import(
-      '@/features/project-bundle/services/test-fixtures'
-    );
+    const { generateFixture } = await importTestFixtures();
 
     const { project } = generateFixture(selectedFixture);
     await createProject(project);
@@ -174,21 +163,15 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
   }, [selectedFixture]);
 
   const handleDownloadFixture = useCallback(async () => {
-    const { generateFixture } = await import(
-      '@/features/project-bundle/services/test-fixtures'
-    );
-    const { downloadSnapshotJson } = await import(
-      '@/features/project-bundle/services/json-export-service'
-    );
+    const { generateFixture } = await importTestFixtures();
+    const { downloadSnapshotJson } = await importJsonExportService();
 
     const { snapshot } = generateFixture(selectedFixture);
     downloadSnapshotJson(snapshot, `fixture-${selectedFixture}`);
   }, [selectedFixture]);
 
   const handleLogFixture = useCallback(async () => {
-    const { generateFixture, getAvailableFixtures } = await import(
-      '@/features/project-bundle/services/test-fixtures'
-    );
+    const { generateFixture, getAvailableFixtures } = await importTestFixtures();
 
     const { project } = generateFixture(selectedFixture);
     const fixtureInfo = getAvailableFixtures().find((f) => f.type === selectedFixture);
@@ -486,3 +469,4 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     </>
   );
 }
+

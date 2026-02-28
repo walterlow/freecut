@@ -8,7 +8,7 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore, type SubComposition } from '../compositions-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { DEFAULT_TRACK_HEIGHT } from '../../constants';
 import { useCompositionNavigationStore } from '../composition-navigation-store';
 import { execute } from './shared';

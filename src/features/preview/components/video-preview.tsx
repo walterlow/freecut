@@ -1,33 +1,36 @@
-import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
-import { Player, type PlayerRef } from '@/features/player';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useItemsStore } from '@/features/timeline/stores/items-store';
-import { useTransitionsStore } from '@/features/timeline/stores/transitions-store';
-import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
-import { useMediaDependencyStore } from '@/features/timeline/stores/media-dependency-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
-import { MainComposition } from '@/lib/composition-runtime/compositions/main-composition';
+﻿import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
+import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
+import { usePlaybackStore } from '@/shared/state/playback';
+import {
+  useTimelineStore,
+  useItemsStore,
+  useTransitionsStore,
+  useTimelineSettingsStore,
+  useMediaDependencyStore,
+} from '@/features/preview/deps/timeline-store';
+import { resolveEffectiveTrackStates } from '@/features/preview/deps/timeline-utils';
+import {
+  useRollingEditPreviewStore,
+  useRippleEditPreviewStore,
+  useSlipEditPreviewStore,
+  useSlideEditPreviewStore,
+} from '@/features/preview/deps/timeline-edit-preview';
+import { useSelectionStore } from '@/shared/state/selection';
+import { MainComposition } from '@/features/preview/deps/composition-runtime';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { proxyService } from '@/features/media-library/services/proxy-service';
-import { blobUrlManager } from '@/lib/blob-url-manager';
-import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
-import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
+import { useMediaLibraryStore, proxyService } from '@/features/preview/deps/media-library';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { GizmoOverlay } from './gizmo-overlay';
 import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
 import { SlideEditOverlay } from './slide-edit-overlay';
-import { useRollingEditPreviewStore } from '@/features/timeline/stores/rolling-edit-preview-store';
-import { useRippleEditPreviewStore } from '@/features/timeline/stores/ripple-edit-preview-store';
-import { useSlipEditPreviewStore } from '@/features/timeline/stores/slip-edit-preview-store';
-import { useSlideEditPreviewStore } from '@/features/timeline/stores/slide-edit-preview-store';
 import type { CompositionInputProps } from '@/types/export';
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
-import { createCompositionRenderer } from '@/features/export/utils/client-render-engine';
+import { createCompositionRenderer } from '@/features/preview/deps/export';
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
@@ -321,7 +324,7 @@ interface VideoPreviewProps {
  * Sync strategy:
  * - Timeline seeks trigger Player seeks (both playing and paused)
  * - Player updates are ignored briefly after seeks to prevent loops
- * - Player fires frameupdate → updates timeline scrubber position
+ * - Player fires frameupdate â†’ updates timeline scrubber position
  * - Play/pause state is synced bidirectionally
  * - Store is authoritative - if store says paused, Player follows
  */
@@ -387,7 +390,7 @@ function useCustomPlayer(
     };
   }, [playerRef, playerReady]);
 
-  // Timeline → Player: Sync play/pause state
+  // Timeline â†’ Player: Sync play/pause state
   useEffect(() => {
     if (!playerRef.current) return;
 
@@ -430,7 +433,7 @@ function useCustomPlayer(
   // loadTimeline() restores the saved currentFrame from IndexedDB.
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
-  // Timeline → Player: Sync frame position
+  // Timeline â†’ Player: Sync frame position
   useEffect(() => {
     if (!playerReady || !playerRef.current || isTimelineLoading) return;
 
@@ -1272,7 +1275,7 @@ export const VideoPreview = memo(function VideoPreview({
         || state.isPlaying !== prev.isPlaying
       ) {
         // When playback starts, warm sources synchronously so video elements
-        // start loading immediately — don't wait for the next animation frame.
+        // start loading immediately â€” don't wait for the next animation frame.
         if (state.isPlaying && !prev.isPlaying) {
           if (rafId !== null) {
             cancelAnimationFrame(rafId);
@@ -1874,7 +1877,7 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
-      // Tab became visible — check if we were hidden long enough for staleness
+      // Tab became visible â€” check if we were hidden long enough for staleness
       if (lastHiddenAt === 0 || Date.now() - lastHiddenAt < STALE_THRESHOLD_MS) {
         return;
       }
@@ -1884,7 +1887,7 @@ export const VideoPreview = memo(function VideoPreview({
       try {
         await proxyService.refreshAllBlobUrls();
       } catch {
-        // Best-effort — continue with source URL refresh even if proxy refresh fails
+        // Best-effort â€” continue with source URL refresh even if proxy refresh fails
       }
 
       // 2. Invalidate source media blob URLs so they get re-created on next resolve
@@ -2104,3 +2107,5 @@ export const VideoPreview = memo(function VideoPreview({
     </div>
   );
 });
+
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Bundle Import Service
  *
  * Imports a .freecut.zip bundle (ZIP archive) and creates a project with media.
@@ -23,8 +23,8 @@ import {
   saveThumbnail,
   associateMediaWithProject,
   updateProject,
-} from '@/lib/storage/indexeddb';
-import { generateThumbnail } from '@/features/media-library/utils/thumbnail-generator';
+} from '@/infrastructure/storage/indexeddb';
+import { generateThumbnail } from '@/features/project-bundle/deps/media-library';
 import { fileSystemService } from './file-system-service';
 
 /**
@@ -345,3 +345,4 @@ async function validateBundle(file: File): Promise<{
     return { valid: false, errors };
   }
 }
+

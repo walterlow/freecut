@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
 import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload } from 'lucide-react';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
 import { MediaInfoPanel } from './media-info-panel';
 import { CompositionsSection } from './compositions-section';
@@ -35,9 +35,11 @@ import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
 import { useMediaLibraryStore } from '../stores/media-library-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useCompositionNavigationStore } from '@/features/timeline/stores/composition-navigation-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import {
+  useTimelineStore,
+  useCompositionNavigationStore,
+} from '@/features/media-library/deps/timeline-stores';
+import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
 import { validateMediaFile } from '../utils/validation';
@@ -109,7 +111,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
 
-  // Composition navigation — show banner when inside a sub-comp
+  // Composition navigation â€” show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
   const breadcrumbs = useCompositionNavigationStore((s) => s.breadcrumbs);
   const exitComposition = useCompositionNavigationStore((s) => s.exitComposition);
@@ -586,7 +588,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               onClick={() => setSearchQuery('')}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
             >
-              <span className="text-xs">✕</span>
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -705,7 +707,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       </div>
 
-      {/* Composition navigation banner — shown when inside a sub-composition */}
+      {/* Composition navigation banner â€” shown when inside a sub-composition */}
       {activeCompositionId !== null && activeCompLabel && (
         <div className="px-3 py-1.5 border-b border-violet-500/30 bg-violet-500/10 flex items-center gap-2 flex-shrink-0">
           <button
@@ -729,10 +731,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          {/* Compositions section — collapsible, auto-hidden when empty */}
+          {/* Compositions section â€” collapsible, auto-hidden when empty */}
           <CompositionsSection />
 
-          {/* Media section — collapsible, matches compositions header style */}
+          {/* Media section â€” collapsible, matches compositions header style */}
           <Collapsible open={mediaOpen} onOpenChange={setMediaOpen}>
             <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 hover:bg-secondary/50 rounded-md px-2 -mx-2 transition-colors">
               <ChevronRight
@@ -758,7 +760,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           </Collapsible>
         </div>
 
-        {/* Drag overlay — absolute sibling, always covers the visible viewport */}
+        {/* Drag overlay â€” absolute sibling, always covers the visible viewport */}
         {isDragging && (
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 border-2 border-dashed border-primary z-50 flex items-center justify-center pointer-events-none">
             <div className="absolute top-2 left-2 w-6 h-6 border-l-2 border-t-2 border-primary" />
@@ -874,3 +876,4 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     </div>
   );
 });
+

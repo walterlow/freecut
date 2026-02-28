@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { createLogger } from '@/lib/logger';
+﻿import { create } from 'zustand';
+import { createLogger } from '@/shared/logging/logger';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect, ItemEffect } from '@/types/effects';
@@ -794,3 +794,4 @@ useItemsStore.subscribe((state) => {
     mediaDependencyVersion: state.mediaDependencyVersion + 1,
   });
 });
+

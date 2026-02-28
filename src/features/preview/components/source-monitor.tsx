@@ -2,16 +2,18 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Repeat, ArrowLeftToLine, ArrowRightToLine, XCircle, ArrowDownToLine, Replace } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { performInsertEdit, performOverwriteEdit } from '@/features/timeline/stores/actions/source-edit-actions';
-import { PlayerEmitterProvider } from '@/features/player/event-emitter';
-import { ClockBridgeProvider, useBridgedTimelineContext } from '@/features/player/clock';
-import { VideoConfigProvider } from '@/features/player/video-config-context';
-import { usePlayer } from '@/features/player/use-player';
+import { performInsertEdit, performOverwriteEdit } from '@/features/preview/deps/timeline-source-edit';
+import {
+  PlayerEmitterProvider,
+  ClockBridgeProvider,
+  useBridgedTimelineContext,
+  VideoConfigProvider,
+  usePlayer,
+} from '@/features/preview/deps/player-context';
 import { SourceComposition } from './source-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { getMediaType } from '@/features/media-library/utils/validation';
-import { useSourcePlayerStore } from '../stores/source-player-store';
+import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
+import { useSourcePlayerStore } from '@/shared/state/source-player';
 
 interface SourceMonitorProps {
   mediaId: string;
@@ -595,3 +597,4 @@ function SourcePlaybackControls({
     </div>
   );
 }
+

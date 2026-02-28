@@ -8,8 +8,11 @@
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
-import { resolveTransform, getSourceDimensions } from '@/lib/composition-runtime/utils/transform-resolver';
-import { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+import {
+  resolveTransform,
+  getSourceDimensions,
+} from '@/features/export/deps/composition-runtime';
+import { resolveAnimatedTransform } from '@/features/export/deps/keyframes';
 
 /**
  * Canvas settings for transform resolution

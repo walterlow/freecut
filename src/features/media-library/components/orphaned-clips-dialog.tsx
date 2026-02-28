@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { createLogger } from '@/lib/logger';
+﻿import { useState, useMemo, useCallback, useEffect } from 'react';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('OrphanedClipsDialog');
 
@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { MediaPickerDialog } from './media-picker-dialog';
-import { autoMatchOrphanedClips } from '@/features/timeline/utils/media-validation';
+import { autoMatchOrphanedClips } from '@/features/media-library/deps/timeline-utils';
 import type { OrphanedClipInfo } from '../types';
 
 const itemTypeIcons = {
@@ -187,7 +187,7 @@ export function OrphanedClipsDialog() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{orphan.fileName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {orphan.itemType} clip • Media deleted
+                        {orphan.itemType} clip â€¢ Media deleted
                       </p>
                     </div>
 
@@ -260,3 +260,4 @@ export function OrphanedClipsDialog() {
     </>
   );
 }
+

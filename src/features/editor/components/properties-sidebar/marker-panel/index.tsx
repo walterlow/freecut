@@ -2,8 +2,8 @@ import { useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MapPin, Trash2 } from 'lucide-react';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { PropertySection, PropertyRow, NumberInput, ColorPicker } from '../components';
 
 const DEFAULT_MARKER_COLOR = 'oklch(0.65 0.20 250)';
@@ -161,3 +161,4 @@ export function MarkerPanel() {
     </div>
   );
 }
+

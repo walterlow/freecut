@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react';
+﻿import { memo, useCallback, useMemo } from 'react';
 import {
   Blend,
   ArrowRight,
@@ -16,10 +16,10 @@ import {
   Info,
   type LucideIcon,
 } from 'lucide-react';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useSelectionStore } from '../stores/selection-store';
-import { transitionRegistry } from '@/lib/transitions';
-import { areFramesAligned } from '@/features/timeline/utils/transition-utils';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { transitionRegistry } from '@/domain/timeline/transitions';
+import { areFramesAligned } from '@/features/editor/deps/timeline-utils';
 import type { Transition } from '@/types/transition';
 import type {
   TransitionCategory,
@@ -28,7 +28,7 @@ import type {
   FlipDirection,
   PresentationConfig,
 } from '@/types/transition';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 // Icon mapping for presentations
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -386,3 +386,5 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
     </div>
   );
 });
+
+

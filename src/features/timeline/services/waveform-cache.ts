@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Waveform Cache Service
  *
  * Manages waveform data caching with:
@@ -10,7 +10,7 @@
  * - Auto-migration from legacy IndexedDB storage
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
@@ -27,7 +27,7 @@ import {
   saveWaveformBin as saveWaveformBinToIndexedDB,
   saveWaveformMeta as saveWaveformMetaToIndexedDB,
   deleteWaveform as deleteWaveformFromIndexedDB,
-} from '@/lib/storage/indexeddb';
+} from '@/infrastructure/storage/indexeddb';
 
 const logger = createLogger('WaveformCache');
 
@@ -1022,3 +1022,4 @@ class WaveformCacheService {
 
 // Singleton instance
 export const waveformCache = new WaveformCacheService();
+

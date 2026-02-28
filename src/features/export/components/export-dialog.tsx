@@ -27,8 +27,8 @@ import {
 } from 'lucide-react';
 import type { ExportSettings, ExportMode } from '@/types/export';
 import { useClientRender } from '../hooks/use-client-render';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import { useProjectStore } from '@/features/export/deps/projects';
+import { useTimelineStore } from '@/features/export/deps/timeline';
 import { formatTimecode, framesToSeconds } from '@/utils/time-utils';
 import type { ClientVideoContainer, ClientAudioContainer } from '../utils/client-renderer';
 import { ExportPreviewPlayer } from './export-preview-player';

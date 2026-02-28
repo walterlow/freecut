@@ -3,7 +3,7 @@ import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect } from '@/types/effects';
 import type { Transition, TransitionType, TransitionPresentation, WipeDirection, SlideDirection, FlipDirection, TransitionBreakage } from '@/types/transition';
 import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType, EasingConfig } from '@/types/keyframe';
-import type { AutoKeyframeOperation } from '@/features/keyframes/utils/auto-keyframe';
+import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 
 export interface TimelineState {
   tracks: TimelineTrack[];

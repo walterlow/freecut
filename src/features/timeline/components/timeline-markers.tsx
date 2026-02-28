@@ -3,8 +3,8 @@ import { useCallback, useRef, useState, useEffect, memo } from 'react';
 
 // Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
 
 // Components
 import { TimelineInOutMarkers } from './timeline-in-out-markers';

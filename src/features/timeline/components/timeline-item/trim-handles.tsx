@@ -1,4 +1,4 @@
-import { memo } from 'react';
+﻿import { memo } from 'react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -6,7 +6,7 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 interface TrimHandlesProps {
   trackLocked: boolean;
@@ -91,3 +91,4 @@ export const TrimHandles = memo(function TrimHandles({
     </>
   );
 });
+

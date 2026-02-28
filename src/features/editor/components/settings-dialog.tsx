@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import type { MediaMetadata } from '@/types/storage';
 import {
   Dialog,
@@ -22,10 +22,21 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RotateCcw, Trash2, Loader2, Check, ImagePlus, Film } from 'lucide-react';
-import { useSettingsStore } from '@/features/settings/stores/settings-store';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';
-import { createLogger } from '@/lib/logger';
+import { useSettingsStore } from '@/features/editor/deps/settings';
+import {
+  useMediaLibraryStore,
+  getSharedProxyKey,
+  importProxyService,
+  importMediaLibraryService,
+  importThumbnailGenerator,
+} from '@/features/editor/deps/media-library';
+import {
+  importGifFrameCache,
+  importFilmstripCache,
+  importWaveformCache,
+} from '@/features/editor/deps/timeline-cache';
+import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('SettingsDialog');
 
@@ -52,18 +63,15 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
     { filmstripCache },
     { waveformCache },
   ] = await Promise.all([
-    import('@/lib/storage/indexeddb/waveforms'),
-    import('@/lib/storage/indexeddb/gif-frames'),
-    import('@/lib/storage/indexeddb/decoded-preview-audio'),
-    import('@/features/timeline/services/gif-frame-cache'),
-    import('@/features/timeline/services/filmstrip-cache'),
-    import('@/features/timeline/services/waveform-cache'),
+    import('@/infrastructure/storage/indexeddb/waveforms'),
+    import('@/infrastructure/storage/indexeddb/gif-frames'),
+    import('@/infrastructure/storage/indexeddb/decoded-preview-audio'),
+    importGifFrameCache(),
+    importFilmstripCache(),
+    importWaveformCache(),
   ]);
 
   // Clear in-memory preview audio cache (not keyed per-media, so clear all)
-  const { clearPreviewAudioCache } = await import(
-    '@/lib/composition-runtime/utils/audio-decode-cache'
-  );
   clearPreviewAudioCache();
 
   await Promise.all(
@@ -86,7 +94,7 @@ async function clearProjectProxies(
 ): Promise<void> {
   if (mediaItems.length === 0) return;
 
-  const { proxyService } = await import('@/features/media-library/services/proxy-service');
+  const { proxyService } = await importProxyService();
 
   await Promise.all(mediaItems.map(async (media) => {
     try {
@@ -115,10 +123,10 @@ async function regenerateProjectThumbnails(
     { saveThumbnail },
     { updateMedia },
   ] = await Promise.all([
-    import('@/features/media-library/services/media-library-service'),
-    import('@/features/media-library/utils/thumbnail-generator'),
-    import('@/lib/storage/indexeddb/thumbnails'),
-    import('@/lib/storage/indexeddb/media'),
+    importMediaLibraryService(),
+    importThumbnailGenerator(),
+    import('@/infrastructure/storage/indexeddb/thumbnails'),
+    import('@/infrastructure/storage/indexeddb/media'),
   ]);
 
   let regenerated = 0;
@@ -395,3 +403,5 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     </Dialog>
   );
 }
+
+

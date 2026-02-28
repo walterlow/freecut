@@ -3,7 +3,7 @@ import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useZoomStore } from '../stores/zoom-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineZoom } from './use-timeline-zoom';
 import {
   generateGridSnapPoints,

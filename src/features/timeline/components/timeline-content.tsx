@@ -7,8 +7,8 @@ import { useItemsStore } from '../stores/items-store';
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { registerZoomTo100 } from '../stores/zoom-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
 
 // Hooks
 import { useMarqueeSelection } from '@/hooks/use-marquee-selection';

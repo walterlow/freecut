@@ -4,7 +4,7 @@
 
 import type { AnimatableProperty, EasingType, KeyframeRef } from '@/types/keyframe';
 import type { KeyframeAddPayload } from '../keyframes-store';
-import type { AutoKeyframeOperation } from '@/features/keyframes/utils/auto-keyframe';
+import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { execute, logger, canAddKeyframeAtFrame } from './shared';

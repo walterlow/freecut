@@ -2,10 +2,10 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   SharedVideoExtractorPool,
   type VideoFrameSource,
-} from '@/features/export/utils/shared-video-extractor';
-import { getGlobalVideoSourcePool } from '@/features/player/video/VideoSourcePool';
+} from '@/features/preview/deps/export';
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import type { TimelineItem } from '@/types/timeline';
-import { usePlaybackStore } from '../stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import {
   computeFittedMediaSize,

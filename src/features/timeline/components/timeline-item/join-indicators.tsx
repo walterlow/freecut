@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { cn } from '@/lib/utils';
+﻿import { memo } from 'react';
+import { cn } from '@/shared/ui/cn';
 
 interface JoinIndicatorsProps {
   hasJoinableLeft: boolean;
@@ -65,3 +65,4 @@ export const JoinIndicators = memo(function JoinIndicators({
     </>
   );
 });
+

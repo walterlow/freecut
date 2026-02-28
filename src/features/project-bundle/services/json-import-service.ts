@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Lightweight JSON Import Service
  *
  * Imports project data from JSON snapshots for debugging, testing,
@@ -25,7 +25,7 @@ import {
   createProject,
   getAllMedia,
   associateMediaWithProject,
-} from '@/lib/storage/indexeddb';
+} from '@/infrastructure/storage/indexeddb';
 
 /**
  * Validate a snapshot without importing
@@ -410,3 +410,4 @@ export async function showImportFilePicker(
     input.click();
   });
 }
+

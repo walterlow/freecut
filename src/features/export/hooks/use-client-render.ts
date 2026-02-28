@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Client-side render hook
  *
  * Provides a React hook for video rendering using mediabunny.
@@ -19,10 +19,10 @@ import {
 } from '../utils/client-renderer';
 import { renderComposition, renderAudioOnly } from '../utils/client-render-engine';
 import { convertTimelineToComposition } from '../utils/timeline-to-composition';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import { resolveMediaUrls } from '@/features/preview/utils/media-resolver';
-import { createLogger } from '@/lib/logger';
+import { useTimelineStore } from '@/features/export/deps/timeline';
+import { useProjectStore } from '@/features/export/deps/projects';
+import { resolveMediaUrls } from '@/features/export/deps/media-library';
+import { createLogger } from '@/shared/logging/logger';
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,
@@ -497,7 +497,7 @@ export function useClientRender(): UseClientRenderReturn {
     a.click();
     document.body.removeChild(a);
 
-    // Revoke during idle — download has already started by then
+    // Revoke during idle â€” download has already started by then
     requestIdleCallback(() => URL.revokeObjectURL(url));
   }, [result]);
 
@@ -557,3 +557,4 @@ export function useClientRender(): UseClientRenderReturn {
     estimateFileSize: estimateFileSizeForSettings,
   };
 }
+

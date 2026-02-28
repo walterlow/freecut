@@ -3,9 +3,9 @@
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useMarkersStore } from '../../stores/markers-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { addMarker, removeMarker } from '../../stores/actions/marker-actions';
 

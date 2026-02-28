@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+﻿import { useState, useCallback, useRef, useEffect } from 'react';
 import { Layers, Trash2, ChevronRight } from 'lucide-react';
 import {
   Collapsible,
@@ -21,11 +21,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
-import { useCompositionsStore, type SubComposition } from '@/features/timeline/stores/compositions-store';
-import { useCompositionNavigationStore } from '@/features/timeline/stores/composition-navigation-store';
-import { useItemsStore } from '@/features/timeline/stores/items-store';
-import { removeItems } from '@/features/timeline/stores/actions/item-actions';
+import { cn } from '@/shared/ui/cn';
+import {
+  useCompositionsStore,
+  useCompositionNavigationStore,
+  useItemsStore,
+  type SubComposition,
+} from '@/features/media-library/deps/timeline-stores';
+import { removeItemsFromItemsActions as removeItems } from '@/features/media-library/deps/timeline-actions';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 
@@ -281,7 +284,7 @@ function CompositionCard({
                 : 'cursor-grab border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
             )}
           >
-            {/* Thumbnail area — gradient with centered icon */}
+            {/* Thumbnail area â€” gradient with centered icon */}
             <div className="flex-1 bg-secondary relative overflow-hidden min-h-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
               <Layers className="w-8 h-8 text-violet-400/70" />
 
@@ -342,7 +345,7 @@ function CompositionCard({
     );
   }
 
-  // List view (default) — matches MediaCard list layout
+  // List view (default) â€” matches MediaCard list layout
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -409,3 +412,4 @@ function CompositionCard({
     </ContextMenu>
   );
 }
+

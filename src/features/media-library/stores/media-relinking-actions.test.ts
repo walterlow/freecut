@@ -1,7 +1,8 @@
-import { describe, expect, it, beforeEach, vi, type Mock } from 'vitest';
+﻿import { describe, expect, it, beforeEach, vi, type Mock } from 'vitest';
 import { createRelinkingActions } from './media-relinking-actions';
-import { blobUrlManager } from '@/lib/blob-url-manager';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import type { MediaLibraryState, MediaLibraryActions, BrokenMediaInfo } from '../types';
+import type { MediaMetadata } from '@/types/storage';
 
 // Mock external dependencies
 vi.mock('../services/media-library-service', () => ({
@@ -11,12 +12,12 @@ vi.mock('../services/media-library-service', () => ({
   },
 }));
 
-vi.mock('@/features/timeline/stores/timeline-actions', () => ({
+vi.mock('@/features/media-library/deps/timeline-actions', () => ({
   removeItems: vi.fn(),
   updateItem: vi.fn(),
 }));
 
-vi.mock('@/features/timeline/stores/timeline-settings-store', () => ({
+vi.mock('@/features/media-library/deps/timeline-stores', () => ({
   useTimelineSettingsStore: {
     getState: () => ({ fps: 30 }),
   },
@@ -26,11 +27,49 @@ vi.mock('@/features/timeline/stores/timeline-settings-store', () => ({
 import { mediaLibraryService } from '../services/media-library-service';
 
 // Helpers
+type RelinkingState = Partial<MediaLibraryState> & Partial<MediaLibraryActions>;
+type RelinkingUpdater =
+  | Partial<MediaLibraryState>
+  | ((state: MediaLibraryState & MediaLibraryActions) => Partial<MediaLibraryState>);
+
+function createMockMediaMetadata(id: string, fileName: string): MediaMetadata {
+  return {
+    id,
+    storageType: 'handle',
+    fileName,
+    fileSize: 1,
+    mimeType: fileName.endsWith('.mp3') ? 'audio/mpeg' : 'video/mp4',
+    duration: 1,
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    codec: 'h264',
+    bitrate: 1,
+    tags: [],
+    createdAt: 0,
+    updatedAt: 0,
+  };
+}
+
+function applyStateUpdate(
+  state: RelinkingState,
+  updater: RelinkingUpdater
+): RelinkingState {
+  if (typeof updater === 'function') {
+    return {
+      ...state,
+      ...updater(state as MediaLibraryState & MediaLibraryActions),
+    };
+  }
+
+  return { ...state, ...updater };
+}
+
 function createMockState(): MediaLibraryState & MediaLibraryActions {
-  const state: Partial<MediaLibraryState & MediaLibraryActions> = {
+  const state: RelinkingState = {
     mediaItems: [
-      { id: 'media-1', fileName: 'video.mp4' } as any,
-      { id: 'media-2', fileName: 'audio.mp3' } as any,
+      createMockMediaMetadata('media-1', 'video.mp4'),
+      createMockMediaMetadata('media-2', 'audio.mp3'),
     ],
     brokenMediaIds: ['media-1'],
     brokenMediaInfo: new Map([
@@ -65,18 +104,14 @@ beforeEach(() => {
 describe('createRelinkingActions', () => {
   describe('markMediaBroken', () => {
     it('adds a media ID to brokenMediaIds', () => {
-      let currentState: any = {
+      let currentState: RelinkingState = {
         brokenMediaIds: [],
-        brokenMediaInfo: new Map(),
+        brokenMediaInfo: new Map<string, BrokenMediaInfo>(),
       };
-      const set = vi.fn((updater: any) => {
-        if (typeof updater === 'function') {
-          currentState = { ...currentState, ...updater(currentState) };
-        } else {
-          currentState = { ...currentState, ...updater };
-        }
+      const set = vi.fn((updater: RelinkingUpdater) => {
+        currentState = applyStateUpdate(currentState, updater);
       });
-      const get = vi.fn(() => currentState);
+      const get = vi.fn(() => currentState as MediaLibraryState & MediaLibraryActions);
 
       const actions = createRelinkingActions(set, get);
       actions.markMediaBroken('media-1', {
@@ -90,20 +125,17 @@ describe('createRelinkingActions', () => {
       expect(currentState.brokenMediaInfo.has('media-1')).toBe(true);
     });
 
-    it('is idempotent — does not duplicate entries', () => {
-      let currentState: any = {
+    it('is idempotent â€” does not duplicate entries', () => {
+      let currentState: RelinkingState = {
         brokenMediaIds: ['media-1'],
         brokenMediaInfo: new Map([
           ['media-1', { mediaId: 'media-1', fileName: 'video.mp4', errorType: 'file_missing' }],
         ]),
       };
-      const set = vi.fn((updater: any) => {
-        if (typeof updater === 'function') {
-          const result = updater(currentState);
-          currentState = { ...currentState, ...result };
-        }
+      const set = vi.fn((updater: RelinkingUpdater) => {
+        currentState = applyStateUpdate(currentState, updater);
       });
-      const get = vi.fn(() => currentState);
+      const get = vi.fn(() => currentState as MediaLibraryState & MediaLibraryActions);
 
       const actions = createRelinkingActions(set, get);
       actions.markMediaBroken('media-1', {
@@ -119,19 +151,17 @@ describe('createRelinkingActions', () => {
 
   describe('markMediaHealthy', () => {
     it('removes a media ID from brokenMediaIds', () => {
-      let currentState: any = {
+      let currentState: RelinkingState = {
         brokenMediaIds: ['media-1', 'media-2'],
         brokenMediaInfo: new Map([
           ['media-1', { mediaId: 'media-1', fileName: 'a.mp4', errorType: 'file_missing' }],
           ['media-2', { mediaId: 'media-2', fileName: 'b.mp4', errorType: 'file_missing' }],
         ]),
       };
-      const set = vi.fn((updater: any) => {
-        if (typeof updater === 'function') {
-          currentState = { ...currentState, ...updater(currentState) };
-        }
+      const set = vi.fn((updater: RelinkingUpdater) => {
+        currentState = applyStateUpdate(currentState, updater);
       });
-      const get = vi.fn(() => currentState);
+      const get = vi.fn(() => currentState as MediaLibraryState & MediaLibraryActions);
 
       const actions = createRelinkingActions(set, get);
       actions.markMediaHealthy('media-1');
@@ -206,20 +236,21 @@ describe('createRelinkingActions', () => {
       (mediaLibraryService.relinkMediaHandle as Mock).mockResolvedValue(updatedMedia);
 
       const mockState = createMockState();
-      let capturedUpdater: any;
-      const set = vi.fn((updater: any) => {
-        if (typeof updater === 'function') {
-          capturedUpdater = updater(mockState);
-        }
+      let capturedUpdate: Partial<MediaLibraryState> | undefined;
+      const set = vi.fn((updater: RelinkingUpdater) => {
+        capturedUpdate =
+          typeof updater === 'function'
+            ? updater(mockState)
+            : updater;
       });
       const get = vi.fn(() => mockState);
 
       const actions = createRelinkingActions(set, get);
       await actions.relinkMedia('media-1', {} as FileSystemFileHandle);
 
-      expect(capturedUpdater.mediaItems).toBeDefined();
-      const updated = capturedUpdater.mediaItems.find((m: any) => m.id === 'media-1');
-      expect(updated.fileName).toBe('relocated.mp4');
+      expect(capturedUpdate?.mediaItems).toBeDefined();
+      const updated = capturedUpdate?.mediaItems?.find((media) => media.id === 'media-1');
+      expect(updated?.fileName).toBe('relocated.mp4');
     });
   });
 
@@ -275,3 +306,4 @@ describe('createRelinkingActions', () => {
     });
   });
 });
+

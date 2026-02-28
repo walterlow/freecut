@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+﻿import { useState, useCallback, useRef } from 'react';
 import { Slider } from '@/components/ui/slider';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 type MixedValue = number | 'mixed';
 
@@ -104,3 +104,4 @@ export function SliderInput({
     </div>
   );
 }
+

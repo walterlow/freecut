@@ -1,7 +1,7 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import { useProjectStore } from '@/features/projects/stores/project-store';
@@ -86,3 +86,4 @@ function NewProject() {
     </div>
   );
 }
+

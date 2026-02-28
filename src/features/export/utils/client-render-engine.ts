@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Client Render Engine
  *
  * Contains the `createCompositionRenderer` factory that builds the per-frame
@@ -24,10 +24,10 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
-import { createLogger } from '@/lib/logger';
-import { blobUrlManager } from '@/lib/blob-url-manager';
-import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
-import { VideoSourcePool } from '@/features/player/video/VideoSourcePool';
+import { createLogger } from '@/shared/logging/logger';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { resolveMediaUrl } from '@/features/export/deps/media-library';
+import { VideoSourcePool } from '@/features/export/deps/player-contract';
 
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
@@ -49,12 +49,11 @@ import {
   buildClipMap,
   type ActiveTransition,
 } from './canvas-transitions';
-import { type CachedGifFrames } from '../../timeline/services/gif-frame-cache';
-import { gifFrameCache } from '../../timeline/services/gif-frame-cache';
+import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/timeline';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
-import { useCompositionsStore } from '../../timeline/stores/compositions-store';
+import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
 import {
@@ -93,7 +92,7 @@ function isGifFormat(item: ImageItem): boolean {
   return isGifUrl(item.src) || (item.label?.toLowerCase() ?? '').endsWith('.gif');
 }
 
-// WebP frame extraction is handled by gifFrameCache.getWebpFrames() —
+// WebP frame extraction is handled by gifFrameCache.getWebpFrames() â€”
 // the cache service uses the ImageDecoder API and provides the same
 // CachedGifFrames structure used for GIF.
 
@@ -732,7 +731,7 @@ export async function createCompositionRenderer(
                 pendingResolutions.push({ subItem, mediaId: subItem.mediaId });
               }
             } else {
-              // No mediaId — use stored src as last resort
+              // No mediaId â€” use stored src as last resort
               const src = (subItem as VideoItem | ImageItem).src ?? '';
               if (src) subCompMediaItems.push({ subItem, src });
             }
@@ -1103,7 +1102,7 @@ export async function createCompositionRenderer(
         return true;
       };
 
-      // Find occlusion cutoff – the lowest track order with a fully occluding item
+      // Find occlusion cutoff â€“ the lowest track order with a fully occluding item
       // If masks are active, disable occlusion culling (masks could reveal content)
       let occlusionCutoffOrder: number | null = null;
 
@@ -1308,3 +1307,4 @@ export async function createCompositionRenderer(
     },
   };
 }
+

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Type, AlignLeft, AlignCenter, AlignRight, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,8 +10,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { TextItem, TimelineItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
 import {
   PropertySection,
   PropertyRow,
@@ -19,7 +19,7 @@ import {
   ColorPicker,
 } from '../components';
 import { FontPicker } from './font-picker';
-import { FONT_CATALOG, FONT_WEIGHT_MAP } from '@/lib/fonts';
+import { FONT_CATALOG, FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 
 const FONT_WEIGHT_OPTIONS = [
   { value: 'normal', label: 'Regular' },
@@ -419,3 +419,5 @@ export function TextSection({ items }: TextSectionProps) {
     </PropertySection>
   );
 }
+
+

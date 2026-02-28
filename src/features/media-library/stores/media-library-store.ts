@@ -1,9 +1,9 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { MediaLibraryState, MediaLibraryActions, MediaLibraryNotification, BrokenMediaInfo, UnsupportedCodecFile } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import { proxyService } from '../services/proxy-service';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
@@ -334,3 +334,4 @@ export const useFilteredMediaItems = () => {
 
   return sorted;
 };
+

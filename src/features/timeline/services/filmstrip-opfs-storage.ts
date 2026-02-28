@@ -1,4 +1,4 @@
-/**
+﻿/**
  * OPFS Filmstrip Storage
  *
  * Simple storage for filmstrip frames. Worker handles saving,
@@ -10,8 +10,8 @@
  *     0.jpg, 1.jpg, 2.jpg, ... (legacy caches may still use .webp)
  */
 
-import { createLogger } from '@/lib/logger';
-import { getCacheMigration } from '@/lib/storage/cache-version';
+import { createLogger } from '@/shared/logging/logger';
+import { getCacheMigration } from '@/infrastructure/storage/cache-version';
 import { safeWrite } from '../utils/opfs-safe-write';
 
 const logger = createLogger('FilmstripOPFS');
@@ -515,3 +515,4 @@ class FilmstripOPFSStorage {
 
 // Singleton
 export const filmstripOPFSStorage = new FilmstripOPFSStorage();
+

@@ -1,9 +1,9 @@
-import { StrictMode } from 'react';
+﻿import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toast } from 'sonner';
 import { App } from './app';
-import { initializeDebugUtils } from '@/lib/debug';
-import { createLogger } from '@/lib/logger';
+import { initializeDebugUtils } from '@/app/debug';
+import { createLogger } from '@/shared/logging/logger';
 import './index.css';
 
 const log = createLogger('App');
@@ -50,7 +50,7 @@ window.addEventListener('vite:preloadError', () => {
       },
     });
   } else {
-    // Not in the editor — safe to reload immediately
+    // Not in the editor â€” safe to reload immediately
     window.location.reload();
   }
 });
@@ -70,3 +70,4 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>
 );
+

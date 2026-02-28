@@ -7,7 +7,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { usePreviewZoom } from '../hooks/use-preview-zoom';
-import { usePlaybackStore } from '../stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import type { PreviewQuality } from '../types';
 
 const QUALITY_PRESETS: { label: string; value: PreviewQuality }[] = [

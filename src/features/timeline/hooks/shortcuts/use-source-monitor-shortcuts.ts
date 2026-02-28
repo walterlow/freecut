@@ -11,7 +11,7 @@
 
 import { useHotkeys } from 'react-hotkeys-hook';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { useEditorStore } from '@/features/editor/stores/editor-store';
+import { useEditorStore } from '@/shared/state/editor';
 import { performInsertEdit, performOverwriteEdit } from '../../stores/actions/source-edit-actions';
 
 export function useSourceMonitorShortcuts() {

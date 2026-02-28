@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { usePlaybackStore } from '../stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 interface UseThrottledFrameOptions {
   /**

@@ -1,5 +1,5 @@
-import { useState, useRef, memo, useCallback, useMemo } from 'react';
-import { createLogger } from '@/lib/logger';
+﻿import { useState, useRef, memo, useCallback, useMemo } from 'react';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem, CompositionItem } from '@/types/timeline';
@@ -9,15 +9,18 @@ import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useVisibleItems } from '../hooks/use-visible-items';
 import { useItemsStore } from '../stores/items-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
-import { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { useProjectStore } from '@/features/timeline/deps/projects';
+import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
+import {
+  resolveMediaUrl,
+  getMediaDragData,
+  type CompositionDragData,
+} from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
-import { getMediaDragData, type CompositionDragData } from '@/features/media-library/utils/drag-data-cache';
-import { mapWithConcurrency } from '@/lib/async-utils';
+import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { computeInitialTransform } from '../utils/transform-init';
@@ -201,9 +204,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const [menuKey, setMenuKey] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
 
-  // Virtualized items/transitions — only those overlapping the visible viewport + buffer
+  // Virtualized items/transitions â€” only those overlapping the visible viewport + buffer
   const { visibleItems: trackItems, visibleTransitions: trackTransitions } = useVisibleItems(track.id);
-  // Full item count — used for context menu guard (must not depend on virtualized subset)
+  // Full item count â€” used for context menu guard (must not depend on virtualized subset)
   const hasAnyItems = useItemsStore((s) => (s.itemsByTrackId[track.id]?.length ?? 0) > 0);
   const addItem = useTimelineStore((s) => s.addItem);
   const addItems = useTimelineStore((s) => s.addItems);
@@ -780,3 +783,4 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     </ContextMenu>
   );
 }, areTrackPropsEqual);
+

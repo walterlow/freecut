@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dopesheet Editor - timeline-style keyframe editor.
  * Shows keyframes across properties as draggable diamonds on a frame grid.
  */
@@ -6,7 +6,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ChevronLeft, ChevronRight, Maximize2, Plus, Trash2, ZoomIn, ZoomOut, Magnet } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -1148,3 +1148,4 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     </div>
   );
 });
+

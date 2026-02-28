@@ -1,6 +1,6 @@
 import { useRef, useEffect, useLayoutEffect } from 'react';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { formatTimecode } from '@/utils/time-utils';
 

@@ -1,14 +1,14 @@
-import type {
+﻿import type {
   MediaLibraryState,
   MediaLibraryActions,
   BrokenMediaInfo,
   OrphanedClipInfo,
 } from '../types';
 import { mediaLibraryService } from '../services/media-library-service';
-import { removeItems, updateItem } from '@/features/timeline/stores/timeline-actions';
-import { useTimelineSettingsStore } from '@/features/timeline/stores/timeline-settings-store';
-import { blobUrlManager } from '@/lib/blob-url-manager';
-import { createLogger } from '@/lib/logger';
+import { removeItems, updateItem } from '@/features/media-library/deps/timeline-actions';
+import { useTimelineSettingsStore } from '@/features/media-library/deps/timeline-stores';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaRelinkingActions');
 
@@ -256,3 +256,4 @@ export function createRelinkingActions(
     },
   };
 }
+

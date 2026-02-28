@@ -1,10 +1,10 @@
-/**
+﻿/**
  * Graph bezier handles component.
  * Renders draggable bezier control point handles for cubic-bezier keyframes.
  */
 
 import { memo, useMemo, useCallback } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import type { GraphKeyframePoint, GraphBezierHandle } from './types';
 
 interface GraphHandlesProps {
@@ -187,3 +187,4 @@ const BezierHandle = memo(function BezierHandle({
     </g>
   );
 });
+

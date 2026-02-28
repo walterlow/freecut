@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo } from 'react';
+﻿import { useMemo, useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Blend,
@@ -20,11 +20,11 @@ import {
   RotateCcw,
   type LucideIcon,
 } from 'lucide-react';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { PropertySection, PropertyRow, SliderInput } from '../components';
-import type { TimelineState, TimelineActions } from '@/features/timeline/types';
-import type { SelectionState, SelectionActions } from '@/features/editor/types';
+import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
+import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import {
   TRANSITION_CONFIGS,
   PRESENTATION_CONFIGS,
@@ -36,7 +36,7 @@ import {
   type FlipDirection,
   type PresentationConfig,
 } from '@/types/transition';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 // Icon mapping for presentation types
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -415,3 +415,5 @@ export function TransitionPanel() {
     </div>
   );
 }
+
+

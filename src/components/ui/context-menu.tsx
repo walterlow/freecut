@@ -1,10 +1,10 @@
-"use client"
+﻿"use client"
 
 import * as React from "react"
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu"
 import { ChevronRight } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/shared/ui/cn"
 
 const ContextMenu = ContextMenuPrimitive.Root
 
@@ -122,3 +122,4 @@ export {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 }
+

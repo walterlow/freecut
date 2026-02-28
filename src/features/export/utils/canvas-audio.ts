@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Canvas Audio Processing System
  *
  * Handles audio extraction, processing, mixing, and encoding for client-side export.
@@ -8,12 +8,16 @@
 import type { CompositionInputProps } from '@/types/export';
 import type { VideoItem, AudioItem, CompositionItem } from '@/types/timeline';
 import type { Keyframe as VolumeKeyframe } from '@/types/keyframe';
-import { createLogger } from '@/lib/logger';
-import { resolveTransitionWindows } from '@/lib/transitions/transition-planner';
-import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/keyframes/utils/interpolation';
-import { useCompositionsStore } from '../../timeline/stores/compositions-store';
-import { blobUrlManager } from '@/lib/blob-url-manager';
-import { resolveMediaUrl } from '@/features/preview/utils/media-resolver';
+import { createLogger } from '@/shared/logging/logger';
+import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import {
+  getPropertyKeyframes,
+  interpolatePropertyValue,
+} from '@/features/export/deps/keyframes';
+import { useCompositionsStore } from '@/features/export/deps/timeline';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library';
+import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
 
 const log = createLogger('CanvasAudio');
 
@@ -26,7 +30,6 @@ const log = createLogger('CanvasAudio');
  * Key: source URL, Value: decoded audio data
  */
 const audioDecodeCache = new Map<string, DecodedAudio>();
-let ac3DecoderRegistered = false;
 
 /**
  * Clear the audio decode cache (call after export completes)
@@ -45,7 +48,7 @@ interface AudioSegment {
   src: string;
   startFrame: number;        // Timeline position
   durationFrames: number;
-  sourceStartFrame: number;  // In source media (for trim) — in source-native FPS frames
+  sourceStartFrame: number;  // In source media (for trim) â€” in source-native FPS frames
   sourceFps: number;         // Source media FPS (sourceStartFrame is in these frames)
   volume: number;            // -60 to +12 dB
   fadeInFrames: number;
@@ -54,6 +57,7 @@ interface AudioSegment {
   speed: number;             // Playback rate
   muted: boolean;
   type: 'video' | 'audio';
+  audioCodec?: string;                  // Audio codec for lazy AC-3 decoder registration
   volumeKeyframes?: VolumeKeyframe[];  // Animated volume keyframes
   itemFrom: number;                     // Item's timeline start frame (for keyframe offset)
 }
@@ -172,6 +176,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           speed: audioItem.speed ?? 1, // Playback speed from BaseTimelineItem
           muted: track.muted ?? false,
           type: 'audio',
+          audioCodec: getMediaAudioCodecById(item.mediaId),
           volumeKeyframes: audioVolumeKfs.length > 0 ? audioVolumeKfs : undefined,
           itemFrom: item.from,
         });
@@ -303,6 +308,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       speed,
       muted: entry.muted,
       type: 'video',
+      audioCodec: getMediaAudioCodecById(videoItem.mediaId),
       beforeFrames: before,
       afterFrames: after,
       volumeKeyframes: videoVolumeKfs.length > 0 ? videoVolumeKfs : undefined,
@@ -347,6 +353,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
     speed: segment.speed,
     muted: segment.muted,
     type: segment.type,
+    audioCodec: segment.audioCodec,
     volumeKeyframes: segment.volumeKeyframes,
     itemFrom: segment.itemFrom,
   });
@@ -425,7 +432,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
         const speed = subItem.speed ?? 1;
         const effectiveSourceStart = baseSourceStart + Math.round(subItemClipStart * speed);
 
-        // Adjust fade durations for clipped portions — if the sub-item was
+        // Adjust fade durations for clipped portions â€” if the sub-item was
         // trimmed by composition bounds the fade should be shortened accordingly.
         const rawFadeInFrames = (subItem.audioFadeIn ?? 0) * fps;
         const rawFadeOutFrames = (subItem.audioFadeOut ?? 0) * fps;
@@ -449,6 +456,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           speed,
           muted: trackMuted || subTrackMuted,
           type: subItem.type as 'video' | 'audio',
+          audioCodec: getMediaAudioCodecById(subItem.mediaId),
           volumeKeyframes: subVolumeKfs.length > 0 ? subVolumeKfs : undefined,
           itemFrom: startFrame,
         });
@@ -479,7 +487,9 @@ async function decodeAudioFromSource(
   src: string,
   itemId: string,
   startTime?: number,
-  endTime?: number
+  endTime?: number,
+  audioCodec?: string,
+  ac3RetryAttempted: boolean = false,
 ): Promise<DecodedAudio> {
   // Check cache first (only for full file decodes for backward compatibility)
   if (startTime === undefined && endTime === undefined) {
@@ -495,23 +505,16 @@ async function decodeAudioFromSource(
     src: src.substring(0, 50),
     startTime,
     endTime,
+    audioCodec,
   });
 
   try {
+    if (isAc3AudioCodec(audioCodec)) {
+      await ensureAc3DecoderRegistered();
+    }
+
     // Try mediabunny first for efficient range extraction
     const mb = await import('mediabunny');
-    if (!ac3DecoderRegistered) {
-      const { registerAc3Decoder } = await import('@mediabunny/ac3');
-      try {
-        registerAc3Decoder();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!/already registered/i.test(message)) {
-          throw err;
-        }
-      }
-      ac3DecoderRegistered = true;
-    }
 
     const input = new mb.Input({
       formats: mb.ALL_FORMATS,
@@ -640,6 +643,17 @@ async function decodeAudioFromSource(
       input.dispose();
     }
   } catch (error) {
+    // Metadata can be missing/stale for some legacy items. If decode fails and
+    // codec did not look like AC-3, retry once after registering the decoder.
+    if (!ac3RetryAttempted && !isAc3AudioCodec(audioCodec)) {
+      try {
+        await ensureAc3DecoderRegistered();
+        return await decodeAudioFromSource(src, itemId, startTime, endTime, audioCodec, true);
+      } catch {
+        // Ignore and continue to Web Audio fallback below.
+      }
+    }
+
     // Fall back to Web Audio API for full decode
     log.warn('Mediabunny audio decode failed, using fallback', { itemId, error });
     return decodeAudioFallback(src, itemId);
@@ -1086,6 +1100,12 @@ export async function processAudio(
     return null;
   }
 
+  const requiresAc3Decoder = activeSegments.some((segment) => isAc3AudioCodec(segment.audioCodec));
+  if (requiresAc3Decoder) {
+    await ensureAc3DecoderRegistered();
+    log.debug('AC-3 decoder pre-registered for export audio decode');
+  }
+
   // Configuration
   const config: AudioProcessingConfig = {
     sampleRate: 48000, // Standard export sample rate
@@ -1126,7 +1146,8 @@ export async function processAudio(
         segment.src,
         segment.itemId,
         sourceStartTime,
-        sourceEndTime
+        sourceEndTime,
+        segment.audioCodec,
       );
 
       // Process audio channels.
@@ -1273,3 +1294,4 @@ export async function hasAudioContent(composition: CompositionInputProps): Promi
   const segments = extractAudioSegments(composition, composition.fps);
   return segments.some((s) => !s.muted);
 }
+

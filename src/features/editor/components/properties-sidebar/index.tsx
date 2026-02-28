@@ -1,8 +1,8 @@
 import { Activity, memo, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
-import { useEditorStore } from '../../stores/editor-store';
-import { useSelectionStore } from '../../stores/selection-store';
+import { useEditorStore } from '@/shared/state/editor';
+import { useSelectionStore } from '@/shared/state/selection';
 import { CanvasPanel } from './canvas-panel';
 import { ClipPanel } from './clip-panel';
 import { MarkerPanel } from './marker-panel';

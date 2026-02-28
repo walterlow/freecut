@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Project Bundle Export Service
  *
  * Exports a project with all its media as a .freecut.zip bundle
@@ -14,9 +14,11 @@ import {
   BUNDLE_VERSION,
   BUNDLE_EXTENSION,
 } from '../types/bundle';
-import { getProject, getProjectMediaIds, getThumbnail } from '@/lib/storage/indexeddb';
-import { mediaLibraryService } from '@/features/media-library/services/media-library-service';
-import { computeContentHashFromBuffer } from '@/features/media-library/utils/content-hash';
+import { getProject, getProjectMediaIds, getThumbnail } from '@/infrastructure/storage/indexeddb';
+import {
+  mediaLibraryService,
+  computeContentHashFromBuffer,
+} from '@/features/project-bundle/deps/media-library';
 
 import type { ProjectTimeline } from '@/types/project';
 
@@ -25,7 +27,7 @@ const APP_VERSION = '1.0.0';
 
 /**
  * Convert timeline items for bundle: strip preview URLs (src, thumbnailUrl)
- * and rename mediaId → mediaRef for portable references.
+ * and rename mediaId â†’ mediaRef for portable references.
  */
 function convertItemsForBundle(items: ProjectTimeline['items']) {
   return items.map((item) => {
@@ -288,7 +290,7 @@ export async function exportProjectBundleStreaming(
     const totalItems = mediaItems.length;
     onProgress?.({ percent: 15, stage: 'hashing' });
 
-    // Step 4: Build manifest and prepare ZIP — stream chunks to disk
+    // Step 4: Build manifest and prepare ZIP â€” stream chunks to disk
     // Collect write promises since fflate's Zip callback is synchronous and won't await
     const zip = new Zip((err, chunk) => {
       if (err) { zipError = err; return; }
@@ -490,3 +492,4 @@ function sanitizeFilename(name: string): string {
     .substring(0, 100);
   return sanitized || 'untitled';
 }
+

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
@@ -8,10 +8,15 @@ import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import {
+  mediaLibraryService,
+  opfsService,
+} from '@/features/timeline/deps/media-library-service';
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, logger } from './shared';
-import { blobUrlManager } from '@/lib/blob-url-manager';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
@@ -213,7 +218,7 @@ export function splitItem(
 ): { leftItem: TimelineItem; rightItem: TimelineItem } | null {
   const item = useItemsStore.getState().items.find((i) => i.id === id);
   if (item) {
-    // Bounds check first — out-of-range splits are a silent no-op (handled by _splitItem),
+    // Bounds check first â€” out-of-range splits are a silent no-op (handled by _splitItem),
     // must not fall through to transition zone check which would false-positive.
     if (splitFrame <= item.from || splitFrame >= item.from + item.durationInFrames) {
       return null;
@@ -311,7 +316,7 @@ export async function insertFreezeFrame(
   const item = items.find((i) => i.id === itemId);
   if (!item || item.type !== 'video') return false;
 
-  // Validate playhead is within item bounds (exclusive of edges — need room to split)
+  // Validate playhead is within item bounds (exclusive of edges â€” need room to split)
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
   if (playheadFrame <= itemStart || playheadFrame >= itemEnd) return false;
@@ -331,7 +336,6 @@ export async function insertFreezeFrame(
   const sourceFrame = sourceStart + timelineToSourceFrames(timelineOffset, speed, fps, sourceFps);
 
   // Get media metadata for resolution and fps info
-  const { useMediaLibraryStore } = await import('@/features/media-library/stores/media-library-store');
   const mediaItems = useMediaLibraryStore.getState().mediaItems;
   const media = mediaItems.find((m) => m.id === item.mediaId);
   if (!media) {
@@ -345,7 +349,6 @@ export async function insertFreezeFrame(
 
   try {
     // Step 1: Get the media file blob
-    const { mediaLibraryService } = await import('@/features/media-library/services/media-library-service');
     const blob = await mediaLibraryService.getMediaFile(media.id);
     if (!blob) {
       logger.error('[insertFreezeFrame] Could not access media file');
@@ -401,7 +404,7 @@ export async function insertFreezeFrame(
     input.dispose();
 
     // Step 3: Store frame as media in IndexedDB
-    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/lib/storage/indexeddb');
+    const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage/indexeddb');
     const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
     if (!currentProjectId) {
       logger.error('[insertFreezeFrame] No project context');
@@ -430,7 +433,6 @@ export async function insertFreezeFrame(
     };
 
     // Store the frame blob in OPFS
-    const { opfsService } = await import('@/features/media-library/services/opfs-service');
     const opfsPath = `content/${frameMediaId.slice(0, 2)}/${frameMediaId.slice(2, 4)}/${frameMediaId}/data`;
     await opfsService.saveFile(opfsPath, await frameBlob.arrayBuffer());
     mediaMetadata.opfsPath = opfsPath;
@@ -557,7 +559,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
     const oldFrom = item.from;
     const oldEnd = item.from + item.durationInFrames;
 
-    // Apply the trim — skip adjacency clamping since downstream items will be shifted
+    // Apply the trim â€” skip adjacency clamping since downstream items will be shifted
     if (handle === 'start') {
       useItemsStore.getState()._trimItemStart(id, trimDelta, { skipAdjacentClamp: true });
     } else {
@@ -575,7 +577,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
       const newEnd = trimmedItem.from + trimmedItem.durationInFrames;
       shiftAmount = newEnd - oldEnd;
     } else {
-      // Start handle: _trimItemStart moved `from` — move it back and compute
+      // Start handle: _trimItemStart moved `from` â€” move it back and compute
       // the shift from the duration change.
       // _trimItemStart: newFrom = oldFrom + clamped, newDuration = oldDuration - clamped
       // We want: from stays at oldFrom, same newDuration, downstream shifts by -clamped
@@ -584,7 +586,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
         useItemsStore.getState()._moveItem(id, oldFrom);
       }
       // Duration got shorter by `actualClamped` (positive = shorter), so downstream
-      // should shift left (negative) by the same amount → shift = -actualClamped
+      // should shift left (negative) by the same amount â†’ shift = -actualClamped
       shiftAmount = -actualClamped;
     }
 
@@ -726,7 +728,7 @@ export function slideItem(
       useTimelineSettingsStore.getState().fps,
     );
 
-    // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
+    // Adjust neighbors (order: shrink first, then extend â€” same as rolling edit)
     if (slideDelta > 0) {
       // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
       if (rightNeighborId) {
@@ -767,3 +769,4 @@ export function slideItem(
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });
 }
+

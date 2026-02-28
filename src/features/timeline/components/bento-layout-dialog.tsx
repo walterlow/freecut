@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+﻿import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,11 +9,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { X } from 'lucide-react';
 import { useBentoLayoutDialogStore } from './bento-layout-dialog-store';
 import { useBentoPresetsStore } from '../stores/bento-presets-store';
-import { useProjectStore } from '@/features/projects/stores/project-store';
+import { useProjectStore } from '@/features/timeline/deps/projects';
 import { useItemsStore } from '../stores/items-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { applyBentoLayout } from '../stores/actions/transform-actions';
@@ -22,7 +22,7 @@ import { buildTransitionIndexes } from '../utils/transition-indexes';
 import type { LayoutPresetType, LayoutConfig, BentoLayoutItem } from '../utils/bento-layout';
 import type { TimelineItem } from '@/types/timeline';
 
-// ── Built-in presets ─────────────────────────────────────────────────────
+// â”€â”€ Built-in presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface BuiltInPreset {
   type: LayoutPresetType;
@@ -41,7 +41,7 @@ const BUILT_IN_PRESETS: BuiltInPreset[] = [
   { type: 'grid', label: '3\u00D73', cols: 3, rows: 3 },
 ];
 
-// ── Item type colors ─────────────────────────────────────────────────────
+// â”€â”€ Item type colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ITEM_TYPE_COLORS: Record<string, { bg: string; border: string }> = {
   video: { bg: 'bg-blue-500/60', border: 'border-blue-400/80' },
@@ -57,7 +57,7 @@ function getItemColor(type: string) {
   return ITEM_TYPE_COLORS[type] ?? DEFAULT_COLOR;
 }
 
-// ── Number input helper ──────────────────────────────────────────────────
+// â”€â”€ Number input helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function NumberInput({
   label,
@@ -87,7 +87,7 @@ function NumberInput({
   );
 }
 
-// ── Layout canvas item ───────────────────────────────────────────────────
+// â”€â”€ Layout canvas item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface CanvasItemRect {
   id: string;
@@ -148,7 +148,7 @@ function CanvasItem({
   );
 }
 
-// ── Layout canvas ────────────────────────────────────────────────────────
+// â”€â”€ Layout canvas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function LayoutCanvas({
   chainOrder,
@@ -158,7 +158,7 @@ function LayoutCanvas({
   config,
   itemsLookup,
 }: {
-  /** Ordered chains — each chain is a group of item IDs sharing one layout cell */
+  /** Ordered chains â€” each chain is a group of item IDs sharing one layout cell */
   chainOrder: string[][];
   onSwap: (fromIndex: number, toIndex: number) => void;
   canvasWidth: number;
@@ -206,7 +206,7 @@ function LayoutCanvas({
     return computeLayout(layoutItems, safeCanvasWidth, safeCanvasHeight, config);
   }, [layoutItems, safeCanvasWidth, safeCanvasHeight, config]);
 
-  // Convert center-relative coords to absolute top-left, then scale — one rect per chain
+  // Convert center-relative coords to absolute top-left, then scale â€” one rect per chain
   const canvasRects: CanvasItemRect[] = useMemo(() => {
     const cx = safeCanvasWidth / 2;
     const cy = safeCanvasHeight / 2;
@@ -326,13 +326,13 @@ function LayoutCanvas({
   );
 }
 
-// ── Preset strip ─────────────────────────────────────────────────────────
+// â”€â”€ Preset strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type SelectedPreset =
   | { kind: 'builtin'; index: number }
   | { kind: 'custom'; id: string };
 
-// ── Main dialog ──────────────────────────────────────────────────────────
+// â”€â”€ Main dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function BentoLayoutDialog() {
   const isOpen = useBentoLayoutDialogStore((s) => s.isOpen);
@@ -349,7 +349,7 @@ export function BentoLayoutDialog() {
   const [selected, setSelected] = useState<SelectedPreset>({ kind: 'builtin', index: 0 });
   const [gap, setGap] = useState(0);
   const [padding, setPadding] = useState(0);
-  /** Chain order — each entry is a chain (group of transition-connected item IDs) */
+  /** Chain order â€” each entry is a chain (group of transition-connected item IDs) */
   const [chainOrder, setChainOrder] = useState<string[][]>([]);
 
   // Save preset inline state
@@ -489,7 +489,7 @@ export function BentoLayoutDialog() {
         <DialogHeader>
           <DialogTitle>Bento Layout</DialogTitle>
           <DialogDescription>
-            Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} — drag items to swap positions
+            Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} â€” drag items to swap positions
           </DialogDescription>
         </DialogHeader>
 
@@ -614,3 +614,4 @@ export function BentoLayoutDialog() {
     </Dialog>
   );
 }
+

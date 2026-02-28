@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Canvas Pool for reusing OffscreenCanvas objects
  *
  * Creating new OffscreenCanvas objects every frame is expensive.
  * This pool pre-allocates canvases and reuses them across frames.
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasPool');
 
@@ -132,3 +132,4 @@ export class TextMeasurementCache {
     this.cache.clear();
   }
 }
+

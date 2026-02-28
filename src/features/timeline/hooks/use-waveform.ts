@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useEffectEvent } from 'react';
+﻿import { useState, useEffect, useRef, useEffectEvent } from 'react';
 import { waveformCache, type CachedWaveform } from '../services/waveform-cache';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('useWaveform');
 
@@ -164,3 +164,4 @@ export function useWaveform({
     error,
   };
 }
+

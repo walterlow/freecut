@@ -3,7 +3,7 @@ import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemEffect, GlitchEffect } from '@/types/effects';
 import { GLITCH_CONFIGS } from '@/types/effects';
-import { PropertyRow, NumberInput } from '@/features/editor/components/properties-sidebar/components';
+import { PropertyRow, NumberInput } from '@/shared/ui/property-controls';
 
 interface GlitchPanelProps {
   effect: ItemEffect;

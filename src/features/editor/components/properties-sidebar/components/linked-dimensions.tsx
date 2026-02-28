@@ -1,8 +1,8 @@
-import { useCallback, useRef, useEffect } from 'react';
+﻿import { useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link2, Link2Off } from 'lucide-react';
 import { NumberInput } from './number-input';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 type MixedValue = number | 'mixed';
 
@@ -131,3 +131,4 @@ export function LinkedDimensions({
     </div>
   );
 }
+

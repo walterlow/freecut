@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import { useSlideEditPreviewStore } from '@/features/timeline/stores/slide-edit-preview-store';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
+import {
+  useTimelineStore,
+} from '@/features/preview/deps/timeline-store';
+import { useSlideEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview';
 import { EditFourUpPanels } from './edit-4up-panels';
 import { getSourceFrameInfo } from './edit-overlay-utils';
 
@@ -115,3 +117,4 @@ export function SlideEditOverlay({ fps }: SlideEditOverlayProps) {
     />
   );
 }
+

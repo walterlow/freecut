@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { usePlaybackStore } from '../stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 /**
  * Zoom presets for preview

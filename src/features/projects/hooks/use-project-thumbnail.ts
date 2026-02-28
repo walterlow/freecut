@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getThumbnail } from '@/lib/storage/indexeddb';
+﻿import { useState, useEffect } from 'react';
+import { getThumbnail } from '@/infrastructure/storage/indexeddb';
 import type { Project } from '@/types/project';
 
 /**
@@ -50,3 +50,4 @@ export function useProjectThumbnail(project: Project): string | undefined {
 
   return thumbnailUrl;
 }
+

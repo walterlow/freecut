@@ -1,6 +1,6 @@
-import { memo } from 'react';
+﻿import { memo } from 'react';
 import { Link2Off, Diamond } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { CLIP_LABEL_ROW_HEIGHT } from '@/features/timeline/constants';
 
 interface ClipIndicatorsProps {
@@ -43,7 +43,7 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Label-row badges — single container to prevent overlap */}
+      {/* Label-row badges â€” single container to prevent overlap */}
       {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
@@ -97,3 +97,4 @@ export const ClipIndicators = memo(function ClipIndicators({
     </>
   );
 });
+

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Check, Loader2, Search, Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import {
   ensureFontsLoaded,
   getGoogleFontsCatalog,
   type FontCatalogEntry,
-} from '@/lib/fonts';
+} from '@/shared/typography/fonts';
 
 interface FontPickerProps {
   value?: string;
@@ -336,3 +336,4 @@ export function FontPicker({
     </div>
   );
 }
+

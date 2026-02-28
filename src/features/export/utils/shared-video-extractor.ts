@@ -1,4 +1,4 @@
-import { createLogger } from '@/lib/logger';
+﻿import { createLogger } from '@/shared/logging/logger';
 import { VideoFrameExtractor } from './canvas-video-extractor';
 
 const log = createLogger('SharedVideoExtractorPool');
@@ -303,3 +303,4 @@ export class SharedVideoExtractorPool {
     }
   }
 }
+

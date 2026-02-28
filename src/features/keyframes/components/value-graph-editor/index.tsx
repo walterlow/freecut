@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Value Graph Editor - Main container component.
  * Interactive graph for editing keyframe values and timing.
  */
 
 import { memo, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, RotateCcw, ChevronLeft, ChevronRight, Plus, Trash2, Magnet } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -875,3 +875,4 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     </div>
   );
 });
+

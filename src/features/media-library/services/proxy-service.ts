@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Proxy Video Service
  *
  * Manages 720p proxy video generation lifecycle:
@@ -14,7 +14,7 @@
  *     meta.json - { width, height, status, createdAt, version, sourceWidth, sourceHeight }
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 import type {
   ProxyWorkerRequest,
@@ -540,3 +540,4 @@ class ProxyService {
 
 // Singleton
 export const proxyService = new ProxyService();
+

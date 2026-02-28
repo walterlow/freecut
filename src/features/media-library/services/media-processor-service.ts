@@ -1,11 +1,11 @@
-/**
+﻿/**
  * Media Processor Service
  *
  * Manages the media processor worker for off-main-thread media processing.
  * Provides a simple async API for extracting metadata and generating thumbnails.
  */
 
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 import type {
   ProcessMediaRequest,
   ProcessMediaResponse,
@@ -241,3 +241,4 @@ class MediaProcessorService {
 
 // Singleton instance
 export const mediaProcessorService = new MediaProcessorService();
+

@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button';
+﻿import { Button } from '@/components/ui/button';
 import {
   AlignStartHorizontal,
   AlignCenterHorizontal,
@@ -7,7 +7,7 @@ import {
   AlignCenterVertical,
   AlignEndVertical,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/ui/cn';
 
 export type AlignmentType =
   | 'left'
@@ -92,3 +92,4 @@ export function AlignmentButtons({
     </div>
   );
 }
+

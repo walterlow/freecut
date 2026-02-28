@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTimelineStore } from '../stores/timeline-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { getVisibleTracks } from '../utils/group-utils';
 

@@ -1,5 +1,5 @@
-import { memo } from 'react';
-import { cn } from '@/lib/utils';
+﻿import { memo } from 'react';
+import { cn } from '@/shared/ui/cn';
 
 interface StretchHandlesProps {
   trackLocked: boolean;
@@ -60,3 +60,4 @@ export const StretchHandles = memo(function StretchHandles({
     </>
   );
 });
+

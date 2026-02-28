@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import { useAnimatedTransform } from '@/features/keyframes/hooks/use-animated-transform';
+import { useAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { transformToScreenBounds } from '../utils/coordinate-transform';
 
 interface SelectableItemProps {

@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useRippleEditPreviewStore } from '@/features/timeline/stores/ripple-edit-preview-store';
+import {
+  useTimelineStore,
+} from '@/features/preview/deps/timeline-store';
+import { useRippleEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview';
 import { EditTwoUpPanels } from './edit-2up-panels';
 import { getSourceFrameInfo } from './edit-overlay-utils';
 
@@ -207,3 +209,4 @@ export function RippleEditOverlay({ fps }: RippleEditOverlayProps) {
     />
   );
 }
+

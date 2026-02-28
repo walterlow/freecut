@@ -5,7 +5,7 @@ import { useKeyframesStore } from '../keyframes-store';
 import { useMarkersStore } from '../markers-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore } from '../compositions-store';
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 /**
  * Capture a snapshot of all timeline state.

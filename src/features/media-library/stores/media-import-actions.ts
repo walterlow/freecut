@@ -1,10 +1,10 @@
-import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
+﻿import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
 import { getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
-import { createLogger } from '@/lib/logger';
+import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaImportActions');
 
@@ -360,3 +360,4 @@ export function createImportActions(
     },
   };
 }
+

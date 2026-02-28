@@ -18,7 +18,7 @@ import {
   PropertyRow,
   NumberInput,
   ColorPicker,
-} from '@/features/editor/components/properties-sidebar/components';
+} from '@/shared/ui/property-controls';
 
 interface HalftonePanelProps {
   effect: ItemEffect;

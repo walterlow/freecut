@@ -54,17 +54,9 @@ export type ProxyWorkerResponse = ProxyProgressResponse | ProxyCompleteResponse 
 // Track active conversions for cancel support
 const activeConversions = new Map<string, { cancel: () => Promise<void> }>();
 
-// Dynamically import mediabunny + register AC-3 decoder
-let ac3Registered = false;
-const loadMediabunny = async () => {
-  const mb = await import('mediabunny');
-  if (!ac3Registered) {
-    const { registerAc3Decoder } = await import('@mediabunny/ac3');
-    registerAc3Decoder();
-    ac3Registered = true;
-  }
-  return mb;
-};
+// Dynamically import mediabunny.
+// Proxy generation discards source audio, so AC-3 decoder registration is not required.
+const loadMediabunny = async () => import('mediabunny');
 
 /**
  * Get or create OPFS directory for proxy storage

@@ -2,8 +2,8 @@
 import { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 
 // Stores and selectors
-import { usePlaybackStore } from '@/features/preview/stores/playback-store';
-import { useSelectionStore } from '@/features/editor/stores/selection-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useSelectionStore } from '@/shared/state/selection';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';

@@ -2,10 +2,10 @@ import { useCallback, useMemo } from 'react';
 import { Video, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/timeline/stores/timeline-store';
-import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
-import type { TimelineState, TimelineActions } from '@/features/timeline/types';
-import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/timeline/utils/source-calculations';
+import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
+import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
+import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/editor/deps/timeline-utils';
 import {
   PropertySection,
   PropertyRow,
@@ -260,3 +260,4 @@ export function VideoSection({ items }: VideoSectionProps) {
     </PropertySection>
   );
 }
+
