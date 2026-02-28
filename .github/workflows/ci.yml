@@ -36,10 +36,10 @@ jobs:
         run: npm run check:deps-wrapper-health
 
       - name: Generate feature-edge report
-        run: npm run report:feature-edges:json > feature-edges-report.json
+        run: npm run -s report:feature-edges:json > feature-edges-report.json
 
       - name: Generate deps-wrapper health report
-        run: npm run report:deps-wrapper-health:json > deps-wrapper-health-report.json
+        run: npm run -s report:deps-wrapper-health:json > deps-wrapper-health-report.json
 
       - name: Check feature-edge budgets
         run: npm run check:edge-budgets -- --input feature-edges-report.json
