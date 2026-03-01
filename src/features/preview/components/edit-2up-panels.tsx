@@ -12,6 +12,7 @@ import {
   getItemAspectRatio,
   renderPanelMedia,
 } from './edit-panel-media-utils';
+import { useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
 
 const TYPE_PLACEHOLDER_COLORS: Record<string, string> = {
   image: '#22c55e',
@@ -41,10 +42,16 @@ function getEditOverlayDecoderPool(): SharedVideoExtractorPool {
 
 function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean): string | null {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const blobUrlVersion = useBlobUrlVersion();
+  const requestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setBlobUrl(null);
+    const requestKey = `${mediaId ?? 'none'}:${useProxy ? 'proxy' : 'source'}`;
+    if (requestKeyRef.current !== requestKey) {
+      requestKeyRef.current = requestKey;
+      setBlobUrl(null);
+    }
 
     if (!mediaId) {
       return () => {
@@ -75,7 +82,7 @@ function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean)
     return () => {
       cancelled = true;
     };
-  }, [mediaId, useProxy]);
+  }, [mediaId, useProxy, blobUrlVersion]);
 
   return blobUrl;
 }

@@ -8,11 +8,65 @@ import {
   useTimelineSettingsStore,
   useTransitionsStore,
 } from '@/features/preview/deps/timeline-store';
+import { useMediaLibraryStore } from '@/features/preview/deps/media-library';
 import { useGizmoStore } from '../stores/gizmo-store';
 
 const seekToMock = vi.fn<(frame: number) => void>();
 const playMock = vi.fn();
 const pauseMock = vi.fn();
+const mockState = vi.hoisted(() => {
+  const blobUrls = new Map<string, string>();
+  const listeners = new Set<() => void>();
+  const version = { current: 0 };
+  const resolveMediaUrlMock = vi.fn(async (mediaId: string) => blobUrls.get(mediaId) ?? '');
+  const resolveProxyUrlMock = vi.fn<(mediaId: string) => string | null>(() => null);
+
+  const publishVersion = () => {
+    version.current += 1;
+    for (const listener of listeners) {
+      listener();
+    }
+  };
+
+  const setBlobUrl = (mediaId: string, url: string | null) => {
+    const current = blobUrls.get(mediaId) ?? null;
+    if (current === url) return;
+
+    if (url === null) {
+      blobUrls.delete(mediaId);
+    } else {
+      blobUrls.set(mediaId, url);
+    }
+    publishVersion();
+  };
+
+  const subscribeVersion = (listener: () => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+
+  return {
+    blobUrls,
+    listeners,
+    version,
+    resolveMediaUrlMock,
+    resolveProxyUrlMock,
+    publishVersion,
+    setBlobUrl,
+    subscribeVersion,
+  };
+});
+
+const {
+  blobUrls: mockBlobUrls,
+  listeners: blobUrlListeners,
+  version: mockBlobUrlVersion,
+  resolveMediaUrlMock,
+  resolveProxyUrlMock,
+  setBlobUrl: setMockBlobUrl,
+} = mockState;
 let mockedPlayerFrame = 0;
 let mockedPlayerIsPlaying = false;
 let lastPlayerDimensions: { width: number; height: number } | null = null;
@@ -24,12 +78,61 @@ let lastCompositionKeyframes: Array<{
     keyframes: Array<{ frame: number; value: number }>;
   }>;
 }> = [];
+let lastCompositionMediaSources: string[] = [];
 
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
   disconnect() {}
 }
+
+vi.mock('@/infrastructure/browser/blob-url-manager', async () => {
+  const React = await import('react');
+
+  return {
+    blobUrlManager: {
+      get: (mediaId: string) => mockState.blobUrls.get(mediaId) ?? null,
+      has: (mediaId: string) => mockState.blobUrls.has(mediaId),
+      acquire: (mediaId: string) => {
+        const existing = mockState.blobUrls.get(mediaId);
+        if (existing) return existing;
+        const generated = `blob:mock-${mediaId}-${mockState.version.current + 1}`;
+        mockState.blobUrls.set(mediaId, generated);
+        mockState.publishVersion();
+        return generated;
+      },
+      release: (mediaId: string) => {
+        if (mockState.blobUrls.delete(mediaId)) {
+          mockState.publishVersion();
+        }
+      },
+      invalidate: (mediaId: string) => {
+        if (mockState.blobUrls.delete(mediaId)) {
+          mockState.publishVersion();
+        }
+      },
+      invalidateAll: () => {
+        if (mockState.blobUrls.size === 0) return;
+        mockState.blobUrls.clear();
+        mockState.publishVersion();
+      },
+      releaseAll: () => {
+        if (mockState.blobUrls.size === 0) return;
+        mockState.blobUrls.clear();
+        mockState.publishVersion();
+      },
+      subscribe: mockState.subscribeVersion,
+      getSnapshot: () => mockState.version.current,
+    },
+    useBlobUrlVersion: () =>
+      React.useSyncExternalStore(mockState.subscribeVersion, () => mockState.version.current),
+  };
+});
+
+vi.mock('../utils/media-resolver', () => ({
+  resolveMediaUrl: mockState.resolveMediaUrlMock,
+  resolveProxyUrl: mockState.resolveProxyUrlMock,
+}));
 
 vi.mock('@/features/preview/deps/player-core', async () => {
   const React = await import('react');
@@ -90,7 +193,7 @@ vi.mock('@/features/preview/deps/player-core', async () => {
 
 vi.mock('@/features/preview/deps/composition-runtime', () => ({
   MainComposition: (props: {
-    tracks?: Array<{ items?: Array<{ id?: string; transform?: { x?: number } }> }>;
+    tracks?: Array<{ items?: Array<{ id?: string; src?: string; transform?: { x?: number } }> }>;
     keyframes?: Array<{
       itemId: string;
       properties: Array<{
@@ -100,6 +203,10 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
     }>;
   }) => {
     lastCompositionKeyframes = props.keyframes ?? [];
+    lastCompositionMediaSources = (props.tracks ?? [])
+      .flatMap((track) => track.items ?? [])
+      .map((item) => item.src ?? '')
+      .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
 }));
@@ -165,6 +272,12 @@ function resetStores() {
     snapLines: [],
     canvasBackgroundPreview: null,
   });
+
+  useMediaLibraryStore.setState({
+    mediaItems: [],
+    mediaById: {},
+    brokenMediaIds: [],
+  });
 }
 
 describe('VideoPreview sync behavior', () => {
@@ -177,6 +290,12 @@ describe('VideoPreview sync behavior', () => {
     playMock.mockReset();
     pauseMock.mockReset();
     lastCompositionKeyframes = [];
+    lastCompositionMediaSources = [];
+    mockBlobUrls.clear();
+    blobUrlListeners.clear();
+    mockBlobUrlVersion.current = 0;
+    resolveMediaUrlMock.mockClear();
+    resolveProxyUrlMock.mockClear();
     localStorage.clear();
     resetStores();
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock;
@@ -248,6 +367,24 @@ describe('VideoPreview sync behavior', () => {
         },
       });
     });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().previewFrame).toBeNull();
+    });
+  });
+
+  it('clears stale previewFrame on mount', async () => {
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(60);
+    });
+    expect(usePlaybackStore.getState().previewFrame).toBe(60);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().previewFrame).toBeNull();
@@ -435,5 +572,78 @@ describe('VideoPreview sync behavior', () => {
         (entry) => entry.width === 1920 && entry.height === 1080
       )
     ).toBe(true);
+  });
+
+  it('refreshes stale resolved media URLs after blob URL invalidation', async () => {
+    const mediaId = 'media-1';
+    setMockBlobUrl(mediaId, 'blob:initial');
+
+    const media = {
+      id: mediaId,
+      projectId: 'project-1',
+      fileName: 'clip.mp4',
+      fileSize: 1024,
+      mimeType: 'video/mp4',
+      width: 1920,
+      height: 1080,
+      duration: 4,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as (typeof useMediaLibraryStore.getState)['mediaItems'][number];
+
+    useMediaLibraryStore.setState({
+      mediaItems: [media],
+      mediaById: {
+        [mediaId]: media,
+      },
+    });
+
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-video-1',
+        type: 'video',
+        trackId: 'track-video',
+        mediaId,
+        from: 0,
+        durationInFrames: 120,
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(lastCompositionMediaSources).toContain('blob:initial');
+    });
+
+    act(() => {
+      setMockBlobUrl(mediaId, 'blob:refreshed');
+    });
+
+    await waitFor(() => {
+      expect(lastCompositionMediaSources).toContain('blob:refreshed');
+    });
+
+    const resolveCallsForMedia = resolveMediaUrlMock.mock.calls.filter(
+      ([id]) => id === mediaId
+    ).length;
+    expect(resolveCallsForMedia).toBeGreaterThan(1);
   });
 });

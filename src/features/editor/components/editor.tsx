@@ -21,7 +21,7 @@ import { useTimelineShortcuts, useTransitionBreakageNotifications } from '@/feat
 import { initTransitionChainSubscription } from '@/features/editor/deps/timeline-subscriptions';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
-import { cleanupBlobUrls, useMediaLibraryStore } from '@/features/editor/deps/media-library';
+import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
@@ -106,6 +106,12 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   useEffect(() => {
     const { setCurrentProject: setMediaProject } = useMediaLibraryStore.getState();
     const { setCurrentProject } = useProjectStore.getState();
+    const playbackStore = usePlaybackStore.getState();
+
+    // Clear stale scrub preview from previous editor sessions.
+    // A non-null previewFrame puts preview into "scrubbing" mode, which can
+    // defer media URL resolution during project open.
+    playbackStore.setPreviewFrame(null);
 
     // Set current project context for media library (v3: project-scoped media)
     setMediaProject(projectId);
@@ -134,10 +140,11 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
     // Cleanup: clear project context, stop playback, and release blob URLs when leaving editor
     return () => {
+      const cleanupPlaybackStore = usePlaybackStore.getState();
+      cleanupPlaybackStore.setPreviewFrame(null);
       useMediaLibraryStore.getState().setCurrentProject(null);
       useProjectStore.getState().setCurrentProject(null);
-      usePlaybackStore.getState().pause();
-      cleanupBlobUrls();
+      cleanupPlaybackStore.pause();
       clearPreviewAudioCache();
     };
   }, [projectId]); // Re-initialize when projectId changes
@@ -332,5 +339,3 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     </div>
   );
 });
-
-

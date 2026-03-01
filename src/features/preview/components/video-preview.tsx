@@ -20,7 +20,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { MainComposition } from '@/features/preview/deps/composition-runtime';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore, proxyService } from '@/features/preview/deps/media-library';
-import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { GizmoOverlay } from './gizmo-overlay';
 import { RollingEditOverlay } from './rolling-edit-overlay';
@@ -888,6 +888,13 @@ export const VideoPreview = memo(function VideoPreview({
   );
 
   useEffect(() => {
+    const playback = usePlaybackStore.getState();
+    if (playback.previewFrame !== null) {
+      playback.setPreviewFrame(null);
+    }
+  }, []);
+
+  useEffect(() => {
     isGizmoInteractingRef.current = isGizmoInteracting;
     if (!isGizmoInteracting) return;
     // During active transform drags, force preview output to come from Player.
@@ -943,6 +950,7 @@ export const VideoPreview = memo(function VideoPreview({
 
   // Cache for resolved blob URLs (mediaId -> blobUrl)
   const [resolvedUrls, setResolvedUrls] = useState<Map<string, string>>(new Map());
+  const blobUrlVersion = useBlobUrlVersion();
   const [isResolving, setIsResolving] = useState(false);
   // Bumped on tab wake-up to force re-resolution of media URLs
   const [urlRefreshVersion, setUrlRefreshVersion] = useState(0);
@@ -1347,6 +1355,54 @@ export const VideoPreview = memo(function VideoPreview({
       });
     }
   }, [addUnresolvedMediaIds, brokenMediaIds, clearResolveRetryState]);
+
+  // If blob URLs are invalidated globally/relinked elsewhere, drop stale
+  // resolved entries so the resolve pass re-acquires fresh URLs.
+  useEffect(() => {
+    if (resolvedUrls.size === 0) {
+      return;
+    }
+
+    const activeMediaIds = useMediaDependencyStore.getState().mediaIds;
+    if (activeMediaIds.length === 0) {
+      return;
+    }
+
+    const activeMediaIdSet = new Set(activeMediaIds);
+    const staleMediaIds: string[] = [];
+
+    for (const [mediaId, resolvedUrl] of resolvedUrls.entries()) {
+      if (!activeMediaIdSet.has(mediaId)) continue;
+      const latestBlobUrl = blobUrlManager.get(mediaId);
+      if (latestBlobUrl !== resolvedUrl) {
+        staleMediaIds.push(mediaId);
+      }
+    }
+
+    if (staleMediaIds.length === 0) {
+      return;
+    }
+
+    clearResolveRetryState(staleMediaIds);
+    addUnresolvedMediaIds(staleMediaIds);
+    setResolvedUrls((prevUrls) => {
+      const nextUrls = new Map(prevUrls);
+      let changed = false;
+      for (const mediaId of staleMediaIds) {
+        if (nextUrls.delete(mediaId)) {
+          changed = true;
+        }
+      }
+      return changed ? nextUrls : prevUrls;
+    });
+    kickResolvePass();
+  }, [
+    addUnresolvedMediaIds,
+    blobUrlVersion,
+    clearResolveRetryState,
+    kickResolvePass,
+    resolvedUrls,
+  ]);
 
   // Resolve media URLs when media dependencies change (not on transform changes)
   useEffect(() => {

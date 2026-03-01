@@ -725,7 +725,41 @@ class FilmstripCacheService {
 
     const pending = this.pendingExtractions.get(mediaId);
     if (pending) {
-      pending.priorityRange = this.normalizePriorityRange(priorityRange, pending.totalFrames);
+      const nextTotalFrames = Math.ceil(duration * FRAME_RATE);
+      const nextPriorityRange = this.normalizePriorityRange(
+        priorityRange ?? pending.priorityRange ?? undefined,
+        nextTotalFrames
+      );
+      pending.priorityRange = nextPriorityRange;
+      pending.duration = duration;
+      pending.onProgress = onProgress ?? pending.onProgress;
+
+      if (pending.blobUrl !== blobUrl) {
+        const currentFrames = Array.from(pending.extractedFrames.values())
+          .sort((a, b) => a.index - b.index);
+        const skipIndices = Array.from(new Set([
+          ...pending.skipIndices,
+          ...currentFrames.map((frame) => frame.index),
+        ]));
+        const forceSingleWorker = pending.forceSingleWorker;
+        const priorityOnly = pending.priorityOnly;
+        const pendingOnProgress = pending.onProgress;
+
+        this.finalizeExtractionMetrics(pending.metrics, 'aborted', currentFrames.length);
+        this.cleanupExtraction(mediaId);
+        this.startExtraction(
+          mediaId,
+          blobUrl,
+          duration,
+          skipIndices,
+          currentFrames,
+          pendingOnProgress,
+          forceSingleWorker,
+          nextPriorityRange ?? undefined,
+          { priorityOnly }
+        );
+      }
+
       const current = this.cache.get(mediaId);
       if (current) {
         this.touchCacheEntry(mediaId);
@@ -1947,4 +1981,3 @@ if (import.meta.env.DEV) {
     clear: () => filmstripCache.clearMetrics(),
   };
 }
-
