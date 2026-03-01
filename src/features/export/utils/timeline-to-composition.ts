@@ -5,8 +5,7 @@ import type { ItemKeyframes, Keyframe, PropertyKeyframes } from '@/types/keyfram
 import {
   interpolatePropertyValue,
 } from '@/features/export/deps/keyframes';
-import { resolveEffectiveTrackStates } from '@/features/export/deps/timeline';
-import { timelineToSourceFrames } from '@/features/timeline/utils/source-calculations';
+import { resolveEffectiveTrackStates, timelineToSourceFrames } from '@/features/export/deps/timeline';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('TimelineToComposition');
