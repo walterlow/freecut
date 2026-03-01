@@ -79,7 +79,7 @@ export function TransformGizmo({
     }
 
     return baseTransform;
-  }, [animatedTransform, isInteracting, previewTransform, item, itemPreview, item.id]);
+  }, [animatedTransform, isInteracting, previewTransform, item, itemPreview]);
 
   // Convert to screen bounds, expanding for stroke width on shapes
   const screenBounds = useMemo(() => {

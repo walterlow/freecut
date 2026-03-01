@@ -18,6 +18,15 @@ interface ProjectSize {
   height: number;
 }
 
+function applyTextExpansion(
+  item: TimelineItem,
+  transform: ResolvedTransform,
+  preview: Record<string, { properties?: Parameters<typeof expandTextTransformForPreview>[2] }> | null,
+): ResolvedTransform {
+  if (item.type !== 'text') return transform;
+  return expandTextTransformForPreview(item, transform, preview?.[item.id]?.properties);
+}
+
 /**
  * Resolve visual transforms for multiple items (base -> keyframes -> preview).
  */
@@ -72,13 +81,7 @@ export function useVisualTransforms(
           opacity: gizmoPreviewTransform.opacity,
           cornerRadius: gizmoPreviewTransform.cornerRadius ?? 0,
         };
-        if (item.type === 'text') {
-          gizmoTransform = expandTextTransformForPreview(
-            item,
-            gizmoTransform,
-            preview?.[item.id]?.properties
-          );
-        }
+        gizmoTransform = applyTextExpansion(item, gizmoTransform, preview);
         transforms.set(item.id, gizmoTransform);
         continue;
       }
@@ -103,25 +106,12 @@ export function useVisualTransforms(
             cornerRadius: previewTransform.cornerRadius ?? animatedTransform.cornerRadius,
           };
         }
-        if (item.type === 'text') {
-          resolvedPreview = expandTextTransformForPreview(
-            item,
-            resolvedPreview,
-            preview?.[item.id]?.properties
-          );
-        }
+        resolvedPreview = applyTextExpansion(item, resolvedPreview, preview);
         transforms.set(item.id, resolvedPreview);
         continue;
       }
 
-      if (item.type === 'text') {
-        transforms.set(
-          item.id,
-          expandTextTransformForPreview(item, animatedTransform, preview?.[item.id]?.properties)
-        );
-      } else {
-        transforms.set(item.id, animatedTransform);
-      }
+      transforms.set(item.id, applyTextExpansion(item, animatedTransform, preview));
     }
 
     return transforms;

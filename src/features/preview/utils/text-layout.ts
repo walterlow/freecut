@@ -118,6 +118,8 @@ function getTextRequiredHeight(
   width: number,
   previewProperties?: ItemPropertiesPreview,
 ): number {
+  // Defaults (fontSize: 60, lineHeight: 1.2, letterSpacing: 0, fontFamily: 'Inter',
+  // fontWeight: 'normal') mirror TextItem type defaults. Update here if those change.
   const fontSize = previewProperties?.fontSize ?? item.fontSize ?? 60;
   const lineHeight = previewProperties?.lineHeight ?? item.lineHeight ?? 1.2;
   const letterSpacing = previewProperties?.letterSpacing ?? item.letterSpacing ?? 0;
