@@ -31,7 +31,7 @@ export function PreviewZoomControls() {
     qualityTriggerRef.current?.blur();
   }, []);
 
-  const handleQualityTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleSelectTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== ' ' && event.code !== 'Space') return;
     // Space is reserved for global play/pause; prevent SelectTrigger from opening.
     event.preventDefault();
@@ -46,7 +46,7 @@ export function PreviewZoomControls() {
     if (preset) {
       handlePresetZoom(preset);
     }
-    blurZoomTrigger();
+    requestAnimationFrame(blurZoomTrigger);
   };
 
   const currentQualityLabel = QUALITY_PRESETS.find((p) => p.value === previewQuality)?.label ?? 'Full';
@@ -70,7 +70,7 @@ export function PreviewZoomControls() {
           ref={qualityTriggerRef}
           className="w-[72px] h-7 text-xs"
           data-tooltip="Preview Quality"
-          onKeyDown={handleQualityTriggerKeyDown}
+          onKeyDown={handleSelectTriggerKeyDown}
         >
           <SelectValue />
         </SelectTrigger>
@@ -91,7 +91,7 @@ export function PreviewZoomControls() {
         value={currentLabel}
         onOpenChange={(open) => {
           if (!open) {
-            blurZoomTrigger();
+            requestAnimationFrame(blurZoomTrigger);
           }
         }}
         onValueChange={handleValueChange}
@@ -100,10 +100,16 @@ export function PreviewZoomControls() {
           ref={zoomTriggerRef}
           className="w-20 h-7 text-xs"
           data-tooltip="Preview Zoom"
+          onKeyDown={handleSelectTriggerKeyDown}
         >
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            requestAnimationFrame(blurZoomTrigger);
+          }}
+        >
           {zoomPresets.map((preset) => (
             <SelectItem key={preset.label} value={preset.label} className="text-xs">
               {preset.label}
