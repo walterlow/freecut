@@ -127,6 +127,15 @@ export async function createCompositionRenderer(
     fps,
   };
 
+  // Match MainComposition visibility semantics:
+  // - If any track is soloed, only solo tracks are considered renderable.
+  // - Otherwise, render tracks whose visible flag is not explicitly false.
+  const hasSoloTracks = tracks.some((track) => track.solo);
+  const isTrackRenderable = (track: CompositionInputProps['tracks'][number]) => {
+    if (hasSoloTracks) return track.solo === true;
+    return track.visible !== false;
+  };
+
   // === PERFORMANCE OPTIMIZATION: Canvas Pool ===
   // Pre-allocate reusable canvases instead of creating new ones per frame
   // Initial size: 10 (1 content + ~5 items + 2 effects + 2 transitions)
@@ -289,6 +298,7 @@ export async function createCompositionRenderer(
   // Collect adjustment layers
   const adjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
   for (const track of tracks) {
+    if (!isTrackRenderable(track)) continue;
     for (const item of track.items) {
       if (item.type === 'adjustment') {
         adjustmentLayers.push({
@@ -439,7 +449,7 @@ export async function createCompositionRenderer(
     const ids: string[] = [];
 
     for (const track of tracks) {
-      if (track.visible === false) continue;
+      if (!isTrackRenderable(track)) continue;
       for (const item of track.items ?? []) {
         if (item.type !== 'video') continue;
         const start = item.from;
@@ -1109,7 +1119,7 @@ export async function createCompositionRenderer(
       if (activeMasks.length === 0) {
         // Scan tracks from top to bottom (lowest order first) to find first occluding item
         for (const track of tracksTopToBottom) {
-          if (track.visible === false) continue;
+          if (!isTrackRenderable(track)) continue;
           const trackOrder = track.order ?? 0;
 
           for (const item of track.items ?? []) {
@@ -1133,7 +1143,7 @@ export async function createCompositionRenderer(
       let skippedTracks = 0;
 
       for (const track of sortedTracks) {
-        if (track.visible === false) continue;
+        if (!isTrackRenderable(track)) continue;
         const trackOrder = track.order ?? 0;
 
         // OCCLUSION CULLING: Skip tracks that are fully occluded by higher tracks
@@ -1190,7 +1200,7 @@ export async function createCompositionRenderer(
       const maxFrame = frame + 1;
 
       for (const track of tracksTopToBottom) {
-        if (track.visible === false) continue;
+        if (!isTrackRenderable(track)) continue;
         for (const item of track.items ?? []) {
           if (item.type !== 'video') continue;
           if (item.from > maxFrame || (item.from + item.durationInFrames) <= minFrame) continue;
@@ -1307,4 +1317,3 @@ export async function createCompositionRenderer(
     },
   };
 }
-
