@@ -1,4 +1,4 @@
-import { opfsService } from '@/features/media-library/services/opfs-service';
+import { opfsService } from '@/features/effects/deps/media-library-contract';
 
 export interface SavedCubeLut {
   id: string;
