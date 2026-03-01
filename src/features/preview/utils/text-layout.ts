@@ -91,9 +91,10 @@ function wrapTextLines(
       const testLine = currentLine ? `${currentLine} ${word}` : word;
       const testWidth = measureTextWidth(ctx, testLine, letterSpacing, fontSize);
 
-      if (testWidth > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
+      if (testWidth > maxWidth) {
+        if (currentLine) {
+          lines.push(currentLine);
+        }
 
         if (measureTextWidth(ctx, word, letterSpacing, fontSize) > maxWidth) {
           const broken = breakWord(ctx, word, maxWidth, letterSpacing, fontSize);
@@ -101,6 +102,8 @@ function wrapTextLines(
             lines.push(broken[i] ?? '');
           }
           currentLine = broken[broken.length - 1] ?? '';
+        } else {
+          currentLine = word;
         }
       } else {
         currentLine = testLine;
