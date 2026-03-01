@@ -40,23 +40,21 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   const nudgeSelectedVisualItems = useCallback((deltaX: number, deltaY: number) => {
     if (selectedItemIds.length === 0) return;
+    if (deltaX === 0 && deltaY === 0) return;
 
     const transforms = new Map<string, Partial<TransformProperties>>();
     for (const itemId of selectedItemIds) {
       const item = items.find((entry) => entry.id === itemId);
       if (!item || item.type === 'audio') continue;
-      if (!item.transform) continue;
+      const defaultTransform: Partial<TransformProperties> = item.transform ?? { x: 0, y: 0 };
+      const nextX = Math.round((defaultTransform.x ?? 0) + deltaX);
+      const nextY = Math.round((defaultTransform.y ?? 0) + deltaY);
 
-      const updates: Partial<TransformProperties> = {};
-      if (deltaX !== 0) {
-        updates.x = Math.round((item.transform.x ?? 0) + deltaX);
-      }
-      if (deltaY !== 0) {
-        updates.y = Math.round((item.transform.y ?? 0) + deltaY);
-      }
-      if (Object.keys(updates).length > 0) {
-        transforms.set(itemId, updates);
-      }
+      transforms.set(itemId, {
+        ...defaultTransform,
+        x: nextX,
+        y: nextY,
+      });
     }
 
     if (transforms.size === 0) return;
