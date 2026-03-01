@@ -5,9 +5,11 @@
  * Supports CSS filters, glitch effects, halftone patterns, and vignette overlays.
  */
 
-import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect } from '@/types/effects';
+import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect, LUTEffect } from '@/types/effects';
 import type { AdjustmentItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
+import { getColorGradingFilterString } from '@/shared/utils/color-grading-filters';
+import { applyCubeLutToCanvasContext, applyCubeLutToImageData } from '@/shared/utils/cube-lut';
 
 const log = createLogger('CanvasEffects');
 
@@ -47,6 +49,11 @@ function buildCSSFilterString(effects: ItemEffect[]): string {
     if (filterStr) {
       filterParts.push(filterStr);
     }
+  }
+
+  const gradingFilters = getColorGradingFilterString(effects);
+  if (gradingFilters) {
+    filterParts.push(gradingFilters);
   }
 
   return filterParts.join(' ');
@@ -126,6 +133,21 @@ function getGlitchEffects(effects: ItemEffect[]): GlitchEffect[] {
   return effects
     .filter((e) => e.enabled && e.effect.type === 'glitch')
     .map((e) => e.effect as GlitchEffect);
+}
+
+/**
+ * Get custom .cube LUT effects from an effects array.
+ */
+function getCubeLutEffects(effects: ItemEffect[]): LUTEffect[] {
+  return effects
+    .filter(
+      (e) => e.enabled
+        && e.effect.type === 'color-grading'
+        && e.effect.variant === 'lut'
+        && typeof e.effect.cubeData === 'string'
+        && e.effect.cubeData.trim().length > 0
+    )
+    .map((e) => e.effect as LUTEffect);
 }
 
 /**
@@ -576,6 +598,7 @@ export function applyAllEffects(
   // Collect effect data
   const cssFilterString = buildCSSFilterString(effects);
   const glitchEffects = getGlitchEffects(effects);
+  const cubeLutEffects = getCubeLutEffects(effects);
   const glitchFilterString = buildGlitchFilterString(glitchEffects, frame);
   const halftoneEffect = getHalftoneEffect(effects);
   const vignetteEffect = getVignetteEffect(effects);
@@ -614,6 +637,51 @@ export function applyAllEffects(
   ctx.filter = 'none';
   ctx.restore();
 
+  if (cubeLutEffects.length > 0) {
+    let cpuImageData: ImageData | null = null;
+    let usedCpuFallback = false;
+
+    for (const lutEffect of cubeLutEffects) {
+      if (!lutEffect.cubeData) continue;
+
+      if (!cpuImageData) {
+        const gpuApplied = applyCubeLutToCanvasContext(
+          ctx,
+          lutEffect.cubeData,
+          lutEffect.intensity,
+          canvas.width,
+          canvas.height
+        );
+        if (gpuApplied) {
+          continue;
+        }
+      }
+
+      if (!cpuImageData) {
+        try {
+          cpuImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          usedCpuFallback = true;
+        } catch (error) {
+          log.warn('Failed to read canvas pixels for CPU LUT fallback', error);
+          break;
+        }
+      }
+
+      const applied = applyCubeLutToImageData(cpuImageData.data, lutEffect.cubeData, lutEffect.intensity);
+      if (!applied) {
+        log.warn('Skipping invalid .cube LUT data during rendering');
+      }
+    }
+
+    if (usedCpuFallback && cpuImageData) {
+      try {
+        ctx.putImageData(cpuImageData, 0, 0);
+      } catch (error) {
+        log.warn('Failed to write CPU LUT fallback pixels to canvas', error);
+      }
+    }
+  }
+
   // Apply overlay effects
   if (scanlinesEffect) {
     applyScanlines(ctx, canvas, scanlinesEffect.intensity);
@@ -627,4 +695,3 @@ export function applyAllEffects(
     applyVignette(ctx, canvas, vignetteEffect);
   }
 }
-

@@ -1,5 +1,6 @@
-import { useCallback, useMemo, memo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo, useRef } from 'react';
 import { Sparkles, Plus, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,6 +18,10 @@ import type {
   GlitchVariant,
   HalftoneEffect,
   VignetteEffect,
+  LUTEffect,
+  CurvesEffect,
+  WheelsEffect,
+  CurvesChannels,
 } from '@/types/effects';
 import {
   CSS_FILTER_CONFIGS,
@@ -26,11 +31,39 @@ import {
   CANVAS_EFFECT_CONFIGS,
   VIGNETTE_CONFIG,
   OVERLAY_EFFECT_CONFIGS,
+  CURVES_CONFIG,
+  WHEELS_CONFIG,
 } from '@/types/effects';
 import { useTimelineStore } from '@/features/effects/deps/timeline-contract';
 import { useGizmoStore } from '@/features/effects/deps/preview-contract';
 import { PropertySection } from '@/shared/ui/property-controls';
-import { CSSFilterPanel, GlitchPanel, HalftonePanel, VignettePanel } from './panels';
+import { parseCubeLut } from '@/shared/utils/cube-lut';
+import {
+  deleteCubeLutFromLibrary,
+  loadCubeLutFromLibrary,
+  loadSavedCubeLuts,
+  saveCubeLutToLibrary,
+  type SavedCubeLut,
+} from '@/features/effects/utils/lut-library';
+import {
+  CSSFilterPanel,
+  GlitchPanel,
+  HalftonePanel,
+  VignettePanel,
+  LUTPanel,
+  CurvesPanel,
+  WheelsPanel,
+} from './panels';
+
+function createDefaultCurvesChannels(): CurvesChannels {
+  const diagonal = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+  return {
+    master: diagonal.map((p) => ({ ...p })),
+    red: diagonal.map((p) => ({ ...p })),
+    green: diagonal.map((p) => ({ ...p })),
+    blue: diagonal.map((p) => ({ ...p })),
+  };
+}
 
 interface EffectsSectionProps {
   /** Visual items (already filtered to exclude audio) */
@@ -62,6 +95,24 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   // Get effects from first selected item (for display)
   // Multi-select shows first item's effects
   const effects: ItemEffect[] = visualItems[0]?.effects ?? [];
+  const [savedCubeLuts, setSavedCubeLuts] = useState<SavedCubeLut[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const luts = await loadSavedCubeLuts();
+        if (!cancelled) {
+          setSavedCubeLuts(luts);
+        }
+      } catch {
+        // OPFS may be unavailable; leave the list empty.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Add a CSS filter effect
   const handleAddFilter = useCallback(
@@ -127,6 +178,55 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
         color: '#000000',
         shape: 'elliptical',
       } as VignetteEffect);
+    });
+  }, [itemIds, addEffect]);
+
+  // Add LUT effect
+  const handleAddLut = useCallback(() => {
+    itemIds.forEach((id) => {
+      addEffect(id, {
+        type: 'color-grading',
+        variant: 'lut',
+        preset: 'cinematic',
+        intensity: 1,
+      } as LUTEffect);
+    });
+  }, [itemIds, addEffect]);
+
+  // Add Curves effect
+  const handleAddCurves = useCallback(() => {
+    itemIds.forEach((id) => {
+      addEffect(id, {
+        type: 'color-grading',
+        variant: 'curves',
+        channels: createDefaultCurvesChannels(),
+        shadows: CURVES_CONFIG.shadows.default,
+        midtones: CURVES_CONFIG.midtones.default,
+        highlights: CURVES_CONFIG.highlights.default,
+        contrast: CURVES_CONFIG.contrast.default,
+        red: CURVES_CONFIG.red.default,
+        green: CURVES_CONFIG.green.default,
+        blue: CURVES_CONFIG.blue.default,
+      } as CurvesEffect);
+    });
+  }, [itemIds, addEffect]);
+
+  // Add Wheels effect
+  const handleAddWheels = useCallback(() => {
+    itemIds.forEach((id) => {
+      addEffect(id, {
+        type: 'color-grading',
+        variant: 'wheels',
+        shadowsHue: WHEELS_CONFIG.shadowsHue.default,
+        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
+        midtonesHue: WHEELS_CONFIG.midtonesHue.default,
+        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
+        highlightsHue: WHEELS_CONFIG.highlightsHue.default,
+        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
+        temperature: WHEELS_CONFIG.temperature.default,
+        tint: WHEELS_CONFIG.tint.default,
+        saturation: WHEELS_CONFIG.saturation.default,
+      } as WheelsEffect);
     });
   }, [itemIds, addEffect]);
 
@@ -325,6 +425,160 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     [handleVignetteLiveChange]
   );
 
+  // Update color grading effect property
+  const handleColorGradingChange = useCallback(
+    (
+      effectId: string,
+      property: string,
+      newValue: unknown
+    ) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading') return;
+
+      itemIds.forEach((id) => {
+        if (effect.effect.variant === 'lut') {
+          updateEffect(id, effectId, {
+            effect: { ...effect.effect, [property]: newValue } as LUTEffect,
+          });
+        } else if (effect.effect.variant === 'curves') {
+          updateEffect(id, effectId, {
+            effect: { ...effect.effect, [property]: newValue } as CurvesEffect,
+          });
+        } else if (effect.effect.variant === 'wheels') {
+          updateEffect(id, effectId, {
+            effect: { ...effect.effect, [property]: newValue } as WheelsEffect,
+          });
+        }
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  // Live preview for color grading effect property
+  const handleColorGradingLiveChange = useCallback(
+    (
+      effectId: string,
+      property: string,
+      newValue: unknown
+    ) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId) return entry;
+          if (entry.effect.type !== 'color-grading') return entry;
+
+          if (entry.effect.variant === 'lut') {
+            return { ...entry, effect: { ...entry.effect, [property]: newValue } as LUTEffect };
+          }
+          if (entry.effect.variant === 'curves') {
+            return { ...entry, effect: { ...entry.effect, [property]: newValue } as CurvesEffect };
+          }
+          return { ...entry, effect: { ...entry.effect, [property]: newValue } as WheelsEffect };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
+
+  const handleCurvesChannelsChange = useCallback(
+    (effectId: string, channels: CurvesChannels) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...effect.effect, channels } as CurvesEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleCurvesChannelsLiveChange = useCallback(
+    (effectId: string, channels: CurvesChannels) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId) return entry;
+          if (entry.effect.type !== 'color-grading' || entry.effect.variant !== 'curves') return entry;
+          return { ...entry, effect: { ...entry.effect, channels } as CurvesEffect };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
+
+  const handleWheelsPairChange = useCallback(
+    (
+      effectId: string,
+      hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
+      amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
+      hue: number,
+      amount: number
+    ) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            [hueKey]: hue,
+            [amountKey]: amount,
+          } as WheelsEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleWheelsPairLiveChange = useCallback(
+    (
+      effectId: string,
+      hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
+      amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
+      hue: number,
+      amount: number
+    ) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId) return entry;
+          if (entry.effect.type !== 'color-grading' || entry.effect.variant !== 'wheels') return entry;
+          return {
+            ...entry,
+            effect: {
+              ...entry.effect,
+              [hueKey]: hue,
+              [amountKey]: amount,
+            } as WheelsEffect,
+          };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
+
   // Reset CSS filter effect to default value
   const handleResetCSSFilter = useCallback(
     (effectId: string, filterType: CSSFilterType) => {
@@ -440,6 +694,213 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     [effects, itemIds, updateEffect]
   );
 
+  const handleResetLutPreset = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            preset: 'cinematic',
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
+
+  const handleResetLutIntensity = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...effect.effect, intensity: 1 } as LUTEffect,
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
+
+  const handleLutPresetChange = useCallback(
+    (effectId: string, preset: LUTEffect['preset']) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            preset,
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutCubeImport = useCallback(
+    async (effectId: string, cubeName: string, cubeData: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      const normalizedCube = cubeData.trim();
+      if (!normalizedCube) {
+        toast.error('Invalid .cube file', { description: 'The selected file is empty.' });
+        return;
+      }
+
+      try {
+        parseCubeLut(normalizedCube);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
+        toast.error('Invalid .cube file', { description: message });
+        return;
+      }
+
+      const saveResult = await saveCubeLutToLibrary(cubeName, normalizedCube);
+      setSavedCubeLuts(saveResult.luts);
+      if (saveResult.error) {
+        toast.warning('LUT applied but not saved', { description: saveResult.error });
+      }
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: saveResult.saved?.name ?? cubeName,
+            cubeData: normalizedCube,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutSavedSelect = useCallback(
+    async (effectId: string, lutId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      const saved = await loadCubeLutFromLibrary(lutId);
+      if (!saved) {
+        toast.error('Saved LUT not found', {
+          description: 'This LUT may have been deleted from OPFS.',
+        });
+        setSavedCubeLuts(await loadSavedCubeLuts());
+        return;
+      }
+
+      try {
+        parseCubeLut(saved.cubeData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
+        toast.error('Saved LUT is invalid', { description: message });
+        return;
+      }
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: saved.lut.name,
+            cubeData: saved.cubeData,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutCubeClear = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      if (!effect.effect.cubeData && !effect.effect.cubeName) return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutSavedDelete = useCallback(
+    async (lutId: string) => {
+      const result = await deleteCubeLutFromLibrary(lutId);
+      setSavedCubeLuts(result.luts);
+      if (result.error) {
+        toast.error('Failed to delete LUT', { description: result.error });
+      }
+    },
+    []
+  );
+
+  const handleResetCurves = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            channels: createDefaultCurvesChannels(),
+            shadows: CURVES_CONFIG.shadows.default,
+            midtones: CURVES_CONFIG.midtones.default,
+            highlights: CURVES_CONFIG.highlights.default,
+            contrast: CURVES_CONFIG.contrast.default,
+            red: CURVES_CONFIG.red.default,
+            green: CURVES_CONFIG.green.default,
+            blue: CURVES_CONFIG.blue.default,
+          } as CurvesEffect,
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
+
+  const handleResetWheels = useCallback(
+    (effectId: string, property: keyof WheelsEffect) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
+      const defaults: Record<keyof WheelsEffect, number | string> = {
+        type: 'color-grading',
+        variant: 'wheels',
+        shadowsHue: WHEELS_CONFIG.shadowsHue.default,
+        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
+        midtonesHue: WHEELS_CONFIG.midtonesHue.default,
+        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
+        highlightsHue: WHEELS_CONFIG.highlightsHue.default,
+        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
+        temperature: WHEELS_CONFIG.temperature.default,
+        tint: WHEELS_CONFIG.tint.default,
+        saturation: WHEELS_CONFIG.saturation.default,
+      };
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...effect.effect, [property]: defaults[property] } as WheelsEffect,
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
+
   // Toggle effect visibility
   const handleToggle = useCallback(
     (effectId: string) => {
@@ -542,6 +1003,22 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
             <DropdownMenuSeparator />
 
+            {/* Color Grading */} 
+            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+              Color Grading
+            </div>
+            <DropdownMenuItem onSelect={handleAddLut}>
+              LUT
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleAddCurves}>
+              Curves
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleAddWheels}>
+              Wheels
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
             {/* Presets */}
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
               Presets
@@ -634,6 +1111,60 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
               onColorChange={handleVignetteChange}
               onColorLiveChange={handleVignetteLiveChange}
               onReset={handleResetVignette}
+              onToggle={handleToggle}
+              onRemove={handleRemove}
+            />
+          );
+        }
+
+        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'lut') {
+          return (
+            <LUTPanel
+              key={effect.id}
+              effect={effect}
+              lut={effect.effect as LUTEffect}
+              onPresetChange={handleLutPresetChange}
+              onIntensityChange={(effectId, percentValue) => handleColorGradingChange(effectId, 'intensity', percentValue / 100)}
+              onIntensityLiveChange={(effectId, percentValue) => handleColorGradingLiveChange(effectId, 'intensity', percentValue / 100)}
+              onCubeImport={handleLutCubeImport}
+              savedCubeLuts={savedCubeLuts}
+              onSavedCubeSelect={handleLutSavedSelect}
+              onSavedCubeDelete={handleLutSavedDelete}
+              onCubeClear={handleLutCubeClear}
+              onResetPreset={handleResetLutPreset}
+              onResetIntensity={handleResetLutIntensity}
+              onToggle={handleToggle}
+              onRemove={handleRemove}
+            />
+          );
+        }
+
+        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'curves') {
+          return (
+            <CurvesPanel
+              key={effect.id}
+              effect={effect}
+              curves={effect.effect as CurvesEffect}
+              onCurvesChange={handleCurvesChannelsChange}
+              onCurvesLiveChange={handleCurvesChannelsLiveChange}
+              onReset={handleResetCurves}
+              onToggle={handleToggle}
+              onRemove={handleRemove}
+            />
+          );
+        }
+
+        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'wheels') {
+          return (
+            <WheelsPanel
+              key={effect.id}
+              effect={effect}
+              wheels={effect.effect as WheelsEffect}
+              onPropertyChange={(effectId, property, value) => handleColorGradingChange(effectId, property, value)}
+              onPropertyLiveChange={(effectId, property, value) => handleColorGradingLiveChange(effectId, property, value)}
+              onWheelChange={handleWheelsPairChange}
+              onWheelLiveChange={handleWheelsPairLiveChange}
+              onReset={handleResetWheels}
               onToggle={handleToggle}
               onRemove={handleRemove}
             />

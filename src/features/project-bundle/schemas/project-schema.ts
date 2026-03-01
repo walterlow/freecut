@@ -152,11 +152,75 @@ const vignetteEffectSchema = z.object({
   shape: z.enum(['circular', 'elliptical']),
 });
 
-const visualEffectSchema = z.discriminatedUnion('type', [
+const lutEffectSchema = z.object({
+  type: z.literal('color-grading'),
+  variant: z.literal('lut'),
+  preset: z.enum([
+    'cinematic',
+    'teal-orange',
+    'warm-film',
+    'cool-film',
+    'fade-vintage',
+    'kodak-2383-d55',
+    'kodak-2383-d60',
+    'kodak-2383-d65',
+    'fuji-3513-d55',
+    'fuji-3513-d60',
+    'fuji-3513-d65',
+    'bleach-bypass',
+    'm31',
+    'day-for-night',
+    'matrix-green',
+  ]),
+  intensity: z.number().min(0).max(1),
+  cubeName: z.string().optional(),
+  cubeData: z.string().optional(),
+});
+
+const curvesEffectSchema = z.object({
+  type: z.literal('color-grading'),
+  variant: z.literal('curves'),
+  channels: z.object({
+    master: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+    red: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+    green: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+    blue: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) })).min(2),
+  }).optional(),
+  shadows: z.number().min(-100).max(100),
+  midtones: z.number().min(-100).max(100),
+  highlights: z.number().min(-100).max(100),
+  contrast: z.number().min(-100).max(100),
+  red: z.number().min(-100).max(100),
+  green: z.number().min(-100).max(100),
+  blue: z.number().min(-100).max(100),
+});
+
+const wheelsEffectSchema = z.object({
+  type: z.literal('color-grading'),
+  variant: z.literal('wheels'),
+  shadowsHue: z.number().min(0).max(360),
+  shadowsAmount: z.number().min(0).max(1),
+  midtonesHue: z.number().min(0).max(360),
+  midtonesAmount: z.number().min(0).max(1),
+  highlightsHue: z.number().min(0).max(360),
+  highlightsAmount: z.number().min(0).max(1),
+  temperature: z.number().min(-100).max(100),
+  tint: z.number().min(-100).max(100),
+  saturation: z.number().min(-100).max(100),
+});
+
+const colorGradingEffectSchema = z.discriminatedUnion('variant', [
+  lutEffectSchema,
+  curvesEffectSchema,
+  wheelsEffectSchema,
+]);
+
+const visualEffectSchema = z.union([
   cssFilterEffectSchema,
   glitchEffectSchema,
   halftoneEffectSchema,
   vignetteEffectSchema,
+  colorGradingEffectSchema,
 ]);
 
 const itemEffectSchema = z.object({
