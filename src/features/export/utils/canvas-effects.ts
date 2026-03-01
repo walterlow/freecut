@@ -8,6 +8,7 @@
 import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect } from '@/types/effects';
 import type { AdjustmentItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
+import { getColorGradingFilterString } from '@/shared/utils/color-grading-filters';
 
 const log = createLogger('CanvasEffects');
 
@@ -47,6 +48,11 @@ function buildCSSFilterString(effects: ItemEffect[]): string {
     if (filterStr) {
       filterParts.push(filterStr);
     }
+  }
+
+  const gradingFilters = getColorGradingFilterString(effects);
+  if (gradingFilters) {
+    filterParts.push(gradingFilters);
   }
 
   return filterParts.join(' ');
@@ -627,4 +633,3 @@ export function applyAllEffects(
     applyVignette(ctx, canvas, vignetteEffect);
   }
 }
-

@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { Columns2 } from 'lucide-react';
+import { Columns2, Activity } from 'lucide-react';
 import {
   VideoPreview,
   PlaybackControls,
   TimecodeDisplay,
   PreviewZoomControls,
   SourceMonitor,
+  ColorScopesPanel,
 } from '@/features/editor/deps/preview';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useEditorStore } from '@/shared/state/editor';
+import { Button } from '@/components/ui/button';
 
 interface PreviewAreaProps {
   project: {
@@ -134,6 +136,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   // Split ratio for source/program monitors (percentage for left panel)
   const [splitPercent, setSplitPercent] = useState(50);
   const [isSplitDragging, setIsSplitDragging] = useState(false);
+  const [showScopes, setShowScopes] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const isDraggingSplitRef = useRef(false);
   const pendingSplitPercentRef = useRef<number | null>(null);
@@ -270,6 +273,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               containerSize={containerSize}
               suspendOverlay={isSplitDragging}
             />
+            <ColorScopesPanel open={showScopes} />
           </div>
 
           {/* Playback Controls */}
@@ -280,7 +284,18 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             <div className="flex-1 min-w-0" />
             <PlaybackControls totalFrames={totalFrames} />
             <div className="flex-1 min-w-0" />
-            <div className="flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                variant={showScopes ? 'default' : 'outline'}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowScopes((prev) => !prev)}
+                data-tooltip={showScopes ? 'Hide Color Scopes' : 'Show Color Scopes'}
+                data-tooltip-side="top"
+                aria-label={showScopes ? 'Hide color scopes' : 'Show color scopes'}
+              >
+                <Activity className="w-4 h-4" />
+              </Button>
               <PreviewZoomControls />
             </div>
           </div>
@@ -290,4 +305,3 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
     </div>
   );
 });
-

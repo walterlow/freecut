@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { ItemEffect, CSSFilterEffect, CSSFilterType, HalftoneEffect, VignetteEffect } from '@/types/effects';
+import { getColorGradingFilterString } from '@/shared/utils/color-grading-filters';
 
 /**
  * Convert a CSS filter effect to its CSS filter string representation.
@@ -58,12 +59,16 @@ function isFilterAtDefault(filter: CSSFilterType, value: number): boolean {
  * @returns CSS filter string (e.g., "brightness(120%) contrast(110%)")
  */
 export function effectsToCSSFilter(effects: ItemEffect[]): string {
-  return effects
+  const baseFilters = effects
     .filter((e) => e.enabled && e.effect.type === 'css-filter')
     .map((e) => e.effect as CSSFilterEffect)
     .filter((effect) => !isFilterAtDefault(effect.filter, effect.value))
     .map((effect) => cssFilterToString(effect))
     .join(' ');
+
+  const gradingFilters = getColorGradingFilterString(effects);
+
+  return [baseFilters, gradingFilters].filter(Boolean).join(' ');
 }
 
 /**

@@ -485,6 +485,21 @@ function parsePreviewPerfPanelQuery(value: string | null): boolean | null {
   return true;
 }
 
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Invalid data URL result'));
+      }
+    };
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 interface VideoPreviewProps {
   project: {
     width: number;
@@ -786,6 +801,7 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubPrewarmedSourcesRef = useRef<Set<string>>(new Set());
   const scrubPrewarmedSourceOrderRef = useRef<string[]>([]);
   const scrubPrewarmedSourceTouchFrameRef = useRef<Map<string, number>>(new Map());
+  const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const scrubDirectionRef = useRef<-1 | 0 | 1>(0);
   const suppressScrubBackgroundPrewarmRef = useRef(false);
   const fallbackToPlayerScrubRef = useRef(false);
@@ -931,22 +947,7 @@ export const VideoPreview = memo(function VideoPreview({
     }
   }, [adaptiveQualityCap, isPlaying]);
 
-  // Register frame capture function for project thumbnail generation and split transitions
   const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
-  useEffect(() => {
-    const captureFunction = async () => {
-      if (playerRef.current) {
-        playerRef.current.getCurrentFrame();
-        return null;
-      }
-      return null;
-    };
-    setCaptureFrame(captureFunction);
-
-    return () => {
-      setCaptureFrame(null);
-    };
-  }, [setCaptureFrame]);
 
   // Cache for resolved blob URLs (mediaId -> blobUrl)
   const [resolvedUrls, setResolvedUrls] = useState<Map<string, string>>(new Map());
@@ -2120,6 +2121,75 @@ export const VideoPreview = memo(function VideoPreview({
   useEffect(() => {
     disposeFastScrubRenderer();
   }, [disposeFastScrubRenderer, fastScrubInputProps, renderSize.height, renderSize.width]);
+
+  const captureCurrentFrame = useCallback(async (options?: {
+    width?: number;
+    height?: number;
+    quality?: number;
+    format?: 'image/jpeg' | 'image/png' | 'image/webp';
+    fullResolution?: boolean;
+  }): Promise<string | null> => {
+    if (captureInFlightRef.current) {
+      return captureInFlightRef.current;
+    }
+
+    const task = (async () => {
+      try {
+        const renderer = await ensureFastScrubRenderer();
+        const offscreen = scrubOffscreenCanvasRef.current;
+        if (!renderer || !offscreen) return null;
+
+        const playback = usePlaybackStore.getState();
+        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        await renderer.renderFrame(targetFrame);
+
+        const format = options?.format ?? 'image/jpeg';
+        const quality = options?.quality ?? 0.9;
+        const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width));
+        const targetHeight = Math.max(2, Math.round(options?.height ?? offscreen.height));
+        const shouldScale = !options?.fullResolution
+          && (targetWidth !== offscreen.width || targetHeight !== offscreen.height);
+
+        if (!shouldScale) {
+          const blob = await offscreen.convertToBlob({
+            type: format,
+            quality,
+          });
+          return blobToDataUrl(blob);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx2d = canvas.getContext('2d');
+        if (!ctx2d) return null;
+
+        ctx2d.drawImage(offscreen, 0, 0, targetWidth, targetHeight);
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob(resolve, format, quality);
+        });
+        if (!blob) return null;
+        return blobToDataUrl(blob);
+      } catch (error) {
+        console.warn('[PreviewCapture] Failed to capture frame:', error);
+        return null;
+      } finally {
+        captureInFlightRef.current = null;
+      }
+    })();
+
+    captureInFlightRef.current = task;
+    return task;
+  }, [ensureFastScrubRenderer]);
+
+  // Register frame capture function for scopes and thumbnail workflows.
+  useEffect(() => {
+    setCaptureFrame(captureCurrentFrame);
+    return () => {
+      setCaptureFrame(null);
+      captureInFlightRef.current = null;
+    };
+  }, [captureCurrentFrame, setCaptureFrame]);
 
   // Background warm-up so first scrub has lower startup latency.
   useEffect(() => {
