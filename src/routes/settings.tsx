@@ -24,7 +24,6 @@ function Settings() {
   const snapEnabled = useSettingsStore((s) => s.snapEnabled);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
-  const previewQuality = useSettingsStore((s) => s.previewQuality);
   const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
   const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
@@ -158,33 +157,6 @@ function Settings() {
                 <p className="text-sm text-muted-foreground">Display video thumbnails on clips</p>
               </div>
               <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
-            </div>
-          </div>
-        </section>
-
-        {/* Preview Section */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold border-b border-border pb-2">Preview</h2>
-
-          <div className="grid gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Preview Quality</Label>
-                <p className="text-sm text-muted-foreground">Lower quality improves performance</p>
-              </div>
-              <Select
-                value={previewQuality}
-                onValueChange={(v) => setSetting('previewQuality', v as 'low' | 'medium' | 'high')}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </section>
