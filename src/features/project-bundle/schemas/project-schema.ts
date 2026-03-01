@@ -173,6 +173,8 @@ const lutEffectSchema = z.object({
     'matrix-green',
   ]),
   intensity: z.number().min(0).max(1),
+  cubeName: z.string().optional(),
+  cubeData: z.string().optional(),
 });
 
 const curvesEffectSchema = z.object({

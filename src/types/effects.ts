@@ -107,6 +107,8 @@ export interface LUTEffect {
   variant: 'lut';
   preset: LUTPresetId;
   intensity: number; // 0-1 blend amount
+  cubeName?: string; // Optional imported .cube file name
+  cubeData?: string; // Optional .cube file contents (when set, overrides preset approximation)
 }
 
 // Parametric curves effect (v1 slider-based tone curve controls)

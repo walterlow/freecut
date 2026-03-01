@@ -1,5 +1,6 @@
-import { useCallback, useMemo, memo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo, useRef } from 'react';
 import { Sparkles, Plus, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -36,6 +37,14 @@ import {
 import { useTimelineStore } from '@/features/effects/deps/timeline-contract';
 import { useGizmoStore } from '@/features/effects/deps/preview-contract';
 import { PropertySection } from '@/shared/ui/property-controls';
+import { parseCubeLut } from '@/shared/utils/cube-lut';
+import {
+  deleteCubeLutFromLibrary,
+  loadCubeLutFromLibrary,
+  loadSavedCubeLuts,
+  saveCubeLutToLibrary,
+  type SavedCubeLut,
+} from '@/features/effects/utils/lut-library';
 import {
   CSSFilterPanel,
   GlitchPanel,
@@ -86,6 +95,20 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   // Get effects from first selected item (for display)
   // Multi-select shows first item's effects
   const effects: ItemEffect[] = visualItems[0]?.effects ?? [];
+  const [savedCubeLuts, setSavedCubeLuts] = useState<SavedCubeLut[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const luts = await loadSavedCubeLuts();
+      if (!cancelled) {
+        setSavedCubeLuts(luts);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Add a CSS filter effect
   const handleAddFilter = useCallback(
@@ -673,7 +696,12 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
       itemIds.forEach((id) => {
         updateEffect(id, effectId, {
-          effect: { ...effect.effect, preset: 'cinematic' } as LUTEffect,
+          effect: {
+            ...effect.effect,
+            preset: 'cinematic',
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
         });
       });
     },
@@ -691,6 +719,133 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       });
     },
     [effects, itemIds, updateEffect]
+  );
+
+  const handleLutPresetChange = useCallback(
+    (effectId: string, preset: LUTEffect['preset']) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            preset,
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutCubeImport = useCallback(
+    async (effectId: string, cubeName: string, cubeData: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      const normalizedCube = cubeData.trim();
+      if (!normalizedCube) {
+        toast.error('Invalid .cube file', { description: 'The selected file is empty.' });
+        return;
+      }
+
+      try {
+        parseCubeLut(normalizedCube);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
+        toast.error('Invalid .cube file', { description: message });
+        return;
+      }
+
+      const saveResult = await saveCubeLutToLibrary(cubeName, normalizedCube);
+      setSavedCubeLuts(saveResult.luts);
+      if (saveResult.error) {
+        toast.warning('LUT applied but not saved', { description: saveResult.error });
+      }
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: saveResult.saved?.name ?? cubeName,
+            cubeData: normalizedCube,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutSavedSelect = useCallback(
+    async (effectId: string, lutId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      const saved = await loadCubeLutFromLibrary(lutId);
+      if (!saved) {
+        toast.error('Saved LUT not found', {
+          description: 'This LUT may have been deleted from OPFS.',
+        });
+        setSavedCubeLuts(await loadSavedCubeLuts());
+        return;
+      }
+
+      try {
+        parseCubeLut(saved.cubeData);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
+        toast.error('Saved LUT is invalid', { description: message });
+        return;
+      }
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: saved.lut.name,
+            cubeData: saved.cubeData,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutCubeClear = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
+
+      if (!effect.effect.cubeData && !effect.effect.cubeName) return;
+
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...effect.effect,
+            cubeName: undefined,
+            cubeData: undefined,
+          } as LUTEffect,
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  const handleLutSavedDelete = useCallback(
+    async (lutId: string) => {
+      const result = await deleteCubeLutFromLibrary(lutId);
+      setSavedCubeLuts(result.luts);
+      if (result.error) {
+        toast.error('Failed to delete LUT', { description: result.error });
+      }
+    },
+    []
   );
 
   const handleResetCurves = useCallback(
@@ -964,9 +1119,14 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
               key={effect.id}
               effect={effect}
               lut={effect.effect as LUTEffect}
-              onPresetChange={(effectId, preset) => handleColorGradingChange(effectId, 'preset', preset)}
+              onPresetChange={handleLutPresetChange}
               onIntensityChange={(effectId, percentValue) => handleColorGradingChange(effectId, 'intensity', percentValue / 100)}
               onIntensityLiveChange={(effectId, percentValue) => handleColorGradingLiveChange(effectId, 'intensity', percentValue / 100)}
+              onCubeImport={handleLutCubeImport}
+              savedCubeLuts={savedCubeLuts}
+              onSavedCubeSelect={handleLutSavedSelect}
+              onSavedCubeDelete={handleLutSavedDelete}
+              onCubeClear={handleLutCubeClear}
               onResetPreset={handleResetLutPreset}
               onResetIntensity={handleResetLutIntensity}
               onToggle={handleToggle}

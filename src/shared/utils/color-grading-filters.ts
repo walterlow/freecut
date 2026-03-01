@@ -102,6 +102,11 @@ function curvesToLegacyControls(channels: CurvesChannels): {
 }
 
 function lutToTargets(effect: LUTEffect): FilterTargets {
+  if (effect.cubeData && effect.cubeData.trim().length > 0) {
+    // Real .cube transforms are applied in pixel pipeline (export). Keep CSS filter path neutral.
+    return { ...DEFAULT_FILTERS };
+  }
+
   const preset = LUT_PRESET_CONFIGS[effect.preset];
   const intensity = clamp(effect.intensity, 0, 1);
 
