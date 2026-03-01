@@ -707,7 +707,6 @@ export const VideoPreview = memo(function VideoPreview({
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
-  const previewQuality = usePlaybackStore((s) => s.previewQuality);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
   // on every proxyStatus Map recreation (e.g. during progress updates)
   const proxyReadyCount = useMediaLibraryStore((s) => {
@@ -730,10 +729,6 @@ export const VideoPreview = memo(function VideoPreview({
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
-  const effectivePreviewQuality = useMemo(
-    () => getEffectivePreviewQuality(previewQuality, adaptiveQualityCap),
-    [previewQuality, adaptiveQualityCap],
-  );
 
   const trackPlayerSeek = useCallback((targetFrame: number) => {
     if (!import.meta.env.DEV) return;
