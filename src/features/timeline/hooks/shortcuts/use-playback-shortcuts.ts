@@ -55,7 +55,7 @@ export function usePlaybackShortcuts(
         callbacks.onPlay();
       }
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [togglePlayPause, isPlaying, callbacks]
   );
 
