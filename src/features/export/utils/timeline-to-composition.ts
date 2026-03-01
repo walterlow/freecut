@@ -5,7 +5,7 @@ import type { ItemKeyframes, Keyframe, PropertyKeyframes } from '@/types/keyfram
 import {
   interpolatePropertyValue,
 } from '@/features/export/deps/keyframes';
-import { resolveEffectiveTrackStates } from '@/features/export/deps/timeline';
+import { resolveEffectiveTrackStates, timelineToSourceFrames } from '@/features/export/deps/timeline';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('TimelineToComposition');
@@ -99,17 +99,18 @@ export function convertTimelineToComposition(
         };
 
         // Update trim properties for video/audio items
-        // additionalTrimStart/End are in timeline frames, but trim/source properties are in source frames
-        // Must multiply by speed to convert: timeline frames * speed = source frames
+        // additionalTrimStart/End are in timeline frames, but trim/source properties are in source frames.
+        // Use FPS-aware conversion so non-native source FPS maps correctly.
         if (item.type === 'video' || item.type === 'audio') {
           const currentTrimStart = item.trimStart || 0;
           const currentTrimEnd = item.trimEnd || 0;
           const currentSourceStart = item.sourceStart || 0;
           const speed = item.speed || 1;
+          const sourceFps = item.sourceFps ?? fps;
 
-          // Convert timeline frames to source frames
-          const sourceTrimStart = Math.round(additionalTrimStart * speed);
-          const sourceTrimEnd = Math.round(additionalTrimEnd * speed);
+          // Convert timeline frames to source-native frames
+          const sourceTrimStart = timelineToSourceFrames(additionalTrimStart, speed, fps, sourceFps);
+          const sourceTrimEnd = timelineToSourceFrames(additionalTrimEnd, speed, fps, sourceFps);
 
           const mediaItem = adjustedItem as typeof item;
           mediaItem.trimStart = currentTrimStart + sourceTrimStart;
@@ -474,4 +475,3 @@ function adjustKeyframesForIOMarkers(
     properties: adjustedProperties,
   };
 }
-
