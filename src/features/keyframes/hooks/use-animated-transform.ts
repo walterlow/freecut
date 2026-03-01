@@ -3,6 +3,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useTimelineStore } from '@/features/keyframes/deps/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -42,9 +43,20 @@ export function useAnimatedTransform(
 
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
+  const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
+  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
+  const animationFrame = getResolvedPlaybackFrame({
+    currentFrame,
+    previewFrame,
+    isPlaying,
+    currentFrameEpoch,
+    previewFrameEpoch,
+  });
 
   // Calculate relative frame
-  const relativeFrame = currentFrame - item.from;
+  const relativeFrame = animationFrame - item.from;
 
   // Resolve the animated transform
   const transform = useMemo(() => {
@@ -84,6 +96,17 @@ export function useAnimatedTransforms(
 
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
+  const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
+  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
+  const animationFrame = getResolvedPlaybackFrame({
+    currentFrame,
+    previewFrame,
+    isPlaying,
+    currentFrameEpoch,
+    previewFrameEpoch,
+  });
 
   // Resolve transforms for all items
   return useMemo(() => {
@@ -100,7 +123,7 @@ export function useAnimatedTransforms(
       // Apply keyframe animation if item has keyframes
       const itemKeyframes = allKeyframes.find((k) => k.itemId === item.id);
       if (itemKeyframes) {
-        const relativeFrame = currentFrame - item.from;
+        const relativeFrame = animationFrame - item.from;
         transforms.set(
           item.id,
           resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
@@ -111,5 +134,5 @@ export function useAnimatedTransforms(
     }
 
     return transforms;
-  }, [items, projectSize, allKeyframes, currentFrame]);
+  }, [items, projectSize, allKeyframes, animationFrame]);
 }

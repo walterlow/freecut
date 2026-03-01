@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { TransformGizmo } from './transform-gizmo';
 import { GroupGizmo } from './group-gizmo';
@@ -86,18 +87,22 @@ export function GizmoOverlay({
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
 
   // Track the "frozen" frame when playback starts - gizmos stay at this frame during playback
-  // This prevents re-renders during playback while maintaining accuracy when paused
-  const frozenFrameRef = useRef<number>(usePlaybackStore.getState().currentFrame);
+  // This prevents re-renders during playback while maintaining accuracy when paused/skimming
+  const initialPlaybackState = usePlaybackStore.getState();
+  const frozenFrameRef = useRef<number>(
+    getResolvedPlaybackFrame(initialPlaybackState)
+  );
 
-  // Update frozen frame when playback stops or when paused and frame changes
+  // Update frozen frame when playback stops or when paused/skimming frame changes
   useEffect(() => {
     if (!isPlaying) {
-      // When paused, sync to current frame
-      frozenFrameRef.current = usePlaybackStore.getState().currentFrame;
+      // When paused/skimming, sync to the effective preview frame
+      const playbackState = usePlaybackStore.getState();
+      frozenFrameRef.current = getResolvedPlaybackFrame(playbackState);
     }
   }, [isPlaying]);
 
-  // Subscribe to frame changes - always update when paused, or at clip boundaries during playback
+  // Subscribe to frame changes - always update when paused/skimming, or at clip boundaries during playback
   // NOTE: Reads items on-demand inside subscribe callback to avoid re-rendering on items change
   useEffect(() => {
     let prevFrame = usePlaybackStore.getState().currentFrame;
@@ -106,9 +111,11 @@ export function GizmoOverlay({
       const currentFrame = state.currentFrame;
 
       if (!state.isPlaying) {
-        // When paused, always update on frame change
-        if (currentFrame !== prevState.currentFrame) {
-          frozenFrameRef.current = currentFrame;
+        // When paused/skimming, follow whichever source was updated most recently.
+        const effectiveFrame = getResolvedPlaybackFrame(state);
+        const prevEffectiveFrame = getResolvedPlaybackFrame(prevState);
+        if (effectiveFrame !== prevEffectiveFrame) {
+          frozenFrameRef.current = effectiveFrame;
           setForceUpdate((n) => n + 1);
         }
       } else {
@@ -135,7 +142,7 @@ export function GizmoOverlay({
     });
   }, []); // No dependencies - reads items on-demand
 
-  // Force update state to trigger re-render and useMemo recalculation when frame changes while paused
+  // Force update state to trigger re-render and useMemo recalculation when frame changes while paused/skimming
   const [frameUpdateKey, setForceUpdate] = useState(0);
 
   // Gizmo store

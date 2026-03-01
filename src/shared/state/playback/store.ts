@@ -12,6 +12,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
     (set) => ({
       // State
       currentFrame: 0,
+      currentFrameEpoch: 0,
       isPlaying: false,
       playbackRate: 1,
       loop: false,
@@ -19,6 +20,8 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       muted: false,
       zoom: -1, // -1 = auto-fit, positive values = specific zoom percentage
       previewFrame: null,
+      previewFrameEpoch: 0,
+      frameUpdateEpoch: 0,
       previewItemId: null,
       captureFrame: null, // Set by VideoPreview when Player is mounted
       useProxy: true,
@@ -28,7 +31,13 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       setCurrentFrame: (frame) =>
         set((state) => {
           const nextFrame = normalizeFrame(frame);
-          return state.currentFrame === nextFrame ? state : { currentFrame: nextFrame };
+          if (state.currentFrame === nextFrame) return state;
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            currentFrame: nextFrame,
+            currentFrameEpoch: nextEpoch,
+            frameUpdateEpoch: nextEpoch,
+          };
         }),
       play: () => set((state) => (state.isPlaying ? state : { isPlaying: true })),
       pause: () => set((state) => (state.isPlaying ? { isPlaying: false } : state)),
@@ -42,9 +51,16 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         set((state) => {
           const nextFrame = frame == null ? null : normalizeFrame(frame);
           const nextItemId = frame == null ? null : (itemId ?? null);
-          return state.previewFrame === nextFrame && state.previewItemId === nextItemId
-            ? state
-            : { previewFrame: nextFrame, previewItemId: nextItemId };
+          if (state.previewFrame === nextFrame && state.previewItemId === nextItemId) {
+            return state;
+          }
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            previewFrame: nextFrame,
+            previewItemId: nextItemId,
+            previewFrameEpoch: nextEpoch,
+            frameUpdateEpoch: nextEpoch,
+          };
         }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
       toggleUseProxy: () => set((state) => ({ useProxy: !state.useProxy })),

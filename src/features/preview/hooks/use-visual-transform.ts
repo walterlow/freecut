@@ -4,6 +4,7 @@ import type { ResolvedTransform } from '@/types/transform';
 import type { ItemKeyframes } from '@/types/keyframe';
 import { useTimelineStore, type TimelineState } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import { useGizmoStore, isFullTransform } from '@/features/preview/stores/gizmo-store';
 import {
   resolveTransform,
@@ -25,9 +26,20 @@ export function useVisualTransforms(
 ): Map<string, ResolvedTransform> {
   const allKeyframes = useTimelineStore((s: TimelineState) => s.keyframes);
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
+  const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
+  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const gizmoPreviewTransform = useGizmoStore((s) => s.previewTransform);
   const preview = useGizmoStore((s) => s.preview);
+  const animationFrame = getResolvedPlaybackFrame({
+    currentFrame,
+    previewFrame,
+    isPlaying,
+    currentFrameEpoch,
+    previewFrameEpoch,
+  });
 
   return useMemo(() => {
     const transforms = new Map<string, ResolvedTransform>();
@@ -41,7 +53,7 @@ export function useVisualTransforms(
       );
 
       const itemKeyframes = allKeyframes.find((k: ItemKeyframes) => k.itemId === item.id);
-      const relativeFrame = currentFrame - item.from;
+      const relativeFrame = animationFrame - item.from;
       let animatedTransform = baseResolved;
       if (itemKeyframes) {
         animatedTransform = resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
@@ -86,6 +98,5 @@ export function useVisualTransforms(
     }
 
     return transforms;
-  }, [items, projectSize, allKeyframes, currentFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview]);
+  }, [items, projectSize, allKeyframes, animationFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview]);
 }
-

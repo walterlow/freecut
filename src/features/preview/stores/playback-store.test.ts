@@ -5,6 +5,7 @@ describe('playback-store', () => {
   beforeEach(() => {
     usePlaybackStore.setState({
       currentFrame: 0,
+      currentFrameEpoch: 0,
       isPlaying: false,
       playbackRate: 1,
       loop: false,
@@ -12,6 +13,8 @@ describe('playback-store', () => {
       muted: false,
       zoom: -1,
       previewFrame: null,
+      previewFrameEpoch: 0,
+      frameUpdateEpoch: 0,
       captureFrame: null,
       previewQuality: 1,
     });

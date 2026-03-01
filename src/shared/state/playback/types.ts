@@ -11,6 +11,8 @@ export type PreviewQuality = 1 | 0.5 | 0.25;
 
 export interface PlaybackState {
   currentFrame: number;
+  /** Internal epoch for last currentFrame mutation (monotonic per store session) */
+  currentFrameEpoch: number;
   isPlaying: boolean;
   playbackRate: number;
   loop: boolean;
@@ -19,6 +21,10 @@ export interface PlaybackState {
   zoom: number;
   /** Frame to preview on hover (null when not hovering) */
   previewFrame: number | null;
+  /** Internal epoch for last previewFrame mutation (monotonic per store session) */
+  previewFrameEpoch: number;
+  /** Internal shared mutation counter used to order frame updates */
+  frameUpdateEpoch: number;
   /** Item ID under the cursor when previewing (null when not over an item) */
   previewItemId: string | null;
   /** Function to capture the current Player frame as a data URL (set by VideoPreview) */
