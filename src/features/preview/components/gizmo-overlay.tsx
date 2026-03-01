@@ -72,6 +72,7 @@ export function GizmoOverlay({
     )
   );
   const tracks = useTimelineStore((s) => s.tracks);
+  const snapEnabled = useTimelineStore((s) => s.snapEnabled);
   const keyframes = useTimelineStore((s) => s.keyframes);
   const updateItemTransform = useTimelineStore((s) => s.updateItemTransform);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
@@ -139,6 +140,7 @@ export function GizmoOverlay({
 
   // Gizmo store
   const setCanvasSize = useGizmoStore((s) => s.setCanvasSize);
+  const setSnappingEnabled = useGizmoStore((s) => s.setSnappingEnabled);
   const snapLines = useGizmoStore((s) => s.snapLines);
   const startTranslate = useGizmoStore((s) => s.startTranslate);
   const updateInteraction = useGizmoStore((s) => s.updateInteraction);
@@ -149,6 +151,10 @@ export function GizmoOverlay({
   useEffect(() => {
     setCanvasSize(projectSize.width, projectSize.height);
   }, [projectSize.width, projectSize.height, setCanvasSize]);
+
+  useEffect(() => {
+    setSnappingEnabled(snapEnabled);
+  }, [snapEnabled, setSnappingEnabled]);
 
   // Get visual items visible at current frame (excluding hidden tracks and locked tracks)
   // Sorted by track order: items on top tracks (lower order) come LAST for proper stacking/click priority
@@ -268,7 +274,11 @@ export function GizmoOverlay({
 
   // Handle transform end - commit the transform to the timeline with auto-keyframing
   const handleTransformEnd = useCallback(
-    (itemId: string, transform: Transform) => {
+    (
+      itemId: string,
+      transform: Transform,
+      operation: 'move' | 'resize' | 'rotate' = 'move'
+    ) => {
       const currentFrame = usePlaybackStore.getState().currentFrame;
       const item = visualItems.find((i) => i.id === itemId);
       if (!item) return;
@@ -320,7 +330,7 @@ export function GizmoOverlay({
 
       // Only call updateItemTransform if there are non-keyframed properties to update
       if (Object.keys(transformProps).length > 1 || !autoKeyframedProps.size) {
-        updateItemTransform(itemId, transformProps);
+        updateItemTransform(itemId, transformProps, { operation });
       }
 
       // Prevent background click from deselecting after drag
@@ -334,7 +344,7 @@ export function GizmoOverlay({
 
   // Handle group transform end - commit transforms for all items as a single undo operation
   const handleGroupTransformEnd = useCallback(
-    (transforms: Map<string, Transform>) => {
+    (transforms: Map<string, Transform>, operation: 'move' | 'resize' | 'rotate') => {
       // Convert Transform to TransformProperties for the batch update
       const transformsMap = new Map<string, Partial<TransformProperties>>();
       for (const [itemId, transform] of transforms) {
@@ -349,7 +359,7 @@ export function GizmoOverlay({
         });
       }
       // Use batch update for single undo operation
-      updateItemsTransformMap(transformsMap);
+      updateItemsTransformMap(transformsMap, { operation });
 
       // Prevent background click from deselecting after drag
       // Use setTimeout instead of requestAnimationFrame because click events
@@ -519,7 +529,7 @@ export function GizmoOverlay({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const movePoint = screenToCanvas(moveEvent.clientX, moveEvent.clientY, coordParams);
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey);
+        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey);
       };
 
       const handleMouseUp = () => {
@@ -529,7 +539,7 @@ export function GizmoOverlay({
 
         const finalTransform = endInteraction();
         if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          handleTransformEnd(itemId, finalTransform);
+          handleTransformEnd(itemId, finalTransform, 'move');
         }
         requestAnimationFrame(() => {
           clearInteraction();
@@ -597,7 +607,9 @@ export function GizmoOverlay({
             item={selectedItems[0]}
             coordParams={coordParams}
             onTransformStart={handleTransformStart}
-            onTransformEnd={(transform) => handleTransformEnd(selectedItems[0]!.id, transform)}
+            onTransformEnd={(transform, operation) =>
+              handleTransformEnd(selectedItems[0]!.id, transform, operation)
+            }
             isPlaying={isPlaying}
           />
         ) : selectedItems.length > 1 ? (
@@ -651,4 +663,3 @@ export function GizmoOverlay({
     </div>
   );
 }
-

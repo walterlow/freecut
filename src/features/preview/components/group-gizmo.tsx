@@ -20,7 +20,10 @@ interface GroupGizmoProps {
   items: TimelineItem[];
   coordParams: CoordinateParams;
   onTransformStart: () => void;
-  onTransformEnd: (transforms: Map<string, Transform>) => void;
+  onTransformEnd: (
+    transforms: Map<string, Transform>,
+    operation: 'move' | 'resize' | 'rotate'
+  ) => void;
   /** Called when clicking (not dragging) on a specific item to select just that item */
   onItemClick?: (itemId: string) => void;
   /** Whether video is currently playing - gizmo shows at lower opacity during playback */
@@ -275,7 +278,7 @@ export function GroupGizmo({
         // Use ref to get latest preview transforms (avoids closure issues)
         const finalTransforms = previewTransformsRef.current ?? itemTransforms;
         if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms);
+          onTransformEnd(finalTransforms, 'move');
         }
 
         setInteractionMode('idle');
@@ -335,7 +338,7 @@ export function GroupGizmo({
         // Use ref to get latest preview transforms (avoids closure issues)
         const finalTransforms = previewTransformsRef.current ?? itemTransforms;
         if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms);
+          onTransformEnd(finalTransforms, 'resize');
         }
 
         setInteractionMode('idle');
@@ -397,7 +400,7 @@ export function GroupGizmo({
         // Use ref to get latest preview transforms (avoids closure issues)
         const finalTransforms = previewTransformsRef.current ?? itemTransforms;
         if (transformsChanged(startTransformsRef.current, finalTransforms)) {
-          onTransformEnd(finalTransforms);
+          onTransformEnd(finalTransforms, 'rotate');
         }
 
         setInteractionMode('idle');

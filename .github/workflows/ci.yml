@@ -59,6 +59,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Preview Sync Stress (20x)
+        run: npm run test:preview-sync:stress
+
       - name: Build
         run: npm run build
 

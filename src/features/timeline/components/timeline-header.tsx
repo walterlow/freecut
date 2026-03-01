@@ -24,6 +24,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useTimelineCommandStore } from '../stores/timeline-command-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import {
@@ -80,6 +81,10 @@ export const TimelineHeader = memo(function TimelineHeader({
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const canUndo = useTimelineCommandStore((s) => s.canUndo);
+  const canRedo = useTimelineCommandStore((s) => s.canRedo);
+  const undoLabel = useTimelineCommandStore((s) => s.getUndoLabel());
+  const redoLabel = useTimelineCommandStore((s) => s.getRedoLabel());
 
 
   // Momentum state for zoom slider
@@ -320,7 +325,8 @@ export const TimelineHeader = memo(function TimelineHeader({
             size="icon"
             className="h-7 w-7"
             onClick={handleUndo}
-            data-tooltip="Undo (Ctrl+Z)"
+            disabled={!canUndo}
+            data-tooltip={undoLabel ? `Undo ${undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
           >
             <Undo2 className="w-3.5 h-3.5" />
           </Button>
@@ -330,7 +336,8 @@ export const TimelineHeader = memo(function TimelineHeader({
             size="icon"
             className="h-7 w-7"
             onClick={handleRedo}
-            data-tooltip="Redo (Ctrl+Shift+Z)"
+            disabled={!canRedo}
+            data-tooltip={redoLabel ? `Redo ${redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
           >
             <Redo2 className="w-3.5 h-3.5" />
           </Button>

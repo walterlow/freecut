@@ -1,6 +1,7 @@
 ﻿import React, { useState, useCallback, useRef, useEffect, useLayoutEffect } from 'react';
 import { useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
+import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useClock } from '@/features/composition-runtime/deps/player';
 import type { VideoItem } from '@/types/timeline';
@@ -478,7 +479,11 @@ const NativePreviewVideo: React.FC<{
       if (!video.paused) {
         video.pause();
       }
-      const isPreviewScrubbing = usePlaybackStore.getState().previewFrame !== null;
+      const playbackState = usePlaybackStore.getState();
+      const isPreviewScrubbing =
+        !playbackState.isPlaying
+        && playbackState.previewFrame !== null
+        && useGizmoStore.getState().activeGizmo === null;
       // Only seek when paused if frame actually changed (user is scrubbing)
       if (frameChanged && canSeek) {
         // Layout sync already applies seeks before paint; skip duplicate runtime seek
@@ -684,4 +689,3 @@ export const VideoContent: React.FC<{
     />
   );
 };
-

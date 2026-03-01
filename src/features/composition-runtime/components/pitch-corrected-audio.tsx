@@ -381,7 +381,11 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       if (!audio.paused) {
         audio.pause();
       }
-      const isPreviewScrubbing = usePlaybackStore.getState().previewFrame !== null;
+      const playbackState = usePlaybackStore.getState();
+      const isPreviewScrubbing =
+        !playbackState.isPlaying
+        && playbackState.previewFrame !== null
+        && useGizmoStore.getState().activeGizmo === null;
       // Only seek when paused if frame actually changed (user is scrubbing) and audio is ready
       if (frameChanged && canSeek && !isPreviewScrubbing) {
         try {

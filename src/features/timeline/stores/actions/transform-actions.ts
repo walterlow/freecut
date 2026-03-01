@@ -5,6 +5,7 @@
 import type { TransformProperties } from '@/types/transform';
 import type { AnimatableProperty } from '@/types/keyframe';
 import type { LayoutConfig } from '../../utils/bento-layout';
+import type { TransformCommandOptions, TransformHistoryOperation } from '../../types';
 import { computeLayout, buildTransitionChains } from '../../utils/bento-layout';
 import { useItemsStore } from '../items-store';
 import { useKeyframesStore } from '../keyframes-store';
@@ -13,11 +14,70 @@ import { useTransitionsStore } from '../transitions-store';
 import { buildTransitionIndexes } from '../../utils/transition-indexes';
 import { execute } from './shared';
 
-export function updateItemTransform(id: string, transform: Partial<TransformProperties>): void {
+function getTransformKeys(transform: Partial<TransformProperties>): Set<string> {
+  const keys = new Set<string>();
+  for (const key of Object.keys(transform)) {
+    keys.add(key);
+  }
+  return keys;
+}
+
+function inferTransformOperation(keys: Set<string>): TransformHistoryOperation {
+  const hasPosition = keys.has('x') || keys.has('y');
+  const hasSize = keys.has('width') || keys.has('height');
+  const hasRotation = keys.has('rotation');
+  const hasOpacity = keys.has('opacity');
+  const hasCornerRadius = keys.has('cornerRadius');
+  const hasOther = [...keys].some((key) =>
+    key !== 'x'
+    && key !== 'y'
+    && key !== 'width'
+    && key !== 'height'
+    && key !== 'rotation'
+    && key !== 'opacity'
+    && key !== 'cornerRadius'
+  );
+
+  if (hasPosition && !hasSize && !hasRotation && !hasOpacity && !hasCornerRadius && !hasOther) {
+    return 'move';
+  }
+  if (hasSize && !hasPosition && !hasRotation && !hasOpacity && !hasCornerRadius && !hasOther) {
+    return 'resize';
+  }
+  if (hasRotation && !hasPosition && !hasSize && !hasOpacity && !hasCornerRadius && !hasOther) {
+    return 'rotate';
+  }
+  if (hasOpacity && !hasPosition && !hasSize && !hasRotation && !hasCornerRadius && !hasOther) {
+    return 'opacity';
+  }
+  if (hasCornerRadius && !hasPosition && !hasSize && !hasRotation && !hasOpacity && !hasOther) {
+    return 'corner_radius';
+  }
+  return 'transform';
+}
+
+function inferTransformOperationFromMap(
+  transformsMap: Map<string, Partial<TransformProperties>>
+): TransformHistoryOperation {
+  const unionKeys = new Set<string>();
+  for (const transform of transformsMap.values()) {
+    for (const key of Object.keys(transform)) {
+      unionKeys.add(key);
+    }
+  }
+  return inferTransformOperation(unionKeys);
+}
+
+export function updateItemTransform(
+  id: string,
+  transform: Partial<TransformProperties>,
+  options?: TransformCommandOptions
+): void {
+  const operation = options?.operation ?? inferTransformOperation(getTransformKeys(transform));
   execute('UPDATE_TRANSFORM', () => {
     useItemsStore.getState()._updateItemTransform(id, transform);
     useTimelineSettingsStore.getState().markDirty();
-  }, { id });
+  }, { id, operation, properties: [...getTransformKeys(transform)] });
 }
 
 export function resetItemTransform(id: string): void {
@@ -27,20 +87,28 @@ export function resetItemTransform(id: string): void {
   }, { id });
 }
 
-export function updateItemsTransform(ids: string[], transform: Partial<TransformProperties>): void {
+export function updateItemsTransform(
+  ids: string[],
+  transform: Partial<TransformProperties>,
+  options?: TransformCommandOptions
+): void {
+  const keys = getTransformKeys(transform);
+  const operation = options?.operation ?? inferTransformOperation(keys);
   execute('UPDATE_TRANSFORMS', () => {
     useItemsStore.getState()._updateItemsTransform(ids, transform);
     useTimelineSettingsStore.getState().markDirty();
-  }, { ids });
+  }, { ids, count: ids.length, operation, properties: [...keys] });
 }
 
 export function updateItemsTransformMap(
-  transformsMap: Map<string, Partial<TransformProperties>>
+  transformsMap: Map<string, Partial<TransformProperties>>,
+  options?: TransformCommandOptions
 ): void {
+  const operation = options?.operation ?? inferTransformOperationFromMap(transformsMap);
   execute('UPDATE_TRANSFORMS', () => {
     useItemsStore.getState()._updateItemsTransformMap(transformsMap);
     useTimelineSettingsStore.getState().markDirty();
-  }, { count: transformsMap.size });
+  }, { count: transformsMap.size, operation });
 }
 
 /** Transform properties that bento layout controls (cleared from keyframes) */

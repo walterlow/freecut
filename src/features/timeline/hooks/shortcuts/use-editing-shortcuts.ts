@@ -2,6 +2,7 @@
  * Editing shortcuts: Delete, Ripple Delete, Join, Split, Keyframes.
  */
 
+import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { toast } from 'sonner';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -19,6 +20,7 @@ import {
   resolveAnimatedTransform,
   isFrameInTransitionRegion,
 } from '@/features/timeline/deps/keyframes';
+import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
 
@@ -31,9 +33,35 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const removeMarker = useTimelineStore((s) => s.removeMarker);
   const removeTransition = useTimelineStore((s) => s.removeTransition);
   const rippleDeleteItems = useTimelineStore((s) => s.rippleDeleteItems);
+  const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
   const joinItems = useTimelineStore((s) => s.joinItems);
   const splitItem = useTimelineStore((s) => s.splitItem);
   const items = useTimelineStore((s) => s.items);
+
+  const nudgeSelectedVisualItems = useCallback((deltaX: number, deltaY: number) => {
+    if (selectedItemIds.length === 0) return;
+
+    const transforms = new Map<string, Partial<TransformProperties>>();
+    for (const itemId of selectedItemIds) {
+      const item = items.find((entry) => entry.id === itemId);
+      if (!item || item.type === 'audio') continue;
+      if (!item.transform) continue;
+
+      const updates: Partial<TransformProperties> = {};
+      if (deltaX !== 0) {
+        updates.x = Math.round((item.transform.x ?? 0) + deltaX);
+      }
+      if (deltaY !== 0) {
+        updates.y = Math.round((item.transform.y ?? 0) + deltaY);
+      }
+      if (Object.keys(updates).length > 0) {
+        transforms.set(itemId, updates);
+      }
+    }
+
+    if (transforms.size === 0) return;
+    updateItemsTransformMap(transforms, { operation: 'move' });
+  }, [selectedItemIds, items, updateItemsTransformMap]);
 
   // Editing: Delete - Delete selected items, marker, or transition
   useHotkeys(
@@ -123,6 +151,88 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, rippleDeleteItems, clearSelection, callbacks]
+  );
+
+  // Editing: Alt+Arrow keys - nudge selected visual items by 1px
+  useHotkeys(
+    HOTKEYS.NUDGE_LEFT,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(-1, 0);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_RIGHT,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(1, 0);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_UP,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(0, -1);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_DOWN,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(0, 1);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  // Editing: Alt+Shift+Arrow keys - nudge selected visual items by 10px
+  useHotkeys(
+    HOTKEYS.NUDGE_LEFT_LARGE,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(-10, 0);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_RIGHT_LARGE,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(10, 0);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_UP_LARGE,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(0, -10);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
+  );
+
+  useHotkeys(
+    HOTKEYS.NUDGE_DOWN_LARGE,
+    (event) => {
+      event.preventDefault();
+      nudgeSelectedVisualItems(0, 10);
+    },
+    HOTKEY_OPTIONS,
+    [nudgeSelectedVisualItems]
   );
 
   // Editing: J - Join selected clips

@@ -23,6 +23,14 @@ export const HOTKEYS = {
   RIPPLE_DELETE: 'mod+delete',
   RIPPLE_DELETE_ALT: 'mod+backspace',
   FREEZE_FRAME: 'shift+f',
+  NUDGE_LEFT: 'alt+left',
+  NUDGE_RIGHT: 'alt+right',
+  NUDGE_UP: 'alt+up',
+  NUDGE_DOWN: 'alt+down',
+  NUDGE_LEFT_LARGE: 'alt+shift+left',
+  NUDGE_RIGHT_LARGE: 'alt+shift+right',
+  NUDGE_UP_LARGE: 'alt+shift+up',
+  NUDGE_DOWN_LARGE: 'alt+shift+down',
 
   // History
   UNDO: 'mod+z',
@@ -104,6 +112,14 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RIPPLE_DELETE: 'Ripple delete selected items',
   RIPPLE_DELETE_ALT: 'Ripple delete selected items (alternative)',
   FREEZE_FRAME: 'Insert freeze frame at playhead',
+  NUDGE_LEFT: 'Nudge selected visual items left (1px)',
+  NUDGE_RIGHT: 'Nudge selected visual items right (1px)',
+  NUDGE_UP: 'Nudge selected visual items up (1px)',
+  NUDGE_DOWN: 'Nudge selected visual items down (1px)',
+  NUDGE_LEFT_LARGE: 'Nudge selected visual items left (10px)',
+  NUDGE_RIGHT_LARGE: 'Nudge selected visual items right (10px)',
+  NUDGE_UP_LARGE: 'Nudge selected visual items up (10px)',
+  NUDGE_DOWN_LARGE: 'Nudge selected visual items down (10px)',
 
   // History
   UNDO: 'Undo',

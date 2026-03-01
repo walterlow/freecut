@@ -11,7 +11,7 @@ interface TransformGizmoProps {
   item: TimelineItem;
   coordParams: CoordinateParams;
   onTransformStart: () => void;
-  onTransformEnd: (transform: Transform) => void;
+  onTransformEnd: (transform: Transform, operation: 'move' | 'resize' | 'rotate') => void;
   /** Whether video is currently playing - gizmo shows at lower opacity during playback */
   isPlaying?: boolean;
 }
@@ -134,7 +134,7 @@ export function TransformGizmo({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const movePoint = toCanvasPoint(moveEvent);
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey);
+        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey);
       };
 
       const handleMouseUp = () => {
@@ -145,7 +145,7 @@ export function TransformGizmo({
         const finalTransform = endInteraction();
         // Only update timeline if transform actually changed
         if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform);
+          onTransformEnd(finalTransform, 'move');
         }
         // Wait 2 animation frames before clearing preview to ensure React has
         // processed the timeline store update and re-rendered with new item values.
@@ -175,7 +175,7 @@ export function TransformGizmo({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const movePoint = toCanvasPoint(moveEvent);
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey);
+        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey);
       };
 
       const handleMouseUp = () => {
@@ -185,7 +185,7 @@ export function TransformGizmo({
 
         const finalTransform = endInteraction();
         if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform);
+          onTransformEnd(finalTransform, 'resize');
         }
         // Wait 2 animation frames before clearing preview to ensure React has
         // processed the timeline store update and re-rendered with new item values.
@@ -214,7 +214,7 @@ export function TransformGizmo({
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const movePoint = toCanvasPoint(moveEvent);
-        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey);
+        updateInteraction(movePoint, moveEvent.shiftKey, moveEvent.ctrlKey, moveEvent.altKey);
       };
 
       const handleMouseUp = () => {
@@ -224,7 +224,7 @@ export function TransformGizmo({
 
         const finalTransform = endInteraction();
         if (finalTransform && transformChanged(startTransformSnapshot, finalTransform)) {
-          onTransformEnd(finalTransform);
+          onTransformEnd(finalTransform, 'rotate');
         }
         // Wait 2 animation frames before clearing preview to ensure React has
         // processed the timeline store update and re-rendered with new item values.

@@ -13,6 +13,21 @@ export interface CompositionSpace {
 
 const CompositionSpaceContext = createContext<CompositionSpace | null>(null);
 
+export function resolveCompositionScale(
+  projectWidth: number,
+  projectHeight: number,
+  renderWidth: number,
+  renderHeight: number
+): Pick<CompositionSpace, 'scaleX' | 'scaleY' | 'scale'> {
+  const scaleX = projectWidth > 0 ? renderWidth / projectWidth : 1;
+  const scaleY = projectHeight > 0 ? renderHeight / projectHeight : 1;
+  return {
+    scaleX,
+    scaleY,
+    scale: Math.min(scaleX, scaleY),
+  };
+}
+
 export const CompositionSpaceProvider: FC<{
   projectWidth: number;
   projectHeight: number;
@@ -23,8 +38,12 @@ export const CompositionSpaceProvider: FC<{
   const value = useMemo<CompositionSpace>(() => {
     const safeProjectWidth = projectWidth > 0 ? projectWidth : renderWidth;
     const safeProjectHeight = projectHeight > 0 ? projectHeight : renderHeight;
-    const scaleX = safeProjectWidth > 0 ? renderWidth / safeProjectWidth : 1;
-    const scaleY = safeProjectHeight > 0 ? renderHeight / safeProjectHeight : 1;
+    const { scaleX, scaleY, scale } = resolveCompositionScale(
+      safeProjectWidth,
+      safeProjectHeight,
+      renderWidth,
+      renderHeight
+    );
     return {
       projectWidth: safeProjectWidth,
       projectHeight: safeProjectHeight,
@@ -32,7 +51,7 @@ export const CompositionSpaceProvider: FC<{
       renderHeight,
       scaleX,
       scaleY,
-      scale: Math.min(scaleX, scaleY),
+      scale,
     };
   }, [projectWidth, projectHeight, renderWidth, renderHeight]);
 

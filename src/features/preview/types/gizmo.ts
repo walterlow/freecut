@@ -62,6 +62,8 @@ export interface GizmoState {
   shiftKey: boolean;
   /** Whether ctrl key is held (for corner-anchored scaling) */
   ctrlKey: boolean;
+  /** Whether alt/option key is held (temporary snap override) */
+  altKey: boolean;
   /** Item ID being transformed */
   itemId: string;
   /** Item type (for type-specific behavior like text free scaling) */

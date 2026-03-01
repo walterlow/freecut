@@ -5,6 +5,18 @@ import type { Transition, TransitionType, TransitionPresentation, WipeDirection,
 import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType, EasingConfig } from '@/types/keyframe';
 import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 
+export type TransformHistoryOperation =
+  | 'move'
+  | 'resize'
+  | 'rotate'
+  | 'opacity'
+  | 'corner_radius'
+  | 'transform';
+
+export interface TransformCommandOptions {
+  operation?: TransformHistoryOperation;
+}
+
 export interface TimelineState {
   tracks: TimelineTrack[];
   items: TimelineItem[];
@@ -57,10 +69,21 @@ export interface TimelineActions {
   removeMarker: (id: string) => void;
   clearAllMarkers: () => void;
   // Transform actions
-  updateItemTransform: (id: string, transform: Partial<TransformProperties>) => void;
+  updateItemTransform: (
+    id: string,
+    transform: Partial<TransformProperties>,
+    options?: TransformCommandOptions
+  ) => void;
   resetItemTransform: (id: string) => void;
-  updateItemsTransform: (ids: string[], transform: Partial<TransformProperties>) => void;
-  updateItemsTransformMap: (transformsMap: Map<string, Partial<TransformProperties>>) => void;
+  updateItemsTransform: (
+    ids: string[],
+    transform: Partial<TransformProperties>,
+    options?: TransformCommandOptions
+  ) => void;
+  updateItemsTransformMap: (
+    transformsMap: Map<string, Partial<TransformProperties>>,
+    options?: TransformCommandOptions
+  ) => void;
   // Effect actions
   addEffect: (itemId: string, effect: VisualEffect) => void;
   addEffects: (updates: Array<{ itemId: string; effects: VisualEffect[] }>) => void;

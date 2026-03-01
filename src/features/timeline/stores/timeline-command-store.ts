@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TimelineCommand, CommandEntry, TimelineSnapshot } from './commands/types';
 import { captureSnapshot, restoreSnapshot, snapshotsEqual } from './commands/snapshot';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
+import { formatTimelineCommandLabel } from './commands/labels';
 
 /**
  * Command store state.
@@ -51,6 +52,16 @@ interface CommandStoreActions {
    * Get the last command type (for debugging/UI).
    */
   getLastCommandType: () => string | null;
+
+  /**
+   * Get the next undo command label for UI affordances.
+   */
+  getUndoLabel: () => string | null;
+
+  /**
+   * Get the next redo command label for UI affordances.
+   */
+  getRedoLabel: () => string | null;
 
   /**
    * Add a pre-captured snapshot to the undo stack.
@@ -155,6 +166,20 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
       if (undoStack.length === 0) return null;
       const entry = undoStack[undoStack.length - 1];
       return entry ? entry.command.type : null;
+    },
+
+    getUndoLabel: () => {
+      const { undoStack } = get();
+      if (undoStack.length === 0) return null;
+      const entry = undoStack[undoStack.length - 1];
+      return entry ? formatTimelineCommandLabel(entry.command) : null;
+    },
+
+    getRedoLabel: () => {
+      const { redoStack } = get();
+      if (redoStack.length === 0) return null;
+      const entry = redoStack[redoStack.length - 1];
+      return entry ? formatTimelineCommandLabel(entry.command) : null;
     },
 
     // Add pre-captured snapshot to undo stack (for drag operations)

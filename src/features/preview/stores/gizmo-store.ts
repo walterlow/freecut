@@ -117,7 +117,12 @@ interface GizmoStoreActions {
   ) => void;
 
   /** Update interaction with current mouse position */
-  updateInteraction: (currentPoint: Point, shiftKey: boolean, ctrlKey?: boolean) => void;
+  updateInteraction: (
+    currentPoint: Point,
+    shiftKey: boolean,
+    ctrlKey?: boolean,
+    altKey?: boolean
+  ) => void;
 
   /** End interaction and return final transform (or null if cancelled) */
   endInteraction: () => Transform | null;
@@ -195,6 +200,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
           currentPoint: startPoint,
           shiftKey: false,
           ctrlKey: false,
+          altKey: false,
           itemId,
           strokeWidth,
         },
@@ -212,6 +218,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
           currentPoint: startPoint,
           shiftKey: false,
           ctrlKey: false,
+          altKey: false,
           itemId,
           itemType,
           aspectRatioLocked,
@@ -231,6 +238,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
           currentPoint: startPoint,
           shiftKey: false,
           ctrlKey: false,
+          altKey: false,
           itemId,
           strokeWidth,
         },
@@ -238,7 +246,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
         snapLines: [],
       }),
 
-    updateInteraction: (currentPoint, shiftKey, ctrlKey = false) => {
+    updateInteraction: (currentPoint, shiftKey, ctrlKey = false, altKey = false) => {
       const { activeGizmo, canvasSize, snappingEnabled } = get();
       if (!activeGizmo) return;
 
@@ -272,7 +280,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
       const { snapLines: currentSnapLines } = get();
       let snapLines: SnapLine[] = [];
       const strokeExpansion = activeGizmo.strokeWidth ?? 0;
-      if (snappingEnabled && activeGizmo.mode !== 'rotate') {
+      if (snappingEnabled && !altKey && activeGizmo.mode !== 'rotate') {
         const snapResult =
           activeGizmo.mode === 'translate'
             ? applySnapping(newTransform, canvasSize.width, canvasSize.height, currentSnapLines, strokeExpansion)
@@ -291,7 +299,7 @@ export const useGizmoStore = create<GizmoStoreState & GizmoStoreActions>(
       }
 
       set({
-        activeGizmo: { ...activeGizmo, currentPoint, shiftKey, ctrlKey },
+        activeGizmo: { ...activeGizmo, currentPoint, shiftKey, ctrlKey, altKey },
         previewTransform: newTransform,
         snapLines,
       });
