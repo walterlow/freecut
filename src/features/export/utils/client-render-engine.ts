@@ -24,6 +24,7 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
+import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveMediaUrl } from '@/features/export/deps/media-library';
@@ -108,7 +109,10 @@ export async function createCompositionRenderer(
   composition: CompositionInputProps,
   canvas: OffscreenCanvas,
   ctx: OffscreenCanvasRenderingContext2D,
-  options: { mode?: 'export' | 'preview' } = {},
+  options: {
+    mode?: 'export' | 'preview';
+    getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
+  } = {},
 ) {
   const {
     fps,
@@ -118,6 +122,7 @@ export async function createCompositionRenderer(
     keyframes = [],
   } = composition;
   const renderMode = options.mode ?? 'export';
+  const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
 
@@ -982,7 +987,17 @@ export async function createCompositionRenderer(
       ) => {
         // Get animated transform
         const itemKeyframes = keyframesMap.get(item.id);
-        const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
+        let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
+        if (renderMode === 'preview') {
+          const previewOverride = getPreviewTransformOverride?.(item.id);
+          if (previewOverride) {
+            transform = {
+              ...transform,
+              ...previewOverride,
+              cornerRadius: previewOverride.cornerRadius ?? transform.cornerRadius,
+            };
+          }
+        }
 
         // Get effects (item effects + adjustment layer effects)
         const adjEffects = getAdjustmentLayerEffects(
