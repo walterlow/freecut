@@ -147,6 +147,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
       fontSize: 60,
       fontFamily: 'Inter',
       fontWeight: 'normal',
+      fontStyle: 'normal',
+      underline: false,
       color: '#ffffff',
       textAlign: 'center',
       lineHeight: 1.2,
@@ -720,4 +722,3 @@ export const MediaSidebar = memo(function MediaSidebar() {
     </div>
   );
 });
-

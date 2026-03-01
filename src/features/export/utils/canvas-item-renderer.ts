@@ -487,8 +487,10 @@ function renderTextItem(
 
   const fontSize = item.fontSize ?? 60;
   const fontFamily = item.fontFamily ?? 'Inter';
+  const fontStyle = item.fontStyle ?? 'normal';
   const fontWeightName = item.fontWeight ?? 'normal';
   const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? 400;
+  const underline = item.underline ?? false;
   const lineHeight = item.lineHeight ?? 1.2;
   const letterSpacing = item.letterSpacing ?? 0;
   const textAlign = item.textAlign ?? 'center';
@@ -503,7 +505,7 @@ function renderTextItem(
   ctx.rect(itemLeft, itemTop, transform.width, transform.height);
   ctx.clip();
 
-  ctx.font = `${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
+  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
   ctx.fillStyle = item.color ?? '#ffffff';
 
   const availableWidth = transform.width - padding * 2;
@@ -576,6 +578,19 @@ function renderTextItem(
     }
 
     drawTextWithLetterSpacing(ctx, line, lineX, lineY, letterSpacing, false, textMeasureCache);
+
+    if (underline) {
+      drawUnderline(
+        ctx,
+        line,
+        lineX,
+        lineY,
+        textAlign,
+        letterSpacing,
+        fontSize,
+        textMeasureCache,
+      );
+    }
   }
 
   ctx.restore();
@@ -708,6 +723,42 @@ function drawTextWithLetterSpacing(
   }
 
   ctx.textAlign = currentAlign;
+}
+
+function drawUnderline(
+  ctx: OffscreenCanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  textAlign: 'left' | 'center' | 'right',
+  letterSpacing: number,
+  fontSize: number,
+  textMeasureCache: TextMeasurementCache,
+): void {
+  const lineWidth = textMeasureCache.measure(ctx, text, letterSpacing);
+  if (lineWidth <= 0) return;
+
+  let startX = x;
+  if (textAlign === 'center') {
+    startX = x - lineWidth / 2;
+  } else if (textAlign === 'right') {
+    startX = x - lineWidth;
+  }
+
+  const underlineY = y + Math.max(1, fontSize * 0.08);
+  const underlineThickness = Math.max(1, fontSize * 0.05);
+  const previousLineWidth = ctx.lineWidth;
+  const previousStrokeStyle = ctx.strokeStyle;
+
+  ctx.beginPath();
+  ctx.lineWidth = underlineThickness;
+  ctx.strokeStyle = ctx.fillStyle;
+  ctx.moveTo(startX, underlineY);
+  ctx.lineTo(startX + lineWidth, underlineY);
+  ctx.stroke();
+
+  ctx.lineWidth = previousLineWidth;
+  ctx.strokeStyle = previousStrokeStyle;
 }
 
 // ---------------------------------------------------------------------------
@@ -942,4 +993,3 @@ export function calculateMediaDrawDimensions(
     height: drawHeight,
   };
 }
-

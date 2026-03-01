@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Type, AlignLeft, AlignCenter, AlignRight, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react';
+import { Type, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -64,6 +64,8 @@ export function TextSection({ items }: TextSectionProps) {
       fontSize: textItems.every(i => (i.fontSize ?? 60) === (first.fontSize ?? 60)) ? (first.fontSize ?? 60) : 'mixed' as const,
       fontFamily: textItems.every(i => (i.fontFamily ?? 'Inter') === (first.fontFamily ?? 'Inter')) ? (first.fontFamily ?? 'Inter') : undefined,
       fontWeight: textItems.every(i => (i.fontWeight ?? 'normal') === (first.fontWeight ?? 'normal')) ? (first.fontWeight ?? 'normal') : undefined,
+      fontStyle: textItems.every(i => (i.fontStyle ?? 'normal') === (first.fontStyle ?? 'normal')) ? (first.fontStyle ?? 'normal') : undefined,
+      underline: textItems.every(i => (i.underline ?? false) === (first.underline ?? false)) ? (first.underline ?? false) : undefined,
       color: textItems.every(i => i.color === first.color) ? first.color : undefined,
       textAlign: textItems.every(i => (i.textAlign ?? 'center') === (first.textAlign ?? 'center')) ? (first.textAlign ?? 'center') : undefined,
       verticalAlign: textItems.every(i => (i.verticalAlign ?? 'middle') === (first.verticalAlign ?? 'middle')) ? (first.verticalAlign ?? 'middle') : undefined,
@@ -154,6 +156,23 @@ export function TextSection({ items }: TextSectionProps) {
     },
     [supportedFontWeightOptions, updateTextItems]
   );
+
+  const handleBoldToggle = useCallback(() => {
+    if (!supportedFontWeightOptions.some((weight) => weight.value === 'bold')) {
+      return;
+    }
+    const nextWeight: TextItem['fontWeight'] = sharedValues?.fontWeight === 'bold' ? 'normal' : 'bold';
+    updateTextItems({ fontWeight: nextWeight });
+  }, [sharedValues?.fontWeight, supportedFontWeightOptions, updateTextItems]);
+
+  const handleItalicToggle = useCallback(() => {
+    const nextStyle: TextItem['fontStyle'] = sharedValues?.fontStyle === 'italic' ? 'normal' : 'italic';
+    updateTextItems({ fontStyle: nextStyle });
+  }, [sharedValues?.fontStyle, updateTextItems]);
+
+  const handleUnderlineToggle = useCallback(() => {
+    updateTextItems({ underline: !(sharedValues?.underline ?? false) });
+  }, [sharedValues?.underline, updateTextItems]);
 
   useEffect(() => {
     const currentFontFamily = sharedValues?.fontFamily;
@@ -262,6 +281,10 @@ export function TextSection({ items }: TextSectionProps) {
   }
 
   const fontPreviewText = sharedValues.text ?? textItems[0]?.text ?? '';
+  const isBoldActive = sharedValues.fontWeight === 'bold';
+  const canUseBold = supportedFontWeightOptions.some((weight) => weight.value === 'bold');
+  const isItalicActive = sharedValues.fontStyle === 'italic';
+  const isUnderlineActive = sharedValues.underline === true;
 
   return (
     <PropertySection title="Text" icon={Type} defaultOpen={true}>
@@ -317,6 +340,40 @@ export function TextSection({ items }: TextSectionProps) {
             ))}
           </SelectContent>
         </Select>
+      </PropertyRow>
+
+      {/* Font Style */}
+      <PropertyRow label="Style">
+        <div className="flex gap-1">
+          <Button
+            variant={isBoldActive ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleBoldToggle}
+            title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
+            disabled={!canUseBold}
+          >
+            <Bold className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant={isItalicActive ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleItalicToggle}
+            title="Italic"
+          >
+            <Italic className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant={isUnderlineActive ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleUnderlineToggle}
+            title="Underline"
+          >
+            <Underline className="w-3.5 h-3.5" />
+          </Button>
+        </div>
       </PropertyRow>
 
       {/* Text Align */}
@@ -419,5 +476,4 @@ export function TextSection({ items }: TextSectionProps) {
     </PropertySection>
   );
 }
-
 

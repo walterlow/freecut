@@ -57,6 +57,7 @@ export type TextItem = BaseTimelineItem & {
   fontFamily?: string; // Font family name (default: 'Inter')
   fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold'; // Font weight (default: 'normal')
   fontStyle?: 'normal' | 'italic'; // Font style (default: 'normal')
+  underline?: boolean; // Underline text decoration (default: false)
   // Colors
   color: string; // Text color (hex or oklch)
   backgroundColor?: string; // Background color behind text (optional)

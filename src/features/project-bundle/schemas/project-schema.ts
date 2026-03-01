@@ -203,6 +203,7 @@ const timelineItemSchema = z.object({
   fontFamily: z.string().optional(),
   fontWeight: fontWeightSchema.optional(),
   fontStyle: fontStyleSchema.optional(),
+  underline: z.boolean().optional(),
   color: z.string().optional(),
   backgroundColor: z.string().optional(),
   textAlign: textAlignSchema.optional(),

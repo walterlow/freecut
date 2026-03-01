@@ -89,6 +89,7 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
           fontFamily: fontFamily,
           fontWeight,
           fontStyle: item.fontStyle ?? 'normal',
+          textDecoration: item.underline ? 'underline' : 'none',
           color,
           textAlign: item.textAlign ?? 'center',
           lineHeight,
