@@ -71,7 +71,9 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
       toggleUseProxy: () => set((state) => ({ useProxy: !state.useProxy })),
-      setPreviewQuality: (quality) => set({ previewQuality: quality }),
+      setPreviewQuality: () => set((state) => (
+        state.previewQuality === 1 ? state : { previewQuality: 1 }
+      )),
     }),
     {
       name: 'playback-storage',

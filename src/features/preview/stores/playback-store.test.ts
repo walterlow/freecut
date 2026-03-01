@@ -153,12 +153,12 @@ describe('playback-store', () => {
       expect(usePlaybackStore.getState().previewQuality).toBe(1);
     });
 
-    it('sets preview quality', () => {
+    it('keeps preview quality locked to full', () => {
       usePlaybackStore.getState().setPreviewQuality(0.5);
-      expect(usePlaybackStore.getState().previewQuality).toBe(0.5);
+      expect(usePlaybackStore.getState().previewQuality).toBe(1);
 
       usePlaybackStore.getState().setPreviewQuality(0.25);
-      expect(usePlaybackStore.getState().previewQuality).toBe(0.25);
+      expect(usePlaybackStore.getState().previewQuality).toBe(1);
     });
   });
 
