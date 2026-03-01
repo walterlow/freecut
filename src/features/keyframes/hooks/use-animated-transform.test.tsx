@@ -54,6 +54,7 @@ function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 10,
     currentFrameEpoch: 0,
+    displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
     loop: false,

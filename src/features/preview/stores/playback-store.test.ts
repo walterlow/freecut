@@ -6,6 +6,7 @@ describe('playback-store', () => {
     usePlaybackStore.setState({
       currentFrame: 0,
       currentFrameEpoch: 0,
+      displayedFrame: null,
       isPlaying: false,
       playbackRate: 1,
       loop: false,
@@ -30,6 +31,7 @@ describe('playback-store', () => {
     expect(state.muted).toBe(false);
     expect(state.zoom).toBe(-1);
     expect(state.previewFrame).toBe(null);
+    expect(state.displayedFrame).toBe(null);
   });
 
   describe('frame navigation', () => {

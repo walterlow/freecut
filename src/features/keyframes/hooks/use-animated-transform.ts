@@ -44,12 +44,14 @@ export function useAnimatedTransform(
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
   const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
   const animationFrame = getResolvedPlaybackFrame({
     currentFrame,
     previewFrame,
+    displayedFrame,
     isPlaying,
     currentFrameEpoch,
     previewFrameEpoch,
@@ -97,12 +99,14 @@ export function useAnimatedTransforms(
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
   const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
   const animationFrame = getResolvedPlaybackFrame({
     currentFrame,
     previewFrame,
+    displayedFrame,
     isPlaying,
     currentFrameEpoch,
     previewFrameEpoch,

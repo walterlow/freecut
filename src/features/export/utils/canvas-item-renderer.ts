@@ -501,9 +501,13 @@ function renderTextItem(
   const itemTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
 
   ctx.save();
-  ctx.beginPath();
-  ctx.rect(itemLeft, itemTop, transform.width, transform.height);
-  ctx.clip();
+  // Preview mode should match the live DOM preview behavior where text isn't
+  // hard-clipped to the item box while editing.
+  if (rctx.renderMode !== 'preview') {
+    ctx.beginPath();
+    ctx.rect(itemLeft, itemTop, transform.width, transform.height);
+    ctx.clip();
+  }
 
   ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
   ctx.fillStyle = item.color ?? '#ffffff';

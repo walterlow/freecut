@@ -13,6 +13,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       // State
       currentFrame: 0,
       currentFrameEpoch: 0,
+      displayedFrame: null,
       isPlaying: false,
       playbackRate: 1,
       loop: false,
@@ -61,6 +62,12 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             previewFrameEpoch: nextEpoch,
             frameUpdateEpoch: nextEpoch,
           };
+        }),
+      setDisplayedFrame: (frame) =>
+        set((state) => {
+          const nextFrame = frame == null ? null : normalizeFrame(frame);
+          if (state.displayedFrame === nextFrame) return state;
+          return { displayedFrame: nextFrame };
         }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
       toggleUseProxy: () => set((state) => ({ useProxy: !state.useProxy })),

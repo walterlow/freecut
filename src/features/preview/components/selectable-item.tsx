@@ -1,11 +1,11 @@
 import { useMemo, useState, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import { useAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { transformToScreenBounds } from '../utils/coordinate-transform';
 
 interface SelectableItemProps {
   item: TimelineItem;
+  transform: Transform;
   coordParams: CoordinateParams;
   isSelected?: boolean;
   onSelect: (e: React.MouseEvent) => void;
@@ -20,6 +20,7 @@ interface SelectableItemProps {
  */
 export function SelectableItem({
   item,
+  transform,
   coordParams,
   isSelected = false,
   onSelect,
@@ -27,25 +28,9 @@ export function SelectableItem({
 }: SelectableItemProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  // Get animated transform using centralized hook
-  const { transform: animatedTransform } = useAnimatedTransform(item, coordParams.projectSize);
-
-  // Convert to Transform type for gizmo system
-  const currentTransform = useMemo((): Transform => {
-    return {
-      x: animatedTransform.x,
-      y: animatedTransform.y,
-      width: animatedTransform.width,
-      height: animatedTransform.height,
-      rotation: animatedTransform.rotation,
-      opacity: animatedTransform.opacity,
-      cornerRadius: animatedTransform.cornerRadius,
-    };
-  }, [animatedTransform]);
-
   // Convert to screen bounds for positioning, expanding for stroke width on shapes
   const screenBounds = useMemo(() => {
-    const bounds = transformToScreenBounds(currentTransform, coordParams);
+    const bounds = transformToScreenBounds(transform, coordParams);
 
     // Expand bounds for stroke width on shape items
     if (item.type === 'shape') {
@@ -65,7 +50,7 @@ export function SelectableItem({
     }
 
     return bounds;
-  }, [currentTransform, coordParams, item]);
+  }, [transform, coordParams, item]);
 
   // Handle mousedown - select and start dragging in one motion
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -77,9 +62,9 @@ export function SelectableItem({
 
     // Start dragging immediately if handler provided
     if (onDragStart) {
-      onDragStart(e, currentTransform);
+      onDragStart(e, transform);
     }
-  }, [onSelect, onDragStart, currentTransform]);
+  }, [onSelect, onDragStart, transform]);
 
   // Only show hover state for unselected items (selected items have gizmo)
   const showHover = isHovered && !isSelected;
@@ -92,7 +77,7 @@ export function SelectableItem({
         top: screenBounds.top,
         width: screenBounds.width,
         height: screenBounds.height,
-        transform: `rotate(${currentTransform.rotation}deg)`,
+        transform: `rotate(${transform.rotation}deg)`,
         transformOrigin: 'center center',
         // Z-index to render above GroupGizmo border but below handles
         zIndex: 5,

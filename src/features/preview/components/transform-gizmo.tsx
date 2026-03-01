@@ -6,6 +6,7 @@ import { useAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { useEscapeCancel } from '../hooks/use-drag-interaction';
 import { GizmoHandles } from './gizmo-handles';
 import { transformToScreenBounds, screenToCanvas, getScaleCursor } from '../utils/coordinate-transform';
+import { expandTextTransformForPreview } from '../utils/text-layout';
 
 interface TransformGizmoProps {
   item: TimelineItem;
@@ -53,7 +54,7 @@ export function TransformGizmo({
       return previewTransform;
     }
 
-    const baseTransform: Transform = {
+    let baseTransform: Transform = {
       x: animatedTransform.x,
       y: animatedTransform.y,
       width: animatedTransform.width,
@@ -63,6 +64,14 @@ export function TransformGizmo({
       cornerRadius: animatedTransform.cornerRadius,
     };
 
+    if (item.type === 'text') {
+      baseTransform = expandTextTransformForPreview(
+        item,
+        baseTransform,
+        itemPreview?.properties
+      );
+    }
+
     // If properties panel is previewing this item's transform, merge its values
     const transformPreview = itemPreview?.transform;
     if (transformPreview) {
@@ -70,7 +79,7 @@ export function TransformGizmo({
     }
 
     return baseTransform;
-  }, [animatedTransform, isInteracting, previewTransform, itemPreview, item.id]);
+  }, [animatedTransform, isInteracting, previewTransform, item, itemPreview, item.id]);
 
   // Convert to screen bounds, expanding for stroke width on shapes
   const screenBounds = useMemo(() => {

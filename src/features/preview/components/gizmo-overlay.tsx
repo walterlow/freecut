@@ -13,7 +13,7 @@ import { SnapGuides } from './snap-guides';
 import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-transform';
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
-import { useAnimatedTransforms } from '@/features/preview/deps/keyframes';
+import { useVisualTransforms } from '../hooks/use-visual-transform';
 import {
   getAutoKeyframeOperation,
   GIZMO_ANIMATABLE_PROPS,
@@ -218,16 +218,16 @@ export function GizmoOverlay({
     };
   }, [containerRect, playerSize, projectSize, zoom]);
 
-  // Get animated transforms for all visible items using centralized hook
-  const animatedTransformsMap = useAnimatedTransforms(visibleItems, projectSize);
+  // Get visual transforms for all visible items (base + keyframes + preview).
+  const visualTransformsMap = useVisualTransforms(visibleItems, projectSize);
 
   // Create marquee items with pre-computed bounding rects for collision detection
   // Rects are calculated once when items/coords change, not on every mouse move
   const marqueeItems = useMemo(() => {
     if (!coordParams || !containerRect) return [];
     return visibleItems.map((item) => {
-      // Get pre-computed animated transform from the hook
-      const resolved = animatedTransformsMap.get(item.id);
+      // Get pre-computed visual transform from the hook
+      const resolved = visualTransformsMap.get(item.id);
       if (!resolved) return { id: item.id, getBoundingRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }) };
 
       const screenBounds = transformToScreenBounds(
@@ -255,7 +255,7 @@ export function GizmoOverlay({
         getBoundingRect: () => rect,
       };
     });
-  }, [visibleItems, coordParams, containerRect, animatedTransformsMap]);
+  }, [visibleItems, coordParams, containerRect, visualTransformsMap]);
 
   // Marquee selection hook
   // Use hitAreaRef for bounds checking (fills container), overlayRef for coordinate display
@@ -433,8 +433,8 @@ export function GizmoOverlay({
       const result: TimelineItem[] = [];
 
       for (const item of visibleItems) {
-        // Get animated transform from the pre-computed map
-        const resolved = animatedTransformsMap.get(item.id);
+        // Get visual transform from the pre-computed map
+        const resolved = visualTransformsMap.get(item.id);
         if (!resolved) continue;
 
         // Convert transform position to absolute canvas coordinates
@@ -459,7 +459,7 @@ export function GizmoOverlay({
 
       return result;
     },
-    [visibleItems, projectSize, animatedTransformsMap]
+    [visibleItems, projectSize, visualTransformsMap]
   );
 
   // Handle right-click to show context menu for overlapping items
@@ -598,15 +598,28 @@ export function GizmoOverlay({
       >
         {/* Clickable areas for UNSELECTED visible items */}
         {/* Selected items are handled by their respective gizmos (TransformGizmo or GroupGizmo) */}
-        {unselectedItems.map((item) => (
-          <SelectableItem
-            key={item.id}
-            item={item}
-            coordParams={coordParams}
-            onSelect={(e) => handleItemClick(item.id, e)}
-            onDragStart={(e, transform) => handleItemDragStart(item.id, e, transform)}
-          />
-        ))}
+        {unselectedItems.map((item) => {
+          const resolved = visualTransformsMap.get(item.id);
+          if (!resolved) return null;
+          return (
+            <SelectableItem
+              key={item.id}
+              item={item}
+              transform={{
+                x: resolved.x,
+                y: resolved.y,
+                width: resolved.width,
+                height: resolved.height,
+                rotation: resolved.rotation,
+                opacity: resolved.opacity,
+                cornerRadius: resolved.cornerRadius,
+              }}
+              coordParams={coordParams}
+              onSelect={(e) => handleItemClick(item.id, e)}
+              onDragStart={(e, transform) => handleItemDragStart(item.id, e, transform)}
+            />
+          );
+        })}
 
         {/* Transform gizmo(s) for selected items - single or group */}
         {selectedItems.length === 1 && selectedItems[0] ? (

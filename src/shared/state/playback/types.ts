@@ -13,6 +13,8 @@ export interface PlaybackState {
   currentFrame: number;
   /** Internal epoch for last currentFrame mutation (monotonic per store session) */
   currentFrameEpoch: number;
+  /** Frame currently presented to the user in preview output (null when Player path is active) */
+  displayedFrame: number | null;
   isPlaying: boolean;
   playbackRate: number;
   loop: boolean;
@@ -46,6 +48,7 @@ export interface PlaybackActions {
   toggleMute: () => void;
   setZoom: (zoom: number) => void;
   setPreviewFrame: (frame: number | null, itemId?: string | null) => void;
+  setDisplayedFrame: (frame: number | null) => void;
   /** Register a frame capture function (called by VideoPreview on mount) */
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
   /** Toggle proxy playback mode */
