@@ -89,22 +89,6 @@ function drawVectorscope(
   ctx.fillStyle = '#030712';
   ctx.fillRect(0, 0, VECTORSCOPE_SIZE, VECTORSCOPE_SIZE);
 
-  // Graticule
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(center, center, Math.floor(radius * 0.66), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(center, 0);
-  ctx.lineTo(center, VECTORSCOPE_SIZE);
-  ctx.moveTo(0, center);
-  ctx.lineTo(VECTORSCOPE_SIZE, center);
-  ctx.stroke();
-
   const image = ctx.createImageData(VECTORSCOPE_SIZE, VECTORSCOPE_SIZE);
   const out = image.data;
   const divisor = Math.max(1, maxDensity);
@@ -121,6 +105,22 @@ function drawVectorscope(
   }
 
   ctx.putImageData(image, 0, 0);
+
+  // Graticule (drawn after putImageData so it renders on top)
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(center, center, Math.floor(radius * 0.66), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(center, 0);
+  ctx.lineTo(center, VECTORSCOPE_SIZE);
+  ctx.moveTo(0, center);
+  ctx.lineTo(VECTORSCOPE_SIZE, center);
+  ctx.stroke();
 }
 
 interface ColorScopesPanelProps {
@@ -193,13 +193,15 @@ export const ColorScopesPanel = memo(function ColorScopesPanel({ open }: ColorSc
 
   useEffect(() => {
     if (!open || !isPlaying) return;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    void drawFromCapture();
-    timer = setInterval(() => {
-      void drawFromCapture();
-    }, 160);
+    let cancelled = false;
+    void (async () => {
+      while (!cancelled) {
+        await drawFromCapture();
+        await new Promise((r) => setTimeout(r, 160));
+      }
+    })();
     return () => {
-      if (timer) clearInterval(timer);
+      cancelled = true;
     };
   }, [open, isPlaying, drawFromCapture]);
 

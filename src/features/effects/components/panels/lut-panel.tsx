@@ -52,7 +52,7 @@ export const LUTPanel = memo(function LUTPanel({
   onRemove,
 }: LUTPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const presetMeta = LUT_PRESET_CONFIGS[lut.preset];
+  const presetMeta = LUT_PRESET_CONFIGS[lut.preset] ?? { label: lut.preset, description: 'Unknown preset' };
   const hasCustomCube = typeof lut.cubeData === 'string' && lut.cubeData.trim().length > 0;
   const activeSourceLabel = hasCustomCube
     ? (lut.cubeName?.trim() || 'Custom .cube')

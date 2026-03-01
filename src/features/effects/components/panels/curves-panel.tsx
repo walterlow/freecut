@@ -368,8 +368,12 @@ export const CurvesPanel = memo(function CurvesPanel({
             title="Add control point"
             onClick={() => {
               const points = draftChannels[activeChannel];
-              const midpoint = points[Math.floor(points.length / 2)] ?? { x: 0.5, y: 0.5 };
-              const next = normalizePoints([...points, { x: clamp(midpoint.x + 0.08, 0, 1), y: midpoint.y }]);
+              const first = points[0] ?? { x: 0, y: 0 };
+              const last = points[points.length - 1] ?? { x: 1, y: 1 };
+              const midX = (first.x + last.x) / 2;
+              const midY = (first.y + last.y) / 2;
+              const newX = clamp(midX + 0.08 * (midX < 0.5 ? 1 : -1), Number.EPSILON, 1 - Number.EPSILON);
+              const next = normalizePoints([...points, { x: newX, y: midY }]);
               const nextChannels: CurvesChannels = {
                 ...draftChannels,
                 [activeChannel]: next,

@@ -100,9 +100,13 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const luts = await loadSavedCubeLuts();
-      if (!cancelled) {
-        setSavedCubeLuts(luts);
+      try {
+        const luts = await loadSavedCubeLuts();
+        if (!cancelled) {
+          setSavedCubeLuts(luts);
+        }
+      } catch {
+        // OPFS may be unavailable; leave the list empty.
       }
     })();
     return () => {
@@ -214,11 +218,11 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
         type: 'color-grading',
         variant: 'wheels',
         shadowsHue: WHEELS_CONFIG.shadowsHue.default,
-        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default / 100,
+        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
         midtonesHue: WHEELS_CONFIG.midtonesHue.default,
-        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default / 100,
+        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
         highlightsHue: WHEELS_CONFIG.highlightsHue.default,
-        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default / 100,
+        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
         temperature: WHEELS_CONFIG.temperature.default,
         tint: WHEELS_CONFIG.tint.default,
         saturation: WHEELS_CONFIG.saturation.default,
@@ -879,11 +883,11 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
         type: 'color-grading',
         variant: 'wheels',
         shadowsHue: WHEELS_CONFIG.shadowsHue.default,
-        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default / 100,
+        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
         midtonesHue: WHEELS_CONFIG.midtonesHue.default,
-        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default / 100,
+        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
         highlightsHue: WHEELS_CONFIG.highlightsHue.default,
-        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default / 100,
+        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
         temperature: WHEELS_CONFIG.temperature.default,
         tint: WHEELS_CONFIG.tint.default,
         saturation: WHEELS_CONFIG.saturation.default,

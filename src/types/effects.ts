@@ -346,11 +346,11 @@ export const CURVES_CONFIG = {
 // Color wheels control metadata
 export const WHEELS_CONFIG = {
   shadowsHue: { label: 'Shadows Hue', min: 0, max: 360, default: 220, step: 1, unit: 'deg' },
-  shadowsAmount: { label: 'Shadows Amt', min: 0, max: 100, default: 0, step: 1, unit: '%' },
+  shadowsAmount: { label: 'Shadows Amt', min: 0, max: 1, default: 0, step: 0.01, unit: '' },
   midtonesHue: { label: 'Midtones Hue', min: 0, max: 360, default: 40, step: 1, unit: 'deg' },
-  midtonesAmount: { label: 'Midtones Amt', min: 0, max: 100, default: 0, step: 1, unit: '%' },
+  midtonesAmount: { label: 'Midtones Amt', min: 0, max: 1, default: 0, step: 0.01, unit: '' },
   highlightsHue: { label: 'Highlights Hue', min: 0, max: 360, default: 45, step: 1, unit: 'deg' },
-  highlightsAmount: { label: 'Highlights Amt', min: 0, max: 100, default: 0, step: 1, unit: '%' },
+  highlightsAmount: { label: 'Highlights Amt', min: 0, max: 1, default: 0, step: 0.01, unit: '' },
   temperature: { label: 'Temperature', min: -100, max: 100, default: 0, step: 1, unit: '' },
   tint: { label: 'Tint', min: -100, max: 100, default: 0, step: 1, unit: '' },
   saturation: { label: 'Saturation', min: -100, max: 100, default: 0, step: 1, unit: '' },

@@ -137,10 +137,13 @@ const WheelControl = memo(function WheelControl({
       <button
         ref={wheelRef}
         type="button"
+        disabled={disabled}
+        aria-disabled={disabled}
         className={`relative rounded-full border border-border/70 ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-crosshair'}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
+          touchAction: 'none',
           backgroundImage:
             'radial-gradient(circle at center, hsl(0 0% 18%) 0%, hsl(0 0% 10%) 26%, transparent 28%), conic-gradient(from 0deg, #ff3b30, #ff9500, #ffcc00, #34c759, #00c7be, #007aff, #5856d6, #ff2d55, #ff3b30)',
         }}

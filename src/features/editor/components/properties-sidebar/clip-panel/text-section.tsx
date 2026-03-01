@@ -351,6 +351,8 @@ export function TextSection({ items }: TextSectionProps) {
             className="h-7 w-7"
             onClick={handleBoldToggle}
             title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
+            aria-label="Bold"
+            aria-pressed={isBoldActive}
             disabled={!canUseBold}
           >
             <Bold className="w-3.5 h-3.5" />
@@ -361,6 +363,8 @@ export function TextSection({ items }: TextSectionProps) {
             className="h-7 w-7"
             onClick={handleItalicToggle}
             title="Italic"
+            aria-label="Italic"
+            aria-pressed={isItalicActive}
           >
             <Italic className="w-3.5 h-3.5" />
           </Button>
@@ -370,6 +374,8 @@ export function TextSection({ items }: TextSectionProps) {
             className="h-7 w-7"
             onClick={handleUnderlineToggle}
             title="Underline"
+            aria-label="Underline"
+            aria-pressed={isUnderlineActive}
           >
             <Underline className="w-3.5 h-3.5" />
           </Button>
