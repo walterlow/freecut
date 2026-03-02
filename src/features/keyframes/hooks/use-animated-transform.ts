@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useTimelineStore } from '@/features/keyframes/deps/timeline';
@@ -36,9 +36,13 @@ export function useAnimatedTransform(
   item: TimelineItem,
   projectSize: ProjectSize
 ): AnimatedTransformResult {
-  // Get keyframes for this item (granular selector)
-  const itemKeyframes = useTimelineStore(
-    useCallback((s) => s.keyframes.find((k) => k.itemId === item.id), [item.id])
+  // Important: avoid selectors that close over item.id here.
+  // The timeline facade memoizes by snapshot reference, so changing item.id due
+  // to a different store (selection) can otherwise return stale keyframes.
+  const allKeyframes = useTimelineStore((s) => s.keyframes);
+  const itemKeyframes = useMemo(
+    () => allKeyframes.find((k) => k.itemId === item.id),
+    [allKeyframes, item.id]
   );
 
   // Get current frame from playback store
