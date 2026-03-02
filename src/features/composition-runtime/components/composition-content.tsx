@@ -137,36 +137,16 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     renderScaleY,
   ]);
 
-  if (!subComp) {
-    return (
-      <AbsoluteFill
-        style={{
-          backgroundColor: '#2a1a2a',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <p style={{ color: '#a855f7', fontSize: 14 }}>Composition not found</p>
-      </AbsoluteFill>
-    );
-  }
-
-  // CSS scale from sub-comp native resolution to parent container dimensions
-  const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1;
-  const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1;
-
-  // Sort tracks so lower order renders first (bottom), higher order on top
-  const sortedTracks = [...subComp.tracks].sort((a, b) => b.order - a.order);
   const visibleTrackIds = useMemo(
-    () => new Set(subComp.tracks.filter((t) => t.visible).map((t) => t.id)),
-    [subComp.tracks]
+    () => subComp ? new Set(subComp.tracks.filter((t) => t.visible).map((t) => t.id)) : new Set<string>(),
+    [subComp?.tracks]
   );
 
   // Resolve active sub-comp masks for the current local frame.
   // This allows masks authored inside a pre-comp to clip items when viewed
   // from the parent timeline.
   const activeMaskInfos = useMemo<MaskInfo[]>(() => {
+    if (!subComp) return [];
     const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
     const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
 
@@ -199,7 +179,29 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
           },
         };
       });
-  }, [resolvedItems, visibleTrackIds, subComp.width, subComp.height, subComp.fps, subComp.keyframes, subCompFrame]);
+  }, [resolvedItems, visibleTrackIds, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
+
+  if (!subComp) {
+    return (
+      <AbsoluteFill
+        style={{
+          backgroundColor: '#2a1a2a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <p style={{ color: '#a855f7', fontSize: 14 }}>Composition not found</p>
+      </AbsoluteFill>
+    );
+  }
+
+  // CSS scale from sub-comp native resolution to parent container dimensions
+  const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1;
+  const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1;
+
+  // Sort tracks so lower order renders first (bottom), higher order on top
+  const sortedTracks = [...subComp.tracks].sort((a, b) => b.order - a.order);
 
   return (
     <div style={{

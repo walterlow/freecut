@@ -281,7 +281,7 @@ function drawVectorscope(
   const { kr, kb } = getMatrixCoefficients(matrix);
   const kg = 1 - kr - kb;
   const { data, width, height } = imageData;
-  const density = new Uint16Array(scopeSize * scopeSize);
+  const density = new Uint32Array(scopeSize * scopeSize);
   let maxDensity = 0;
 
   const center = Math.floor(scopeSize / 2);
