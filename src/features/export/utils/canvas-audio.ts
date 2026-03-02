@@ -11,10 +11,14 @@ import type { Keyframe as VolumeKeyframe } from '@/types/keyframe';
 import { createLogger } from '@/shared/logging/logger';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import {
+  timelineToSourceFrames,
+  sourceToTimelineFrames,
+  useCompositionsStore,
+} from '@/features/export/deps/timeline';
+import {
   getPropertyKeyframes,
   interpolatePropertyValue,
 } from '@/features/export/deps/keyframes';
-import { useCompositionsStore } from '@/features/export/deps/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
@@ -115,6 +119,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
   const isContinuousAudioTransition = (left: VideoItem, right: VideoItem): boolean => {
     const leftSpeed = left.speed ?? 1;
     const rightSpeed = right.speed ?? 1;
+    const leftSourceFps = left.sourceFps ?? fps;
     if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
 
     const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
@@ -128,7 +133,12 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
 
     const leftTrim = getVideoTrimBefore(left);
     const rightTrim = getVideoTrimBefore(right);
-    const computedLeftSourceEnd = leftTrim + Math.round(left.durationInFrames * leftSpeed);
+    const computedLeftSourceEnd = leftTrim + timelineToSourceFrames(
+      left.durationInFrames,
+      leftSpeed,
+      fps,
+      leftSourceFps,
+    );
     const storedLeftSourceEnd = left.sourceEnd;
     const computedContinuous = Math.abs(rightTrim - computedLeftSourceEnd) <= 2;
     const storedContinuous = storedLeftSourceEnd !== undefined
@@ -255,7 +265,12 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
 
         if (sameSpeed && sameMedia && adjacent && sameOrigin) {
           const previousTrimBefore = resolvedTrimBeforeById.get(previous.id) ?? getVideoTrimBefore(previous);
-          resolvedTrimBefore = previousTrimBefore + Math.round(previous.durationInFrames * previousSpeed);
+          resolvedTrimBefore = previousTrimBefore + timelineToSourceFrames(
+            previous.durationInFrames,
+            previousSpeed,
+            fps,
+            previous.sourceFps ?? fps,
+          );
         }
       }
     }
@@ -274,9 +289,12 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
   for (const [, entry] of videoById) {
     const videoItem = entry.item;
     const speed = videoItem.speed ?? 1;
+    const sourceFps = videoItem.sourceFps ?? fps;
     const baseTrimBefore = resolvedTrimBeforeById.get(videoItem.id) ?? getVideoTrimBefore(videoItem);
     const extension = extensionByClipId.get(videoItem.id) ?? { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
-    const maxBeforeBySource = speed > 0 ? Math.floor(baseTrimBefore / speed) : 0;
+    const maxBeforeBySource = speed > 0
+      ? sourceToTimelineFrames(baseTrimBefore, speed, sourceFps, fps)
+      : 0;
     const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
     const after = Math.max(0, extension.after);
 
@@ -299,8 +317,8 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       src: videoItem.src,
       startFrame: videoItem.from - before,
       durationFrames: videoItem.durationInFrames + before + after,
-      sourceStartFrame: baseTrimBefore - (before * speed),
-      sourceFps: videoItem.sourceFps ?? fps,
+      sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
+      sourceFps,
       volume: videoItem.volume ?? 0,
       fadeInFrames: fadeIn,
       fadeOutFrames: fadeOut,
@@ -430,7 +448,12 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
         const subItemClipStart = effectiveStart - startFrame;
         const baseSourceStart = subItem.sourceStart ?? subItem.trimStart ?? 0;
         const speed = subItem.speed ?? 1;
-        const effectiveSourceStart = baseSourceStart + Math.round(subItemClipStart * speed);
+        const effectiveSourceStart = baseSourceStart + timelineToSourceFrames(
+          subItemClipStart,
+          speed,
+          fps,
+          subItem.sourceFps ?? fps,
+        );
 
         // Adjust fade durations for clipped portions â€” if the sub-item was
         // trimmed by composition bounds the fade should be shortened accordingly.
@@ -1294,4 +1317,3 @@ export async function hasAudioContent(composition: CompositionInputProps): Promi
   const segments = extractAudioSegments(composition, composition.fps);
   return segments.some((s) => !s.muted);
 }
-
