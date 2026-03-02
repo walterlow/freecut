@@ -63,7 +63,7 @@ export function getShapePath(
 
   const width = transform.width;
   const height = transform.height;
-  const cornerRadius = shape.cornerRadius ?? 0;
+  const cornerRadius = transform.cornerRadius ?? shape.cornerRadius ?? 0;
 
   // Calculate the bounding box top-left on canvas
   const boxLeft = centerX + transform.x - width / 2;

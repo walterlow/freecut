@@ -77,6 +77,7 @@ function getMaskPath(
       height: transform.height,
       rotation: 0, // Handle rotation separately
       opacity: transform.opacity,
+      cornerRadius: transform.cornerRadius,
     },
     {
       canvasWidth: canvas.width,
@@ -337,12 +338,7 @@ export function getActiveMasksForFrame(
     const itemKeyframes = keyframesMap?.get(mask.mask.id);
     const transform = getAnimatedTransform(mask.mask, itemKeyframes, frame, canvas);
     const prepared = getMaskPath(mask.mask, transform, canvas);
-    activeMasks.push({
-      path: prepared.path,
-      inverted: prepared.inverted,
-      feather: prepared.feather,
-      maskType: prepared.maskType,
-    });
+    activeMasks.push(prepared);
   }
 
   return activeMasks;

@@ -292,13 +292,14 @@ const MaskDefinitions = React.memo<MaskDefinitionsProps>(({ masks, hasPotentialM
       height: animatedResolved.height,
       rotation: animatedResolved.rotation,
       opacity: animatedResolved.opacity,
+      cornerRadius: animatedResolved.cornerRadius,
     };
 
     if (unifiedPreviewTransform) {
       // Unified preview includes both group transforms and properties panel transforms
       resolvedTransform = { ...resolvedTransform, ...unifiedPreviewTransform };
     } else if (isGizmoPreviewActive && previewTransform) {
-      resolvedTransform = { ...previewTransform };
+      resolvedTransform = { ...previewTransform, cornerRadius: previewTransform.cornerRadius ?? resolvedTransform.cornerRadius };
     }
 
     // Generate mask path
