@@ -35,6 +35,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
+  const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
   const setVolume = usePlaybackStore((s) => s.setVolume);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
 
@@ -44,15 +46,23 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
   // Note: totalFrames is the count, so valid frame indices are [0, totalFrames - 1]
   const lastValidFrame = Math.max(0, totalFrames - 1);
   
-  const handleGoToStart = () => setCurrentFrame(0);
-  const handleGoToEnd = () => setCurrentFrame(lastValidFrame);
+  const commitTimelineSeek = (frame: number) => {
+    // Transport seeks should exit hover-scrub state so Player rendering
+    // follows the actual playhead immediately.
+    setPreviewFrame(null);
+    setDisplayedFrame(null);
+    setCurrentFrame(frame);
+  };
+
+  const handleGoToStart = () => commitTimelineSeek(0);
+  const handleGoToEnd = () => commitTimelineSeek(lastValidFrame);
   const handlePreviousFrame = () => {
     const currentFrame = usePlaybackStore.getState().currentFrame;
-    setCurrentFrame(Math.max(0, currentFrame - 1));
+    commitTimelineSeek(Math.max(0, currentFrame - 1));
   };
   const handleNextFrame = () => {
     const currentFrame = usePlaybackStore.getState().currentFrame;
-    setCurrentFrame(Math.min(lastValidFrame, currentFrame + 1));
+    commitTimelineSeek(Math.min(lastValidFrame, currentFrame + 1));
   };
 
   return (
