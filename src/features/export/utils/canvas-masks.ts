@@ -6,12 +6,13 @@
  */
 
 import type { ShapeItem, TimelineTrack } from '@/types/timeline';
+import type { ItemKeyframes } from '@/types/keyframe';
+import type { ResolvedTransform } from '@/types/transform';
 import {
   getShapePath,
   rotatePath,
-  resolveTransform,
-  getSourceDimensions,
 } from '@/features/export/deps/composition-runtime';
+import { getAnimatedTransform } from './canvas-keyframes';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('CanvasMasks');
@@ -23,6 +24,10 @@ interface MaskEntry {
 interface PreparedMask {
   startFrame: number;
   endFrame: number;
+  mask: ShapeItem;
+}
+
+interface ResolvedMaskPath {
   path: Path2D;
   inverted: boolean;
   feather: number;
@@ -50,7 +55,7 @@ export function svgPathToPath2D(svgPath: string): Path2D {
 }
 
 /**
- * Build the static mask path and metadata for a shape.
+ * Build mask path and metadata for a shape at a resolved transform.
  *
  * @param mask - The mask shape item
  * @param canvas - Canvas settings
@@ -58,13 +63,9 @@ export function svgPathToPath2D(svgPath: string): Path2D {
  */
 function getMaskPath(
   mask: ShapeItem,
+  transform: ResolvedTransform,
   canvas: MaskCanvasSettings
-): Omit<PreparedMask, 'startFrame' | 'endFrame'> {
-
-  // Resolve transform for the mask
-  const canvasSettings = { width: canvas.width, height: canvas.height, fps: canvas.fps };
-  const sourceDimensions = getSourceDimensions(mask);
-  const transform = resolveTransform(mask, canvasSettings, sourceDimensions);
+): ResolvedMaskPath {
 
   // Generate SVG path
   let svgPath = getShapePath(
@@ -299,22 +300,21 @@ export function applyMasks(
 }
 
 /**
- * Build a static mask index for the full render.
- * Path2D generation is expensive, so we do it once and reuse each frame.
+ * Build a static mask timing index for the full render.
+ * Path generation is frame-dependent when keyframes are present, so only
+ * timing and mask references are indexed here.
  */
 export function buildMaskFrameIndex(
-  tracks: TimelineTrack[],
-  canvas: MaskCanvasSettings
+  tracks: TimelineTrack[]
 ): MaskFrameIndex {
   const masks = collectMasks(tracks);
   const preparedMasks: PreparedMask[] = [];
 
   for (const { mask } of masks) {
-    const prepared = getMaskPath(mask, canvas);
     preparedMasks.push({
       startFrame: mask.from,
       endFrame: mask.from + mask.durationInFrames,
-      ...prepared,
+      mask,
     });
   }
 
@@ -326,27 +326,22 @@ export function buildMaskFrameIndex(
  */
 export function getActiveMasksForFrame(
   index: MaskFrameIndex,
-  frame: number
-): Array<{
-  path: Path2D;
-  inverted: boolean;
-  feather: number;
-  maskType: 'clip' | 'alpha';
-}> {
-  const activeMasks: Array<{
-    path: Path2D;
-    inverted: boolean;
-    feather: number;
-    maskType: 'clip' | 'alpha';
-  }> = [];
+  frame: number,
+  canvas: MaskCanvasSettings,
+  keyframesMap?: Map<string, ItemKeyframes>
+): ResolvedMaskPath[] {
+  const activeMasks: ResolvedMaskPath[] = [];
 
   for (const mask of index.masks) {
     if (frame < mask.startFrame || frame >= mask.endFrame) continue;
+    const itemKeyframes = keyframesMap?.get(mask.mask.id);
+    const transform = getAnimatedTransform(mask.mask, itemKeyframes, frame, canvas);
+    const prepared = getMaskPath(mask.mask, transform, canvas);
     activeMasks.push({
-      path: mask.path,
-      inverted: mask.inverted,
-      feather: mask.feather,
-      maskType: mask.maskType,
+      path: prepared.path,
+      inverted: prepared.inverted,
+      feather: prepared.feather,
+      maskType: prepared.maskType,
     });
   }
 
@@ -364,15 +359,11 @@ export function getActiveMasksForFrame(
 export function prepareMasks(
   tracks: TimelineTrack[],
   frame: number,
-  canvas: MaskCanvasSettings
-): Array<{
-  path: Path2D;
-  inverted: boolean;
-  feather: number;
-  maskType: 'clip' | 'alpha';
-}> {
-  const index = buildMaskFrameIndex(tracks, canvas);
-  const preparedMasks = getActiveMasksForFrame(index, frame);
+  canvas: MaskCanvasSettings,
+  keyframesMap?: Map<string, ItemKeyframes>
+): ResolvedMaskPath[] {
+  const index = buildMaskFrameIndex(tracks);
+  const preparedMasks = getActiveMasksForFrame(index, frame, canvas, keyframesMap);
 
   if (preparedMasks.length > 0) {
     log.debug('Prepared masks for frame', {
@@ -386,4 +377,3 @@ export function prepareMasks(
 
   return preparedMasks;
 }
-

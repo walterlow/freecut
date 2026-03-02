@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useCallback } from 'react';
+﻿import React, { useMemo, useCallback, useContext } from 'react';
 import { AbsoluteFill, Sequence } from '@/features/composition-runtime/deps/player';
 import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
 import type { CompositionInputProps } from '@/types/export';
@@ -7,7 +7,7 @@ import { Item } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
 import { OptimizedEffectsBasedTransitionsLayer } from '../components/transition-renderer';
-import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+import { useGizmoStore, useMediaLibraryStore, useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/composition-runtime/deps/timeline';
 import { StableVideoSequence, type StableVideoSequenceItem } from '../components/stable-video-sequence';
@@ -15,9 +15,10 @@ import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
 import { getShapePath, rotatePath } from '../utils/shape-path';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
-import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
+import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 import { KeyframesProvider } from '../contexts/keyframes-context';
+import { KeyframesContext } from '../contexts/keyframes-context-core';
 import { CompositionSpaceProvider } from '../contexts/composition-space-context';
 
 /**
@@ -200,6 +201,15 @@ interface MaskDefinitionsProps {
  */
 const MaskDefinitions = React.memo<MaskDefinitionsProps>(({ masks, hasPotentialMasks, currentFrame, canvasWidth, canvasHeight, fps }) => {
   const canvas = { width: canvasWidth, height: canvasHeight, fps };
+  const keyframesContext = useContext(KeyframesContext);
+  const storeKeyframes = useTimelineStore((s) => s.keyframes);
+  const storeKeyframesByItemId = useMemo(() => {
+    const map = new Map<string, (typeof storeKeyframes)[number]>();
+    for (const itemKeyframes of storeKeyframes) {
+      map.set(itemKeyframes.itemId, itemKeyframes);
+    }
+    return map;
+  }, [storeKeyframes]);
 
   // Read gizmo store for real-time mask preview during drag operations
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
@@ -265,17 +275,23 @@ const MaskDefinitions = React.memo<MaskDefinitionsProps>(({ masks, hasPotentialM
     const unifiedPreviewTransform = maskPreview?.transform;
     const isGizmoPreviewActive = activeGizmo?.itemId === mask.id && previewTransform !== null;
 
-    // Get base transform
+    // Resolve transform with keyframes before applying previews.
     const baseResolved = resolveTransform(mask, canvas);
+    const itemKeyframes = keyframesContext?.getItemKeyframes(mask.id) ?? storeKeyframesByItemId.get(mask.id);
+    const relativeFrame = currentFrame - mask.from;
+    const animatedResolved =
+      itemKeyframes && hasKeyframeAnimation(itemKeyframes)
+        ? resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
+        : baseResolved;
 
-    // Priority: Unified preview (group/properties) > Single gizmo preview > Base
+    // Priority: Unified preview (group/properties) > Single gizmo preview > Keyframes > Base
     let resolvedTransform = {
-      x: baseResolved.x,
-      y: baseResolved.y,
-      width: baseResolved.width,
-      height: baseResolved.height,
-      rotation: baseResolved.rotation,
-      opacity: baseResolved.opacity,
+      x: animatedResolved.x,
+      y: animatedResolved.y,
+      width: animatedResolved.width,
+      height: animatedResolved.height,
+      rotation: animatedResolved.rotation,
+      opacity: animatedResolved.opacity,
     };
 
     if (unifiedPreviewTransform) {

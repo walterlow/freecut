@@ -344,7 +344,7 @@ export async function createCompositionRenderer(
   }
 
   const maskSettings: MaskCanvasSettings = canvasSettings;
-  const maskFrameIndex = buildMaskFrameIndex(tracks, maskSettings);
+  const maskFrameIndex = buildMaskFrameIndex(tracks);
 
   // Track which videos successfully use mediabunny (for render decisions)
   const useMediabunny = new Set<string>();
@@ -952,7 +952,7 @@ export async function createCompositionRenderer(
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Prepare masks for this frame
-      const activeMasks = getActiveMasksForFrame(maskFrameIndex, frame);
+      const activeMasks = getActiveMasksForFrame(maskFrameIndex, frame, maskSettings, keyframesMap);
 
       // Find active transitions
       const { activeTransitions, transitionClipIds } = getTransitionFrameState(
