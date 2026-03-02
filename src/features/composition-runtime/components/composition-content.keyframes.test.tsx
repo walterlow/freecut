@@ -69,7 +69,6 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
 });
 
 vi.mock('./item', async () => {
-  const React = await import('react');
   const { useItemKeyframesFromContext } = await import('../contexts/keyframes-context');
 
   return {
@@ -190,4 +189,3 @@ describe('CompositionContent keyframes', () => {
     expect(screen.getByTestId('sub-item-sub-content')).toHaveAttribute('data-keyframe-count', '1');
   });
 });
-
