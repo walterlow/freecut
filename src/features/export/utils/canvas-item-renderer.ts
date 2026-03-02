@@ -33,10 +33,12 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
+import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
+import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -811,17 +813,24 @@ async function renderCompositionItem(
 
   // Create an offscreen canvas at the sub-comp dimensions
   const { canvas: subCanvas, ctx: subCtx } = rctx.canvasPool.acquire();
+  const { canvas: subContentCanvas, ctx: subContentCtx } = rctx.canvasPool.acquire();
 
   try {
-    // Clear the sub canvas
-    subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
-
     // Use the sub-composition's authored dimensions for canvas settings
     // so transforms and positioning inside the sub-composition are correct.
     // The pooled canvas may be at main canvas size, so we resize it to match.
     subCanvas.width = item.compositionWidth;
     subCanvas.height = item.compositionHeight;
+    subContentCanvas.width = item.compositionWidth;
+    subContentCanvas.height = item.compositionHeight;
+    subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
+    subContentCtx.clearRect(0, 0, subContentCanvas.width, subContentCanvas.height);
     const subCanvasSettings: CanvasSettings = {
+      width: item.compositionWidth,
+      height: item.compositionHeight,
+      fps: subData.fps,
+    };
+    const subMaskSettings: MaskCanvasSettings = {
       width: item.compositionWidth,
       height: item.compositionHeight,
       fps: subData.fps,
@@ -830,9 +839,21 @@ async function renderCompositionItem(
     // Use a scoped render context with sub-canvas settings so that
     // rotation centers, clipping, and draw dimensions are relative to the
     // sub-composition canvas, not the main canvas.
-    const subRctx: ItemRenderContext = { ...rctx, canvasSettings: subCanvasSettings };
+    const subRctx: ItemRenderContext = {
+      ...rctx,
+      fps: subData.fps,
+      canvasSettings: subCanvasSettings,
+    };
 
-    // Render each visible item at the local frame using pre-computed data
+    // Render each visible item at the local frame using pre-computed data.
+    // Collect active mask shapes and apply them as a group, matching
+    // main-composition mask behavior.
+    const activeSubMasks: Array<{
+      path: Path2D;
+      inverted: boolean;
+      feather: number;
+      maskType: 'clip' | 'alpha';
+    }> = [];
     let renderedSubItems = 0;
     for (const track of subData.sortedTracks) {
       if (!track.visible) continue;
@@ -840,6 +861,43 @@ async function renderCompositionItem(
       for (const subItem of track.items) {
         // Check if item is visible at this local frame
         if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+          continue;
+        }
+
+        const subItemKeyframes = subData.keyframesMap.get(subItem.id);
+        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
+
+        if (subItem.type === 'shape' && subItem.isMask) {
+          const maskType = subItem.maskType ?? 'clip';
+          const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
+          let svgPath = getShapePath(
+            subItem,
+            {
+              x: subItemTransform.x,
+              y: subItemTransform.y,
+              width: subItemTransform.width,
+              height: subItemTransform.height,
+              rotation: 0,
+              opacity: subItemTransform.opacity,
+            },
+            {
+              canvasWidth: subCanvasSettings.width,
+              canvasHeight: subCanvasSettings.height,
+            }
+          );
+
+          if (subItemTransform.rotation !== 0) {
+            const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
+            const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
+            svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
+          }
+
+          activeSubMasks.push({
+            path: svgPathToPath2D(svgPath),
+            inverted: subItem.maskInvert ?? false,
+            feather,
+            maskType,
+          });
           continue;
         }
 
@@ -856,11 +914,7 @@ async function renderCompositionItem(
           });
         }
 
-        // Get transform for the sub-item using pre-built keyframes map (O(1))
-        const subItemKeyframes = subData.keyframesMap.get(subItem.id);
-        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
-
-        await renderItem(subCtx, subItem, subItemTransform, localFrame, subRctx);
+        await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
         renderedSubItems++;
       }
     }
@@ -873,6 +927,8 @@ async function renderCompositionItem(
         trackCount: subData.sortedTracks.length,
       });
     }
+
+    applyMasks(subCtx, subContentCanvas, activeSubMasks, subMaskSettings);
 
     // Draw the sub-composition result onto the main canvas at the CompositionItem's position
     const drawDimensions = calculateMediaDrawDimensions(
@@ -890,6 +946,7 @@ async function renderCompositionItem(
       drawDimensions.height,
     );
   } finally {
+    rctx.canvasPool.release(subContentCanvas);
     rctx.canvasPool.release(subCanvas);
   }
 }

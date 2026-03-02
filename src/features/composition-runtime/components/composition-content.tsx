@@ -1,6 +1,6 @@
 ﻿import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
-import type { CompositionItem as CompositionItemType, TimelineItem } from '@/types/timeline';
+import type { CompositionItem as CompositionItemType, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useCompositionsStore } from '@/features/composition-runtime/deps/stores';
 import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
@@ -13,6 +13,7 @@ import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/compo
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { CompositionSpaceProvider, useCompositionSpace } from '../contexts/composition-space-context';
 import { Item } from './item';
+import type { MaskInfo } from './item';
 
 interface CompositionContentProps {
   item: CompositionItemType;
@@ -88,6 +89,8 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
   const relativeFrame = frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0);
+  const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
+  const subCompFrame = relativeFrame + sourceOffset;
 
   const containerDims = useMemo(() => {
     const canvas = { width: projectWidth, height: projectHeight, fps: mainFps };
@@ -133,6 +136,50 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     renderScaleX,
     renderScaleY,
   ]);
+
+  const visibleTrackIds = useMemo(
+    () => subComp ? new Set(subComp.tracks.filter((t) => t.visible).map((t) => t.id)) : new Set<string>(),
+    [subComp?.tracks]
+  );
+
+  // Resolve active sub-comp masks for the current local frame.
+  // This allows masks authored inside a pre-comp to clip items when viewed
+  // from the parent timeline.
+  const activeMaskInfos = useMemo<MaskInfo[]>(() => {
+    if (!subComp) return [];
+    const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
+    const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
+
+    return resolvedItems
+      .filter((subItem): subItem is ShapeItem => (
+        subItem.type === 'shape'
+        && subItem.isMask === true
+        && visibleTrackIds.has(subItem.trackId)
+        && subCompFrame >= subItem.from
+        && subCompFrame < subItem.from + subItem.durationInFrames
+      ))
+      .map((maskShape) => {
+        const baseResolved = resolveTransform(maskShape, canvas, getSourceDimensions(maskShape));
+        const maskKeyframes = keyframesById.get(maskShape.id);
+        const maskRelativeFrame = subCompFrame - maskShape.from;
+        const animatedResolved = (maskKeyframes && hasKeyframeAnimation(maskKeyframes))
+          ? resolveAnimatedTransform(baseResolved, maskKeyframes, maskRelativeFrame)
+          : baseResolved;
+
+        return {
+          shape: maskShape,
+          transform: {
+            x: animatedResolved.x,
+            y: animatedResolved.y,
+            width: animatedResolved.width,
+            height: animatedResolved.height,
+            rotation: animatedResolved.rotation,
+            opacity: animatedResolved.opacity,
+            cornerRadius: animatedResolved.cornerRadius,
+          },
+        };
+      });
+  }, [resolvedItems, visibleTrackIds, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
 
   if (!subComp) {
     return (
@@ -181,7 +228,11 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
             {sortedTracks.map((track) => {
               if (!track.visible) return null;
 
-              const trackItems = resolvedItems.filter((i) => i.trackId === track.id);
+              const trackItems = resolvedItems.filter((i) => (
+                i.trackId === track.id
+                // Mask shapes are control items and should not render visually.
+                && !(i.type === 'shape' && i.isMask)
+              ));
 
               return trackItems.map((subItem) => (
                 <Sequence
@@ -189,7 +240,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                   from={subItem.from}
                   durationInFrames={subItem.durationInFrames}
                 >
-                  <Item item={subItem} muted={parentMuted || track.muted} masks={[]} renderDepth={renderDepth} />
+                  <Item item={subItem} muted={parentMuted || track.muted} masks={activeMaskInfos} renderDepth={renderDepth} />
                 </Sequence>
               ));
             })}
@@ -199,4 +250,3 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     </div>
   );
 });
-
