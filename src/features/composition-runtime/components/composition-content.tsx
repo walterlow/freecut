@@ -11,7 +11,6 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { resolveTransform, getSourceDimensions } from '../utils/transform-resolver';
 import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
-import { KeyframesProvider } from '../contexts/keyframes-context';
 import { CompositionSpaceProvider, useCompositionSpace } from '../contexts/composition-space-context';
 import { Item } from './item';
 import type { MaskInfo } from './item';
@@ -225,29 +224,27 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
           fps={subComp.fps}
           durationInFrames={subComp.durationInFrames}
         >
-          <KeyframesProvider keyframes={subComp.keyframes}>
-            <AbsoluteFill>
-              {sortedTracks.map((track) => {
-                if (!track.visible) return null;
+          <AbsoluteFill>
+            {sortedTracks.map((track) => {
+              if (!track.visible) return null;
 
-                const trackItems = resolvedItems.filter((i) => (
-                  i.trackId === track.id
-                  // Mask shapes are control items and should not render visually.
-                  && !(i.type === 'shape' && i.isMask)
-                ));
+              const trackItems = resolvedItems.filter((i) => (
+                i.trackId === track.id
+                // Mask shapes are control items and should not render visually.
+                && !(i.type === 'shape' && i.isMask)
+              ));
 
-                return trackItems.map((subItem) => (
-                  <Sequence
-                    key={subItem.id}
-                    from={subItem.from}
-                    durationInFrames={subItem.durationInFrames}
-                  >
-                    <Item item={subItem} muted={parentMuted || track.muted} masks={activeMaskInfos} renderDepth={renderDepth} />
-                  </Sequence>
-                ));
-              })}
-            </AbsoluteFill>
-          </KeyframesProvider>
+              return trackItems.map((subItem) => (
+                <Sequence
+                  key={subItem.id}
+                  from={subItem.from}
+                  durationInFrames={subItem.durationInFrames}
+                >
+                  <Item item={subItem} muted={parentMuted || track.muted} masks={activeMaskInfos} renderDepth={renderDepth} />
+                </Sequence>
+              ));
+            })}
+          </AbsoluteFill>
         </VideoConfigProvider>
       </CompositionSpaceProvider>
     </div>
