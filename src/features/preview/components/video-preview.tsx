@@ -1,6 +1,6 @@
 ﻿import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
 import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
-import type { PreviewQuality } from '@/shared/state/playback';
+import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
   useTimelineStore,
@@ -654,6 +654,8 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubPrewarmedSourceOrderRef = useRef<string[]>([]);
   const scrubPrewarmedSourceTouchFrameRef = useRef<Map<string, number>>(new Map());
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
+  const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
+  const captureScaleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const scrubDirectionRef = useRef<-1 | 0 | 1>(0);
   const suppressScrubBackgroundPrewarmRef = useRef(false);
   const fallbackToPlayerScrubRef = useRef(false);
@@ -806,6 +808,7 @@ export const VideoPreview = memo(function VideoPreview({
   }, [adaptiveQualityCap, isPlaying]);
 
   const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
+  const setCaptureFrameImageData = usePlaybackStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
 
   // Cache for resolved blob URLs (mediaId -> blobUrl)
@@ -1990,13 +1993,7 @@ export const VideoPreview = memo(function VideoPreview({
     disposeFastScrubRenderer();
   }, [disposeFastScrubRenderer, fastScrubInputProps, renderSize.height, renderSize.width]);
 
-  const captureCurrentFrame = useCallback(async (options?: {
-    width?: number;
-    height?: number;
-    quality?: number;
-    format?: 'image/jpeg' | 'image/png' | 'image/webp';
-    fullResolution?: boolean;
-  }): Promise<string | null> => {
+  const captureCurrentFrame = useCallback(async (options?: CaptureOptions): Promise<string | null> => {
     if (captureInFlightRef.current) {
       return captureInFlightRef.current;
     }
@@ -2050,15 +2047,73 @@ export const VideoPreview = memo(function VideoPreview({
     return task;
   }, [ensureFastScrubRenderer]);
 
+  const captureCurrentFrameImageData = useCallback(async (options?: CaptureOptions): Promise<ImageData | null> => {
+    if (captureImageDataInFlightRef.current) {
+      return captureImageDataInFlightRef.current;
+    }
+
+    const task = (async () => {
+      try {
+        const renderer = await ensureFastScrubRenderer();
+        const offscreen = scrubOffscreenCanvasRef.current;
+        if (!renderer || !offscreen) return null;
+
+        const playback = usePlaybackStore.getState();
+        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        await renderer.renderFrame(targetFrame);
+
+        const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width));
+        const targetHeight = Math.max(2, Math.round(options?.height ?? offscreen.height));
+        const shouldScale = !options?.fullResolution
+          && (targetWidth !== offscreen.width || targetHeight !== offscreen.height);
+
+        if (!shouldScale) {
+          const offscreenCtx = scrubOffscreenCtxRef.current
+            ?? offscreen.getContext('2d', { willReadFrequently: true });
+          if (!offscreenCtx) return null;
+          return offscreenCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+        }
+
+        let scaleCanvas = captureScaleCanvasRef.current;
+        if (!scaleCanvas) {
+          scaleCanvas = document.createElement('canvas');
+          captureScaleCanvasRef.current = scaleCanvas;
+        }
+        if (scaleCanvas.width !== targetWidth || scaleCanvas.height !== targetHeight) {
+          scaleCanvas.width = targetWidth;
+          scaleCanvas.height = targetHeight;
+        }
+        const scaleCtx = scaleCanvas.getContext('2d', { willReadFrequently: true });
+        if (!scaleCtx) return null;
+
+        scaleCtx.clearRect(0, 0, targetWidth, targetHeight);
+        scaleCtx.drawImage(offscreen, 0, 0, targetWidth, targetHeight);
+        return scaleCtx.getImageData(0, 0, targetWidth, targetHeight);
+      } catch (error) {
+        console.warn('[PreviewCapture] Failed to capture raw frame:', error);
+        return null;
+      } finally {
+        captureImageDataInFlightRef.current = null;
+      }
+    })();
+
+    captureImageDataInFlightRef.current = task;
+    return task;
+  }, [ensureFastScrubRenderer]);
+
   // Register frame capture function for scopes and thumbnail workflows.
   useEffect(() => {
     setCaptureFrame(captureCurrentFrame);
+    setCaptureFrameImageData?.(captureCurrentFrameImageData);
     return () => {
       setCaptureFrame(null);
+      setCaptureFrameImageData?.(null);
       setDisplayedFrame(null);
       captureInFlightRef.current = null;
+      captureImageDataInFlightRef.current = null;
+      captureScaleCanvasRef.current = null;
     };
-  }, [captureCurrentFrame, setCaptureFrame, setDisplayedFrame]);
+  }, [captureCurrentFrame, captureCurrentFrameImageData, setCaptureFrame, setCaptureFrameImageData, setDisplayedFrame]);
 
   // Background warm-up so first scrub has lower startup latency.
   useEffect(() => {

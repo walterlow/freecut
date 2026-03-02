@@ -20,6 +20,7 @@ import {
   Flag,
   FlagOff,
   LineChart,
+  Activity,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
@@ -39,10 +40,14 @@ interface TimelineHeaderProps {
   onZoomIn?: () => void;
   onZoomOut?: () => void;
   onZoomToFit?: () => void;
-  /** Whether the keyframe graph panel is open */
-  isGraphPanelOpen?: boolean;
-  /** Callback to toggle the graph panel */
-  onToggleGraphPanel?: () => void;
+  /** Whether the keyframe editor tab is active in the bottom editor panel */
+  isKeyframePanelOpen?: boolean;
+  /** Callback to toggle/open the keyframe editor tab */
+  onToggleKeyframePanel?: () => void;
+  /** Whether the color scopes tab is active in the bottom editor panel */
+  isScopesPanelOpen?: boolean;
+  /** Callback to toggle/open the color scopes tab */
+  onToggleScopesPanel?: () => void;
 }
 
 /**
@@ -59,8 +64,10 @@ export const TimelineHeader = memo(function TimelineHeader({
   onZoomIn,
   onZoomOut,
   onZoomToFit,
-  isGraphPanelOpen,
-  onToggleGraphPanel,
+  isKeyframePanelOpen,
+  onToggleKeyframePanel,
+  isScopesPanelOpen,
+  onToggleScopesPanel,
 }: TimelineHeaderProps) {
   const { zoomLevel, zoomIn, zoomOut, setZoom } = useTimelineZoom();
   const snapEnabled = useTimelineStore((s) => s.snapEnabled);
@@ -438,17 +445,29 @@ export const TimelineHeader = memo(function TimelineHeader({
 
         <Separator orientation="vertical" className="h-6 mx-2" />
 
-        {/* Keyframe Graph Panel Toggle */}
+        {/* Editor Panel Toggles */}
         <Button
           variant="ghost"
           size="icon"
           className={`h-7 w-7 ${
-            isGraphPanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            isKeyframePanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
           }`}
-          onClick={onToggleGraphPanel}
-          data-tooltip={isGraphPanelOpen ? 'Hide Keyframe Graph' : 'Show Keyframe Graph'}
+          onClick={onToggleKeyframePanel}
+          data-tooltip={isKeyframePanelOpen ? 'Hide Keyframe Editor' : 'Show Keyframe Editor'}
         >
           <LineChart className="w-3.5 h-3.5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 ${
+            isScopesPanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+          }`}
+          onClick={onToggleScopesPanel}
+          data-tooltip={isScopesPanelOpen ? 'Hide Color Scopes' : 'Show Color Scopes'}
+        >
+          <Activity className="w-3.5 h-3.5" />
         </Button>
       </div>
 

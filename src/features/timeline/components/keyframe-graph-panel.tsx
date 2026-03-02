@@ -27,6 +27,7 @@ import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import type { AnimatableProperty, KeyframeRef } from '@/types/keyframe';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { ColorScopesView } from '@/shared/components/color-scopes-view';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -46,6 +47,10 @@ const MAX_CONTENT_HEIGHT = 500;
 interface KeyframeGraphPanelProps {
   /** Whether the panel is open */
   isOpen: boolean;
+  /** Active tab in the panel */
+  activeTab: 'keyframes' | 'scopes';
+  /** Select active tab */
+  onSelectTab: (tab: 'keyframes' | 'scopes') => void;
   /** Callback to toggle panel visibility */
   onToggle: () => void;
   /** Callback to close the panel */
@@ -89,6 +94,8 @@ function loadKeyframeEditorSplitRatio(): number {
  */
 export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   isOpen,
+  activeTab,
+  onSelectTab,
   onToggle,
   onClose,
 }: KeyframeGraphPanelProps) {
@@ -333,14 +340,24 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     setSelectedProperty(property);
   }, []);
 
+  const handleSelectTab = useCallback(
+    (tab: 'keyframes' | 'scopes') => {
+      onSelectTab(tab);
+      if (!isOpen) {
+        onToggle();
+      }
+    },
+    [isOpen, onSelectTab, onToggle]
+  );
+
   useHotkeys(
     HOTKEYS.KEYFRAME_EDITOR_GRAPH,
     (event) => {
       event.preventDefault();
       setEditorMode('graph');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen },
-    [isOpen]
+    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
+    [isOpen, activeTab]
   );
 
   useHotkeys(
@@ -349,8 +366,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       event.preventDefault();
       setEditorMode('dopesheet');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen },
-    [isOpen]
+    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
+    [isOpen, activeTab]
   );
 
   useHotkeys(
@@ -359,8 +376,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       event.preventDefault();
       setEditorMode('split');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen },
-    [isOpen]
+    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
+    [isOpen, activeTab]
   );
 
   // Handle scrubbing in graph editor - convert clip-relative frame to absolute frame
@@ -500,7 +517,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   }, [isSplitResizing, editorWidth]);
 
   // Don't show panel if no item with keyframes is selected and panel is not explicitly open
-  const hasContent = !!selectedItemWithKeyframes;
+  const hasContent = activeTab === 'scopes' || !!selectedItemWithKeyframes;
 
   if (!hasContent && !isOpen) {
     return null;
@@ -539,8 +556,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </Button>
           <span className="text-xs font-medium text-muted-foreground">
-            Keyframe Editor
-            {selectedItemWithKeyframes && (
+            {activeTab === 'keyframes' ? 'Keyframe Editor' : 'Color Scopes'}
+            {activeTab === 'keyframes' && selectedItemWithKeyframes && (
               <span className="ml-2 text-foreground">
                 - {selectedItemWithKeyframes.item.label || selectedItemWithKeyframes.item.type}
                 <span className="ml-1 text-muted-foreground">
@@ -552,6 +569,31 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
         </div>
 
         <div className="flex items-center gap-1">
+          <Button
+            variant={activeTab === 'keyframes' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectTab('keyframes');
+            }}
+          >
+            Keyframes
+          </Button>
+          <Button
+            variant={activeTab === 'scopes' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectTab('scopes');
+            }}
+          >
+            Scopes
+          </Button>
+
+          {activeTab === 'keyframes' && (
+            <>
           <Button
             variant={editorMode === 'graph' ? 'secondary' : 'ghost'}
             size="sm"
@@ -585,6 +627,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
           >
             Split
           </Button>
+            </>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -602,7 +646,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       {/* Keyframe editor content */}
       {isOpen && (
         <div ref={containerRef} className="p-2" style={{ height: contentHeight }}>
-          {selectedItemWithKeyframes && containerWidth > 0 ? (
+          {activeTab === 'scopes' ? (
+            <ColorScopesView open embedded />
+          ) : selectedItemWithKeyframes && containerWidth > 0 ? (
             editorMode === 'split' ? (
               <div className="flex h-full min-w-0">
                 <div className="h-full flex-shrink-0 min-w-0" style={{ width: splitLeftWidth }}>
@@ -727,4 +773,3 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     </div>
   );
 });
-
