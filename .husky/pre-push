@@ -1,0 +1,29 @@
+# Pre-push hook: mirrors CI "Quality Checks" (fast subset)
+# Skip with: git push --no-verify
+
+set -e
+
+echo "Running quality checks before push..."
+
+echo "  [1/6] check:boundaries"
+npm run check:boundaries --silent
+
+echo "  [2/6] check:deps-contracts"
+npm run check:deps-contracts --silent
+
+echo "  [3/6] check:legacy-lib-imports"
+npm run check:legacy-lib-imports --silent
+
+echo "  [4/6] check:deps-wrapper-health"
+npm run check:deps-wrapper-health --silent
+
+echo "  [5/6] check:edge-budgets"
+EDGE_REPORT=$(mktemp)
+trap 'rm -f "$EDGE_REPORT"' EXIT
+npm run -s report:feature-edges:json > "$EDGE_REPORT"
+npm run check:edge-budgets --silent -- --input "$EDGE_REPORT"
+
+echo "  [6/6] lint"
+npm run lint --silent
+
+echo "All quality checks passed."
