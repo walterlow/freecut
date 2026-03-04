@@ -233,6 +233,7 @@ function applyRGBSplit(
   const { width, height } = sourceCanvas;
   const { ctx: scratchCtx, imageData: outputData } = getRGBSplitBuffers(width, height);
 
+  scratchCtx.clearRect(0, 0, width, height);
   scratchCtx.drawImage(sourceCanvas, 0, 0);
   const sourceData = scratchCtx.getImageData(0, 0, width, height).data;
 
