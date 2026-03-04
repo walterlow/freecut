@@ -29,6 +29,34 @@ interface EffectCanvasSettings {
   height: number;
 }
 
+interface RGBSplitBuffers {
+  canvas: OffscreenCanvas;
+  ctx: OffscreenCanvasRenderingContext2D;
+  imageData: ImageData;
+}
+
+let rgbSplitBuffers: RGBSplitBuffers | null = null;
+
+function getRGBSplitBuffers(width: number, height: number): RGBSplitBuffers {
+  if (rgbSplitBuffers && rgbSplitBuffers.canvas.width === width && rgbSplitBuffers.canvas.height === height) {
+    return rgbSplitBuffers;
+  }
+
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) {
+    throw new Error('Failed to create RGB split offscreen context');
+  }
+
+  rgbSplitBuffers = {
+    canvas,
+    ctx,
+    imageData: new ImageData(width, height),
+  };
+
+  return rgbSplitBuffers;
+}
+
 // ============================================================================
 // CSS Filter Effects
 // ============================================================================
@@ -181,40 +209,40 @@ function applyRGBSplit(
   }
 
   const { width, height } = sourceCanvas;
+  const { ctx: scratchCtx, imageData: outputData } = getRGBSplitBuffers(width, height);
 
-  // Create temporary canvases for each channel
-  const redCanvas = new OffscreenCanvas(width, height);
-  const greenCanvas = new OffscreenCanvas(width, height);
-  const blueCanvas = new OffscreenCanvas(width, height);
+  scratchCtx.clearRect(0, 0, width, height);
+  scratchCtx.drawImage(sourceCanvas, 0, 0);
+  const sourceData = scratchCtx.getImageData(0, 0, width, height).data;
 
-  const redCtx = redCanvas.getContext('2d', { willReadFrequently: true })!;
-  const greenCtx = greenCanvas.getContext('2d', { willReadFrequently: true })!;
-  const blueCtx = blueCanvas.getContext('2d', { willReadFrequently: true })!;
+  const outputPixels = outputData.data;
+  const xShift = Math.round(offset);
 
-  // Draw source to each with offset
-  // Red channel - shift right
-  redCtx.drawImage(sourceCanvas, offset, 0);
-  // Green channel - centered
-  greenCtx.drawImage(sourceCanvas, 0, 0);
-  // Blue channel - shift left
-  blueCtx.drawImage(sourceCanvas, -offset, 0);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * width;
 
-  // Get image data from each
-  const redData = redCtx.getImageData(0, 0, width, height);
-  const greenData = greenCtx.getImageData(0, 0, width, height);
-  const blueData = blueCtx.getImageData(0, 0, width, height);
+    for (let x = 0; x < width; x++) {
+      const pixelIndex = (rowStart + x) * 4;
 
-  // Combine channels
-  const outputData = ctx.createImageData(width, height);
-  for (let i = 0; i < outputData.data.length; i += 4) {
-    outputData.data[i] = redData.data[i]!;           // Red from red canvas
-    outputData.data[i + 1] = greenData.data[i + 1]!; // Green from green canvas
-    outputData.data[i + 2] = blueData.data[i + 2]!;  // Blue from blue canvas
-    outputData.data[i + 3] = Math.max(              // Alpha is max of all
-      redData.data[i + 3]!,
-      greenData.data[i + 3]!,
-      blueData.data[i + 3]!
-    );
+      const redX = x - xShift;
+      const blueX = x + xShift;
+
+      const redIdx = redX >= 0 && redX < width ? (rowStart + redX) * 4 : -1;
+      const blueIdx = blueX >= 0 && blueX < width ? (rowStart + blueX) * 4 : -1;
+
+      const red = redIdx === -1 ? 0 : sourceData[redIdx]!;
+      const green = sourceData[pixelIndex + 1]!;
+      const blue = blueIdx === -1 ? 0 : sourceData[blueIdx + 2]!;
+
+      const alphaRed = redIdx === -1 ? 0 : sourceData[redIdx + 3]!;
+      const alphaGreen = sourceData[pixelIndex + 3]!;
+      const alphaBlue = blueIdx === -1 ? 0 : sourceData[blueIdx + 3]!;
+
+      outputPixels[pixelIndex] = red;
+      outputPixels[pixelIndex + 1] = green;
+      outputPixels[pixelIndex + 2] = blue;
+      outputPixels[pixelIndex + 3] = Math.max(alphaRed, alphaGreen, alphaBlue);
+    }
   }
 
   ctx.putImageData(outputData, 0, 0);
