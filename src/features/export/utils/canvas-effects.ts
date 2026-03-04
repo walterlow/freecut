@@ -178,6 +178,28 @@ function getCubeLutEffects(effects: ItemEffect[]): LUTEffect[] {
     .map((e) => e.effect as LUTEffect);
 }
 
+function sampleInterpolatedChannel(
+  data: Uint8ClampedArray,
+  rowStart: number,
+  width: number,
+  sampleX: number,
+  channelOffset: 0 | 1 | 2 | 3
+): number {
+  if (sampleX < 0 || sampleX > width - 1) return 0;
+
+  const leftX = Math.floor(sampleX);
+  const rightX = Math.min(leftX + 1, width - 1);
+  const t = sampleX - leftX;
+
+  const leftValue = data[(rowStart + leftX) * 4 + channelOffset]!;
+  if (t === 0 || rightX === leftX) {
+    return leftValue;
+  }
+
+  const rightValue = data[(rowStart + rightX) * 4 + channelOffset]!;
+  return Math.round(leftValue * (1 - t) + rightValue * t);
+}
+
 /**
  * Apply RGB split effect to canvas content.
  * Creates chromatic aberration by offsetting color channels.
@@ -211,12 +233,10 @@ function applyRGBSplit(
   const { width, height } = sourceCanvas;
   const { ctx: scratchCtx, imageData: outputData } = getRGBSplitBuffers(width, height);
 
-  scratchCtx.clearRect(0, 0, width, height);
   scratchCtx.drawImage(sourceCanvas, 0, 0);
   const sourceData = scratchCtx.getImageData(0, 0, width, height).data;
 
   const outputPixels = outputData.data;
-  const xShift = Math.round(offset);
 
   for (let y = 0; y < height; y++) {
     const rowStart = y * width;
@@ -224,19 +244,16 @@ function applyRGBSplit(
     for (let x = 0; x < width; x++) {
       const pixelIndex = (rowStart + x) * 4;
 
-      const redX = x - xShift;
-      const blueX = x + xShift;
+      const redSampleX = x - offset;
+      const blueSampleX = x + offset;
 
-      const redIdx = redX >= 0 && redX < width ? (rowStart + redX) * 4 : -1;
-      const blueIdx = blueX >= 0 && blueX < width ? (rowStart + blueX) * 4 : -1;
-
-      const red = redIdx === -1 ? 0 : sourceData[redIdx]!;
+      const red = sampleInterpolatedChannel(sourceData, rowStart, width, redSampleX, 0);
       const green = sourceData[pixelIndex + 1]!;
-      const blue = blueIdx === -1 ? 0 : sourceData[blueIdx + 2]!;
+      const blue = sampleInterpolatedChannel(sourceData, rowStart, width, blueSampleX, 2);
 
-      const alphaRed = redIdx === -1 ? 0 : sourceData[redIdx + 3]!;
+      const alphaRed = sampleInterpolatedChannel(sourceData, rowStart, width, redSampleX, 3);
       const alphaGreen = sourceData[pixelIndex + 3]!;
-      const alphaBlue = blueIdx === -1 ? 0 : sourceData[blueIdx + 3]!;
+      const alphaBlue = sampleInterpolatedChannel(sourceData, rowStart, width, blueSampleX, 3);
 
       outputPixels[pixelIndex] = red;
       outputPixels[pixelIndex + 1] = green;
