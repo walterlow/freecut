@@ -72,7 +72,7 @@ Pixels is a browser-based multi-track video editor. No installation, no uploads 
 **Prerequisites:** Node.js 18+
 
 ```bash
-git clone https://github.com/walterlow/freecut.git
+git clone https://github.com/creativeplatform/pixels.git
 cd freecut
 npm install
 npm run dev

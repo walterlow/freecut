@@ -254,7 +254,7 @@ function ProjectsIndex() {
                 asChild
               >
                 <a
-                  href="https://github.com/walterlow/freecut"
+                  href="https://github.com/creativeplatform/pixels"
                   target="_blank"
                   rel="noopener noreferrer"
                   data-tooltip="View on GitHub"
