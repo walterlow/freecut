@@ -242,11 +242,11 @@ function ProjectsIndex() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <div className="panel-header border-b border-border">
-          <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
-            <Link to="/">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-2">
+            <Link to="/" className="min-w-0 flex-shrink">
               <PixelsLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <Button
                 variant="outline"
                 size="icon"
@@ -259,18 +259,31 @@ function ProjectsIndex() {
                   rel="noopener noreferrer"
                   data-tooltip="View on GitHub"
                   data-tooltip-side="left"
+                  aria-label="View on GitHub"
                 >
                   <Github className="w-5 h-5" />
                 </a>
               </Button>
-              <Button variant="outline" size="lg" className="gap-2" onClick={handleImportClick}>
-                <Upload className="w-4 h-4" />
-                Import Project
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-2 h-10 w-10 sm:w-auto sm:h-10"
+                onClick={handleImportClick}
+                aria-label="Import Project"
+                title="Import Project"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden sm:inline">Import Project</span>
               </Button>
               <Link to="/projects/new">
-                <Button size="lg" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  New Project
+                <Button
+                  size="lg"
+                  className="gap-2 h-10 w-10 sm:w-auto sm:h-10"
+                  aria-label="New Project"
+                  title="New Project"
+                >
+                  <Plus className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">New Project</span>
                 </Button>
               </Link>
             </div>
@@ -288,7 +301,7 @@ function ProjectsIndex() {
 
         {/* Error state */}
         {error && (
-          <div className="max-w-[1920px] mx-auto px-6 py-4">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-4">
             <div className="panel-bg border border-destructive/50 rounded-lg p-4 text-destructive">
               <p className="font-medium">Error loading projects</p>
               <p className="text-sm mt-1">{error}</p>
@@ -298,7 +311,7 @@ function ProjectsIndex() {
 
         {/* Loading state */}
         {isLoading ? (
-          <div className="max-w-[1920px] mx-auto px-6 py-16 flex items-center justify-center">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-16 flex items-center justify-center">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
               <p className="text-muted-foreground">Loading projects...</p>
@@ -306,7 +319,7 @@ function ProjectsIndex() {
           </div>
         ) : (
           /* Projects List */
-          <div className="max-w-[1920px] mx-auto px-6 py-8">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
             <ProjectList onEditProject={handleEditProject} />
           </div>
         )}
@@ -314,7 +327,7 @@ function ProjectsIndex() {
 
       {/* Edit Project Dialog */}
       <Dialog open={!!editingProject} onOpenChange={(open) => !open && setEditingProject(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto mx-4 max-w-[calc(100vw-2rem)] sm:mx-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Project Settings</DialogTitle>
           </DialogHeader>
@@ -340,7 +353,7 @@ function ProjectsIndex() {
       <Dialog open={importDialogOpen} onOpenChange={(open) => {
         if (!open) handleCloseImportDialog();
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 max-w-[calc(100vw-2rem)] sm:mx-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {importError ? 'Import Failed' : isImporting ? 'Importing Project' : 'Import Project'}
