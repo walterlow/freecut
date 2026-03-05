@@ -1,6 +1,6 @@
 # Pixels
 
-**[freecut.net](http://freecut.net/)**
+**[Creative Pixels](https://create.creativeplatform.xyz)**
 
 **Edit videos. In your browser.**
 
