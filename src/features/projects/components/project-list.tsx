@@ -87,9 +87,9 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
     <div className="space-y-6">
       {/* Search and Filters Bar */}
       {!isEmpty && (
-        <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
+        <div className="space-y-3">
+          {/* Search - full width on mobile */}
+          <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
@@ -110,79 +110,82 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             )}
           </div>
 
-          {/* Resolution Filter */}
-          <Select
-            value={filterResolution || 'all'}
-            onValueChange={(value) => setFilterResolution(value === 'all' ? undefined : value)}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Resolutions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Resolutions</SelectItem>
-              {uniqueResolutions.map((res) => (
-                <SelectItem key={res} value={res}>
-                  {res}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Filters row - wraps on small screens */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+            {/* Resolution Filter */}
+            <Select
+              value={filterResolution || 'all'}
+              onValueChange={(value) => setFilterResolution(value === 'all' ? undefined : value)}
+            >
+              <SelectTrigger className="w-full min-w-[120px] sm:w-[180px]">
+                <SelectValue placeholder="All Resolutions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Resolutions</SelectItem>
+                {uniqueResolutions.map((res) => (
+                  <SelectItem key={res} value={res}>
+                    {res}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          {/* FPS Filter */}
-          <Select
-            value={filterFps?.toString() || 'all'}
-            onValueChange={(value) => setFilterFps(value === 'all' ? undefined : Number(value))}
-          >
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All FPS" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All FPS</SelectItem>
-              {uniqueFps.map((fps) => (
-                <SelectItem key={fps} value={fps.toString()}>
-                  {fps} fps
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* FPS Filter */}
+            <Select
+              value={filterFps?.toString() || 'all'}
+              onValueChange={(value) => setFilterFps(value === 'all' ? undefined : Number(value))}
+            >
+              <SelectTrigger className="w-full min-w-[100px] sm:w-[140px]">
+                <SelectValue placeholder="All FPS" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All FPS</SelectItem>
+                {uniqueFps.map((fps) => (
+                  <SelectItem key={fps} value={fps.toString()}>
+                    {fps} fps
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          {/* Sort Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <ArrowUpDown className="w-4 h-4" />
+            {/* Sort Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0">
+                  <ArrowUpDown className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setSortField('name')}>
+                  Name {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortField('updatedAt')}>
+                  Last Modified{' '}
+                  {sortField === 'updatedAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortField('createdAt')}>
+                  Date Created {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortField('resolution')}>
+                  Resolution {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={toggleSortDirection}>
+                  {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Clear Filters */}
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={handleClearFilters} className="shrink-0">
+                <X className="w-4 h-4 mr-2" />
+                Clear Filters
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setSortField('name')}>
-                Name {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortField('updatedAt')}>
-                Last Modified{' '}
-                {sortField === 'updatedAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortField('createdAt')}>
-                Date Created {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortField('resolution')}>
-                Resolution {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={toggleSortDirection}>
-                {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Clear Filters */}
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-              <X className="w-4 h-4 mr-2" />
-              Clear Filters
-            </Button>
-          )}
+            )}
+          </div>
         </div>
       )}
 
