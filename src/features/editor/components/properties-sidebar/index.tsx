@@ -2,6 +2,7 @@ import { Activity, memo, useCallback, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
 import { useEditorStore } from '@/shared/state/editor';
+import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { useSelectionStore } from '@/shared/state/selection';
 import { CanvasPanel } from './canvas-panel';
 import { ClipPanel } from './clip-panel';
@@ -17,9 +18,16 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   // Use granular selectors - Zustand v5 best practice
   const rightSidebarOpen = useEditorStore((s) => s.rightSidebarOpen);
   const toggleRightSidebar = useEditorStore((s) => s.toggleRightSidebar);
+  const setLeftSidebarOpen = useEditorStore((s) => s.setLeftSidebarOpen);
   const rightSidebarWidth = useEditorStore((s) => s.rightSidebarWidth);
   const setRightSidebarWidth = useEditorStore((s) => s.setRightSidebarWidth);
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
+
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const handleOpenRightSidebar = useCallback(() => {
+    if (isMobile) setLeftSidebarOpen(false);
+    toggleRightSidebar();
+  }, [isMobile, setLeftSidebarOpen, toggleRightSidebar]);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
 
@@ -68,16 +76,25 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
 
   return (
     <>
-      {/* Right Sidebar */}
+      {/* Right Sidebar: overlay on mobile (fixed), inline on md+ */}
       <div
-        className={`panel-bg border-l border-border flex-shrink-0 relative ${
-          rightSidebarOpen ? '' : 'w-0'
+        className={`panel-bg border-l border-border flex-shrink-0 transition-[width] ${
+          rightSidebarOpen
+            ? 'fixed right-0 top-14 bottom-0 z-10 w-[min(100vw-3rem,320px)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pr-0 md:pb-0 md:relative md:right-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-right-sidebar-width)]'
+            : 'w-0'
         }`}
-        style={rightSidebarOpen ? { width: rightSidebarWidth, transition: isResizingRef.current ? 'none' : 'width 200ms' } : { transition: 'width 200ms' }}
+        style={
+          rightSidebarOpen
+            ? {
+                ['--editor-right-sidebar-width' as string]: `${rightSidebarWidth}px`,
+                transition: isResizingRef.current ? 'none' : 'width 200ms',
+              }
+            : { transition: 'width 200ms' }
+        }
       >
         {/* Use Activity for React 19 performance optimization */}
         <Activity mode={rightSidebarOpen ? 'visible' : 'hidden'}>
-          <div className="h-full flex flex-col" style={{ width: rightSidebarWidth }}>
+          <div className="h-full flex flex-col w-full md:w-[var(--editor-right-sidebar-width)]">
             {/* Sidebar Header */}
             <div className="h-11 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
               <h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-2">
@@ -87,7 +104,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-7 w-7 min-h-11 min-w-11 md:min-h-0 md:min-w-0"
                 onClick={toggleRightSidebar}
               >
                 <ChevronRight className="w-4 h-4" />
@@ -108,11 +125,11 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
             </div>
           </div>
         </Activity>
-        {/* Resize Handle */}
+        {/* Resize Handle - desktop only */}
         {rightSidebarOpen && (
           <div
             onMouseDown={handleResizeStart}
-            className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10"
+            className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10 hidden md:block"
           />
         )}
       </div>
@@ -120,8 +137,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       {/* Right Sidebar Toggle */}
       {!rightSidebarOpen && (
         <button
-          onClick={toggleRightSidebar}
-          className="absolute right-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
+          onClick={handleOpenRightSidebar}
+          className="absolute right-0 top-3 z-10 w-6 h-20 min-h-11 min-w-11 md:min-h-0 md:min-w-0 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
           data-tooltip="Show Properties Panel"
           data-tooltip-side="left"
         >

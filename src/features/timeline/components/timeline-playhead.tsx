@@ -243,7 +243,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
         <>
           {/* Invisible larger hit area for diamond */}
           <div
-            className="absolute"
+            className="absolute touch-none"
             style={{
               top: '-12px',
               left: '50%',

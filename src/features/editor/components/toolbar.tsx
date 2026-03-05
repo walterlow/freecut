@@ -59,13 +59,13 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
   };
 
   return (
-    <div className="panel-header h-14 border-b border-border flex items-center px-4 gap-3 flex-shrink-0">
+    <div className="panel-header h-14 min-h-14 border-b border-border flex items-center px-3 md:px-4 gap-2 md:gap-3 flex-shrink-0 flex-wrap pt-[env(safe-area-inset-top)]">
       {/* Project Info */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-9 w-9 min-h-11 min-w-11 md:min-h-0 md:min-w-0 flex-shrink-0"
           onClick={handleBackClick}
           data-tooltip="Back to Projects"
           data-tooltip-side="right"
@@ -82,19 +82,19 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
           projectName={project?.name}
         />
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="h-6 flex-shrink-0 hidden sm:block" />
 
-        <div className="flex flex-col -space-y-0.5">
-          <h1 className="text-sm font-medium leading-none">
+        <div className="flex flex-col -space-y-0.5 min-w-0">
+          <h1 className="text-sm font-medium leading-none truncate">
             {project?.name || 'Untitled Project'}
           </h1>
-          <span className="text-xs text-muted-foreground font-mono">
+          <span className="text-xs text-muted-foreground font-mono hidden sm:block">
             {project?.width}×{project?.height} • {project?.fps}fps
           </span>
         </div>
       </div>
 
-      <div className="flex-1" />
+      <div className="flex-1 min-w-2" />
 
       {/* Shortcuts Dialog */}
       <ShortcutsDialog
@@ -109,11 +109,11 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
       />
 
       {/* Save & Export */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           onClick={() => setShowSettingsDialog(true)}
           data-tooltip="Settings"
           data-tooltip-side="left"
@@ -124,7 +124,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           onClick={() => setShowShortcutsDialog(true)}
           data-tooltip="Keyboard Shortcuts"
           data-tooltip-side="left"
@@ -135,7 +135,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-8 w-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           asChild
         >
           <a
@@ -149,7 +149,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
             <Github className="w-4 h-4" />
           </a>
         </Button>
-        <Button variant="outline" size="sm" className="gap-2" onClick={handleSave} aria-label="Save project">
+        <Button variant="outline" size="sm" className="gap-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0" onClick={handleSave} aria-label="Save project">
           <div className="relative">
             <Save className="w-4 h-4" />
             {isDirty && (
@@ -161,7 +161,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-2 glow-primary-sm">
+            <Button size="sm" className="gap-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0 glow-primary-sm">
               <Download className="w-4 h-4" />
               Export
               <ChevronDown className="w-3 h-3" />

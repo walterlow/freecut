@@ -10,6 +10,7 @@ import {
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useEditorStore } from '@/shared/state/editor';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 interface PreviewAreaProps {
   project: {
@@ -217,12 +218,16 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
   const isSplit = !!sourcePreviewMediaId;
 
+  const handleTapPlayPause = useCallback(() => {
+    usePlaybackStore.getState().togglePlayPause();
+  }, []);
+
   return (
     <div ref={splitContainerRef} className="flex-1 flex min-h-0 min-w-0 relative">
       {/* Source Monitor - left (only when split) */}
       {sourcePreviewMediaId && (
         <>
-          <div className="flex flex-col min-w-0" style={{ width: `${splitPercent}%` }}>
+          <div className="flex flex-col min-w-0 shrink-[0]" style={{ width: `${splitPercent}%`, minWidth: 120 }}>
             <SourceMonitor
               key={sourcePreviewMediaId}
               mediaId={sourcePreviewMediaId}
@@ -252,7 +257,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
       {/* Program Monitor — always in the same tree position */}
       <div
-        className={`flex flex-col min-w-0 min-h-0 ${isSplit ? '' : 'flex-1'}`}
+        className={`flex flex-col min-w-0 min-h-0 ${isSplit ? 'min-w-[120px]' : 'flex-1'}`}
         style={isSplit ? { width: `${100 - splitPercent}%` } : undefined}
       >
         {/* Header — only shown in split mode */}
@@ -270,10 +275,17 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               containerSize={containerSize}
               suspendOverlay={isSplitDragging}
             />
+            {/* Tap overlay to toggle play/pause (mobile-friendly) */}
+            <div
+              className="absolute inset-0 z-10 cursor-pointer"
+              onClick={handleTapPlayPause}
+              aria-label="Play or Pause"
+              role="button"
+            />
           </div>
 
           {/* Playback Controls */}
-          <div className="h-16 border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden">
+          <div className="min-h-16 border-t border-border panel-header flex items-center flex-wrap px-3 py-2 flex-shrink-0 gap-2 md:gap-3 overflow-hidden">
             <div className="flex-shrink-0">
               <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
             </div>

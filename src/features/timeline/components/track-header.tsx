@@ -127,10 +127,10 @@ export const TrackHeader = memo(function TrackHeader({
           </div>
 
           {/* Right column: Name row + Icons row, centered as a block */}
-          <div className="flex items-center justify-center min-w-0 flex-1">
-          <div className="flex flex-col items-start">
+          <div className="flex items-center justify-center min-w-0 flex-1 overflow-hidden">
+          <div className="flex flex-col items-start min-w-0 w-full">
             {/* Row 1: Name */}
-            <span className="text-sm font-bold font-mono truncate">
+            <span className="text-sm font-bold font-mono truncate block w-full max-w-full">
               {track.name}
             </span>
 

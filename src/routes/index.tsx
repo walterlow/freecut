@@ -323,7 +323,7 @@ function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-8">
         <div className="mx-auto max-w-5xl text-center text-sm text-muted-foreground">
-          MIT License © {new Date().getFullYear()} Pixels
+          Creative Platform Inc. © {new Date().getFullYear()} Pixels
         </div>
       </footer>
     </div>

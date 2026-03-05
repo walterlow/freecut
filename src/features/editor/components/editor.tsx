@@ -23,6 +23,7 @@ import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
@@ -100,6 +101,27 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       preloadBundleExportDialog();
     });
     return () => cancelIdleCallback(id);
+  }, []);
+
+  // Mobile: default both sidebars closed so the video is visible on first load
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      const { setLeftSidebarOpen, setRightSidebarOpen } = useEditorStore.getState();
+      setLeftSidebarOpen(false);
+      setRightSidebarOpen(false);
+    }
+  }, []);
+
+  // Mobile: when resizing to mobile with both sidebars open, close one so video stays visible
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 767px)');
+    const handler = () => {
+      if (!mql.matches) return;
+      const { leftSidebarOpen, rightSidebarOpen, setRightSidebarOpen } = useEditorStore.getState();
+      if (leftSidebarOpen && rightSidebarOpen) setRightSidebarOpen(false);
+    };
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
   }, []);
 
   // Initialize timeline from project data (or create default tracks for new projects)
@@ -268,10 +290,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         />
 
         {/* Resizable Layout: Main Content + Timeline */}
-        <ResizablePanelGroup direction="vertical" className="flex-1">
+        <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
           {/* Main Content Area */}
           <ResizablePanel defaultSize={70} minSize={50} maxSize={85}>
-            <div className="h-full flex overflow-hidden relative">
+            <div className="h-full flex overflow-hidden relative min-w-0">
               {/* Left Sidebar - Media Library */}
               <ErrorBoundary level="feature">
                 <MediaSidebar />
@@ -289,7 +311,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             </div>
           </ResizablePanel>
 
-          <ResizableHandle withHandle />
+          <ResizableHandle withHandle className="hidden md:flex" />
 
           {/* Bottom - Timeline */}
           <ResizablePanel

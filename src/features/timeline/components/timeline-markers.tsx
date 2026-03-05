@@ -828,7 +828,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   return (
     <div
       ref={containerRef}
-      className="h-11 border-b border-border/80 relative"
+      className="h-11 border-b border-border/80 relative touch-none"
       onMouseDown={handleMouseDown}
       style={{
         background: 'linear-gradient(to bottom, oklch(0.22 0 0 / 0.30), oklch(0.22 0 0 / 0.20), oklch(0.22 0 0 / 0.10))',
@@ -880,7 +880,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       {/* Draggable in/out strip */}
       {inPoint !== null && outPoint !== null && (
         <div
-          className="absolute cursor-move"
+          className="absolute cursor-move touch-none"
           onMouseDown={handleRangeMouseDown}
           style={{
             left: `${timeToPixels(inPoint / fps)}px`,

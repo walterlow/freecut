@@ -482,7 +482,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   return (
 
-      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden">
+      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]">
         {/* Timeline Header */}
         <TimelineHeader
           onZoomChange={zoomHandlers?.handleZoomChange}
@@ -501,7 +501,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       {/* Timeline Content */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Track Headers Sidebar */}
-        <div className="w-48 border-r border-border panel-bg flex-shrink-0 flex flex-col overflow-x-hidden">
+        <div className="w-24 md:w-48 border-r border-border panel-bg flex-shrink-0 flex flex-col overflow-x-hidden">
           {/* Tracks label with controls */}
           <div className="h-11 flex items-center justify-between px-3 border-b border-border bg-secondary/20 flex-shrink-0">
             <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
@@ -512,7 +512,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
                 onClick={handleAddTrack}
                 title={activeTrackId
                   ? "Add track (inserts above selected)"
@@ -524,7 +524,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-6 w-6 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
                 onClick={handleRemoveTracks}
                 disabled={tracks.length === 0 || (!activeTrackId && selectedTrackIds.length === 0)}
                 title={

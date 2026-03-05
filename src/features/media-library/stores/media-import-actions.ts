@@ -1,4 +1,4 @@
-﻿import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
+import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
@@ -18,7 +18,7 @@ type Get = () => MediaLibraryState & MediaLibraryActions;
 export function createImportActions(
   set: Set,
   get: Get
-): Pick<MediaLibraryActions, 'importMedia' | 'importHandles'> {
+): Pick<MediaLibraryActions, 'importMedia' | 'importHandles' | 'importFiles'> {
   return {
     // Import media using file picker (instant, no copy - local-first)
     // Now runs processing in worker to avoid blocking UI
@@ -350,6 +350,117 @@ export function createImportActions(
         const codecList = [
           ...new Set(unsupportedCodecFiles.map((f) => f.audioCodec)),
         ].join(', ');
+        get().showNotification({
+          type: 'warning',
+          message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
+        });
+      }
+
+      return results;
+    },
+
+    // Import media from File objects (mobile fallback when showOpenFilePicker is unavailable)
+    importFiles: async (files: File[]) => {
+      const { currentProjectId } = get();
+      if (!currentProjectId) {
+        set({ error: 'No project selected' });
+        return [];
+      }
+
+      const importTasks = Array.from(files).map((file) => ({
+        file,
+        tempId: crypto.randomUUID(),
+      }));
+
+      for (const { file, tempId } of importTasks) {
+        const tempItem: MediaMetadata = {
+          id: tempId,
+          storageType: 'opfs',
+          fileName: file.name,
+          fileSize: file.size,
+          fileLastModified: file.lastModified,
+          mimeType: getMimeType(file),
+          duration: 0,
+          width: 0,
+          height: 0,
+          fps: 30,
+          codec: 'importing...',
+          bitrate: 0,
+          tags: [],
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        set((state) => ({
+          mediaItems: [tempItem, ...state.mediaItems],
+          importingIds: [...state.importingIds, tempId],
+          error: null,
+        }));
+      }
+
+      const results: MediaMetadata[] = [];
+      const duplicateNames: string[] = [];
+      const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+
+      const importResults = await Promise.allSettled(
+        importTasks.map(async ({ file, tempId }) => {
+          const metadata = await mediaLibraryService.importMediaWithFile(
+            file,
+            currentProjectId
+          );
+          return { metadata, tempId, file };
+        })
+      );
+
+      for (let i = 0; i < importResults.length; i++) {
+        const result = importResults[i];
+        const task = importTasks[i];
+        if (!task) continue;
+
+        if (result.status === 'fulfilled') {
+          const { metadata, tempId, file } = result.value;
+          if (metadata.isDuplicate) {
+            set((state) => ({
+              mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
+              importingIds: state.importingIds.filter((id) => id !== tempId),
+            }));
+            duplicateNames.push(file.name);
+          } else {
+            set((state) => ({
+              mediaItems: state.mediaItems.map((item) =>
+                item.id === tempId ? metadata : item
+              ),
+              importingIds: state.importingIds.filter((id) => id !== tempId),
+            }));
+            if (metadata.mimeType.startsWith('video/')) {
+              proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+            }
+            results.push(metadata);
+            if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+              unsupportedCodecFiles.push({
+                fileName: file.name,
+                audioCodec: metadata.audioCodec,
+              });
+            }
+          }
+        } else {
+          set((state) => ({
+            mediaItems: state.mediaItems.filter((item) => item.id !== task.tempId),
+            importingIds: state.importingIds.filter((id) => id !== task.tempId),
+          }));
+          logger.error(`[importFiles] Failed to import ${task.file.name}:`, result.reason);
+        }
+      }
+
+      if (duplicateNames.length > 0) {
+        const message =
+          duplicateNames.length === 1
+            ? `"${duplicateNames[0]}" already exists in library`
+            : `${duplicateNames.length} files already exist in library`;
+        get().showNotification({ type: 'info', message });
+      }
+
+      if (unsupportedCodecFiles.length > 0) {
+        const codecList = [...new Set(unsupportedCodecFiles.map((f) => f.audioCodec))].join(', ');
         get().showNotification({
           type: 'warning',
           message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,

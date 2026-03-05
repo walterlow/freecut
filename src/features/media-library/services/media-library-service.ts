@@ -1,4 +1,4 @@
-﻿import type { MediaMetadata, ThumbnailData } from '@/types/storage';
+import type { MediaMetadata, ThumbnailData } from '@/types/storage';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibraryService');
@@ -14,6 +14,7 @@ import {
   // v3: Content-addressable storage
   incrementContentRef,
   decrementContentRef,
+  ensureContentRecordAndIncrement,
   deleteContent,
   // v3: Project-media associations
   associateMediaWithProject,
@@ -203,6 +204,96 @@ class MediaLibraryService {
     await associateMediaWithProject(projectId, id);
 
     // Pre-extract GIF frames in background
+    if (resolvedMimeType === 'image/gif') {
+      const blobUrl = URL.createObjectURL(file);
+      void gifFrameCache.getGifFrames(id, blobUrl)
+        .catch((err) => logger.warn('Failed to pre-extract GIF frames:', err))
+        .finally(() => URL.revokeObjectURL(blobUrl));
+    }
+
+    return {
+      ...mediaMetadata,
+      hasUnsupportedCodec: codecCheck.unsupported,
+    };
+  }
+
+  /**
+   * Import a single File (e.g. from input[type=file] on mobile where showOpenFilePicker is unavailable).
+   * Copies file to OPFS and creates media metadata. Use for mobile/safari fallback.
+   */
+  async importMediaWithFile(
+    file: File,
+    projectId: string
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    const validationResult = validateMediaFile(file);
+    if (!validationResult.valid) {
+      throw new Error(validationResult.error);
+    }
+
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existing = projectMedia.find(
+      (m) => m.fileName === file.name && m.fileSize === file.size
+    );
+    if (existing) {
+      return { ...existing, isDuplicate: true };
+    }
+
+    const { hash, opfsPath } = await opfsService.processUpload(file);
+    const resolvedMimeType = getMimeType(file);
+    await ensureContentRecordAndIncrement(hash, file.size, resolvedMimeType);
+
+    const id = crypto.randomUUID();
+    const { metadata, thumbnail } = await mediaProcessorService.processMedia(
+      file,
+      resolvedMimeType,
+      { thumbnailTimestamp: 1 }
+    );
+
+    let thumbnailId: string | undefined;
+    if (thumbnail) {
+      thumbnailId = crypto.randomUUID();
+      const thumbnailData: ThumbnailData = {
+        id: thumbnailId,
+        mediaId: id,
+        blob: thumbnail,
+        timestamp: 1,
+        width: 320,
+        height: 180,
+      };
+      await saveThumbnailDB(thumbnailData);
+    }
+
+    const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
+    const mediaMetadata: MediaMetadata = {
+      id,
+      storageType: 'opfs',
+      opfsPath,
+      contentHash: hash,
+      fileName: file.name,
+      fileSize: file.size,
+      fileLastModified: file.lastModified,
+      mimeType: resolvedMimeType,
+      duration: 'duration' in metadata ? metadata.duration : 0,
+      width: 'width' in metadata ? metadata.width : 0,
+      height: 'height' in metadata ? metadata.height : 0,
+      fps: metadata.type === 'video' ? metadata.fps : 30,
+      codec: metadata.type === 'video'
+        ? metadata.codec
+        : metadata.type === 'audio'
+          ? (metadata.codec || 'unknown')
+          : 'unknown',
+      bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
+      audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
+      audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,
+      thumbnailId,
+      tags: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await createMediaDB(mediaMetadata);
+    await associateMediaWithProject(projectId, id);
+
     if (resolvedMimeType === 'image/gif') {
       const blobUrl = URL.createObjectURL(file);
       void gifFrameCache.getGifFrames(id, blobUrl)

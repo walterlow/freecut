@@ -11,7 +11,8 @@ export interface MediaLibraryNotification {
 export interface UnsupportedCodecFile {
   fileName: string;
   audioCodec: string;
-  handle: FileSystemFileHandle;
+  /** Present when imported via File System Access API; absent when imported via input[type=file] (e.g. mobile). */
+  handle?: FileSystemFileHandle;
 }
 
 /**
@@ -93,6 +94,11 @@ export interface MediaLibraryActions {
    * Uses FileSystemFileHandle directly without file picker
    */
   importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
+  /**
+   * Import media from File objects (e.g. input[type=file] on mobile when showOpenFilePicker is unavailable).
+   * Copies files to OPFS.
+   */
+  importFiles: (files: File[]) => Promise<MediaMetadata[]>;
   deleteMedia: (id: string) => Promise<void>;
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 

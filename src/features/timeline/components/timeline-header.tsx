@@ -228,9 +228,10 @@ export const TimelineHeader = memo(function TimelineHeader({
   };
 
   return (
-    <div className="h-11 flex items-center justify-between px-4 border-b border-border">
+    <div className="h-11 flex items-center px-4 border-b border-border overflow-x-auto overflow-y-hidden pb-1">
+      <div className="flex items-center justify-between flex-nowrap gap-3 min-w-max">
       {/* Left: Title & Tools */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-shrink-0">
         <h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-2">
           <Film className="w-3 h-3" />
           Timeline
@@ -241,7 +242,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'select' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool('select')}
@@ -253,7 +254,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'razor' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'razor' ? 'select' : 'razor')}
@@ -265,7 +266,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'rate-stretch' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'rate-stretch' ? 'select' : 'rate-stretch')}
@@ -277,7 +278,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'rolling-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'rolling-edit' ? 'select' : 'rolling-edit')}
@@ -289,7 +290,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'ripple-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'ripple-edit' ? 'select' : 'ripple-edit')}
@@ -301,7 +302,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'slip' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'slip' ? 'select' : 'slip')}
@@ -313,7 +314,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className={`h-7 w-7 ${
+            className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
               activeTool === 'slide' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'slide' ? 'select' : 'slide')}
@@ -330,7 +331,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={handleUndo}
             disabled={!canUndo}
             data-tooltip={undoLabel ? `Undo ${undoLabel} (Ctrl+Z)` : 'Undo (Ctrl+Z)'}
@@ -341,7 +342,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={handleRedo}
             disabled={!canRedo}
             data-tooltip={redoLabel ? `Redo ${redoLabel} (Ctrl+Shift+Z)` : 'Redo (Ctrl+Shift+Z)'}
@@ -357,7 +358,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={() => setInPoint(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Set In Point (I)"
           >
@@ -367,7 +368,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={() => setOutPoint(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Set Out Point (O)"
           >
@@ -377,7 +378,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={clearInOutPoints}
             disabled={inPoint === null && outPoint === null}
             data-tooltip="Clear In/Out Points"
@@ -393,7 +394,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={() => addMarker(usePlaybackStore.getState().currentFrame)}
             data-tooltip="Add Marker (M)"
           >
@@ -403,7 +404,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={() => {
               if (selectedMarkerId) {
                 removeMarker(selectedMarkerId);
@@ -419,7 +420,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
             onClick={clearAllMarkers}
             disabled={!hasMarkers}
             data-tooltip="Clear All Markers"
@@ -449,7 +450,7 @@ export const TimelineHeader = memo(function TimelineHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={`h-7 w-7 ${
+          className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
             isKeyframePanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
           }`}
           onClick={onToggleKeyframePanel}
@@ -461,7 +462,7 @@ export const TimelineHeader = memo(function TimelineHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={`h-7 w-7 ${
+          className={`h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0 ${
             isScopesPanelOpen ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
           }`}
           onClick={onToggleScopesPanel}
@@ -472,11 +473,11 @@ export const TimelineHeader = memo(function TimelineHeader({
       </div>
 
       {/* Right: Zoom Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           onClick={() => {
             if (onZoomOut) {
               onZoomOut();
@@ -502,7 +503,7 @@ export const TimelineHeader = memo(function TimelineHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           onClick={() => {
             if (onZoomIn) {
               onZoomIn();
@@ -518,7 +519,7 @@ export const TimelineHeader = memo(function TimelineHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-7 w-7 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
           onClick={onZoomToFit}
           data-tooltip="Zoom to Fit (Z)"
         >
@@ -528,6 +529,7 @@ export const TimelineHeader = memo(function TimelineHeader({
         <span className="text-xs text-muted-foreground font-mono w-12 text-right">
           {Math.round(zoomLevel * 100)}%
         </span>
+      </div>
       </div>
     </div>
   );

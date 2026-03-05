@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
+import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
@@ -41,6 +41,7 @@ import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
+import { useCoarsePointer } from '../../hooks/use-coarse-pointer';
 import { insertFreezeFrame } from '../../stores/actions/item-actions';
 import {
   createPreComp,
@@ -49,8 +50,9 @@ import {
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 
-// Width in pixels for edge hover detection (trim/rate-stretch handles)
+// Width in pixels for edge hover detection (trim/rate-stretch handles). Larger on touch.
 const EDGE_HOVER_ZONE = 8;
+const EDGE_HOVER_ZONE_TOUCH = 16;
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -74,6 +76,8 @@ interface TimelineItemProps {
  */
 export const TimelineItem = memo(function TimelineItem({ item, timelineDuration = 30, trackLocked = false, trackHidden = false }: TimelineItemProps) {
   const { timeToPixels, frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
+  const isCoarsePointer = useCoarsePointer();
+  const edgeHoverZone = isCoarsePointer ? EDGE_HOVER_ZONE_TOUCH : EDGE_HOVER_ZONE;
 
   // Granular selector: only re-render when THIS item's selection state changes
   const isSelected = useSelectionStore(
@@ -882,14 +886,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     const x = e.clientX - rect.left;
     const itemWidth = rect.width;
 
-    if (x <= EDGE_HOVER_ZONE) {
+    if (x <= edgeHoverZone) {
       if (hoveredEdgeRef.current !== 'start') setHoveredEdge('start');
-    } else if (x >= itemWidth - EDGE_HOVER_ZONE) {
+    } else if (x >= itemWidth - edgeHoverZone) {
       if (hoveredEdgeRef.current !== 'end') setHoveredEdge('end');
     } else {
       if (hoveredEdgeRef.current !== null) setHoveredEdge(null);
     }
-  }, [trackLocked]);
+  }, [trackLocked, edgeHoverZone]);
 
   // Cursor class based on state
   const cursorClass = trackLocked
@@ -1063,7 +1067,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const isOnEdge = x <= EDGE_HOVER_ZONE || x >= rect.width - EDGE_HOVER_ZONE;
+      const isOnEdge = x <= edgeHoverZone || x >= rect.width - edgeHoverZone;
       if (!isOnEdge) {
         setDragBlockedTooltip({ x: e.clientX, y: e.clientY });
         return;
@@ -1073,7 +1077,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
     handleDragStart(e);
-  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type]);
+  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type, edgeHoverZone]);
 
   // Track which edge is closer when right-clicking for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {

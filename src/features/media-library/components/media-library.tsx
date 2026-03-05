@@ -86,6 +86,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
+  const importFiles = useMediaLibraryStore((s) => s.importFiles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
   const searchQuery = useMediaLibraryStore((s) => s.searchQuery);
@@ -220,14 +221,34 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     };
   }, [selectedMediaIds, showDeleteDialog]);
 
-  // Import files using file picker (instant, no copy)
-  const handleImport = async () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import files: use file picker when available, else fall back to input[type=file] (e.g. mobile Safari)
+  const handleImport = useCallback(async () => {
+    if (!('showOpenFilePicker' in window)) {
+      fileInputRef.current?.click();
+      return;
+    }
     try {
       await importMedia();
     } catch (error) {
       logger.error('Import failed:', error);
     }
-  };
+  }, [importMedia]);
+
+  const handleFileInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files?.length) return;
+      try {
+        await importFiles(Array.from(files));
+      } catch (error) {
+        logger.error('Import failed:', error);
+      }
+      e.target.value = '';
+    },
+    [importFiles]
+  );
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
@@ -421,6 +442,15 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*,audio/*,image/*"
+        multiple
+        className="hidden"
+        aria-hidden
+        onChange={handleFileInputChange}
+      />
       {/* Header toolbar */}
       <div className="px-3 py-2 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2 text-xs">

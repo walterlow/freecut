@@ -27,6 +27,7 @@ import {
   Blend,
 } from 'lucide-react';
 import { useEditorStore } from '@/shared/state/editor';
+import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -48,10 +49,17 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Use granular selectors - Zustand v5 best practice
   const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
+  const setRightSidebarOpen = useEditorStore((s) => s.setRightSidebarOpen);
   const activeTab = useEditorStore((s) => s.activeTab);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth);
   const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth);
+
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const handleLeftSidebarToggle = useCallback(() => {
+    if (!leftSidebarOpen && isMobile) setRightSidebarOpen(false);
+    toggleLeftSidebar();
+  }, [leftSidebarOpen, isMobile, setRightSidebarOpen, toggleLeftSidebar]);
 
   // Resize handle logic
   const isResizingRef = useRef(false);
@@ -410,8 +418,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
         {/* Header row - aligned with content panel header */}
         <div className="h-10 flex items-center justify-center border-b border-border w-full">
           <button
-            onClick={toggleLeftSidebar}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            onClick={handleLeftSidebarToggle}
+            className="w-8 h-8 min-h-11 min-w-11 md:min-h-0 md:min-w-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
             data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
             data-tooltip-side="right"
           >
@@ -430,14 +438,14 @@ export const MediaSidebar = memo(function MediaSidebar() {
               key={id}
               onClick={() => {
                 if (activeTab === id && leftSidebarOpen) {
-                  toggleLeftSidebar();
+                  handleLeftSidebarToggle();
                 } else {
                   setActiveTab(id);
-                  if (!leftSidebarOpen) toggleLeftSidebar();
+                  if (!leftSidebarOpen) handleLeftSidebarToggle();
                 }
               }}
               className={`
-                w-10 h-10 rounded-lg flex items-center justify-center transition-all
+                w-10 h-10 min-h-11 min-w-11 md:min-h-0 md:min-w-0 rounded-lg flex items-center justify-center transition-all
                 ${activeTab === id && leftSidebarOpen
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
@@ -452,16 +460,25 @@ export const MediaSidebar = memo(function MediaSidebar() {
         </div>
       </div>
 
-      {/* Content Panel */}
+      {/* Content Panel: overlay on mobile (fixed), inline on md+ */}
       <div
-        className={`panel-bg border-r border-border overflow-hidden relative ${
-          leftSidebarOpen ? '' : 'w-0'
+        className={`panel-bg border-r border-border overflow-hidden transition-[width] ${
+          leftSidebarOpen
+            ? 'fixed left-12 top-14 bottom-0 z-10 w-[min(100vw-3rem,320px)] pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pl-0 md:pb-0 md:relative md:left-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-left-sidebar-width)]'
+            : 'w-0'
         }`}
-        style={leftSidebarOpen ? { width: sidebarWidth, transition: isResizingRef.current ? 'none' : 'width 200ms' } : { transition: 'width 200ms' }}
+        style={
+          leftSidebarOpen
+            ? {
+                ['--editor-left-sidebar-width' as string]: `${sidebarWidth}px`,
+                transition: isResizingRef.current ? 'none' : 'width 200ms',
+              }
+            : { transition: 'width 200ms' }
+        }
       >
         {/* Use Activity for React 19 performance optimization - defers updates when hidden */}
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>
-          <div className="h-full flex flex-col" style={{ width: sidebarWidth }}>
+          <div className="h-full flex flex-col w-full md:w-[var(--editor-left-sidebar-width)]">
           {/* Panel Header */}
           <div className="h-10 flex items-center px-3 border-b border-border flex-shrink-0">
             <span className="text-sm font-medium text-foreground">
@@ -711,11 +728,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
           </div>
           </div>
         </Activity>
-        {/* Resize Handle */}
+        {/* Resize Handle - desktop only */}
         {leftSidebarOpen && (
           <div
             onMouseDown={handleResizeStart}
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10"
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10 hidden md:block"
           />
         )}
       </div>
