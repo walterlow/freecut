@@ -1,4 +1,4 @@
-# FreeCut
+# Pixels
 
 **[freecut.net](http://freecut.net/)**
 
@@ -6,9 +6,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
+![Pixels Timeline Editor](./public/assets/landing/timeline.png)
 
-FreeCut is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebCodecs, OPFS, and the File System Access API.
+Pixels is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebCodecs, OPFS, and the File System Access API.
 
 ## Features
 
@@ -91,7 +91,7 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 ## Browser Support
 
-Chrome 102+ required. FreeCut uses WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
+Chrome 102+ required. Pixels uses WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
 
 ### Brave
 

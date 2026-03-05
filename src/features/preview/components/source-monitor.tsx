@@ -477,7 +477,7 @@ function SourcePlaybackControls({
         {/* Out marker */}
         {outPct !== null && (
           <div
-            className="absolute inset-y-0 w-0.5 bg-orange-400 pointer-events-none z-20"
+            className="absolute inset-y-0 w-0.5 bg-[#EC407A] pointer-events-none z-20"
             style={{ left: `${outPct}%` }}
           />
         )}

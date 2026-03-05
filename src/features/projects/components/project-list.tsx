@@ -189,7 +189,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       {/* Empty State - No Projects */}
       {isEmpty && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h2 className="text-3xl font-semibold text-foreground mb-2">Welcome to FreeCut</h2>
+          <h2 className="text-3xl font-semibold text-foreground mb-2">Welcome to Pixels</h2>
           <p className="text-muted-foreground max-w-md mb-6">
             Get started by creating your first video project. Choose your resolution, frame rate, and
             start editing!

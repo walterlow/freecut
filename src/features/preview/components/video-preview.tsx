@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
 import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -114,7 +114,7 @@ const RESOLVE_MAX_IDS_PER_PASS_IDLE = 8;
 const RESOLVE_MAX_IDS_PER_PASS_SCRUB = 4;
 const RESOLVE_DEFER_DURING_SCRUB_MS = 120;
 const PREVIEW_PERF_PUBLISH_INTERVAL_MS = 750;
-const PREVIEW_PERF_PANEL_STORAGE_KEY = 'freecut.preview.perf-panel';
+const PREVIEW_PERF_PANEL_STORAGE_KEY = 'pixels.preview.perf-panel';
 const PREVIEW_PERF_PANEL_QUERY_KEY = 'previewPerfPanel';
 const PREVIEW_PERF_RENDER_SOURCE_HISTORY_MAX = 6;
 const PREVIEW_PERF_SEEK_TIMEOUT_MS = 2500;

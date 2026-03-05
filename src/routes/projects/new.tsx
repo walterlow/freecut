@@ -1,11 +1,11 @@
-﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { createLogger } from '@/shared/logging/logger';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import { useProjectStore } from '@/features/projects/stores/project-store';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { Button } from '@/components/ui/button';
 import { Github } from 'lucide-react';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
@@ -58,7 +58,7 @@ function NewProject() {
       <div className="panel-header border-b border-border">
         <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
           <Link to="/">
-            <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
+            <PixelsLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
           </Link>
           <Button
             variant="outline"

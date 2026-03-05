@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 import {
   ResizablePanelGroup,
@@ -191,11 +191,11 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       const safeName = project.name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').substring(0, 100);
       try {
         const handle = await window.showSaveFilePicker({
-          suggestedName: `${safeName}.freecut.zip`,
+          suggestedName: `${safeName}.pixels.zip`,
           types: [
             {
-              description: 'FreeCut Project Bundle',
-              accept: { 'application/zip': ['.freecut.zip'] },
+              description: 'Pixels Project Bundle',
+              accept: { 'application/zip': ['.pixels.zip'] },
             },
           ],
         });

@@ -534,7 +534,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {notification && (
         <div className={`mx-4 mt-3 p-2.5 rounded text-xs animate-in slide-in-from-top-2 duration-200 ${
           notification.type === 'info'
-            ? 'bg-orange-500/10 border border-orange-500/30'
+            ? 'bg-[#EC407A]/10 border border-[#EC407A]/30'
             : notification.type === 'warning'
             ? 'bg-yellow-500/10 border border-yellow-500/30'
             : notification.type === 'success'
@@ -545,7 +545,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Info className={`w-3.5 h-3.5 flex-shrink-0 ${
                 notification.type === 'info'
-                  ? 'text-orange-500'
+                  ? 'text-[#EC407A]'
                   : notification.type === 'warning'
                   ? 'text-yellow-500'
                   : notification.type === 'success'
@@ -554,7 +554,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               }`} />
               <p className={`leading-relaxed line-clamp-2 ${
                 notification.type === 'info'
-                  ? 'text-orange-600 dark:text-orange-400'
+                  ? 'text-[#EC407A] dark:text-[#EC407A]'
                   : notification.type === 'warning'
                   ? 'text-yellow-600 dark:text-yellow-400'
                   : notification.type === 'success'

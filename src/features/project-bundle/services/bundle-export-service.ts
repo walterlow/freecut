@@ -1,7 +1,7 @@
-﻿/**
+/**
  * Project Bundle Export Service
  *
- * Exports a project with all its media as a .freecut.zip bundle
+ * Exports a project with all its media as a .pixels.zip bundle
  */
 
 import { Zip, ZipPassThrough, ZipDeflate } from 'fflate';

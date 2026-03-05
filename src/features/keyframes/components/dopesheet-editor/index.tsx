@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Dopesheet Editor - timeline-style keyframe editor.
  * Shows keyframes across properties as draggable diamonds on a frame grid.
  */
@@ -1113,7 +1113,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                             'absolute w-3 h-3 -ml-1.5 -mt-1.5 rotate-45 border z-10',
                             selected
                               ? 'bg-primary border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.25)]'
-                              : 'bg-orange-500 border-orange-300 hover:bg-orange-400'
+                              : 'bg-[#EC407A] border-[#EC407A] hover:bg-[#EC407A]/90'
                           )}
                           style={{
                             left: frameToX(keyframe.frame),

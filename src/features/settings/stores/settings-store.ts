@@ -68,7 +68,7 @@ export const useSettingsStore = create<SettingsStore>()(
       resetToDefaults: () => set(DEFAULT_SETTINGS),
     }),
     {
-      name: 'freecut-settings',
+      name: 'pixels-settings',
     }
   )
 );

@@ -1,5 +1,5 @@
 /**
- * use-player.ts - Core playback hook for FreeCut Player
+ * use-player.ts - Core playback hook for Pixels Player
  * 
  * Provides all playback operations including:
  * - play/pause/toggle

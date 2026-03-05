@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Value Graph Editor - Main container component.
  * Interactive graph for editing keyframe values and timing.
  */
@@ -842,7 +842,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
               y1={draggingPoint.y}
               x2={graphRight}
               y2={draggingPoint.y}
-              stroke="#f97316"
+              stroke="#EC407A"
               strokeWidth={1.5}
               strokeDasharray="6 3"
               opacity={0.8}
@@ -855,7 +855,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
               y1={graphTop}
               x2={draggingPoint.x}
               y2={graphBottom}
-              stroke="#f97316"
+              stroke="#EC407A"
               strokeWidth={1.5}
               strokeDasharray="6 3"
               opacity={0.8}

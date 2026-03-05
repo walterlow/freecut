@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Project Debug Panel
  *
  * Floating debug panel for project data operations.
@@ -191,7 +191,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     {
       label: 'Download JSON',
       icon: <Download className="h-3.5 w-3.5" />,
-      action: () => runAction(handleExportJson, 'Downloaded .freecut.json'),
+      action: () => runAction(handleExportJson, 'Downloaded .pixels.json'),
       description: 'Download project as JSON file',
     },
     {

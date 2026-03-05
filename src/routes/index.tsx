@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Layers, ArrowRight, Play, FolderOpen, Download, Star } from 'lucide-react';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { Button } from '@/components/ui/button';
 import {
   Accordion,
@@ -15,12 +15,12 @@ export const Route = createFileRoute('/')({
 
 const faqItems = [
   {
-    question: 'Is FreeCut really free?',
-    answer: 'Yes, FreeCut is completely free and open source under the MIT license. There are no hidden fees, subscriptions, or watermarks.',
+    question: 'Is Pixels really free?',
+    answer: 'Yes, Pixels is completely free and open source under the MIT license. There are no hidden fees, subscriptions, or watermarks.',
   },
   {
     question: 'Do I need to install anything?',
-    answer: 'No installation required. FreeCut runs entirely in your browser. Just open the website and start editing.',
+    answer: 'No installation required. Pixels runs entirely in your browser. Just open the website and start editing.',
   },
   {
     question: 'Where are my videos stored?',
@@ -32,7 +32,7 @@ const faqItems = [
     answer: (
       <>
         <p className="mb-3">
-          FreeCut currently supports Google Chrome version 102+. We use modern
+          Pixels currently supports Google Chrome version 102+. We use modern
           browser APIs like WebCodecs and File System Access which have limited
           cross-browser support.
         </p>
@@ -129,7 +129,7 @@ function LandingPage() {
 
         <div className="relative z-10 flex flex-col items-center text-center animate-fade-in">
           <div className="mb-6 flex items-center gap-3">
-            <FreeCutLogo size="lg" />
+            <PixelsLogo size="lg" />
             <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
               Beta
             </span>
@@ -243,7 +243,7 @@ function LandingPage() {
               See it in Action
             </h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
-              Watch a quick demo of FreeCut's editing capabilities.
+              Watch a quick demo of Pixels's editing capabilities.
             </p>
           </div>
 
@@ -253,7 +253,7 @@ function LandingPage() {
               <iframe
                 className="h-full w-full"
                 src="https://www.youtube.com/embed/2EWVUXpNntk"
-                title="FreeCut Demo"
+                title="Pixels Demo"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
@@ -270,7 +270,7 @@ function LandingPage() {
               Frequently Asked Questions
             </h2>
             <p className="text-muted-foreground">
-              Everything you need to know about FreeCut.
+              Everything you need to know about Pixels.
             </p>
           </div>
 
@@ -323,7 +323,7 @@ function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border px-6 py-8">
         <div className="mx-auto max-w-5xl text-center text-sm text-muted-foreground">
-          MIT License © {new Date().getFullYear()} FreeCut
+          MIT License © {new Date().getFullYear()} Pixels
         </div>
       </footer>
     </div>

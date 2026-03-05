@@ -53,8 +53,8 @@ const GraphCurve = memo(function GraphCurve({
     return points.join(' ');
   }, [startPoint, endPoint, easingConfig]);
 
-  // Always use orange for curves (blue glow added when selected)
-  const color = strokeColor || '#f97316';
+  // Curve color (blue glow added when selected)
+  const color = strokeColor || '#EC407A';
 
   return (
     <g className="graph-curve">

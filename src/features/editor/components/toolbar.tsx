@@ -153,7 +153,7 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
           <div className="relative">
             <Save className="w-4 h-4" />
             {isDirty && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#EC407A] rounded-full animate-pulse" />
             )}
           </div>
           Save
