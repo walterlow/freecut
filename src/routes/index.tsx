@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { Layers, ArrowRight, Play, FolderOpen, Download, Star } from 'lucide-react';
+import { Layers, ArrowRight, Play, FolderOpen, Download } from 'lucide-react';
 import { useAuthModal, useUser, useSignerStatus } from '@account-kit/react';
 import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { Button } from '@/components/ui/button';

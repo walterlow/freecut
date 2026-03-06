@@ -2,7 +2,7 @@ import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('TimelineTrack');
-import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, VideoItem, AudioItem, ImageItem, CompositionItem } from '@/types/timeline';
+import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, CompositionItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
@@ -21,7 +21,6 @@ import {
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
 import { buildTimelineBaseItem, buildTypedTimelineItem } from '../utils/build-timeline-item-from-media';
-import type { TimelineBaseItem } from '../utils/build-timeline-item-from-media';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
