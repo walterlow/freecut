@@ -15,13 +15,12 @@ import {
   Video,
   FolderArchive,
   ChevronDown,
-  Github,
+  Share2,
   Keyboard,
   Settings,
 } from 'lucide-react';
+import { WalletConnectButton } from '@/components/wallet-connect-button';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
-import { ShortcutsDialog } from './shortcuts-dialog';
-import { SettingsDialog } from './settings-dialog';
 
 interface ToolbarProps {
   projectId: string;
@@ -36,13 +35,21 @@ interface ToolbarProps {
   onSave?: () => Promise<void>;
   onExport?: () => void;
   onExportBundle?: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenSettings?: () => void;
 }
 
-export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave, onExport, onExportBundle }: ToolbarProps) {
+export const Toolbar = memo(function Toolbar({
+  project,
+  isDirty = false,
+  onSave,
+  onExport,
+  onExportBundle,
+  onOpenShortcuts,
+  onOpenSettings,
+}: ToolbarProps) {
   const navigate = useNavigate();
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   const handleBackClick = () => {
     if (isDirty) {
@@ -96,25 +103,13 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
 
       <div className="flex-1 min-w-2" />
 
-      {/* Shortcuts Dialog */}
-      <ShortcutsDialog
-        open={showShortcutsDialog}
-        onOpenChange={setShowShortcutsDialog}
-      />
-
-      {/* Settings Dialog */}
-      <SettingsDialog
-        open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
-      />
-
-      {/* Save & Export */}
-      <div className="flex items-center gap-2 flex-wrap">
+      {/* Save & Export - hidden on mobile; shown in left sidebar instead */}
+      <div className="hidden md:flex items-center gap-2 flex-wrap">
         <Button
           variant="outline"
           size="icon"
           className="h-8 w-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
-          onClick={() => setShowSettingsDialog(true)}
+          onClick={() => onOpenSettings?.()}
           data-tooltip="Settings"
           data-tooltip-side="left"
           aria-label="Settings"
@@ -125,13 +120,14 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
           variant="outline"
           size="icon"
           className="h-8 w-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0"
-          onClick={() => setShowShortcutsDialog(true)}
+          onClick={() => onOpenShortcuts?.()}
           data-tooltip="Keyboard Shortcuts"
           data-tooltip-side="left"
           aria-label="Keyboard shortcuts"
         >
           <Keyboard className="w-4 h-4" />
         </Button>
+        <WalletConnectButton size="sm" compact className="h-8 min-h-10 min-w-10 md:min-h-0 md:min-w-0" />
         <Button
           variant="outline"
           size="icon"
@@ -139,14 +135,14 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
           asChild
         >
           <a
-            href="https://github.com/creativeplatform/pixels"
+            href="https://tv.creativeplatform.xyz"
             target="_blank"
             rel="noopener noreferrer"
-            data-tooltip="View on GitHub"
+            data-tooltip="Distribute"
             data-tooltip-side="left"
-            aria-label="View on GitHub"
+            aria-label="Distribute"
           >
-            <Github className="w-4 h-4" />
+            <Share2 className="w-4 h-4" />
           </a>
         </Button>
         <Button variant="outline" size="sm" className="gap-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0" onClick={handleSave} aria-label="Save project">

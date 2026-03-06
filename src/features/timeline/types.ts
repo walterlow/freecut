@@ -112,4 +112,6 @@ export interface TimelineActions {
   clearTimeline: () => void;
   markDirty: () => void;
   markClean: () => void;
+  /** Add media to timeline at playhead (mobile-friendly, no drag required) */
+  addMediaToTimeline: (mediaId: string) => Promise<void>;
 }

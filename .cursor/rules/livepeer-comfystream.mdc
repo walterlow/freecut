@@ -1,0 +1,78 @@
+---
+description: ComfyStream integration with Livepeer: modular AI inference engine for video frame pipelines on GPU workers.
+alwaysApply: false
+---
+AI Pipelines
+ComfyStream
+ComfyStream integration with Livepeer: modular AI inference engine for video frame pipelines on GPU workers.
+
+ComfyStream is a modular AI inference engine that integrates with Livepeer’s Gateway Protocol to execute video frame pipelines on GPU-powered worker nodes. It extends ComfyUI with Livepeer-compatible gateway binding, real-time stream I/O, dynamic node graphs and plugin chaining, and overlay rendering and metadata export.
+For a high-level overview and DeepWiki, see the ComfyStream full guide.
+​
+Architecture overview
+RTMP/HLS Video Stream
+
+Livepeer Ingest + Frame Split
+
+Gateway Task Queue
+
+ComfyStream Worker Node
+
+Model Execution
+
+Result Upload / Stream Return
+
+​
+Node types in ComfyStream
+Node type	Description	Example models
+Whisper Node	Transcribe / translate speech	whisper-large
+Diffusion	Style transfer, background change	SDXL, ControlNet
+Detection	Bounding boxes or masks	YOLOv8, SAM
+Blur / Redact	Visual filter	SegmentBlur, MediaPipe
+These are exposed as modules in nodes/*.py and can be chained in graph format.
+​
+Example pipeline: caption overlay
+{
+  "pipeline": [
+    { "task": "whisper-transcribe" },
+    { "task": "caption-overlay", "font": "Roboto" }
+  ]
+}
+ComfyStream converts this to an internal computation graph (e.g. WhisperNode → TextOverlayNode → OutputStreamNode).
+​
+Plugin support
+You can build your own plugins:
+Implement the NodeBase class from ComfyUI
+Register metadata and parameters
+Declare inputs and outputs for chaining
+Example:
+class FaceBlurNode(NodeBase):
+  def run(self, frame):
+    result = blur_faces(frame)
+    return result
+​
+Connecting to Livepeer Gateway
+In config.yaml:
+gatewayURL: wss://gateway.livepeer.org
+models:
+  - whisper
+  - sdxl
+Start your node:
+python run.py --adapter grpc --model whisper --gpu
+The ComfyStream worker will listen to task queues via pub/sub, execute pipelines frame-by-frame, and return inference results as overlays or JSON.
+​
+Debugging pipelines
+ComfyStream logs heartbeats to the gateway, job payloads, graph errors, and output stream metrics. Enable verbose mode:
+python run.py --debug
+​
+See also
+AI Pipelines overview - Pipeline concepts and worker types
+BYOC - Bring your own compute setup
+ComfyStream full guide - Architecture layers, components, and DeepWiki
+Network technical architecture - Gateway and Orchestrator stack
+​
+Resources
+ComfyStream GitHub
+BYOC setup
+Plugin examples (Forum)
+Livepeer Studio AI

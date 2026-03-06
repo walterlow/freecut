@@ -1,0 +1,305 @@
+---
+description: Learn how to send video into Daydream
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Ingest Guide
+
+> Learn how to send video into Daydream
+
+# What is Ingest?
+
+Think of ingest as the pathway that livestreams passes through to reach the internet.
+
+## Why do we need ingest?
+
+Your video needs to get to a platform (like Twitch, YouTube, or Facebook) somehow! The ingest server is the platform's receiving point. It accepts your stream, processes it, and then distributes it to all your viewers.
+
+The key term you'll see:
+
+**Ingest URL** : The specific address where you send your stream.
+
+When you create a stream with the Daydream API, you'll receive an ingest URL in the response that looks like the following.
+
+Example:
+
+```json  theme={null}
+{
+  "whip_url": "https://ai.livepeer.com/live/video-to-video/<stream_key>/whip"
+}
+```
+
+## How to Ingest
+
+When you go live, your camera and microphone capture video and audio. Your streaming software (like OBS, Streamlabs, or built-in apps) takes that content and sends it to an ingest server - basically a computer that receives your stream.
+
+### Web Browser Method
+
+<Warning>
+  Don't forget to replace `<API_KEY>` with your own.
+</Warning>
+
+<Steps>
+  <Step title="Create a stream">
+    Create a stream using the Daydream API.
+
+    <CodeGroup>
+      ```bash curl theme={null}
+      # Available models:
+      # - stabilityai/sd-turbo: Fast generation with SD-turbo (default)
+      # - stabilityai/sdxl-turbo: High-quality with SDXL-turbo
+      # - Lykon/dreamshaper-8: Stable Diffusion 1.5 for more control
+      # - prompthero/openjourney-v4: SD1.5 with artistic style
+
+      curl -X POST \
+        "https://api.daydream.live/v1/streams" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer <API_KEY>" \
+        -d '{
+          "pipeline": "streamdiffusion",
+          "params": {
+            "model_id": "stabilityai/sd-turbo"
+          }
+        }'
+      ```
+
+      ```javascript JavaScript theme={null}
+      // Available models:
+      // - stabilityai/sd-turbo: Fast generation with SD-turbo (default)
+      // - stabilityai/sdxl-turbo: High-quality with SDXL-turbo
+      // - Lykon/dreamshaper-8: Stable Diffusion 1.5 for more control
+      // - prompthero/openjourney-v4: SD1.5 with artistic style
+
+      const response = await fetch('https://api.daydream.live/v1/streams', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer <API_KEY>'
+        },
+        body: JSON.stringify({
+          pipeline: 'streamdiffusion',
+          params: {
+            model_id: 'stabilityai/sd-turbo'
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log(data);
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Implement the Webcam">
+    <Warning>
+      Don't forget to replace `<STREAM_KEY>` with your own.
+    </Warning>
+
+    <CodeGroup>
+      ```JavaScript JS Snippet theme={null}
+      <script>
+         // 👇 PASTE THE JS SNIPPET HERE
+         const WHIP_URL = 'https://ai.livepeer.com/live/video-to-video/<STREAM_KEY>/whip';
+         
+         let localStream = null;
+         let peerConnection = null;
+         
+         async function startDaydreamStream() {
+             localStream = await navigator.mediaDevices.getUserMedia({
+                 video: { width: 1280, height: 720 },
+                 audio: false
+             });
+             
+             peerConnection = new RTCPeerConnection({
+                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+             });
+             
+             localStream.getTracks().forEach(track => {
+                 peerConnection.addTrack(track, localStream);
+             });
+             
+             const offer = await peerConnection.createOffer();
+             await peerConnection.setLocalDescription(offer);
+             
+             const response = await fetch(WHIP_URL, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/sdp' },
+                 body: peerConnection.localDescription.sdp
+             });
+             
+             const answer = await response.text();
+             await peerConnection.setRemoteDescription({
+                 type: 'answer',
+                 sdp: answer
+             });
+             
+             return localStream;
+         }
+         
+         // 👇 CALL IT FROM YOUR BUTTON
+         async function start() {
+             const stream = await startDaydreamStream();
+             document.getElementById('video').srcObject = stream;
+             alert('Streaming to Daydream!');
+         }
+      ```
+
+      ```html Full Example theme={null}
+      <!DOCTYPE html>
+      <html>
+      <head>
+      <title>My Daydream App</title>
+      </head>
+      <body>
+      <button onclick="start()">Start</button>
+      <video id="video" autoplay muted></video>
+
+      <script>
+         // 👇 PASTE THE JS SNIPPET HERE
+         const WHIP_URL = 'https://ai.livepeer.com/live/video-to-video/<STREAM_KEY>/whip';
+         
+         let localStream = null;
+         let peerConnection = null;
+         
+         async function startDaydreamStream() {
+             localStream = await navigator.mediaDevices.getUserMedia({
+                 video: { width: 1280, height: 720 },
+                 audio: false
+             });
+             
+             peerConnection = new RTCPeerConnection({
+                 iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+             });
+             
+             localStream.getTracks().forEach(track => {
+                 peerConnection.addTrack(track, localStream);
+             });
+             
+             const offer = await peerConnection.createOffer();
+             await peerConnection.setLocalDescription(offer);
+             
+             const response = await fetch(WHIP_URL, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/sdp' },
+                 body: peerConnection.localDescription.sdp
+             });
+             
+             const answer = await response.text();
+             await peerConnection.setRemoteDescription({
+                 type: 'answer',
+                 sdp: answer
+             });
+             
+             return localStream;
+         }
+         
+         // 👇 CALL IT FROM YOUR BUTTON
+         async function start() {
+             const stream = await startDaydreamStream();
+             document.getElementById('video').srcObject = stream;
+             alert('Streaming to Daydream!');
+         }
+      </script>
+      </body>
+      </html>
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+#### **Workflow Diagram**
+
+```mermaid  theme={null}
+graph LR
+    A[Broadcaster<br/>Webcam] -->|INGEST<br/>WebRTC WHIP<br/>Sends Live Video to Daydream| B[Streaming Platform<br/>Web Browser]
+    B -->|DELIVERY<br/>WebRTC WHEP<br/>Distributes via CDN| C[PLAYBACK<br/>Daydream playback output]
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style B fill:#F5A623,stroke:#C17D11,stroke-width:2px,color:#000
+    style C fill:#7ED321,stroke:#5FA319,stroke-width:2px,color:#000
+```
+
+### OBS Ingest Method
+
+<Warning>
+  Don't forget to replace `<API_KEY>` with your own.
+</Warning>
+
+<Steps>
+  <Step title="Create a stream">
+    Create a stream using the Daydream API.
+
+    <CodeGroup>
+      ```bash curl  theme={null}
+      curl --request POST \
+      --url https://api.daydream.live/v1/streams \
+      --header 'Content-Type: application/json' \
+      --header 'Authorization: Bearer <API KEY>' \
+      --data '{
+        "pipeline": "streamdiffusion",
+        "params": {
+          "model_id": "stabilityai/sdxl-turbo",
+          "prompt": "a serene mountain landscape at sunset"
+        }
+      }'
+
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Get the Ingest URL">
+    In the response from the Create Stream API call, find the `whip_url` field.
+
+    ```json  theme={null}
+    {
+      "whip_url": "https://ai.livepeer.com/live/video-to-video/<STREAM_KEY>/whip"
+    }
+    ```
+  </Step>
+
+  <Step title="Copy the Ingest URL">
+    Copy the `whip_url` to use in the OBS settings.
+    `https://ai.livepeer.com/live/video-to-video/<STREAM_KEY>/whip`
+  </Step>
+
+  <Step title="Set the OBS Settings">
+    * Open OBS and go to Settings
+      <img src="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=bcad84cb33a781b115ce3dc607b9a56e" alt="Settings" data-og-width="667" width="667" data-og-height="492" height="492" data-path="images/obs-settings-1.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=280&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=e1216c057a8163ba59124e8af4193a3b 280w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=560&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=37f85deff7c1a8173fb7984c6611a6d4 560w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=840&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=5d40997ee84a01172bc37d7899fda6dc 840w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=1100&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=c5420a3f57354c451d7c26635dbbe4d3 1100w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=1650&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=56aea8d0444e024c955db501746e463a 1650w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-1.png?w=2500&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=e3678d71326f26d8bd24299db30f3c86 2500w" />
+    * Click on the `Stream` tab
+      <img src="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=0917f98a7ffd2a21fd4ea4817d4aad11" alt="Stream" data-og-width="346" width="346" data-og-height="206" height="206" data-path="images/obs-settings-2.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=280&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=98abad5d87ae3e4aca97e9506ce220e7 280w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=560&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=20794a83dc18f8ba7da7403eebb0266f 560w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=840&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=d10993a36c27d62ce80eaa54babce006 840w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=1100&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=25b0a3e346df4a4496262e14029bbc9f 1100w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=1650&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=7fbf33740f21196d2de6eb1790e08ce7 1650w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-2.png?w=2500&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=9ee77b326c1538af9d882420b5b9872a 2500w" />
+    * Set the OBS settings to the following:
+
+    <Warning>
+      Don't forget to replace `<STREAM_KEY>` with your own.
+    </Warning>
+
+    * Service: `WHIP`
+    * Server: `https://ai.livepeer.com/live/video-to-video/<STREAM_KEY>/whip`
+    * Bearer Token: `EMPTY`
+    * Save the settings.
+      <img src="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=d6623286c720cecd6c563fa83c7d2468" alt="Settings" data-og-width="1524" width="1524" data-og-height="848" height="848" data-path="images/obs-settings-3.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=280&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=600928cd848322848fe7adb8913c31fe 280w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=560&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=5baef73902dc136c1f251af898a29454 560w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=840&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=9cf12ad7694bfad43eb1e7cddc69fa15 840w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=1100&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=b99af3e0d79ade5f1ba22b669c80d4ec 1100w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=1650&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=8ec561ddcfdc6d49e7374fe0b0484ba7 1650w, https://mintcdn.com/dd/QeagSeN2XLI00lIC/images/obs-settings-3.png?w=2500&fit=max&auto=format&n=QeagSeN2XLI00lIC&q=85&s=f6e081bbe8e40afe762a51d68f0788de 2500w" />
+  </Step>
+
+  <Step title="Start Streaming">
+    Under the `Controls` section, select `Start Streaming` to start the stream.
+
+    <Note>
+      Make sure you have a video capture device selected as the source and is turned on.
+    </Note>
+  </Step>
+</Steps>
+
+#### **Workflow Diagram**
+
+```mermaid  theme={null}
+graph LR
+    A[Broadcaster<br/>OBS] -->|INGEST<br/>WebRTC WHIP<br/>Sends Live Video to Daydream| B[Streaming Platform<br/>Web Browser]
+    B -->|DELIVERY<br/>WebRTC WHEP<br/>Distributes via CDN| C[PLAYBACK<br/>Daydream playback output]
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style B fill:#F5A623,stroke:#C17D11,stroke-width:2px,color:#000
+    style C fill:#7ED321,stroke:#5FA319,stroke-width:2px,color:#000
+```

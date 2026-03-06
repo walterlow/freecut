@@ -1,0 +1,232 @@
+---
+description: Send video to Daydream for AI processing
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Broadcast
+
+> Send video to Daydream for AI processing
+
+# Broadcast API
+
+The `createBroadcast` function lets you send video to Daydream for real-time AI processing.
+
+## Basic Usage
+
+```typescript  theme={null}
+import { createBroadcast } from "@daydreamlive/browser";
+
+// Get user's webcam
+const stream = await navigator.mediaDevices.getUserMedia({
+  video: { width: 512, height: 512 },
+  audio: false,
+});
+
+// Create broadcast
+const broadcast = createBroadcast({
+  whipUrl: "https://...", // from your backend
+  stream,
+});
+
+// Listen for state changes
+broadcast.on("stateChange", (state) => {
+  console.log("State:", state);
+  // 'connecting' | 'live' | 'reconnecting' | 'ended' | 'error'
+});
+
+// Connect
+await broadcast.connect();
+
+// The WHEP URL for playing the AI output is now available
+// It's captured from the WHIP response header 'livepeer-playback-url'
+console.log("Watch at:", broadcast.whepUrl);
+```
+
+<Tip>
+  The WHEP playback URL is returned in the WHIP response header `livepeer-playback-url`. The Browser SDK automatically captures this for you in `broadcast.whepUrl` after connecting.
+</Tip>
+
+## Configuration Options
+
+```typescript  theme={null}
+const broadcast = createBroadcast({
+  // Required
+  whipUrl: string,           // WHIP endpoint from your backend
+  stream: MediaStream,       // Video stream to broadcast
+
+  // Optional
+  reconnect: {
+    enabled: true,           // Auto-reconnect on disconnect
+    maxAttempts: 5,          // Max reconnection attempts
+    baseDelay: 1000,         // Initial delay (ms)
+    maxDelay: 30000,         // Max delay (ms)
+  },
+  video: {
+    maxBitrate: 2500000,     // Max video bitrate (bps)
+    maxFramerate: 30,        // Max framerate
+  },
+});
+```
+
+## State Machine
+
+The broadcast goes through these states:
+
+```mermaid  theme={null}
+stateDiagram-v2
+    [*] --> idle
+    idle --> connecting: connect()
+    connecting --> live: connected
+    connecting --> error: failed
+    live --> reconnecting: disconnected
+    live --> ended: stop()
+    reconnecting --> live: reconnected
+    reconnecting --> error: max attempts
+    error --> [*]
+    ended --> [*]
+```
+
+## Events
+
+```typescript  theme={null}
+// State changes
+broadcast.on("stateChange", (state) => {
+  switch (state) {
+    case "connecting":
+      console.log("Connecting to Daydream...");
+      break;
+    case "live":
+      console.log("Broadcasting! WHEP URL:", broadcast.whepUrl);
+      break;
+    case "reconnecting":
+      console.log("Lost connection, reconnecting...");
+      break;
+    case "error":
+      console.log("Error occurred");
+      break;
+    case "ended":
+      console.log("Broadcast ended");
+      break;
+  }
+});
+
+// Error details
+broadcast.on("error", (error) => {
+  console.error("Broadcast error:", error.message);
+});
+```
+
+## Replace Stream
+
+You can swap the video source while broadcasting (e.g., switch from camera to screen share):
+
+```typescript  theme={null}
+// Start with camera
+const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+const broadcast = createBroadcast({ whipUrl, stream: cameraStream });
+await broadcast.connect();
+
+// Later, switch to screen share
+const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+await broadcast.replaceStream(screenStream);
+
+// Stop old stream tracks
+cameraStream.getTracks().forEach(track => track.stop());
+```
+
+## Adjust Framerate
+
+Dynamically change the max framerate:
+
+```typescript  theme={null}
+// Reduce framerate to save bandwidth
+broadcast.setMaxFramerate(15);
+
+// Restore full framerate
+broadcast.setMaxFramerate(30);
+
+// Remove limit
+broadcast.setMaxFramerate(undefined);
+```
+
+## Stop Broadcasting
+
+```typescript  theme={null}
+await broadcast.stop();
+```
+
+This will:
+
+1. Close the WebRTC connection
+2. Set state to `"ended"`
+3. The `whepUrl` is no longer valid
+
+<Note>
+  Calling `stop()` doesn't stop the MediaStream tracks. You should stop them separately if needed:
+
+  ```typescript  theme={null}
+  stream.getTracks().forEach(track => track.stop());
+  ```
+</Note>
+
+## Complete Example
+
+```typescript  theme={null}
+import { createBroadcast } from "@daydreamlive/browser";
+
+async function startBroadcast(whipUrl: string) {
+  // Get camera
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 512, height: 512, frameRate: 30 },
+    audio: false,
+  });
+
+  // Preview locally
+  const preview = document.querySelector("video#preview");
+  preview.srcObject = stream;
+
+  // Create broadcast
+  const broadcast = createBroadcast({
+    whipUrl,
+    stream,
+    reconnect: { enabled: true },
+    video: { maxBitrate: 2000000 },
+  });
+
+  // Handle state changes
+  broadcast.on("stateChange", (state) => {
+    const statusEl = document.querySelector("#status");
+    statusEl.textContent = state;
+
+    if (state === "live") {
+      // Start player with the AI output
+      playOutput(broadcast.whepUrl);
+    }
+  });
+
+  broadcast.on("error", (error) => {
+    console.error("Broadcast failed:", error);
+    alert("Broadcast error: " + error.message);
+  });
+
+  // Connect
+  await broadcast.connect();
+
+  return broadcast;
+}
+
+// Usage
+const broadcast = await startBroadcast(whipUrl);
+
+// Later...
+await broadcast.stop();
+```
+
+## Next Steps
+
+* [Player](/sdks/browser/player) - Play the AI-processed output
+* [React Hooks](/sdks/browser/react-hooks) - Use `useBroadcast` hook
+* [Compositor](/sdks/browser/compositor) - Combine multiple sources

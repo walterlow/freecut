@@ -1,0 +1,130 @@
+---
+description: Create and manage streams with the TypeScript SDK
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Quickstart
+
+> Create and manage streams with the TypeScript SDK
+
+# TypeScript SDK Quickstart
+
+This guide walks you through creating a stream with all parameters configured upfront.
+
+## Prerequisites
+
+* [Install the SDK](/sdks/typescript/installation)
+* Get an [API key](https://app.daydream.live/dashboard/api-keys)
+
+## Create a Stream
+
+Create a stream with your model, prompt, ControlNets, and IP Adapter all configured:
+
+```typescript  theme={null}
+import { Daydream } from "@daydreamlive/sdk";
+
+const daydream = new Daydream({
+  bearer: process.env.DAYDREAM_API_KEY,
+});
+
+const stream = await daydream.streams.create({
+  pipeline: "streamdiffusion",
+  params: {
+    modelId: "stabilityai/sdxl-turbo",
+    prompt: "anime character, vibrant colors",
+    negativePrompt: "blurry, low quality",
+    guidanceScale: 1.0,
+    width: 512,
+    height: 512,
+    controlnets: [
+      {
+        modelId: "xinsir/controlnet-depth-sdxl-1.0",
+        preprocessor: "depth_tensorrt",
+        conditioningScale: 0.5,
+        enabled: true,
+      },
+    ],
+    ipAdapter: {
+      enabled: true,
+      scale: 0.5,
+    },
+    ipAdapterStyleImageUrl: "https://example.com/style.png",
+  },
+});
+
+console.log("Stream ID:", stream.id);
+console.log("WHIP URL:", stream.whipUrl);
+console.log("Watch at: https://lvpr.tv/?v=" + stream.outputPlaybackId);
+```
+
+The response includes:
+
+* `id` - Unique stream identifier
+* `whipUrl` - URL to send video via WebRTC WHIP
+* `outputPlaybackId` - ID to watch the processed output
+
+## Start Broadcasting
+
+Use the `whipUrl` with the [Browser SDK](/sdks/browser/broadcast) to send video.
+
+## Update Prompt
+
+Change the prompt in real-time without reloading the pipeline:
+
+```typescript  theme={null}
+await daydream.streams.update(stream.id, {
+  pipeline: "streamdiffusion",
+  params: {
+    prompt: "cyberpunk character, neon lights",
+  },
+});
+```
+
+<Tip>
+  Hot-swappable parameters (no reload): `prompt`, `negativePrompt`, `guidanceScale`, `seed`, `delta`, `controlnets[].conditioningScale`, `ipAdapter.scale`
+</Tip>
+
+## Get Stream Status
+
+```typescript  theme={null}
+const status = await daydream.streams.getById(stream.id);
+console.log("Stream:", status);
+```
+
+## List All Streams
+
+```typescript  theme={null}
+const streams = await daydream.streams.getAll();
+for (const s of streams) {
+  console.log(s.id, s.name);
+}
+```
+
+## Delete a Stream
+
+```typescript  theme={null}
+await daydream.streams.delete(stream.id);
+```
+
+## Available ControlNets
+
+**SDXL** (`stabilityai/sdxl-turbo`):
+
+* `xinsir/controlnet-depth-sdxl-1.0` - Depth guidance
+* `xinsir/controlnet-canny-sdxl-1.0` - Edge detection
+* `xinsir/controlnet-tile-sdxl-1.0` - Texture preservation
+
+**SD1.5** (`Lykon/dreamshaper-8`, `prompthero/openjourney-v4`):
+
+* `lllyasviel/control_v11f1p_sd15_depth` - Depth
+* `lllyasviel/control_v11p_sd15_canny` - Canny edges
+* `lllyasviel/control_v11f1e_sd15_tile` - Tile
+
+## Next Steps
+
+* [Methods Reference](/sdks/typescript/methods) - Full API documentation
+* [Parameters](/api/parameters/SDXL) - All available model parameters
+* [Browser SDK](/sdks/browser/installation) - Build web apps with broadcasting

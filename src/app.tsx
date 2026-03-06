@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
+import { AlchemyAccountProvider } from '@account-kit/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { GlobalTooltip } from '@/components/ui/global-tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { alchemyConfig, queryClient } from '@/config/alchemy';
 import { routeTree } from './routeTree.gen';
 
 const router = createRouter({ routeTree });
@@ -52,13 +55,29 @@ export function App() {
   // GlobalTooltip for performant data-tooltip based tooltips
   // Toaster for toast notifications
   // ErrorBoundary for graceful error recovery
+  const content = (
+    <RouterProvider router={router} />
+  );
+
   return (
     <ErrorBoundary level="app">
-      <TooltipProvider delayDuration={300}>
-        <RouterProvider router={router} />
-        <GlobalTooltip />
-        <Toaster />
-      </TooltipProvider>
+      <QueryClientProvider client={queryClient}>
+        {alchemyConfig ? (
+          <AlchemyAccountProvider config={alchemyConfig} queryClient={queryClient}>
+            <TooltipProvider delayDuration={300}>
+              {content}
+              <GlobalTooltip />
+              <Toaster />
+            </TooltipProvider>
+          </AlchemyAccountProvider>
+        ) : (
+          <TooltipProvider delayDuration={300}>
+            {content}
+            <GlobalTooltip />
+            <Toaster />
+          </TooltipProvider>
+        )}
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

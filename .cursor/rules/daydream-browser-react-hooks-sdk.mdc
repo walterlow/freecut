@@ -1,0 +1,362 @@
+---
+alwaysApply: true
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# React Hooks
+
+> Use Daydream with React hooks
+
+# React Hooks
+
+The `@daydreamlive/react` package provides React hooks for easy integration with React applications.
+
+## Installation
+
+```bash  theme={null}
+npm install @daydreamlive/react
+```
+
+## useBroadcast
+
+Manages broadcasting state and controls.
+
+```tsx  theme={null}
+import { useBroadcast } from "@daydreamlive/react";
+
+function Broadcaster({ whipUrl }: { whipUrl: string }) {
+  const { status, start, stop, setMaxFramerate } = useBroadcast({
+    whipUrl,
+    reconnect: { enabled: true },
+  });
+
+  const handleStart = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    await start(stream);
+  };
+
+  return (
+    <div>
+      <p>Status: {status.state}</p>
+
+      {status.state === "live" && (
+        <p>WHEP URL: {status.whepUrl}</p>
+      )}
+
+      {status.state === "error" && (
+        <p>Error: {status.error.message}</p>
+      )}
+
+      <button onClick={handleStart} disabled={status.state === "live"}>
+        Start Broadcasting
+      </button>
+
+      <button onClick={stop} disabled={status.state !== "live"}>
+        Stop
+      </button>
+    </div>
+  );
+}
+```
+
+### Options
+
+```typescript  theme={null}
+useBroadcast({
+  whipUrl: string,           // Required: WHIP endpoint
+  reconnect?: {
+    enabled: boolean,        // Auto-reconnect (default: false)
+    maxAttempts?: number,
+    baseDelay?: number,
+    maxDelay?: number,
+  },
+  video?: {
+    maxBitrate?: number,
+    maxFramerate?: number,
+  },
+})
+```
+
+### Returns
+
+| Property          | Type                                     | Description               |
+| ----------------- | ---------------------------------------- | ------------------------- |
+| `status`          | `UseBroadcastStatus`                     | Current state (see below) |
+| `start`           | `(stream: MediaStream) => Promise<void>` | Start broadcasting        |
+| `stop`            | `() => void`                             | Stop broadcasting         |
+| `setMaxFramerate` | `(fps?: number) => void`                 | Adjust framerate          |
+
+### Status States
+
+The `status` is a discriminated union - use `status.state` to determine the current state:
+
+```typescript  theme={null}
+type UseBroadcastStatus =
+  | { state: "idle" }
+  | { state: "connecting" }
+  | { state: "live"; whepUrl: string }
+  | { state: "reconnecting"; whepUrl: string; reconnectInfo: ReconnectInfo }
+  | { state: "ended" }
+  | { state: "error"; error: DaydreamError };
+```
+
+***
+
+## usePlayer
+
+Manages playback state and controls.
+
+```tsx  theme={null}
+import { usePlayer } from "@daydreamlive/react";
+
+function Player({ whepUrl }: { whepUrl: string }) {
+  const { status, play, stop, videoRef } = usePlayer(whepUrl, {
+    autoPlay: true,
+    reconnect: { enabled: true },
+  });
+
+  return (
+    <div>
+      <p>Status: {status.state}</p>
+
+      {status.state === "error" && (
+        <p>Error: {status.error.message}</p>
+      )}
+
+      <video ref={videoRef} autoPlay playsInline muted />
+
+      <button onClick={play} disabled={status.state === "playing"}>
+        Play
+      </button>
+
+      <button onClick={stop}>
+        Stop
+      </button>
+    </div>
+  );
+}
+```
+
+### Options
+
+```typescript  theme={null}
+usePlayer(whepUrl: string, {
+  autoPlay?: boolean,        // Auto-start playback (default: false)
+  reconnect?: {
+    enabled: boolean,
+    maxAttempts?: number,
+    baseDelay?: number,
+    maxDelay?: number,
+  },
+})
+```
+
+### Returns
+
+| Property   | Type                          | Description         |
+| ---------- | ----------------------------- | ------------------- |
+| `status`   | `UsePlayerStatus`             | Current state       |
+| `play`     | `() => Promise<void>`         | Start playback      |
+| `stop`     | `() => void`                  | Stop playback       |
+| `videoRef` | `RefObject<HTMLVideoElement>` | Attach to `<video>` |
+
+### Status States
+
+```typescript  theme={null}
+type UsePlayerStatus =
+  | { state: "idle" }
+  | { state: "connecting" }
+  | { state: "playing" }
+  | { state: "buffering"; reconnectInfo: ReconnectInfo }
+  | { state: "ended" }
+  | { state: "error"; error: DaydreamError };
+```
+
+***
+
+## Complete Example
+
+Here's a full example with broadcasting and playback:
+
+```tsx  theme={null}
+"use client";
+
+import { useState } from "react";
+import { useBroadcast, usePlayer } from "@daydreamlive/react";
+
+export default function DaydreamDemo({ whipUrl }: { whipUrl: string }) {
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+
+  // Broadcast hook
+  const broadcast = useBroadcast({
+    whipUrl,
+    reconnect: { enabled: true },
+  });
+
+  // Player hook - only connect when we have a WHEP URL
+  const player = usePlayer(
+    broadcast.status.state === "live" ? broadcast.status.whepUrl : "",
+    { autoPlay: true, reconnect: { enabled: true } }
+  );
+
+  const handleStart = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 512, height: 512 },
+      audio: false,
+    });
+    setLocalStream(stream);
+    await broadcast.start(stream);
+  };
+
+  const handleStop = () => {
+    broadcast.stop();
+    localStream?.getTracks().forEach(track => track.stop());
+    setLocalStream(null);
+  };
+
+  return (
+    <div className="flex gap-4">
+      {/* Local preview */}
+      <div>
+        <h3>Input</h3>
+        <video
+          autoPlay
+          playsInline
+          muted
+          ref={(el) => {
+            if (el && localStream) el.srcObject = localStream;
+          }}
+          className="w-64 h-64 bg-black"
+        />
+        <p>Broadcast: {broadcast.status.state}</p>
+      </div>
+
+      {/* AI output */}
+      <div>
+        <h3>AI Output</h3>
+        <video
+          ref={player.videoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-64 h-64 bg-black"
+        />
+        <p>Player: {player.status.state}</p>
+      </div>
+
+      {/* Controls */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleStart}
+          disabled={broadcast.status.state === "live"}
+          className="px-4 py-2 bg-green-500 text-white rounded"
+        >
+          Start
+        </button>
+        <button
+          onClick={handleStop}
+          disabled={broadcast.status.state !== "live"}
+          className="px-4 py-2 bg-red-500 text-white rounded"
+        >
+          Stop
+        </button>
+      </div>
+
+      {/* Errors */}
+      {broadcast.status.state === "error" && (
+        <p className="text-red-500">
+          Broadcast error: {broadcast.status.error.message}
+        </p>
+      )}
+      {player.status.state === "error" && (
+        <p className="text-red-500">
+          Player error: {player.status.error.message}
+        </p>
+      )}
+    </div>
+  );
+}
+```
+
+## Next.js Server Actions Pattern
+
+For Next.js apps, create the stream on the server and pass the WHIP URL to the client:
+
+```tsx  theme={null}
+// app/actions.ts
+"use server";
+
+import { Daydream } from "@daydreamlive/sdk";
+
+const daydream = new Daydream({
+  bearer: process.env.DAYDREAM_API_KEY!,
+});
+
+export async function createStream() {
+  const stream = await daydream.streams.create({
+    pipeline: "streamdiffusion",
+    params: {
+      modelId: "Lykon/dreamshaper-8",
+      prompt: "anime character",
+    },
+  });
+
+  return {
+    id: stream.id,
+    whipUrl: stream.whipUrl,
+    playbackUrl: `https://lvpr.tv/?v=${stream.outputPlaybackId}`,
+  };
+}
+
+export async function updatePrompt(streamId: string, prompt: string) {
+  await daydream.streams.update(streamId, {
+    pipeline: "streamdiffusion",
+    params: {
+      modelId: "Lykon/dreamshaper-8",
+      prompt,
+    },
+  });
+}
+```
+
+```tsx  theme={null}
+// app/page.tsx
+"use client";
+
+import { useState } from "react";
+import { createStream, updatePrompt } from "./actions";
+import DaydreamDemo from "./DaydreamDemo";
+
+export default function Page() {
+  const [streamData, setStreamData] = useState<{
+    id: string;
+    whipUrl: string;
+  } | null>(null);
+
+  const handleCreate = async () => {
+    const data = await createStream();
+    setStreamData(data);
+  };
+
+  if (!streamData) {
+    return <button onClick={handleCreate}>Create Stream</button>;
+  }
+
+  return <DaydreamDemo whipUrl={streamData.whipUrl} />;
+}
+```
+
+## Live Examples
+
+* [with-react](https://daydream-browser-kohl.preview.livepeer.monster) - Basic React hooks demo
+* [with-compositor](https://daydream-browser-zeta.preview.livepeer.monster) - Canvas composition
+* [with-screen-share](https://with-screen-share-lime.preview.livepeer.monster) - Screen capture
+* [with-three](https://with-three-git-main.preview.livepeer.monster) - Three.js integration
+
+## Next Steps
+
+* [Broadcast](/sdks/browser/broadcast) - Core broadcast API
+* [Player](/sdks/browser/player) - Core player API
+* [Compositor](/sdks/browser/compositor) - Combine video sources

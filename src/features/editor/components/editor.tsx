@@ -14,6 +14,8 @@ import { PreviewArea } from './preview-area';
 import { ProjectDebugPanel } from './project-debug-panel';
 import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
+import { ShortcutsDialog } from './shortcuts-dialog';
+import { SettingsDialog } from './settings-dialog';
 import { toast } from 'sonner';
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
@@ -72,6 +74,8 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
+  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -287,6 +291,8 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           onSave={handleSave}
           onExport={handleExport}
           onExportBundle={handleExportBundle}
+          onOpenShortcuts={() => setShowShortcutsDialog(true)}
+          onOpenSettings={() => setShowSettingsDialog(true)}
         />
 
         {/* Resizable Layout: Main Content + Timeline */}
@@ -296,7 +302,16 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             <div className="h-full flex overflow-hidden relative min-w-0">
               {/* Left Sidebar - Media Library */}
               <ErrorBoundary level="feature">
-                <MediaSidebar />
+                <MediaSidebar
+                  toolbarActions={{
+                    onSave: handleSave,
+                    onExport: handleExport,
+                    onExportBundle: handleExportBundle,
+                    isDirty,
+                    onOpenSettings: () => setShowSettingsDialog(true),
+                    onOpenShortcuts: () => setShowShortcutsDialog(true),
+                  }}
+                />
               </ErrorBoundary>
 
               {/* Center - Preview */}
@@ -349,6 +364,15 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           />
         )}
       </Suspense>
+
+      <ShortcutsDialog
+        open={showShortcutsDialog}
+        onOpenChange={setShowShortcutsDialog}
+      />
+      <SettingsDialog
+        open={showSettingsDialog}
+        onOpenChange={setShowSettingsDialog}
+      />
 
       {/* Clear Keyframes Confirmation Dialog */}
       <ClearKeyframesDialog />

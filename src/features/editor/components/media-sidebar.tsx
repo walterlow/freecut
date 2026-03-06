@@ -25,7 +25,22 @@ import {
   Wand2,
   Grid3X3,
   Blend,
+  Settings,
+  Keyboard,
+  Share2,
+  Save,
+  Download,
+  Video,
+  FolderArchive,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { WalletConnectButton } from '@/components/wallet-connect-button';
 import { useEditorStore } from '@/shared/state/editor';
 import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
@@ -45,7 +60,20 @@ import {
   VIGNETTE_CONFIG,
 } from '@/types/effects';
 
-export const MediaSidebar = memo(function MediaSidebar() {
+export interface ToolbarActionsProps {
+  onSave: () => Promise<void>;
+  onExport: () => void;
+  onExportBundle: () => void;
+  isDirty: boolean;
+  onOpenSettings: () => void;
+  onOpenShortcuts: () => void;
+}
+
+interface MediaSidebarProps {
+  toolbarActions?: ToolbarActionsProps;
+}
+
+export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: MediaSidebarProps) {
   // Use granular selectors - Zustand v5 best practice
   const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
@@ -432,7 +460,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         </div>
 
         {/* Category Icons */}
-        <div className="flex flex-col gap-1 py-2">
+        <div className="flex flex-col gap-1 py-2 flex-1 min-h-0">
           {categories.map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -458,13 +486,93 @@ export const MediaSidebar = memo(function MediaSidebar() {
             </button>
           ))}
         </div>
+
+        {/* Mobile: toolbar actions (Save, Export, Settings, etc.) at bottom of strip */}
+        {isMobile && toolbarActions && (
+          <div className="flex flex-col gap-1 py-2 border-t border-border w-full items-center flex-shrink-0">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 min-h-11 min-w-11 rounded-lg"
+              onClick={toolbarActions.onOpenSettings}
+              data-tooltip="Settings"
+              data-tooltip-side="right"
+              aria-label="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 min-h-11 min-w-11 rounded-lg"
+              onClick={toolbarActions.onOpenShortcuts}
+              data-tooltip="Keyboard Shortcuts"
+              data-tooltip-side="right"
+              aria-label="Keyboard shortcuts"
+            >
+              <Keyboard className="w-4 h-4" />
+            </Button>
+            <WalletConnectButton size="sm" compact className="h-10 w-10 min-h-11 min-w-11 rounded-lg" />
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 min-h-11 min-w-11 rounded-lg"
+              asChild
+            >
+              <a
+                href="https://tv.creativeplatform.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                data-tooltip="Distribute"
+                data-tooltip-side="right"
+                aria-label="Distribute"
+              >
+                <Share2 className="w-4 h-4" />
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-10 w-10 min-h-11 min-w-11 rounded-lg relative"
+              onClick={() => void toolbarActions.onSave()}
+              aria-label="Save project"
+            >
+              <Save className="w-4 h-4" />
+              {toolbarActions.isDirty && (
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#EC407A] rounded-full animate-pulse" />
+              )}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-10 w-10 min-h-11 min-w-11 rounded-lg glow-primary-sm"
+                  aria-label="Export"
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side="right">
+                <DropdownMenuItem onClick={toolbarActions.onExport} className="gap-2">
+                  <Video className="w-4 h-4" />
+                  Export Video
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={toolbarActions.onExportBundle} className="gap-2">
+                  <FolderArchive className="w-4 h-4" />
+                  Download Project (.zip)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       {/* Content Panel: overlay on mobile (fixed), inline on md+ */}
       <div
         className={`panel-bg border-r border-border overflow-hidden transition-[width] ${
           leftSidebarOpen
-            ? 'fixed left-12 top-14 bottom-0 z-10 w-[min(100vw-3rem,320px)] pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pl-0 md:pb-0 md:relative md:left-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-left-sidebar-width)]'
+            ? 'fixed left-12 top-14 bottom-0 z-20 w-[min(100vw-3rem,320px)] max-md:bg-[var(--panel-bg)] pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pl-0 md:pb-0 md:relative md:left-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-left-sidebar-width)]'
             : 'w-0'
         }`}
         style={
@@ -472,6 +580,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
             ? {
                 ['--editor-left-sidebar-width' as string]: `${sidebarWidth}px`,
                 transition: isResizingRef.current ? 'none' : 'width 200ms',
+                // Force opaque background on mobile overlay so preview doesn't show through
+                backgroundColor: 'var(--panel-bg)',
               }
             : { transition: 'width 200ms' }
         }

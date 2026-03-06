@@ -1,11 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Polyfill Node stdlib (buffer, etc.) for browser - required by @account-kit deps (elliptic, bn.js, @solana/web3.js)
+    nodePolyfills(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -84,6 +90,17 @@ export default defineConfig({
           }
           if (id.includes('/node_modules/gifuct-js/')) {
             return 'gif-processing';
+          }
+          // Wallet / Account Kit – separate chunk so main bundle stays smaller and wallet code is cacheable
+          if (
+            id.includes('@account-kit/') ||
+            id.includes('/wagmi/') ||
+            id.includes('@reown/') ||
+            id.includes('@walletconnect/') ||
+            id.includes('@coinbase/wallet-sdk') ||
+            id.includes('/viem/')
+          ) {
+            return 'wallet-vendor';
           }
           // UI framework
           if (id.includes('@radix-ui/')) {

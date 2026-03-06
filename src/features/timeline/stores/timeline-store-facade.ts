@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Timeline Store Facade
  *
  * Provides backward-compatible access to the split timeline stores.
@@ -556,6 +556,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       markClean: timelineActions.markClean,
       saveTimeline,
       loadTimeline,
+      addMediaToTimeline: timelineActions.addMediaToTimeline,
     };
   }
 
