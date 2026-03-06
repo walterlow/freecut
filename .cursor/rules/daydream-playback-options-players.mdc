@@ -1,0 +1,227 @@
+---
+description: Learn how to playback your stream
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+#  Playback Options & Players
+
+> Learn how to playback your stream
+
+# What is Playback?
+
+When you stream video, you need two things: a way to send video (ingest) and a way for viewers to watch it (playback). This guide focuses on the playback side, how viewers watch your stream.
+
+## The Playback Paths
+
+There are different playback paths you can use to watch your stream:
+
+### Direct WebRTC/WHEP (Ultra-Low Latency)
+
+Best use case is for small audiences (under 1,000 viewers), interactive streams, real-time applications.
+
+| Pros                                                             | Cons                                                          |
+| ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| Nearly instant playback (sub-second latency)                     | Expensive at scale (each viewer needs a dedicated connection) |
+| Great for two-way interaction (gaming, auctions, sports betting) | Limited to \~1,000 concurrent viewers per stream              |
+|                                                                  | Not all browsers/devices support it well                      |
+
+#### Workflow Diagram
+
+```mermaid  theme={null}
+graph LR
+    A[Your Camera] --> B[Server]
+    B --> C[WebRTC/WHEP]
+    C --> D[Viewers<br/> 0.5-2 seconds delay]
+    style D fill:#5E565A
+```
+
+### HLS/DASH via CDN (Scalable)
+
+Best use case is for large audiences, reliable playback, broad device support
+
+| Pros                               | Cons                                     |
+| ---------------------------------- | ---------------------------------------- |
+| Scales to millions of viewers      | Higher latency (typically 10-30 seconds) |
+| Works on virtually all devices     | Not suitable for real-time interaction   |
+| Cost-effective for large audiences |                                          |
+| CDN handles traffic spikes         |                                          |
+
+#### Workflow Diagram
+
+```mermaid  theme={null}
+graph LR
+    A[Your Camera] --> B[Server]
+    B --> C[Transcoding]
+    C --> D[HLS/DASH]
+    D --> E[CDN]
+    E --> F[Viewers<br/> 3-30 seconds delay]
+    style F fill:#5E565A
+```
+
+### Livepeer Studio
+
+Livepeer Studio supports both WebRTC and HLS protocols within a single workflow. Best use case for
+development and testing. Livepeer Studio can also be used on a smaller scale for production
+
+## Choosing the right playback path
+
+| Criteria          | HLS Playback                                                        | WHEP Playback                                                               | Livepeer Studio                                                   |
+| ----------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **What It Is**    | HTTP Live Streaming - segment-based protocol                        | WebRTC HTTP Egress Protocol - real-time WebRTC streaming                    | Managed video infrastructure platform                             |
+| **Latency**       | 6-30+ seconds                                                       | \< 1 second (sub-second)                                                    | Both available (HLS + WebRTC)                                     |
+| **Compatibility** | Near-universal (all browsers, devices, smart TVs)                   | Modern browsers with WebRTC support                                         | Both HLS and WebRTC endpoints provided                            |
+| **Best For**      | Maximum device compatibility, large-scale broadcasting, VOD content | Ultra-low latency, real-time interaction, two-way communication             | Quick development, MVP/prototyping, flexible infrastructure       |
+| **Scale**         | Thousands to millions of viewers                                    | Hundreds to low thousands of concurrent viewers                             | Tens to low hundreds of viewers                                   |
+| **Use Cases**     | Live sports broadcasts, webinars, concerts, on-demand libraries     | Live trading platforms, multiplayer gaming, interactive Q\&A, live auctions | Testing ideas, proof of concepts, projects needing both protocols |
+| **Choose When**   | Latency of 10-30 seconds is acceptable and reach matters most       | Real-time interaction is critical and you have modern audience              | You need to ship fast without managing infrastructure             |
+
+## Example Players for Playback
+
+### Eyevinn
+
+As the SDP Offer/Answer exchange is WebRTC media server specific this WebRTC player is designed to be extended with Media Server specific adapters. You can either use one of the included media server adapters or build your own custom adapter.
+
+Visit [Eyevinn Player](https://github.com/Eyevinn/webrtc-player)
+
+### OvenPlayer
+
+OvenPlayer is a JavaScript-based Player that can play Low Latency HLS (LLHLS) and WebRTC streams optimized for OvenMediaEngine. It provides various APIs, so you can build and operate your media service more easily.
+
+Visit [OvenPlayer](https://github.com/AirenSoft/OvenPlayer)
+
+### HLS.js
+
+HLS.js is a JavaScript library that allows you to play HLS streams in the browser. It is a port of the native HLS.js library for Node.js.
+
+Visit [HLS.js](https://github.com/video-dev/hls.js)
+
+### DASH.js
+
+DASH.js is a JavaScript library that allows you to play DASH streams in the browser. It is a port of the native DASH.js library for Node.js.
+
+Visit [DASH.js](https://github.com/Dash-Industry-Forum/dash.js)
+
+### Example Code
+
+<CodeGroup>
+  ```html Eyevinn theme={null}
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <title>WebRTC Livestream</title>
+  </head>
+  <body>
+      <video id="player" controls autoplay muted></video>
+      
+      <script type="module">
+          import { WebRTCPlayer } from 'https://cdn.jsdelivr.net/npm/@eyevinn/webrtc-player@2/dist/webrtc-player.js';
+          
+          const player = new WebRTCPlayer({
+              video: document.getElementById('player'),
+              type: 'whep',
+              statsTypeFilter: '^candidate-*|^inbound-rtp'
+          });
+          
+          // Your WHEP playback URL from your own server
+          player.load('<YOUR_WHEP_URL>');
+      </script>
+  </body>
+  </html>
+  ```
+
+  ```html OvenPlayer theme={null}
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <title>OvenPlayer Hybrid Stream</title>
+      <script src="https://cdn.jsdelivr.net/npm/ovenplayer/dist/ovenplayer.js"></script>
+  </head>
+  <body>
+      <div id="player"></div>
+      
+      <script>
+          const player = OvenPlayer.create('player', {
+              sources: [
+                  {
+                      // Try WebRTC first (low latency)
+                      type: 'webrtc',
+                      file: 'wss://streaming-server.com/webrtc/stream-abc123'
+                  },
+                  {
+                      // Fallback to HLS if WebRTC fails
+                      type: 'hls',
+                      file: 'https://streaming-server.com/webrtc/stream-abc123/index.m3u8'
+                  }
+              ],
+              autoStart: true,
+              controls: true
+          });
+      </script>
+  </body>
+  </html>
+  ```
+
+  ```html HTML5 Video Player theme={null}
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <title>HLS Livestream</title>
+      <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  </head>
+  <body>
+      <video id="player" controls autoplay muted width="800"></video>
+      
+      <script>
+          const video = document.getElementById('player');
+          const hlsUrl = 'https://streaming-server.com/webrtc/stream-abc123/index.m3u8';
+          
+          // Check if browser supports HLS natively (Safari)
+          if (video.canPlayType('application/vnd.apple.mpegurl')) {
+              video.src = hlsUrl;
+          }
+          // Use HLS.js for other browsers (Chrome, Firefox)
+          else if (Hls.isSupported()) {
+              const hls = new Hls();
+              hls.loadSource(hlsUrl);
+              hls.attachMedia(video);
+              
+              hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                  video.play();
+              });
+          }
+      </script>
+  </body>
+  </html>
+  ```
+
+  ```html DASH.js theme={null}
+  <!doctype html>
+  <html>
+  <head>
+      <title>dash.js Rocks</title>
+      <style>
+          video {
+              width: 640px;
+              height: 360px;
+          }
+      </style>
+  </head>
+  <body>
+  <div>
+      <video id="videoPlayer" controls></video>
+  </div>
+  <script src="https://cdn.dashjs.org/latest/modern/umd/dash.all.min.js"></script>
+  <script>
+      (function () {
+          var url = "https://dash.akamaized.net/envivio/EnvivioDash3/manifest.mpd";
+          var player = dashjs.MediaPlayer().create();
+          player.initialize(document.querySelector("#videoPlayer"), url, true);
+      })();
+  </script>
+  </body>
+  </html>
+  ```
+</CodeGroup>

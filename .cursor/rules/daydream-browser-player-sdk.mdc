@@ -1,0 +1,217 @@
+---
+description: Play AI-processed video from Daydream
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Player
+
+> Play AI-processed video from Daydream
+
+# Player API
+
+The `createPlayer` function lets you play the AI-processed video output from Daydream.
+
+## Basic Usage
+
+```typescript  theme={null}
+import { createPlayer } from "@daydreamlive/browser";
+
+// Create player with WHEP URL (from broadcast.whepUrl or your backend)
+const player = createPlayer(whepUrl);
+
+// Listen for state changes
+player.on("stateChange", (state) => {
+  console.log("State:", state);
+  // 'connecting' | 'playing' | 'buffering' | 'ended' | 'error'
+});
+
+// Connect and attach to video element
+await player.connect();
+player.attachTo(document.querySelector("video#output"));
+```
+
+## Configuration Options
+
+```typescript  theme={null}
+const player = createPlayer(whepUrl, {
+  // Optional
+  reconnect: {
+    enabled: true,           // Auto-reconnect on disconnect
+    maxAttempts: 5,          // Max reconnection attempts
+    baseDelay: 1000,         // Initial delay (ms)
+    maxDelay: 30000,         // Max delay (ms)
+  },
+});
+```
+
+## State Machine
+
+The player goes through these states:
+
+```mermaid  theme={null}
+stateDiagram-v2
+    [*] --> idle
+    idle --> connecting: connect()
+    connecting --> playing: connected
+    connecting --> error: failed
+    playing --> buffering: stalled
+    playing --> ended: stop()
+    buffering --> playing: resumed
+    buffering --> error: timeout
+    error --> [*]
+    ended --> [*]
+```
+
+## Events
+
+```typescript  theme={null}
+// State changes
+player.on("stateChange", (state) => {
+  switch (state) {
+    case "connecting":
+      console.log("Connecting...");
+      break;
+    case "playing":
+      console.log("Playing AI output!");
+      break;
+    case "buffering":
+      console.log("Buffering...");
+      break;
+    case "error":
+      console.log("Playback error");
+      break;
+    case "ended":
+      console.log("Playback ended");
+      break;
+  }
+});
+
+// Error details
+player.on("error", (error) => {
+  console.error("Player error:", error.message);
+});
+```
+
+## Attach to Video Element
+
+The `attachTo` method connects the player to a `<video>` element:
+
+```typescript  theme={null}
+const player = createPlayer(whepUrl);
+await player.connect();
+
+// Attach to existing video element
+const video = document.querySelector("video#output");
+player.attachTo(video);
+```
+
+The video element should have these attributes for best results:
+
+```html  theme={null}
+<video id="output" autoplay playsinline muted></video>
+```
+
+* `autoplay` - Start playing automatically
+* `playsinline` - Don't go fullscreen on mobile
+* `muted` - Required for autoplay in most browsers
+
+## Get Media Stream
+
+You can access the raw MediaStream for custom rendering (e.g., canvas):
+
+```typescript  theme={null}
+const player = createPlayer(whepUrl);
+await player.connect();
+
+// Get the MediaStream
+const stream = player.getStream();
+
+// Use with canvas, WebGL, etc.
+const video = document.createElement("video");
+video.srcObject = stream;
+video.play();
+
+// Draw to canvas
+const ctx = canvas.getContext("2d");
+function draw() {
+  ctx.drawImage(video, 0, 0);
+  requestAnimationFrame(draw);
+}
+draw();
+```
+
+## Stop Playback
+
+```typescript  theme={null}
+player.stop();
+```
+
+This will:
+
+1. Close the WebRTC connection
+2. Detach from the video element
+3. Set state to `"ended"`
+
+## Complete Example
+
+```typescript  theme={null}
+import { createBroadcast, createPlayer } from "@daydreamlive/browser";
+
+async function startStreaming(whipUrl: string) {
+  // Get camera
+  const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+  // Show local preview
+  const previewVideo = document.querySelector("video#preview");
+  previewVideo.srcObject = stream;
+
+  // Start broadcasting
+  const broadcast = createBroadcast({ whipUrl, stream });
+
+  broadcast.on("stateChange", async (state) => {
+    if (state === "live") {
+      // Once broadcasting, start the player for AI output
+      const player = createPlayer(broadcast.whepUrl);
+
+      player.on("stateChange", (playerState) => {
+        console.log("Player:", playerState);
+      });
+
+      await player.connect();
+      player.attachTo(document.querySelector("video#output"));
+    }
+  });
+
+  await broadcast.connect();
+
+  return { broadcast, player };
+}
+```
+
+## Playback via Livepeer
+
+Alternatively, you can use the playback ID with Livepeer's player. This has higher latency than WHEP but is useful when you don't have the WHEP URL:
+
+```typescript  theme={null}
+// From stream creation response
+const playbackId = stream.outputPlaybackId;
+
+// Use Livepeer's player
+const playbackUrl = `https://lvpr.tv/?v=${playbackId}`;
+window.open(playbackUrl);
+
+// Or embed with iframe
+const iframe = document.createElement("iframe");
+iframe.src = playbackUrl;
+iframe.allow = "autoplay";
+document.body.appendChild(iframe);
+```
+
+## Next Steps
+
+* [Broadcast](/sdks/browser/broadcast) - Send video to Daydream
+* [React Hooks](/sdks/browser/react-hooks) - Use `usePlayer` hook
+* [Compositor](/sdks/browser/compositor) - Combine multiple sources

@@ -1,0 +1,112 @@
+---
+alwaysApply: true
+---
+AI Pipelines
+Is My AI Workload a Good Fit for Livepeer?
+Decision framework for evaluating whether your AI workload belongs on Livepeer. Includes decision tree, capability matrix, gateway vs orchestrator responsibilities, and anti-patterns.
+
+​
+Decision tree
+Livepeer is optimised for streaming, GPU-bound, low-latency inference. It is not a general-purpose batch compute or file-processing network. Use this page to determine whether your workload is a good fit before you start building.
+Start
+ │
+ ├── Is the workload STREAMING (frames / chunks / segments)?
+ │    └── No  →  ✗ Not a good Livepeer fit
+ │
+ └── Yes
+      │
+      ├── Does the workload require GPU-accelerated INFERENCE?
+      │    └── No  →  ✗ Use a gateway or standard compute
+      │
+      └── Yes
+           │
+           ├── Is LOW LATENCY (< ~500ms) important to the UX?
+           │    └── No  →  ⚠ Possible, but not differentiated
+           │
+           └── Yes
+                │
+                ├── Does it produce INCREMENTAL output?
+                │    └── No  →  ⚠ Marginal fit
+                │
+                └── Yes  →  ✓ Excellent Livepeer workload
+Summary: Livepeer works best for streaming, GPU-bound inference with low latency and incremental output. If your workload fails the first two gates, don’t build it on Livepeer.
+​
+Capability matrix
+Category	Example workloads	Fit	Why
+Audio	Live ASR, live translation, audio intent	✓ Strong	Chunked streams, GPU inference, low latency
+Audio	Offline transcription	⚠ Medium	Works, but batch infra is cheaper
+Audio	Video → MP3 extraction	✗ Poor	CPU task, no inference
+Vision	Depth, pose, segmentation	✓ Strong	Frame-based GPU inference
+Vision	Image classification (batch)	⚠ Medium	Not latency-critical
+Video	Video-to-video, diffusion, effects	✓ Excellent	Core Livepeer strength
+Video	Transcoding only	⚠ Medium	Supported, but not AI-driven
+Text	Prompt routing, captions, metadata	⚠ Conditional	Only if real-time
+Text	LLM batch inference	✗ Poor	Latency-tolerant, expensive on GPU
+​
+Gateway vs orchestrator responsibilities by workload
+Understanding the split between gateway and orchestrator helps you know where to direct integration effort for each workload type.
+​
+Audio workloads (ASR, translation, intent)
+Gateway handles: audio ingestion via WebRTC, chunking and buffering, authentication and retries, output aggregation and fan-out.
+Orchestrator handles: GPU-resident ASR / translation models, streaming inference execution, incremental token emission, language or model specialisation.
+​
+Vision workloads (depth, pose, segmentation)
+Gateway handles: frame routing, capability selection, latency monitoring, cost-aware routing.
+Orchestrator handles: vision model execution, GPU memory optimisation, per-frame inference, optional batching.
+​
+Video workloads (generation, effects, diffusion)
+Gateway handles: stream orchestration, QoS and failover, output delivery, session lifecycle management.
+Orchestrator handles: persistent GPU pipelines, multi-model composition, frame-by-frame generation, real-time conditioning.
+​
+Text workloads (real-time only)
+Gateway handles: request multiplexing, rate limiting, stable API surface.
+Orchestrator handles: lightweight LLMs or classifiers, prompt routing and control logic, real-time response generation.
+​
+ASR pipeline examples
+These are some of the best-fit workloads on Livepeer today.
+​
+Live captions for video streams
+Mic / Video Audio
+      ↓
+Gateway (WebRTC audio chunks)
+      ↓
+Orchestrator (GPU ASR model)
+      ↓
+Incremental text tokens
+      ↓
+Gateway → captions / overlays / APIs
+Why it fits: continuous audio stream, warm GPU state, incremental output, latency-critical UX.
+​
+Multilingual live translation
+Live Audio
+      ↓
+ASR
+      ↓
+Translation model
+      ↓
+Translated captions (real-time)
+Why it fits: chained streaming inference, strong latency requirements, high differentiation vs batch pipelines.
+​
+Voice-driven avatars or agents
+Live Audio
+      ↓
+ASR
+      ↓
+Intent / command extraction
+      ↓
+Video or avatar pipeline conditioning
+Why it fits: multimodal real-time control loop, audio conditions downstream video.
+​
+Live moderation and safety
+Live Audio
+      ↓
+ASR
+      ↓
+Keyword / sentiment / policy model
+      ↓
+Flags, triggers, overlays
+Why it fits: streaming classification, immediate downstream actions.
+​
+What about batch and file-based workloads?
+File-to-file and batch workloads: doable vs sensible
+

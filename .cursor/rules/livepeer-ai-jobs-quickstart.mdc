@@ -1,0 +1,126 @@
+---
+alwaysApply: true
+---
+AI Jobs & Pipelines
+AI Jobs Quickstart
+Send your first AI job to a Livepeer gateway using the AI API, with GitHub-validated endpoint references and a stakeholder signoff checklist.
+
+​
+AI Jobs Quickstart
+Submit your first AI inference job through a Livepeer gateway, verify the response shape, and then branch into more advanced pipelines.
+​
+AI-ready summary (for humans and assistants)
+Use the AI gateway base URL: https://livepeer.studio/api/beta/generate
+Authenticate with Authorization: Bearer <LIVEPEER_STUDIO_API_KEY>
+Start with POST /text-to-image for a simple request/response pattern
+Other AI job endpoints follow the same auth/base URL pattern
+Final default pipeline flow still requires stakeholder approval
+​
+Review status
+This quickstart is structurally complete and source-backed, but stakeholder signoff is still required to confirm the canonical AI pipeline flow and default example model_id.
+​
+1. Prerequisites
+A Livepeer Studio API key (backend use only)
+curl (and optionally jq)
+A known-good model_id approved by stakeholders for user-facing docs
+​
+2. Base URL and authentication
+Use the Livepeer AI gateway base URL and Bearer auth:
+Base URL: https://livepeer.studio/api/beta/generate
+Auth header: Authorization: Bearer <LIVEPEER_STUDIO_API_KEY>
+As of 02-March-2026, Studio-managed AI requests use this beta base URL.
+Minimal connectivity check:
+curl -sS \
+  -H "Authorization: Bearer $LIVEPEER_STUDIO_API_KEY" \
+  https://livepeer.studio/api/beta/generate/health
+If auth and routing are working, you should receive a JSON response from the health endpoint.
+​
+3. Submit an AI job (text-to-image starter flow)
+POST /text-to-image is the simplest JSON-only AI job endpoint in the current AI gateway spec.
+​
+Example request body
+model_id is required by the spec. Use a stakeholder-approved model ID for production docs.
+{
+  "model_id": "<MODEL_ID>",
+  "prompt": "A cinematic still of a lighthouse on a rocky coast at sunrise",
+  "width": 1024,
+  "height": 576,
+  "num_images_per_prompt": 1
+}
+​
+Example curl request
+curl -sS \
+  -X POST "https://livepeer.studio/api/beta/generate/text-to-image" \
+  -H "Authorization: Bearer $LIVEPEER_STUDIO_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_id": "<MODEL_ID>",
+    "prompt": "A cinematic still of a lighthouse on a rocky coast at sunrise",
+    "width": 1024,
+    "height": 576,
+    "num_images_per_prompt": 1
+  }'
+​
+4. Read the response
+The AI gateway spec defines ImageResponse as an object with an images array. Each item includes:
+url (generated media URL)
+seed
+nsfw
+Example response shape (trimmed to the fields defined in the spec):
+{
+  "images": [
+    {
+      "url": "https://example-cdn/path/to/output.png",
+      "seed": 123456789,
+      "nsfw": false
+    }
+  ]
+}
+​
+5. Troubleshooting
+​
+401 Unauthorized
+Confirm the Bearer token is valid
+Confirm the header is exactly Authorization: Bearer ...
+​
+422 Validation Error
+Check required fields (model_id, prompt)
+Check request body JSON formatting
+Check field types (width/height should be integers)
+​
+500 Internal Server Error
+Retry the request
+Check gateway health endpoint
+If persistent, collect request ID/log context and escalate through the current support path
+​
+6. What counts as an “AI job” (scope note)
+This quickstart uses text-to-image as the starter flow because it is the simplest JSON endpoint pattern in the current gateway spec.
+The same auth/base URL pattern also applies to other AI job endpoints such as:
+image-to-image
+image-to-video
+upscale
+audio-to-text
+segment-anything-2
+llm
+image-to-text
+live-video-to-video
+text-to-speech
+​
+7. Required stakeholder signoff before marking final
+Confirm the canonical user-facing “AI Jobs” flow(s)
+Confirm the default model_id to publish in examples
+Confirm any deprecated flows/endpoints that should be excluded
+Confirm required caveats (limits, model availability, pricing, auth/onboarding changes)
+​
+8. Next steps
+AI API portal
+Text-to-image endpoint reference
+AI Pipelines overview
+BYOC (Bring Your Own Compute)
+​
+Canonical references (source-of-truth first)
+GitHub (primary): livepeer/docs api/gateway.openapi.yaml
+GitHub (primary): livepeer/ai-runner gateway.openapi.yaml
+GitHub (primary): livepeer/ai-runner README
+DeepWiki (corroboration only): livepeer/ai-runner | DeepWiki
+Repo-local docs refs (unvalidated until cross-checked): /gateways/references/api-reference/AI-API/ai, /gateways/references/api-reference/AI-API/text-to-image
