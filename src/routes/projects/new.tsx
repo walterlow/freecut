@@ -7,6 +7,7 @@ import { useCreateProject } from '@/features/projects/hooks/use-project-actions'
 import { useProjectStore } from '@/features/projects/stores/project-store';
 import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { Button } from '@/components/ui/button';
+import { RequireWallet } from '@/components/require-wallet';
 import { WalletConnectButton } from '@/components/wallet-connect-button';
 import { Share2 } from 'lucide-react';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
@@ -14,7 +15,11 @@ import type { ProjectFormData } from '@/features/projects/utils/validation';
 const logger = createLogger('NewProject');
 
 export const Route = createFileRoute('/projects/new')({
-  component: NewProject,
+  component: () => (
+    <RequireWallet>
+      <NewProject />
+    </RequireWallet>
+  ),
   beforeLoad: async () => {
     try {
       const { loadProjects } = useProjectStore.getState();
