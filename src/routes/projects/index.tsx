@@ -5,6 +5,7 @@ import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
+import { RequireWallet } from '@/components/require-wallet';
 import { WalletConnectButton } from '@/components/wallet-connect-button';
 import { Plus, Upload, FolderOpen, File, Share2 } from 'lucide-react';
 import { PixelsLogo } from '@/components/brand/pixels-logo';
@@ -29,7 +30,11 @@ import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 
 export const Route = createFileRoute('/projects/')({
-  component: ProjectsIndex,
+  component: () => (
+    <RequireWallet>
+      <ProjectsIndex />
+    </RequireWallet>
+  ),
   // Clean up any media blob URLs when returning to projects page
   beforeLoad: async () => {
     cleanupBlobUrls();

@@ -1,9 +1,14 @@
-﻿import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { Editor } from '@/features/editor/components/editor';
+import { RequireWallet } from '@/components/require-wallet';
 import { getProject } from '@/infrastructure/storage/indexeddb';
 
 export const Route = createFileRoute('/editor/$projectId')({
-  component: EditorPage,
+  component: () => (
+    <RequireWallet>
+      <EditorPage />
+    </RequireWallet>
+  ),
   loader: async ({ params }) => {
     // Validate project exists - actual loading happens in Editor via loadTimeline
     const project = await getProject(params.projectId);
