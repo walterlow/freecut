@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Client Render Engine
  *
  * Contains the `createCompositionRenderer` factory that builds the per-frame
@@ -570,6 +570,8 @@ export async function createCompositionRenderer(
       // so the HTML5 fallback is ready if mediabunny fails mid-export.
       // This is critical for transitions where the outgoing clip's extractor
       // may fail past the source duration boundary.
+      // Note: This preload is for preview/export only. Project save does not
+      // depend on it; saved project data is unaffected by video load errors.
       const allVideoIds = Array.from(videoElements.keys());
 
       if (!hasDom && allVideoIds.some(id => !useMediabunny.has(id))) {
@@ -601,7 +603,10 @@ export async function createCompositionRenderer(
               }, { once: true });
               video.addEventListener('error', () => {
                 clearTimeout(timeout);
-                log.error('Video load error', { itemId });
+                log.warn(
+                  'Video preload failed (preview/export may be affected; project save is not affected)',
+                  { itemId }
+                );
                 resolve();
               }, { once: true });
               video.load();

@@ -5,7 +5,8 @@ import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, FolderOpen, File, Github } from 'lucide-react';
+import { WalletConnectButton } from '@/components/wallet-connect-button';
+import { Plus, Upload, FolderOpen, File, Share2 } from 'lucide-react';
 import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { ProjectList } from '@/features/projects/components/project-list';
 import { ProjectForm } from '@/features/projects/components/project-form';
@@ -247,6 +248,7 @@ function ProjectsIndex() {
               <PixelsLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <WalletConnectButton size="sm" compact className="h-10" />
               <Button
                 variant="outline"
                 size="icon"
@@ -254,14 +256,14 @@ function ProjectsIndex() {
                 asChild
               >
                 <a
-                  href="https://github.com/creativeplatform/pixels"
+                  href="https://tv.creativeplatform.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
-                  data-tooltip="View on GitHub"
+                  data-tooltip="Distribute"
                   data-tooltip-side="left"
-                  aria-label="View on GitHub"
+                  aria-label="Distribute"
                 >
-                  <Github className="w-5 h-5" />
+                  <Share2 className="w-5 h-5" />
                 </a>
               </Button>
               <Button

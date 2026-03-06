@@ -1,8 +1,9 @@
-﻿import { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { MediaMetadata } from '@/types/storage';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -235,6 +236,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <DialogContent className="max-w-lg">
         <DialogHeader className="flex flex-row items-center justify-between">
           <DialogTitle>Editor Settings</DialogTitle>
+          <DialogDescription className="sr-only">
+            Editor settings and cache options.
+          </DialogDescription>
           <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 gap-1.5 mr-6">
             <RotateCcw className="w-3.5 h-3.5" />
             Reset

@@ -1,6 +1,13 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
 @plugin "tailwindcss-animate";
+
+/* Account Kit: dark text on white (secondary/auth) buttons only; modal body stays light on dark */
+.akui-btn-secondary,
+.akui-btn-auth {
+  color: #0f0f0f;
+}
 
 /* Feature-specific theme extensions */
 @import "./features/timeline/theme.css";

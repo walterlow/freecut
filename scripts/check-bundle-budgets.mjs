@@ -9,6 +9,7 @@ const DEFAULT_ASSETS_DIR = path.join(ROOT_DIR, 'dist', 'assets');
 
 const CHUNK_BUDGETS = [
   { chunk: 'react-vendor', prefix: 'react-vendor-', maxBytes: 250 * 1024, maxFiles: 1 },
+  { chunk: 'wallet-vendor', prefix: 'wallet-vendor-', maxBytes: 3200 * 1024, maxFiles: 1 },
   { chunk: 'feature-editing-core', prefix: 'feature-editing-core-', maxBytes: 500 * 1024, maxFiles: 1 },
   { chunk: 'feature-editing-ui', prefix: 'feature-editing-ui-', maxBytes: 240 * 1024, maxFiles: 1 },
   { chunk: 'feature-composition-runtime', prefix: 'feature-composition-runtime-', maxBytes: 220 * 1024, maxFiles: 1 },

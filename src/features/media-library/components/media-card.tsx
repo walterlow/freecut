@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap } from 'lucide-react';
+import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, Film } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,6 +12,7 @@ import { mediaLibraryService } from '../services/media-library-service';
 import { getMediaType, formatDuration } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { useMediaLibraryStore } from '../stores/media-library-store';
+import { useTimelineStore } from '../deps/timeline-stores';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 
@@ -258,16 +259,29 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
         {/* Actions - hidden during upload */}
         {!isImporting && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
+                className="min-h-11 min-w-11 h-11 w-11 md:min-h-0 md:min-w-0 md:h-6 md:w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
               >
                 <MoreVertical className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuItem
+                disabled={isImporting}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useTimelineStore.getState().addMediaToTimeline(media.id);
+                }}
+              >
+                <Film className="w-3 h-3 mr-2" />
+                Add to timeline
+              </DropdownMenuItem>
               {isBroken && onRelink && (
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
                   <RefreshCw className="w-3 h-3 mr-2" />
@@ -406,16 +420,29 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
           {/* Actions dropdown - hidden during upload */}
           {!isImporting && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-5 w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
+                  className="min-h-11 min-w-11 h-11 w-11 md:min-h-0 md:min-w-0 md:h-5 md:w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                 >
                   <MoreVertical className="w-2.5 h-2.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  disabled={isImporting}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    useTimelineStore.getState().addMediaToTimeline(media.id);
+                  }}
+                >
+                  <Film className="w-3 h-3 mr-2" />
+                  Add to timeline
+                </DropdownMenuItem>
                 {isBroken && onRelink && (
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
                     <RefreshCw className="w-3 h-3 mr-2" />

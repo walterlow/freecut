@@ -1,5 +1,7 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { Layers, ArrowRight, Play, FolderOpen, Download, Star } from 'lucide-react';
+import { useAuthModal, useUser, useSignerStatus } from '@account-kit/react';
 import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,6 +10,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { alchemyConfig } from '@/config/alchemy';
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
@@ -117,6 +120,56 @@ const showcaseItems = [
   },
 ];
 
+/** Get Started CTA: connect wallet when not connected, navigate to /projects when connected. Only rendered when Alchemy is configured. */
+function GetStartedWalletButton() {
+  const navigate = useNavigate();
+  const user = useUser();
+  const { openAuthModal } = useAuthModal();
+  const signerStatus = useSignerStatus();
+  const wasDisconnectedRef = useRef<boolean | null>(null);
+
+  const isInitializing = signerStatus.isInitializing;
+  const isConnected = Boolean(user && !isInitializing);
+
+  // Only redirect when user *becomes* connected on this page (not when already connected on load).
+  useEffect(() => {
+    if (wasDisconnectedRef.current === null) {
+      wasDisconnectedRef.current = !user;
+    }
+    if (user && wasDisconnectedRef.current) {
+      wasDisconnectedRef.current = false;
+      navigate({ to: '/projects' });
+    }
+  }, [user, navigate]);
+
+  const handleClick = () => {
+    if (isConnected) {
+      navigate({ to: '/projects' });
+    } else {
+      openAuthModal();
+    }
+  };
+
+  const label = isInitializing
+    ? 'Loading…'
+    : isConnected
+      ? 'Continue to Projects'
+      : 'Get Started';
+
+  return (
+    <Button
+      size="lg"
+      className="gap-2 px-8"
+      onClick={handleClick}
+      disabled={isInitializing}
+      aria-label={label}
+    >
+      {label}
+      <ArrowRight className="h-4 w-4" />
+    </Button>
+  );
+}
+
 function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground select-text">
@@ -150,23 +203,27 @@ function LandingPage() {
           </p>
 
           <div className="flex flex-col items-center gap-4 sm:flex-row">
-            <Button asChild size="lg" className="gap-2 px-8">
-              <Link to="/projects">
-                Get Started
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            {alchemyConfig ? (
+              <GetStartedWalletButton />
+            ) : (
+              <Button asChild size="lg" className="gap-2 px-8">
+                <Link to="/projects">
+                  Get Started
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
 
-            <Button asChild variant="outline" size="lg" className="gap-2">
+            {/* <Button asChild variant="outline" size="lg" className="gap-2">
               <a
-                href="https://github.com/creativeplatform/pixels"
+                href="https://tv.creativeplatform.xyz"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Star className="h-4 w-4" />
-                Star on GitHub
+                Creative TV
               </a>
-            </Button>
+            </Button> */}
           </div>
         </div>
       </section>
@@ -306,16 +363,16 @@ function LandingPage() {
               </Link>
             </Button>
 
-            <Button asChild variant="outline" size="lg" className="gap-2">
+            {/* <Button asChild variant="outline" size="lg" className="gap-2">
               <a
-                href="https://github.com/creativeplatform/pixels"
+                href="https://tv.creativeplatform.xyz"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 <Star className="h-4 w-4" />
-                Star on GitHub
+                Creative TV
               </a>
-            </Button>
+            </Button> */}
           </div>
         </div>
       </section>

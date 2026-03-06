@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
@@ -9,11 +9,16 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/shared/state/selection';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { useProjectStore } from '@/features/timeline/deps/projects';
 import {
   mediaLibraryService,
   opfsService,
 } from '@/features/timeline/deps/media-library-service';
+import { resolveMediaUrl, getMediaType } from '@/features/timeline/deps/media-library-resolver';
+import { findNearestAvailableSpace } from '../../utils/collision-utils';
+import { buildTimelineBaseItem, buildTypedTimelineItem } from '../../utils/build-timeline-item-from-media';
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -768,5 +773,97 @@ export function slideItem(
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });
+}
+
+/**
+ * Add a single media item to the timeline at the current playhead on the active
+ * (or first available) track. Used for mobile/tap "Add to timeline" without drag-and-drop.
+ */
+export async function addMediaToTimeline(mediaId: string): Promise<void> {
+  try {
+    const media = useMediaLibraryStore.getState().mediaById[mediaId];
+    if (!media) {
+      logger.warn('Add to timeline: media not found', { mediaId });
+      toast.error('Media not found');
+      return;
+    }
+
+    const { tracks, items } = useItemsStore.getState();
+    const fps = useTimelineSettingsStore.getState().fps;
+    const currentFrame = usePlaybackStore.getState().currentFrame;
+    const currentProject = useProjectStore.getState().currentProject;
+    const canvasWidth = currentProject?.metadata?.width ?? 1920;
+    const canvasHeight = currentProject?.metadata?.height ?? 1080;
+
+    const droppableTracks = tracks.filter(
+      (t) => !t.isGroup && t.visible && !t.locked
+    );
+    const activeTrackId = useSelectionStore.getState().activeTrackId;
+    const targetTrack =
+      (activeTrackId && droppableTracks.find((t) => t.id === activeTrackId)) ??
+      droppableTracks[0];
+
+    if (!targetTrack) {
+      toast.error('No track available to add media');
+      return;
+    }
+
+    const mediaType = getMediaType(media.mimeType);
+    const durationInFrames =
+      mediaType === 'image'
+        ? fps * 3
+        : Math.round(media.duration * fps) || fps;
+    const itemDuration = durationInFrames > 0 ? durationInFrames : fps;
+
+    const finalPosition = findNearestAvailableSpace(
+      Math.max(0, currentFrame),
+      itemDuration,
+      targetTrack.id,
+      items
+    );
+    if (finalPosition === null) {
+      toast.error('No space on track for this clip');
+      return;
+    }
+
+    const blobUrl = await resolveMediaUrl(mediaId);
+    if (!blobUrl) {
+      toast.error('Could not load media');
+      return;
+    }
+
+    const needsThumbnail = mediaType === 'video' || mediaType === 'image';
+    const thumbnailUrl = needsThumbnail
+      ? await mediaLibraryService.getThumbnailBlobUrl(mediaId)
+      : null;
+
+    const baseItem = buildTimelineBaseItem({
+      media,
+      mediaId,
+      label: media.fileName,
+      trackId: targetTrack.id,
+      from: finalPosition,
+      durationInFrames: itemDuration,
+      timelineFps: fps,
+    });
+    const timelineItem = buildTypedTimelineItem({
+      baseItem,
+      mediaType,
+      blobUrl,
+      thumbnailUrl,
+      media,
+      canvasWidth,
+      canvasHeight,
+    });
+    if (!timelineItem) {
+      toast.error('Unsupported media type');
+      return;
+    }
+
+    addItem(timelineItem);
+  } catch (err) {
+    logger.error('Add to timeline failed', { mediaId, err });
+    toast.error('Could not add to timeline');
+  }
 }
 

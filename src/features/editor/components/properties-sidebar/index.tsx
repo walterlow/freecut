@@ -80,7 +80,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       <div
         className={`panel-bg border-l border-border flex-shrink-0 transition-[width] ${
           rightSidebarOpen
-            ? 'fixed right-0 top-14 bottom-0 z-10 w-[min(100vw-3rem,320px)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pr-0 md:pb-0 md:relative md:right-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-right-sidebar-width)]'
+            ? 'fixed right-0 top-14 bottom-0 z-20 w-[min(100vw-3rem,320px)] max-md:bg-[var(--panel-bg)] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pr-0 md:pb-0 md:relative md:right-auto md:top-auto md:bottom-auto md:z-auto md:w-[var(--editor-right-sidebar-width)]'
             : 'w-0'
         }`}
         style={
@@ -88,6 +88,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
             ? {
                 ['--editor-right-sidebar-width' as string]: `${rightSidebarWidth}px`,
                 transition: isResizingRef.current ? 'none' : 'width 200ms',
+                // Force opaque background on mobile overlay so preview doesn't show through
+                backgroundColor: 'var(--panel-bg)',
               }
             : { transition: 'width 200ms' }
         }

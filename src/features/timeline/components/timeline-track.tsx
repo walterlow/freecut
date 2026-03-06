@@ -1,4 +1,4 @@
-﻿import { useState, useRef, memo, useCallback, useMemo } from 'react';
+import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('TimelineTrack');
@@ -20,10 +20,11 @@ import {
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
+import { buildTimelineBaseItem, buildTypedTimelineItem } from '../utils/build-timeline-item-from-media';
+import type { TimelineBaseItem } from '../utils/build-timeline-item-from-media';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
-import { computeInitialTransform } from '../utils/transform-init';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -52,22 +53,6 @@ interface DragMediaItem {
   duration: number;
 }
 
-interface TimelineBaseItem {
-  id: string;
-  trackId: string;
-  from: number;
-  durationInFrames: number;
-  label: string;
-  mediaId: string;
-  originId: string;
-  sourceStart: number;
-  sourceEnd: number;
-  sourceDuration: number;
-  sourceFps: number;
-  trimStart: number;
-  trimEnd: number;
-}
-
 interface PlannedDroppedMediaItem {
   dragItem: DragMediaItem;
   media: MediaMetadata;
@@ -89,91 +74,6 @@ function isValidDragMediaItem(value: unknown): value is DragMediaItem {
     && isNonEmptyString(candidate.fileName)
     && typeof candidate.duration === 'number'
     && Number.isFinite(candidate.duration);
-}
-
-function buildTimelineBaseItem(params: {
-  media: MediaMetadata;
-  mediaId: string;
-  label: string;
-  trackId: string;
-  from: number;
-  durationInFrames: number;
-  timelineFps: number;
-}): TimelineBaseItem {
-  const { media, mediaId, label, trackId, from, durationInFrames, timelineFps } = params;
-  const sourceFps = media.fps || timelineFps;
-  const actualSourceDurationFrames = Math.round(media.duration * sourceFps);
-  const sourceFramesForItemDuration = Math.min(
-    actualSourceDurationFrames,
-    Math.round(durationInFrames * sourceFps / timelineFps)
-  );
-
-  return {
-    id: crypto.randomUUID(),
-    trackId,
-    from,
-    durationInFrames,
-    label,
-    mediaId,
-    originId: crypto.randomUUID(),
-    sourceStart: 0,
-    sourceEnd: sourceFramesForItemDuration,
-    sourceDuration: actualSourceDurationFrames,
-    sourceFps,
-    trimStart: 0,
-    trimEnd: 0,
-  };
-}
-
-function buildTypedTimelineItem(params: {
-  baseItem: TimelineBaseItem;
-  mediaType: string;
-  blobUrl: string;
-  thumbnailUrl: string | null;
-  media: MediaMetadata;
-  canvasWidth: number;
-  canvasHeight: number;
-}): TimelineItemType | null {
-  const { baseItem, mediaType, blobUrl, thumbnailUrl, media, canvasWidth, canvasHeight } = params;
-
-  if (mediaType === 'video') {
-    const sourceW = media.width || canvasWidth;
-    const sourceH = media.height || canvasHeight;
-    return {
-      ...baseItem,
-      type: 'video',
-      src: blobUrl,
-      thumbnailUrl: thumbnailUrl || undefined,
-      sourceWidth: media.width || undefined,
-      sourceHeight: media.height || undefined,
-      transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-    } as VideoItem;
-  }
-
-  if (mediaType === 'audio') {
-    return {
-      ...baseItem,
-      type: 'audio',
-      src: blobUrl,
-    } as AudioItem;
-  }
-
-  if (mediaType === 'image') {
-    const sourceW = media.width || canvasWidth;
-    const sourceH = media.height || canvasHeight;
-    return {
-      ...baseItem,
-      type: 'image',
-      src: blobUrl,
-      thumbnailUrl: thumbnailUrl || undefined,
-      sourceWidth: media.width || undefined,
-      sourceHeight: media.height || undefined,
-      transform: computeInitialTransform(sourceW, sourceH, canvasWidth, canvasHeight),
-    } as ImageItem;
-  }
-
-  logger.warn('Unsupported media type:', mediaType);
-  return null;
 }
 
 /**
