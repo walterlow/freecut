@@ -6,8 +6,9 @@
  * passes coordinate params to the overlay.
  */
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useEffect } from 'react';
 import { useCornerPinStore } from '../stores/corner-pin-store';
+import { useSelectionStore } from '@/shared/state/selection';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { CornerPinOverlay } from './corner-pin-overlay';
 import type { CoordinateParams, Transform } from '../types/gizmo';
@@ -28,8 +29,17 @@ export const CornerPinContainer = memo(function CornerPinContainer({
 }: CornerPinContainerProps) {
   const isEditing = useCornerPinStore((s) => s.isEditing);
   const editingItemId = useCornerPinStore((s) => s.editingItemId);
+  const stopEditing = useCornerPinStore((s) => s.stopEditing);
 
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const items = useItemsStore((s) => s.items);
+
+  // Stop editing when the edited item is deselected
+  useEffect(() => {
+    if (isEditing && editingItemId && !selectedItemIds.includes(editingItemId)) {
+      stopEditing();
+    }
+  }, [isEditing, editingItemId, selectedItemIds, stopEditing]);
 
   const editingItem = useMemo(
     () => (editingItemId ? items.find((i) => i.id === editingItemId) : null),

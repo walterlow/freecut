@@ -35,6 +35,7 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
     hoveredHandle,
     setDragging,
     setHovered,
+    stopEditing,
   } = useCornerPinStore();
 
   const items = useItemsStore((s) => s.items);
@@ -292,6 +293,17 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
     },
     [draggingHandle, hitTest, setHovered],
   );
+
+  // Escape key exits corner pin editing
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        stopEditing();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [stopEditing]);
 
   // Resize canvas to match container
   useEffect(() => {
