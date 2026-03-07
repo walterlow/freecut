@@ -640,6 +640,7 @@ export const VideoPreview = memo(function VideoPreview({
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
   const gpuEffectsCanvasRef = useRef<HTMLCanvasElement>(null);
+  const scrubFrameDirtyRef = useRef(false);
   const bypassPreviewSeekRef = useRef(false);
   const scrubRendererRef = useRef<CompositionRenderer | null>(null);
   const scrubInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
@@ -709,7 +710,9 @@ export const VideoPreview = memo(function VideoPreview({
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef);
+  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
+  const hasGpuEffectsRef = useRef(showGpuEffectsOverlay);
+  hasGpuEffectsRef.current = showGpuEffectsOverlay;
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -2175,10 +2178,20 @@ export const VideoPreview = memo(function VideoPreview({
     scrubMountedRef.current = true;
 
     const drawToDisplay = (renderedFrame: number) => {
-      const displayCanvas = scrubCanvasRef.current;
       const offscreen = scrubOffscreenCanvasRef.current;
-      if (!displayCanvas || !offscreen) return;
+      if (!offscreen) return;
 
+      // When GPU effects are active, the overlay canvas (zIndex 5) is the
+      // display surface. Skip the CPU→CPU copy to the display canvas —
+      // the overlay reads directly from the offscreen canvas (1 copy instead of 3).
+      if (hasGpuEffectsRef.current) {
+        scrubFrameDirtyRef.current = true;
+        setDisplayedFrame(renderedFrame);
+        return;
+      }
+
+      const displayCanvas = scrubCanvasRef.current;
+      if (!displayCanvas) return;
       const displayCtx = displayCanvas.getContext('2d');
       if (!displayCtx) return;
       displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
@@ -3320,7 +3333,10 @@ export const VideoPreview = memo(function VideoPreview({
               />
             )}
 
-            {/* GPU effects overlay - WebGPU canvas for shader-based effects preview */}
+            {/* GPU effects overlay - WebGPU canvas for shader-based effects.
+                Always on top when GPU effects are present. The composition renderer
+                in preview mode skips GPU effects; this overlay handles them via
+                the fast WebGPU canvas path (no CPU readback). */}
             <canvas
               ref={gpuEffectsCanvasRef}
               className="absolute inset-0 pointer-events-none"

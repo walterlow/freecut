@@ -5,9 +5,6 @@ import type { EffectsPipeline } from '@/lib/gpu-effects';
 import type { GpuEffectInstance } from '@/lib/gpu-effects/types';
 import type { GpuEffect, ItemEffect } from '@/types/effects';
 
-/**
- * Collect GPU effect instances from all visible items' effects.
- */
 function collectGpuEffects(items: { effects?: ItemEffect[] }[]): GpuEffectInstance[] {
   const instances: GpuEffectInstance[] = [];
   for (const item of items) {
@@ -29,20 +26,25 @@ function collectGpuEffects(items: { effects?: ItemEffect[] }[]): GpuEffectInstan
 }
 
 /**
- * Hook that manages a GPU effects overlay canvas for the preview.
+ * GPU effects overlay — non-blocking for all interactions.
  *
- * Event-driven: only renders when frame or effects change, not polling.
- * Skips rendering during playback (Player handles that).
+ * Scrubbing: reads from offscreen canvas via dirty flag (zero extra render).
+ * Seeking: Player handles the seek instantly, GPU effects catch up async
+ *   via captureCanvasSource (progressive — frame shows immediately, effects pop in).
+ * Playback: rAF loop with captureCanvasSource at best-effort framerate.
+ *
+ * Single copyExternalImageToTexture per frame, then stays on GPU.
  */
-export function useGpuEffectsOverlay(gpuCanvasRef: React.RefObject<HTMLCanvasElement | null>) {
+export function useGpuEffectsOverlay(
+  gpuCanvasRef: React.RefObject<HTMLCanvasElement | null>,
+  scrubOffscreenRef: React.RefObject<OffscreenCanvas | null>,
+  scrubFrameDirtyRef: React.RefObject<boolean>,
+) {
   const pipelineRef = useRef<EffectsPipeline | null>(null);
   const gpuCtxRef = useRef<GPUCanvasContext | null>(null);
   const initPromiseRef = useRef<Promise<EffectsPipeline | null> | null>(null);
-  const renderInFlightRef = useRef(false);
-  const pendingRenderRef = useRef(false);
   const [hasGpuEffects, setHasGpuEffects] = useState(false);
 
-  // Track whether items have GPU effects
   useEffect(() => {
     const check = () => {
       const items = useItemsStore.getState().items;
@@ -73,79 +75,125 @@ export function useGpuEffectsOverlay(gpuCanvasRef: React.RefObject<HTMLCanvasEle
     return initPromiseRef.current;
   }, []);
 
-  const renderGpuFrame = useCallback(async () => {
-    // Coalesce rapid calls — only one render in flight at a time
-    if (renderInFlightRef.current) {
-      pendingRenderRef.current = true;
+  const applyFromCanvas = useCallback((source: HTMLCanvasElement | OffscreenCanvas) => {
+    const canvas = gpuCanvasRef.current;
+    const pipeline = pipelineRef.current;
+    if (!canvas || !pipeline) return;
+
+    const items = useItemsStore.getState().items;
+    const gpuInstances = collectGpuEffects(items);
+    if (gpuInstances.length === 0) return;
+
+    if (!gpuCtxRef.current) {
+      gpuCtxRef.current = pipeline.configureCanvas(canvas);
+    }
+    if (!gpuCtxRef.current) return;
+
+    if (canvas.width !== source.width || canvas.height !== source.height) {
+      canvas.width = source.width;
+      canvas.height = source.height;
+      gpuCtxRef.current = pipeline.configureCanvas(canvas);
+      if (!gpuCtxRef.current) return;
+    }
+
+    pipeline.applyEffects(source, gpuInstances, gpuCtxRef.current);
+  }, [gpuCanvasRef]);
+
+  // Coalesced async render (for seeks, playback, effect changes)
+  const asyncInFlightRef = useRef(false);
+  const asyncPendingRef = useRef(false);
+
+  const renderAsync = useCallback(() => {
+    if (asyncInFlightRef.current) {
+      asyncPendingRef.current = true;
       return;
     }
-    renderInFlightRef.current = true;
+    const captureFn = usePlaybackStore.getState().captureCanvasSource;
+    if (!captureFn || !pipelineRef.current) return;
 
-    try {
-      const canvas = gpuCanvasRef.current;
-      if (!canvas) return;
-
-      // Skip during playback
-      if (usePlaybackStore.getState().isPlaying) return;
-
-      const items = useItemsStore.getState().items;
-      const gpuInstances = collectGpuEffects(items);
-      if (gpuInstances.length === 0) return;
-
-      const captureFn = usePlaybackStore.getState().captureCanvasSource;
-      if (!captureFn) return;
-
-      const pipeline = await ensurePipeline();
-      if (!pipeline) return;
-
-      if (!gpuCtxRef.current) {
-        gpuCtxRef.current = pipeline.configureCanvas(canvas);
+    asyncInFlightRef.current = true;
+    captureFn().then((source) => {
+      if (source) applyFromCanvas(source);
+    }).catch(() => {}).finally(() => {
+      asyncInFlightRef.current = false;
+      if (asyncPendingRef.current) {
+        asyncPendingRef.current = false;
+        renderAsync();
       }
-      if (!gpuCtxRef.current) return;
+    });
+  }, [applyFromCanvas]);
 
-      const source = await captureFn();
-      if (!source) return;
+  // Main rAF loop: picks up dirty flag from scrub system
+  // + drives playback rendering
+  useEffect(() => {
+    if (!hasGpuEffects) return;
 
-      if (canvas.width !== source.width || canvas.height !== source.height) {
-        canvas.width = source.width;
-        canvas.height = source.height;
-        gpuCtxRef.current = pipeline.configureCanvas(canvas);
-        if (!gpuCtxRef.current) return;
+    let active = true;
+    let rafId = 0;
+
+    const loop = () => {
+      if (!active) return;
+
+      // Scrub system rendered a new frame
+      if (scrubFrameDirtyRef.current) {
+        scrubFrameDirtyRef.current = false;
+        const offscreen = scrubOffscreenRef.current;
+        if (offscreen && offscreen.width > 0 && offscreen.height > 0) {
+          applyFromCanvas(offscreen);
+        }
+      }
+      // During playback, render at best-effort framerate
+      else if (usePlaybackStore.getState().isPlaying) {
+        renderAsync();
       }
 
-      pipeline.applyEffects(source, gpuInstances, gpuCtxRef.current);
-    } catch {
-      // Silently continue
-    } finally {
-      renderInFlightRef.current = false;
-      if (pendingRenderRef.current) {
-        pendingRenderRef.current = false;
-        void renderGpuFrame();
-      }
-    }
-  }, [gpuCanvasRef, ensurePipeline]);
+      rafId = requestAnimationFrame(loop);
+    };
 
-  // Re-render on frame changes (scrubbing, seeking)
+    void ensurePipeline().then(() => {
+      if (!active) return;
+      rafId = requestAnimationFrame(loop);
+    });
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    };
+  }, [hasGpuEffects, ensurePipeline, applyFromCanvas, renderAsync, scrubOffscreenRef, scrubFrameDirtyRef]);
+
+  // Seeking / settled: Player handles the seek instantly,
+  // GPU effects catch up async (non-blocking)
   useEffect(() => {
     if (!hasGpuEffects) return;
     let prevFrame = -1;
     return usePlaybackStore.subscribe(() => {
       const s = usePlaybackStore.getState();
-      const frame = s.previewFrame ?? s.currentFrame;
-      if (frame !== prevFrame && !s.isPlaying) {
+      if (s.isPlaying || s.previewFrame !== null) return;
+      const frame = s.currentFrame;
+      if (frame !== prevFrame) {
         prevFrame = frame;
-        void renderGpuFrame();
+        renderAsync();
       }
     });
-  }, [hasGpuEffects, renderGpuFrame]);
+  }, [hasGpuEffects, renderAsync]);
 
-  // Re-render on effect param changes
+  // Effect param changes while settled
   useEffect(() => {
     if (!hasGpuEffects) return;
-    return useItemsStore.subscribe(() => void renderGpuFrame());
-  }, [hasGpuEffects, renderGpuFrame]);
+    return useItemsStore.subscribe(() => {
+      const s = usePlaybackStore.getState();
+      if (s.isPlaying || s.previewFrame !== null) return;
+      renderAsync();
+    });
+  }, [hasGpuEffects, renderAsync]);
 
-  // Cleanup pipeline on unmount
+  // Pre-init pipeline
+  useEffect(() => {
+    if (hasGpuEffects) void ensurePipeline();
+  }, [hasGpuEffects, ensurePipeline]);
+
+  // Cleanup
   useEffect(() => {
     return () => {
       pipelineRef.current?.destroy();

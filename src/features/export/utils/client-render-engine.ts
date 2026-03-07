@@ -33,6 +33,7 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
+  applyAllEffects,
   applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
@@ -1038,12 +1039,19 @@ export async function createCompositionRenderer(
 
         // Apply effects
         if (combinedEffects.length > 0) {
-          const hasGpu = combinedEffects.some((e) => e.enabled && e.effect.type === 'gpu-effect');
-          if (hasGpu && !itemRenderContext.gpuPipeline) {
-            itemRenderContext.gpuPipeline = await ensureGpuPipeline();
-          }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
-          await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
+          if (renderMode === 'preview') {
+            // Preview mode: skip GPU effects (the overlay handles them via
+            // the fast WebGPU canvas path with no CPU readback)
+            applyAllEffects(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings);
+          } else {
+            // Export mode: apply GPU effects via applyEffectsToImageData
+            const hasGpu = combinedEffects.some((e) => e.enabled && e.effect.type === 'gpu-effect');
+            if (hasGpu && !itemRenderContext.gpuPipeline) {
+              itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+            }
+            await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
+          }
           contentCtx.drawImage(effectCanvas, 0, 0);
           canvasPool.release(effectCanvas);
         } else {
