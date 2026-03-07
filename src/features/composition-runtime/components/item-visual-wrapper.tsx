@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
-import { useItemVisualState, getScanlinesStyle } from './hooks/use-item-visual-state';
+import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
 interface ItemVisualWrapperProps {
@@ -46,57 +46,6 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     }
     return {};
   }, [state.maskType, state.maskClipPath, state.svgMaskId]);
-
-  // Check if any overlay effects are active
-  const hasOverlays = state.scanlinesEffect || state.halftoneStyles || state.vignetteStyle;
-
-  // Scanlines style (or hidden)
-  const scanlinesStyle = useMemo((): React.CSSProperties => {
-    if (!state.scanlinesEffect) {
-      return { display: 'none' };
-    }
-    return {
-      position: 'absolute',
-      inset: 0,
-      pointerEvents: 'none',
-      ...getScanlinesStyle(state.scanlinesEffect.intensity),
-    };
-  }, [state.scanlinesEffect]);
-
-  // Halftone wrapper style
-  const halftoneWrapperStyle = useMemo((): React.CSSProperties => {
-    if (!state.halftoneStyles) {
-      return { display: 'none' };
-    }
-    return {
-      position: 'absolute',
-      inset: 0,
-      overflow: 'hidden',
-      pointerEvents: 'none',
-      mixBlendMode: state.halftoneStyles.patternStyle.mixBlendMode,
-      opacity: state.halftoneStyles.patternStyle.opacity,
-    };
-  }, [state.halftoneStyles]);
-
-  // Halftone pattern style (without blendMode/opacity which is on wrapper)
-  const halftonePatternStyle = useMemo((): React.CSSProperties => {
-    if (!state.halftoneStyles) {
-      return {};
-    }
-    return {
-      ...state.halftoneStyles.patternStyle,
-      mixBlendMode: undefined,
-      opacity: undefined,
-    };
-  }, [state.halftoneStyles]);
-
-  // Vignette style (or hidden)
-  const vignetteContainerStyle = useMemo((): React.CSSProperties => {
-    if (!state.vignetteStyle) {
-      return { display: 'none' };
-    }
-    return state.vignetteStyle;
-  }, [state.vignetteStyle]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
@@ -179,33 +128,6 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
           }}
         >
           {children}
-
-          {/* Overlay container - ALWAYS rendered, hidden via CSS when unused */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              display: hasOverlays ? 'block' : 'none',
-            }}
-          >
-            {/* Scanlines overlay */}
-            <div style={scanlinesStyle} />
-
-            {/* Halftone pattern overlay */}
-            <div style={halftoneWrapperStyle}>
-              {state.halftoneStyles?.fadeWrapperStyle ? (
-                <div style={state.halftoneStyles.fadeWrapperStyle}>
-                  <div style={halftonePatternStyle} />
-                </div>
-              ) : (
-                <div style={halftonePatternStyle} />
-              )}
-            </div>
-
-            {/* Vignette overlay - renders on top of all other effects */}
-            <div style={vignetteContainerStyle} />
-          </div>
         </div>
       </div>
     </>

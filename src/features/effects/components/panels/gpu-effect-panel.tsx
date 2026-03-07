@@ -17,6 +17,62 @@ interface GpuEffectPanelProps {
   onRemove: (effectId: string) => void;
 }
 
+/**
+ * Action buttons shared across single-row and multi-row layouts.
+ */
+function ActionButtons({
+  effectId,
+  enabled,
+  isDefault,
+  onReset,
+  onToggle,
+  onRemove,
+}: {
+  effectId: string;
+  enabled: boolean;
+  isDefault: boolean;
+  onReset: (id: string) => void;
+  onToggle: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
+        onClick={() => onReset(effectId)}
+        title="Reset to defaults"
+        disabled={isDefault}
+      >
+        <RotateCcw className="w-3 h-3" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 flex-shrink-0"
+        onClick={() => onToggle(effectId)}
+        title={enabled ? 'Disable effect' : 'Enable effect'}
+      >
+        {enabled ? (
+          <Eye className="w-3 h-3" />
+        ) : (
+          <EyeOff className="w-3 h-3 text-muted-foreground" />
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 flex-shrink-0"
+        onClick={() => onRemove(effectId)}
+        title="Remove effect"
+      >
+        <Trash2 className="w-3 h-3" />
+      </Button>
+    </>
+  );
+}
+
 export const GpuEffectPanel = memo(function GpuEffectPanel({
   effect,
   gpuEffect,
@@ -32,47 +88,70 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
     ([key, param]) => gpuEffect.params[key] === param.default
   );
 
-  return (
-    <div className="space-y-0">
-      {/* Header row with effect name and action buttons */}
+  // Single number param: compact single-row layout matching CSS filter panels
+  if (paramEntries.length === 1 && paramEntries[0]![1].type === 'number') {
+    const [key, param] = paramEntries[0]!;
+    const currentValue = (gpuEffect.params[key] ?? param.default) as number;
+    return (
+      <PropertyRow label={definition.name}>
+        <div className="flex items-center gap-1 min-w-0 w-full">
+          <NumberInput
+            value={currentValue}
+            onChange={(v) => onParamChange(effect.id, key, v)}
+            onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
+            min={param.min ?? 0}
+            max={param.max ?? 1}
+            step={param.step ?? 0.01}
+            disabled={!effect.enabled}
+            className="flex-1 min-w-0"
+          />
+          <ActionButtons
+            effectId={effect.id}
+            enabled={effect.enabled}
+            isDefault={isDefault}
+            onReset={onReset}
+            onToggle={onToggle}
+            onRemove={onRemove}
+          />
+        </div>
+      </PropertyRow>
+    );
+  }
+
+  // Zero params: header-only row with action buttons
+  if (paramEntries.length === 0) {
+    return (
       <PropertyRow label={definition.name}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
-            onClick={() => onReset(effect.id)}
-            title="Reset to defaults"
-            disabled={isDefault}
-          >
-            <RotateCcw className="w-3 h-3" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 flex-shrink-0"
-            onClick={() => onToggle(effect.id)}
-            title={effect.enabled ? 'Disable effect' : 'Enable effect'}
-          >
-            {effect.enabled ? (
-              <Eye className="w-3 h-3" />
-            ) : (
-              <EyeOff className="w-3 h-3 text-muted-foreground" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 flex-shrink-0"
-            onClick={() => onRemove(effect.id)}
-            title="Remove effect"
-          >
-            <Trash2 className="w-3 h-3" />
-          </Button>
+          <ActionButtons
+            effectId={effect.id}
+            enabled={effect.enabled}
+            isDefault={isDefault}
+            onReset={onReset}
+            onToggle={onToggle}
+            onRemove={onRemove}
+          />
+        </div>
+      </PropertyRow>
+    );
+  }
+
+  // Multi-param: header row with buttons, then one row per param
+  return (
+    <div className="space-y-0">
+      <PropertyRow label={definition.name}>
+        <div className="flex items-center gap-1 min-w-0 w-full justify-end">
+          <ActionButtons
+            effectId={effect.id}
+            enabled={effect.enabled}
+            isDefault={isDefault}
+            onReset={onReset}
+            onToggle={onToggle}
+            onRemove={onRemove}
+          />
         </div>
       </PropertyRow>
 
-      {/* Parameter rows */}
       {paramEntries.map(([key, param]) => {
         const currentValue = gpuEffect.params[key] ?? param.default;
 

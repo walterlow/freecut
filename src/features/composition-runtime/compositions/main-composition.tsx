@@ -1141,7 +1141,6 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
             <OptimizedEffectsBasedTransitionsLayer
               transitions={transitions}
               itemsById={itemsById}
-              adjustmentLayers={visibleAdjustmentLayers}
             />
 
             {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}

@@ -24,6 +24,7 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
+import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -115,6 +116,7 @@ export async function createCompositionRenderer(
   options: {
     mode?: 'export' | 'preview';
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
+    getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
@@ -127,6 +129,7 @@ export async function createCompositionRenderer(
   } = composition;
   const renderMode = options.mode ?? 'export';
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
+  const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
@@ -1073,13 +1076,14 @@ export async function createCompositionRenderer(
           }
         }
 
-        // Get effects (item effects + adjustment layer effects)
+        // Get effects (preview override → item effects + adjustment layer effects)
+        const itemEffects = (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ?? item.effects;
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
           frame
         );
-        const combinedEffects = combineEffects(item.effects, adjEffects);
+        const combinedEffects = combineEffects(itemEffects, adjEffects);
 
         // === DIRECT VIDEO→GPU PATH (importExternalTexture) ===
         // When a video item has ONLY GPU effects, a DOM video element is available,
@@ -1246,9 +1250,7 @@ export async function createCompositionRenderer(
           if (!effectWrapper.enabled) continue;
           const effect = effectWrapper.effect;
           // Effects that could add transparency
-          if (effect.type === 'glitch' ||
-              effect.type === 'canvas-effect' ||
-              ('opacity' in effect && typeof effect.opacity === 'number' && effect.opacity < 1)) {
+          if ('opacity' in effect && typeof effect.opacity === 'number' && effect.opacity < 1) {
             return false;
           }
         }
@@ -1452,6 +1454,25 @@ export async function createCompositionRenderer(
 
     setDomVideoElementProvider(provider: ((itemId: string) => HTMLVideoElement | null) | undefined) {
       itemRenderContext.domVideoElementProvider = provider;
+    },
+
+    /** Evict specific frames from the render cache (e.g. after effect param changes). */
+    invalidateFrameCache(frames?: number[]) {
+      if (!frames) {
+        for (const bitmap of frameCache.values()) bitmap.close();
+        frameCache.clear();
+        frameCacheOrder.length = 0;
+      } else {
+        for (const f of frames) {
+          const bitmap = frameCache.get(f);
+          if (bitmap) {
+            bitmap.close();
+            frameCache.delete(f);
+            const idx = frameCacheOrder.indexOf(f);
+            if (idx >= 0) frameCacheOrder.splice(idx, 1);
+          }
+        }
+      }
     },
 
     dispose() {

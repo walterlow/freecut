@@ -1,48 +1,26 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { ItemEffect, WheelsEffect } from '@/types/effects';
-import { WHEELS_CONFIG } from '@/types/effects';
+import type { ItemEffect, GpuEffect } from '@/types/effects';
+import type { GpuEffectDefinition } from '@/lib/gpu-effects/types';
 import { PropertyRow, NumberInput } from '@/shared/ui/property-controls';
 
-interface WheelsPanelProps {
+interface GpuWheelsPanelProps {
   effect: ItemEffect;
-  wheels: WheelsEffect;
-  onPropertyChange: (effectId: string, property: keyof WheelsEffect, value: number) => void;
-  onPropertyLiveChange: (effectId: string, property: keyof WheelsEffect, value: number) => void;
-  onWheelChange: (
-    effectId: string,
-    hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
-    amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
-    hue: number,
-    amount: number
-  ) => void;
-  onWheelLiveChange: (
-    effectId: string,
-    hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
-    amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
-    hue: number,
-    amount: number
-  ) => void;
-  onReset: (effectId: string, property: keyof WheelsEffect) => void;
+  gpuEffect: GpuEffect;
+  definition: GpuEffectDefinition;
+  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
+  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
+  onParamsBatchChange: (effectId: string, updates: Record<string, number | boolean | string>) => void;
+  onParamsBatchLiveChange: (effectId: string, updates: Record<string, number | boolean | string>) => void;
+  onReset: (effectId: string) => void;
   onToggle: (effectId: string) => void;
   onRemove: (effectId: string) => void;
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-interface WheelControlProps {
-  label: string;
-  hue: number;
-  amount: number;
-  size: number;
-  disabled: boolean;
-  onLiveChange: (hue: number, amount: number) => void;
-  onCommit: (hue: number, amount: number) => void;
-  onReset: () => void;
 }
 
 const MAX_WHEEL_SIZE = 100;
@@ -61,6 +39,17 @@ function getHueAmountFromClient(clientX: number, clientY: number, element: HTMLB
   const amount = clamp(dist / trackRadius, 0, 1);
   const hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
   return { hue, amount };
+}
+
+interface WheelControlProps {
+  label: string;
+  hue: number;
+  amount: number;
+  size: number;
+  disabled: boolean;
+  onLiveChange: (hue: number, amount: number) => void;
+  onCommit: (hue: number, amount: number) => void;
+  onReset: () => void;
 }
 
 const WheelControl = memo(function WheelControl({
@@ -126,11 +115,9 @@ const WheelControl = memo(function WheelControl({
     setDragging(false);
   }, [dragging, localAmount, localHue, onCommit]);
 
-  const displayHue = localHue;
-  const displayAmount = localAmount;
   const displayTrackRadius = size / 2 - PUCK_RADIUS_PX - 1;
-  const puckX = Math.cos((displayHue * Math.PI) / 180) * (displayTrackRadius * displayAmount);
-  const puckY = Math.sin((displayHue * Math.PI) / 180) * (displayTrackRadius * displayAmount);
+  const puckX = Math.cos((localHue * Math.PI) / 180) * (displayTrackRadius * localAmount);
+  const puckY = Math.sin((localHue * Math.PI) / 180) * (displayTrackRadius * localAmount);
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -166,7 +153,7 @@ const WheelControl = memo(function WheelControl({
       </button>
       <div className="text-[10px] text-muted-foreground">{label}</div>
       <div className="text-[10px] text-muted-foreground font-mono">
-        {Math.round(displayHue)}° • {Math.round(displayAmount * 100)}%
+        {Math.round(localHue)}° • {Math.round(localAmount * 100)}%
       </div>
       <Button
         variant="ghost"
@@ -182,37 +169,33 @@ const WheelControl = memo(function WheelControl({
   );
 });
 
-export const WheelsPanel = memo(function WheelsPanel({
+const WHEEL_DESCRIPTORS = [
+  { label: 'Shadows', hueKey: 'shadowsHue', amountKey: 'shadowsAmount' },
+  { label: 'Midtones', hueKey: 'midtonesHue', amountKey: 'midtonesAmount' },
+  { label: 'Highlights', hueKey: 'highlightsHue', amountKey: 'highlightsAmount' },
+] as const;
+
+const TONAL_PARAMS = ['temperature', 'tint', 'saturation'] as const;
+
+export const GpuWheelsPanel = memo(function GpuWheelsPanel({
   effect,
-  wheels,
-  onPropertyChange,
-  onPropertyLiveChange,
-  onWheelChange,
-  onWheelLiveChange,
+  gpuEffect,
+  definition,
+  onParamChange,
+  onParamLiveChange,
+  onParamsBatchChange,
+  onParamsBatchLiveChange,
   onReset,
   onToggle,
   onRemove,
-}: WheelsPanelProps) {
+}: GpuWheelsPanelProps) {
   const wheelGridRef = useRef<HTMLDivElement>(null);
   const [wheelSize, setWheelSize] = useState(MAX_WHEEL_SIZE);
-  const wheelDescriptors = useMemo(() => ([
-    {
-      label: 'Shadows',
-      hueKey: 'shadowsHue' as const,
-      amountKey: 'shadowsAmount' as const,
-    },
-    {
-      label: 'Midtones',
-      hueKey: 'midtonesHue' as const,
-      amountKey: 'midtonesAmount' as const,
-    },
-    {
-      label: 'Highlights',
-      hueKey: 'highlightsHue' as const,
-      amountKey: 'highlightsAmount' as const,
-    },
-  ]), []);
-  const tonalRowClass = '[&>span]:w-[84px] [&>span]:min-w-[84px]';
+
+  const paramEntries = Object.entries(definition.params);
+  const isDefault = paramEntries.every(
+    ([key, param]) => gpuEffect.params[key] === param.default
+  );
 
   useEffect(() => {
     const el = wheelGridRef.current;
@@ -221,26 +204,33 @@ export const WheelsPanel = memo(function WheelsPanel({
     const updateSize = () => {
       const width = el.clientWidth;
       const slotWidth = (width - GRID_GAP_PX * 2) / 3;
-      const nextSize = clamp(Math.floor(slotWidth), MIN_WHEEL_SIZE, MAX_WHEEL_SIZE);
-      setWheelSize(nextSize);
+      setWheelSize(clamp(Math.floor(slotWidth), MIN_WHEEL_SIZE, MAX_WHEEL_SIZE));
     };
 
     updateSize();
 
     if (typeof ResizeObserver === 'undefined') return;
-
-    const observer = new ResizeObserver(() => {
-      updateSize();
-    });
+    const observer = new ResizeObserver(() => updateSize());
     observer.observe(el);
-
     return () => observer.disconnect();
   }, []);
 
+  const tonalRowClass = '[&>span]:w-[84px] [&>span]:min-w-[84px]';
+
   return (
-    <div className="border-b border-border/50 pb-2 mb-2">
-      <PropertyRow label="Wheels">
-        <div className="flex items-center gap-1 flex-1 justify-end">
+    <div className="space-y-0">
+      <PropertyRow label={definition.name}>
+        <div className="flex items-center gap-1 min-w-0 w-full justify-end">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
+            onClick={() => onReset(effect.id)}
+            title="Reset to defaults"
+            disabled={isDefault}
+          >
+            <RotateCcw className="w-3 h-3" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -268,106 +258,58 @@ export const WheelsPanel = memo(function WheelsPanel({
 
       <div className="px-2 pb-2">
         <div ref={wheelGridRef} className="grid grid-cols-3 gap-1">
-          {wheelDescriptors.map((descriptor) => (
+          {WHEEL_DESCRIPTORS.map((desc) => (
             <WheelControl
-              key={descriptor.label}
-              label={descriptor.label}
-              hue={wheels[descriptor.hueKey]}
-              amount={wheels[descriptor.amountKey]}
+              key={desc.label}
+              label={desc.label}
+              hue={(gpuEffect.params[desc.hueKey] as number) ?? 0}
+              amount={(gpuEffect.params[desc.amountKey] as number) ?? 0}
               size={wheelSize}
               disabled={!effect.enabled}
               onLiveChange={(hue, amount) => {
-                onWheelLiveChange(effect.id, descriptor.hueKey, descriptor.amountKey, hue, amount);
+                onParamsBatchLiveChange(effect.id, {
+                  [desc.hueKey]: hue,
+                  [desc.amountKey]: amount,
+                });
               }}
               onCommit={(hue, amount) => {
-                onWheelChange(effect.id, descriptor.hueKey, descriptor.amountKey, hue, amount);
+                onParamsBatchChange(effect.id, {
+                  [desc.hueKey]: hue,
+                  [desc.amountKey]: amount,
+                });
               }}
               onReset={() => {
-                onReset(effect.id, descriptor.hueKey);
-                onReset(effect.id, descriptor.amountKey);
+                onParamsBatchChange(effect.id, {
+                  [desc.hueKey]: 0,
+                  [desc.amountKey]: 0,
+                });
               }}
             />
           ))}
         </div>
       </div>
 
-      <PropertyRow label={WHEELS_CONFIG.temperature.label} className={tonalRowClass}>
-        <div className="flex items-center gap-1 min-w-0 w-full">
-          <NumberInput
-            value={wheels.temperature}
-            onChange={(v) => onPropertyChange(effect.id, 'temperature', v)}
-            onLiveChange={(v) => onPropertyLiveChange(effect.id, 'temperature', v)}
-            min={WHEELS_CONFIG.temperature.min}
-            max={WHEELS_CONFIG.temperature.max}
-            step={WHEELS_CONFIG.temperature.step}
-            unit={WHEELS_CONFIG.temperature.unit}
-            disabled={!effect.enabled}
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-6 w-6 flex-shrink-0 ${wheels.temperature === WHEELS_CONFIG.temperature.default ? 'opacity-30' : ''}`}
-            onClick={() => onReset(effect.id, 'temperature')}
-            title="Reset to default"
-            disabled={wheels.temperature === WHEELS_CONFIG.temperature.default}
-          >
-            <RotateCcw className="w-3 h-3" />
-          </Button>
-        </div>
-      </PropertyRow>
-
-      <PropertyRow label={WHEELS_CONFIG.tint.label} className={tonalRowClass}>
-        <div className="flex items-center gap-1 min-w-0 w-full">
-          <NumberInput
-            value={wheels.tint}
-            onChange={(v) => onPropertyChange(effect.id, 'tint', v)}
-            onLiveChange={(v) => onPropertyLiveChange(effect.id, 'tint', v)}
-            min={WHEELS_CONFIG.tint.min}
-            max={WHEELS_CONFIG.tint.max}
-            step={WHEELS_CONFIG.tint.step}
-            unit={WHEELS_CONFIG.tint.unit}
-            disabled={!effect.enabled}
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-6 w-6 flex-shrink-0 ${wheels.tint === WHEELS_CONFIG.tint.default ? 'opacity-30' : ''}`}
-            onClick={() => onReset(effect.id, 'tint')}
-            title="Reset to default"
-            disabled={wheels.tint === WHEELS_CONFIG.tint.default}
-          >
-            <RotateCcw className="w-3 h-3" />
-          </Button>
-        </div>
-      </PropertyRow>
-
-      <PropertyRow label={WHEELS_CONFIG.saturation.label} className={tonalRowClass}>
-        <div className="flex items-center gap-1 min-w-0 w-full">
-          <NumberInput
-            value={wheels.saturation}
-            onChange={(v) => onPropertyChange(effect.id, 'saturation', v)}
-            onLiveChange={(v) => onPropertyLiveChange(effect.id, 'saturation', v)}
-            min={WHEELS_CONFIG.saturation.min}
-            max={WHEELS_CONFIG.saturation.max}
-            step={WHEELS_CONFIG.saturation.step}
-            unit={WHEELS_CONFIG.saturation.unit}
-            disabled={!effect.enabled}
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-6 w-6 flex-shrink-0 ${wheels.saturation === WHEELS_CONFIG.saturation.default ? 'opacity-30' : ''}`}
-            onClick={() => onReset(effect.id, 'saturation')}
-            title="Reset to default"
-            disabled={wheels.saturation === WHEELS_CONFIG.saturation.default}
-          >
-            <RotateCcw className="w-3 h-3" />
-          </Button>
-        </div>
-      </PropertyRow>
+      {TONAL_PARAMS.map((key) => {
+        const param = definition.params[key];
+        if (!param) return null;
+        const value = (gpuEffect.params[key] as number) ?? param.default;
+        return (
+          <PropertyRow key={key} label={param.label} className={tonalRowClass}>
+            <div className="flex items-center gap-1 min-w-0 w-full">
+              <NumberInput
+                value={value}
+                onChange={(v) => onParamChange(effect.id, key, v)}
+                onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
+                min={param.min ?? -100}
+                max={param.max ?? 100}
+                step={param.step ?? 1}
+                disabled={!effect.enabled}
+                className="flex-1 min-w-0"
+              />
+            </div>
+          </PropertyRow>
+        );
+      })}
     </div>
   );
 });

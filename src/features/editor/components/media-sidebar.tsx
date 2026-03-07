@@ -12,18 +12,7 @@ import {
   Hexagon,
   Heart,
   Pentagon,
-  Sun,
-  Contrast,
-  Droplets,
-  Wind,
-  Palette,
-  CircleDot,
-  ImageOff,
   Sparkles,
-  Zap,
-  Scan,
-  Wand2,
-  Grid3X3,
   Blend,
 } from 'lucide-react';
 import { useEditorStore } from '@/shared/state/editor';
@@ -35,14 +24,8 @@ import { MediaLibrary } from '@/features/editor/deps/media-library';
 import { TransitionsPanel } from './transitions-panel';
 import { findNearestAvailableSpace } from '@/features/editor/deps/timeline-utils';
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline';
-import type { VisualEffect, CSSFilterType, GlitchVariant } from '@/types/effects';
-import {
-  CSS_FILTER_CONFIGS,
-  GLITCH_CONFIGS,
-  EFFECT_PRESETS,
-  HALFTONE_CONFIG,
-  VIGNETTE_CONFIG,
-} from '@/types/effects';
+import type { VisualEffect } from '@/types/effects';
+import { EFFECT_PRESETS } from '@/types/effects';
 
 export const MediaSidebar = memo(function MediaSidebar() {
   // Use granular selectors - Zustand v5 best practice
@@ -301,92 +284,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
     selectItems([adjustmentItem.id]);
   }, []);
 
-  // Effect card configurations with icons
-  const effectCards: Array<{
-    type: CSSFilterType;
-    icon: typeof Sun;
-  }> = [
-    { type: 'brightness', icon: Sun },
-    { type: 'contrast', icon: Contrast },
-    { type: 'saturate', icon: Droplets },
-    { type: 'blur', icon: Wind },
-    { type: 'hue-rotate', icon: Palette },
-    { type: 'grayscale', icon: CircleDot },
-    { type: 'sepia', icon: ImageOff },
-    { type: 'invert', icon: Sparkles },
-  ];
-
-  const glitchCards: Array<{
-    type: GlitchVariant;
-    icon: typeof Zap;
-  }> = [
-    { type: 'rgb-split', icon: Zap },
-    { type: 'scanlines', icon: Scan },
-    { type: 'color-glitch', icon: Wand2 },
-  ];
-
-  // Create adjustment layer with a CSS filter effect
-  const handleAddFilterEffect = useCallback((filterType: CSSFilterType) => {
-    const config = CSS_FILTER_CONFIGS[filterType];
-    handleAddAdjustmentLayer(
-      [{ type: 'css-filter', filter: filterType, value: config.default }],
-      config.label
-    );
-  }, [handleAddAdjustmentLayer]);
-
-  // Create adjustment layer with a glitch effect
-  const handleAddGlitchEffect = useCallback((variant: GlitchVariant) => {
-    const config = GLITCH_CONFIGS[variant];
-    handleAddAdjustmentLayer(
-      [{
-        type: 'glitch',
-        variant,
-        intensity: 0.5,
-        speed: 1,
-        seed: Math.floor(Math.random() * 10000),
-      }],
-      config.label
-    );
-  }, [handleAddAdjustmentLayer]);
-
-  // Create adjustment layer with halftone effect
-  const handleAddHalftoneEffect = useCallback(() => {
-    handleAddAdjustmentLayer(
-      [{
-        type: 'canvas-effect',
-        variant: 'halftone',
-        patternType: HALFTONE_CONFIG.patternType.default,
-        dotSize: HALFTONE_CONFIG.dotSize.default,
-        spacing: HALFTONE_CONFIG.spacing.default,
-        angle: HALFTONE_CONFIG.angle.default,
-        intensity: HALFTONE_CONFIG.intensity.default,
-        softness: HALFTONE_CONFIG.softness.default,
-        blendMode: HALFTONE_CONFIG.blendMode.default,
-        inverted: HALFTONE_CONFIG.inverted.default,
-        fadeAngle: HALFTONE_CONFIG.fadeAngle.default,
-        fadeAmount: HALFTONE_CONFIG.fadeAmount.default,
-        dotColor: '#000000',
-      }],
-      'Halftone'
-    );
-  }, [handleAddAdjustmentLayer]);
-
-  // Create adjustment layer with vignette effect
-  const handleAddVignetteEffect = useCallback(() => {
-    handleAddAdjustmentLayer(
-      [{
-        type: 'overlay-effect',
-        variant: 'vignette',
-        intensity: VIGNETTE_CONFIG.intensity.default,
-        size: VIGNETTE_CONFIG.size.default,
-        softness: VIGNETTE_CONFIG.softness.default,
-        color: '#000000',
-        shape: 'elliptical',
-      }],
-      'Vignette'
-    );
-  }, [handleAddAdjustmentLayer]);
-
   // Create adjustment layer with preset effects
   const handleAddPreset = useCallback((presetId: string) => {
     const preset = EFFECT_PRESETS.find((p) => p.id === presetId);
@@ -601,83 +498,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     </div>
                   </div>
                 </button>
-              </div>
-
-              {/* Color Adjustments */}
-              <div>
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Color Adjustments
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {effectCards.map(({ type, icon: Icon }) => (
-                    <button
-                      key={type}
-                      onClick={() => handleAddFilterEffect(type)}
-                      className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                    >
-                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
-                        <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
-                      </div>
-                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                        {CSS_FILTER_CONFIGS[type].label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Glitch Effects */}
-              <div>
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Glitch Effects
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {glitchCards.map(({ type, icon: Icon }) => (
-                    <button
-                      key={type}
-                      onClick={() => handleAddGlitchEffect(type)}
-                      className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                    >
-                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
-                        <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
-                      </div>
-                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                        {GLITCH_CONFIGS[type].label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Stylized Effects */}
-              <div>
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Stylized
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  <button
-                    onClick={handleAddHalftoneEffect}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                  >
-                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
-                      <Grid3X3 className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
-                    </div>
-                    <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                      Halftone
-                    </span>
-                  </button>
-                  <button
-                    onClick={handleAddVignetteEffect}
-                    className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                  >
-                    <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
-                      <CircleDot className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
-                    </div>
-                    <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                      Vignette
-                    </span>
-                  </button>
-                </div>
               </div>
 
               {/* Presets */}

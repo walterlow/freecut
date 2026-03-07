@@ -257,6 +257,119 @@ fn scanlinesFragment(input: VertexOutput) -> @location(0) vec4f {
   },
 };
 
+export const colorGlitch: GpuEffectDefinition = {
+  id: 'gpu-color-glitch',
+  name: 'Color Glitch',
+  category: 'stylize',
+  entryPoint: 'colorGlitchFragment',
+  uniformSize: 16,
+  shader: /* wgsl */ `
+struct ColorGlitchParams { intensity: f32, speed: f32, time: f32, _pad: f32 };
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: ColorGlitchParams;
+@fragment
+fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let t = params.time * params.speed;
+  let glitchNoise = hash(vec2f(floor(t * 8.0), floor(input.uv.y * 20.0)));
+  let shouldGlitch = step(1.0 - params.intensity, glitchNoise);
+  let hueShift = hash(vec2f(floor(t * 12.0), 0.0)) * shouldGlitch;
+  var hsv = rgb2hsv(color.rgb);
+  hsv.x = fract(hsv.x + hueShift);
+  let glitched = hsv2rgb(hsv);
+  return vec4f(mix(color.rgb, glitched, shouldGlitch * params.intensity), color.a);
+}`,
+  params: {
+    intensity: { type: 'number', label: 'Intensity', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    speed: { type: 'number', label: 'Speed', default: 1, min: 0.1, max: 5, step: 0.1, animatable: false },
+  },
+  packUniforms: (p) => {
+    const time = performance.now() / 1000;
+    return new Float32Array([p.intensity as number ?? 0.5, p.speed as number ?? 1, time, 0]);
+  },
+};
+
+export const halftone: GpuEffectDefinition = {
+  id: 'gpu-halftone',
+  name: 'Halftone',
+  category: 'stylize',
+  entryPoint: 'halftoneFragment',
+  uniformSize: 32,
+  shader: /* wgsl */ `
+struct HalftoneParams {
+  dotSize: f32, spacing: f32, angle: f32, intensity: f32,
+  width: f32, height: f32, invertFlag: f32, patternType: f32,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: HalftoneParams;
+@fragment
+fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSample(inputTex, texSampler, input.uv);
+  let luma = luminance601(color.rgb);
+  let pixelPos = input.uv * vec2f(params.width, params.height);
+  let angleRad = params.angle * PI / 180.0;
+  let cosA = cos(angleRad);
+  let sinA = sin(angleRad);
+  let rotated = vec2f(
+    pixelPos.x * cosA - pixelPos.y * sinA,
+    pixelPos.x * sinA + pixelPos.y * cosA
+  );
+  var pattern: f32;
+  let pType = i32(params.patternType);
+  if (pType == 1) {
+    let linePos = fract(rotated.y / params.spacing);
+    let lineWidth = luma * 0.8;
+    pattern = smoothstep(lineWidth - 0.05, lineWidth + 0.05, abs(linePos - 0.5) * 2.0);
+  } else if (pType == 2) {
+    let center = vec2f(params.width * 0.5, params.height * 0.5);
+    let fromCenter = pixelPos - center;
+    let ray = atan2(fromCenter.y, fromCenter.x);
+    let rayPattern = fract(ray * params.spacing / TAU);
+    pattern = smoothstep(luma - 0.1, luma + 0.1, abs(rayPattern - 0.5) * 2.0);
+  } else if (pType == 3) {
+    let center = vec2f(params.width * 0.5, params.height * 0.5);
+    let dist = length(pixelPos - center);
+    let ripple = fract(dist / params.spacing);
+    pattern = smoothstep(luma - 0.1, luma + 0.1, abs(ripple - 0.5) * 2.0);
+  } else {
+    let cell = floor(rotated / params.spacing);
+    let cellCenter = (cell + 0.5) * params.spacing;
+    let dist = length(rotated - cellCenter);
+    let dotRadius = params.dotSize * (1.0 - luma) * 0.5;
+    pattern = smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist);
+  }
+  if (params.invertFlag > 0.5) { pattern = 1.0 - pattern; }
+  let result = mix(color.rgb, mix(vec3f(0.0), color.rgb, pattern), params.intensity);
+  return vec4f(result, color.a);
+}`,
+  params: {
+    patternType: {
+      type: 'select', label: 'Pattern', default: 'dots',
+      options: [
+        { value: 'dots', label: 'Dots' },
+        { value: 'lines', label: 'Lines' },
+        { value: 'rays', label: 'Rays' },
+        { value: 'ripples', label: 'Ripples' },
+      ],
+    },
+    dotSize: { type: 'number', label: 'Dot Size', default: 8, min: 2, max: 20, step: 1, animatable: true },
+    spacing: { type: 'number', label: 'Spacing', default: 10, min: 4, max: 40, step: 1, animatable: true },
+    angle: { type: 'number', label: 'Angle', default: 45, min: 0, max: 360, step: 1, animatable: true },
+    intensity: { type: 'number', label: 'Intensity', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    invert: { type: 'boolean', label: 'Invert', default: false },
+  },
+  packUniforms: (p, w, h) => {
+    const patternMap: Record<string, number> = { dots: 0, lines: 1, rays: 2, ripples: 3 };
+    return new Float32Array([
+      p.dotSize as number ?? 8, p.spacing as number ?? 10,
+      p.angle as number ?? 45, p.intensity as number ?? 0.5,
+      w, h, p.invert ? 1 : 0, patternMap[p.patternType as string] ?? 0,
+    ]);
+  },
+};
+
 export const threshold: GpuEffectDefinition = {
   id: 'gpu-threshold',
   name: 'Threshold',

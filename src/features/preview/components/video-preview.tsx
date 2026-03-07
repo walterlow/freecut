@@ -96,7 +96,7 @@ const FAST_SCRUB_BACKWARD_RENDER_THROTTLE_MS = 24;
 const FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES = 2;
 const FAST_SCRUB_BACKWARD_FORCE_JUMP_FRAMES = 8;
 const FAST_SCRUB_PREWARM_RENDER_BUDGET_MS = 16;
-const FAST_SCRUB_FORCE_OVERLAY_FOR_CUSTOM_CUBE = true;
+
 const PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS = 20;
 const PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES = 2;
 const PLAYER_BACKWARD_SCRUB_FORCE_JUMP_FRAMES = 8;
@@ -195,28 +195,6 @@ function toTrackFingerprint(tracks: CompositionInputProps['tracks']): string {
     }
   }
   return parts.join('|');
-}
-
-function hasCustomCubeLutInEffects(effects: ItemEffect[] | undefined): boolean {
-  if (!effects || effects.length === 0) return false;
-  return effects.some((entry) =>
-    entry.enabled
-    && entry.effect.type === 'color-grading'
-    && entry.effect.variant === 'lut'
-    && typeof entry.effect.cubeData === 'string'
-    && entry.effect.cubeData.trim().length > 0
-  );
-}
-
-function hasCustomCubeLutInTracks(tracks: CompositionInputProps['tracks']): boolean {
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (hasCustomCubeLutInEffects(item.effects)) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 function getPreloadBudget(mode: PreviewInteractionMode): number {
@@ -1846,6 +1824,11 @@ export const VideoPreview = memo(function VideoPreview({
     return undefined;
   }, []);
 
+  const getPreviewEffectsOverride = useCallback((itemId: string): ItemEffect[] | undefined => {
+    const gizmoState = useGizmoStore.getState();
+    return gizmoState.preview?.[itemId]?.effects;
+  }, []);
+
   const fastScrubScaledTracks = useMemo(() => {
     return fastScrubTracks as CompositionInputProps['tracks'];
   }, [
@@ -1877,12 +1860,7 @@ export const VideoPreview = memo(function VideoPreview({
     fastScrubScaledKeyframes,
   ]);
 
-  const hasCustomCubePreview = useMemo(
-    () => hasCustomCubeLutInTracks(fastScrubScaledTracks),
-    [fastScrubScaledTracks]
-  );
-
-  const forceFastScrubOverlay = (FAST_SCRUB_FORCE_OVERLAY_FOR_CUSTOM_CUBE && hasCustomCubePreview) || showGpuEffectsOverlay;
+  const forceFastScrubOverlay = showGpuEffectsOverlay;
   const preferPlayerForTextGizmo = (
     !forceFastScrubOverlay
     && isGizmoInteracting
@@ -1943,6 +1921,7 @@ export const VideoPreview = memo(function VideoPreview({
         const renderer = await createCompositionRenderer(fastScrubInputProps, offscreen, offscreenCtx, {
           mode: 'preview',
           getPreviewTransformOverride,
+          getPreviewEffectsOverride,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -1991,7 +1970,7 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, getPreviewTransformOverride, isResolving, renderSize.height, renderSize.width]);
+  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, isResolving, renderSize.height, renderSize.width]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -2616,18 +2595,27 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
-    // During gizmo drags, trigger re-renders even when frame is unchanged so
-    // transform previews stay on the fast-scrub render path.
+    // During gizmo drags or live effect parameter changes, trigger re-renders
+    // even when frame is unchanged so previews stay on the fast-scrub render path.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
       if (preferPlayerForTextGizmoRef.current) return;
       if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
-      if (!state.activeGizmo) return;
-      const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
       const unifiedPreviewChanged = state.preview !== prev.preview;
-      if (!transformPreviewChanged && !unifiedPreviewChanged) return;
+      const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
+      // Gizmo transform changes require an active gizmo; effect preview changes don't.
+      if (!unifiedPreviewChanged && !(transformPreviewChanged && state.activeGizmo)) return;
 
       const playbackState = usePlaybackStore.getState();
-      scrubRequestedFrameRef.current = playbackState.currentFrame;
+      const currentFrame = playbackState.currentFrame;
+
+      // Effect param changes don't change the frame number, so the frame cache
+      // would return the stale bitmap. Invalidate the current frame so the
+      // renderer re-composites with the updated effect params.
+      if (unifiedPreviewChanged && scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache([currentFrame]);
+      }
+
+      scrubRequestedFrameRef.current = currentFrame;
       void pumpRenderLoop();
     });
 

@@ -26,19 +26,9 @@ import React, { useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
-import type { VideoItem, ImageItem, AdjustmentItem } from '@/types/timeline';
+import type { VideoItem, ImageItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import { resolveTransform, toTransformStyle, getSourceDimensions } from '../utils/transform-resolver';
-import {
-  effectsToCSSFilter,
-  getVignetteEffect,
-  getVignetteStyle,
-  getHalftoneEffect,
-  getHalftoneStyles,
-  getGlitchEffects,
-} from '@/features/composition-runtime/deps/effects';
-import { getGlitchFilterString, getScanlinesStyle } from '@/features/composition-runtime/deps/effects';
-import type { GlitchEffect, ItemEffect } from '@/types/effects';
 import { calculateEasingCurve, calculateTransitionStyles } from '@/domain/timeline/transitions/engine';
 import { resolveTransitionWindows, type ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import { useCompositionSpace } from '../contexts/composition-space-context';
@@ -46,11 +36,6 @@ import { useCompositionSpace } from '../contexts/composition-space-context';
 // ============================================================================
 // Types
 // ============================================================================
-
-interface AdjustmentLayerWithTrackOrder {
-  layer: AdjustmentItem;
-  trackOrder: number;
-}
 
 type EnrichedVisualItem = (VideoItem | ImageItem) & {
   zIndex: number;
@@ -63,7 +48,6 @@ interface OptimizedTransitionProps {
   window: ResolvedTransitionWindow;
   leftClip: EnrichedVisualItem;
   rightClip: EnrichedVisualItem;
-  adjustmentLayers: AdjustmentLayerWithTrackOrder[];
 }
 
 // ============================================================================
@@ -263,8 +247,6 @@ interface ClipContentProps {
   renderScaleY: number;
   renderScale: number;
   fps: number;
-  adjustmentLayers: AdjustmentLayerWithTrackOrder[];
-  clipGlobalFrom: number;
 }
 
 const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent({
@@ -280,74 +262,10 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
   renderScaleY,
   renderScale,
   fps,
-  adjustmentLayers,
-  clipGlobalFrom,
 }) {
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
   const videoContainerRef = useRef<HTMLDivElement>(null);
-
-  // Use a safe frame for hook dependency values (hooks must always run)
-  const safeFrame = Math.max(0, frame);
-  const globalFrame = safeFrame + clipGlobalFrom;
-
-  // Memoized effect calculations â€” ALL hooks must run before any early return
-  const adjustmentEffects = useMemo((): ItemEffect[] => {
-    if (adjustmentLayers.length === 0) return [];
-
-    const affectingLayers = adjustmentLayers.filter(({ layer, trackOrder }) => {
-      if (clip.trackOrder <= trackOrder) return false;
-      return globalFrame >= layer.from && globalFrame < layer.from + layer.durationInFrames;
-    });
-
-    if (affectingLayers.length === 0) return [];
-
-    return affectingLayers
-      .toSorted((a, b) => a.trackOrder - b.trackOrder)
-      .flatMap(({ layer }) => (layer.effects ?? []).filter((e) => e.enabled));
-  }, [adjustmentLayers, clip.trackOrder, globalFrame]);
-
-  const allEffects = useMemo(() => {
-    const clipEffects = clip.effects ?? [];
-    return [...adjustmentEffects, ...clipEffects];
-  }, [adjustmentEffects, clip.effects]);
-
-  const cssFilterString = useMemo(() => {
-    if (allEffects.length === 0) return '';
-    return effectsToCSSFilter(allEffects);
-  }, [allEffects]);
-
-  const glitchEffects = useMemo(() => {
-    if (allEffects.length === 0) return [];
-    return getGlitchEffects(allEffects) as Array<GlitchEffect & { id: string }>;
-  }, [allEffects]);
-
-  const glitchFilterString = useMemo(() => {
-    if (glitchEffects.length === 0) return '';
-    return getGlitchFilterString(glitchEffects, safeFrame);
-  }, [glitchEffects, safeFrame]);
-
-  const halftoneEffect = useMemo(() => {
-    if (allEffects.length === 0) return null;
-    return getHalftoneEffect(allEffects);
-  }, [allEffects]);
-
-  const halftoneStyles = useMemo(() => {
-    if (!halftoneEffect) return null;
-    return getHalftoneStyles(halftoneEffect);
-  }, [halftoneEffect]);
-
-  const vignetteEffect = useMemo(() => {
-    if (allEffects.length === 0) return null;
-    return getVignetteEffect(allEffects);
-  }, [allEffects]);
-
-  const vignetteStyle = useMemo(() => {
-    if (!vignetteEffect) return null;
-    return getVignetteStyle(vignetteEffect);
-  }, [vignetteEffect]);
-
-  // --- All hooks are above this line --- early return is safe below ---
 
   // During premount (frame < 0), we still render video elements so they can
   // acquire from the pool and seek to the correct position BEFORE the
@@ -368,13 +286,6 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
     cornerRadius: resolved.cornerRadius * renderScale,
   };
   const transformStyle = toTransformStyle(scaledResolved, renderCanvas);
-
-  const combinedFilter = [cssFilterString, glitchFilterString].filter(Boolean).join(' ');
-  const scanlinesEffect = glitchEffects.find((e) => e.variant === 'scanlines');
-  const finalFilter = halftoneStyles
-    ? [combinedFilter, halftoneStyles.containerStyle.filter].filter(Boolean).join(' ')
-    : combinedFilter;
-  const hasOverlays = scanlinesEffect || halftoneStyles || vignetteStyle;
 
   // Render media content
   let mediaContent: React.ReactNode = null;
@@ -425,56 +336,11 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
         width: '100%',
         height: '100%',
         position: 'relative',
-        filter: finalFilter || undefined,
         // Hidden during premount â€” video elements still mount and pre-seek
         visibility: isPremounted ? 'hidden' : undefined,
       }}
     >
       {mediaContent}
-
-      {hasOverlays && !isPremounted && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-          }}
-        >
-          {scanlinesEffect && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                pointerEvents: 'none',
-                ...getScanlinesStyle(scanlinesEffect.intensity),
-              }}
-            />
-          )}
-
-          {halftoneStyles && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                overflow: 'hidden',
-                pointerEvents: 'none',
-                mixBlendMode: halftoneStyles.patternStyle.mixBlendMode,
-                opacity: halftoneStyles.patternStyle.opacity,
-              }}
-            >
-              {halftoneStyles.fadeWrapperStyle ? (
-                <div style={halftoneStyles.fadeWrapperStyle}>
-                  <div style={{ ...halftoneStyles.patternStyle, mixBlendMode: undefined, opacity: undefined }} />
-                </div>
-              ) : (
-                <div style={{ ...halftoneStyles.patternStyle, mixBlendMode: undefined, opacity: undefined }} />
-              )}
-            </div>
-          )}
-
-          {vignetteStyle && <div style={vignetteStyle} />}
-        </div>
-      )}
     </div>
   );
 });
@@ -634,7 +500,6 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     window,
     leftClip,
     rightClip,
-    adjustmentLayers,
   }) {
     const { width: canvasWidth, height: canvasHeight, fps } = useVideoConfig();
     const compositionSpace = useCompositionSpace();
@@ -653,11 +518,6 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
     // is visible behind the flipping clip. Rendered as a child (not on the
     // AbsoluteFill) so it's hidden during premount when frame < 0.
     const needsBackground = window.transition.presentation === 'flip';
-
-    // Global frame offsets for ClipContent's adjustment layer calculations
-    // Both use startFrame since localFrame + startFrame = actual global frame
-    const leftClipGlobalFrom = window.startFrame;
-    const rightClipGlobalFrom = window.startFrame;
 
     // In the overlap model, the right clip physically overlaps the left clip.
     // The transition overlay and regular Sequence both start at the same
@@ -705,8 +565,6 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
               renderScaleY={renderScaleY}
               renderScale={renderScale}
               fps={fps}
-              adjustmentLayers={adjustmentLayers}
-              clipGlobalFrom={rightClipGlobalFrom}
             />
           </TransitionOverlay>
 
@@ -733,8 +591,6 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
               renderScaleY={renderScaleY}
               renderScale={renderScale}
               fps={fps}
-              adjustmentLayers={adjustmentLayers}
-              clipGlobalFrom={leftClipGlobalFrom}
             />
           </TransitionOverlay>
         </AbsoluteFill>
@@ -750,11 +606,9 @@ const OptimizedEffectsBasedTransitionRenderer = React.memo<OptimizedTransitionPr
 export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
   transitions: Transition[];
   itemsById: Map<string, EnrichedVisualItem>;
-  adjustmentLayers: AdjustmentLayerWithTrackOrder[];
 }>(function OptimizedEffectsBasedTransitionsLayer({
   transitions,
   itemsById,
-  adjustmentLayers,
 }) {
   const resolvedWindows = useMemo(() => {
     return resolveTransitionWindows(transitions, itemsById);
@@ -776,7 +630,6 @@ export const OptimizedEffectsBasedTransitionsLayer = React.memo<{
             window={window}
             leftClip={leftClip}
             rightClip={rightClip}
-            adjustmentLayers={adjustmentLayers}
           />
         );
       })}

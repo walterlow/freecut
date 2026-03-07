@@ -1,16 +1,5 @@
 /**
  * Adapter exports for effect-layer dependencies.
+ * Legacy CSS/glitch/halftone/vignette effects removed in v6 migration.
+ * All effects now render via GPU pipeline in client-render-engine.
  */
-
-export {
-  effectsToCSSFilter,
-  getGlitchEffects,
-  getVignetteEffect,
-  getVignetteStyle,
-  getHalftoneEffect,
-  getHalftoneStyles,
-} from '@/features/effects/utils/effect-to-css';
-export {
-  getScanlinesStyle,
-  getGlitchFilterString,
-} from '@/features/effects/utils/glitch-algorithms';

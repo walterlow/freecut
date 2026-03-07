@@ -1,4 +1,7 @@
-import type { CurvePoint } from '@/types/effects';
+interface CurvePoint {
+  x: number;
+  y: number;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
