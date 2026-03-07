@@ -157,7 +157,7 @@ export async function createCompositionRenderer(
   // === RENDERED FRAME CACHE (preview only) ===
   // Caches recently rendered frames as ImageBitmaps for instant backward scrubbing.
   // Without this, every backward seek restarts mediabunny's decoder stream.
-  const FRAME_CACHE_MAX = renderMode === 'preview' ? 120 : 0;
+  const FRAME_CACHE_MAX = renderMode === 'preview' ? 240 : 0;
   const frameCache = new Map<number, ImageBitmap>();
   const frameCacheOrder: number[] = []; // LRU eviction order
 

@@ -87,7 +87,7 @@ const FAST_SCRUB_BOUNDARY_SOURCE_PREWARM_MAX_SOURCES_PER_FRAME = 6;
 const FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES = 6;
 const FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD = true;
 const FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD = true;
-const FAST_SCRUB_DIRECTIONAL_PREWARM_FORWARD_STEPS = 1;
+const FAST_SCRUB_DIRECTIONAL_PREWARM_FORWARD_STEPS = 3;
 const FAST_SCRUB_DIRECTIONAL_PREWARM_BACKWARD_STEPS = 2;
 const FAST_SCRUB_DIRECTIONAL_PREWARM_OPPOSITE_STEPS = 0;
 const FAST_SCRUB_DIRECTIONAL_PREWARM_NEUTRAL_RADIUS = 1;
@@ -95,6 +95,7 @@ const FAST_SCRUB_PREWARM_QUEUE_MAX = 24;
 const FAST_SCRUB_BACKWARD_RENDER_THROTTLE_MS = 24;
 const FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES = 2;
 const FAST_SCRUB_BACKWARD_FORCE_JUMP_FRAMES = 8;
+const FAST_SCRUB_PREWARM_RENDER_BUDGET_MS = 16;
 const FAST_SCRUB_FORCE_OVERLAY_FOR_CUSTOM_CUBE = true;
 const PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS = 20;
 const PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES = 2;
@@ -2349,6 +2350,7 @@ export const VideoPreview = memo(function VideoPreview({
           }
         };
 
+        let prewarmBudgetStart = 0;
         while (scrubMountedRef.current) {
           if (preferPlayerForTextGizmoRef.current) {
             setShowFastScrubOverlay(false);
@@ -2375,6 +2377,7 @@ export const VideoPreview = memo(function VideoPreview({
 
           if (isPriorityFrame) {
             scrubRequestedFrameRef.current = null;
+            prewarmBudgetStart = 0; // Reset budget for prewarm after this priority frame
           } else {
             scrubPrewarmQueuedSetRef.current.delete(frameToRender);
             // Skip stale prewarm if a newer scrub frame is pending.
@@ -2383,6 +2386,11 @@ export const VideoPreview = memo(function VideoPreview({
             }
             if (suppressScrubBackgroundPrewarmRef.current) {
               continue;
+            }
+            // Time-budget prewarm renders to keep scrubbing responsive.
+            // After exhausting the budget, yield so new priority frames aren't delayed.
+            if (prewarmBudgetStart > 0 && performance.now() - prewarmBudgetStart > FAST_SCRUB_PREWARM_RENDER_BUDGET_MS) {
+              break;
             }
           }
 
@@ -2408,11 +2416,10 @@ export const VideoPreview = memo(function VideoPreview({
             }
           }
 
-          if (isPriorityFrame || !('prewarmFrame' in renderer) || typeof renderer.prewarmFrame !== 'function') {
-            await renderer.renderFrame(frameToRender);
-          } else {
-            await renderer.prewarmFrame(frameToRender);
-          }
+          // Use full renderFrame for both priority and prewarm frames.
+          // Prewarm renders populate the frame cache so subsequent scrubs
+          // to those frames are instant cache hits (~0.1ms vs 5-80ms).
+          await renderer.renderFrame(frameToRender);
           if (!scrubMountedRef.current) break;
 
           if (isPriorityFrame) {
@@ -2446,6 +2453,7 @@ export const VideoPreview = memo(function VideoPreview({
               enqueueBoundaryPrewarm(frameToRender);
               enqueueBoundarySourcePrewarm(frameToRender);
             }
+            prewarmBudgetStart = performance.now();
           } else {
             markPrewarmed(frameToRender);
           }
