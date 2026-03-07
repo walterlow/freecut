@@ -50,6 +50,8 @@ export interface FilmstripFrame {
   timestamp: number;
   url: string; // Object URL for img src
   byteSize?: number;
+  /** Hardware-backed bitmap for instant canvas rendering (skips JPEG decode) */
+  bitmap?: ImageBitmap;
 }
 
 interface LoadedFilmstrip {
@@ -421,6 +423,25 @@ class FilmstripOPFSStorage {
       timestamp: index / FRAME_RATE,
       url,
       byteSize: blob.size,
+    };
+  }
+
+  /**
+   * Create an in-memory frame from a transferred ImageBitmap.
+   * Provides instant display without JPEG encode/decode roundtrip.
+   * URL is empty — the component renders from bitmap directly via canvas.
+   * Once the JPEG blob arrives (via createFrameFromBlob), the URL is set
+   * and the bitmap can be closed.
+   */
+  createFrameFromBitmap(_mediaId: string, index: number, bitmap: ImageBitmap): FilmstripFrame | null {
+    if (!bitmap || bitmap.width === 0) return null;
+
+    return {
+      index,
+      timestamp: index / FRAME_RATE,
+      url: '',
+      byteSize: bitmap.width * bitmap.height * 4,
+      bitmap,
     };
   }
 

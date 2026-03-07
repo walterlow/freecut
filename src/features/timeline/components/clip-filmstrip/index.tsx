@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { memo, useEffect, useState, useMemo, useCallback, useRef, type RefCallback } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
@@ -100,17 +100,20 @@ function getInteractionMaxTiles(pixelsPerSecond: number): number {
 }
 
 /**
- * Simple filmstrip tile - memoized to prevent unnecessary re-renders
- * Hides itself on error to avoid broken image icons
+ * Simple filmstrip tile - memoized to prevent unnecessary re-renders.
+ * Renders from ImageBitmap via canvas when available (instant, no JPEG decode),
+ * falls back to <img> for blob URL sources (OPFS-loaded frames).
  */
 const FilmstripTile = memo(function FilmstripTile({
   src,
+  bitmap,
   x,
   height,
   width,
   sourceWidth,
 }: {
   src: string;
+  bitmap?: ImageBitmap;
   x: number;
   height: number;
   width: number;
@@ -118,12 +121,37 @@ const FilmstripTile = memo(function FilmstripTile({
 }) {
   const [errorSrc, setErrorSrc] = useState<string | null>(null);
 
+  // Draw bitmap to canvas when ref is attached or bitmap changes
+  const canvasRefCallback: RefCallback<HTMLCanvasElement> = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas || !bitmap) return;
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.drawImage(bitmap, 0, 0);
+  }, [bitmap]);
+
   const handleError = useCallback(() => {
     setErrorSrc(src);
   }, [src]);
 
+  // Bitmap path: render to canvas (instant, no JPEG decode)
+  if (bitmap) {
+    return (
+      <canvas
+        ref={canvasRefCallback}
+        className="absolute top-0"
+        style={{
+          left: x,
+          width,
+          height,
+          objectFit: 'cover',
+        }}
+      />
+    );
+  }
+
   // Hide if this specific src failed, but allow new src to try again
-  if (errorSrc === src) {
+  if (!src || errorSrc === src) {
     return null;
   }
 
@@ -425,6 +453,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           <FilmstripTile
             key={tileIndex}
             src={frame.url}
+            bitmap={frame.bitmap}
             x={x}
             height={height}
             width={width}

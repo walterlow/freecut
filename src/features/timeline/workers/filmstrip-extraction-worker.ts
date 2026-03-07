@@ -54,6 +54,11 @@ export interface ProgressResponse {
     blob: Blob;
   }>;
   savedIndices: number[];
+  /** Transferable ImageBitmaps for instant display (no JPEG encode/decode roundtrip) */
+  bitmapFrames?: Array<{
+    index: number;
+    bitmap: ImageBitmap;
+  }>;
 }
 
 export interface CompleteResponse {
@@ -218,12 +223,16 @@ async function extractAndSave(
       }
     }
 
-    // Pipeline: overlap JPEG encoding with the next frame's video decode.
-    // After mediabunny yields a canvas, snapshot it to ImageBitmap (instant),
-    // then encode the previous frame's bitmap while the next decode runs.
+    // Two parallel pipelines per frame:
+    // 1. FAST: createImageBitmap → transfer to main thread (instant display, no encode)
+    // 2. SLOW: convertToBlob (JPEG) → save to OPFS (persistence, runs in background)
+    //
+    // Bitmaps are sent immediately on every decoded frame for instant UI updates.
+    // JPEG encode + OPFS save runs concurrently, blobs reported when ready.
     const pendingSaves: Promise<void>[] = [];
     const MAX_PARALLEL_SAVES = Math.max(1, Math.min(6, maxParallelSaves ?? 4));
     let pendingEncode: Promise<{ blob: Blob; frameIndex: number }> | null = null;
+    let bitmapsSinceLastReport: Array<{ index: number; bitmap: ImageBitmap }> = [];
 
     const flushPendingEncode = async () => {
       if (!pendingEncode) return;
@@ -252,22 +261,25 @@ async function extractAndSave(
         continue;
       }
 
-      // Snapshot canvas to ImageBitmap immediately (fast, <0.1ms) so the
-      // canvas pool slot is freed for the next decode. Then kick off JPEG
-      // encoding from the bitmap — this overlaps with the next iteration's
-      // video decode since createImageBitmap + convertToBlob are async.
       const canvas = wrapped.canvas as OffscreenCanvas;
-      const bitmap = await createImageBitmap(canvas);
-
-      // Flush any prior encode before starting a new one
-      await flushPendingEncode();
-
-      // Start JPEG encode in background — runs concurrently with next decode
       const frameIndex = frame.index;
-      const encodeCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+
+      // Create two bitmaps: one for transfer to main thread, one for JPEG encode.
+      // Both are instant snapshots (<0.1ms) that free the canvas pool slot.
+      const [displayBitmap, encodeBitmap] = await Promise.all([
+        createImageBitmap(canvas),
+        createImageBitmap(canvas),
+      ]);
+
+      // Queue bitmap for immediate transfer to main thread (no JPEG encode needed)
+      bitmapsSinceLastReport.push({ index: frameIndex, bitmap: displayBitmap });
+
+      // Flush prior encode, then start JPEG encode in background for OPFS persistence
+      await flushPendingEncode();
+      const encodeCanvas = new OffscreenCanvas(encodeBitmap.width, encodeBitmap.height);
       const encodeCtx = encodeCanvas.getContext('2d')!;
-      encodeCtx.drawImage(bitmap, 0, 0);
-      bitmap.close();
+      encodeCtx.drawImage(encodeBitmap, 0, 0);
+      encodeBitmap.close();
       pendingEncode = encodeCanvas.convertToBlob({
         type: IMAGE_FORMAT,
         quality: IMAGE_QUALITY,
@@ -276,18 +288,20 @@ async function extractAndSave(
       extractedCount++;
       frameListIndex++;
 
-      // extractedCount tracks decoded/extracted frames immediately, while
-      // savedFrames/savedIndices only include writes that have finished.
-      // pendingSaves + Promise.race throttle OPFS writes, so progress reflects
-      // extraction and persistence completion can lag briefly behind it.
-      // Batch progress updates - report first 3, then every 10 frames
-      const shouldReport = extractedCount <= 3 || extractedCount % 10 === 0;
+      // Send progress with bitmaps on every frame for instant display.
+      // savedFrames/savedIndices lag behind as JPEG encode + OPFS write complete.
+      const shouldReport = extractedCount <= 3 || extractedCount % 10 === 0
+        || bitmapsSinceLastReport.length > 0;
       if (shouldReport) {
         const progress = Math.round((extractedCount / totalFrames) * 100);
         const savedFrames = savedSinceLastReport;
         savedSinceLastReport = [];
         const savedIndices = savedFrames.map((entry) => entry.index);
+        const bitmapFrames = bitmapsSinceLastReport;
+        bitmapsSinceLastReport = [];
 
+        // Transfer bitmaps to main thread (zero-copy via transferable)
+        const transferables = bitmapFrames.map((bf) => bf.bitmap);
         self.postMessage({
           type: 'progress',
           requestId,
@@ -296,7 +310,8 @@ async function extractAndSave(
           progress: Math.min(progress, 99),
           savedFrames,
           savedIndices,
-        } as ProgressResponse);
+          bitmapFrames,
+        } as ProgressResponse, { transfer: transferables as unknown as Transferable[] });
       }
     }
 
