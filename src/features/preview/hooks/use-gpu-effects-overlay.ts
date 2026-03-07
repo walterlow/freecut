@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import type { EffectsPipeline } from '@/lib/gpu-effects';
 import type { GpuEffectInstance } from '@/lib/gpu-effects/types';
 import type { GpuEffect, ItemEffect } from '@/types/effects';
 
-function collectGpuEffects(items: { effects?: ItemEffect[] }[]): GpuEffectInstance[] {
+function collectGpuEffects(
+  items: { from: number; durationInFrames: number; effects?: ItemEffect[] }[],
+  frame: number,
+): GpuEffectInstance[] {
   const instances: GpuEffectInstance[] = [];
   for (const item of items) {
+    // Only collect effects from items visible at the current frame
+    if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
     if (!item.effects) continue;
     for (const eff of item.effects) {
       if (eff.enabled && eff.effect.type === 'gpu-effect') {
@@ -83,8 +89,27 @@ export function useGpuEffectsOverlay(
     if (!canvas || !pipeline) return;
 
     const items = useItemsStore.getState().items;
-    const gpuInstances = collectGpuEffects(items);
-    if (gpuInstances.length === 0) return;
+    const { currentFrame, previewFrame } = usePlaybackStore.getState();
+    const frame = previewFrame ?? currentFrame;
+    const gpuInstances = collectGpuEffects(items, frame);
+    if (gpuInstances.length === 0) {
+      // Clear the overlay so stale effects don't persist on clips without effects
+      if (gpuCtxRef.current) {
+        const tex = gpuCtxRef.current.getCurrentTexture();
+        const encoder = pipeline.getDevice().createCommandEncoder();
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: tex.createView(),
+            loadOp: 'clear' as GPULoadOp,
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            storeOp: 'store' as GPUStoreOp,
+          }],
+        });
+        pass.end();
+        pipeline.getDevice().queue.submit([encoder.finish()]);
+      }
+      return;
+    }
 
     if (!gpuCtxRef.current) {
       gpuCtxRef.current = pipeline.configureCanvas(canvas);
