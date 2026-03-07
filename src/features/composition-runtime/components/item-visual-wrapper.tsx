@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
+import { maskVerticesToSvgPath } from '@/features/preview/utils/mask-path-utils';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
@@ -47,6 +48,78 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     }
     return {};
   }, [state.maskType, state.maskClipPath, state.svgMaskId]);
+
+  // Per-item ClipMask (bezier paths) — rendered as clip-path or SVG mask
+  const clipMaskStyle = useMemo((): React.CSSProperties => {
+    const clipMasks = item.masks?.filter((m) => m.enabled && m.vertices.length >= 2);
+    if (!clipMasks || clipMasks.length === 0) return {};
+
+    // For ClipMask, vertices are in normalized 0-1 space relative to item bounds.
+    // We use the resolved transform dimensions for the SVG viewBox.
+    const w = state.transform.width;
+    const h = state.transform.height;
+
+    // Build combined SVG path from all enabled masks
+    const paths = clipMasks.map((m) => maskVerticesToSvgPath(m.vertices, w, h));
+    const hasFeather = clipMasks.some((m) => m.feather > 0.5);
+    const hasInverted = clipMasks.some((m) => m.inverted);
+
+    if (!hasFeather && !hasInverted && clipMasks.length === 1) {
+      // Simple clip-path (fastest path)
+      return { clipPath: `path('${paths[0]}')` };
+    }
+
+    // For complex masks (feather, invert, multiple), use SVG mask via inline style
+    // The SVG defs are rendered below in clipMaskSvgDefs
+    return {
+      mask: `url(#clip-mask-${item.id})`,
+      WebkitMask: `url(#clip-mask-${item.id})`,
+    };
+  }, [item.masks, item.id, state.transform.width, state.transform.height]);
+
+  // SVG defs for per-item ClipMask (when feather/invert/multiple masks needed)
+  const clipMaskSvgDefs = useMemo(() => {
+    const clipMasks = item.masks?.filter((m) => m.enabled && m.vertices.length >= 2);
+    if (!clipMasks || clipMasks.length === 0) return null;
+
+    const hasFeather = clipMasks.some((m) => m.feather > 0.5);
+    const hasInverted = clipMasks.some((m) => m.inverted);
+    if (!hasFeather && !hasInverted && clipMasks.length === 1) return null;
+
+    const w = state.transform.width;
+    const h = state.transform.height;
+    const maskId = `clip-mask-${item.id}`;
+    const filterId = `clip-mask-blur-${item.id}`;
+    const maxFeather = clipMasks.reduce((max, m) => Math.max(max, m.feather), 0);
+    const allInverted = clipMasks.every((m) => m.inverted);
+
+    return (
+      <svg
+        style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}
+        aria-hidden="true"
+      >
+        <defs>
+          {maxFeather > 0.5 && (
+            <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation={maxFeather} />
+            </filter>
+          )}
+          <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={w} height={h}>
+            <rect x="0" y="0" width={w} height={h} fill={allInverted ? 'white' : 'black'} />
+            {clipMasks.map((m) => (
+              <path
+                key={m.id}
+                d={maskVerticesToSvgPath(m.vertices, w, h)}
+                fill={m.inverted ? 'black' : 'white'}
+                opacity={m.opacity}
+                filter={m.feather > 0.5 ? `url(#${filterId})` : undefined}
+              />
+            ))}
+          </mask>
+        </defs>
+      </svg>
+    );
+  }, [item.masks, item.id, state.transform.width, state.transform.height]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
@@ -110,6 +183,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     <>
       {/* SVG mask definitions (hidden, referenced via CSS) */}
       {svgMaskDefs}
+      {clipMaskSvgDefs}
 
       {/* Outer: Transform + Mask + Blend Mode */}
       <div
@@ -122,13 +196,14 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
             : undefined,
         }}
       >
-        {/* Inner: Effects + Content */}
+        {/* Inner: Effects + Per-item ClipMask + Content */}
         <div
           style={{
             width: '100%',
             height: '100%',
             position: 'relative',
             filter: state.cssFilter || undefined,
+            ...clipMaskStyle,
           }}
         >
           {children}

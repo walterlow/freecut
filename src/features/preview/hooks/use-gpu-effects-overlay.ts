@@ -26,7 +26,8 @@ export function useGpuEffectsOverlay(
       setHasGpuEffects(
         items.some((item) =>
           item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ||
-          (item.blendMode && item.blendMode !== 'normal')
+          (item.blendMode && item.blendMode !== 'normal') ||
+          (item.masks && item.masks.some((m) => m.enabled))
         )
       );
     };

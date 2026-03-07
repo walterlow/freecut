@@ -18,6 +18,7 @@ import { GifSection } from './gif-section';
 import { AudioSection } from './audio-section';
 import { TextSection } from './text-section';
 import { ShapeSection } from './shape-section';
+import { MaskSection } from './mask-section';
 import { EffectsSection } from '@/features/editor/deps/effects-contract';
 
 /**
@@ -216,6 +217,8 @@ export const ClipPanel = memo(function ClipPanel() {
                 canvas={canvas}
                 onTransformChange={handleTransformChange}
               />
+              <Separator />
+              <MaskSection items={layoutFillItems} />
             </>
           )}
         </TabsContent>

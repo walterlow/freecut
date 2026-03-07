@@ -23,6 +23,7 @@ import { useMediaLibraryStore, proxyService } from '@/features/preview/deps/medi
 import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { GizmoOverlay } from './gizmo-overlay';
+import { MaskEditorContainer } from './mask-editor-container';
 import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
@@ -3459,13 +3460,21 @@ export const VideoPreview = memo(function VideoPreview({
           </div>
 
           {!suspendOverlay && (
-            <GizmoOverlay
-              containerRect={playerContainerRect}
-              playerSize={playerSize}
-              projectSize={{ width: project.width, height: project.height }}
-              zoom={zoom}
-              hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
-            />
+            <>
+              <GizmoOverlay
+                containerRect={playerContainerRect}
+                playerSize={playerSize}
+                projectSize={{ width: project.width, height: project.height }}
+                zoom={zoom}
+                hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
+              />
+              <MaskEditorContainer
+                containerRect={playerContainerRect}
+                playerSize={playerSize}
+                projectSize={{ width: project.width, height: project.height }}
+                zoom={zoom}
+              />
+            </>
           )}
         </div>
       </div>
