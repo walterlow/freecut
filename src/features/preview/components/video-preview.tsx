@@ -710,7 +710,7 @@ export const VideoPreview = memo(function VideoPreview({
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
+  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
   const hasGpuEffectsRef = useRef(showGpuEffectsOverlay);
   hasGpuEffectsRef.current = showGpuEffectsOverlay;
   const zoom = usePlaybackStore((s) => s.zoom);

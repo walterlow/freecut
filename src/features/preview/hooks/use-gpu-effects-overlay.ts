@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePlaybackStore } from '@/shared/state/playback';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import type { EffectsPipeline } from '@/lib/gpu-effects';
 import type { GpuEffectInstance } from '@/lib/gpu-effects/types';
@@ -26,17 +25,19 @@ function collectGpuEffects(items: { effects?: ItemEffect[] }[]): GpuEffectInstan
 }
 
 /**
- * GPU effects overlay — non-blocking for all interactions.
+ * GPU effects overlay — WebGPU-native approach inspired by masterselects engine.
  *
- * Scrubbing: reads from offscreen canvas via dirty flag (zero extra render).
- * Seeking: Player handles the seek instantly, GPU effects catch up async
- *   via captureCanvasSource (progressive — frame shows immediately, effects pop in).
- * Playback: rAF loop with captureCanvasSource at best-effort framerate.
+ * Instead of CPU composition renders, captures directly from the Player's
+ * <video> element via copyExternalImageToTexture (near-zero-copy GPU capture).
+ * Effects run as GPU render passes. No CPU readback, no composition render.
  *
- * Single copyExternalImageToTexture per frame, then stays on GPU.
+ * Scrubbing: offscreen canvas dirty flag (scrub renderer already rendered).
+ * Seeking/settled/param changes: reads directly from <video> element in DOM.
+ * Playback: rAF loop reads from <video> element every frame.
  */
 export function useGpuEffectsOverlay(
   gpuCanvasRef: React.RefObject<HTMLCanvasElement | null>,
+  playerContainerRef: React.RefObject<HTMLDivElement | null>,
   scrubOffscreenRef: React.RefObject<OffscreenCanvas | null>,
   scrubFrameDirtyRef: React.RefObject<boolean>,
 ) {
@@ -75,7 +76,8 @@ export function useGpuEffectsOverlay(
     return initPromiseRef.current;
   }, []);
 
-  const applyFromCanvas = useCallback((source: HTMLCanvasElement | OffscreenCanvas) => {
+  // Apply GPU effects from any valid source (video element, canvas, offscreen canvas)
+  const applyFromSource = useCallback((source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas) => {
     const canvas = gpuCanvasRef.current;
     const pipeline = pipelineRef.current;
     if (!canvas || !pipeline) return;
@@ -89,9 +91,12 @@ export function useGpuEffectsOverlay(
     }
     if (!gpuCtxRef.current) return;
 
-    if (canvas.width !== source.width || canvas.height !== source.height) {
-      canvas.width = source.width;
-      canvas.height = source.height;
+    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
+    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
+
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
       gpuCtxRef.current = pipeline.configureCanvas(canvas);
       if (!gpuCtxRef.current) return;
     }
@@ -99,32 +104,21 @@ export function useGpuEffectsOverlay(
     pipeline.applyEffects(source, gpuInstances, gpuCtxRef.current);
   }, [gpuCanvasRef]);
 
-  // Coalesced async render (for seeks, playback, effect changes)
-  const asyncInFlightRef = useRef(false);
-  const asyncPendingRef = useRef(false);
-
-  const renderAsync = useCallback(() => {
-    if (asyncInFlightRef.current) {
-      asyncPendingRef.current = true;
-      return;
-    }
-    const captureFn = usePlaybackStore.getState().captureCanvasSource;
-    if (!captureFn || !pipelineRef.current) return;
-
-    asyncInFlightRef.current = true;
-    captureFn().then((source) => {
-      if (source) applyFromCanvas(source);
-    }).catch(() => {}).finally(() => {
-      asyncInFlightRef.current = false;
-      if (asyncPendingRef.current) {
-        asyncPendingRef.current = false;
-        renderAsync();
+  // Find a usable <video> element inside the Player container
+  const findVideoElement = useCallback((): HTMLVideoElement | null => {
+    const container = playerContainerRef.current;
+    if (!container) return null;
+    const videos = container.querySelectorAll('video');
+    for (const video of videos) {
+      // readyState >= 2 = HAVE_CURRENT_DATA (has at least one decoded frame)
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        return video;
       }
-    });
-  }, [applyFromCanvas]);
+    }
+    return null;
+  }, [playerContainerRef]);
 
-  // Main rAF loop: picks up dirty flag from scrub system
-  // + drives playback rendering
+  // Main rAF loop — WebGPU-native: reads from video element or offscreen canvas
   useEffect(() => {
     if (!hasGpuEffects) return;
 
@@ -134,17 +128,21 @@ export function useGpuEffectsOverlay(
     const loop = () => {
       if (!active) return;
 
-      // Scrub system rendered a new frame
+      // Priority 1: scrub system dirty flag (scrub renderer already rendered to offscreen)
       if (scrubFrameDirtyRef.current) {
         scrubFrameDirtyRef.current = false;
         const offscreen = scrubOffscreenRef.current;
         if (offscreen && offscreen.width > 0 && offscreen.height > 0) {
-          applyFromCanvas(offscreen);
+          applyFromSource(offscreen);
         }
-      }
-      // During playback, render at best-effort framerate
-      else if (usePlaybackStore.getState().isPlaying) {
-        renderAsync();
+      } else {
+        // Priority 2: capture directly from <video> element — zero composition render
+        // Works for: seeking, playback, param changes, idle
+        // copyExternalImageToTexture from <video> is near-zero-copy (GPU DMA)
+        const video = findVideoElement();
+        if (video) {
+          applyFromSource(video);
+        }
       }
 
       rafId = requestAnimationFrame(loop);
@@ -160,33 +158,7 @@ export function useGpuEffectsOverlay(
       cancelAnimationFrame(rafId);
       rafId = 0;
     };
-  }, [hasGpuEffects, ensurePipeline, applyFromCanvas, renderAsync, scrubOffscreenRef, scrubFrameDirtyRef]);
-
-  // Seeking / settled: Player handles the seek instantly,
-  // GPU effects catch up async (non-blocking)
-  useEffect(() => {
-    if (!hasGpuEffects) return;
-    let prevFrame = -1;
-    return usePlaybackStore.subscribe(() => {
-      const s = usePlaybackStore.getState();
-      if (s.isPlaying || s.previewFrame !== null) return;
-      const frame = s.currentFrame;
-      if (frame !== prevFrame) {
-        prevFrame = frame;
-        renderAsync();
-      }
-    });
-  }, [hasGpuEffects, renderAsync]);
-
-  // Effect param changes while settled
-  useEffect(() => {
-    if (!hasGpuEffects) return;
-    return useItemsStore.subscribe(() => {
-      const s = usePlaybackStore.getState();
-      if (s.isPlaying || s.previewFrame !== null) return;
-      renderAsync();
-    });
-  }, [hasGpuEffects, renderAsync]);
+  }, [hasGpuEffects, ensurePipeline, applyFromSource, findVideoElement, scrubOffscreenRef, scrubFrameDirtyRef]);
 
   // Pre-init pipeline
   useEffect(() => {

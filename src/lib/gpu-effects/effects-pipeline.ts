@@ -44,6 +44,14 @@ export class EffectsPipeline {
   private texH = 0;
   private initialized = false;
 
+  // Reusable uniform buffers per effect type (avoids per-frame allocation)
+  private uniformBuffers = new Map<string, GPUBuffer>();
+  // Cached texture views for ping/pong (recreated when textures change)
+  private pingView: GPUTextureView | null = null;
+  private pongView: GPUTextureView | null = null;
+  // GPU backpressure: true while GPU is processing a frame
+  private gpuBusy = false;
+
   private constructor(device: GPUDevice) {
     this.device = device;
     this.format = navigator.gpu.getPreferredCanvasFormat();
@@ -138,8 +146,22 @@ export class EffectsPipeline {
     };
     this.pingTexture = this.device.createTexture(desc);
     this.pongTexture = this.device.createTexture(desc);
+    this.pingView = this.pingTexture.createView();
+    this.pongView = this.pongTexture.createView();
     this.texW = w;
     this.texH = h;
+  }
+
+  private getOrCreateUniformBuffer(effectId: string, size: number): GPUBuffer {
+    let buf = this.uniformBuffers.get(effectId);
+    if (buf && buf.size >= size) return buf;
+    buf?.destroy();
+    buf = this.device.createBuffer({
+      size,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    this.uniformBuffers.set(effectId, buf);
+    return buf;
   }
 
   private runEffectChain(
@@ -152,6 +174,8 @@ export class EffectsPipeline {
   ): GPUTexture {
     let inputTex = startInput;
     let outputTex = startOutput;
+    let inputView = inputTex === this.pingTexture ? this.pingView! : this.pongView!;
+    let outputView = outputTex === this.pingTexture ? this.pingView! : this.pongView!;
 
     for (const effect of effects) {
       const pipeline = this.pipelines.get(effect.type);
@@ -164,16 +188,13 @@ export class EffectsPipeline {
       const uniformData = definition.packUniforms(effect.params, w, h);
       let uniformBuffer: GPUBuffer | undefined;
       if (uniformData) {
-        uniformBuffer = this.device.createBuffer({
-          size: uniformData.byteLength,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-        });
+        uniformBuffer = this.getOrCreateUniformBuffer(effect.type, uniformData.byteLength);
         this.device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
       }
 
       const bindEntries: GPUBindGroupEntry[] = [
         { binding: 0, resource: this.sampler },
-        { binding: 1, resource: inputTex.createView() },
+        { binding: 1, resource: inputView },
       ];
       if (uniformBuffer) {
         bindEntries.push({ binding: 2, resource: { buffer: uniformBuffer } });
@@ -183,7 +204,7 @@ export class EffectsPipeline {
 
       const pass = commandEncoder.beginRenderPass({
         colorAttachments: [{
-          view: outputTex.createView(),
+          view: outputView,
           loadOp: 'clear',
           storeOp: 'store',
         }],
@@ -193,9 +214,12 @@ export class EffectsPipeline {
       pass.draw(6);
       pass.end();
 
-      const temp = inputTex;
+      const tempTex = inputTex;
       inputTex = outputTex;
-      outputTex = temp;
+      outputTex = tempTex;
+      const tempView = inputView;
+      inputView = outputView;
+      outputView = tempView;
     }
 
     return inputTex;
@@ -213,10 +237,12 @@ export class EffectsPipeline {
   }
 
   /**
-   * Process a source canvas through an effect chain and render to output canvas context.
+   * Process a source through an effect chain and render to output canvas context.
+   * Accepts HTMLVideoElement for zero-copy GPU capture (like masterselects importExternalTexture).
+   * Returns false if skipped (GPU busy or no effects).
    */
   applyEffects(
-    source: OffscreenCanvas | HTMLCanvasElement,
+    source: OffscreenCanvas | HTMLCanvasElement | HTMLVideoElement,
     effects: GpuEffectInstance[],
     outputCtx: GPUCanvasContext,
   ): boolean {
@@ -224,8 +250,12 @@ export class EffectsPipeline {
     if (enabled.length === 0) return false;
     if (!this.blitPipeline || !this.blitBindGroupLayout) return false;
 
-    const w = source.width;
-    const h = source.height;
+    // Backpressure: skip if GPU is still processing the previous frame
+    if (this.gpuBusy) return false;
+
+    // Get dimensions — HTMLVideoElement uses videoWidth/videoHeight
+    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
+    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
     if (w < 2 || h < 2) return false;
 
     this.ensurePingPong(w, h);
@@ -245,12 +275,13 @@ export class EffectsPipeline {
       commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
     );
 
-    // Blit final result to output canvas via passthrough shader
+    // Blit final result to output canvas
+    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
     const blitBindGroup = this.device.createBindGroup({
       layout: this.blitBindGroupLayout,
       entries: [
         { binding: 0, resource: this.sampler },
-        { binding: 1, resource: finalTex.createView() },
+        { binding: 1, resource: finalView },
       ],
     });
 
@@ -267,6 +298,13 @@ export class EffectsPipeline {
     outputPass.end();
 
     this.device.queue.submit([commandEncoder.finish()]);
+
+    // Track GPU completion to prevent queue buildup
+    this.gpuBusy = true;
+    this.device.queue.onSubmittedWorkDone().then(() => {
+      this.gpuBusy = false;
+    });
+
     return true;
   }
 
@@ -343,6 +381,12 @@ export class EffectsPipeline {
     this.pongTexture?.destroy();
     this.pingTexture = null;
     this.pongTexture = null;
+    this.pingView = null;
+    this.pongView = null;
+    for (const buf of this.uniformBuffers.values()) {
+      buf.destroy();
+    }
+    this.uniformBuffers.clear();
     this.pipelines.clear();
     this.bindGroupLayouts.clear();
     this.blitPipeline = null;
