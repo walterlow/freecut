@@ -121,6 +121,11 @@ export interface ItemRenderContext {
 
   // GPU effects pipeline (lazily initialized)
   gpuPipeline?: import('@/lib/gpu-effects').EffectsPipeline | null;
+
+  // DOM video element provider for zero-copy playback rendering.
+  // During playback, the Remotion Player's <video> elements are already at
+  // the correct frame — use them directly instead of mediabunny decode.
+  domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
 }
 
 /**
@@ -239,6 +244,29 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+
+  // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
+  // During playback, the Remotion Player's <video> elements are already playing
+  // at the correct frame. Drawing from them avoids mediabunny decode entirely.
+  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
+    const domVideo = rctx.domVideoElementProvider(item.id);
+    if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+      const drawDimensions = calculateMediaDrawDimensions(
+        domVideo.videoWidth,
+        domVideo.videoHeight,
+        transform,
+        canvasSettings,
+      );
+      ctx.drawImage(
+        domVideo,
+        drawDimensions.x,
+        drawDimensions.y,
+        drawDimensions.width,
+        drawDimensions.height,
+      );
+      return;
+    }
+  }
 
   if (
     isPreviewMode

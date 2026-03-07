@@ -2393,6 +2393,21 @@ export const VideoPreview = memo(function VideoPreview({
             break;
           }
 
+          // Enable DOM video element provider during playback for zero-copy rendering.
+          // During playback, the Remotion Player's <video> elements are already at
+          // the correct frame — reading from them avoids mediabunny decode entirely.
+          if ('setDomVideoElementProvider' in renderer) {
+            const playbackNow = usePlaybackStore.getState();
+            if (playbackNow.isPlaying && playerContainerRef.current) {
+              const container = playerContainerRef.current;
+              renderer.setDomVideoElementProvider((itemId: string) => {
+                return container.querySelector<HTMLVideoElement>(`[data-item-id="${itemId}"] video`);
+              });
+            } else {
+              renderer.setDomVideoElementProvider(undefined);
+            }
+          }
+
           if (isPriorityFrame || !('prewarmFrame' in renderer) || typeof renderer.prewarmFrame !== 'function') {
             await renderer.renderFrame(frameToRender);
           } else {

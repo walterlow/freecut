@@ -36,6 +36,7 @@ import {
   applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
+  getGpuEffectInstances,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
 import { EffectsPipeline } from '@/lib/gpu-effects';
@@ -61,6 +62,7 @@ import { useCompositionsStore } from '@/features/export/deps/timeline';
 import {
   renderItem,
   renderTransitionToCanvas,
+  calculateMediaDrawDimensions,
   type CanvasSettings,
   type WorkerLoadedImage,
   type ItemRenderContext,
@@ -113,6 +115,7 @@ export async function createCompositionRenderer(
   options: {
     mode?: 'export' | 'preview';
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
+    domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
   const {
@@ -124,6 +127,7 @@ export async function createCompositionRenderer(
   } = composition;
   const renderMode = options.mode ?? 'export';
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
+  const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
 
@@ -405,6 +409,7 @@ export async function createCompositionRenderer(
     adjustmentLayers,
     subCompRenderData,
     gpuPipeline: null,
+    domVideoElementProvider,
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
@@ -1078,6 +1083,45 @@ export async function createCompositionRenderer(
         );
         const combinedEffects = combineEffects(item.effects, adjEffects);
 
+        // === DIRECT VIDEO→GPU PATH (importExternalTexture) ===
+        // When a video item has ONLY GPU effects, a DOM video element is available,
+        // and the transform is simple (no rotation/corner-radius that need canvas 2D),
+        // skip canvas 2D entirely and go: video → importExternalTexture → GPU effects → output.
+        if (
+          renderMode === 'preview'
+          && item.type === 'video'
+          && combinedEffects.length > 0
+          && combinedEffects.every((e) => !e.enabled || e.effect.type === 'gpu-effect')
+          && transform.rotation === 0
+          && transform.cornerRadius === 0
+          && transform.opacity === 1
+          && itemRenderContext.domVideoElementProvider
+        ) {
+          const domVideo = itemRenderContext.domVideoElementProvider(item.id);
+          if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+            if (!itemRenderContext.gpuPipeline) {
+              itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+            }
+            if (itemRenderContext.gpuPipeline) {
+              const gpuInstances = getGpuEffectInstances(combinedEffects);
+              const drawDims = calculateMediaDrawDimensions(
+                domVideo.videoWidth, domVideo.videoHeight, transform, canvasSettings,
+              );
+              const gpuCanvas = itemRenderContext.gpuPipeline.applyEffectsToVideo(
+                domVideo, gpuInstances, drawDims, canvasSettings.width, canvasSettings.height,
+              );
+              if (gpuCanvas) {
+                if (deferred) {
+                  return { source: gpuCanvas, poolCanvases: [] };
+                }
+                contentCtx.drawImage(gpuCanvas, 0, 0);
+                return null;
+              }
+            }
+            // Fall through to standard path if importExternalTexture failed
+          }
+        }
+
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===
         const { canvas: itemCanvas, ctx: itemCtx } = canvasPool.acquire();
 
@@ -1426,6 +1470,10 @@ export async function createCompositionRenderer(
           }
         }
       }
+    },
+
+    setDomVideoElementProvider(provider: ((itemId: string) => HTMLVideoElement | null) | undefined) {
+      itemRenderContext.domVideoElementProvider = provider;
     },
 
     dispose() {

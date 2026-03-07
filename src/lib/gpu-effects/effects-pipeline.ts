@@ -2,7 +2,7 @@ import { COMMON_WGSL } from './common';
 import type { GpuEffectDefinition, GpuEffectInstance } from './types';
 import { GPU_EFFECT_REGISTRY, getGpuEffect } from './index';
 
-const BLIT_SHADER = /* wgsl */ `
+const FULLSCREEN_VERTEX = /* wgsl */ `
 struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
@@ -22,11 +22,40 @@ fn vertexMain(@builtin(vertex_index) vi: u32) -> VertexOutput {
   o.uv = uv[vi];
   return o;
 }
+`;
+
+const BLIT_SHADER = /* wgsl */ `
+${FULLSCREEN_VERTEX}
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @fragment
 fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
   return textureSample(inputTex, texSampler, input.uv);
+}
+`;
+
+/**
+ * Shader for importing an external video texture (texture_external) into the
+ * ping texture with positioning. Uses importExternalTexture for zero-copy
+ * GPU access to the video decoder's output buffer.
+ *
+ * destRect uniform: (left, top, right, bottom) in UV space [0..1].
+ * Pixels outside the rect are transparent; pixels inside sample the video.
+ */
+const IMPORT_EXTERNAL_SHADER = /* wgsl */ `
+${FULLSCREEN_VERTEX}
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var videoTex: texture_external;
+@group(0) @binding(2) var<uniform> destRect: vec4f;
+@fragment
+fn importFragment(input: VertexOutput) -> @location(0) vec4f {
+  let uv = input.uv;
+  let r = destRect;
+  if (uv.x < r.x || uv.x > r.z || uv.y < r.y || uv.y > r.w) {
+    return vec4f(0.0);
+  }
+  let videoUv = (uv - r.xy) / (r.zw - r.xy);
+  return textureSampleBaseClampToEdge(videoTex, texSampler, videoUv);
 }
 `;
 
@@ -38,6 +67,10 @@ export class EffectsPipeline {
   private sampler: GPUSampler;
   private blitPipeline: GPURenderPipeline | null = null;
   private blitBindGroupLayout: GPUBindGroupLayout | null = null;
+  // importExternalTexture pipeline for zero-copy video → GPU
+  private importPipeline: GPURenderPipeline | null = null;
+  private importBindGroupLayout: GPUBindGroupLayout | null = null;
+  private importUniformBuffer: GPUBuffer | null = null;
   private pingTexture: GPUTexture | null = null;
   private pongTexture: GPUTexture | null = null;
   private texW = 0;
@@ -86,6 +119,7 @@ export class EffectsPipeline {
 
     // Create blit (passthrough) pipeline for final canvas output
     this.createBlitPipeline();
+    this.createImportExternalPipeline();
 
     for (const [id, effect] of GPU_EFFECT_REGISTRY) {
       this.createEffectPipeline(id, effect);
@@ -109,6 +143,36 @@ export class EffectsPipeline {
       fragment: { module, entryPoint: 'blitFragment', targets: [{ format: this.format }] },
       primitive: { topology: 'triangle-list' },
     });
+  }
+
+  private createImportExternalPipeline(): void {
+    try {
+      const module = this.device.createShaderModule({ label: 'import-external', code: IMPORT_EXTERNAL_SHADER });
+      this.importBindGroupLayout = this.device.createBindGroupLayout({
+        label: 'import-external-layout',
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, externalTexture: {} },
+          { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        ],
+      });
+      this.importPipeline = this.device.createRenderPipeline({
+        label: 'import-external-pipeline',
+        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.importBindGroupLayout] }),
+        vertex: { module, entryPoint: 'vertexMain' },
+        fragment: { module, entryPoint: 'importFragment', targets: [{ format: 'rgba8unorm' }] },
+        primitive: { topology: 'triangle-list' },
+      });
+      this.importUniformBuffer = this.device.createBuffer({
+        size: 16, // vec4f = 4 floats × 4 bytes
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+    } catch {
+      // importExternalTexture may not be supported — fall back to copyExternalImageToTexture path
+      this.importPipeline = null;
+      this.importBindGroupLayout = null;
+      this.importUniformBuffer = null;
+    }
   }
 
   private createEffectPipeline(id: string, effect: GpuEffectDefinition): void {
@@ -435,15 +499,15 @@ export class EffectsPipeline {
    * Outside pool mode: uses a single reusable output canvas.
    */
   applyEffectsToCanvas(
-    source: OffscreenCanvas | HTMLCanvasElement,
+    source: OffscreenCanvas | HTMLCanvasElement | HTMLVideoElement,
     effects: GpuEffectInstance[],
   ): OffscreenCanvas | null {
     const enabled = effects.filter(e => e.enabled);
     if (enabled.length === 0) return null;
     if (!this.blitPipeline || !this.blitBindGroupLayout) return null;
 
-    const w = source.width;
-    const h = source.height;
+    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
+    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
     if (w < 2 || h < 2) return null;
 
     // Get output canvas — from pool in pool mode, reusable single otherwise
@@ -510,6 +574,127 @@ export class EffectsPipeline {
     return outCanvas;
   }
 
+  /**
+   * Apply effects directly from an HTMLVideoElement via importExternalTexture.
+   * Zero-copy: the GPU reads directly from the video decoder's output buffer.
+   * Positions the video at `destRect` on a canvas of `canvasWidth × canvasHeight`.
+   *
+   * Falls back to null if importExternalTexture is not supported or fails.
+   */
+  applyEffectsToVideo(
+    video: HTMLVideoElement,
+    effects: GpuEffectInstance[],
+    destRect: { x: number; y: number; width: number; height: number },
+    canvasWidth: number,
+    canvasHeight: number,
+  ): OffscreenCanvas | null {
+    const enabled = effects.filter(e => e.enabled);
+    if (enabled.length === 0) return null;
+    if (!this.importPipeline || !this.importBindGroupLayout || !this.importUniformBuffer) return null;
+    if (!this.blitPipeline || !this.blitBindGroupLayout) return null;
+    if (video.readyState < 2 || video.videoWidth < 2) return null;
+
+    const w = canvasWidth;
+    const h = canvasHeight;
+    if (w < 2 || h < 2) return null;
+
+    // Get output canvas
+    let outCanvas: OffscreenCanvas;
+    let outCtx: GPUCanvasContext;
+    if (this.poolMode) {
+      const entry = this.acquirePooledOutput(w, h);
+      if (!entry) return null;
+      outCanvas = entry.canvas;
+      outCtx = entry.ctx;
+    } else {
+      if (!this.outputCanvas || this.outputW !== w || this.outputH !== h) {
+        this.outputCanvas = new OffscreenCanvas(w, h);
+        this.outputCtx = this.configureCanvas(this.outputCanvas);
+        this.outputW = w;
+        this.outputH = h;
+      }
+      if (!this.outputCtx) return null;
+      outCanvas = this.outputCanvas;
+      outCtx = this.outputCtx;
+    }
+
+    this.ensurePingPong(w, h);
+    if (!this.pingTexture || !this.pongTexture) return null;
+
+    // Import video as external texture (truly zero-copy — no pixel transfer)
+    let externalTexture: GPUExternalTexture;
+    try {
+      externalTexture = this.device.importExternalTexture({ source: video });
+    } catch {
+      return null; // importExternalTexture failed — caller should fall back
+    }
+
+    // Compute destination rect in UV space [0..1]
+    const uvRect = new Float32Array([
+      destRect.x / w,
+      destRect.y / h,
+      (destRect.x + destRect.width) / w,
+      (destRect.y + destRect.height) / h,
+    ]);
+    this.device.queue.writeBuffer(this.importUniformBuffer, 0, uvRect.buffer);
+
+    const commandEncoder = this.device.createCommandEncoder();
+
+    // Pass 1: Import external texture → ping texture (with positioning)
+    const importBindGroup = this.device.createBindGroup({
+      layout: this.importBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: externalTexture },
+        { binding: 2, resource: { buffer: this.importUniformBuffer } },
+      ],
+    });
+
+    const importPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.pingView!,
+        loadOp: 'clear',
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        storeOp: 'store',
+      }],
+    });
+    importPass.setPipeline(this.importPipeline);
+    importPass.setBindGroup(0, importBindGroup);
+    importPass.draw(6);
+    importPass.end();
+
+    // Pass 2+: Effect chain (ping/pong as usual)
+    const finalTex = this.runEffectChain(
+      commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
+    );
+
+    // Final blit to output canvas
+    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
+    const blitBindGroup = this.device.createBindGroup({
+      layout: this.blitBindGroupLayout!,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: finalView },
+      ],
+    });
+
+    const outputPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outCtx.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    outputPass.setPipeline(this.blitPipeline!);
+    outputPass.setBindGroup(0, blitBindGroup);
+    outputPass.draw(6);
+    outputPass.end();
+
+    this.device.queue.submit([commandEncoder.finish()]);
+
+    return outCanvas;
+  }
+
   getDevice(): GPUDevice {
     return this.device;
   }
@@ -540,6 +725,10 @@ export class EffectsPipeline {
     this.bindGroupLayouts.clear();
     this.blitPipeline = null;
     this.blitBindGroupLayout = null;
+    this.importPipeline = null;
+    this.importBindGroupLayout = null;
+    this.importUniformBuffer?.destroy();
+    this.importUniformBuffer = null;
     this.initialized = false;
   }
 }

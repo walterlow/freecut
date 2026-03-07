@@ -529,7 +529,7 @@ function hexToRgba(hex: string, alpha: number): string {
 /**
  * Get GPU effects from an effects array and convert to GpuEffectInstance format.
  */
-function getGpuEffectInstances(effects: ItemEffect[]): GpuEffectInstance[] {
+export function getGpuEffectInstances(effects: ItemEffect[]): GpuEffectInstance[] {
   return effects
     .filter((e) => e.enabled && e.effect.type === 'gpu-effect')
     .map((e) => {
