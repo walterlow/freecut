@@ -4,6 +4,7 @@ import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import { maskVerticesToSvgPath } from '@/features/preview/utils/mask-path-utils';
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
+import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
@@ -122,16 +123,21 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     );
   }, [item.masks, item.id, state.transform.width, state.transform.height]);
 
-  // Corner pin CSS matrix3d
+  // Corner pin CSS matrix3d — use preview during drag for smooth interaction
+  const cornerPinPreview = useCornerPinStore((s) =>
+    s.editingItemId === item.id ? s.previewCornerPin : null
+  );
+  const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
+
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
-    if (!hasCornerPin(item.cornerPin)) return null;
+    if (!hasCornerPin(effectiveCornerPin)) return null;
     const w = state.transform.width;
     const h = state.transform.height;
     return {
       transformOrigin: '0 0',
-      transform: computeCornerPinMatrix3d(w, h, item.cornerPin!),
+      transform: computeCornerPinMatrix3d(w, h, effectiveCornerPin!),
     };
-  }, [item.cornerPin, state.transform.width, state.transform.height]);
+  }, [effectiveCornerPin, state.transform.width, state.transform.height]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
