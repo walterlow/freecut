@@ -2101,19 +2101,39 @@ export const VideoPreview = memo(function VideoPreview({
     return task;
   }, [ensureFastScrubRenderer]);
 
+  const captureCanvasSource = useCallback(async (): Promise<OffscreenCanvas | HTMLCanvasElement | null> => {
+    try {
+      const renderer = await ensureFastScrubRenderer();
+      const offscreen = scrubOffscreenCanvasRef.current;
+      if (!renderer || !offscreen) return null;
+
+      const playback = usePlaybackStore.getState();
+      const targetFrame = playback.previewFrame ?? playback.currentFrame;
+      await renderer.renderFrame(targetFrame);
+      return offscreen;
+    } catch (error) {
+      console.warn('[PreviewCapture] Failed to capture canvas source:', error);
+      return null;
+    }
+  }, [ensureFastScrubRenderer]);
+
+  const setCaptureCanvasSource = usePlaybackStore((s) => s.setCaptureCanvasSource);
+
   // Register frame capture function for scopes and thumbnail workflows.
   useEffect(() => {
     setCaptureFrame(captureCurrentFrame);
     setCaptureFrameImageData?.(captureCurrentFrameImageData);
+    setCaptureCanvasSource?.(captureCanvasSource);
     return () => {
       setCaptureFrame(null);
       setCaptureFrameImageData?.(null);
+      setCaptureCanvasSource?.(null);
       setDisplayedFrame(null);
       captureInFlightRef.current = null;
       captureImageDataInFlightRef.current = null;
       captureScaleCanvasRef.current = null;
     };
-  }, [captureCurrentFrame, captureCurrentFrameImageData, setCaptureFrame, setCaptureFrameImageData, setDisplayedFrame]);
+  }, [captureCurrentFrame, captureCurrentFrameImageData, captureCanvasSource, setCaptureFrame, setCaptureFrameImageData, setCaptureCanvasSource, setDisplayedFrame]);
 
   // Background warm-up so first scrub has lower startup latency.
   useEffect(() => {

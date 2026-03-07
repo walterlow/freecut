@@ -26,6 +26,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       previewItemId: null,
       captureFrame: null, // Set by VideoPreview when Player is mounted
       captureFrameImageData: null,
+      captureCanvasSource: null,
       useProxy: true,
       previewQuality: 1 as PreviewQuality,
 
@@ -72,6 +73,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         }),
       setCaptureFrame: (fn) => set({ captureFrame: fn }),
       setCaptureFrameImageData: (fn) => set({ captureFrameImageData: fn }),
+      setCaptureCanvasSource: (fn) => set({ captureCanvasSource: fn }),
       toggleUseProxy: () => set((state) => ({ useProxy: !state.useProxy })),
       setPreviewQuality: () => set((state) => (
         state.previewQuality === 1 ? state : { previewQuality: 1 }
