@@ -711,8 +711,6 @@ export const VideoPreview = memo(function VideoPreview({
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
-  const hasGpuEffectsRef = useRef(showGpuEffectsOverlay);
-  hasGpuEffectsRef.current = showGpuEffectsOverlay;
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -1883,7 +1881,7 @@ export const VideoPreview = memo(function VideoPreview({
     [fastScrubScaledTracks]
   );
 
-  const forceFastScrubOverlay = FAST_SCRUB_FORCE_OVERLAY_FOR_CUSTOM_CUBE && hasCustomCubePreview;
+  const forceFastScrubOverlay = (FAST_SCRUB_FORCE_OVERLAY_FOR_CUSTOM_CUBE && hasCustomCubePreview) || showGpuEffectsOverlay;
   const preferPlayerForTextGizmo = (
     !forceFastScrubOverlay
     && isGizmoInteracting
@@ -2180,15 +2178,6 @@ export const VideoPreview = memo(function VideoPreview({
     const drawToDisplay = (renderedFrame: number) => {
       const offscreen = scrubOffscreenCanvasRef.current;
       if (!offscreen) return;
-
-      // When GPU effects are active, the overlay canvas (zIndex 5) is the
-      // display surface. Skip the CPU→CPU copy to the display canvas —
-      // the overlay reads directly from the offscreen canvas (1 copy instead of 3).
-      if (hasGpuEffectsRef.current) {
-        scrubFrameDirtyRef.current = true;
-        setDisplayedFrame(renderedFrame);
-        return;
-      }
 
       const displayCanvas = scrubCanvasRef.current;
       if (!displayCanvas) return;
@@ -3333,10 +3322,9 @@ export const VideoPreview = memo(function VideoPreview({
               />
             )}
 
-            {/* GPU effects overlay - WebGPU canvas for shader-based effects.
-                Always on top when GPU effects are present. The composition renderer
-                in preview mode skips GPU effects; this overlay handles them via
-                the fast WebGPU canvas path (no CPU readback). */}
+            {/* GPU effects overlay canvas — kept hidden. GPU effects are now
+                applied per-item in the composition renderer. The canvas ref is
+                retained for API compatibility. */}
             <canvas
               ref={gpuEffectsCanvasRef}
               className="absolute inset-0 pointer-events-none"
@@ -3344,7 +3332,7 @@ export const VideoPreview = memo(function VideoPreview({
                 width: '100%',
                 height: '100%',
                 zIndex: 5,
-                visibility: showGpuEffectsOverlay ? 'visible' : 'hidden',
+                visibility: 'hidden',
               }}
             />
 

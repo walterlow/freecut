@@ -51,6 +51,15 @@ export class EffectsPipeline {
   private pongView: GPUTextureView | null = null;
   // GPU backpressure: true while GPU is processing a frame
   private gpuBusy = false;
+  // Reusable offscreen canvas for applyEffectsToCanvas output (non-batch)
+  private outputCanvas: OffscreenCanvas | null = null;
+  private outputCtx: GPUCanvasContext | null = null;
+  private outputW = 0;
+  private outputH = 0;
+  // Pooled output mode: per-item output canvases for deferred compositing
+  private poolMode = false;
+  private outputPool: { canvas: OffscreenCanvas; ctx: GPUCanvasContext; w: number; h: number }[] = [];
+  private batchIndex = 0;
 
   private constructor(device: GPUDevice) {
     this.device = device;
@@ -368,6 +377,139 @@ export class EffectsPipeline {
     return new ImageData(resultData, w, h);
   }
 
+  /**
+   * Begin pooled output mode. Each applyEffectsToCanvas call gets its own
+   * output canvas from a pool and submits immediately. This allows the GPU
+   * to pipeline work across items. Callers should defer compositing
+   * (drawImage) until all items are processed — the first drawImage stalls
+   * for all preceding GPU work, subsequent ones are free.
+   */
+  beginBatch(): void {
+    this.poolMode = true;
+    this.batchIndex = 0;
+  }
+
+  /**
+   * End pooled output mode. Reset pool index for next frame.
+   */
+  endBatch(): void {
+    this.poolMode = false;
+    this.batchIndex = 0;
+  }
+
+  isBatching(): boolean {
+    return this.poolMode;
+  }
+
+  private acquirePooledOutput(w: number, h: number): { canvas: OffscreenCanvas; ctx: GPUCanvasContext } | null {
+    let entry = this.outputPool[this.batchIndex];
+    if (entry) {
+      if (entry.w !== w || entry.h !== h) {
+        entry.canvas.width = w;
+        entry.canvas.height = h;
+        const ctx = this.configureCanvas(entry.canvas);
+        if (!ctx) return null;
+        entry.ctx = ctx;
+        entry.w = w;
+        entry.h = h;
+      }
+    } else {
+      const canvas = new OffscreenCanvas(w, h);
+      const ctx = this.configureCanvas(canvas);
+      if (!ctx) return null;
+      entry = { canvas, ctx, w, h };
+      this.outputPool.push(entry);
+    }
+    this.batchIndex++;
+    return entry;
+  }
+
+  /**
+   * Apply effects to a canvas source and return a canvas with the result.
+   * Zero-copy input via copyExternalImageToTexture, GPU-rendered output.
+   *
+   * In pool mode (beginBatch/endBatch): each call gets its own output canvas
+   * from a pool and submits immediately. The GPU pipelines work across items.
+   * Callers should defer compositing (drawImage) until all items are processed.
+   *
+   * Outside pool mode: uses a single reusable output canvas.
+   */
+  applyEffectsToCanvas(
+    source: OffscreenCanvas | HTMLCanvasElement,
+    effects: GpuEffectInstance[],
+  ): OffscreenCanvas | null {
+    const enabled = effects.filter(e => e.enabled);
+    if (enabled.length === 0) return null;
+    if (!this.blitPipeline || !this.blitBindGroupLayout) return null;
+
+    const w = source.width;
+    const h = source.height;
+    if (w < 2 || h < 2) return null;
+
+    // Get output canvas — from pool in pool mode, reusable single otherwise
+    let outCanvas: OffscreenCanvas;
+    let outCtx: GPUCanvasContext;
+
+    if (this.poolMode) {
+      const entry = this.acquirePooledOutput(w, h);
+      if (!entry) return null;
+      outCanvas = entry.canvas;
+      outCtx = entry.ctx;
+    } else {
+      if (!this.outputCanvas || this.outputW !== w || this.outputH !== h) {
+        this.outputCanvas = new OffscreenCanvas(w, h);
+        this.outputCtx = this.configureCanvas(this.outputCanvas);
+        this.outputW = w;
+        this.outputH = h;
+      }
+      if (!this.outputCtx) return null;
+      outCanvas = this.outputCanvas;
+      outCtx = this.outputCtx;
+    }
+
+    this.ensurePingPong(w, h);
+    if (!this.pingTexture || !this.pongTexture) return null;
+
+    // Upload source → GPU texture (zero-copy path, no ImageData)
+    this.device.queue.copyExternalImageToTexture(
+      { source, flipY: false },
+      { texture: this.pingTexture },
+      { width: w, height: h },
+    );
+
+    const commandEncoder = this.device.createCommandEncoder();
+
+    const finalTex = this.runEffectChain(
+      commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
+    );
+
+    // Blit to output canvas
+    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
+    const blitBindGroup = this.device.createBindGroup({
+      layout: this.blitBindGroupLayout!,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: finalView },
+      ],
+    });
+
+    const outputPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outCtx.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    outputPass.setPipeline(this.blitPipeline!);
+    outputPass.setBindGroup(0, blitBindGroup);
+    outputPass.draw(6);
+    outputPass.end();
+
+    this.device.queue.submit([commandEncoder.finish()]);
+
+    return outCanvas;
+  }
+
   getDevice(): GPUDevice {
     return this.device;
   }
@@ -383,6 +525,13 @@ export class EffectsPipeline {
     this.pongTexture = null;
     this.pingView = null;
     this.pongView = null;
+    this.outputCanvas = null;
+    this.outputCtx = null;
+    this.outputW = 0;
+    this.outputH = 0;
+    this.poolMode = false;
+    this.outputPool = [];
+    this.batchIndex = 0;
     for (const buf of this.uniformBuffers.values()) {
       buf.destroy();
     }

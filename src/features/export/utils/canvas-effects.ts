@@ -546,9 +546,49 @@ function getGpuEffectInstances(effects: ItemEffect[]): GpuEffectInstance[] {
 
 /**
  * Apply GPU effects to canvas via the EffectsPipeline.
- * Reads current canvas content as ImageData, processes through GPU, writes back.
+ * Uses zero-copy canvas→GPU path (copyExternalImageToTexture) with GPU-rendered
+ * output canvas.
+ *
+ * In pool mode (pipeline.isBatching()): returns the GPU output canvas without
+ * drawing back. GPU work is submitted but the caller should defer compositing
+ * to allow GPU pipelining across items. The first drawImage stalls, subsequent
+ * ones are free.
+ *
+ * Outside pool mode: draws result back to ctx immediately.
+ *
+ * Returns the GPU output canvas if pooling (for deferred compositing), null otherwise.
  */
-async function applyGpuEffects(
+function applyGpuEffects(
+  ctx: OffscreenCanvasRenderingContext2D,
+  canvas: EffectCanvasSettings,
+  gpuInstances: GpuEffectInstance[],
+  pipeline: EffectsPipeline,
+): OffscreenCanvas | null {
+  if (gpuInstances.length === 0) return null;
+
+  try {
+    const result = pipeline.applyEffectsToCanvas(ctx.canvas as OffscreenCanvas, gpuInstances);
+    if (result) {
+      if (pipeline.isBatching()) {
+        // Pool mode: return GPU canvas for deferred compositing.
+        // GPU work is submitted — defer drawImage to allow pipelining.
+        return result;
+      }
+      // Non-pool: draw back immediately
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(result, 0, 0);
+      return null;
+    }
+  } catch (error) {
+    log.warn('GPU effects zero-copy path failed, skipping', error);
+  }
+  return null;
+}
+
+/**
+ * Apply GPU effects with async readback (for export where accuracy matters).
+ */
+async function applyGpuEffectsAsync(
   ctx: OffscreenCanvasRenderingContext2D,
   canvas: EffectCanvasSettings,
   gpuInstances: GpuEffectInstance[],
@@ -621,6 +661,10 @@ export function combineEffects(
  * Apply all effects to a canvas item.
  * This is the main entry point for effect processing.
  *
+ * Returns a GPU output canvas if the pipeline is batching and GPU effects
+ * were applied — the caller must defer compositing until after endBatch().
+ * Returns null otherwise (result is already in ctx).
+ *
  * @param ctx - Canvas context where item has been drawn
  * @param sourceCanvas - Offscreen canvas containing the item content
  * @param effects - Combined effects to apply
@@ -634,11 +678,11 @@ export function applyAllEffects(
   frame: number,
   canvas: EffectCanvasSettings,
   gpuPipeline?: EffectsPipeline | null,
-): void {
+): OffscreenCanvas | null {
   if (effects.length === 0) {
     // No effects - just draw source
     ctx.drawImage(sourceCanvas, 0, 0);
-    return;
+    return null;
   }
 
   // Collect effect data
@@ -741,19 +785,21 @@ export function applyAllEffects(
     applyVignette(ctx, canvas, vignetteEffect);
   }
 
-  // Apply GPU shader effects (async, fire-and-forget for sync pipeline)
+  // Apply GPU shader effects (zero-copy canvas→GPU→canvas path)
   const gpuInstances = getGpuEffectInstances(effects);
   if (gpuInstances.length > 0 && gpuPipeline) {
-    // Note: GPU effects are async but applyAllEffects is sync.
-    // For synchronous callers, GPU effects are skipped here.
-    // Use applyAllEffectsAsync for full GPU support.
-    void applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
+    const deferredCanvas = applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
+    if (deferredCanvas) return deferredCanvas;
   }
+  return null;
 }
 
 /**
  * Async version of applyAllEffects that properly awaits GPU effects.
  * Use this in export pipelines where async is supported.
+ *
+ * Returns a GPU output canvas if the pipeline is batching and GPU effects
+ * were applied (for deferred compositing). Returns null otherwise.
  */
 export async function applyAllEffectsAsync(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -762,13 +808,18 @@ export async function applyAllEffectsAsync(
   frame: number,
   canvas: EffectCanvasSettings,
   gpuPipeline?: EffectsPipeline | null,
-): Promise<void> {
-  // Apply all non-GPU effects synchronously
-  applyAllEffects(ctx, sourceCanvas, effects, frame, canvas);
-
-  // Then apply GPU effects with proper await
-  const gpuInstances = getGpuEffectInstances(effects);
-  if (gpuInstances.length > 0 && gpuPipeline) {
-    await applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
+  mode: 'preview' | 'export' = 'preview',
+): Promise<OffscreenCanvas | null> {
+  if (mode === 'export') {
+    // Export: apply non-GPU effects without GPU pipeline, then async GPU readback
+    applyAllEffects(ctx, sourceCanvas, effects, frame, canvas);
+    const gpuInstances = getGpuEffectInstances(effects);
+    if (gpuInstances.length > 0 && gpuPipeline) {
+      await applyGpuEffectsAsync(ctx, canvas, gpuInstances, gpuPipeline);
+    }
+    return null;
+  } else {
+    // Preview: apply all effects including GPU via zero-copy canvas path
+    return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);
   }
 }

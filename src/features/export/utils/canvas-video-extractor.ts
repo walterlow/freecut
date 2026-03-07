@@ -47,6 +47,8 @@ export class VideoFrameExtractor {
   private static readonly TIMESTAMP_EPSILON = 1e-4;
   private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
   private static readonly STREAM_BACKTRACK_SECONDS = 1.0;
+  /** Forward jump threshold: restart stream instead of reading through samples */
+  private static readonly FORWARD_JUMP_RESTART_SECONDS = 3.0;
 
   private sink: MediabunnySink | null = null;
   private input: MediabunnyInput | null = null;
@@ -191,7 +193,14 @@ export class VideoFrameExtractor {
       this.lastRequestedTimestamp !== null
       && timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON < this.lastRequestedTimestamp
     ) {
-      // Timeline time moved backward for this clip (rare during export). Restart stream.
+      // Timeline time moved backward for this clip. Restart stream.
+      this.resetSampleIterator(timestamp, 'backward');
+    } else if (
+      this.lastRequestedTimestamp !== null
+      && timestamp - this.lastRequestedTimestamp > VideoFrameExtractor.FORWARD_JUMP_RESTART_SECONDS
+    ) {
+      // Large forward jump — restart stream at new position instead of reading
+      // through hundreds of samples. Faster than sequential iteration.
       this.resetSampleIterator(timestamp, 'backward');
     }
 

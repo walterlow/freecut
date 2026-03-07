@@ -33,7 +33,6 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
-  applyAllEffects,
   applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
@@ -150,6 +149,13 @@ export async function createCompositionRenderer(
 
   // === PERFORMANCE OPTIMIZATION: Text Measurement Cache ===
   const textMeasureCache = new TextMeasurementCache();
+
+  // === RENDERED FRAME CACHE (preview only) ===
+  // Caches recently rendered frames as ImageBitmaps for instant backward scrubbing.
+  // Without this, every backward seek restarts mediabunny's decoder stream.
+  const FRAME_CACHE_MAX = renderMode === 'preview' ? 120 : 0;
+  const frameCache = new Map<number, ImageBitmap>();
+  const frameCacheOrder: number[] = []; // LRU eviction order
 
   // === GPU Effects Pipeline ===
   // Lazily initialized on first use to avoid blocking startup
@@ -965,6 +971,16 @@ export async function createCompositionRenderer(
     },
 
     async renderFrame(frame: number) {
+      // Check rendered frame cache (preview only — avoids costly mediabunny restarts)
+      if (FRAME_CACHE_MAX > 0) {
+        const cached = frameCache.get(frame);
+        if (cached) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(cached, 0, 0);
+          return;
+        }
+      }
+
       // Clear canvas
       ctx.fillStyle = backgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -998,11 +1014,48 @@ export async function createCompositionRenderer(
       const { canvas: contentCanvas, ctx: contentCtx } = canvasPool.acquire();
 
 
-      // Helper function to render a single item with effects
+      // Deferred compositing for GPU pipelining: each item's GPU effects submit
+      // immediately, but we defer drawImage calls so the GPU can pipeline work.
+      // The first drawImage stalls for preceding GPU work, rest are free.
+      const deferredComposites: { source: OffscreenCanvas; poolCanvas: OffscreenCanvas | null }[] = [];
+      let useBatch = false;
+
+      // In preview mode, check if any active items have GPU effects
+      // and eagerly init the pipeline + start batch before processing items
+      if (renderMode === 'preview') {
+        let hasAnyGpuEffects = false;
+        for (const track of sortedTracks) {
+          if (!isTrackRenderable(track)) continue;
+          for (const item of track.items ?? []) {
+            if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
+            if (item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')) {
+              hasAnyGpuEffects = true;
+              break;
+            }
+          }
+          if (hasAnyGpuEffects) break;
+        }
+        if (hasAnyGpuEffects) {
+          if (!itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+          }
+          if (itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline.beginBatch();
+            useBatch = true;
+          }
+        }
+      }
+
+      /**
+       * Render a single item with effects. Returns the canvas to composite
+       * (and canvases to release) for deferred compositing, or composites
+       * immediately in export mode.
+       */
       const renderItemWithEffects = async (
         item: TimelineItem,
-        trackOrder: number
-      ) => {
+        trackOrder: number,
+        deferred: boolean,
+      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
         // Get animated transform
         const itemKeyframes = keyframesMap.get(item.id);
         let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
@@ -1037,29 +1090,34 @@ export async function createCompositionRenderer(
           itemRenderContext
         );
 
-        // Apply effects
+        // Apply effects (per-item — GPU effects applied here for both preview and export)
         if (combinedEffects.length > 0) {
-          const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
-          if (renderMode === 'preview') {
-            // Preview mode: skip GPU effects (the overlay handles them via
-            // the fast WebGPU canvas path with no CPU readback)
-            applyAllEffects(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings);
-          } else {
-            // Export mode: apply GPU effects via applyEffectsToImageData
-            const hasGpu = combinedEffects.some((e) => e.enabled && e.effect.type === 'gpu-effect');
-            if (hasGpu && !itemRenderContext.gpuPipeline) {
-              itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+          const hasGpu = combinedEffects.some((e) => e.enabled && e.effect.type === 'gpu-effect');
+          if (hasGpu && !itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+            if (!itemRenderContext.gpuPipeline) {
+              console.warn('[CompositionRenderer] GPU pipeline init failed — GPU effects will be skipped');
             }
-            await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
           }
-          contentCtx.drawImage(effectCanvas, 0, 0);
+          const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
+          const deferredGpuCanvas = await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline, renderMode);
+          canvasPool.release(itemCanvas);
+
+          const source = deferredGpuCanvas ?? effectCanvas;
+          if (deferred) {
+            return { source, poolCanvases: [effectCanvas] };
+          }
+          contentCtx.drawImage(source, 0, 0);
           canvasPool.release(effectCanvas);
-        } else {
-          contentCtx.drawImage(itemCanvas, 0, 0);
+          return null;
         }
 
-        // Release item canvas back to pool
+        if (deferred) {
+          return { source: itemCanvas, poolCanvases: [itemCanvas] };
+        }
+        contentCtx.drawImage(itemCanvas, 0, 0);
         canvasPool.release(itemCanvas);
+        return null;
       };
 
       // Helper to check if item should be rendered
@@ -1186,33 +1244,75 @@ export async function createCompositionRenderer(
       // Track order: higher values render first (behind), lower values render last (on top)
       let skippedTracks = 0;
 
-      for (const track of sortedTracks) {
-        if (!isTrackRenderable(track)) continue;
-        const trackOrder = track.order ?? 0;
+      // In preview mode, parallelize item rendering (video decode is the bottleneck).
+      // Collect all renderable items in z-order, fire all renders concurrently,
+      // then composite results in z-order.
+      if (renderMode === 'preview') {
+        type RenderTask = { type: 'item'; item: TimelineItem; trackOrder: number }
+          | { type: 'transition'; transition: ActiveTransition; trackOrder: number };
+        const renderTasks: RenderTask[] = [];
 
-        // OCCLUSION CULLING: Skip tracks that are fully occluded by higher tracks
-        if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
-          skippedTracks++;
-          continue;
+        for (const track of sortedTracks) {
+          if (!isTrackRenderable(track)) continue;
+          const trackOrder = track.order ?? 0;
+          if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
+            skippedTracks++;
+            continue;
+          }
+          for (const item of track.items ?? []) {
+            if (!shouldRenderItem(item)) continue;
+            renderTasks.push({ type: 'item', item, trackOrder });
+          }
+          const trackTransitions = transitionsByTrackOrder.get(trackOrder);
+          if (trackTransitions) {
+            for (const at of trackTransitions) {
+              renderTasks.push({ type: 'transition', transition: at, trackOrder });
+            }
+          }
         }
 
-        // Render all items on this track (respecting track order as primary)
-        for (const item of track.items ?? []) {
-          if (!shouldRenderItem(item)) continue;
-          await renderItemWithEffects(item, trackOrder);
+        // Fire all item renders in parallel (video decodes run concurrently)
+        const results = await Promise.all(
+          renderTasks.map(async (task) => {
+            if (task.type === 'item') {
+              return renderItemWithEffects(task.item, task.trackOrder, true);
+            }
+            // Transitions: render to a dedicated canvas
+            const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire();
+            await renderTransitionToCanvas(trCtx, task.transition, frame, itemRenderContext, task.trackOrder);
+            return { source: trCanvas, poolCanvases: [trCanvas] } as { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
+          }),
+        );
+
+        // End GPU pool mode before compositing
+        if (useBatch && itemRenderContext.gpuPipeline) {
+          itemRenderContext.gpuPipeline.endBatch();
         }
 
-        // Render transitions that belong to this track (after the track's items)
-        const trackTransitions = transitionsByTrackOrder.get(trackOrder);
-        if (trackTransitions) {
-          for (const activeTransition of trackTransitions) {
-            await renderTransitionToCanvas(
-              contentCtx,
-              activeTransition,
-              frame,
-              itemRenderContext,
-              trackOrder
-            );
+        // Composite all results in z-order (preserved by renderTasks ordering)
+        for (const result of results) {
+          if (!result) continue;
+          contentCtx.drawImage(result.source, 0, 0);
+          for (const c of result.poolCanvases) canvasPool.release(c);
+        }
+      } else {
+        // Export mode: sequential rendering (preserves exact frame ordering)
+        for (const track of sortedTracks) {
+          if (!isTrackRenderable(track)) continue;
+          const trackOrder = track.order ?? 0;
+          if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
+            skippedTracks++;
+            continue;
+          }
+          for (const item of track.items ?? []) {
+            if (!shouldRenderItem(item)) continue;
+            await renderItemWithEffects(item, trackOrder, false);
+          }
+          const trackTransitions = transitionsByTrackOrder.get(trackOrder);
+          if (trackTransitions) {
+            for (const activeTransition of trackTransitions) {
+              await renderTransitionToCanvas(contentCtx, activeTransition, frame, itemRenderContext, trackOrder);
+            }
           }
         }
       }
@@ -1231,6 +1331,25 @@ export async function createCompositionRenderer(
 
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);
+
+      // Cache the rendered frame (preview only) for instant backward scrubbing
+      if (FRAME_CACHE_MAX > 0) {
+        createImageBitmap(canvas).then((bitmap) => {
+          // Evict oldest if cache is full
+          if (frameCacheOrder.length >= FRAME_CACHE_MAX) {
+            const evicted = frameCacheOrder.shift()!;
+            const old = frameCache.get(evicted);
+            if (old) { old.close(); frameCache.delete(evicted); }
+          }
+          // Don't cache if a newer version already exists (race from rapid scrubbing)
+          if (!frameCache.has(frame)) {
+            frameCache.set(frame, bitmap);
+            frameCacheOrder.push(frame);
+          } else {
+            bitmap.close();
+          }
+        }).catch(() => { /* createImageBitmap can fail if canvas is zero-size */ });
+      }
     },
 
     async prewarmFrame(frame: number) {
@@ -1351,6 +1470,11 @@ export async function createCompositionRenderer(
       prewarmAttempted = false;
 
       // === PERFORMANCE: Clean up optimization resources ===
+      // Clean up rendered frame cache
+      for (const bitmap of frameCache.values()) bitmap.close();
+      frameCache.clear();
+      frameCacheOrder.length = 0;
+
       gpuPipeline?.destroy();
       gpuPipeline = null;
       canvasPool.dispose();

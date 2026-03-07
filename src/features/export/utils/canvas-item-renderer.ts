@@ -989,7 +989,7 @@ export async function renderTransitionToCanvas(
 
   if (leftCombinedEffects.length > 0) {
     const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-    await applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings, rctx.gpuPipeline);
+    await applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
     leftFinalCanvas = leftEffectCanvas;
   }
 
@@ -1005,7 +1005,7 @@ export async function renderTransitionToCanvas(
 
   if (rightCombinedEffects.length > 0) {
     const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-    await applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings, rctx.gpuPipeline);
+    await applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
     rightFinalCanvas = rightEffectCanvas;
   }
 
