@@ -24,6 +24,7 @@ import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
+import { CornerPinContainer } from './corner-pin-container';
 import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
@@ -3469,6 +3470,12 @@ export const VideoPreview = memo(function VideoPreview({
                 hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
               />
               <MaskEditorContainer
+                containerRect={playerContainerRect}
+                playerSize={playerSize}
+                projectSize={{ width: project.width, height: project.height }}
+                zoom={zoom}
+              />
+              <CornerPinContainer
                 containerRect={playerContainerRect}
                 playerSize={playerSize}
                 projectSize={{ width: project.width, height: project.height }}

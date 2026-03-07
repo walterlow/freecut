@@ -39,6 +39,7 @@ import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/time
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
+import { hasCornerPin, drawCornerPinImage } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -163,6 +164,12 @@ export async function renderItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
 ): Promise<void> {
+  // Corner pin: render to temp canvas, then warp onto main canvas
+  if (hasCornerPin(item.cornerPin)) {
+    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset);
+    return;
+  }
+
   ctx.save();
 
   // Apply opacity only if it's not the default value (1.0)
@@ -188,6 +195,22 @@ export async function renderItem(
     ctx.clip();
   }
 
+  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset);
+
+  ctx.restore();
+}
+
+/**
+ * Render item content (dispatches to type-specific renderers).
+ */
+async function renderItemContent(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  sourceFrameOffset: number,
+): Promise<void> {
   switch (item.type) {
     case 'video':
       await renderVideoItem(ctx, item as VideoItem, transform, frame, rctx, sourceFrameOffset);
@@ -208,7 +231,73 @@ export async function renderItem(
       await renderCompositionItem(ctx, item as CompositionItem, transform, frame, rctx);
       break;
   }
+}
 
+/**
+ * Render an item with corner pin perspective warp.
+ * Renders to a temporary canvas at item dimensions, then warps onto the main canvas.
+ */
+async function renderItemWithCornerPin(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  sourceFrameOffset: number,
+): Promise<void> {
+  const itemW = Math.ceil(transform.width);
+  const itemH = Math.ceil(transform.height);
+  if (itemW <= 0 || itemH <= 0) return;
+
+  // Render item content to a temp canvas at item dimensions
+  const tempCanvas = new OffscreenCanvas(itemW, itemH);
+  const tempCtx = tempCanvas.getContext('2d');
+  if (!tempCtx) return;
+
+  // Create a centered transform for the temp canvas
+  const tempTransform: ItemTransform = {
+    ...transform,
+    x: 0,
+    y: 0,
+  };
+  const tempRctx: ItemRenderContext = {
+    ...rctx,
+    canvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
+  };
+
+  // Render content to temp canvas
+  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset);
+
+  // Apply corner radius clipping on temp canvas if needed
+  if (transform.cornerRadius > 0) {
+    tempCtx.save();
+    tempCtx.globalCompositeOperation = 'destination-in';
+    tempCtx.beginPath();
+    tempCtx.roundRect(0, 0, itemW, itemH, transform.cornerRadius);
+    tempCtx.fill();
+    tempCtx.restore();
+  }
+
+  // Draw warped image onto main canvas
+  ctx.save();
+  if (transform.opacity !== 1) {
+    ctx.globalAlpha = transform.opacity;
+  }
+
+  // Apply rotation around item center
+  const centerX = rctx.canvasSettings.width / 2 + transform.x;
+  const centerY = rctx.canvasSettings.height / 2 + transform.y;
+  if (transform.rotation !== 0) {
+    ctx.translate(centerX, centerY);
+    ctx.rotate((transform.rotation * Math.PI) / 180);
+    ctx.translate(-centerX, -centerY);
+  }
+
+  // Item position on canvas
+  const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+
+  drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
   ctx.restore();
 }
 

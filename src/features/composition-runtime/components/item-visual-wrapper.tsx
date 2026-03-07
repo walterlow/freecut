@@ -3,6 +3,7 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import { maskVerticesToSvgPath } from '@/features/preview/utils/mask-path-utils';
+import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
@@ -121,6 +122,17 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     );
   }, [item.masks, item.id, state.transform.width, state.transform.height]);
 
+  // Corner pin CSS matrix3d
+  const cornerPinStyle = useMemo((): React.CSSProperties | null => {
+    if (!hasCornerPin(item.cornerPin)) return null;
+    const w = state.transform.width;
+    const h = state.transform.height;
+    return {
+      transformOrigin: '0 0',
+      transform: computeCornerPinMatrix3d(w, h, item.cornerPin!),
+    };
+  }, [item.cornerPin, state.transform.width, state.transform.height]);
+
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
     if (state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
@@ -190,23 +202,36 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         style={{
           ...state.transformStyle,
           ...maskStyle,
-          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+          overflow: state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
           mixBlendMode: item.blendMode && item.blendMode !== 'normal'
             ? BLEND_MODE_CSS[item.blendMode]
             : undefined,
         }}
       >
-        {/* Inner: Effects + Per-item ClipMask + Content */}
+        {/* Corner Pin wrapper (only when active) */}
         <div
-          style={{
+          style={cornerPinStyle ? {
             width: '100%',
             height: '100%',
-            position: 'relative',
-            filter: state.cssFilter || undefined,
-            ...clipMaskStyle,
+            ...cornerPinStyle,
+            overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+          } : {
+            width: '100%',
+            height: '100%',
           }}
         >
-          {children}
+          {/* Inner: Effects + Per-item ClipMask + Content */}
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              position: 'relative',
+              filter: state.cssFilter || undefined,
+              ...clipMaskStyle,
+            }}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </>

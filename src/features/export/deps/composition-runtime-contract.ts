@@ -8,3 +8,4 @@ export {
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
 export { getShapePath, rotatePath } from '@/features/composition-runtime/utils/shape-path';
+export { hasCornerPin, drawCornerPinImage } from '@/features/composition-runtime/utils/corner-pin';

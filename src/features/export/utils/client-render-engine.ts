@@ -1263,6 +1263,9 @@ export async function createCompositionRenderer(
         // Non-normal blend modes interact with layers below
         if (item.blendMode && item.blendMode !== 'normal') return false;
 
+        // Corner pin warps the shape, exposing content below
+        if (item.cornerPin) return false;
+
         // Get animated transform at current frame
         const itemKeyframes = keyframesMap.get(item.id);
         const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
