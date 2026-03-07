@@ -1019,15 +1019,13 @@ export async function createCompositionRenderer(
       const { canvas: contentCanvas, ctx: contentCtx } = canvasPool.acquire();
 
 
-      // Deferred compositing for GPU pipelining: each item's GPU effects submit
-      // immediately, but we defer drawImage calls so the GPU can pipeline work.
-      // The first drawImage stalls for preceding GPU work, rest are free.
-      const deferredComposites: { source: OffscreenCanvas; poolCanvas: OffscreenCanvas | null }[] = [];
+      // GPU batch mode: each item's GPU effects submit immediately via pooled
+      // output canvases, but we defer compositing so the GPU can pipeline work.
       let useBatch = false;
 
-      // In preview mode, check if any active items have GPU effects
+      // Check if any active items have GPU effects
       // and eagerly init the pipeline + start batch before processing items
-      if (renderMode === 'preview') {
+      {
         let hasAnyGpuEffects = false;
         for (const track of sortedTracks) {
           if (!isTrackRenderable(track)) continue;
@@ -1288,10 +1286,10 @@ export async function createCompositionRenderer(
       // Track order: higher values render first (behind), lower values render last (on top)
       let skippedTracks = 0;
 
-      // In preview mode, parallelize item rendering (video decode is the bottleneck).
+      // Parallelize item rendering (video decode is the bottleneck).
       // Collect all renderable items in z-order, fire all renders concurrently,
       // then composite results in z-order.
-      if (renderMode === 'preview') {
+      {
         type RenderTask = { type: 'item'; item: TimelineItem; trackOrder: number }
           | { type: 'transition'; transition: ActiveTransition; trackOrder: number };
         const renderTasks: RenderTask[] = [];
@@ -1338,26 +1336,6 @@ export async function createCompositionRenderer(
           if (!result) continue;
           contentCtx.drawImage(result.source, 0, 0);
           for (const c of result.poolCanvases) canvasPool.release(c);
-        }
-      } else {
-        // Export mode: sequential rendering (preserves exact frame ordering)
-        for (const track of sortedTracks) {
-          if (!isTrackRenderable(track)) continue;
-          const trackOrder = track.order ?? 0;
-          if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
-            skippedTracks++;
-            continue;
-          }
-          for (const item of track.items ?? []) {
-            if (!shouldRenderItem(item)) continue;
-            await renderItemWithEffects(item, trackOrder, false);
-          }
-          const trackTransitions = transitionsByTrackOrder.get(trackOrder);
-          if (trackTransitions) {
-            for (const activeTransition of trackTransitions) {
-              await renderTransitionToCanvas(contentCtx, activeTransition, frame, itemRenderContext, trackOrder);
-            }
-          }
         }
       }
 

@@ -585,26 +585,6 @@ function applyGpuEffects(
   return null;
 }
 
-/**
- * Apply GPU effects with async readback (for export where accuracy matters).
- */
-async function applyGpuEffectsAsync(
-  ctx: OffscreenCanvasRenderingContext2D,
-  canvas: EffectCanvasSettings,
-  gpuInstances: GpuEffectInstance[],
-  pipeline: EffectsPipeline,
-): Promise<void> {
-  if (gpuInstances.length === 0) return;
-
-  try {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const result = await pipeline.applyEffectsToImageData(imageData, gpuInstances);
-    ctx.putImageData(result, 0, 0);
-  } catch (error) {
-    log.warn('GPU effects processing failed, skipping', error);
-  }
-}
-
 // ============================================================================
 // Adjustment Layer Effects
 // ============================================================================
@@ -808,18 +788,11 @@ export async function applyAllEffectsAsync(
   frame: number,
   canvas: EffectCanvasSettings,
   gpuPipeline?: EffectsPipeline | null,
-  mode: 'preview' | 'export' = 'preview',
+  _mode: 'preview' | 'export' = 'preview',
 ): Promise<OffscreenCanvas | null> {
-  if (mode === 'export') {
-    // Export: apply non-GPU effects without GPU pipeline, then async GPU readback
-    applyAllEffects(ctx, sourceCanvas, effects, frame, canvas);
-    const gpuInstances = getGpuEffectInstances(effects);
-    if (gpuInstances.length > 0 && gpuPipeline) {
-      await applyGpuEffectsAsync(ctx, canvas, gpuInstances, gpuPipeline);
-    }
-    return null;
-  } else {
-    // Preview: apply all effects including GPU via zero-copy canvas path
-    return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);
-  }
+  // Both preview and export use the zero-copy canvas→GPU→canvas path.
+  // The old export path used getImageData/putImageData readback which was
+  // 4 pixel copies per item. The zero-copy path via copyExternalImageToTexture
+  // + GPU canvas output is pixel-identical and much faster.
+  return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);
 }
