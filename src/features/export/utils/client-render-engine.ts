@@ -41,6 +41,9 @@ import {
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
 import { EffectsPipeline } from '@/lib/gpu-effects';
+import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/lib/gpu-compositor';
+import type { CompositeLayer } from '@/lib/gpu-compositor';
+import { MaskTextureManager } from '@/lib/masks/mask-texture-manager';
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -180,6 +183,20 @@ export async function createCompositionRenderer(
     });
     return gpuPipelineInitPromise;
   };
+
+  // === GPU Compositor (for pixel-perfect blend modes) ===
+  // Lazily created from the effects pipeline's GPU device
+  let gpuCompositor: CompositorPipeline | null = null;
+  let gpuMaskManager: MaskTextureManager | null = null;
+
+  function ensureGpuCompositor(): boolean {
+    if (gpuCompositor) return true;
+    if (!gpuPipeline) return false;
+    const device = gpuPipeline.getDevice();
+    gpuCompositor = new CompositorPipeline(device);
+    gpuMaskManager = new MaskTextureManager(device);
+    return true;
+  }
 
   // Build lookup maps
   const keyframesMap = buildKeyframesMap(keyframes);
@@ -1384,25 +1401,107 @@ export async function createCompositionRenderer(
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
-        for (let i = 0; i < results.length; i++) {
-          const result = results[i];
-          if (!result) continue;
+        // Use GPU compositor for pixel-perfect blend modes when available
+        const hasNonNormalBlend = renderTasks.some(
+          (t) => t.type === 'item' && t.item.blendMode && t.item.blendMode !== 'normal',
+        );
+        const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor();
 
-          // Apply blend mode for item tasks
-          const task = renderTasks[i]!;
-          const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
-          if (blendMode && blendMode !== 'normal') {
-            contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
+        if (useGpuCompositor && gpuCompositor && gpuMaskManager) {
+          // GPU compositing path — pixel-perfect blend modes via WebGPU
+          const device = gpuPipeline!.getDevice();
+          const w = canvasSettings.width;
+          const h = canvasSettings.height;
+          const layers: CompositeLayer[] = [];
+          const layerTextures: GPUTexture[] = [];
+
+          for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            if (!result) continue;
+
+            const task = renderTasks[i]!;
+            const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+
+            // Upload item canvas to GPU texture
+            const tex = device.createTexture({
+              size: [w, h],
+              format: 'rgba8unorm',
+              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+            });
+            device.queue.copyExternalImageToTexture(
+              { source: result.source, flipY: false },
+              { texture: tex },
+              { width: w, height: h },
+            );
+            layerTextures.push(tex);
+
+            layers.push({
+              params: { ...DEFAULT_LAYER_PARAMS, blendMode, sourceAspect: w / h, outputAspect: w / h },
+              textureView: tex.createView(),
+              maskView: gpuMaskManager.getFallbackView(),
+            });
+
+            for (const c of result.poolCanvases) canvasPool.release(c);
           }
 
-          contentCtx.drawImage(result.source, 0, 0);
+          if (layers.length > 0) {
+            const commandEncoder = device.createCommandEncoder();
+            const composited = gpuCompositor.compositeToTexture(layers, w, h, commandEncoder);
 
-          // Reset composite operation after non-normal blend
-          if (blendMode && blendMode !== 'normal') {
-            contentCtx.globalCompositeOperation = 'source-over';
+            if (composited) {
+              // Readback composited result to Canvas2D
+              const bytesPerRow = Math.ceil(w * 4 / 256) * 256;
+              const readBuffer = device.createBuffer({
+                size: bytesPerRow * h,
+                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+              });
+              commandEncoder.copyTextureToBuffer(
+                { texture: composited.texture },
+                { buffer: readBuffer, bytesPerRow },
+                { width: w, height: h },
+              );
+              device.queue.submit([commandEncoder.finish()]);
+
+              await readBuffer.mapAsync(GPUMapMode.READ);
+              const mapped = new Uint8Array(readBuffer.getMappedRange());
+              const pixels = new Uint8ClampedArray(w * h * 4);
+              for (let row = 0; row < h; row++) {
+                pixels.set(
+                  mapped.subarray(row * bytesPerRow, row * bytesPerRow + w * 4),
+                  row * w * 4,
+                );
+              }
+              readBuffer.unmap();
+              readBuffer.destroy();
+
+              contentCtx.putImageData(new ImageData(pixels, w, h), 0, 0);
+            } else {
+              device.queue.submit([commandEncoder.finish()]);
+            }
           }
 
-          for (const c of result.poolCanvases) canvasPool.release(c);
+          // Destroy per-frame textures
+          for (const tex of layerTextures) tex.destroy();
+        } else {
+          // Canvas2D compositing fallback
+          for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            if (!result) continue;
+
+            const task = renderTasks[i]!;
+            const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+            if (blendMode && blendMode !== 'normal') {
+              contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
+            }
+
+            contentCtx.drawImage(result.source, 0, 0);
+
+            if (blendMode && blendMode !== 'normal') {
+              contentCtx.globalCompositeOperation = 'source-over';
+            }
+
+            for (const c of result.poolCanvases) canvasPool.release(c);
+          }
         }
       }
 
@@ -1587,6 +1686,10 @@ export async function createCompositionRenderer(
       frameCache.clear();
       frameCacheOrder.length = 0;
 
+      gpuCompositor?.destroy();
+      gpuCompositor = null;
+      gpuMaskManager?.destroy();
+      gpuMaskManager = null;
       gpuPipeline?.destroy();
       gpuPipeline = null;
       canvasPool.dispose();
