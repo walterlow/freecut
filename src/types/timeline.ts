@@ -1,5 +1,7 @@
 import type { TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
+import type { BlendMode } from './blend-modes';
+import type { ClipMask } from './masks';
 
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
@@ -27,8 +29,19 @@ type BaseTimelineItem = {
   // Video properties (for video items)
   fadeIn?: number; // Video fade in duration in seconds (default: 0)
   fadeOut?: number; // Video fade out duration in seconds (default: 0)
-  // Visual effects (CSS filters, glitch effects)
+  // Visual effects (GPU shader effects)
   effects?: ItemEffect[];
+  // Blend mode for layer compositing (default: 'normal')
+  blendMode?: BlendMode;
+  // Bezier mask paths
+  masks?: ClipMask[];
+  // Corner pin transform (perspective warp)
+  cornerPin?: {
+    topLeft: [number, number];
+    topRight: [number, number];
+    bottomRight: [number, number];
+    bottomLeft: [number, number];
+  };
 };
 
 // Discriminated union types for different item types

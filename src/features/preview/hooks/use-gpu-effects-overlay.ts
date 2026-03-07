@@ -24,7 +24,10 @@ export function useGpuEffectsOverlay(
     const check = () => {
       const items = useItemsStore.getState().items;
       setHasGpuEffects(
-        items.some((item) => item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect'))
+        items.some((item) =>
+          item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ||
+          (item.blendMode && item.blendMode !== 'normal')
+        )
       );
     };
     check();

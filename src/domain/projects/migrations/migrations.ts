@@ -447,6 +447,23 @@ const migrations: Record<number, Migration> = {
       };
     },
   },
+
+  /**
+   * Version 7: Add blend mode, masks, and corner pin fields
+   *
+   * New optional fields on timeline items:
+   * - blendMode: layer compositing blend mode (default: 'normal')
+   * - masks: bezier mask paths array (default: [])
+   * - cornerPin: perspective warp corners (default: undefined)
+   *
+   * These fields are all optional with sensible defaults so no data
+   * transformation is needed — this migration just bumps the version.
+   */
+  7: {
+    version: 7,
+    description: 'Add blend mode, masks, and corner pin fields to timeline items',
+    migrate: (project: Project): Project => project,
+  },
 };
 
 /**

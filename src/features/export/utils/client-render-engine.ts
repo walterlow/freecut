@@ -57,6 +57,7 @@ import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/time
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
+import { getCompositeOperation } from '@/types/blend-mode-css';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
@@ -1216,6 +1217,9 @@ export async function createCompositionRenderer(
         // Items in transitions are blended, not fully occluding
         if (transitionClipIds.has(item.id)) return false;
 
+        // Non-normal blend modes interact with layers below
+        if (item.blendMode && item.blendMode !== 'normal') return false;
+
         // Get animated transform at current frame
         const itemKeyframes = keyframesMap.get(item.id);
         const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
@@ -1334,9 +1338,24 @@ export async function createCompositionRenderer(
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
-        for (const result of results) {
+        for (let i = 0; i < results.length; i++) {
+          const result = results[i];
           if (!result) continue;
+
+          // Apply blend mode for item tasks
+          const task = renderTasks[i]!;
+          const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+          if (blendMode && blendMode !== 'normal') {
+            contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
+          }
+
           contentCtx.drawImage(result.source, 0, 0);
+
+          // Reset composite operation after non-normal blend
+          if (blendMode && blendMode !== 'normal') {
+            contentCtx.globalCompositeOperation = 'source-over';
+          }
+
           for (const c of result.poolCanvases) canvasPool.release(c);
         }
       }

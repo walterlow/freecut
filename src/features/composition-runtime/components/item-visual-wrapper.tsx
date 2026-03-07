@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
+import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
@@ -110,12 +111,15 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       {/* SVG mask definitions (hidden, referenced via CSS) */}
       {svgMaskDefs}
 
-      {/* Outer: Transform + Mask */}
+      {/* Outer: Transform + Mask + Blend Mode */}
       <div
         style={{
           ...state.transformStyle,
           ...maskStyle,
           overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+          mixBlendMode: item.blendMode && item.blendMode !== 'normal'
+            ? BLEND_MODE_CSS[item.blendMode]
+            : undefined,
         }}
       >
         {/* Inner: Effects + Content */}
