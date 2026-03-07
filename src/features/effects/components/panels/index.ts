@@ -5,3 +5,4 @@ export { VignettePanel } from './vignette-panel';
 export { LUTPanel } from './lut-panel';
 export { CurvesPanel } from './curves-panel';
 export { WheelsPanel } from './wheels-panel';
+export { GpuEffectPanel } from './gpu-effect-panel';

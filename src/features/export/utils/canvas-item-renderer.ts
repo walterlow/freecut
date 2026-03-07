@@ -23,7 +23,7 @@ import { createLogger } from '@/shared/logging/logger';
 // Subsystem imports
 import { getAnimatedTransform } from './canvas-keyframes';
 import {
-  applyAllEffects,
+  applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
@@ -118,6 +118,9 @@ export interface ItemRenderContext {
 
   // Pre-computed sub-composition render data (built once during preload)
   subCompRenderData: Map<string, SubCompRenderData>;
+
+  // GPU effects pipeline (lazily initialized)
+  gpuPipeline?: import('@/lib/gpu-effects').EffectsPipeline | null;
 }
 
 /**
@@ -986,7 +989,7 @@ export async function renderTransitionToCanvas(
 
   if (leftCombinedEffects.length > 0) {
     const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-    applyAllEffects(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings);
+    await applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings, rctx.gpuPipeline);
     leftFinalCanvas = leftEffectCanvas;
   }
 
@@ -1002,7 +1005,7 @@ export async function renderTransitionToCanvas(
 
   if (rightCombinedEffects.length > 0) {
     const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-    applyAllEffects(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings);
+    await applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings, rctx.gpuPipeline);
     rightFinalCanvas = rightEffectCanvas;
   }
 

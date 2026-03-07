@@ -5,11 +5,13 @@
  * Supports CSS filters, glitch effects, halftone patterns, and vignette overlays.
  */
 
-import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect, LUTEffect } from '@/types/effects';
+import type { ItemEffect, CSSFilterEffect, GlitchEffect, HalftoneEffect, VignetteEffect, LUTEffect, GpuEffect } from '@/types/effects';
 import type { AdjustmentItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import { getColorGradingFilterString } from '@/shared/utils/color-grading-filters';
 import { applyCubeLutToCanvasContext, applyCubeLutToImageData } from '@/shared/utils/cube-lut';
+import type { EffectsPipeline } from '@/lib/gpu-effects';
+import type { GpuEffectInstance } from '@/lib/gpu-effects/types';
 
 const log = createLogger('CanvasEffects');
 
@@ -521,6 +523,49 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 // ============================================================================
+// GPU Effects
+// ============================================================================
+
+/**
+ * Get GPU effects from an effects array and convert to GpuEffectInstance format.
+ */
+function getGpuEffectInstances(effects: ItemEffect[]): GpuEffectInstance[] {
+  return effects
+    .filter((e) => e.enabled && e.effect.type === 'gpu-effect')
+    .map((e) => {
+      const gpuEffect = e.effect as GpuEffect;
+      return {
+        id: e.id,
+        type: gpuEffect.gpuEffectType,
+        name: gpuEffect.gpuEffectType,
+        enabled: true,
+        params: { ...gpuEffect.params },
+      };
+    });
+}
+
+/**
+ * Apply GPU effects to canvas via the EffectsPipeline.
+ * Reads current canvas content as ImageData, processes through GPU, writes back.
+ */
+async function applyGpuEffects(
+  ctx: OffscreenCanvasRenderingContext2D,
+  canvas: EffectCanvasSettings,
+  gpuInstances: GpuEffectInstance[],
+  pipeline: EffectsPipeline,
+): Promise<void> {
+  if (gpuInstances.length === 0) return;
+
+  try {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const result = await pipeline.applyEffectsToImageData(imageData, gpuInstances);
+    ctx.putImageData(result, 0, 0);
+  } catch (error) {
+    log.warn('GPU effects processing failed, skipping', error);
+  }
+}
+
+// ============================================================================
 // Adjustment Layer Effects
 // ============================================================================
 
@@ -587,7 +632,8 @@ export function applyAllEffects(
   sourceCanvas: OffscreenCanvas,
   effects: ItemEffect[],
   frame: number,
-  canvas: EffectCanvasSettings
+  canvas: EffectCanvasSettings,
+  gpuPipeline?: EffectsPipeline | null,
 ): void {
   if (effects.length === 0) {
     // No effects - just draw source
@@ -693,5 +739,36 @@ export function applyAllEffects(
 
   if (vignetteEffect) {
     applyVignette(ctx, canvas, vignetteEffect);
+  }
+
+  // Apply GPU shader effects (async, fire-and-forget for sync pipeline)
+  const gpuInstances = getGpuEffectInstances(effects);
+  if (gpuInstances.length > 0 && gpuPipeline) {
+    // Note: GPU effects are async but applyAllEffects is sync.
+    // For synchronous callers, GPU effects are skipped here.
+    // Use applyAllEffectsAsync for full GPU support.
+    void applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
+  }
+}
+
+/**
+ * Async version of applyAllEffects that properly awaits GPU effects.
+ * Use this in export pipelines where async is supported.
+ */
+export async function applyAllEffectsAsync(
+  ctx: OffscreenCanvasRenderingContext2D,
+  sourceCanvas: OffscreenCanvas,
+  effects: ItemEffect[],
+  frame: number,
+  canvas: EffectCanvasSettings,
+  gpuPipeline?: EffectsPipeline | null,
+): Promise<void> {
+  // Apply all non-GPU effects synchronously
+  applyAllEffects(ctx, sourceCanvas, effects, frame, canvas);
+
+  // Then apply GPU effects with proper await
+  const gpuInstances = getGpuEffectInstances(effects);
+  if (gpuInstances.length > 0 && gpuPipeline) {
+    await applyGpuEffects(ctx, canvas, gpuInstances, gpuPipeline);
   }
 }

@@ -22,6 +22,7 @@ import type {
   CurvesEffect,
   WheelsEffect,
   CurvesChannels,
+  GpuEffect,
 } from '@/types/effects';
 import {
   CSS_FILTER_CONFIGS,
@@ -53,7 +54,9 @@ import {
   LUTPanel,
   CurvesPanel,
   WheelsPanel,
+  GpuEffectPanel,
 } from './panels';
+import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/lib/gpu-effects';
 
 function createDefaultCurvesChannels(): CurvesChannels {
   const diagonal = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
@@ -229,6 +232,88 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       } as WheelsEffect);
     });
   }, [itemIds, addEffect]);
+
+  // Add a GPU shader effect
+  const handleAddGpuEffect = useCallback(
+    (gpuEffectId: string) => {
+      const defaults = getGpuEffectDefaultParams(gpuEffectId);
+      itemIds.forEach((id) => {
+        addEffect(id, {
+          type: 'gpu-effect',
+          gpuEffectType: gpuEffectId,
+          params: defaults,
+        } as GpuEffect);
+      });
+    },
+    [itemIds, addEffect]
+  );
+
+  // GPU effect categories for dropdown menu
+  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), []);
+
+  // Update GPU effect parameter
+  const handleGpuParamChange = useCallback(
+    (effectId: string, paramKey: string, value: number | boolean | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
+
+      const gpuEff = effect.effect as GpuEffect;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...gpuEff,
+            params: { ...gpuEff.params, [paramKey]: value },
+          },
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
+
+  // Live preview for GPU effect parameter
+  const handleGpuParamLiveChange = useCallback(
+    (effectId: string, paramKey: string, value: number | boolean | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
+
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId || entry.effect.type !== 'gpu-effect') return entry;
+          const entryGpu = entry.effect as GpuEffect;
+          return {
+            ...entry,
+            effect: {
+              ...entryGpu,
+              params: { ...entryGpu.params, [paramKey]: value },
+            },
+          };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
+
+  // Reset GPU effect to defaults
+  const handleResetGpuEffect = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
+
+      const gpuEff = effect.effect as GpuEffect;
+      const defaults = getGpuEffectDefaultParams(gpuEff.gpuEffectType);
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...gpuEff, params: defaults },
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
 
   // Apply a preset (adds multiple effects as single undo/redo action)
   const handleApplyPreset = useCallback(
@@ -434,19 +519,20 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     ) => {
       const effect = effects.find((e) => e.id === effectId);
       if (!effect || effect.effect.type !== 'color-grading') return;
+      const gradingEffect = effect.effect as LUTEffect | CurvesEffect | WheelsEffect;
 
       itemIds.forEach((id) => {
-        if (effect.effect.variant === 'lut') {
+        if (gradingEffect.variant === 'lut') {
           updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as LUTEffect,
+            effect: { ...gradingEffect, [property]: newValue } as LUTEffect,
           });
-        } else if (effect.effect.variant === 'curves') {
+        } else if (gradingEffect.variant === 'curves') {
           updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as CurvesEffect,
+            effect: { ...gradingEffect, [property]: newValue } as CurvesEffect,
           });
-        } else if (effect.effect.variant === 'wheels') {
+        } else if (gradingEffect.variant === 'wheels') {
           updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as WheelsEffect,
+            effect: { ...gradingEffect, [property]: newValue } as WheelsEffect,
           });
         }
       });
@@ -1017,6 +1103,24 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
               Wheels
             </DropdownMenuItem>
 
+            {/* GPU Shader Effects */}
+            {gpuCategories.map(({ category, effects: catEffects }) => (
+              <div key={category}>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                  GPU {category.charAt(0).toUpperCase() + category.slice(1)}
+                </div>
+                {catEffects.map((def) => (
+                  <DropdownMenuItem
+                    key={def.id}
+                    onSelect={() => handleAddGpuEffect(def.id)}
+                  >
+                    {def.name}
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            ))}
+
             <DropdownMenuSeparator />
 
             {/* Presets */}
@@ -1165,6 +1269,24 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
               onWheelChange={handleWheelsPairChange}
               onWheelLiveChange={handleWheelsPairLiveChange}
               onReset={handleResetWheels}
+              onToggle={handleToggle}
+              onRemove={handleRemove}
+            />
+          );
+        }
+
+        if (effect.effect.type === 'gpu-effect') {
+          const def = getGpuEffect(effect.effect.gpuEffectType);
+          if (!def) return null;
+          return (
+            <GpuEffectPanel
+              key={effect.id}
+              effect={effect}
+              gpuEffect={effect.effect as GpuEffect}
+              definition={def}
+              onParamChange={handleGpuParamChange}
+              onParamLiveChange={handleGpuParamLiveChange}
+              onReset={handleResetGpuEffect}
               onToggle={handleToggle}
               onRemove={handleRemove}
             />

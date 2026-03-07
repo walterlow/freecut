@@ -33,11 +33,12 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
-  applyAllEffects,
+  applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
+import { EffectsPipeline } from '@/lib/gpu-effects';
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -148,6 +149,21 @@ export async function createCompositionRenderer(
 
   // === PERFORMANCE OPTIMIZATION: Text Measurement Cache ===
   const textMeasureCache = new TextMeasurementCache();
+
+  // === GPU Effects Pipeline ===
+  // Lazily initialized on first use to avoid blocking startup
+  let gpuPipeline: EffectsPipeline | null = null;
+  let gpuPipelineInitPromise: Promise<EffectsPipeline | null> | null = null;
+  const ensureGpuPipeline = async (): Promise<EffectsPipeline | null> => {
+    if (gpuPipeline) return gpuPipeline;
+    if (gpuPipelineInitPromise) return gpuPipelineInitPromise;
+    gpuPipelineInitPromise = EffectsPipeline.create().then((p) => {
+      gpuPipeline = p;
+      gpuPipelineInitPromise = null;
+      return p;
+    });
+    return gpuPipelineInitPromise;
+  };
 
   // Build lookup maps
   const keyframesMap = buildKeyframesMap(keyframes);
@@ -381,6 +397,7 @@ export async function createCompositionRenderer(
     keyframesMap,
     adjustmentLayers,
     subCompRenderData,
+    gpuPipeline: null,
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
@@ -1021,8 +1038,12 @@ export async function createCompositionRenderer(
 
         // Apply effects
         if (combinedEffects.length > 0) {
+          const hasGpu = combinedEffects.some((e) => e.enabled && e.effect.type === 'gpu-effect');
+          if (hasGpu && !itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+          }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
-          applyAllEffects(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings);
+          await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
           contentCtx.drawImage(effectCanvas, 0, 0);
           canvasPool.release(effectCanvas);
         } else {
@@ -1322,6 +1343,8 @@ export async function createCompositionRenderer(
       prewarmAttempted = false;
 
       // === PERFORMANCE: Clean up optimization resources ===
+      gpuPipeline?.destroy();
+      gpuPipeline = null;
       canvasPool.dispose();
       textMeasureCache.clear();
 

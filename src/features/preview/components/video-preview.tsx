@@ -59,6 +59,7 @@ import {
   getFrameBudgetMs,
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
+import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
@@ -638,6 +639,7 @@ export const VideoPreview = memo(function VideoPreview({
   const playerRef = useRef<PlayerRef>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
+  const gpuEffectsCanvasRef = useRef<HTMLCanvasElement>(null);
   const bypassPreviewSeekRef = useRef(false);
   const scrubRendererRef = useRef<CompositionRenderer | null>(null);
   const scrubInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
@@ -707,6 +709,7 @@ export const VideoPreview = memo(function VideoPreview({
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef);
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -3316,6 +3319,18 @@ export const VideoPreview = memo(function VideoPreview({
                 }}
               />
             )}
+
+            {/* GPU effects overlay - WebGPU canvas for shader-based effects preview */}
+            <canvas
+              ref={gpuEffectsCanvasRef}
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                width: '100%',
+                height: '100%',
+                zIndex: 5,
+                visibility: showGpuEffectsOverlay ? 'visible' : 'hidden',
+              }}
+            />
 
             {import.meta.env.DEV && showPerfPanel && perfPanelSnapshot && (
               <div

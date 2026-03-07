@@ -145,6 +145,13 @@ export interface WheelsEffect {
   saturation: number; // -100..100
 }
 
+// GPU shader effect configuration
+export interface GpuEffect {
+  type: 'gpu-effect';
+  gpuEffectType: string; // ID from GPU_EFFECT_REGISTRY (e.g. 'gpu-brightness')
+  params: Record<string, number | boolean | string>;
+}
+
 // Union of all visual effects
 export type VisualEffect =
   | CSSFilterEffect
@@ -153,7 +160,8 @@ export type VisualEffect =
   | VignetteEffect
   | LUTEffect
   | CurvesEffect
-  | WheelsEffect;
+  | WheelsEffect
+  | GpuEffect;
 
 // Effect instance applied to a timeline item
 export interface ItemEffect {
