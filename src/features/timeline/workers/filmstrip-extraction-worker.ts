@@ -218,9 +218,27 @@ async function extractAndSave(
       }
     }
 
-    // Extract and save each frame with parallel writes
+    // Pipeline: overlap JPEG encoding with the next frame's video decode.
+    // After mediabunny yields a canvas, snapshot it to ImageBitmap (instant),
+    // then encode the previous frame's bitmap while the next decode runs.
     const pendingSaves: Promise<void>[] = [];
     const MAX_PARALLEL_SAVES = Math.max(1, Math.min(6, maxParallelSaves ?? 4));
+    let pendingEncode: Promise<{ blob: Blob; frameIndex: number }> | null = null;
+
+    const flushPendingEncode = async () => {
+      if (!pendingEncode) return;
+      const { blob, frameIndex } = await pendingEncode;
+      pendingEncode = null;
+      const savePromise = saveFrame(dir, frameIndex, blob).then(() => {
+        const idx = pendingSaves.indexOf(savePromise);
+        if (idx > -1) pendingSaves.splice(idx, 1);
+        savedSinceLastReport.push({ index: frameIndex, blob });
+      });
+      pendingSaves.push(savePromise);
+      if (pendingSaves.length >= MAX_PARALLEL_SAVES) {
+        await Promise.race(pendingSaves);
+      }
+    };
 
     for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
       if (state.aborted) break;
@@ -234,27 +252,26 @@ async function extractAndSave(
         continue;
       }
 
-      // Convert canvas to image blob (must await - need canvas before it's reused)
+      // Snapshot canvas to ImageBitmap immediately (fast, <0.1ms) so the
+      // canvas pool slot is freed for the next decode. Then kick off JPEG
+      // encoding from the bitmap — this overlaps with the next iteration's
+      // video decode since createImageBitmap + convertToBlob are async.
       const canvas = wrapped.canvas as OffscreenCanvas;
-      const blob = await canvas.convertToBlob({
+      const bitmap = await createImageBitmap(canvas);
+
+      // Flush any prior encode before starting a new one
+      await flushPendingEncode();
+
+      // Start JPEG encode in background — runs concurrently with next decode
+      const frameIndex = frame.index;
+      const encodeCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const encodeCtx = encodeCanvas.getContext('2d')!;
+      encodeCtx.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      pendingEncode = encodeCanvas.convertToBlob({
         type: IMAGE_FORMAT,
         quality: IMAGE_QUALITY,
-      });
-
-      // Save to OPFS in parallel (don't await)
-      const frameIndex = frame.index;
-      const savePromise = saveFrame(dir, frameIndex, blob).then(() => {
-        // Remove from pending when done
-        const idx = pendingSaves.indexOf(savePromise);
-        if (idx > -1) pendingSaves.splice(idx, 1);
-        savedSinceLastReport.push({ index: frameIndex, blob });
-      });
-      pendingSaves.push(savePromise);
-
-      // Throttle parallel saves to prevent overwhelming OPFS
-      if (pendingSaves.length >= MAX_PARALLEL_SAVES) {
-        await Promise.race(pendingSaves);
-      }
+      }).then((blob) => ({ blob, frameIndex }));
 
       extractedCount++;
       frameListIndex++;
@@ -282,6 +299,9 @@ async function extractAndSave(
         } as ProgressResponse);
       }
     }
+
+    // Flush the last pipelined encode
+    await flushPendingEncode();
 
     // Wait for all pending saves to complete
     if (pendingSaves.length > 0) {
