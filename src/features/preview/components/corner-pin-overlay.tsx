@@ -8,7 +8,7 @@
  * store's previewCornerPin (lightweight, no undo history). On mouse up,
  * the final value is committed to the timeline store.
  *
- * Drag logic uses refs to avoid stale closures from React re-renders.
+ * Drag uses pointer capture for reliable release detection.
  */
 
 import { useRef, useEffect, useCallback, memo } from 'react';
@@ -30,6 +30,7 @@ interface CornerPinOverlayProps {
 
 const HANDLE_RADIUS = 6;
 const HIT_RADIUS = 12;
+const PADDING = 20;
 
 const CORNER_KEYS: CornerPinHandle[] = ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'];
 
@@ -55,15 +56,10 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
     draggingHandle,
     hoveredHandle,
     previewCornerPin,
-    setDragging,
     setHovered,
-    setPreview,
-    clearPreview,
-    stopEditing,
   } = useCornerPinStore();
 
   const items = useItemsStore((s) => s.items);
-  const updateItem = useTimelineStore((s) => s.updateItem);
 
   const item = items.find((i) => i.id === editingItemId);
   const baseCornerPin = item?.cornerPin ?? DEFAULT_PIN;
@@ -71,20 +67,20 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
 
   const scale = getEffectiveScale(coordParams);
 
-  // Keep refs current for use inside window event handlers
+  // Keep refs current for use inside pointer event handlers
   const coordParamsRef = useRef(coordParams);
   coordParamsRef.current = coordParams;
   const itemTransformRef = useRef(itemTransform);
   itemTransformRef.current = itemTransform;
-  const playerSizeRef = useRef(playerSize);
-  playerSizeRef.current = playerSize;
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   const editingItemIdRef = useRef(editingItemId);
   editingItemIdRef.current = editingItemId;
+  const baseCornerPinRef = useRef(baseCornerPin);
+  baseCornerPinRef.current = baseCornerPin;
 
-  // Convert item-local corner position to screen coordinates
-  const cornerToScreen = useCallback(
+  // Convert item-local corner position to canvas draw coordinates (with padding offset)
+  const cornerToCanvas = useCallback(
     (corner: CornerPinHandle): [number, number] => {
       const { projectSize } = coordParams;
       const w = itemTransform.width;
@@ -126,29 +122,23 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
         cy = centerY + dx * sin + dy * cos;
       }
 
-      const playerOffsetX = (coordParams.containerRect.width - playerSize.width) / 2;
-      const playerOffsetY = (coordParams.containerRect.height - playerSize.height) / 2;
-
-      return [cx * scale + playerOffsetX, cy * scale + playerOffsetY];
+      return [cx * scale + PADDING, cy * scale + PADDING];
     },
-    [coordParams, itemTransform, cornerPin, playerSize, scale],
+    [coordParams, itemTransform, cornerPin, scale],
   );
 
-  // Convert screen position to item-local offset (uses refs for window handlers)
-  const screenToCornerOffsetFromRefs = useCallback(
-    (corner: CornerPinHandle, screenX: number, screenY: number): [number, number] => {
-      const cp = coordParamsRef.current;
+  // Convert pointer position (relative to canvas element) to item-local offset
+  const pointerToCornerOffset = useCallback(
+    (corner: CornerPinHandle, px: number, py: number): [number, number] => {
       const it = itemTransformRef.current;
-      const ps = playerSizeRef.current;
       const sc = scaleRef.current;
-      const { projectSize } = cp;
+      const { projectSize } = coordParamsRef.current;
       const w = it.width;
       const h = it.height;
 
-      const playerOffsetX = (cp.containerRect.width - ps.width) / 2;
-      const playerOffsetY = (cp.containerRect.height - ps.height) / 2;
-      let canvasX = (screenX - playerOffsetX) / sc;
-      let canvasY = (screenY - playerOffsetY) / sc;
+      // Remove padding, then convert from screen to project space
+      let canvasX = (px - PADDING) / sc;
+      let canvasY = (py - PADDING) / sc;
 
       if (it.rotation !== 0) {
         const centerX = projectSize.width / 2 + it.x;
@@ -186,9 +176,11 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const corners = CORNER_KEYS.map((key) => cornerToScreen(key));
+    const corners = CORNER_KEYS.map((key) => cornerToCanvas(key));
 
     // Quad outline
     ctx.beginPath();
@@ -235,59 +227,57 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       ctx.textAlign = 'center';
       ctx.fillText(labels[i]!, cx, cy - radius - 4);
     }
-  }, [cornerToScreen, draggingHandle, hoveredHandle]);
+  }, [cornerToCanvas, draggingHandle, hoveredHandle]);
 
-  useEffect(() => {
-    draw();
-  }, [draw]);
-
-  // Hit test for corner handles
-  const hitTest = useCallback(
-    (e: React.MouseEvent): CornerPinHandle | null => {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return null;
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
+  // Hit test: returns corner key if pointer is near a handle
+  const hitTestXY = useCallback(
+    (px: number, py: number): CornerPinHandle | null => {
       for (const key of CORNER_KEYS) {
-        const [cx, cy] = cornerToScreen(key);
-        const dx = mx - cx;
-        const dy = my - cy;
+        const [cx, cy] = cornerToCanvas(key);
+        const dx = px - cx;
+        const dy = py - cy;
         if (dx * dx + dy * dy <= HIT_RADIUS * HIT_RADIUS) {
           return key;
         }
       }
       return null;
     },
-    [cornerToScreen],
+    [cornerToCanvas],
   );
 
-  // Mouse down: start drag
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      const hit = hitTest(e);
-      if (!hit || !editingItemId) return;
+  // --- Pointer-capture based drag ---
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (isDraggingRef.current) return;
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
+      const hit = hitTestXY(px, py);
+      if (!hit || !editingItemIdRef.current) return;
+
       e.stopPropagation();
       e.preventDefault();
+      canvasRef.current!.setPointerCapture(e.pointerId);
 
-      // Track drag state in refs (stable across re-renders)
       isDraggingRef.current = true;
       dragHandleRef.current = hit;
-      dragStartPinRef.current = { ...baseCornerPin };
+      dragStartPinRef.current = { ...baseCornerPinRef.current };
 
-      setDragging(hit);
-      document.body.style.cursor = 'move';
+      useCornerPinStore.getState().setDragging(hit);
+    },
+    [hitTestXY],
+  );
 
-      const onMove = (moveEvent: MouseEvent) => {
-        if (!isDraggingRef.current || !dragHandleRef.current) return;
-        const rect = canvasRef.current?.getBoundingClientRect();
-        if (!rect) return;
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const px = e.clientX - rect.left;
+      const py = e.clientY - rect.top;
 
-        const offset = screenToCornerOffsetFromRefs(
-          dragHandleRef.current,
-          moveEvent.clientX - rect.left,
-          moveEvent.clientY - rect.top,
-        );
+      if (isDraggingRef.current && dragHandleRef.current) {
+        const offset = pointerToCornerOffset(dragHandleRef.current, px, py);
         const rounded: [number, number] = [
           Math.round(offset[0] * 10) / 10,
           Math.round(offset[1] * 10) / 10,
@@ -296,76 +286,79 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
           ...dragStartPinRef.current,
           [dragHandleRef.current]: rounded,
         });
-      };
+        return;
+      }
 
-      const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
-        document.body.style.cursor = '';
-
-        isDraggingRef.current = false;
-        const handle = dragHandleRef.current;
-        dragHandleRef.current = null;
-
-        // Commit final preview value to timeline store
-        const finalPreview = useCornerPinStore.getState().previewCornerPin;
-        const itemId = editingItemIdRef.current;
-        if (finalPreview && itemId && handle) {
-          useTimelineStore.getState().updateItem(itemId, { cornerPin: finalPreview });
-        }
-        useCornerPinStore.getState().clearPreview();
-      };
-
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
-    },
-    [hitTest, editingItemId, baseCornerPin, screenToCornerOffsetFromRefs, setDragging],
-  );
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (isDraggingRef.current) return;
-      const hit = hitTest(e);
+      // Hover detection
+      const hit = hitTestXY(px, py);
       setHovered(hit);
       const canvas = canvasRef.current;
       if (canvas) {
         canvas.style.cursor = hit ? 'move' : 'default';
       }
     },
-    [hitTest, setHovered],
+    [hitTestXY, pointerToCornerOffset, setHovered],
   );
 
-  // Escape key exits corner pin editing
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        stopEditing();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [stopEditing]);
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      canvasRef.current?.releasePointerCapture(e.pointerId);
 
-  // Resize canvas to match container
+      isDraggingRef.current = false;
+      const handle = dragHandleRef.current;
+      dragHandleRef.current = null;
+
+      // Commit final preview value to timeline store
+      const finalPreview = useCornerPinStore.getState().previewCornerPin;
+      const itemId = editingItemIdRef.current;
+      if (finalPreview && itemId && handle) {
+        useTimelineStore.getState().updateItem(itemId, { cornerPin: finalPreview });
+      }
+
+      // Wait 2 animation frames before clearing preview to ensure React has
+      // processed the timeline store update and re-rendered with new item values.
+      // (Same pattern as transform-gizmo.tsx to prevent snap-back.)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          useCornerPinStore.getState().clearPreview();
+        });
+      });
+    },
+    [],
+  );
+
+  // Resize canvas to match player size (with padding), then redraw
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const parent = canvas.parentElement;
-    if (!parent) return;
-    const rect = parent.getBoundingClientRect();
-    if (canvas.width !== rect.width || canvas.height !== rect.height) {
-      canvas.width = rect.width;
-      canvas.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    const w = (playerSize.width + PADDING * 2) * dpr;
+    const h = (playerSize.height + PADDING * 2) * dpr;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
     }
-  });
+    draw();
+  }, [playerSize, draw]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0"
-      style={{ zIndex: 99, pointerEvents: 'auto' }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
+      className="absolute z-20"
+      style={{
+        top: -PADDING,
+        left: -PADDING,
+        width: playerSize.width + PADDING * 2,
+        height: playerSize.height + PADDING * 2,
+        pointerEvents: 'auto',
+      }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onClick={(e) => e.stopPropagation()}
     />
   );
 });
