@@ -2366,6 +2366,12 @@ export const VideoPreview = memo(function VideoPreview({
             if (suppressScrubBackgroundPrewarmRef.current) {
               continue;
             }
+            // Skip prewarm during playback — WASM decode prewarm renders
+            // (40-80ms each) block the loop from processing priority frames,
+            // causing the overlay to fall behind and show stale content.
+            if (usePlaybackStore.getState().isPlaying) {
+              break;
+            }
             // Time-budget prewarm renders to keep scrubbing responsive.
             // After exhausting the budget, yield so new priority frames aren't delayed.
             if (prewarmBudgetStart > 0 && performance.now() - prewarmBudgetStart > FAST_SCRUB_PREWARM_RENDER_BUDGET_MS) {
@@ -2402,6 +2408,7 @@ export const VideoPreview = memo(function VideoPreview({
           if (!scrubMountedRef.current) break;
 
           if (isPriorityFrame) {
+
             const playbackState = usePlaybackStore.getState();
             if (fallbackToPlayerScrubRef.current) {
               setShowFastScrubOverlay(false);
