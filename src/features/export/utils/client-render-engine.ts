@@ -123,6 +123,7 @@ export async function createCompositionRenderer(
     mode?: 'export' | 'preview';
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
     getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
+    getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
@@ -136,6 +137,7 @@ export async function createCompositionRenderer(
   const renderMode = options.mode ?? 'export';
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
+  const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
   const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
@@ -1096,8 +1098,17 @@ export async function createCompositionRenderer(
           }
         }
 
+        // Apply corner pin preview override during interactive drag
+        let effectiveItem = item;
+        if (renderMode === 'preview') {
+          const cornerPinOverride = getPreviewCornerPinOverride?.(item.id);
+          if (cornerPinOverride !== undefined) {
+            effectiveItem = { ...item, cornerPin: cornerPinOverride };
+          }
+        }
+
         // Get effects (preview override → item effects + adjustment layer effects)
-        const itemEffects = (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ?? item.effects;
+        const itemEffects = (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ?? effectiveItem.effects;
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
@@ -1117,7 +1128,7 @@ export async function createCompositionRenderer(
           && transform.rotation === 0
           && transform.cornerRadius === 0
           && transform.opacity === 1
-          && !hasCornerPin(item.cornerPin)
+          && !hasCornerPin(effectiveItem.cornerPin)
           && itemRenderContext.domVideoElementProvider
         ) {
           const domVideo = itemRenderContext.domVideoElementProvider(item.id);
@@ -1151,7 +1162,7 @@ export async function createCompositionRenderer(
         // Render based on item type
         await renderItem(
           itemCtx,
-          item,
+          effectiveItem,
           transform,
           frame,
           itemRenderContext

@@ -30,6 +30,7 @@ import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
 import { SlideEditOverlay } from './slide-edit-overlay';
 import { useGizmoStore } from '../stores/gizmo-store';
+import { useCornerPinStore } from '../stores/corner-pin-store';
 import type { CompositionInputProps } from '@/types/export';
 import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
@@ -1831,6 +1832,14 @@ export const VideoPreview = memo(function VideoPreview({
     return gizmoState.preview?.[itemId]?.effects;
   }, []);
 
+  const getPreviewCornerPinOverride = useCallback((itemId: string) => {
+    const cpState = useCornerPinStore.getState();
+    if (cpState.editingItemId === itemId && cpState.previewCornerPin) {
+      return cpState.previewCornerPin;
+    }
+    return undefined;
+  }, []);
+
   const fastScrubScaledTracks = useMemo(() => {
     return fastScrubTracks as CompositionInputProps['tracks'];
   }, [
@@ -1924,6 +1933,7 @@ export const VideoPreview = memo(function VideoPreview({
           mode: 'preview',
           getPreviewTransformOverride,
           getPreviewEffectsOverride,
+          getPreviewCornerPinOverride,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -1972,7 +1982,7 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, isResolving, renderSize.height, renderSize.width]);
+  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, isResolving, renderSize.height, renderSize.width]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -2628,6 +2638,20 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
+    // During corner pin drag, re-render with the live preview values so the
+    // scrub overlay reflects the warp in real-time instead of waiting for commit.
+    const unsubscribeCornerPin = useCornerPinStore.subscribe((state, prev) => {
+      if (!forceFastScrubOverlay) return;
+      if (state.previewCornerPin === prev.previewCornerPin) return;
+
+      const currentFrame = usePlaybackStore.getState().currentFrame;
+      if (scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache([currentFrame]);
+      }
+      scrubRequestedFrameRef.current = currentFrame;
+      void pumpRenderLoop();
+    });
+
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
@@ -2646,6 +2670,7 @@ export const VideoPreview = memo(function VideoPreview({
       lastBackwardRequestedFrameRef.current = null;
       unsubscribe();
       unsubscribeGizmo();
+      unsubscribeCornerPin();
     };
   }, [
     disposeFastScrubRenderer,
