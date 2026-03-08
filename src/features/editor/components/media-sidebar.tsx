@@ -28,7 +28,7 @@ import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/tim
 import { useMaskEditorStore } from '@/features/editor/deps/preview';
 import type { VisualEffect, GpuEffect } from '@/types/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
-import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/lib/gpu-effects';
+import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 
 export const MediaSidebar = memo(function MediaSidebar() {

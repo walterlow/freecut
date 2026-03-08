@@ -121,10 +121,10 @@ export interface ItemRenderContext {
   subCompRenderData: Map<string, SubCompRenderData>;
 
   // GPU effects pipeline (lazily initialized)
-  gpuPipeline?: import('@/lib/gpu-effects').EffectsPipeline | null;
+  gpuPipeline?: import('@/infrastructure/gpu/effects').EffectsPipeline | null;
 
   // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
-  gpuTransitionPipeline?: import('@/lib/gpu-transitions').TransitionPipeline | null;
+  gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
 
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Remotion Player's <video> elements are already at

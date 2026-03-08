@@ -3,7 +3,7 @@ import { Activity } from 'lucide-react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
-import { ScopeRenderer } from '@/lib/gpu-scopes';
+import { ScopeRenderer } from '@/infrastructure/gpu/scopes';
 
 const SAMPLE_WIDTH_PAUSED = 384;
 const SAMPLE_HEIGHT_PAUSED = 216;

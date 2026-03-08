@@ -31,7 +31,7 @@ interface PreparedMask {
 }
 
 export interface MaskFrameIndex {
-  masks: PreparedMask[];
+  masks: MaskEntry[];
 }
 
 /**
@@ -135,6 +135,8 @@ function collectMasks(
       if (item.type === 'shape' && item.isMask) {
         masks.push({
           mask: item,
+          startFrame: item.from,
+          endFrame: item.from + item.durationInFrames,
         });
       }
     }

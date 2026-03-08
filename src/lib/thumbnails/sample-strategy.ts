@@ -6,7 +6,7 @@
  * scene-boundary > content-aware > even distribution.
  */
 
-import type { SceneCut } from '@/lib/analysis';
+import type { SceneCut } from '@/infrastructure/analysis';
 
 interface ClipBoundary {
   from: number;

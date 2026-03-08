@@ -9,7 +9,7 @@ import { useTimelineStore } from '@/features/effects/deps/timeline-contract';
 import { useGizmoStore } from '@/features/effects/deps/preview-contract';
 import { PropertySection } from '@/shared/ui/property-controls';
 import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels';
-import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/lib/gpu-effects';
+import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '../hooks/use-effect-previews';
 
 interface EffectsSectionProps {

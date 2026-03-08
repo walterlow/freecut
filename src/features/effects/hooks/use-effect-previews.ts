@@ -11,8 +11,8 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { EffectsPipeline } from '@/lib/gpu-effects';
-import type { GpuEffectInstance, GpuEffectDefinition } from '@/lib/gpu-effects';
+import { EffectsPipeline } from '@/infrastructure/gpu/effects';
+import type { GpuEffectInstance, GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
 
 const PREVIEW_WIDTH = 80;

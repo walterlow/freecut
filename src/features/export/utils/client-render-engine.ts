@@ -40,11 +40,11 @@ import {
   getGpuEffectInstances,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
-import { EffectsPipeline } from '@/lib/gpu-effects';
-import { TransitionPipeline } from '@/lib/gpu-transitions';
-import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/lib/gpu-compositor';
-import type { CompositeLayer } from '@/lib/gpu-compositor';
-import { MaskTextureManager } from '@/lib/masks/mask-texture-manager';
+import { EffectsPipeline } from '@/infrastructure/gpu/effects';
+import { TransitionPipeline } from '@/infrastructure/gpu/transitions';
+import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/infrastructure/gpu/compositor';
+import type { CompositeLayer } from '@/infrastructure/gpu/compositor';
+import { MaskTextureManager } from '@/infrastructure/gpu/masks';
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -62,7 +62,7 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
-import { renderMasks } from '@/lib/masks/mask-renderer';
+import { renderMasks } from '@/infrastructure/gpu/masks';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer

@@ -11,7 +11,7 @@ import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/
 import { transitionRegistry } from '@/domain/timeline/transitions/registry';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import { createLogger } from '@/shared/logging/logger';
-import type { TransitionPipeline } from '@/lib/gpu-transitions';
+import type { TransitionPipeline } from '@/infrastructure/gpu/transitions';
 
 const log = createLogger('CanvasTransitions');
 

@@ -62,15 +62,15 @@ describe('canvas mask animation', () => {
     items: [
       {
         id: 'mask-1',
-        type: 'shape',
+        type: 'shape' as const,
         trackId: 'track-1',
         from: 0,
         durationInFrames: 30,
         label: 'Mask',
-        shapeType: 'rectangle',
+        shapeType: 'rectangle' as const,
         fillColor: '#fff',
         isMask: true,
-        maskType: 'clip',
+        maskType: 'clip' as const,
       },
     ],
   };

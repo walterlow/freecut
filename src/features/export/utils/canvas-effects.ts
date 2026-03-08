@@ -7,8 +7,7 @@
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { AdjustmentItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
-import type { EffectsPipeline } from '@/lib/gpu-effects';
-import type { GpuEffectInstance } from '@/lib/gpu-effects/types';
+import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
 
 const log = createLogger('CanvasEffects');
 

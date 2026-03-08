@@ -3,7 +3,7 @@ import type React from 'react';
 import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { GpuEffectDefinition } from '@/lib/gpu-effects/types';
+import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuCurvesPanelProps {
