@@ -71,6 +71,8 @@ export interface MaskEditorActions {
   cancelPenMode: () => void;
   /** Add a vertex at normalized position (click without drag) */
   addPenVertex: (vertex: MaskVertex) => void;
+  /** Replace the current open pen path vertices */
+  setPenVertices: (vertices: MaskVertex[]) => void;
   /** Update the last pen vertex's out handle (during click+drag) */
   updatePenLastHandle: (outHandle: [number, number]) => void;
   /** Set pen dragging state */
@@ -116,8 +118,13 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingHandle: null,
       previewVertices: null,
       previewMasks: null,
+      hoveredVertexIndex: null,
+      hoveredHandle: null,
       penMode: false,
+      shapePenMode: false,
       penVertices: [],
+      penDraggingHandle: false,
+      penCursorPos: null,
     }),
 
   stopEditing: () =>
@@ -180,6 +187,8 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingHandle: null,
       previewVertices: null,
       previewMasks: null,
+      hoveredVertexIndex: null,
+      hoveredHandle: null,
     }),
 
   cancelPenMode: () =>
@@ -191,6 +200,11 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       penCursorPos: null,
       isEditing: false,
       editingItemId: null,
+      draggingVertexIndex: null,
+      draggingHandle: null,
+      previewVertices: null,
+      hoveredVertexIndex: null,
+      hoveredHandle: null,
       previewMasks: null,
     }),
 
@@ -198,6 +212,9 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
     set((state) => ({
       penVertices: [...state.penVertices, vertex],
     })),
+
+  setPenVertices: (vertices) =>
+    set({ penVertices: vertices }),
 
   updatePenLastHandle: (outHandle) =>
     set((state) => {
@@ -233,6 +250,8 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingHandle: null,
       previewVertices: null,
       previewMasks: null,
+      hoveredVertexIndex: null,
+      hoveredHandle: null,
     }),
 
   setPreviewMasks: (masks) => set({ previewMasks: masks }),
