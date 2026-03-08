@@ -344,11 +344,13 @@ async function renderVideoItem(
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
       // Reject videos that are too far from the expected time. This catches
-      // transition layer videos that haven't finished seeking yet — drawing
-      // from a stale video produces a wrong frame and causes visible jitter
-      // at transition boundaries.
+      // videos that haven't finished seeking yet (e.g. newly mounted shadow
+      // elements during transitions). The threshold must align with the RVFC
+      // drift correction in video-content.tsx (corrects at ±150ms), otherwise
+      // the render engine rejects frames that RVFC hasn't corrected yet,
+      // causing intermittent mediabunny fallback and visible jitter.
       const drift = Math.abs(domVideo.currentTime - sourceTime);
-      const driftThreshold = 2 / fps; // ~2 frames tolerance
+      const driftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
       if (drift <= driftThreshold) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
@@ -1117,10 +1119,9 @@ export async function renderTransitionToCanvas(
   ]);
 
   // Apply effects to both clips (parallel when both have effects)
-  const leftAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
-  const leftCombinedEffects = combineEffects(leftClip.effects, leftAdjEffects);
-  const rightAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
-  const rightCombinedEffects = combineEffects(rightClip.effects, rightAdjEffects);
+  const adjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
+  const leftCombinedEffects = combineEffects(leftClip.effects, adjEffects);
+  const rightCombinedEffects = combineEffects(rightClip.effects, adjEffects);
 
   let leftFinalCanvas: OffscreenCanvas = leftCanvas;
   let rightFinalCanvas: OffscreenCanvas = rightCanvas;

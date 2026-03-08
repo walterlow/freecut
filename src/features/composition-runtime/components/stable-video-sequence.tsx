@@ -237,6 +237,16 @@ function areGroupPropsEqual(
   return true;
 }
 
+const SHADOW_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  visibility: 'hidden',
+  pointerEvents: 'none',
+};
+
 const GroupRenderer: React.FC<{
   group: VideoGroup;
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
@@ -259,6 +269,52 @@ const GroupRenderer: React.FC<{
   // During premount, don't find any active item - we shouldn't render.
   const activeItemIndex = isPremounted ? -1 : findActiveItemIndex(group.items, globalFrame);
   const activeItem = activeItemIndex >= 0 ? group.items[activeItemIndex] : null;
+
+  const { fps } = useVideoConfig();
+
+  // Compute stable overlap key — only changes at transition boundaries.
+  // During overlap, non-primary items need hidden DOM video elements so
+  // domVideoElementProvider can find them for zero-copy decode.
+  //
+  // LOOKAHEAD: Shadows are mounted ~0.5s BEFORE the overlap actually starts.
+  // This gives the shadow's pool element time to load (src set, readyState → 2)
+  // before the transition begins. Without this, at transition start the left
+  // clip loses its primary pool element to the right clip and the new shadow
+  // element needs 100-300ms to load, causing mediabunny fallback (40-80ms/frame)
+  // for the first few transition frames.
+  const overlapKey = useMemo(() => {
+    if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
+    const lookahead = Math.round(fps * 0.5);
+    const indices: number[] = [];
+    for (let i = 0; i < group.items.length; i++) {
+      if (i === activeItemIndex) continue;
+      const item = group.items[i]!;
+      const itemEnd = item.from + item.durationInFrames;
+      // Current overlap OR upcoming overlap within lookahead window
+      if (globalFrame + lookahead >= item.from && globalFrame < itemEnd) {
+        indices.push(i);
+      }
+    }
+    return indices.join(',');
+  }, [isPremounted, activeItemIndex, group.items, globalFrame, fps]);
+
+  // Build adjusted shadow items — only recalculated when overlap composition changes.
+  // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
+  const adjustedShadows = useMemo(() => {
+    if (!overlapKey) return [];
+    const indices = overlapKey.split(',').map(Number);
+    return indices.map(idx => {
+      const item = group.items[idx]!;
+      return {
+        ...item,
+        _sequenceFrameOffset: item.from - group.minFrom,
+        // Separate pool ID so shadow gets its own video element (not shared with primary)
+        _poolClipId: `shadow-${item.id}`,
+      };
+    });
+    // overlapKey is a string — React compares by value, so this only re-runs
+    // when the set of overlapping items actually changes (transition boundaries)
+  }, [overlapKey, group.items, group.minFrom]);
 
   // Memoize the adjusted item based on active item identity.
   // Only recalculates when crossing split boundaries or when item/group properties change.
@@ -290,7 +346,22 @@ const GroupRenderer: React.FC<{
     return renderItem(adjustedItem);
   }, [adjustedItem, renderItem]);
 
-  return <>{renderedContent}</>;
+  // Memoize shadow content — only changes at transition boundaries
+  const shadowContent = useMemo(() => {
+    if (adjustedShadows.length === 0) return null;
+    return adjustedShadows.map(shadow => (
+      <div key={shadow.id} style={SHADOW_STYLE}>
+        {renderItem(shadow)}
+      </div>
+    ));
+  }, [adjustedShadows, renderItem]);
+
+  return (
+    <>
+      {renderedContent}
+      {shadowContent}
+    </>
+  );
 }, areGroupPropsEqual);
 
 GroupRenderer.displayName = 'GroupRenderer';

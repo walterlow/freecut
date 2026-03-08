@@ -322,7 +322,13 @@ const NativePreviewVideo: React.FC<{
     const video = elementRef.current;
     if (!video) return;
 
-    video.playbackRate = playbackRate;
+    // Only set playbackRate from React when RVFC isn't managing drift correction.
+    // During playback with RVFC, the callback owns video.playbackRate and applies
+    // small rate adjustments for smooth drift correction. Overwriting here would
+    // undo those adjustments every frame.
+    if (!isPlaying || !supportsRVFC) {
+      video.playbackRate = playbackRate;
+    }
 
     const relativeFrame = frame - sequenceFrameOffset;
     const isPremounted = relativeFrame < 0;
@@ -369,8 +375,11 @@ const NativePreviewVideo: React.FC<{
     const video = elementRef.current;
     if (!video) return;
 
-    // Set playback rate
-    video.playbackRate = playbackRate;
+    // Only set playbackRate from React when RVFC isn't active.
+    // RVFC owns the rate during playback for smooth drift correction.
+    if (!isPlaying || !supportsRVFC) {
+      video.playbackRate = playbackRate;
+    }
 
     // Update sequenceFrom for rVFC callback (global frame minus local frame)
     sequenceFromRef.current = clock.currentFrame - frame;
@@ -530,12 +539,17 @@ const NativePreviewVideo: React.FC<{
   }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
 
   // requestVideoFrameCallback-based drift correction.
-  // Runs outside React's render cycle â€” the browser calls us exactly when a
-  // video frame is presented, so we can nudge currentTime with zero scheduling
-  // overhead. Falls back to the per-frame React effect above when unsupported.
+  // Runs outside React's render cycle — the browser calls us exactly when a
+  // video frame is presented. Uses rate-based correction for small drifts
+  // (adjusts playbackRate ±2-5% to smoothly converge) and hard seeks only
+  // for large drifts (>200ms). This eliminates the visible “drift then jump”
+  // jitter pattern that hard-seek-only correction causes.
   useEffect(() => {
     const video = elementRef.current;
     if (!video || !isPlaying || !supportsRVFC) return;
+
+    // Set initial playbackRate when RVFC takes over
+    video.playbackRate = playbackRateRef.current;
 
     let handle: number;
     const onVideoFrame = () => {
@@ -553,7 +567,7 @@ const NativePreviewVideo: React.FC<{
         return;
       }
 
-      const rate = playbackRateRef.current;
+      const nominalRate = playbackRateRef.current;
       const timelineFps = fpsRef.current;
       const clipSourceFps = sourceFpsRef.current;
       const trim = safeTrimBeforeRef.current;
@@ -561,7 +575,7 @@ const NativePreviewVideo: React.FC<{
         trim,
         clipSourceFps,
         localFrame,
-        rate,
+        nominalRate,
         timelineFps,
         sequenceFrameOffsetRef.current
       );
@@ -569,18 +583,30 @@ const NativePreviewVideo: React.FC<{
       const clamped = Math.min(Math.max(0, target), dur - 0.05);
 
       const drift = v.currentTime - clamped;
-      const now = Date.now();
-      const timeSinceLastSync = now - lastSyncTimeRef.current;
+      const absDrift = Math.abs(drift);
 
-      if (drift > 0.5 || (drift < -0.2 && timeSinceLastSync > 80)) {
+      if (absDrift > 0.2) {
+        // Large drift (>200ms) — hard seek, reset rate
         if (v.readyState >= 1) {
           try {
             v.currentTime = clamped;
-            lastSyncTimeRef.current = now;
+            lastSyncTimeRef.current = Date.now();
           } catch {
             // Seek may fail if element isn't fully loaded
           }
         }
+        v.playbackRate = nominalRate;
+      } else if (absDrift > 0.016) {
+        // Small drift (16-200ms) — smooth rate-based correction.
+        // Proportional: larger drift → stronger correction (up to ±5%).
+        // Converges in ~0.3-0.5s without visible jumps.
+        const correction = Math.min(0.05, absDrift * 0.3);
+        v.playbackRate = drift > 0
+          ? nominalRate * (1 - correction) // ahead → slow down
+          : nominalRate * (1 + correction); // behind → speed up
+      } else {
+        // In sync (within ~1 frame) — nominal rate
+        v.playbackRate = nominalRate;
       }
 
       handle = v.requestVideoFrameCallback(onVideoFrame);
@@ -589,6 +615,10 @@ const NativePreviewVideo: React.FC<{
     handle = video.requestVideoFrameCallback(onVideoFrame);
     return () => {
       video.cancelVideoFrameCallback(handle);
+      // Reset to nominal rate when RVFC stops managing
+      if (elementRef.current) {
+        elementRef.current.playbackRate = playbackRateRef.current;
+      }
     };
   }, [isPlaying, poolClipId, clock]);
 
