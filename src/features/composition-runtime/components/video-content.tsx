@@ -14,6 +14,7 @@ import {
   useVideoAudioVolume,
   connectedVideoElements,
   videoAudioContexts,
+  ensureAudioContextResumed,
 } from './video-audio-context';
 
 const videoLog = createLogger('NativePreviewVideo');
@@ -172,20 +173,30 @@ const NativePreviewVideo: React.FC<{
     const isNearTarget = Math.abs(element.currentTime - clampedInitial) < 0.2;
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
+    elementRef.current = element;
+    applyVideoElementAudioVolume(element, audioVolumeRef.current);
+
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
       // but is at the right position. Resume immediately to minimize the
-      // decode pipeline interruption (pauseâ†’play in same synchronous batch).
-      elementRef.current = element;
-      applyVideoElementAudioVolume(element, audioVolumeRef.current);
+      // decode pipeline interruption (pause→play in same synchronous batch).
       element.playbackRate = playbackRate;
       element.play().catch(() => {});
       needsInitialSyncRef.current = false;
+    } else if (currentlyPlaying) {
+      // Playback is active but element isn’t at position (transition mount,
+      // shadow mount, or resume near a boundary). Seek and play immediately
+      // instead of pausing and waiting for the sync effect next frame.
+      // This eliminates ~16-50ms of React scheduling + readyState gate delay.
+      element.playbackRate = playbackRate;
+      element.currentTime = clampedInitial;
+      if (element.readyState >= 2) {
+        element.play().catch(() => {});
+      }
+      needsInitialSyncRef.current = false;
     } else {
-      // Normal mount (first mount, scrubbing, or position mismatch)
+      // Not playing (scrubbing, paused) — pause and seek
       element.pause();
-      elementRef.current = element;
-      applyVideoElementAudioVolume(element, audioVolumeRef.current);
     }
 
     // Set up event listeners
@@ -243,22 +254,18 @@ const NativePreviewVideo: React.FC<{
 
     // Force a frame render by doing a quick play/pause - some browsers need this
     // to actually display the video frame after seeking.
-    // IMPORTANT: Only do this when NOT playing. During playback, the sync effect
-    // handles play() and this timeout's playâ†’pause sequence would race with it,
-    // causing the video to get paused right after the sync effect started it.
-    const forceFrameRender = () => {
-      if (element.paused && element.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
-        element.play().then(() => {
-          element.pause();
-          videoLog.debug(`[${shortId}] forced frame render`);
-        }).catch(() => {
-          // Ignore - autoplay might be blocked
-        });
-      }
-    };
-
-    // Try after a short delay to allow the seek to complete
-    forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
+    // Only when NOT playing — during playback, the sync effect handles play()
+    // and this timeout’s play→pause sequence would race with it.
+    if (!currentlyPlaying) {
+      const forceFrameRender = () => {
+        if (element.paused && element.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
+          element.play().then(() => {
+            element.pause();
+          }).catch(() => {});
+        }
+      };
+      forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
+    }
 
     // Stall watchdog: if the element is stuck at readyState 0 for too long
     // (e.g., slow OPFS read, browser decoder init, broken file), retry load.
@@ -440,16 +447,19 @@ const NativePreviewVideo: React.FC<{
       // Invalidate any in-flight pre-warm promise so its .then()/.catch() no-ops
       preWarmGenRef.current += 1;
 
-      // Normal forward playback
-      // Initial sync is always needed (first play after mount/seek)
+      // Initial sync on first play after mount/seek.
+      // Skip the seek if element is already at the target (avoids readyState
+      // drop from redundant seeks, which delays play start by 100-300ms).
       if (needsInitialSyncRef.current && canSeek) {
-        try {
-          video.currentTime = clampedTargetTime;
-          lastSyncTimeRef.current = Date.now();
-          needsInitialSyncRef.current = false;
-        } catch {
-          // Seek failed - video may not be ready yet
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed - video may not be ready yet
+          }
         }
+        lastSyncTimeRef.current = Date.now();
+        needsInitialSyncRef.current = false;
       }
 
       // Drift correction: only run from React effect when rVFC is NOT available.
@@ -475,10 +485,11 @@ const NativePreviewVideo: React.FC<{
         }
       }
 
-      // Play if paused and video has buffered ahead (HAVE_FUTURE_DATA).
-      // >= 3 ensures the decoder has frames in its buffer, preventing
-      // stutter on play start after seeking to a new position.
-      if (video.paused && video.readyState >= 3) {
+      // Play if paused and video has current frame data (HAVE_CURRENT_DATA).
+      // >= 2 is sufficient — the browser buffers ahead during playback.
+      // Previous >= 3 gate added 100-300ms of unnecessary cold start delay
+      // waiting for HAVE_FUTURE_DATA after every seek.
+      if (video.paused && video.readyState >= 2) {
         video.play().catch(() => {
           // Autoplay might be blocked - this is fine
         });
@@ -547,6 +558,10 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     const video = elementRef.current;
     if (!video || !isPlaying || !supportsRVFC) return;
+
+    // Pre-resume AudioContext so audio starts immediately with video.
+    // Without this, suspended AudioContext adds 50-100ms audio delay on cold resume.
+    ensureAudioContextResumed();
 
     // Set initial playbackRate when RVFC takes over
     video.playbackRate = playbackRateRef.current;
