@@ -6,7 +6,6 @@ import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, AudioItem, ImageIt
 import { Item } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
-import { OptimizedEffectsBasedTransitionsLayer } from '../components/transition-renderer';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/composition-runtime/deps/timeline';
@@ -514,14 +513,6 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   );
 
   // Build item lookup map for effects-based transitions
-  const itemsById = useMemo(() => {
-    const map = new Map<string, typeof allVisualItems[number]>();
-    for (const item of allVisualItems) {
-      map.set(item.id, item);
-    }
-    return map;
-  }, [allVisualItems]);
-
   // Video items for rendering (all video items, rendered by StableVideoSequence)
   const videoItems = useMemo(() =>
     allVisualItems.filter((item): item is StableVideoSequenceItem => item.type === 'video'),
@@ -1134,13 +1125,6 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
               items={videoItems}
               premountFor={Math.round(fps * 1)}
               renderItem={renderVideoItem}
-            />
-
-            {/* Effects-based transitions - visual effect centered on cut point */}
-            {/* These render ABOVE the normal clips during the transition window */}
-            <OptimizedEffectsBasedTransitionsLayer
-              transitions={transitions}
-              itemsById={itemsById}
             />
 
             {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
