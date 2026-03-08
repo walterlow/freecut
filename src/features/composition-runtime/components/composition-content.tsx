@@ -15,6 +15,10 @@ import { KeyframesProvider } from '../contexts/keyframes-context';
 import { CompositionSpaceProvider, useCompositionSpace } from '../contexts/composition-space-context';
 import { Item } from './item';
 import type { MaskInfo } from './item';
+import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
+import {
+  resolveTrackRenderState,
+} from '../utils/scene-assembly';
 
 interface CompositionContentProps {
   item: CompositionItemType;
@@ -138,10 +142,12 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     renderScaleY,
   ]);
 
-  const visibleTrackIds = useMemo(
-    () => subComp ? new Set(subComp.tracks.filter((t) => t.visible).map((t) => t.id)) : new Set<string>(),
-    [subComp?.tracks]
+  const trackRenderState = useMemo(
+    () => subComp ? resolveTrackRenderState(subComp.tracks) : null,
+    [subComp]
   );
+  const visibleTrackIds = trackRenderState?.visibleTrackIds ?? new Set<string>();
+  const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
 
   // Resolve active sub-comp masks for the current local frame.
   // This allows masks authored inside a pre-comp to clip items when viewed
@@ -150,36 +156,31 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     if (!subComp) return [];
     const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
     const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
+    const activeMasks = resolvedItems.filter((subItem): subItem is ShapeItem => (
+      subItem.type === 'shape'
+      && subItem.isMask === true
+      && visibleTrackIds.has(subItem.trackId)
+    ));
 
-    return resolvedItems
-      .filter((subItem): subItem is ShapeItem => (
-        subItem.type === 'shape'
-        && subItem.isMask === true
-        && visibleTrackIds.has(subItem.trackId)
-        && subCompFrame >= subItem.from
-        && subCompFrame < subItem.from + subItem.durationInFrames
-      ))
-      .map((maskShape) => {
-        const baseResolved = resolveTransform(maskShape, canvas, getSourceDimensions(maskShape));
-        const maskKeyframes = keyframesById.get(maskShape.id);
-        const maskRelativeFrame = subCompFrame - maskShape.from;
-        const animatedResolved = (maskKeyframes && hasKeyframeAnimation(maskKeyframes))
-          ? resolveAnimatedTransform(baseResolved, maskKeyframes, maskRelativeFrame)
-          : baseResolved;
-
-        return {
-          shape: maskShape,
-          transform: {
-            x: animatedResolved.x,
-            y: animatedResolved.y,
-            width: animatedResolved.width,
-            height: animatedResolved.height,
-            rotation: animatedResolved.rotation,
-            opacity: animatedResolved.opacity,
-            cornerRadius: animatedResolved.cornerRadius,
-          },
-        };
-      });
+    return resolveActiveShapeMasksAtFrame(
+      activeMasks,
+      {
+        canvas,
+        frame: subCompFrame,
+        getKeyframes: (itemId) => keyframesById.get(itemId),
+      }
+    ).map(({ shape, transform }) => ({
+      shape,
+      transform: {
+        x: transform.x,
+        y: transform.y,
+        width: transform.width,
+        height: transform.height,
+        rotation: transform.rotation,
+        opacity: transform.opacity,
+        cornerRadius: transform.cornerRadius,
+      },
+    }));
   }, [resolvedItems, visibleTrackIds, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
 
   if (!subComp) {
@@ -200,9 +201,6 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   // CSS scale from sub-comp native resolution to parent container dimensions
   const scaleX = subComp.width > 0 ? containerDims.width / subComp.width : 1;
   const scaleY = subComp.height > 0 ? containerDims.height / subComp.height : 1;
-
-  // Sort tracks so lower order renders first (bottom), higher order on top
-  const sortedTracks = [...subComp.tracks].sort((a, b) => b.order - a.order);
 
   return (
     <div style={{

@@ -8,4 +8,9 @@ export {
   resolveTransform,
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
+export {
+  applyTransformOverride,
+  resolveItemTransformAtFrame,
+  resolveActiveShapeMasksAtFrame,
+} from '@/features/composition-runtime/utils/frame-scene';
 export { getVideoTargetTimeSeconds } from '@/features/composition-runtime/utils/video-timing';

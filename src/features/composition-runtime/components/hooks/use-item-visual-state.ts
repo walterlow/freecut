@@ -6,16 +6,17 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
 import {
-  resolveTransform,
-  getSourceDimensions,
   toTransformStyle,
 } from '../../utils/transform-resolver';
-import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { getShapePath, rotatePath } from '../../utils/shape-path';
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
 import { useCompositionSpace } from '../../contexts/composition-space-context';
 import type { MaskInfo } from '../item';
 import type React from 'react';
+import {
+  applyTransformOverride,
+  resolveItemTransformAtRelativeFrame,
+} from '../../utils/frame-scene';
 
 /**
  * Consolidated visual state for an item.
@@ -126,29 +127,18 @@ export function useItemVisualState(
     // Check for item properties preview (fades)
     const propertiesPreview = itemPreview?.properties;
 
-    // Resolve base transform from item
-    const baseResolved = resolveTransform(item, logicalCanvas, getSourceDimensions(item));
-
-    // Apply keyframe animation to base transform
-    // Use relativeFrame (relative to item.from) for correct keyframe interpolation
-    let animatedResolved = baseResolved;
-    if (itemKeyframes && hasKeyframeAnimation(itemKeyframes)) {
-      animatedResolved = resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
-    }
+    const animatedResolved = resolveItemTransformAtRelativeFrame(item, {
+      canvas: logicalCanvas,
+      relativeFrame,
+      keyframes: itemKeyframes,
+    });
 
     // Priority: Unified preview (group/properties) > Single gizmo preview > Keyframe animation > Base
     let resolved = animatedResolved;
     if (isUnifiedPreviewActive && unifiedPreviewTransform) {
-      resolved = {
-        ...animatedResolved,
-        ...unifiedPreviewTransform,
-        cornerRadius: unifiedPreviewTransform.cornerRadius ?? animatedResolved.cornerRadius,
-      } as ResolvedTransform;
+      resolved = applyTransformOverride(animatedResolved, unifiedPreviewTransform);
     } else if (isGizmoPreviewActive && previewTransform) {
-      resolved = {
-        ...previewTransform,
-        cornerRadius: previewTransform.cornerRadius ?? 0,
-      };
+      resolved = applyTransformOverride(animatedResolved, previewTransform);
     }
 
     // Calculate fade opacity based on fadeIn/fadeOut (in seconds)
@@ -285,15 +275,10 @@ export function useItemVisualState(
       };
 
       if (isGizmoPreviewActive && previewTransform) {
-        resolvedMaskTransform = {
-          ...resolvedMaskTransform,
-          x: previewTransform.x,
-          y: previewTransform.y,
-          width: previewTransform.width,
-          height: previewTransform.height,
-          rotation: previewTransform.rotation,
-          opacity: previewTransform.opacity,
-        };
+        resolvedMaskTransform = applyTransformOverride(
+          resolvedMaskTransform as ResolvedTransform,
+          previewTransform
+        );
       }
 
       const scaledMaskTransform = {

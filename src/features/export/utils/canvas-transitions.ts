@@ -7,9 +7,11 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/animation/easing';
 import { transitionRegistry } from '@/domain/timeline/transitions/registry';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import {
+  resolveTransitionFrameState,
+} from '@/features/export/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
 import type { TransitionPipeline } from '@/infrastructure/gpu/transitions';
 
@@ -45,7 +47,7 @@ export interface ActiveTransition {
  * Build once per render, then reuse for every frame.
  */
 export interface TransitionFrameIndex {
-  windows: ReturnType<typeof resolveTransitionWindows>;
+  windows: ReturnType<typeof import('@/domain/timeline/transitions/transition-planner').resolveTransitionWindows>;
 }
 
 /**
@@ -90,39 +92,11 @@ export function getTransitionFrameState(
   frame: number,
   fps: number
 ): TransitionFrameState {
-  const activeTransitions: ActiveTransition[] = [];
-  const transitionClipIds = new Set<string>();
-
-  for (const window of index.windows) {
-    if (frame < window.startFrame || frame >= window.endFrame) continue;
-
-    const localFrame = frame - window.startFrame;
-    const progress = calculateProgress(
-      localFrame,
-      window.durationInFrames,
-      window.transition.timing,
-      fps,
-      window.transition.bezierPoints
-    );
-
-    activeTransitions.push({
-      transition: window.transition,
-      leftClip: window.leftClip,
-      rightClip: window.rightClip,
-      progress,
-      transitionStart: window.startFrame,
-      transitionEnd: window.endFrame,
-      durationInFrames: window.durationInFrames,
-      leftPortion: window.leftPortion,
-      rightPortion: window.rightPortion,
-      cutPoint: window.cutPoint,
-    });
-
-    transitionClipIds.add(window.transition.leftClipId);
-    transitionClipIds.add(window.transition.rightClipId);
-  }
-
-  return { activeTransitions, transitionClipIds };
+  void fps;
+  return resolveTransitionFrameState({
+    transitionWindows: index.windows,
+    frame,
+  });
 }
 
 /**
@@ -142,45 +116,6 @@ export function findActiveTransitions(
 ): ActiveTransition[] {
   const index = createTransitionFrameIndex(transitions, clipMap);
   return getTransitionFrameState(index, frame, fps).activeTransitions;
-}
-
-/**
- * Calculate transition progress with timing.
- *
- * @param localFrame - Frame within transition (0 to duration-1)
- * @param duration - Total transition duration in frames
- * @param timing - Timing type ('linear' or 'spring')
- * @param fps - Frames per second
- * @returns Progress value (0 to 1, may overshoot for spring)
- */
-function calculateProgress(
-  localFrame: number,
-  duration: number,
-  timing: string,
-  _fps: number,
-  bezierPoints?: { x1: number; y1: number; x2: number; y2: number }
-): number {
-  // Linear progress
-  const maxFrame = Math.max(1, duration - 1);
-  const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame));
-
-  switch (timing) {
-    case 'spring':
-      return springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 });
-    case 'ease-in':
-      return easeIn(linearProgress);
-    case 'ease-out':
-      return easeOut(linearProgress);
-    case 'ease-in-out':
-      return easeInOut(linearProgress);
-    case 'cubic-bezier':
-      if (bezierPoints) {
-        return cubicBezier(linearProgress, bezierPoints);
-      }
-      return linearProgress;
-    default:
-      return linearProgress;
-  }
 }
 
 // ============================================================================
@@ -686,4 +621,3 @@ export function getTransitionClipIds(
   }
   return clipIds;
 }
-

@@ -13,7 +13,14 @@
 import React, { useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useVideoConfig } from '../hooks/use-player-compat';
-import type { VideoItem } from '@/types/timeline';
+import type { TimelineItem, VideoItem } from '@/types/timeline';
+import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import {
+  findActiveVideoItemIndex,
+  groupStableVideoItems,
+  type StableVideoGroup,
+} from '../utils/video-scene';
+import { collectTransitionParticipantClipIds } from '../utils/transition-scene';
 
 /** Video item with additional properties added by MainComposition */
 export type StableVideoSequenceItem = VideoItem & {
@@ -28,157 +35,12 @@ export type StableVideoSequenceItem = VideoItem & {
 interface StableVideoSequenceProps {
   /** All video items that might share the same origin */
   items: StableVideoSequenceItem[];
+  /** Shared transition windows for current composition */
+  transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
   /** Render function for the video content */
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
   /** Number of frames to premount */
   premountFor?: number;
-}
-
-interface VideoGroup {
-  originKey: string;
-  items: StableVideoSequenceItem[];
-  minFrom: number;
-  maxEnd: number;
-}
-
-function findActiveItemIndex(items: StableVideoSequenceItem[], frame: number): number {
-  let low = 0;
-  let high = items.length - 1;
-
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    const item = items[mid]!;
-    const start = item.from;
-    const end = item.from + item.durationInFrames;
-
-    if (frame < start) {
-      high = mid - 1;
-      continue;
-    }
-
-    if (frame >= end) {
-      low = mid + 1;
-      continue;
-    }
-
-    // Overlap-aware tie-break:
-    // If multiple clips are active at this frame (transition overlap), prefer
-    // the right-most active clip (latest start). This prevents a base-layer
-    // left->right handoff exactly at transition exit, which can leak as a
-    // one-frame flicker if the transition overlay drops a frame.
-    let rightmost = mid;
-    while (rightmost + 1 < items.length) {
-      const next = items[rightmost + 1]!;
-      const nextStart = next.from;
-      const nextEnd = next.from + next.durationInFrames;
-      if (frame >= nextStart && frame < nextEnd) {
-        rightmost += 1;
-        continue;
-      }
-      break;
-    }
-
-    return rightmost;
-  }
-
-  return -1;
-}
-
-/**
- * Groups video items by their origin key (mediaId-originId) AND adjacency.
- * Only adjacent clips (one ends where another begins) are grouped together.
- * Clips that have been dragged apart are placed in separate groups.
- *
- * KEY STABILITY NOTES:
- * - Speed is NOT part of the key - changing speed should not cause remounts
- * - Position (minFrom) is NOT part of the key - rate stretch from start, trim,
- *   move, or undo should not cause remounts
- * - Uses first item's ID to differentiate sub-groups when clips are dragged apart
- * - This ensures Web Audio API connections stay intact across all operations
- *
- * RATE STRETCH HANDLING:
- * - Clips with non-default speed (speed != 1) are placed in their own groups
- * - This is because the sourceStart adjustment formula breaks for mixed-speed groups
- * - The formula (sourceStart - itemOffset * speed) produces negative values when
- *   a clip with speed > 1 is far from the group start
- */
-function groupByOrigin(items: StableVideoSequenceItem[]): VideoGroup[] {
-  // First, collect items by their origin key
-  const byOriginKey = new Map<string, StableVideoSequenceItem[]>();
-
-  for (const item of items) {
-    const originId = item.originId || item.id;
-    // NOTE: Do NOT include speed in the key - changing speed should NOT cause remount
-    // Remounting breaks Web Audio API connections, causing audio to go silent
-    // Speed changes are handled dynamically via playbackRate prop
-    const key = `${item.mediaId}-${originId}`;
-
-    const existing = byOriginKey.get(key);
-    if (existing) {
-      existing.push(item);
-    } else {
-      byOriginKey.set(key, [item]);
-    }
-  }
-
-  // Now split each origin group into contiguous sub-groups
-  const groups: VideoGroup[] = [];
-
-  for (const [originKey, originItems] of byOriginKey) {
-    // Sort by position (toSorted for immutability)
-    const sorted = originItems.toSorted((a, b) => a.from - b.from);
-
-    // Build contiguous groups - clips must be adjacent (no gap)
-    let currentGroup: StableVideoSequenceItem[] = [sorted[0]!];
-    let currentEnd = sorted[0]!.from + sorted[0]!.durationInFrames;
-
-    for (let i = 1; i < sorted.length; i++) {
-      const item = sorted[i]!;
-      // Check if this item or any item in current group has non-default speed
-      // Rate-stretched clips must be in their own group because the sourceStart
-      // adjustment formula (sourceStart - itemOffset * speed) breaks when clips
-      // have different speeds - it can produce negative sourceStart values
-      const itemHasCustomSpeed = (item.speed ?? 1) !== 1;
-      const groupHasCustomSpeed = currentGroup.some(g => (g.speed ?? 1) !== 1);
-      const speedMismatch = itemHasCustomSpeed || groupHasCustomSpeed;
-
-      // Adjacent if this item starts where previous ends (allow 1 frame tolerance for rounding)
-      // BUT also require same speed to be grouped together
-      if (item.from <= currentEnd + 1 && !speedMismatch) {
-        currentGroup.push(item);
-        currentEnd = Math.max(currentEnd, item.from + item.durationInFrames);
-      } else {
-        // Gap detected - finalize current group and start new one
-        const minFrom = Math.min(...currentGroup.map((i) => i.from));
-        const maxEnd = Math.max(...currentGroup.map((i) => i.from + i.durationInFrames));
-        // Use first item's ID for stable key - doesn't change when position changes
-        // (minFrom would change on rate stretch from start, trim, or move, causing remount)
-        const firstItemId = currentGroup[0]!.id;
-        groups.push({
-          originKey: `${originKey}-${firstItemId}`,
-          items: currentGroup,
-          minFrom,
-          maxEnd,
-        });
-        currentGroup = [item];
-        currentEnd = item.from + item.durationInFrames;
-      }
-    }
-
-    // Finalize last group
-    const minFrom = Math.min(...currentGroup.map((i) => i.from));
-    const maxEnd = Math.max(...currentGroup.map((i) => i.from + i.durationInFrames));
-    // Use first item's ID for stable key - doesn't change when position changes
-    const firstItemId = currentGroup[0]!.id;
-    groups.push({
-      originKey: `${originKey}-${firstItemId}`,
-      items: currentGroup,
-      minFrom,
-      maxEnd,
-    });
-  }
-
-  return groups;
 }
 
 /**
@@ -195,8 +57,16 @@ function groupByOrigin(items: StableVideoSequenceItem[]): VideoGroup[] {
  * cases where group.items contains items with changed properties (like speed after rate stretch).
  */
 function areGroupPropsEqual(
-  prevProps: { group: VideoGroup; renderItem: (item: StableVideoSequenceItem) => React.ReactNode },
-  nextProps: { group: VideoGroup; renderItem: (item: StableVideoSequenceItem) => React.ReactNode }
+  prevProps: {
+    group: StableVideoGroup<StableVideoSequenceItem>;
+    renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
+    transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+  },
+  nextProps: {
+    group: StableVideoGroup<StableVideoSequenceItem>;
+    renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
+    transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
+  }
 ): boolean {
   // Quick reference check first
   if (prevProps.group === nextProps.group && prevProps.renderItem === nextProps.renderItem) {
@@ -205,6 +75,10 @@ function areGroupPropsEqual(
 
   // If renderItem changed, need to re-render
   if (prevProps.renderItem !== nextProps.renderItem) {
+    return false;
+  }
+
+  if (prevProps.transitionWindows !== nextProps.transitionWindows) {
     return false;
   }
 
@@ -249,9 +123,10 @@ const SHADOW_STYLE: React.CSSProperties = {
 };
 
 const GroupRenderer: React.FC<{
-  group: VideoGroup;
+  group: StableVideoGroup<StableVideoSequenceItem>;
+  transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
-}> = React.memo(({ group, renderItem }) => {
+}> = React.memo(({ group, transitionWindows = [], renderItem }) => {
   // Get local frame from Sequence context (0-based within this Sequence)
   // The Sequence component provides this via SequenceContext
   const sequenceContext = useSequenceContext();
@@ -268,7 +143,7 @@ const GroupRenderer: React.FC<{
 
   // Find the active item ID for current frame
   // During premount, don't find any active item - we shouldn't render.
-  const activeItemIndex = isPremounted ? -1 : findActiveItemIndex(group.items, globalFrame);
+  const activeItemIndex = isPremounted ? -1 : findActiveVideoItemIndex(group.items, globalFrame);
   const activeItem = activeItemIndex >= 0 ? group.items[activeItemIndex] : null;
 
   const { fps } = useVideoConfig();
@@ -285,19 +160,17 @@ const GroupRenderer: React.FC<{
   // for the first few transition frames.
   const overlapKey = useMemo(() => {
     if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
-    const lookahead = Math.round(fps * 0.5);
-    const indices: number[] = [];
-    for (let i = 0; i < group.items.length; i++) {
-      if (i === activeItemIndex) continue;
-      const item = group.items[i]!;
-      const itemEnd = item.from + item.durationInFrames;
-      // Current overlap OR upcoming overlap within lookahead window
-      if (globalFrame + lookahead >= item.from && globalFrame < itemEnd) {
-        indices.push(i);
-      }
-    }
-    return indices.join(',');
-  }, [isPremounted, activeItemIndex, group.items, globalFrame, fps]);
+    const transitionClipIds = collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: globalFrame,
+      lookaheadFrames: Math.round(fps * 0.5),
+    });
+    return group.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
+      .map(({ index }) => index)
+      .join(',');
+  }, [isPremounted, activeItemIndex, group.items, transitionWindows, globalFrame, fps]);
 
   // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
@@ -375,13 +248,14 @@ GroupRenderer.displayName = 'GroupRenderer';
  */
 export const StableVideoSequence: React.FC<StableVideoSequenceProps> = ({
   items,
+  transitionWindows,
   renderItem,
   premountFor = 0,
 }) => {
   const { fps } = useVideoConfig();
   const defaultPremount = premountFor || Math.round(fps * 2);
 
-  const groups = useMemo(() => groupByOrigin(items), [items]);
+  const groups = useMemo(() => groupStableVideoItems(items), [items]);
 
   return (
     <>
@@ -392,7 +266,7 @@ export const StableVideoSequence: React.FC<StableVideoSequenceProps> = ({
           durationInFrames={group.maxEnd - group.minFrom}
           premountFor={defaultPremount}
         >
-          <GroupRenderer group={group} renderItem={renderItem} />
+          <GroupRenderer group={group} transitionWindows={transitionWindows} renderItem={renderItem} />
         </Sequence>
       ))}
     </>
