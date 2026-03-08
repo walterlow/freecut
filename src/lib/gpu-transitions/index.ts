@@ -2,6 +2,12 @@ import type { GpuTransitionDefinition } from './types';
 export type { GpuTransitionDefinition } from './types';
 export { TransitionPipeline } from './transition-pipeline';
 
+import { fade } from './transitions/fade';
+import { wipe } from './transitions/wipe';
+import { slide } from './transitions/slide';
+import { flip } from './transitions/flip';
+import { clockWipe } from './transitions/clock-wipe';
+import { iris } from './transitions/iris';
 import { dissolve } from './transitions/dissolve';
 import { glitch } from './transitions/glitch';
 import { lightLeak } from './transitions/light-leak';
@@ -15,6 +21,12 @@ function register(def: GpuTransitionDefinition) {
   GPU_TRANSITION_REGISTRY.set(def.id, def);
 }
 
+register(fade);
+register(wipe);
+register(slide);
+register(flip);
+register(clockWipe);
+register(iris);
 register(dissolve);
 register(glitch);
 register(lightLeak);

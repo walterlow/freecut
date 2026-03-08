@@ -1045,6 +1045,7 @@ export async function createCompositionRenderer(
       // GPU batch mode: each item's GPU effects submit immediately via pooled
       // output canvases, but we defer compositing so the GPU can pipeline work.
       let useBatch = false;
+      let useGpuLayerCompositor = false;
 
       // Check if any active items have GPU effects
       // and eagerly init the pipeline + start batch before processing items
@@ -1088,7 +1089,7 @@ export async function createCompositionRenderer(
         item: TimelineItem,
         trackOrder: number,
         deferred: boolean,
-      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
+      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[]; maskImageData?: ImageData | null; itemId?: string } | null> => {
         // Get animated transform
         const itemKeyframes = keyframesMap.get(item.id);
         let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
@@ -1187,18 +1188,26 @@ export async function createCompositionRenderer(
           canvasPool.release(itemCanvas);
 
           let source = deferredGpuCanvas ?? effectCanvas;
-          source = applyItemClipMasks(item, source, transform);
+          const maskImageData = useGpuLayerCompositor && deferred
+            ? createPositionedItemClipMask(item, transform)
+            : null;
+          if (!maskImageData) {
+            source = applyItemClipMasks(item, source, transform);
+          }
           if (deferred) {
-            return { source, poolCanvases: [effectCanvas] };
+            return { source, poolCanvases: [effectCanvas], maskImageData, itemId: item.id };
           }
           contentCtx.drawImage(source, 0, 0);
           canvasPool.release(effectCanvas);
           return null;
         }
 
-        const maskedCanvas = applyItemClipMasks(item, itemCanvas, transform);
+        const maskImageData = useGpuLayerCompositor && deferred
+          ? createPositionedItemClipMask(item, transform)
+          : null;
+        const maskedCanvas = maskImageData ? itemCanvas : applyItemClipMasks(item, itemCanvas, transform);
         if (deferred) {
-          return { source: maskedCanvas, poolCanvases: [itemCanvas] };
+          return { source: maskedCanvas, poolCanvases: [itemCanvas], maskImageData, itemId: item.id };
         }
         contentCtx.drawImage(maskedCanvas, 0, 0);
         canvasPool.release(itemCanvas);
@@ -1243,6 +1252,72 @@ export async function createCompositionRenderer(
         maskCtx.globalCompositeOperation = 'source-over';
 
         return maskCanvas;
+      };
+
+      const createFrameMaskImageData = (): ImageData | null => {
+        if (activeMasks.length === 0) return null;
+
+        const whiteCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+        const whiteCtx = whiteCanvas.getContext('2d');
+        if (!whiteCtx) return null;
+        whiteCtx.fillStyle = '#ffffff';
+        whiteCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const maskCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+        const maskCtx = maskCanvas.getContext('2d');
+        if (!maskCtx) return null;
+
+        applyMasks(maskCtx, whiteCanvas, activeMasks, maskSettings);
+        return maskCtx.getImageData(0, 0, canvas.width, canvas.height);
+      };
+
+      const createPositionedItemClipMask = (
+        item: TimelineItem,
+        transform: ResolvedTransform,
+      ): ImageData | null => {
+        const clipMasks = item.masks?.filter((m) => m.enabled && m.vertices.length >= 2);
+        if (!clipMasks || clipMasks.length === 0) return null;
+
+        const maskW = Math.round(transform.width);
+        const maskH = Math.round(transform.height);
+        if (maskW <= 0 || maskH <= 0) return null;
+
+        const maskImage = renderMasks(clipMasks, maskW, maskH);
+        const fullWidth = canvas.width;
+        const fullHeight = canvas.height;
+        const fullData = new Uint8ClampedArray(fullWidth * fullHeight * 4);
+
+        const itemLeft = Math.round(fullWidth / 2 + transform.x - transform.width / 2);
+        const itemTop = Math.round(fullHeight / 2 + transform.y - transform.height / 2);
+        const srcData = maskImage.data;
+
+        for (let srcY = 0; srcY < maskH; srcY++) {
+          const dstY = itemTop + srcY;
+          if (dstY < 0 || dstY >= fullHeight) continue;
+
+          const srcRowStart = srcY * maskW * 4;
+          const dstRowStart = dstY * fullWidth * 4;
+
+          let copyStartX = 0;
+          let copyWidth = maskW;
+          let dstX = itemLeft;
+
+          if (dstX < 0) {
+            copyStartX = -dstX;
+            copyWidth -= copyStartX;
+            dstX = 0;
+          }
+          if (dstX + copyWidth > fullWidth) {
+            copyWidth = fullWidth - dstX;
+          }
+          if (copyWidth <= 0) continue;
+
+          const srcOffset = srcRowStart + copyStartX * 4;
+          const dstOffset = dstRowStart + dstX * 4;
+          fullData.set(srcData.subarray(srcOffset, srcOffset + copyWidth * 4), dstOffset);
+        }
+
+        return new ImageData(fullData, fullWidth, fullHeight);
       };
 
       // Helper to check if item should be rendered
@@ -1363,6 +1438,7 @@ export async function createCompositionRenderer(
       // Render tracks in order (bottom to top), with transitions at their track position
       // Track order: higher values render first (behind), lower values render last (on top)
       let skippedTracks = 0;
+      let finalFrameMaskAppliedOnGpu = false;
 
       // Parallelize item rendering (video decode is the bottleneck).
       // Collect all renderable items in z-order, fire all renders concurrently,
@@ -1373,6 +1449,16 @@ export async function createCompositionRenderer(
             visibleTrackIds.has(track.id) && (track.order ?? 0) > occlusionCutoffOrder
           )).length;
         }
+
+        // Decide compositor mode up front so item render tasks can either
+        // pre-bake clip masks in Canvas2D or hand them off as GPU mask textures.
+        const hasNonNormalBlend = renderTasks.some(
+          (t) => t.type === 'item' && t.item.blendMode && t.item.blendMode !== 'normal',
+        );
+        const hasItemClipMasks = renderTasks.some(
+          (t) => t.type === 'item' && Boolean(t.item.masks?.some((m) => m.enabled && m.vertices.length >= 2)),
+        );
+        useGpuLayerCompositor = Boolean((hasNonNormalBlend || hasItemClipMasks) && gpuPipeline && ensureGpuCompositor());
 
         // Fire all item renders in parallel (video decodes run concurrently)
         const results = await Promise.all(
@@ -1393,13 +1479,9 @@ export async function createCompositionRenderer(
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
-        // Use GPU compositor for pixel-perfect blend modes when available
-        const hasNonNormalBlend = renderTasks.some(
-          (t) => t.type === 'item' && t.item.blendMode && t.item.blendMode !== 'normal',
-        );
-        const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor();
+        // Use GPU compositor for pixel-perfect blend modes and per-item clip masks when available
 
-        if (useGpuCompositor && gpuCompositor && gpuMaskManager) {
+        if (useGpuLayerCompositor && gpuCompositor && gpuMaskManager) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
           const device = gpuPipeline!.getDevice();
           const w = canvasSettings.width;
@@ -1413,6 +1495,12 @@ export async function createCompositionRenderer(
 
             const task = renderTasks[i]!;
             const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+            const maskInfo = task.type === 'item' && result.itemId
+              ? (() => {
+                  gpuMaskManager.updateMask(result.itemId, result.maskImageData ?? null);
+                  return gpuMaskManager.getMaskInfo(result.itemId);
+                })()
+              : { hasMask: false, view: gpuMaskManager.getFallbackView() };
 
             // Upload item canvas to GPU texture
             const tex = device.createTexture({
@@ -1428,9 +1516,15 @@ export async function createCompositionRenderer(
             layerTextures.push(tex);
 
             layers.push({
-              params: { ...DEFAULT_LAYER_PARAMS, blendMode, sourceAspect: w / h, outputAspect: w / h },
+              params: {
+                ...DEFAULT_LAYER_PARAMS,
+                blendMode,
+                sourceAspect: w / h,
+                outputAspect: w / h,
+                hasMask: maskInfo.hasMask,
+              },
               textureView: tex.createView(),
-              maskView: gpuMaskManager.getFallbackView(),
+              maskView: maskInfo.view,
             });
 
             for (const c of result.poolCanvases) canvasPool.release(c);
@@ -1438,35 +1532,59 @@ export async function createCompositionRenderer(
 
           if (layers.length > 0) {
             const commandEncoder = device.createCommandEncoder();
-            const composited = gpuCompositor.compositeToTexture(layers, w, h, commandEncoder);
+            let composited = gpuCompositor.compositeToTexture(layers, w, h, commandEncoder);
 
             if (composited) {
-              // Readback composited result to Canvas2D
-              const bytesPerRow = Math.ceil(w * 4 / 256) * 256;
-              const readBuffer = device.createBuffer({
-                size: bytesPerRow * h,
-                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-              });
-              commandEncoder.copyTextureToBuffer(
-                { texture: composited.texture },
-                { buffer: readBuffer, bytesPerRow },
-                { width: w, height: h },
-              );
-              device.queue.submit([commandEncoder.finish()]);
-
-              await readBuffer.mapAsync(GPUMapMode.READ);
-              const mapped = new Uint8Array(readBuffer.getMappedRange());
-              const pixels = new Uint8ClampedArray(w * h * 4);
-              for (let row = 0; row < h; row++) {
-                pixels.set(
-                  mapped.subarray(row * bytesPerRow, row * bytesPerRow + w * 4),
-                  row * w * 4,
-                );
+              if (activeMasks.length > 0) {
+                const frameMaskImageData = createFrameMaskImageData();
+                if (frameMaskImageData) {
+                  gpuMaskManager.updateMask('__frame__', frameMaskImageData);
+                  const frameMaskInfo = gpuMaskManager.getMaskInfo('__frame__');
+                  if (frameMaskInfo.hasMask) {
+                    composited = gpuCompositor.applyMaskToTexture(
+                      composited,
+                      frameMaskInfo.view,
+                      w,
+                      h,
+                      commandEncoder,
+                    ) ?? composited;
+                    finalFrameMaskAppliedOnGpu = true;
+                  }
+                }
               }
-              readBuffer.unmap();
-              readBuffer.destroy();
 
-              contentCtx.putImageData(new ImageData(pixels, w, h), 0, 0);
+              const gpuCanvas = gpuCompositor.renderTextureToCanvas(composited, w, h, commandEncoder);
+              if (gpuCanvas) {
+                device.queue.submit([commandEncoder.finish()]);
+                contentCtx.drawImage(gpuCanvas, 0, 0);
+              } else {
+                // Fallback: explicit readback when WebGPU canvas output is unavailable
+                const bytesPerRow = Math.ceil(w * 4 / 256) * 256;
+                const readBuffer = device.createBuffer({
+                  size: bytesPerRow * h,
+                  usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+                });
+                commandEncoder.copyTextureToBuffer(
+                  { texture: composited.texture },
+                  { buffer: readBuffer, bytesPerRow },
+                  { width: w, height: h },
+                );
+                device.queue.submit([commandEncoder.finish()]);
+
+                await readBuffer.mapAsync(GPUMapMode.READ);
+                const mapped = new Uint8Array(readBuffer.getMappedRange());
+                const pixels = new Uint8ClampedArray(w * h * 4);
+                for (let row = 0; row < h; row++) {
+                  pixels.set(
+                    mapped.subarray(row * bytesPerRow, row * bytesPerRow + w * 4),
+                    row * w * 4,
+                  );
+                }
+                readBuffer.unmap();
+                readBuffer.destroy();
+
+                contentCtx.putImageData(new ImageData(pixels, w, h), 0, 0);
+              }
             } else {
               device.queue.submit([commandEncoder.finish()]);
             }
@@ -1503,7 +1621,7 @@ export async function createCompositionRenderer(
       }
 
       // Apply masks to content
-      if (activeMasks.length > 0) {
+      if (activeMasks.length > 0 && !finalFrameMaskAppliedOnGpu) {
         applyMasks(ctx, contentCanvas, activeMasks, maskSettings);
       } else {
         ctx.drawImage(contentCanvas, 0, 0);

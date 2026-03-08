@@ -38,6 +38,17 @@ fn vertexMain(@builtin(vertex_index) vi: u32) -> VertexOutput {
 }
 `;
 
+const BLIT_SHADER = /* wgsl */ `
+${VERTEX_SHADER}
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+
+@fragment
+fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
+  return textureSample(inputTex, texSampler, input.uv);
+}
+`;
+
 const COMPOSITE_UNIFORMS = /* wgsl */ `
 struct CompositeUniforms {
   opacity: f32,            // 0
@@ -273,8 +284,17 @@ function packUniforms(p: CompositeLayerParams): Float32Array {
 
 export class CompositorPipeline {
   private device: GPUDevice;
+  private format: GPUTextureFormat;
   private sampler: GPUSampler;
   private uniformBuffer: GPUBuffer;
+  private transparentTexture: GPUTexture;
+  private transparentView: GPUTextureView;
+  private blitPipeline: GPURenderPipeline | null = null;
+  private blitLayout: GPUBindGroupLayout | null = null;
+  private outputCanvas: OffscreenCanvas | null = null;
+  private outputCtx: GPUCanvasContext | null = null;
+  private outputW = 0;
+  private outputH = 0;
 
   private regularPipeline: GPURenderPipeline | null = null;
   private regularLayout: GPUBindGroupLayout | null = null;
@@ -294,15 +314,51 @@ export class CompositorPipeline {
 
   constructor(device: GPUDevice) {
     this.device = device;
+    this.format = navigator.gpu.getPreferredCanvasFormat();
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.uniformBuffer = device.createBuffer({
       size: UNIFORM_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
+    this.transparentTexture = device.createTexture({
+      size: { width: 1, height: 1 },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture(
+      { texture: this.transparentTexture },
+      new Uint8Array([0, 0, 0, 0]),
+      { bytesPerRow: 4 },
+      { width: 1, height: 1 },
+    );
+    this.transparentView = this.transparentTexture.createView();
     this.createPipelines();
   }
 
   private createPipelines(): void {
+    try {
+      const module = this.device.createShaderModule({
+        label: 'compositor-blit',
+        code: BLIT_SHADER,
+      });
+      this.blitLayout = this.device.createBindGroupLayout({
+        label: 'compositor-blit-layout',
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        ],
+      });
+      this.blitPipeline = this.device.createRenderPipeline({
+        label: 'compositor-blit-pipeline',
+        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.blitLayout] }),
+        vertex: { module, entryPoint: 'vertexMain' },
+        fragment: { module, entryPoint: 'blitFragment', targets: [{ format: this.format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+    } catch (e) {
+      console.warn('Failed to create compositor blit pipeline', e);
+    }
+
     // Regular composite pipeline (texture_2d layer)
     try {
       const module = this.device.createShaderModule({
@@ -487,14 +543,121 @@ export class CompositorPipeline {
     return this.device;
   }
 
+  configureCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): GPUCanvasContext | null {
+    try {
+      const ctx = canvas.getContext('webgpu') as GPUCanvasContext | null;
+      if (!ctx) return null;
+      ctx.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+      return ctx;
+    } catch {
+      return null;
+    }
+  }
+
+  renderTextureToCanvas(
+    source: { texture: GPUTexture; view: GPUTextureView },
+    width: number,
+    height: number,
+    commandEncoder: GPUCommandEncoder,
+  ): OffscreenCanvas | null {
+    if (!this.blitPipeline || !this.blitLayout) return null;
+
+    if (!this.outputCanvas || this.outputW !== width || this.outputH !== height) {
+      this.outputCanvas = new OffscreenCanvas(width, height);
+      this.outputCtx = this.configureCanvas(this.outputCanvas);
+      this.outputW = width;
+      this.outputH = height;
+    }
+    if (!this.outputCanvas || !this.outputCtx) return null;
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.blitLayout,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: source.view },
+      ],
+    });
+
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: this.outputCtx.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    pass.setPipeline(this.blitPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(6);
+    pass.end();
+
+    return this.outputCanvas;
+  }
+
+  /**
+   * Apply a mask to a texture produced by this compositor.
+   * The source texture must not be the same texture currently used as the render target.
+   */
+  applyMaskToTexture(
+    source: { texture: GPUTexture; view: GPUTextureView },
+    maskView: GPUTextureView,
+    width: number,
+    height: number,
+    commandEncoder: GPUCommandEncoder,
+  ): { texture: GPUTexture; view: GPUTextureView } | null {
+    if (!this.regularPipeline || !this.regularLayout) return null;
+
+    this.ensurePingPong(width, height);
+    if (!this.pingTexture || !this.pongTexture || !this.pingView || !this.pongView) return null;
+
+    const renderToPing = source.texture === this.pongTexture;
+    const outputTexture = renderToPing ? this.pingTexture : this.pongTexture;
+    const outputView = renderToPing ? this.pingView : this.pongView;
+
+    this.writeUniforms({
+      ...DEFAULT_LAYER_PARAMS,
+      blendMode: 'normal',
+      sourceAspect: width / height,
+      outputAspect: width / height,
+      hasMask: true,
+    });
+
+    const bindGroup = this.device.createBindGroup({
+      layout: this.regularLayout,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.transparentView },
+        { binding: 2, resource: source.view },
+        { binding: 3, resource: { buffer: this.uniformBuffer } },
+        { binding: 4, resource: maskView },
+      ],
+    });
+
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outputView,
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    pass.setPipeline(this.regularPipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(6);
+    pass.end();
+
+    return { texture: outputTexture, view: outputView };
+  }
+
   destroy(): void {
     this.pingTexture?.destroy();
     this.pongTexture?.destroy();
     this.uniformBuffer.destroy();
+    this.transparentTexture.destroy();
     this.pingTexture = null;
     this.pongTexture = null;
     this.pingView = null;
     this.pongView = null;
+    this.outputCanvas = null;
+    this.outputCtx = null;
   }
 }
 
