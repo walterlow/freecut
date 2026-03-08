@@ -123,6 +123,9 @@ export interface ItemRenderContext {
   // GPU effects pipeline (lazily initialized)
   gpuPipeline?: import('@/lib/gpu-effects').EffectsPipeline | null;
 
+  // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
+  gpuTransitionPipeline?: import('@/lib/gpu-transitions').TransitionPipeline | null;
+
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Remotion Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
@@ -1089,46 +1092,54 @@ export async function renderTransitionToCanvas(
   const { canvasPool, canvasSettings, keyframesMap, adjustmentLayers } = rctx;
   const { leftClip, rightClip } = activeTransition;
 
-  const leftEffectiveFrame = frame;
-  const rightEffectiveFrame = frame;
-
-  // === PERFORMANCE: Use pooled canvases for transition rendering ===
+  // === PERFORMANCE: Render both clips in parallel ===
+  // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
+  // Running both clips concurrently halves the decode wait time.
   const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
-  const leftKeyframes = keyframesMap.get(leftClip.id);
-  const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, leftEffectiveFrame, canvasSettings);
-
-  await renderItem(leftCtx, leftClip, leftTransform, leftEffectiveFrame, rctx, 0);
-
-  // Apply effects to left (outgoing) clip
-  const leftAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, leftEffectiveFrame);
-  const leftCombinedEffects = combineEffects(leftClip.effects, leftAdjEffects);
-  let leftFinalCanvas: OffscreenCanvas = leftCanvas;
-
-  if (leftCombinedEffects.length > 0) {
-    const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-    await applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
-    leftFinalCanvas = leftEffectCanvas;
-  }
-
   const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire();
-  const rightKeyframes = keyframesMap.get(rightClip.id);
-  const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, rightEffectiveFrame, canvasSettings);
-  await renderItem(rightCtx, rightClip, rightTransform, rightEffectiveFrame, rctx, 0);
 
-  // Apply effects to right (incoming) clip
-  const rightAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, rightEffectiveFrame);
+  const leftKeyframes = keyframesMap.get(leftClip.id);
+  const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, frame, canvasSettings);
+  const rightKeyframes = keyframesMap.get(rightClip.id);
+  const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, frame, canvasSettings);
+
+  await Promise.all([
+    renderItem(leftCtx, leftClip, leftTransform, frame, rctx, 0),
+    renderItem(rightCtx, rightClip, rightTransform, frame, rctx, 0),
+  ]);
+
+  // Apply effects to both clips (parallel when both have effects)
+  const leftAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
+  const leftCombinedEffects = combineEffects(leftClip.effects, leftAdjEffects);
+  const rightAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
   const rightCombinedEffects = combineEffects(rightClip.effects, rightAdjEffects);
+
+  let leftFinalCanvas: OffscreenCanvas = leftCanvas;
   let rightFinalCanvas: OffscreenCanvas = rightCanvas;
 
-  if (rightCombinedEffects.length > 0) {
-    const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-    await applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
-    rightFinalCanvas = rightEffectCanvas;
+  const hasLeftEffects = leftCombinedEffects.length > 0;
+  const hasRightEffects = rightCombinedEffects.length > 0;
+
+  if (hasLeftEffects || hasRightEffects) {
+    const effectPromises: Promise<unknown>[] = [];
+
+    if (hasLeftEffects) {
+      const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
+      leftFinalCanvas = leftEffectCanvas;
+      effectPromises.push(applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline, rctx.renderMode));
+    }
+    if (hasRightEffects) {
+      const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
+      rightFinalCanvas = rightEffectCanvas;
+      effectPromises.push(applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline, rctx.renderMode));
+    }
+
+    await Promise.all(effectPromises);
   }
 
   // Render transition with effect-applied canvases
   const transitionSettings: TransitionCanvasSettings = canvasSettings;
-  renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings);
+  renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings, rctx.gpuTransitionPipeline);
 
   // Release all canvases back to pool
   if (leftFinalCanvas !== leftCanvas) canvasPool.release(leftFinalCanvas);

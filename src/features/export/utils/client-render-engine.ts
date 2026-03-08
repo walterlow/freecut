@@ -41,6 +41,7 @@ import {
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
 import { EffectsPipeline } from '@/lib/gpu-effects';
+import { TransitionPipeline } from '@/lib/gpu-transitions';
 import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/lib/gpu-compositor';
 import type { CompositeLayer } from '@/lib/gpu-compositor';
 import { MaskTextureManager } from '@/lib/masks/mask-texture-manager';
@@ -186,6 +187,17 @@ export async function createCompositionRenderer(
     });
     return gpuPipelineInitPromise;
   };
+
+  // === GPU Transition Pipeline ===
+  // Shares the GPU device with the effects pipeline
+  let gpuTransitionPipeline: TransitionPipeline | null = null;
+
+  function ensureGpuTransitionPipeline(): boolean {
+    if (gpuTransitionPipeline) return true;
+    if (!gpuPipeline) return false;
+    gpuTransitionPipeline = TransitionPipeline.create(gpuPipeline.getDevice());
+    return gpuTransitionPipeline !== null;
+  }
 
   // === GPU Compositor (for pixel-perfect blend modes) ===
   // Lazily created from the effects pipeline's GPU device
@@ -434,6 +446,7 @@ export async function createCompositionRenderer(
     adjustmentLayers,
     subCompRenderData,
     gpuPipeline: null,
+    gpuTransitionPipeline: null,
     domVideoElementProvider,
   };
 
@@ -1063,13 +1076,20 @@ export async function createCompositionRenderer(
           }
           if (hasAnyGpuEffects) break;
         }
-        if (hasAnyGpuEffects) {
+        if (hasAnyGpuEffects || activeTransitions.length > 0) {
           if (!itemRenderContext.gpuPipeline) {
             itemRenderContext.gpuPipeline = await ensureGpuPipeline();
           }
           if (itemRenderContext.gpuPipeline) {
-            itemRenderContext.gpuPipeline.beginBatch();
-            useBatch = true;
+            if (hasAnyGpuEffects) {
+              itemRenderContext.gpuPipeline.beginBatch();
+              useBatch = true;
+            }
+            // Initialize GPU transition pipeline (shares device with effects pipeline)
+            if (activeTransitions.length > 0 && !itemRenderContext.gpuTransitionPipeline) {
+              ensureGpuTransitionPipeline();
+              itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline;
+            }
           }
         }
       }
@@ -1703,6 +1723,8 @@ export async function createCompositionRenderer(
       gpuCompositor = null;
       gpuMaskManager?.destroy();
       gpuMaskManager = null;
+      gpuTransitionPipeline?.destroy();
+      gpuTransitionPipeline = null;
       gpuPipeline?.destroy();
       gpuPipeline = null;
       canvasPool.dispose();

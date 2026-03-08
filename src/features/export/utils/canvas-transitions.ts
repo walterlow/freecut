@@ -11,6 +11,7 @@ import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/
 import { transitionRegistry } from '@/domain/timeline/transitions/registry';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import { createLogger } from '@/shared/logging/logger';
+import type { TransitionPipeline } from '@/lib/gpu-transitions';
 
 const log = createLogger('CanvasTransitions');
 
@@ -571,7 +572,8 @@ export function renderTransition(
   activeTransition: ActiveTransition,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
-  canvas: TransitionCanvasSettings
+  canvas: TransitionCanvasSettings,
+  gpuTransitionPipeline?: TransitionPipeline | null,
 ): void {
   const { transition, progress } = activeTransition;
   const presentation = transition.presentation;
@@ -588,6 +590,26 @@ export function renderTransition(
 
   // Try registry renderer first
   const renderer = transitionRegistry.getRenderer(presentation);
+
+  // GPU-accelerated path: use TransitionPipeline when available
+  if (renderer?.gpuTransitionId && gpuTransitionPipeline?.has(renderer.gpuTransitionId)) {
+    const result = gpuTransitionPipeline.render(
+      renderer.gpuTransitionId,
+      leftCanvas,
+      rightCanvas,
+      progress,
+      canvas.width,
+      canvas.height,
+      direction as string,
+      transition.properties,
+    );
+    if (result) {
+      ctx.drawImage(result, 0, 0);
+      return;
+    }
+    // Fall through to Canvas 2D if GPU render failed
+  }
+
   if (renderer?.renderCanvas) {
     renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas);
     return;

@@ -2,23 +2,10 @@
 import { Button } from '@/components/ui/button';
 import {
   Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  MoveRight,
-  MoveLeft,
-  MoveDown,
-  MoveUp,
-  FlipHorizontal,
-  FlipVertical,
-  Clock,
-  Circle,
   Trash2,
   Zap,
   Copy,
   RotateCcw,
-  type LucideIcon,
 } from 'lucide-react';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -27,7 +14,6 @@ import type { TimelineState, TimelineActions } from '@/features/editor/deps/time
 import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import {
   TRANSITION_CONFIGS,
-  PRESENTATION_CONFIGS,
   type Transition,
   type TransitionPresentation,
   type TransitionTiming,
@@ -37,45 +23,12 @@ import {
   type PresentationConfig,
 } from '@/types/transition';
 import { cn } from '@/shared/ui/cn';
-
-// Icon mapping for presentation types
-const ICON_MAP: Record<string, LucideIcon> = {
-  Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  MoveRight,
-  MoveLeft,
-  MoveDown,
-  MoveUp,
-  FlipHorizontal,
-  FlipHorizontal2: FlipHorizontal, // Use same icon, rotated via CSS if needed
-  FlipVertical,
-  FlipVertical2: FlipVertical,
-  Clock,
-  Circle,
-};
-
-// Group presentations by category for the picker
-const PRESENTATION_BY_CATEGORY = PRESENTATION_CONFIGS.reduce<
-  Record<string, PresentationConfig[]>
->((acc, config) => {
-  const category = config.category;
-  if (!acc[category]) {
-    acc[category] = [];
-  }
-  acc[category]!.push(config);
-  return acc;
-}, {});
-
-const CATEGORY_LABELS: Record<string, string> = {
-  basic: 'Basic',
-  wipe: 'Wipe',
-  slide: 'Slide',
-  flip: 'Flip',
-  special: 'Special',
-};
+import {
+  TRANSITION_ICON_MAP,
+  TRANSITION_CATEGORY_INFO,
+  TRANSITION_CATEGORY_ORDER,
+  TRANSITION_CONFIGS_BY_CATEGORY,
+} from '@/features/editor/utils/transition-ui-config';
 
 /**
  * Single presentation option button
@@ -89,7 +42,7 @@ const PresentationButton = memo(function PresentationButton({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const Icon = ICON_MAP[config.icon] || Blend;
+  const Icon = TRANSITION_ICON_MAP[config.icon] || Blend;
 
   return (
     <button
@@ -142,23 +95,27 @@ const PresentationPicker = memo(function PresentationPicker({
 
   return (
     <div className="space-y-3">
-      {Object.entries(PRESENTATION_BY_CATEGORY).map(([category, configs]) => (
-        <div key={category}>
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            {CATEGORY_LABELS[category]}
-          </span>
-          <div className="grid grid-cols-4 gap-1 mt-1">
-            {configs.map((config, idx) => (
-              <PresentationButton
-                key={`${config.id}-${config.direction || idx}`}
-                config={config}
-                isSelected={isSelected(config)}
-                onClick={() => onSelect(config.id, config.direction)}
-              />
-            ))}
+      {TRANSITION_CATEGORY_ORDER.map((category) => {
+        const configs = TRANSITION_CONFIGS_BY_CATEGORY[category];
+        if (!configs || configs.length === 0) return null;
+        return (
+          <div key={category}>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              {TRANSITION_CATEGORY_INFO[category]?.title ?? category}
+            </span>
+            <div className="grid grid-cols-4 gap-1 mt-1">
+              {configs.map((config, idx) => (
+                <PresentationButton
+                  key={`${config.id}-${config.direction || idx}`}
+                  config={config}
+                  isSelected={isSelected(config)}
+                  onClick={() => onSelect(config.id, config.direction)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 });

@@ -1,136 +1,24 @@
 ﻿import { memo, useCallback, useMemo } from 'react';
-import {
-  Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowUp,
-  ArrowDown,
-  MoveRight,
-  MoveLeft,
-  MoveUp,
-  MoveDown,
-  FlipHorizontal,
-  FlipVertical,
-  Clock,
-  Circle,
-  Info,
-  type LucideIcon,
-} from 'lucide-react';
+import { Blend, Info } from 'lucide-react';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { transitionRegistry } from '@/domain/timeline/transitions';
 import { areFramesAligned } from '@/features/editor/deps/timeline-utils';
 import type { Transition } from '@/types/transition';
 import type {
-  TransitionCategory,
   WipeDirection,
   SlideDirection,
   FlipDirection,
   PresentationConfig,
 } from '@/types/transition';
 import { cn } from '@/shared/ui/cn';
-
-// Icon mapping for presentations
-const ICON_MAP: Record<string, LucideIcon> = {
-  Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowUp,
-  ArrowDown,
-  MoveRight,
-  MoveLeft,
-  MoveUp,
-  MoveDown,
-  FlipHorizontal,
-  FlipHorizontal2: FlipHorizontal,
-  FlipVertical,
-  FlipVertical2: FlipVertical,
-  Clock,
-  Circle,
-};
-
-// Category display info
-const CATEGORY_INFO: Record<string, { title: string }> = {
-  basic: { title: 'Basic' },
-  wipe: { title: 'Wipe' },
-  slide: { title: 'Slide' },
-  flip: { title: 'Flip' },
-  mask: { title: 'Mask' },
-  light: { title: 'Light' },
-  custom: { title: 'Custom' },
-};
-
-const CATEGORY_ORDER: TransitionCategory[] = [
-  'basic', 'wipe', 'slide', 'flip', 'mask',
-];
-
-// Direction labels for directional transitions
-const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
-  'from-left': { label: 'Left', icon: 'ArrowRight' },
-  'from-right': { label: 'Right', icon: 'ArrowLeft' },
-  'from-top': { label: 'Top', icon: 'ArrowDown' },
-  'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
-};
-
-/**
- * Generate PresentationConfig array from the transition registry.
- * Directional transitions produce one config per direction.
- */
-function generateConfigsFromRegistry(): PresentationConfig[] {
-  const configs: PresentationConfig[] = [];
-  const definitions = transitionRegistry.getDefinitions();
-
-  for (const def of definitions) {
-    if (def.hasDirection && def.directions && def.directions.length > 0) {
-      for (const dir of def.directions) {
-        const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon };
-        configs.push({
-          id: def.id,
-          label: dirInfo.label,
-          description: `${def.label} ${dirInfo.label.toLowerCase()}`,
-          icon: dirInfo.icon,
-          category: def.category,
-          direction: dir,
-        });
-      }
-    } else {
-      configs.push({
-        id: def.id,
-        label: def.label,
-        description: def.description,
-        icon: def.icon,
-        category: def.category,
-      });
-    }
-  }
-
-  return configs;
-}
-
-// Generate configs once (registry is populated at module load)
-const REGISTRY_CONFIGS = generateConfigsFromRegistry();
-
-// Pre-compute categories from registry configs
-function computeCategories(configs: PresentationConfig[]) {
-  const categories: Record<string, PresentationConfig[]> = {};
-  for (const config of configs) {
-    if (!categories[config.category]) {
-      categories[config.category] = [];
-    }
-    categories[config.category]!.push(config);
-  }
-
-  const startIndices: Record<string, number> = {};
-  let running = 0;
-  for (const category of CATEGORY_ORDER) {
-    startIndices[category] = running;
-    running += (categories[category]?.length || 0);
-  }
-
-  return { categories, startIndices };
-}
-
-const { categories: CATEGORIES, startIndices: CATEGORY_START_INDICES } = computeCategories(REGISTRY_CONFIGS);
+import {
+  TRANSITION_ICON_MAP,
+  TRANSITION_CATEGORY_INFO,
+  TRANSITION_CATEGORY_ORDER,
+  TRANSITION_PRESENTATION_CONFIGS,
+  TRANSITION_CONFIGS_BY_CATEGORY,
+  TRANSITION_CATEGORY_START_INDICES,
+} from '@/features/editor/utils/transition-ui-config';
 
 interface TransitionCardProps {
   config: PresentationConfig;
@@ -148,7 +36,7 @@ const TransitionCard = memo(function TransitionCard({
   onApply,
   disabled,
 }: TransitionCardProps) {
-  const Icon = ICON_MAP[config.icon] ?? Blend;
+  const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend;
 
   const handleClick = useCallback(() => {
     onApply(configIndex);
@@ -194,7 +82,7 @@ const CategorySection = memo(function CategorySection({
   onApply,
   disabled,
 }: CategorySectionProps) {
-  const info = CATEGORY_INFO[category] || { title: category };
+  const info = TRANSITION_CATEGORY_INFO[category] || { title: category };
 
   if (configs.length === 0) return null;
 
@@ -317,7 +205,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   // Apply a transition by config index
   const handleApplyByIndex = useCallback(
     (configIndex: number) => {
-      const config = REGISTRY_CONFIGS[configIndex];
+      const config = TRANSITION_PRESENTATION_CONFIGS[configIndex];
       if (!config) return;
 
       // Get fresh state at click time
@@ -367,8 +255,8 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
 
       {/* Transitions grid by category */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {CATEGORY_ORDER.map((category) => {
-          const configs = CATEGORIES[category];
+        {TRANSITION_CATEGORY_ORDER.map((category) => {
+          const configs = TRANSITION_CONFIGS_BY_CATEGORY[category];
           if (!configs || configs.length === 0) return null;
 
           return (
@@ -376,7 +264,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
               key={category}
               category={category}
               configs={configs}
-              startIndex={CATEGORY_START_INDICES[category]!}
+              startIndex={TRANSITION_CATEGORY_START_INDICES[category]!}
               onApply={handleApplyByIndex}
               disabled={!hasValidSelection}
             />

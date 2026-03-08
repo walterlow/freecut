@@ -58,6 +58,9 @@ export interface TransitionRenderer {
 
   /** Optional GLSL fragment shader source for WebGL acceleration */
   glslShader?: string;
+
+  /** GPU transition ID for WebGPU-accelerated rendering via TransitionPipeline */
+  gpuTransitionId?: string;
 }
 
 /**
