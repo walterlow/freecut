@@ -8,6 +8,7 @@ export {
   useTimelineStore,
   useItemsStore,
   useTransitionsStore,
+  useCompositionsStore,
   useTimelineSettingsStore,
   useMediaDependencyStore,
 } from './timeline-contract';

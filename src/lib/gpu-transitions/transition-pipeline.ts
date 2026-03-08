@@ -229,6 +229,80 @@ export class TransitionPipeline {
     return this.outputCanvas;
   }
 
+  renderToTexture(
+    transitionId: string,
+    leftCanvas: OffscreenCanvas,
+    rightCanvas: OffscreenCanvas,
+    progress: number,
+    width: number,
+    height: number,
+    direction?: string,
+    properties?: Record<string, unknown>,
+  ): { texture: GPUTexture; view: GPUTextureView } | null {
+    const pipeline = this.pipelines.get(transitionId);
+    const layout = this.bindGroupLayouts.get(transitionId);
+    const def = getGpuTransition(transitionId);
+    if (!pipeline || !layout || !def) return null;
+    if (width < 2 || height < 2) return null;
+
+    const sizeChanged = this.texW !== width || this.texH !== height;
+    this.ensureTextures(width, height);
+    if (!this.leftTexture || !this.rightTexture) return null;
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: leftCanvas, flipY: false },
+      { texture: this.leftTexture },
+      { width, height },
+    );
+    this.device.queue.copyExternalImageToTexture(
+      { source: rightCanvas, flipY: false },
+      { texture: this.rightTexture },
+      { width, height },
+    );
+
+    const dirNum = directionToNumber(direction);
+    const uniformData = def.packUniforms(progress, width, height, dirNum, properties);
+    const uniformBuffer = this.getOrCreateUniformBuffer(transitionId, uniformData.byteLength);
+    this.device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer, uniformData.byteOffset, uniformData.byteLength);
+
+    let bindGroup = this.cachedBindGroups.get(transitionId);
+    if (!bindGroup || sizeChanged) {
+      const bindEntries: GPUBindGroupEntry[] = [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: this.leftView! },
+        { binding: 2, resource: this.rightView! },
+      ];
+      if (def.uniformSize > 0) {
+        bindEntries.push({ binding: 3, resource: { buffer: uniformBuffer } });
+      }
+      bindGroup = this.device.createBindGroup({ layout, entries: bindEntries });
+      this.cachedBindGroups.set(transitionId, bindGroup);
+    }
+
+    const outputTexture = this.device.createTexture({
+      size: { width, height },
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    const outputView = outputTexture.createView();
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outputView,
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(6);
+    pass.end();
+
+    this.device.queue.submit([commandEncoder.finish()]);
+    return { texture: outputTexture, view: outputView };
+  }
+
   has(transitionId: string): boolean {
     return this.pipelines.has(transitionId);
   }

@@ -574,6 +574,64 @@ export class EffectsPipeline {
     return outCanvas;
   }
 
+  applyEffectsToTexture(
+    source: OffscreenCanvas | HTMLCanvasElement | HTMLVideoElement,
+    effects: GpuEffectInstance[],
+  ): { texture: GPUTexture; view: GPUTextureView } | null {
+    const enabled = effects.filter(e => e.enabled);
+    if (enabled.length === 0) return null;
+    if (!this.blitPipeline || !this.blitBindGroupLayout) return null;
+
+    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
+    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
+    if (w < 2 || h < 2) return null;
+
+    this.ensurePingPong(w, h);
+    if (!this.pingTexture || !this.pongTexture) return null;
+
+    this.device.queue.copyExternalImageToTexture(
+      { source, flipY: false },
+      { texture: this.pingTexture },
+      { width: w, height: h },
+    );
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const finalTex = this.runEffectChain(
+      commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
+    );
+
+    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
+    const blitBindGroup = this.device.createBindGroup({
+      layout: this.blitBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this.sampler },
+        { binding: 1, resource: finalView },
+      ],
+    });
+
+    const outputTexture = this.device.createTexture({
+      size: { width: w, height: h },
+      format: this.format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    const outputView = outputTexture.createView();
+
+    const outputPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outputView,
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    outputPass.setPipeline(this.blitPipeline);
+    outputPass.setBindGroup(0, blitBindGroup);
+    outputPass.draw(6);
+    outputPass.end();
+
+    this.device.queue.submit([commandEncoder.finish()]);
+    return { texture: outputTexture, view: outputView };
+  }
+
   /**
    * Apply effects directly from an HTMLVideoElement via importExternalTexture.
    * Zero-copy: the GPU reads directly from the video decoder's output buffer.

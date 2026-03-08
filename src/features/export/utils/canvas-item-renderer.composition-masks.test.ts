@@ -44,6 +44,7 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     translate: vi.fn(),
     rotate: vi.fn(),
     globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
   } as unknown as OffscreenCanvasRenderingContext2D;
 }
 
@@ -94,28 +95,58 @@ describe('canvas-item-renderer composition masks', () => {
       compositionWidth: 640,
       compositionHeight: 360,
     };
+    const subTrack = {
+      id: 'sub-track',
+      name: 'Sub Track',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 0,
+      items: [subMaskItem, subContentItem],
+    };
 
     const subData: SubCompRenderData = {
       fps: 30,
       durationInFrames: 60,
-      sortedTracks: [
-        {
-          visible: true,
-          items: [subMaskItem, subContentItem],
+      renderPlan: {
+        trackRenderState: {
+          hasSoloTracks: false,
+          maxOrder: 0,
+          visibleTracks: [subTrack],
+          visibleTrackIds: new Set(['sub-track']),
+          visibleTracksByOrderDesc: [subTrack],
+          visibleTracksByOrderAsc: [subTrack],
+          allTracksByOrderDesc: [subTrack],
+          trackOrderMap: new Map([['sub-track', 0]]),
         },
-      ],
+        visualItems: [],
+        videoItems: [],
+        audioItems: [],
+        stableDomTracks: [],
+        visibleShapeMasks: [{ mask: subMaskItem, trackOrder: 0 }],
+        visibleAdjustmentLayers: [],
+        visibleTextFontFamilies: [],
+        transitionClipItems: [],
+        transitionClipMap: new Map(),
+        transitionWindows: [],
+      },
       keyframesMap: new Map(),
     };
 
     const subCanvas = { width: 640, height: 360 } as OffscreenCanvas;
     const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const itemCanvas = { width: 640, height: 360 } as OffscreenCanvas;
     const subCtx = createMockCtx();
     const subContentCtx = createMockCtx();
+    const itemCtx = createMockCtx();
     const rootCtx = createMockCtx();
 
     const acquireQueue = [
       { canvas: subCanvas, ctx: subCtx },
       { canvas: subContentCanvas, ctx: subContentCtx },
+      { canvas: itemCanvas, ctx: itemCtx },
     ];
 
     const canvasPool = {

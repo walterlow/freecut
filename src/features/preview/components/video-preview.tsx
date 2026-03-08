@@ -31,6 +31,7 @@ import { SlipEditOverlay } from './slip-edit-overlay';
 import { SlideEditOverlay } from './slide-edit-overlay';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { useCornerPinStore } from '../stores/corner-pin-store';
+import { useMaskEditorStore } from '../stores/mask-editor-store';
 import type { CompositionInputProps } from '@/types/export';
 import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
@@ -1841,6 +1842,14 @@ export const VideoPreview = memo(function VideoPreview({
     return undefined;
   }, []);
 
+  const getPreviewMasksOverride = useCallback((itemId: string) => {
+    const maskState = useMaskEditorStore.getState();
+    if (maskState.editingItemId === itemId && maskState.previewMasks) {
+      return maskState.previewMasks;
+    }
+    return undefined;
+  }, []);
+
   const fastScrubScaledTracks = useMemo(() => {
     return fastScrubTracks as CompositionInputProps['tracks'];
   }, [
@@ -1935,6 +1944,7 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewTransformOverride,
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
+          getPreviewMasksOverride,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -1983,7 +1993,7 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, isResolving, renderSize.height, renderSize.width]);
+  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, getPreviewMasksOverride, isResolving, renderSize.height, renderSize.width]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -2650,6 +2660,18 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
+    const unsubscribeMaskEditor = useMaskEditorStore.subscribe((state, prev) => {
+      if (!forceFastScrubOverlay) return;
+      if (state.previewMasks === prev.previewMasks) return;
+
+      const currentFrame = usePlaybackStore.getState().currentFrame;
+      if (scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache([currentFrame]);
+      }
+      scrubRequestedFrameRef.current = currentFrame;
+      void pumpRenderLoop();
+    });
+
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
@@ -2669,6 +2691,7 @@ export const VideoPreview = memo(function VideoPreview({
       unsubscribe();
       unsubscribeGizmo();
       unsubscribeCornerPin();
+      unsubscribeMaskEditor();
     };
   }, [
     disposeFastScrubRenderer,

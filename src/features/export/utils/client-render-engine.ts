@@ -24,6 +24,7 @@ import type {
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect } from '@/types/effects';
+import type { ClipMask } from '@/types/masks';
 import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -34,6 +35,7 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
   applyAllEffectsAsync,
+  applyAllEffectsToTexture,
   getAdjustmentLayerEffects,
   combineEffects,
   getGpuEffectInstances,
@@ -71,6 +73,7 @@ import {
 } from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
+  renderTransitionLayer,
   renderTransitionToCanvas,
   calculateMediaDrawDimensions,
   type CanvasSettings,
@@ -128,6 +131,7 @@ export async function createCompositionRenderer(
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
     getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
     getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
+    getPreviewMasksOverride?: (itemId: string) => ClipMask[] | undefined;
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
@@ -142,6 +146,7 @@ export async function createCompositionRenderer(
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
+  const getPreviewMasksOverride = options.getPreviewMasksOverride;
   const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
@@ -217,6 +222,8 @@ export async function createCompositionRenderer(
     const device = gpuPipeline.getDevice();
     gpuCompositor = new CompositorPipeline(device);
     gpuMaskManager = new MaskTextureManager(device);
+    itemRenderContext.gpuCompositor = gpuCompositor;
+    itemRenderContext.gpuMaskManager = gpuMaskManager;
     return true;
   }
 
@@ -423,6 +430,12 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
+    gpuCompositor: null,
+    gpuMaskManager: null,
+    getPreviewTransformOverride,
+    getPreviewEffectsOverride,
+    getPreviewCornerPinOverride,
+    getPreviewMasksOverride,
     domVideoElementProvider,
   };
 
@@ -741,18 +754,10 @@ export async function createCompositionRenderer(
 
           // Build pre-computed render data for this sub-composition (once)
           if (!subCompRenderData.has(compItem.compositionId)) {
-            // Sort tracks once (bottom-to-top: highest order first)
-            const sorted = [...subComp.tracks].sort(
-              (a, b) => (b.order ?? 0) - (a.order ?? 0)
-            );
-
-            // Pre-assign items to tracks and filter out audio/adjustment
-            const sortedWithItems = sorted.map(t => ({
-              visible: t.visible !== false,
-              items: subComp.items.filter(
-                i => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
-              ),
-            }));
+            const subRenderPlan = resolveCompositionRenderPlan({
+              tracks: subComp.tracks,
+              transitions: subComp.transitions ?? [],
+            });
 
             // Build keyframes map for O(1) lookup
             const subKfMap = new Map<string, ItemKeyframes>();
@@ -763,7 +768,7 @@ export async function createCompositionRenderer(
             subCompRenderData.set(compItem.compositionId, {
               fps: subComp.fps,
               durationInFrames: subComp.durationInFrames,
-              sortedTracks: sortedWithItems,
+              renderPlan: subRenderPlan,
               keyframesMap: subKfMap,
             });
           }
@@ -1067,6 +1072,10 @@ export async function createCompositionRenderer(
             itemRenderContext.gpuPipeline = await ensureGpuPipeline();
           }
           if (itemRenderContext.gpuPipeline) {
+            const hasTransitionClipMasks = activeTransitions.some(({ leftClip, rightClip }) => (
+              Boolean(leftClip.masks?.some((mask) => mask.enabled && mask.vertices.length >= 2))
+              || Boolean(rightClip.masks?.some((mask) => mask.enabled && mask.vertices.length >= 2))
+            ));
             if (hasAnyGpuEffects) {
               itemRenderContext.gpuPipeline.beginBatch();
               useBatch = true;
@@ -1075,6 +1084,9 @@ export async function createCompositionRenderer(
             if (activeTransitions.length > 0 && !itemRenderContext.gpuTransitionPipeline) {
               ensureGpuTransitionPipeline();
               itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline;
+            }
+            if (hasTransitionClipMasks && !itemRenderContext.gpuCompositor) {
+              ensureGpuCompositor();
             }
           }
         }
@@ -1089,7 +1101,13 @@ export async function createCompositionRenderer(
         item: TimelineItem,
         trackOrder: number,
         deferred: boolean,
-      ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[]; maskImageData?: ImageData | null; itemId?: string } | null> => {
+      ): Promise<{
+        source: OffscreenCanvas;
+        poolCanvases: OffscreenCanvas[];
+        maskImageData?: ImageData | null;
+        itemId?: string;
+        gpuSource?: { texture: GPUTexture; view: GPUTextureView };
+      } | null> => {
         // Get animated transform
         const itemKeyframes = keyframesMap.get(item.id);
         let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
@@ -1110,6 +1128,10 @@ export async function createCompositionRenderer(
           const cornerPinOverride = getPreviewCornerPinOverride?.(item.id);
           if (cornerPinOverride !== undefined) {
             effectiveItem = { ...item, cornerPin: cornerPinOverride };
+          }
+          const masksOverride = getPreviewMasksOverride?.(item.id);
+          if (masksOverride !== undefined) {
+            effectiveItem = { ...effectiveItem, masks: masksOverride };
           }
         }
 
@@ -1181,6 +1203,25 @@ export async function createCompositionRenderer(
             itemRenderContext.gpuPipeline = await ensureGpuPipeline();
             if (!itemRenderContext.gpuPipeline) {
               console.warn('[CompositionRenderer] GPU pipeline init failed — GPU effects will be skipped');
+            }
+          }
+          if (useGpuLayerCompositor && deferred && itemRenderContext.gpuPipeline) {
+            const gpuSource = applyAllEffectsToTexture(
+              itemCanvas,
+              combinedEffects,
+              frame,
+              canvasSettings,
+              itemRenderContext.gpuPipeline,
+            );
+            if (gpuSource) {
+              const maskImageData = createPositionedItemClipMask(item, transform);
+              return {
+                source: itemCanvas,
+                poolCanvases: [itemCanvas],
+                maskImageData,
+                itemId: item.id,
+                gpuSource,
+              };
             }
           }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
@@ -1466,10 +1507,13 @@ export async function createCompositionRenderer(
             if (task.type === 'item') {
               return renderItemWithEffects(task.item, task.trackOrder, true);
             }
-            // Transitions: render to a dedicated canvas
-            const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire();
-            await renderTransitionToCanvas(trCtx, task.transition, frame, itemRenderContext, task.trackOrder);
-            return { source: trCanvas, poolCanvases: [trCanvas] } as { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
+            return renderTransitionLayer(
+              task.transition,
+              frame,
+              itemRenderContext,
+              task.trackOrder,
+              useGpuLayerCompositor ? 'texture' : 'canvas',
+            );
           }),
         );
 
@@ -1502,17 +1546,19 @@ export async function createCompositionRenderer(
                 })()
               : { hasMask: false, view: gpuMaskManager.getFallbackView() };
 
-            // Upload item canvas to GPU texture
-            const tex = device.createTexture({
+            const tex = result.gpuSource?.texture ?? device.createTexture({
               size: [w, h],
               format: 'rgba8unorm',
               usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
             });
-            device.queue.copyExternalImageToTexture(
-              { source: result.source, flipY: false },
-              { texture: tex },
-              { width: w, height: h },
-            );
+            if (!result.gpuSource) {
+              if (!result.source) continue;
+              device.queue.copyExternalImageToTexture(
+                { source: result.source, flipY: false },
+                { texture: tex },
+                { width: w, height: h },
+              );
+            }
             layerTextures.push(tex);
 
             layers.push({
@@ -1523,7 +1569,7 @@ export async function createCompositionRenderer(
                 outputAspect: w / h,
                 hasMask: maskInfo.hasMask,
               },
-              textureView: tex.createView(),
+              textureView: result.gpuSource?.view ?? tex.createView(),
               maskView: maskInfo.view,
             });
 
@@ -1604,7 +1650,9 @@ export async function createCompositionRenderer(
               contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
             }
 
-            contentCtx.drawImage(result.source, 0, 0);
+            if (result.source) {
+              contentCtx.drawImage(result.source, 0, 0);
+            }
 
             if (blendMode && blendMode !== 'normal') {
               contentCtx.globalCompositeOperation = 'source-over';

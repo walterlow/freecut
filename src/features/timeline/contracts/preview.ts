@@ -6,6 +6,7 @@ export type { TimelineState } from '../types';
 export { useTimelineStore } from '../stores/timeline-store';
 export { useItemsStore } from '../stores/items-store';
 export { useTransitionsStore } from '../stores/transitions-store';
+export { useCompositionsStore } from '../stores/compositions-store';
 export { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 export { useMediaDependencyStore } from '../stores/media-dependency-store';
 export { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';

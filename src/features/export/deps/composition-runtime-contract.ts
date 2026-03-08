@@ -3,6 +3,11 @@
  * Export modules should import composition-runtime utilities from here.
  */
 
+export type {
+  CompositionRenderPlan,
+  TrackRenderState,
+} from '@/features/composition-runtime/utils/scene-assembly';
+
 export {
   resolveTransform,
   getSourceDimensions,

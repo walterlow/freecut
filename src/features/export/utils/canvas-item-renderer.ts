@@ -18,12 +18,23 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
+import type { ItemEffect } from '@/types/effects';
+import type { ClipMask } from '@/types/masks';
+import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
+import { getCompositeOperation } from '@/types/blend-mode-css';
+import { transitionRegistry } from '@/domain/timeline/transitions/registry';
+import { renderMasks } from '@/infrastructure/gpu/masks';
+import { DEFAULT_LAYER_PARAMS } from '@/infrastructure/gpu/compositor';
+import type { CompositeLayer } from '@/infrastructure/gpu/compositor';
+import type { MaskTextureManager } from '@/infrastructure/gpu/masks';
+import type { CompositorPipeline } from '@/infrastructure/gpu/compositor';
 
 // Subsystem imports
 import { getAnimatedTransform } from './canvas-keyframes';
 import {
   applyAllEffectsAsync,
+  applyAllEffectsToTexture,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
@@ -38,7 +49,13 @@ import { renderShape } from './canvas-shapes';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
-import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
+import {
+  getShapePath,
+  rotatePath,
+  resolveFrameCompositionScene,
+  resolveFrameRenderScene,
+  type CompositionRenderPlan,
+} from '@/features/export/deps/composition-runtime';
 import { hasCornerPin, drawCornerPinImage } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
@@ -125,6 +142,14 @@ export interface ItemRenderContext {
 
   // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
   gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
+  gpuCompositor?: CompositorPipeline | null;
+  gpuMaskManager?: MaskTextureManager | null;
+
+  // Preview override hooks used by the composition renderer.
+  getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
+  getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
+  getPreviewMasksOverride?: (itemId: string) => ClipMask[] | undefined;
 
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Remotion Player's <video> elements are already at
@@ -139,13 +164,54 @@ export interface ItemRenderContext {
 export interface SubCompRenderData {
   fps: number;
   durationInFrames: number;
-  /** Tracks sorted bottom-to-top (highest order first), with items pre-assigned */
-  sortedTracks: Array<{
-    visible: boolean;
-    items: TimelineItem[];
-  }>;
+  renderPlan: CompositionRenderPlan;
   /** O(1) keyframe lookup by item ID */
   keyframesMap: Map<string, ItemKeyframes>;
+}
+
+function resolvePreviewItemOverrides(
+  item: TimelineItem,
+  transform: ItemTransform,
+  rctx: ItemRenderContext,
+): {
+  item: TimelineItem;
+  transform: ItemTransform;
+  itemEffects: ItemEffect[] | undefined;
+} {
+  if (rctx.renderMode !== 'preview') {
+    return {
+      item,
+      transform,
+      itemEffects: item.effects,
+    };
+  }
+
+  let effectiveTransform = transform;
+  const transformOverride = rctx.getPreviewTransformOverride?.(item.id);
+  if (transformOverride) {
+    effectiveTransform = {
+      ...transform,
+      ...transformOverride,
+      cornerRadius: transformOverride.cornerRadius ?? transform.cornerRadius,
+    };
+  }
+
+  let effectiveItem = item;
+  const cornerPinOverride = rctx.getPreviewCornerPinOverride?.(item.id);
+  if (cornerPinOverride !== undefined) {
+    effectiveItem = { ...effectiveItem, cornerPin: cornerPinOverride };
+  }
+
+  const masksOverride = rctx.getPreviewMasksOverride?.(item.id);
+  if (masksOverride !== undefined) {
+    effectiveItem = { ...effectiveItem, masks: masksOverride };
+  }
+
+  return {
+    item: effectiveItem,
+    transform: effectiveTransform,
+    itemEffects: rctx.getPreviewEffectsOverride?.(item.id) ?? effectiveItem.effects,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -900,6 +966,265 @@ function drawUnderline(
   ctx.strokeStyle = previousStrokeStyle;
 }
 
+function applyItemClipMasksToCanvas(
+  item: TimelineItem,
+  source: OffscreenCanvas,
+  transform: ItemTransform,
+  rctx: ItemRenderContext,
+): { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } {
+  const clipMasks = item.masks?.filter((mask) => mask.enabled && mask.vertices.length >= 2);
+  if (!clipMasks || clipMasks.length === 0) {
+    return { source, poolCanvases: [] };
+  }
+
+  const { canvas: maskCanvas, ctx: maskCtx } = rctx.canvasPool.acquire();
+  const { width: canvasWidth, height: canvasHeight } = rctx.canvasSettings;
+
+  maskCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+  maskCtx.drawImage(source, 0, 0);
+  maskCtx.globalCompositeOperation = 'destination-in';
+
+  const itemLeft = Math.round(canvasWidth / 2 + transform.x - transform.width / 2);
+  const itemTop = Math.round(canvasHeight / 2 + transform.y - transform.height / 2);
+  const maskWidth = Math.round(transform.width);
+  const maskHeight = Math.round(transform.height);
+
+  if (maskWidth > 0 && maskHeight > 0) {
+    const maskImage = renderMasks(clipMasks, maskWidth, maskHeight);
+    const tempCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+    const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx) {
+      tempCtx.putImageData(maskImage, itemLeft, itemTop);
+      maskCtx.drawImage(tempCanvas, 0, 0);
+    }
+  }
+
+  maskCtx.globalCompositeOperation = 'source-over';
+  return { source: maskCanvas, poolCanvases: [maskCanvas] };
+}
+
+function createPositionedItemClipMask(
+  item: TimelineItem,
+  transform: ItemTransform,
+  rctx: ItemRenderContext,
+): ImageData | null {
+  const clipMasks = item.masks?.filter((mask) => mask.enabled && mask.vertices.length >= 2);
+  if (!clipMasks || clipMasks.length === 0) {
+    return null;
+  }
+
+  const maskWidth = Math.round(transform.width);
+  const maskHeight = Math.round(transform.height);
+  if (maskWidth <= 0 || maskHeight <= 0) {
+    return null;
+  }
+
+  const maskImage = renderMasks(clipMasks, maskWidth, maskHeight);
+  const fullWidth = rctx.canvasSettings.width;
+  const fullHeight = rctx.canvasSettings.height;
+  const fullData = new Uint8ClampedArray(fullWidth * fullHeight * 4);
+
+  const itemLeft = Math.round(fullWidth / 2 + transform.x - transform.width / 2);
+  const itemTop = Math.round(fullHeight / 2 + transform.y - transform.height / 2);
+  const srcData = maskImage.data;
+
+  for (let srcY = 0; srcY < maskHeight; srcY++) {
+    const dstY = itemTop + srcY;
+    if (dstY < 0 || dstY >= fullHeight) continue;
+
+    const srcRowStart = srcY * maskWidth * 4;
+    const dstRowStart = dstY * fullWidth * 4;
+
+    let copyStartX = 0;
+    let copyWidth = maskWidth;
+    let dstX = itemLeft;
+
+    if (dstX < 0) {
+      copyStartX = -dstX;
+      copyWidth -= copyStartX;
+      dstX = 0;
+    }
+    if (dstX + copyWidth > fullWidth) {
+      copyWidth = fullWidth - dstX;
+    }
+    if (copyWidth <= 0) continue;
+
+    const srcOffset = srcRowStart + copyStartX * 4;
+    const dstOffset = dstRowStart + dstX * 4;
+    fullData.set(srcData.subarray(srcOffset, srcOffset + copyWidth * 4), dstOffset);
+  }
+
+  return new ImageData(fullData, fullWidth, fullHeight);
+}
+
+function createFrameMaskImageData(
+  masks: Array<{
+    path: Path2D;
+    inverted: boolean;
+    feather: number;
+    maskType: 'clip' | 'alpha';
+  }>,
+  canvas: MaskCanvasSettings,
+): ImageData | null {
+  if (masks.length === 0) return null;
+
+  const whiteCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+  const whiteCtx = whiteCanvas.getContext('2d');
+  if (!whiteCtx) return null;
+  whiteCtx.fillStyle = '#ffffff';
+  whiteCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const maskCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+  const maskCtx = maskCanvas.getContext('2d');
+  if (!maskCtx) return null;
+
+  applyMasks(maskCtx, whiteCanvas, masks, canvas);
+  return maskCtx.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function applyMaskImageDataOnGpu(
+  source: OffscreenCanvas,
+  maskImageData: ImageData,
+  maskId: string,
+  rctx: ItemRenderContext,
+): OffscreenCanvas | null {
+  if (!rctx.gpuPipeline || !rctx.gpuCompositor || !rctx.gpuMaskManager) {
+    return null;
+  }
+
+  const width = rctx.canvasSettings.width;
+  const height = rctx.canvasSettings.height;
+  const device = rctx.gpuPipeline.getDevice();
+  const texture = device.createTexture({
+    size: [width, height],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  try {
+    device.queue.copyExternalImageToTexture(
+      { source, flipY: false },
+      { texture },
+      { width, height },
+    );
+    rctx.gpuMaskManager.updateMask(maskId, maskImageData);
+    const maskInfo = rctx.gpuMaskManager.getMaskInfo(maskId);
+    if (!maskInfo.hasMask) {
+      return null;
+    }
+
+    const commandEncoder = device.createCommandEncoder();
+    const masked = rctx.gpuCompositor.applyMaskToTexture(
+      { texture, view: texture.createView() },
+      maskInfo.view,
+      width,
+      height,
+      commandEncoder,
+    );
+    if (!masked) {
+      device.queue.submit([commandEncoder.finish()]);
+      return null;
+    }
+
+    const gpuCanvas = rctx.gpuCompositor.renderTextureToCanvas(masked, width, height, commandEncoder);
+    device.queue.submit([commandEncoder.finish()]);
+    return gpuCanvas;
+  } finally {
+    texture.destroy();
+  }
+}
+
+async function renderItemWithEffectsToCanvas(
+  item: TimelineItem,
+  trackOrder: number,
+  frame: number,
+  rctx: ItemRenderContext,
+  deferClipMaskToGpu: boolean = false,
+  preferGpuSource: boolean = false,
+): Promise<{
+  source: OffscreenCanvas;
+  poolCanvases: OffscreenCanvas[];
+  maskImageData?: ImageData | null;
+  itemId?: string;
+  effectiveItem?: TimelineItem;
+  transform?: ItemTransform;
+  gpuSource?: { texture: GPUTexture; view: GPUTextureView };
+}> {
+  const itemKeyframes = rctx.keyframesMap.get(item.id);
+  const animatedTransform = getAnimatedTransform(item, itemKeyframes, frame, rctx.canvasSettings);
+  const {
+    item: effectiveItem,
+    transform,
+    itemEffects,
+  } = resolvePreviewItemOverrides(item, animatedTransform, rctx);
+  const { canvas: itemCanvas, ctx: itemCtx } = rctx.canvasPool.acquire();
+
+  await renderItem(itemCtx, effectiveItem, transform, frame, rctx);
+
+  const adjustmentEffects = getAdjustmentLayerEffects(trackOrder, rctx.adjustmentLayers, frame);
+  const combinedEffects = combineEffects(itemEffects, adjustmentEffects);
+
+  let source = itemCanvas;
+  const poolCanvases: OffscreenCanvas[] = [itemCanvas];
+
+  if (combinedEffects.length > 0) {
+    let gpuSource: { texture: GPUTexture; view: GPUTextureView } | undefined;
+    if (preferGpuSource && rctx.gpuPipeline) {
+      gpuSource = applyAllEffectsToTexture(
+        itemCanvas,
+        combinedEffects,
+        frame,
+        rctx.canvasSettings,
+        rctx.gpuPipeline,
+      ) ?? undefined;
+    }
+
+    if (gpuSource) {
+      const maskImageData = createPositionedItemClipMask(effectiveItem, transform, rctx);
+      return {
+        source,
+        poolCanvases,
+        maskImageData,
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource,
+      };
+    }
+
+    const { canvas: effectCanvas, ctx: effectCtx } = rctx.canvasPool.acquire();
+    poolCanvases.push(effectCanvas);
+    const deferredGpuCanvas = await applyAllEffectsAsync(
+      effectCtx,
+      itemCanvas,
+      combinedEffects,
+      frame,
+      rctx.canvasSettings,
+      rctx.gpuPipeline,
+    );
+    source = deferredGpuCanvas ?? effectCanvas;
+  }
+
+  const maskImageData = deferClipMaskToGpu
+    ? createPositionedItemClipMask(effectiveItem, transform, rctx)
+    : null;
+  if (!maskImageData) {
+    const masked = applyItemClipMasksToCanvas(effectiveItem, source, transform, rctx);
+    poolCanvases.push(...masked.poolCanvases);
+    source = masked.source;
+  }
+
+  return {
+    source,
+    poolCanvases,
+    maskImageData,
+    itemId: effectiveItem.id,
+    effectiveItem,
+    transform,
+    gpuSource: undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Composition item (sub-composition / pre-comp)
 // ---------------------------------------------------------------------------
@@ -968,6 +1293,7 @@ async function renderCompositionItem(
       height: item.compositionHeight,
       fps: subData.fps,
     };
+    const subRenderPlan = subData.renderPlan;
 
     // Use a scoped render context with sub-canvas settings so that
     // rotation centers, clipping, and draw dimensions are relative to the
@@ -976,79 +1302,248 @@ async function renderCompositionItem(
       ...rctx,
       fps: subData.fps,
       canvasSettings: subCanvasSettings,
+      keyframesMap: subData.keyframesMap,
+      adjustmentLayers: subRenderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[],
     };
 
-    // Render each visible item at the local frame using pre-computed data.
-    // Collect active mask shapes and apply them as a group, matching
-    // main-composition mask behavior.
-    const activeSubMasks: Array<{
-      path: Path2D;
-      inverted: boolean;
-      feather: number;
-      maskType: 'clip' | 'alpha';
-    }> = [];
-    let renderedSubItems = 0;
-    for (const track of subData.sortedTracks) {
-      if (!track.visible) continue;
+    const frameScene = resolveFrameCompositionScene({
+      renderPlan: subRenderPlan,
+      frame: localFrame,
+      canvas: subCanvasSettings,
+      getKeyframes: (itemId) => subData.keyframesMap.get(itemId),
+      getPreviewTransform: subRctx.getPreviewTransformOverride,
+    });
+    const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
 
-      for (const subItem of track.items) {
-        // Check if item is visible at this local frame
+    const activeSubMasks = frameScene.activeShapeMasks.map(({ shape, transform: maskTransform }) => {
+      const maskType = shape.maskType ?? 'clip';
+      const feather = maskType === 'alpha' ? (shape.maskFeather ?? 0) : 0;
+      let svgPath = getShapePath(
+        shape,
+        {
+          x: maskTransform.x,
+          y: maskTransform.y,
+          width: maskTransform.width,
+          height: maskTransform.height,
+          rotation: 0,
+          opacity: maskTransform.opacity,
+        },
+        {
+          canvasWidth: subCanvasSettings.width,
+          canvasHeight: subCanvasSettings.height,
+        },
+      );
+
+      if (maskTransform.rotation !== 0) {
+        const centerX = subCanvasSettings.width / 2 + maskTransform.x;
+        const centerY = subCanvasSettings.height / 2 + maskTransform.y;
+        svgPath = rotatePath(svgPath, maskTransform.rotation, centerX, centerY);
+      }
+
+      return {
+        path: svgPathToPath2D(svgPath),
+        inverted: shape.maskInvert ?? false,
+        feather,
+        maskType,
+      };
+    });
+
+    const renderScene = resolveFrameRenderScene<ActiveTransition>({
+      tracksByOrderDesc: subRenderPlan.trackRenderState.visibleTracksByOrderDesc,
+      tracksByOrderAsc: subRenderPlan.trackRenderState.visibleTracksByOrderAsc,
+      visibleTrackIds: subRenderPlan.trackRenderState.visibleTrackIds,
+      activeTransitions,
+      getTransitionTrackOrder: (activeTransition) => (
+        subRenderPlan.trackRenderState.trackOrderMap.get(activeTransition.transition.trackId ?? '') ?? 0
+      ),
+      disableOcclusion: true,
+      shouldRenderItem: (subItem) => {
         if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
-          continue;
+          return false;
         }
+        if (transitionClipIds.has(subItem.id)) return false;
+        if (subItem.type === 'audio' || subItem.type === 'adjustment') return false;
+        if (subItem.type === 'shape' && subItem.isMask) return false;
+        return true;
+      },
+      isFullyOccluding: () => false,
+    });
 
-        const subItemKeyframes = subData.keyframesMap.get(subItem.id);
-        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
+    const hasNonNormalBlend = renderScene.renderTasks.some(
+      (task) => task.type === 'item' && Boolean(task.item.blendMode && task.item.blendMode !== 'normal'),
+    );
+    const hasItemClipMasks = renderScene.renderTasks.some(
+      (task) => task.type === 'item' && Boolean(task.item.masks?.some((mask) => mask.enabled && mask.vertices.length >= 2)),
+    );
+    const useGpuLayerCompositor = Boolean(
+      (hasNonNormalBlend || hasItemClipMasks)
+      && subRctx.gpuPipeline
+      && subRctx.gpuCompositor
+      && subRctx.gpuMaskManager
+    );
 
-        if (subItem.type === 'shape' && subItem.isMask) {
-          const maskType = subItem.maskType ?? 'clip';
-          const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
-          let svgPath = getShapePath(
-            subItem,
-            {
-              x: subItemTransform.x,
-              y: subItemTransform.y,
-              width: subItemTransform.width,
-              height: subItemTransform.height,
-              rotation: 0,
-              opacity: subItemTransform.opacity,
-            },
-            {
-              canvasWidth: subCanvasSettings.width,
-              canvasHeight: subCanvasSettings.height,
-            }
+    let renderedSubItems = 0;
+    const renderResults = await Promise.all(
+      renderScene.renderTasks.map(async (task) => {
+        if (task.type === 'transition') {
+          return renderTransitionLayer(
+            task.transition,
+            localFrame,
+            subRctx,
+            task.trackOrder,
+            useGpuLayerCompositor ? 'texture' : 'canvas',
           );
-
-          if (subItemTransform.rotation !== 0) {
-            const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
-            const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
-            svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
-          }
-
-          activeSubMasks.push({
-            path: svgPathToPath2D(svgPath),
-            inverted: subItem.maskInvert ?? false,
-            feather,
-            maskType,
-          });
-          continue;
         }
 
         if (frame === 0) {
           log.info('Rendering sub-comp item', {
-            itemId: subItem.id.substring(0, 8),
-            type: subItem.type,
+            itemId: task.item.id.substring(0, 8),
+            type: task.item.type,
             localFrame,
-            subItemFrom: subItem.from,
-            subItemDuration: subItem.durationInFrames,
-            hasExtractor: rctx.videoExtractors.has(subItem.id),
-            hasImage: rctx.imageElements.has(subItem.id),
-            hasGif: rctx.gifFramesMap.has(subItem.id),
+            subItemFrom: task.item.from,
+            subItemDuration: task.item.durationInFrames,
+            hasExtractor: rctx.videoExtractors.has(task.item.id),
+            hasImage: rctx.imageElements.has(task.item.id),
+            hasGif: rctx.gifFramesMap.has(task.item.id),
           });
         }
 
-        await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
-        renderedSubItems++;
+        return renderItemWithEffectsToCanvas(
+          task.item,
+          task.trackOrder,
+          localFrame,
+          subRctx,
+          useGpuLayerCompositor,
+          useGpuLayerCompositor,
+        );
+      }),
+    );
+
+    let finalSubMaskAppliedOnGpu = false;
+    if (useGpuLayerCompositor && subRctx.gpuCompositor && subRctx.gpuMaskManager && subRctx.gpuPipeline) {
+      const device = subRctx.gpuPipeline.getDevice();
+      const layers: CompositeLayer[] = [];
+      const layerTextures: GPUTexture[] = [];
+
+      for (let i = 0; i < renderResults.length; i++) {
+        const result = renderResults[i];
+        if (!result) continue;
+
+        const task = renderScene.renderTasks[i]!;
+        const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+        const maskInfo = task.type === 'item' && result.itemId
+          ? (() => {
+              subRctx.gpuMaskManager!.updateMask(result.itemId, result.maskImageData ?? null);
+              return subRctx.gpuMaskManager!.getMaskInfo(result.itemId);
+            })()
+          : { hasMask: false, view: subRctx.gpuMaskManager.getFallbackView() };
+
+        const tex = result.gpuSource?.texture ?? device.createTexture({
+          size: [subCanvasSettings.width, subCanvasSettings.height],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        if (!result.gpuSource) {
+          if (!result.source) continue;
+          device.queue.copyExternalImageToTexture(
+            { source: result.source, flipY: false },
+            { texture: tex },
+            { width: subCanvasSettings.width, height: subCanvasSettings.height },
+          );
+        }
+        layerTextures.push(tex);
+
+        layers.push({
+          params: {
+            ...DEFAULT_LAYER_PARAMS,
+            blendMode,
+            sourceAspect: subCanvasSettings.width / subCanvasSettings.height,
+            outputAspect: subCanvasSettings.width / subCanvasSettings.height,
+            hasMask: maskInfo.hasMask,
+          },
+          textureView: result.gpuSource?.view ?? tex.createView(),
+          maskView: maskInfo.view,
+        });
+
+        for (const poolCanvas of result.poolCanvases) {
+          rctx.canvasPool.release(poolCanvas);
+        }
+        renderedSubItems += 1;
+      }
+
+      if (layers.length > 0) {
+        const commandEncoder = device.createCommandEncoder();
+        let composited = subRctx.gpuCompositor.compositeToTexture(
+          layers,
+          subCanvasSettings.width,
+          subCanvasSettings.height,
+          commandEncoder,
+        );
+        if (composited) {
+          if (activeSubMasks.length > 0) {
+            const frameMaskImageData = createFrameMaskImageData(activeSubMasks, subMaskSettings);
+            if (frameMaskImageData) {
+              const frameMaskId = `__subframe__:${item.id}`;
+              subRctx.gpuMaskManager.updateMask(frameMaskId, frameMaskImageData);
+              const frameMaskInfo = subRctx.gpuMaskManager.getMaskInfo(frameMaskId);
+              if (frameMaskInfo.hasMask) {
+                composited = subRctx.gpuCompositor.applyMaskToTexture(
+                  composited,
+                  frameMaskInfo.view,
+                  subCanvasSettings.width,
+                  subCanvasSettings.height,
+                  commandEncoder,
+                ) ?? composited;
+                finalSubMaskAppliedOnGpu = true;
+              }
+            }
+          }
+
+          const gpuCanvas = subRctx.gpuCompositor.renderTextureToCanvas(
+            composited,
+            subCanvasSettings.width,
+            subCanvasSettings.height,
+            commandEncoder,
+          );
+          device.queue.submit([commandEncoder.finish()]);
+          if (gpuCanvas) {
+            if (finalSubMaskAppliedOnGpu) {
+              subCtx.drawImage(gpuCanvas, 0, 0);
+            } else {
+              subContentCtx.drawImage(gpuCanvas, 0, 0);
+            }
+          }
+        } else {
+          device.queue.submit([commandEncoder.finish()]);
+        }
+      }
+
+      for (const tex of layerTextures) {
+        tex.destroy();
+      }
+    } else {
+      for (let i = 0; i < renderResults.length; i++) {
+        const result = renderResults[i];
+        if (!result) continue;
+
+        const task = renderScene.renderTasks[i]!;
+        try {
+          const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+          if (blendMode && blendMode !== 'normal') {
+            subContentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
+          }
+          if (result.source) {
+            subContentCtx.drawImage(result.source, 0, 0);
+          }
+          if (blendMode && blendMode !== 'normal') {
+            subContentCtx.globalCompositeOperation = 'source-over';
+          }
+          renderedSubItems += 1;
+        } finally {
+          for (const poolCanvas of result.poolCanvases) {
+            rctx.canvasPool.release(poolCanvas);
+          }
+        }
       }
     }
 
@@ -1057,11 +1552,13 @@ async function renderCompositionItem(
         compositionId: item.compositionId.substring(0, 8),
         localFrame,
         renderedSubItems,
-        trackCount: subData.sortedTracks.length,
+        trackCount: subRenderPlan.trackRenderState.visibleTracksByOrderDesc.length,
       });
     }
 
-    applyMasks(subCtx, subContentCanvas, activeSubMasks, subMaskSettings);
+    if (!finalSubMaskAppliedOnGpu) {
+      applyMasks(subCtx, subContentCanvas, activeSubMasks, subMaskSettings);
+    }
 
     // Draw the sub-composition result onto the main canvas at the CompositionItem's position
     const drawDimensions = calculateMediaDrawDimensions(
@@ -1088,6 +1585,134 @@ async function renderCompositionItem(
 // Transition compositing
 // ---------------------------------------------------------------------------
 
+export interface DeferredRenderLayerResult {
+  source?: OffscreenCanvas;
+  gpuSource?: { texture: GPUTexture; view: GPUTextureView };
+  poolCanvases: OffscreenCanvas[];
+}
+
+async function prepareTransitionSources(
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+): Promise<{
+  leftFinalCanvas: OffscreenCanvas;
+  rightFinalCanvas: OffscreenCanvas;
+  poolCanvases: OffscreenCanvas[];
+  transitionId?: string;
+}> {
+  const { leftClip, rightClip, transition } = activeTransition;
+  const renderer = transitionRegistry.getRenderer(transition.presentation);
+  const canUseGpuTransition = Boolean(
+    renderer?.gpuTransitionId
+    && rctx.gpuTransitionPipeline?.has(renderer.gpuTransitionId),
+  );
+  const deferClipMasksToGpu = Boolean(
+    canUseGpuTransition
+    && rctx.gpuPipeline
+    && rctx.gpuCompositor
+    && rctx.gpuMaskManager,
+  );
+
+  const [leftResult, rightResult] = await Promise.all([
+    renderItemWithEffectsToCanvas(leftClip, trackOrder, frame, rctx, deferClipMasksToGpu, false),
+    renderItemWithEffectsToCanvas(rightClip, trackOrder, frame, rctx, deferClipMasksToGpu, false),
+  ]);
+
+  let leftFinalCanvas: OffscreenCanvas = leftResult.source;
+  let rightFinalCanvas: OffscreenCanvas = rightResult.source;
+  const poolCanvases = [
+    ...leftResult.poolCanvases,
+    ...rightResult.poolCanvases,
+  ];
+
+  if (deferClipMasksToGpu) {
+    if (leftResult.maskImageData && leftResult.itemId && leftResult.effectiveItem && leftResult.transform) {
+      const gpuMaskedLeft = applyMaskImageDataOnGpu(leftResult.source, leftResult.maskImageData, `__transition-left__:${leftResult.itemId}`, rctx);
+      if (gpuMaskedLeft) {
+        leftFinalCanvas = gpuMaskedLeft;
+      } else {
+        const masked = applyItemClipMasksToCanvas(
+          leftResult.effectiveItem,
+          leftResult.source,
+          leftResult.transform,
+          rctx,
+        );
+        leftFinalCanvas = masked.source;
+        poolCanvases.push(...masked.poolCanvases);
+      }
+    }
+    if (rightResult.maskImageData && rightResult.itemId && rightResult.effectiveItem && rightResult.transform) {
+      const gpuMaskedRight = applyMaskImageDataOnGpu(rightResult.source, rightResult.maskImageData, `__transition-right__:${rightResult.itemId}`, rctx);
+      if (gpuMaskedRight) {
+        rightFinalCanvas = gpuMaskedRight;
+      } else {
+        const masked = applyItemClipMasksToCanvas(
+          rightResult.effectiveItem,
+          rightResult.source,
+          rightResult.transform,
+          rctx,
+        );
+        rightFinalCanvas = masked.source;
+        poolCanvases.push(...masked.poolCanvases);
+      }
+    }
+  }
+
+  return {
+    leftFinalCanvas,
+    rightFinalCanvas,
+    poolCanvases,
+    transitionId: canUseGpuTransition ? renderer?.gpuTransitionId : undefined,
+  };
+}
+
+export async function renderTransitionLayer(
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+  mode: 'canvas' | 'texture' = 'canvas',
+): Promise<DeferredRenderLayerResult> {
+  const { canvasPool, canvasSettings } = rctx;
+  const { transition } = activeTransition;
+  const prepared = await prepareTransitionSources(activeTransition, frame, rctx, trackOrder);
+
+  if (mode === 'texture' && prepared.transitionId && rctx.gpuTransitionPipeline) {
+    const gpuSource = rctx.gpuTransitionPipeline.renderToTexture(
+      prepared.transitionId,
+      prepared.leftFinalCanvas,
+      prepared.rightFinalCanvas,
+      activeTransition.progress,
+      canvasSettings.width,
+      canvasSettings.height,
+      transition.direction as string,
+      transition.properties,
+    );
+    if (gpuSource) {
+      return {
+        gpuSource,
+        poolCanvases: prepared.poolCanvases,
+      };
+    }
+  }
+
+  const { canvas: transitionCanvas, ctx: transitionCtx } = canvasPool.acquire();
+  renderTransition(
+    transitionCtx,
+    activeTransition,
+    prepared.leftFinalCanvas,
+    prepared.rightFinalCanvas,
+    canvasSettings,
+    rctx.gpuTransitionPipeline,
+  );
+  return {
+    source: transitionCanvas,
+    poolCanvases: [...prepared.poolCanvases, transitionCanvas],
+  };
+}
+
 /**
  * Render a single active transition: renders both clips with effects, then
  * composites them via the transition renderer.
@@ -1099,82 +1724,14 @@ export async function renderTransitionToCanvas(
   rctx: ItemRenderContext,
   trackOrder: number,
 ): Promise<void> {
-  const { canvasPool, canvasSettings, keyframesMap, adjustmentLayers } = rctx;
-  const { leftClip, rightClip } = activeTransition;
-
-  // === PERFORMANCE: Render both clips in parallel ===
-  // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
-  // Running both clips concurrently halves the decode wait time.
-  const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
-  const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire();
-
-  const leftKeyframes = keyframesMap.get(leftClip.id);
-  const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, frame, canvasSettings);
-  const rightKeyframes = keyframesMap.get(rightClip.id);
-  const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, frame, canvasSettings);
-
-  await Promise.all([
-    renderItem(leftCtx, leftClip, leftTransform, frame, rctx, 0),
-    renderItem(rightCtx, rightClip, rightTransform, frame, rctx, 0),
-  ]);
-
-  // Apply effects to both clips (parallel when both have effects)
-  const adjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
-  const leftCombinedEffects = combineEffects(leftClip.effects, adjEffects);
-  const rightCombinedEffects = combineEffects(rightClip.effects, adjEffects);
-
-  let leftFinalCanvas: OffscreenCanvas = leftCanvas;
-  let rightFinalCanvas: OffscreenCanvas = rightCanvas;
-
-  const hasLeftEffects = leftCombinedEffects.length > 0;
-  const hasRightEffects = rightCombinedEffects.length > 0;
-
-  // Track pool effect canvases separately — in GPU batch mode the final
-  // source may be a GPU output canvas (not from the pool), but the pool
-  // canvases still need to be released.
-  let leftEffectPoolCanvas: OffscreenCanvas | null = null;
-  let rightEffectPoolCanvas: OffscreenCanvas | null = null;
-
-  if (hasLeftEffects || hasRightEffects) {
-    // In GPU batch mode, applyAllEffectsAsync returns a deferred GPU canvas
-    // instead of drawing back to the effect canvas. We must capture and use
-    // the returned canvas, otherwise effects are silently dropped.
-    let leftGpuPromise: Promise<OffscreenCanvas | null> | undefined;
-    let rightGpuPromise: Promise<OffscreenCanvas | null> | undefined;
-
-    if (hasLeftEffects) {
-      const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-      leftEffectPoolCanvas = leftEffectCanvas;
-      leftFinalCanvas = leftEffectCanvas;
-      leftGpuPromise = applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
-    }
-    if (hasRightEffects) {
-      const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-      rightEffectPoolCanvas = rightEffectCanvas;
-      rightFinalCanvas = rightEffectCanvas;
-      rightGpuPromise = applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
-    }
-
-    const [leftGpu, rightGpu] = await Promise.all([
-      leftGpuPromise ?? Promise.resolve(null),
-      rightGpuPromise ?? Promise.resolve(null),
-    ]);
-
-    // Use deferred GPU canvas when returned (batch mode), otherwise the
-    // effect canvas already has the result drawn into it.
-    if (leftGpu) leftFinalCanvas = leftGpu;
-    if (rightGpu) rightFinalCanvas = rightGpu;
+  const { canvasPool } = rctx;
+  const result = await renderTransitionLayer(activeTransition, frame, rctx, trackOrder, 'canvas');
+  if (result.source) {
+    ctx.drawImage(result.source, 0, 0);
   }
-
-  // Render transition with effect-applied canvases
-  const transitionSettings: TransitionCanvasSettings = canvasSettings;
-  renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings, rctx.gpuTransitionPipeline);
-
-  // Release all pool canvases (GPU output canvases are managed by the pipeline)
-  if (leftEffectPoolCanvas) canvasPool.release(leftEffectPoolCanvas);
-  canvasPool.release(leftCanvas);
-  if (rightEffectPoolCanvas) canvasPool.release(rightEffectPoolCanvas);
-  canvasPool.release(rightCanvas);
+  for (const poolCanvas of result.poolCanvases) {
+    canvasPool.release(poolCanvas);
+  }
 }
 
 // ---------------------------------------------------------------------------
