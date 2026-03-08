@@ -16,6 +16,7 @@ import { useGizmoStore } from '@/features/effects/deps/preview-contract';
 import { PropertySection } from '@/shared/ui/property-controls';
 import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels';
 import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/lib/gpu-effects';
+import { useEffectPreviews } from '../hooks/use-effect-previews';
 
 interface EffectsSectionProps {
   /** Visual items (already filtered to exclude audio) */
@@ -65,6 +66,16 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
   // GPU effect categories for dropdown menu
   const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), []);
+
+  // Effect preview thumbnails — lazily GPU-rendered on first dropdown open
+  const allEffectEntries = useMemo(
+    () => gpuCategories.flatMap(({ effects: catEffects }) =>
+      catEffects.map((def) => ({ id: def.id, def }))
+    ),
+    [gpuCategories],
+  );
+  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), []);
+  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(allEffectEntries, presetIds);
 
   // Update GPU effect parameter(s)
   const handleGpuParamChange = useCallback(
@@ -232,11 +243,14 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
 
   const handleDropdownOpenChange = useCallback((open: boolean) => {
-    if (!open) {
+    if (open) {
+      // Start generating GPU previews on first open
+      triggerPreviews();
+    } else {
       // Blur the trigger button when menu closes so space key triggers play/pause instead
       dropdownTriggerRef.current?.blur();
     }
-  }, []);
+  }, [triggerPreviews]);
 
   if (visualItems.length === 0) return null;
 
@@ -251,7 +265,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
               Add Effect
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
+          <DropdownMenuContent align="start" className="w-56">
             {/* GPU Shader Effects */}
             {gpuCategories.map(({ category, effects: catEffects }, index) => (
               <div key={category}>
@@ -263,7 +277,17 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   <DropdownMenuItem
                     key={def.id}
                     onSelect={() => handleAddGpuEffect(def.id)}
+                    className="flex items-center gap-2"
                   >
+                    {effectPreviews.has(def.id) ? (
+                      <img
+                        src={effectPreviews.get(def.id)}
+                        alt=""
+                        className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                    )}
                     {def.name}
                   </DropdownMenuItem>
                 ))}
@@ -282,7 +306,17 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   <DropdownMenuItem
                     key={preset.id}
                     onSelect={() => handleApplyPreset(preset.id)}
+                    className="flex items-center gap-2"
                   >
+                    {effectPreviews.has(`preset:${preset.id}`) ? (
+                      <img
+                        src={effectPreviews.get(`preset:${preset.id}`)}
+                        alt=""
+                        className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                    )}
                     {preset.name}
                   </DropdownMenuItem>
                 ))}

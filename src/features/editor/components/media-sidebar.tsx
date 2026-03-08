@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, memo, Activity } from 'react';
+import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -24,8 +24,10 @@ import { MediaLibrary } from '@/features/editor/deps/media-library';
 import { TransitionsPanel } from './transitions-panel';
 import { findNearestAvailableSpace } from '@/features/editor/deps/timeline-utils';
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline';
-import type { VisualEffect } from '@/types/effects';
+import type { VisualEffect, GpuEffect } from '@/types/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
+import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/lib/gpu-effects';
+import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 
 export const MediaSidebar = memo(function MediaSidebar() {
   // Use granular selectors - Zustand v5 best practice
@@ -291,6 +293,45 @@ export const MediaSidebar = memo(function MediaSidebar() {
     handleAddAdjustmentLayer(preset.effects, preset.name);
   }, [handleAddAdjustmentLayer]);
 
+  // Add a single GPU effect — to selected clips, or as adjustment layer if nothing selected
+  const handleAddGpuEffect = useCallback((gpuEffectId: string) => {
+    const { selectedItemIds } = useSelectionStore.getState();
+    const { items, addEffect } = useTimelineStore.getState();
+
+    // Find selected visual items (not audio)
+    const visualIds = selectedItemIds.filter((id) => {
+      const item = items.find((i) => i.id === id);
+      return item && item.type !== 'audio';
+    });
+
+    if (visualIds.length > 0) {
+      const defaults = getGpuEffectDefaultParams(gpuEffectId);
+      const effect: GpuEffect = {
+        type: 'gpu-effect',
+        gpuEffectType: gpuEffectId,
+        params: defaults,
+      };
+      visualIds.forEach((id) => addEffect(id, effect));
+    } else {
+      // No visual selection — create adjustment layer with this effect
+      const defaults = getGpuEffectDefaultParams(gpuEffectId);
+      handleAddAdjustmentLayer(
+        [{ type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults }],
+      );
+    }
+  }, [handleAddAdjustmentLayer]);
+
+  // GPU effect categories and preview thumbnails (static data, memoize once)
+  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), []);
+  const allEffectEntries = useMemo(
+    () => gpuCategories.flatMap(({ effects: catEffects }) =>
+      catEffects.map((def) => ({ id: def.id, def }))
+    ),
+    [gpuCategories],
+  );
+  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), []);
+  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(allEffectEntries, presetIds);
+
   // Category items for the vertical nav
   const categories = [
     { id: 'media' as const, icon: Film, label: 'Media' },
@@ -331,6 +372,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 } else {
                   setActiveTab(id);
                   if (!leftSidebarOpen) toggleLeftSidebar();
+                  if (id === 'effects') triggerPreviews();
                 }
               }}
               className={`
@@ -479,30 +521,25 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
           {/* Effects Tab */}
           <div className={`flex-1 overflow-y-auto p-3 ${activeTab === 'effects' ? 'block' : 'hidden'}`}>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {/* Blank Adjustment Layer */}
-              <div>
-                <button
-                  onClick={() => handleAddAdjustmentLayer()}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                >
-                  <div className="w-9 h-9 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
-                    <Layers className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+              <button
+                onClick={() => handleAddAdjustmentLayer()}
+                className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+              >
+                <div className="w-8 h-8 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
+                  <Layers className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs text-muted-foreground group-hover:text-foreground">
+                    Blank Adjustment Layer
                   </div>
-                  <div className="text-left">
-                    <div className="text-sm text-muted-foreground group-hover:text-foreground">
-                      Blank Adjustment Layer
-                    </div>
-                    <div className="text-[10px] text-muted-foreground/70">
-                      Add effects manually
-                    </div>
-                  </div>
-                </button>
-              </div>
+                </div>
+              </button>
 
               {/* Presets */}
               <div>
-                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
                   Presets
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
@@ -510,11 +547,19 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <button
                       key={preset.id}
                       onClick={() => handleAddPreset(preset.id)}
-                      className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                      className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                     >
-                      <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
-                        <Sparkles className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
-                      </div>
+                      {effectPreviews.has(`preset:${preset.id}`) ? (
+                        <img
+                          src={effectPreviews.get(`preset:${preset.id}`)}
+                          alt=""
+                          className="w-full aspect-video rounded-sm object-cover"
+                        />
+                      ) : (
+                        <div className="w-full aspect-video rounded-sm bg-muted flex items-center justify-center">
+                          <Sparkles className="w-3 h-3 text-muted-foreground/50" />
+                        </div>
+                      )}
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
                         {preset.name}
                       </span>
@@ -522,6 +567,37 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   ))}
                 </div>
               </div>
+
+              {/* GPU Effects by Category */}
+              {gpuCategories.map(({ category, effects: catEffects }) => (
+                <div key={category}>
+                  <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
+                    {category}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {catEffects.map((def) => (
+                      <button
+                        key={def.id}
+                        onClick={() => handleAddGpuEffect(def.id)}
+                        className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                      >
+                        {effectPreviews.has(def.id) ? (
+                          <img
+                            src={effectPreviews.get(def.id)}
+                            alt=""
+                            className="w-full aspect-video rounded-sm object-cover"
+                          />
+                        ) : (
+                          <div className="w-full aspect-video rounded-sm bg-muted" />
+                        )}
+                        <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight truncate w-full">
+                          {def.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
