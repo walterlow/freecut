@@ -33,6 +33,8 @@ interface MarkerInterval {
 
 // Tile configuration - 1000px tiles for faster individual renders and better cache granularity
 const TILE_WIDTH = 1000;
+const MAX_VISIBLE_MINOR_MARKERS = 72;
+const MIN_MINOR_TICK_SPACING_PX = 14;
 
 // Quantize pixelsPerSecond for cache keys to avoid redrawing on every minor zoom change
 // Uses logarithmic steps for perceptually uniform quantization across zoom range
@@ -55,42 +57,42 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
   // At 200 pps: 5 frames = 33px, 10 frames = 67px, 15 frames = 100px
   if (pixelsPerSecond >= 180) {
     // ~100px apart at max zoom - show every 15 frames (0.5 sec at 30fps)
-    return { type: 'frame', intervalInSeconds: 15 / 30, minorTicks: 5 };
+    return { type: 'frame', intervalInSeconds: 15 / 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 120) {
     // ~100px apart - show every 25 frames (~0.83 sec)
-    return { type: 'frame', intervalInSeconds: 25 / 30, minorTicks: 5 };
+    return { type: 'frame', intervalInSeconds: 25 / 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 80) {
     // 1 second intervals with frame subdivisions
-    return { type: 'second', intervalInSeconds: 1, minorTicks: 10 };
+    return { type: 'second', intervalInSeconds: 1, minorTicks: 4 };
   }
   if (pixelsPerSecond >= 50) {
     // 2 second intervals
-    return { type: 'multi-second', intervalInSeconds: 2, minorTicks: 4 };
+    return { type: 'multi-second', intervalInSeconds: 2, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 24) {
-    return { type: 'multi-second', intervalInSeconds: 5, minorTicks: 5 };
+    return { type: 'multi-second', intervalInSeconds: 5, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 12) {
-    return { type: 'multi-second', intervalInSeconds: 10, minorTicks: 5 };
+    return { type: 'multi-second', intervalInSeconds: 10, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 4) {
-    return { type: 'multi-second', intervalInSeconds: 30, minorTicks: 6 };
+    return { type: 'multi-second', intervalInSeconds: 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 2) {
-    return { type: 'minute', intervalInSeconds: 60, minorTicks: 6 };
+    return { type: 'minute', intervalInSeconds: 60, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 1) {
-    return { type: 'minute', intervalInSeconds: 120, minorTicks: 4 };
+    return { type: 'minute', intervalInSeconds: 120, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 0.5) {
-    return { type: 'minute', intervalInSeconds: 300, minorTicks: 5 };
+    return { type: 'minute', intervalInSeconds: 300, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 0.2) {
-    return { type: 'minute', intervalInSeconds: 600, minorTicks: 10 };
+    return { type: 'minute', intervalInSeconds: 600, minorTicks: 3 };
   }
-  return { type: 'minute', intervalInSeconds: 1800, minorTicks: 6 };
+  return { type: 'minute', intervalInSeconds: 1800, minorTicks: 2 };
 }
 
 /**
@@ -134,9 +136,16 @@ function drawTile(
   const startMarkerIndex = Math.max(0, Math.floor(tileOffset / markerWidthPx) - 1);
   const endMarkerIndex = Math.ceil((tileOffset + actualTileWidth) / markerWidthPx);
 
-  // Performance: skip minor ticks when many markers
+  // Keep the ruler readable by hiding sub-markers when spacing gets too tight.
   const visibleMarkerCount = endMarkerIndex - startMarkerIndex + 1;
-  const showMinorTicks = visibleMarkerCount < 100;
+  const tickSpacing = markerConfig.minorTicks > 0
+    ? markerWidthPx / markerConfig.minorTicks
+    : 0;
+  const showMinorTicks = (
+    markerConfig.minorTicks > 0
+    && visibleMarkerCount < MAX_VISIBLE_MINOR_MARKERS
+    && tickSpacing >= MIN_MINOR_TICK_SPACING_PX
+  );
 
   for (let i = startMarkerIndex; i <= endMarkerIndex; i++) {
     const timeInSeconds = i * intervalInSeconds;
@@ -155,9 +164,7 @@ function drawTile(
     }
 
     // Minor ticks - check each tick individually (they may extend from markers outside tile)
-    if (showMinorTicks && markerConfig.minorTicks > 0) {
-      const tickSpacing = markerWidthPx / markerConfig.minorTicks;
-
+    if (showMinorTicks) {
       // Skip if all minor ticks would be outside tile
       const lastTickX = x + tickSpacing * (markerConfig.minorTicks - 1);
       if (lastTickX < 0 || x > actualTileWidth) continue;

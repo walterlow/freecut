@@ -63,6 +63,7 @@ import {
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
+import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
@@ -2403,25 +2404,8 @@ export const VideoPreview = memo(function VideoPreview({
           // the correct frame — reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
-            if (playbackNow.isPlaying && playerContainerRef.current) {
-              const container = playerContainerRef.current;
-              renderer.setDomVideoElementProvider((itemId: string) => {
-                // Use querySelectorAll to find ALL matching video elements (base layer
-                // + transition layer may both have elements with the same item ID).
-                // Pick the best-ready element to avoid using a transition video that
-                // is still seeking/loading, which would produce a stale frame and
-                // cause jitter at transition boundaries.
-                const videos = container.querySelectorAll<HTMLVideoElement>(`[data-item-id="${itemId}"] video`);
-                let best: HTMLVideoElement | null = null;
-                let bestReady = 0;
-                for (const video of videos) {
-                  if (video.readyState > bestReady && video.videoWidth > 0) {
-                    best = video;
-                    bestReady = video.readyState;
-                  }
-                }
-                return best;
-              });
+            if (playbackNow.isPlaying) {
+              renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
             } else {
               renderer.setDomVideoElementProvider(undefined);
             }
