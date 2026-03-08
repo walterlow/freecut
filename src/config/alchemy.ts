@@ -34,8 +34,8 @@ export const SWITCHABLE_CHAINS = useMainnetChains
   ? ([...PRODUCTION_CHAINS] as const)
   : ([...DEVELOPMENT_CHAINS] as const);
 
-/** Default chain: Base Sepolia in dev (unless VITE_USE_MAINNET), Base in production. */
-const defaultChain = useMainnetChains ? base : baseSepolia;
+/** Default chain: Arbitrum Sepolia in dev (unless VITE_USE_MAINNET), Arbitrum One in production. */
+const defaultChain = useMainnetChains ? arbitrum : arbitrumSepolia;
 
 export const queryClient = new QueryClient();
 

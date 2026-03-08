@@ -309,7 +309,7 @@ function LandingPage() {
             <div className="aspect-video w-full">
               <iframe
                 className="h-full w-full"
-                src="https://www.youtube.com/embed/2EWVUXpNntk"
+                src="https://www.youtube.com/embed/uMaVi_6jRJc"
                 title="Pixels Demo"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
