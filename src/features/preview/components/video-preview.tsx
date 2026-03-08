@@ -1953,6 +1953,7 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
           getPreviewMasksOverride,
+          domVideoElementProvider: getBestDomVideoElementForItem,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -2417,16 +2418,11 @@ export const VideoPreview = memo(function VideoPreview({
             break;
           }
 
-          // Enable DOM video element provider during playback for zero-copy rendering.
-          // During playback, the Remotion Player's <video> elements are already at
-          // the correct frame — reading from them avoids mediabunny decode entirely.
+          // Keep DOM video element provider attached for all overlay renders.
+          // Paused/scrubbed frames still validate drift per item before using the
+          // DOM element, so stale shadow elements are rejected automatically.
           if ('setDomVideoElementProvider' in renderer) {
-            const playbackNow = usePlaybackStore.getState();
-            if (playbackNow.isPlaying) {
-              renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
-            } else {
-              renderer.setDomVideoElementProvider(undefined);
-            }
+            renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
           }
 
           // Use full renderFrame for both priority and prewarm frames.
@@ -3376,6 +3372,7 @@ export const VideoPreview = memo(function VideoPreview({
               style={{
                 width: '100%',
                 height: '100%',
+                transition: 'none',
               }}
               onFrameChange={handleFrameChange}
               onPlayStateChange={handlePlayStateChange}
