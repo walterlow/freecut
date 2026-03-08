@@ -35,6 +35,7 @@ export function useVisualTransforms(
   projectSize: ProjectSize
 ): Map<string, ResolvedTransform> {
   const allKeyframes = useTimelineStore((s: TimelineState) => s.keyframes);
+  const fps = useTimelineStore((s: TimelineState) => s.fps);
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
@@ -60,7 +61,7 @@ export function useVisualTransforms(
       const sourceDimensions = getSourceDimensions(item);
       const baseResolved = resolveTransform(
         item,
-        { width: projectSize.width, height: projectSize.height, fps: 30 },
+        { width: projectSize.width, height: projectSize.height, fps },
         sourceDimensions
       );
 
@@ -115,5 +116,5 @@ export function useVisualTransforms(
     }
 
     return transforms;
-  }, [items, projectSize, allKeyframes, animationFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview]);
+  }, [items, projectSize, allKeyframes, animationFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview, fps]);
 }

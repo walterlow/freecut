@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
-import { maskVerticesToSvgPath } from '@/features/preview/utils/mask-path-utils';
+import { maskVerticesToSvgPath } from '@/features/composition-runtime/deps/stores';
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
 import { useCornerPinStore, useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';

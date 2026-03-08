@@ -76,7 +76,7 @@ import {
   type ItemRenderContext,
   type SubCompRenderData,
 } from './canvas-item-renderer';
-import { ScrubbingCache } from '@/features/preview/utils/scrubbing-cache';
+import { ScrubbingCache } from '@/features/export/deps/preview';
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator';
@@ -1035,7 +1035,13 @@ export async function createCompositionRenderer(
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Prepare masks for this frame
-      const activeMasks = getActiveMasksForFrame(maskFrameIndex, frame);
+      const activeMasks = getActiveMasksForFrame(
+        maskFrameIndex,
+        frame,
+        maskSettings,
+        keyframesMap,
+        renderMode === 'preview' ? getPreviewTransformOverride : undefined
+      );
 
       // Find active transitions
       const { activeTransitions, transitionClipIds } = getTransitionFrameState(

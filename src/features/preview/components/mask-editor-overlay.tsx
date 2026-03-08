@@ -14,7 +14,7 @@
 
 import { useCallback, useRef, useEffect, memo } from 'react';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
+import { useItemsStore, useTimelineStore } from '@/features/preview/deps/timeline-store';
 import {
   screenToCanvas,
   getEffectiveScale,
@@ -26,7 +26,8 @@ import {
   generateMaskId,
 } from '../utils/mask-path-utils';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import type { MaskVertex } from '@/types/masks';
+import type { ClipMask, MaskVertex } from '@/types/masks';
+import type { ShapeItem } from '@/types/timeline';
 
 /** Radius of vertex control points in screen pixels */
 const VERTEX_RADIUS = 5;
@@ -77,6 +78,8 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const setPenDragging = useMaskEditorStore((s) => s.setPenDragging);
   const setPenCursorPos = useMaskEditorStore((s) => s.setPenCursorPos);
   const cancelPenMode = useMaskEditorStore((s) => s.cancelPenMode);
+  const setPreviewMasks = useMaskEditorStore((s) => s.setPreviewMasks);
+  const clearPreviewMasks = useMaskEditorStore((s) => s.clearPreviewMasks);
 
   // ============================================================
   // Shared coordinate helpers
@@ -544,9 +547,102 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [setPenDragging]
   );
 
-  /** Close pen path and commit as a new mask on the item */
+  /** Commit pen vertices as a new ShapeItem with shapeType='path' and isMask=true */
+  const commitShapePenPath = useCallback((verts: MaskVertex[]) => {
+    // Calculate bounding box from canvas-normalized vertices (0-1)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const v of verts) {
+      minX = Math.min(minX, v.position[0]);
+      minY = Math.min(minY, v.position[1]);
+      maxX = Math.max(maxX, v.position[0]);
+      maxY = Math.max(maxY, v.position[1]);
+    }
+
+    const { width: canvasW, height: canvasH } = coordParams.projectSize;
+    const bboxW = (maxX - minX) * canvasW;
+    const bboxH = (maxY - minY) * canvasH;
+
+    // Prevent degenerate shapes
+    if (bboxW < 2 || bboxH < 2) {
+      cancelPenMode();
+      return;
+    }
+
+    // Convert vertices to shape-local normalized coords (0-1 within bounding box)
+    const localVerts: MaskVertex[] = verts.map((v) => ({
+      position: [
+        (v.position[0] - minX) / (maxX - minX),
+        (v.position[1] - minY) / (maxY - minY),
+      ] as [number, number],
+      // Scale handles proportionally
+      inHandle: [
+        v.inHandle[0] / (maxX - minX),
+        v.inHandle[1] / (maxY - minY),
+      ] as [number, number],
+      outHandle: [
+        v.outHandle[0] / (maxX - minX),
+        v.outHandle[1] / (maxY - minY),
+      ] as [number, number],
+    }));
+
+    // Bounding box center relative to canvas center
+    const centerX = ((minX + maxX) / 2 - 0.5) * canvasW;
+    const centerY = ((minY + maxY) / 2 - 0.5) * canvasH;
+
+    const { tracks, fps, addItem } = useTimelineStore.getState();
+
+    // Find first available track
+    const targetTrack = tracks.find((t) => t.visible !== false && !t.locked && !t.isGroup);
+    if (!targetTrack) {
+      cancelPenMode();
+      return;
+    }
+
+    const currentFrame = 0;
+    const durationInFrames = fps * 60;
+
+    const shapeItem: ShapeItem = {
+      id: crypto.randomUUID(),
+      type: 'shape',
+      trackId: targetTrack.id,
+      from: currentFrame,
+      durationInFrames,
+      label: 'Path Mask',
+      shapeType: 'path',
+      pathVertices: localVerts,
+      fillColor: '#ffffff',
+      isMask: true,
+      maskType: 'alpha',
+      transform: {
+        x: centerX,
+        y: centerY,
+        width: bboxW,
+        height: bboxH,
+        rotation: 0,
+        opacity: 1,
+        aspectRatioLocked: false,
+      },
+    };
+
+    addItem(shapeItem);
+    cancelPenMode();
+  }, [coordParams, cancelPenMode]);
+
+  /** Close pen path and commit as a new mask on the item (or as a new ShapeItem) */
   const closePenPath = useCallback(() => {
-    const verts = useMaskEditorStore.getState().penVertices;
+    const state = useMaskEditorStore.getState();
+    const verts = state.penVertices;
+
+    if (state.shapePenMode) {
+      // Shape pen mode: create a new ShapeItem with shapeType='path'
+      if (verts.length < 3) {
+        cancelPenMode();
+        return;
+      }
+      commitShapePenPath(verts);
+      return;
+    }
+
     if (verts.length < 3 || !editingItemId) {
       cancelPenMode();
       return;
@@ -605,6 +701,31 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   editingItemIdRef.current = editingItemId;
   const selectedMaskIndexRef = useRef(selectedMaskIndex);
   selectedMaskIndexRef.current = selectedMaskIndex;
+
+  const syncPreviewMaskVertices = useCallback(
+    (
+      vertices: MaskVertex[],
+      itemId: string | null = editingItemIdRef.current,
+      maskIndex: number = selectedMaskIndexRef.current
+    ) => {
+      if (!itemId) {
+        clearPreviewMasks();
+        return;
+      }
+      const item = useItemsStore.getState().items.find((i) => i.id === itemId);
+      const masks = item?.masks;
+      const mask = masks?.[maskIndex];
+      if (!masks || !mask) {
+        clearPreviewMasks();
+        return;
+      }
+
+      const previewMasks: ClipMask[] = [...masks];
+      previewMasks[maskIndex] = { ...mask, vertices };
+      setPreviewMasks(previewMasks);
+    },
+    [setPreviewMasks, clearPreviewMasks]
+  );
 
   const handleEditPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -716,6 +837,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         }
 
         updatePreview(newVertices);
+        syncPreviewMaskVertices(newVertices);
         return;
       }
 
@@ -776,11 +898,12 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       // processed the timeline store update (same pattern as corner-pin-overlay)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          clearPreviewMasks();
           endDrag();
         });
       });
     },
-    [endDrag]
+    [clearPreviewMasks, endDrag]
   );
 
   const handleEditContextMenu = useCallback(

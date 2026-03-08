@@ -1,9 +1,9 @@
 ﻿import React, { useMemo, useCallback } from 'react';
-import { AbsoluteFill, Sequence } from '@/features/composition-runtime/deps/player';
-import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
+import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
+import { useVideoConfig } from '../hooks/use-player-compat';
 import type { CompositionInputProps } from '@/types/export';
-import type { TextItem, ShapeItem, AdjustmentItem, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
-import { Item } from '../components/item';
+import type { TimelineItem, TextItem, ShapeItem, AdjustmentItem, VideoItem, AudioItem, ImageItem } from '@/types/timeline';
+import { Item, type MaskInfo } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
@@ -12,11 +12,12 @@ import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/compo
 import { StableVideoSequence, type StableVideoSequenceItem } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { resolveTransform } from '../utils/transform-resolver';
-import { getShapePath, rotatePath } from '../utils/shape-path';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 import { KeyframesProvider } from '../contexts/keyframes-context';
+import { KeyframesContext } from '../contexts/keyframes-context-core';
+import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { CompositionSpaceProvider } from '../contexts/composition-space-context';
 
 /**
@@ -34,6 +35,60 @@ type EnrichedVideoItem = EnrichedVisualItem & { type: 'video' };
 interface MaskWithTrackOrder {
   mask: ShapeItem;
   trackOrder: number;
+}
+
+/**
+ * Resolve active shape masks for the current frame with keyframe animation.
+ * Called per-item inside <Sequence> so useSequenceContext() provides per-frame updates.
+ *
+ * Uses useSequenceContext() instead of useCurrentFrame() because Sequence internally
+ * subscribes to the Clock via useSyncExternalStore, guaranteeing per-frame re-renders.
+ * useCurrentFrame() reads from BridgedTimelineContext which may not propagate updates
+ * through memo boundaries and children-as-props optimizations.
+ */
+function useActiveMasks(
+  masks: MaskWithTrackOrder[],
+  canvasWidth: number,
+  canvasHeight: number,
+  fps: number,
+): MaskInfo[] {
+  // Compute global frame from sequence context (reliable per-frame updates inside <Sequence>)
+  const sequenceCtx = useSequenceContext();
+  const globalFrame = (sequenceCtx?.from ?? 0) + (sequenceCtx?.localFrame ?? 0);
+
+  const keyframesCtx = React.useContext(KeyframesContext);
+  const canvas = { width: canvasWidth, height: canvasHeight, fps };
+
+  return useMemo<MaskInfo[]>(() => {
+    if (masks.length === 0) return [];
+    return masks
+      .filter(({ mask }) => {
+        const start = mask.from;
+        const end = mask.from + mask.durationInFrames;
+        return globalFrame >= start && globalFrame < end;
+      })
+      .map(({ mask }) => {
+        const baseResolved = resolveTransform(mask, canvas);
+        const maskKeyframes = keyframesCtx?.getItemKeyframes(mask.id);
+        const relativeFrame = globalFrame - mask.from;
+        const animatedResolved = (maskKeyframes && hasKeyframeAnimation(maskKeyframes))
+          ? resolveAnimatedTransform(baseResolved, maskKeyframes, relativeFrame)
+          : baseResolved;
+
+        return {
+          shape: mask,
+          transform: {
+            x: animatedResolved.x,
+            y: animatedResolved.y,
+            width: animatedResolved.width,
+            height: animatedResolved.height,
+            rotation: animatedResolved.rotation,
+            opacity: animatedResolved.opacity,
+            cornerRadius: animatedResolved.cornerRadius,
+          },
+        };
+      });
+  }, [masks, globalFrame, keyframesCtx, canvasWidth, canvasHeight, fps]);
 }
 
 interface ClipAudioExtension {
@@ -174,271 +229,20 @@ function isContinuousAudioTransition(left: EnrichedVideoItem, right: EnrichedVid
   return rightMissingTrimStart;
 }
 
-/** Props for MaskDefinitions component */
-interface MaskDefinitionsProps {
-  masks: MaskWithTrackOrder[];
-  hasPotentialMasks: boolean;
-  currentFrame: number;
-  canvasWidth: number;
-  canvasHeight: number;
-  fps: number;
-}
-
-/**
- * SVG Mask Definitions Component
- *
- * Renders SVG mask definitions with OPACITY-CONTROLLED activation.
- * The mask is always present in the DOM; its effect is toggled via internal opacity.
- * This prevents DOM structure changes when masks activate/deactivate.
- *
- * IMPORTANT: When hasPotentialMasks is true but masks is empty, we render an
- * "empty" mask (just the base white rect) that shows everything. This ensures
- * the mask reference is always valid when StableMaskedGroup applies it.
- *
- * Memoized to prevent re-renders when props haven't changed.
- */
-const MaskDefinitions = React.memo<MaskDefinitionsProps>(({ masks, hasPotentialMasks, currentFrame, canvasWidth, canvasHeight, fps }) => {
-  const canvas = { width: canvasWidth, height: canvasHeight, fps };
-
-  // Read gizmo store for real-time mask preview during drag operations
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo);
-  const previewTransform = useGizmoStore((s) => s.previewTransform);
-  // Read unified preview for all masks at once (more efficient than per-mask selectors)
-  const preview = useGizmoStore((s) => s.preview);
-
-  // Only render if there are potential masks (shapes that could be masks)
-  // This keeps DOM structure stable when isMask is toggled
-  if (!hasPotentialMasks) return null;
-
-  // Generate combined mask ID for the group
-  const groupMaskId = 'group-composition-mask';
-
-  // Handle empty active masks case - render SVG with just base white rect
-  // This ensures mask reference is valid when StableMaskedGroup applies it
-  if (masks.length === 0) {
-    return (
-      <svg
-        style={{
-          position: 'absolute',
-          width: 0,
-          height: 0,
-          overflow: 'hidden',
-          pointerEvents: 'none',
-        }}
-        aria-hidden="true"
-      >
-        <defs>
-          <mask
-            id={groupMaskId}
-            maskUnits="userSpaceOnUse"
-            x="0"
-            y="0"
-            width={canvasWidth}
-            height={canvasHeight}
-          >
-            {/* No active masks - show everything (white = visible) */}
-            <rect
-              x="0"
-              y="0"
-              width={canvasWidth}
-              height={canvasHeight}
-              fill="white"
-            />
-          </mask>
-        </defs>
-      </svg>
-    );
-  }
-
-  // Compute mask data with opacity for activation
-  const maskData = masks.map(({ mask, trackOrder }) => {
-    const maskStart = mask.from;
-    const maskEnd = mask.from + mask.durationInFrames;
-
-    // Binary opacity: 1 when active, 0 when inactive
-    const isActive = currentFrame >= maskStart && currentFrame < maskEnd;
-    const opacity = isActive ? 1 : 0;
-
-    // Check for active preview transforms from unified preview system
-    const maskPreview = preview?.[mask.id];
-    const unifiedPreviewTransform = maskPreview?.transform;
-    const isGizmoPreviewActive = activeGizmo?.itemId === mask.id && previewTransform !== null;
-
-    // Get base transform
-    const baseResolved = resolveTransform(mask, canvas);
-
-    // Priority: Unified preview (group/properties) > Single gizmo preview > Base
-    let resolvedTransform = {
-      x: baseResolved.x,
-      y: baseResolved.y,
-      width: baseResolved.width,
-      height: baseResolved.height,
-      rotation: baseResolved.rotation,
-      opacity: baseResolved.opacity,
-    };
-
-    if (unifiedPreviewTransform) {
-      // Unified preview includes both group transforms and properties panel transforms
-      resolvedTransform = { ...resolvedTransform, ...unifiedPreviewTransform };
-    } else if (isGizmoPreviewActive && previewTransform) {
-      resolvedTransform = { ...previewTransform };
-    }
-
-    // Generate mask path
-    let path = getShapePath(mask, resolvedTransform, { canvasWidth, canvasHeight });
-
-    // Bake rotation into path
-    if (resolvedTransform.rotation !== 0) {
-      const centerX = canvasWidth / 2 + resolvedTransform.x;
-      const centerY = canvasHeight / 2 + resolvedTransform.y;
-      path = rotatePath(path, resolvedTransform.rotation, centerX, centerY);
-    }
-
-    return {
-      mask,
-      trackOrder,
-      opacity,
-      path,
-      id: `composition-mask-${mask.id}`,
-      strokeWidth: mask.strokeWidth ?? 0,
-    };
-  });
-
-  // Compute per-mask feather values (only for alpha type, clip type = hard edges)
-  // Uses unified preview for real-time slider updates
-  const maskFeatherValues = masks.map(({ mask }) => {
-    const maskPreview = preview?.[mask.id];
-    const type = mask.maskType ?? 'clip';
-    const feather = maskPreview?.properties?.maskFeather ?? mask.maskFeather ?? 0;
-    return type === 'alpha' ? feather : 0;
-  });
-
-  return (
-    <svg
-      style={{
-        position: 'absolute',
-        width: 0,
-        height: 0,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-      }}
-      aria-hidden="true"
-    >
-      <defs>
-        {/* Render individual blur filters for each mask that needs feathering */}
-        {masks.map(({ mask }, index) => {
-          const feather = maskFeatherValues[index]!;
-          if (feather <= 0) return null;
-          return (
-            <filter
-              key={`filter-${mask.id}`}
-              id={`blur-mask-${mask.id}`}
-              x="-50%"
-              y="-50%"
-              width="200%"
-              height="200%"
-            >
-              <feGaussianBlur stdDeviation={feather} />
-            </filter>
-          );
-        })}
-        <mask
-          id={groupMaskId}
-          maskUnits="userSpaceOnUse"
-          x="0"
-          y="0"
-          width={canvasWidth}
-          height={canvasHeight}
-        >
-          {/* Base: When ALL masks are inactive, show everything (white = visible) */}
-          {/* When ANY mask is active, this gets covered by the mask shapes */}
-          <rect
-            x="0"
-            y="0"
-            width={canvasWidth}
-            height={canvasHeight}
-            fill="white"
-          />
-
-          {/* For each mask: when active (opacity=1), apply the mask effect */}
-          {maskData.map(({ id, path, opacity, strokeWidth, mask: shapeItem }, index) => {
-            const itemMaskInvert = shapeItem.maskInvert ?? false;
-            // Per-mask feather: only apply for alpha type (soft edges)
-            const itemMaskFeather = maskFeatherValues[index]!;
-
-            // When mask is active (opacity=1):
-            // - Draw black rect to hide everything
-            // - Draw white path to reveal the mask shape
-            // When mask is inactive (opacity=0): nothing is drawn, base white rect shows
-            return (
-              <g key={id} style={{ opacity }}>
-                {/* Hide everything first */}
-                <rect
-                  x="0"
-                  y="0"
-                  width={canvasWidth}
-                  height={canvasHeight}
-                  fill={itemMaskInvert ? 'white' : 'black'}
-                />
-                {/* Reveal the mask shape */}
-                <path
-                  d={path}
-                  fill={itemMaskInvert ? 'black' : 'white'}
-                  stroke={strokeWidth > 0 ? (itemMaskInvert ? 'black' : 'white') : undefined}
-                  strokeWidth={strokeWidth > 0 ? strokeWidth : undefined}
-                  filter={itemMaskFeather > 0 ? `url(#blur-mask-${shapeItem.id})` : undefined}
-                />
-              </g>
-            );
-          })}
-        </mask>
-      </defs>
-    </svg>
-  );
-});
-
-/**
- * Frame-aware wrapper for MaskDefinitions.
- * Isolates useCurrentFrame() to this component so that MainComposition
- * doesn't re-render on every frame. Only this component and its children
- * will re-render per frame.
- */
-const FrameAwareMaskDefinitions: React.FC<{
-  masks: MaskWithTrackOrder[];
-  hasPotentialMasks: boolean;
-  canvasWidth: number;
-  canvasHeight: number;
-  fps: number;
-}> = (props) => {
-  const currentFrame = useCurrentFrame();
-  return <MaskDefinitions {...props} currentFrame={currentFrame} />;
-};
-
 // ClearingLayer removed - was causing flicker at clip boundaries
 // Background layer at z-index -1 is sufficient for showing background color
 
-/**
- * Stable wrapper that applies CSS mask reference.
- * ALWAYS renders the same div structure - mask effect controlled by SVG opacity.
- */
-const StableMaskedGroup: React.FC<{
-  children: React.ReactNode;
-  hasMasks: boolean;
-}> = ({ children, hasMasks }) => {
-  // Always apply the mask reference - the SVG mask handles activation via opacity
-  // When no masks are active, the SVG mask shows everything (base white rect)
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        mask: hasMasks ? 'url(#group-composition-mask)' : undefined,
-        WebkitMask: hasMasks ? 'url(#group-composition-mask)' : undefined,
-      }}
-    >
-      {children}
-    </div>
-  );
+/** Item wrapper that resolves shape masks per-frame inside a <Sequence> */
+const MaskedItem: React.FC<{
+  item: TimelineItem;
+  muted: boolean;
+  shapeMasks: MaskWithTrackOrder[];
+  canvasWidth: number;
+  canvasHeight: number;
+  fps: number;
+}> = ({ item, muted, shapeMasks, canvasWidth, canvasHeight, fps }) => {
+  const masks = useActiveMasks(shapeMasks, canvasWidth, canvasHeight, fps);
+  return <Item item={item} muted={muted} masks={masks} />;
 };
 
 
@@ -968,8 +772,6 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
     if (fontFamilies.length > 0) loadFonts(fontFamilies);
   }, [visibleTracks]);
 
-  // hasActiveMasks: shapes with isMask: true (for actual mask rendering)
-  const hasActiveMasks = activeMasks.length > 0;
 
   // Stable render function for video items - prevents re-renders on every frame
   // useCallback ensures the function reference stays stable between renders
@@ -996,11 +798,11 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           adjustmentLayers={visibleAdjustmentLayers}
           sequenceFrom={sequenceFrom}
         >
-          <Item item={item} muted={true} masks={[]} />
+          <MaskedItem item={item} muted={true} shapeMasks={activeMasks} canvasWidth={canvasWidth} canvasHeight={canvasHeight} fps={fps} />
         </ItemEffectWrapper>
       </AbsoluteFill>
     );
-  }, [visibleAdjustmentLayers]);
+  }, [visibleAdjustmentLayers, activeMasks, canvasWidth, canvasHeight, fps]);
 
   return (
     <KeyframesProvider keyframes={keyframes}>
@@ -1011,15 +813,8 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
         renderHeight={renderHeight}
       >
         <AbsoluteFill>
-          {/* SVG MASK DEFINITIONS - opacity controls activation, no DOM changes */}
-          {/* Uses FrameAwareMaskDefinitions to isolate per-frame re-renders */}
-          <FrameAwareMaskDefinitions
-            masks={activeMasks}
-            hasPotentialMasks={hasActiveMasks}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-            fps={fps}
-          />
+          {/* SVG MASK DEFINITIONS - kept for backward compat with feather/invert that need SVG mask */}
+          {/* Shape mask animation is now handled per-item via ActiveMasksProvider + MaskedItem */}
 
           {/* BACKGROUND LAYER */}
           <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
@@ -1118,7 +913,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
 
           {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
           {/* This ensures items from different tracks respect z-index across all types */}
-          <StableMaskedGroup hasMasks={hasActiveMasks}>
+          <AbsoluteFill>
             {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
             {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
             <StableVideoSequence
@@ -1149,14 +944,14 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                           adjustmentLayers={visibleAdjustmentLayers}
                           sequenceFrom={item.from}
                         >
-                          <Item item={item} muted={track.muted || !track.trackVisible} masks={[]} />
+                          <MaskedItem item={item} muted={track.muted || !track.trackVisible} shapeMasks={activeMasks} canvasWidth={canvasWidth} canvasHeight={canvasHeight} fps={fps} />
                         </ItemEffectWrapper>
                       </Sequence>
                     ))}
                   </AbsoluteFill>
                 );
               })}
-          </StableMaskedGroup>
+          </AbsoluteFill>
         </AbsoluteFill>
       </CompositionSpaceProvider>
     </KeyframesProvider>

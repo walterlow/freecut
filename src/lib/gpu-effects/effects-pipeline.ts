@@ -311,7 +311,7 @@ export class EffectsPipeline {
 
   /**
    * Process a source through an effect chain and render to output canvas context.
-   * Accepts HTMLVideoElement for zero-copy GPU capture (like masterselects importExternalTexture).
+   * Accepts HTMLVideoElement for zero-copy GPU capture
    * Returns false if skipped (GPU busy or no effects).
    */
   applyEffects(

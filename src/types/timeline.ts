@@ -101,7 +101,7 @@ export type ImageItem = BaseTimelineItem & {
   sourceHeight?: number;
 };
 
-export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart';
+export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart' | 'path';
 
 export type ShapeItem = BaseTimelineItem & {
   type: 'shape';
@@ -116,6 +116,8 @@ export type ShapeItem = BaseTimelineItem & {
   direction?: 'up' | 'down' | 'left' | 'right';  // Triangle only
   points?: number;              // Star (5 default), Polygon (6 default)
   innerRadius?: number;         // Star only (ratio 0-1 of outer)
+  // Path shape (custom bezier path drawn with pen tool)
+  pathVertices?: import('@/types/masks').MaskVertex[];  // Normalized 0-1 vertices for 'path' shapeType
   // Mask properties
   isMask?: boolean;             // When true, shape acts as mask for lower tracks
   maskType?: 'clip' | 'alpha';  // clip = hard edges, alpha = soft edges

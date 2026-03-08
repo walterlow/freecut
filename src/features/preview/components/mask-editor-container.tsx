@@ -11,7 +11,7 @@ import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { MaskEditorOverlay } from './mask-editor-overlay';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import { resolveTransform, getSourceDimensions } from '@/features/preview/deps/composition-runtime';
+import { useVisualTransforms } from '../hooks/use-visual-transform';
 
 interface MaskEditorContainerProps {
   containerRect: DOMRect | null;
@@ -28,6 +28,7 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
 }: MaskEditorContainerProps) {
   const isEditing = useMaskEditorStore((s) => s.isEditing);
   const editingItemId = useMaskEditorStore((s) => s.editingItemId);
+  const shapePenMode = useMaskEditorStore((s) => s.shapePenMode);
 
   const items = useItemsStore((s) => s.items);
 
@@ -35,6 +36,7 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
     () => (editingItemId ? items.find((i) => i.id === editingItemId) : null),
     [editingItemId, items]
   );
+  const visualTransforms = useVisualTransforms(editingItem ? [editingItem] : [], projectSize);
 
   const coordParams = useMemo((): CoordinateParams | null => {
     if (!containerRect) return null;
@@ -42,9 +44,17 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
   }, [containerRect, playerSize, projectSize, zoom]);
 
   const itemTransform = useMemo((): Transform | null => {
+    // Shape pen mode: use full canvas as the coordinate space
+    if (shapePenMode) {
+      return {
+        x: 0, y: 0,
+        width: projectSize.width, height: projectSize.height,
+        rotation: 0, opacity: 1, cornerRadius: 0,
+      };
+    }
     if (!editingItem) return null;
-    const canvas = { width: projectSize.width, height: projectSize.height, fps: 30 };
-    const resolved = resolveTransform(editingItem, canvas, getSourceDimensions(editingItem));
+    const resolved = visualTransforms.get(editingItem.id);
+    if (!resolved) return null;
     return {
       x: resolved.x,
       y: resolved.y,
@@ -54,7 +64,7 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
       opacity: resolved.opacity,
       cornerRadius: resolved.cornerRadius,
     };
-  }, [editingItem, projectSize]);
+  }, [editingItem, projectSize, shapePenMode, visualTransforms]);
 
   if (!isEditing || !coordParams || !itemTransform) return null;
 
