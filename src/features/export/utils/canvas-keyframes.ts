@@ -7,12 +7,8 @@
 
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
-import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
-import {
-  resolveTransform,
-  getSourceDimensions,
-} from '@/features/export/deps/composition-runtime';
-import { resolveAnimatedTransform } from '@/features/export/deps/keyframes';
+import type { ResolvedTransform } from '@/types/transform';
+import { resolveItemTransformAtFrame } from '@/features/export/deps/composition-runtime';
 
 /**
  * Canvas settings for transform resolution
@@ -38,22 +34,15 @@ export function getAnimatedTransform(
   frame: number,
   canvas: CanvasRenderSettings
 ): ResolvedTransform {
-  // Get source dimensions for proper fit-to-canvas calculation
-  const sourceDimensions = getSourceDimensions(item);
-
-  // Get base resolved transform (without animation)
-  const canvasSettings: CanvasSettings = {
-    width: canvas.width,
-    height: canvas.height,
-    fps: canvas.fps,
-  };
-  const baseResolved = resolveTransform(item, canvasSettings, sourceDimensions);
-
-  // Calculate local frame relative to item start
-  const localFrame = frame - item.from;
-
-  // Apply keyframe animation if any
-  return resolveAnimatedTransform(baseResolved, keyframes, localFrame);
+  return resolveItemTransformAtFrame(item, {
+    canvas: {
+      width: canvas.width,
+      height: canvas.height,
+      fps: canvas.fps,
+    },
+    frame,
+    keyframes,
+  });
 }
 
 /**

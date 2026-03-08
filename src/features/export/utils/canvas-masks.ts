@@ -11,9 +11,9 @@ import type { ResolvedTransform } from '@/types/transform';
 import {
   getShapePath,
   rotatePath,
+  resolveActiveShapeMasksAtFrame,
 } from '@/features/export/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
-import { getAnimatedTransform } from './canvas-keyframes';
 
 const log = createLogger('CanvasMasks');
 
@@ -97,24 +97,6 @@ function getMaskPath(
     feather,
     maskType,
   };
-}
-
-function resolveMaskTransform(
-  mask: ShapeItem,
-  frame: number,
-  canvas: MaskCanvasSettings,
-  keyframesMap: Map<string, ItemKeyframes>,
-  previewOverride?: Partial<ResolvedTransform>
-): ResolvedTransform {
-  let transform = getAnimatedTransform(mask, keyframesMap.get(mask.id), frame, canvas);
-  if (previewOverride) {
-    transform = {
-      ...transform,
-      ...previewOverride,
-      cornerRadius: previewOverride.cornerRadius ?? transform.cornerRadius,
-    };
-  }
-  return transform;
 }
 
 /**
@@ -358,17 +340,18 @@ export function getActiveMasksForFrame(
     feather: number;
     maskType: 'clip' | 'alpha';
   }> = [];
-
-  for (const mask of index.masks) {
-    if (frame < mask.startFrame || frame >= mask.endFrame) continue;
-    const transform = resolveMaskTransform(
-      mask.mask,
-      frame,
+  const activeMaskShapes = resolveActiveShapeMasksAtFrame(
+    index.masks.map(({ mask }) => mask),
+    {
       canvas,
-      keyframesMap,
-      getPreviewTransformOverride?.(mask.mask.id)
-    );
-    activeMasks.push(getMaskPath(mask.mask, transform, canvas));
+      frame,
+      getKeyframes: (itemId) => keyframesMap.get(itemId),
+      getPreviewTransform: getPreviewTransformOverride,
+    }
+  );
+
+  for (const mask of activeMaskShapes) {
+    activeMasks.push(getMaskPath(mask.shape, mask.transform, canvas));
   }
 
   return activeMasks;

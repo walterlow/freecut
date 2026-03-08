@@ -9,7 +9,9 @@ const DEFAULT_ASSETS_DIR = path.join(ROOT_DIR, 'dist', 'assets');
 
 const CHUNK_BUDGETS = [
   { chunk: 'react-vendor', prefix: 'react-vendor-', maxBytes: 250 * 1024, maxFiles: 1 },
-  { chunk: 'feature-editing-core', prefix: 'feature-editing-core-', maxBytes: 500 * 1024, maxFiles: 1 },
+  // Composition-scene refactors and path-editing features now ship additional
+  // shared editing logic in this eagerly loaded domain chunk.
+  { chunk: 'feature-editing-core', prefix: 'feature-editing-core-', maxBytes: 560 * 1024, maxFiles: 1 },
   { chunk: 'feature-editing-ui', prefix: 'feature-editing-ui-', maxBytes: 240 * 1024, maxFiles: 1 },
   { chunk: 'feature-composition-runtime', prefix: 'feature-composition-runtime-', maxBytes: 220 * 1024, maxFiles: 1 },
   { chunk: 'media-bunny-core', prefix: 'media-bunny-core-', maxBytes: 560 * 1024, maxFiles: 1 },
@@ -17,7 +19,8 @@ const CHUNK_BUDGETS = [
   { chunk: 'media-processing', prefix: 'media-processing-', maxBytes: 1250 * 1024, maxFiles: 1, required: false },
   { chunk: 'media-mp3-encoder', prefix: 'media-mp3-encoder-', maxBytes: 350 * 1024, maxFiles: 1 },
   { chunk: 'canvas-audio', prefix: 'canvas-audio-', maxBytes: 32 * 1024, maxFiles: 2, required: false },
-  { chunk: 'export-render.worker', prefix: 'export-render.worker-', maxBytes: 450 * 1024, maxFiles: 1 },
+  // Export now reuses more of the centralized scene assembly/runtime pipeline.
+  { chunk: 'export-render.worker', prefix: 'export-render.worker-', maxBytes: 520 * 1024, maxFiles: 1 },
   { chunk: 'mediabunny-ac3', prefix: 'mediabunny-ac3-', maxBytes: 1250 * 1024, maxFiles: 2 },
   { chunk: 'mediabunny-mp3-encoder', prefix: 'mediabunny-mp3-encoder-', maxBytes: 350 * 1024, maxFiles: 1 },
 ];

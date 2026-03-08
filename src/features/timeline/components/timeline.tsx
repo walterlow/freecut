@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
+import { TimelineNavigator } from './timeline-navigator';
 import { TrackHeader } from './track-header';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
@@ -97,6 +98,10 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     handleZoomOut: () => void;
     handleZoomToFit: () => void;
   } | null>(null);
+  const [timelineMetrics, setTimelineMetrics] = useState({
+    actualDuration: Math.max(duration, 10),
+    timelineWidth: 0,
+  });
 
   // Bottom editor panel state (Keyframes / Scopes)
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
@@ -612,7 +617,19 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           duration={duration}
           scrollRef={timelineContentRef}
           onZoomHandlersReady={setZoomHandlers}
+          onMetricsChange={setTimelineMetrics}
         />
+      </div>
+
+      <div className="flex flex-shrink-0 overflow-hidden">
+        <div className="w-48 border-r border-border panel-bg flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <TimelineNavigator
+            actualDuration={timelineMetrics.actualDuration}
+            timelineWidth={timelineMetrics.timelineWidth}
+            scrollContainerRef={timelineContentRef}
+          />
+        </div>
       </div>
 
       {/* Keyframe Graph Panel */}

@@ -20,7 +20,6 @@ import type {
   VideoItem,
   ImageItem,
   ShapeItem,
-  AdjustmentItem,
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
@@ -52,9 +51,6 @@ import {
   type MaskCanvasSettings,
 } from './canvas-masks';
 import {
-  createTransitionFrameIndex,
-  getTransitionFrameState,
-  buildClipMap,
   type ActiveTransition,
 } from './canvas-transitions';
 import { type CachedGifFrames, gifFrameCache } from '@/features/export/deps/timeline';
@@ -66,7 +62,13 @@ import { renderMasks } from '@/infrastructure/gpu/masks';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
-import { hasCornerPin } from '@/features/export/deps/composition-runtime';
+import {
+  hasCornerPin,
+  resolveFrameCompositionScene,
+  resolveCompositionRenderPlan,
+  collectFrameVideoCandidates,
+  resolveFrameRenderScene,
+} from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
   renderTransitionToCanvas,
@@ -150,14 +152,14 @@ export async function createCompositionRenderer(
     fps,
   };
 
-  // Match MainComposition visibility semantics:
-  // - If any track is soloed, only solo tracks are considered renderable.
-  // - Otherwise, render tracks whose visible flag is not explicitly false.
-  const hasSoloTracks = tracks.some((track) => track.solo);
-  const isTrackRenderable = (track: CompositionInputProps['tracks'][number]) => {
-    if (hasSoloTracks) return track.solo === true;
-    return track.visible !== false;
-  };
+  const renderPlan = resolveCompositionRenderPlan({ tracks, transitions });
+  const { trackRenderState } = renderPlan;
+  const {
+    visibleTrackIds,
+    visibleTracksByOrderDesc: sortedTracks,
+    visibleTracksByOrderAsc: tracksTopToBottom,
+    trackOrderMap,
+  } = trackRenderState;
 
   // === PERFORMANCE OPTIMIZATION: Canvas Pool ===
   // Pre-allocate reusable canvases instead of creating new ones per frame
@@ -370,41 +372,10 @@ export async function createCompositionRenderer(
   }
 
   // Collect adjustment layers
-  const adjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
-  for (const track of tracks) {
-    if (!isTrackRenderable(track)) continue;
-    for (const item of track.items) {
-      if (item.type === 'adjustment') {
-        adjustmentLayers.push({
-          layer: item as AdjustmentItem,
-          trackOrder: track.order ?? 0,
-        });
-      }
-    }
-  }
+  const adjustmentLayers = renderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[];
 
-  // Build clip map for transitions
-  const allClips: TimelineItem[] = [];
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (item.type === 'video' || item.type === 'image') {
-        allClips.push(item);
-      }
-    }
-  }
-  const clipMap = buildClipMap(allClips);
-
-  // Precompute frame-invariant render metadata.
-  const sortedTracks = [...tracks].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-  const tracksTopToBottom = [...sortedTracks].reverse();
-  const trackOrderMap = new Map<string, number>();
-  for (const track of tracks) {
-    trackOrderMap.set(track.id, track.order ?? 0);
-  }
-
-  const transitionFrameIndex = createTransitionFrameIndex(transitions, clipMap);
   const transitionTrackOrderById = new Map<string, number>();
-  for (const window of transitionFrameIndex.windows) {
+  for (const window of renderPlan.transitionWindows) {
     const transitionTrackId = window.transition.trackId;
     const trackOrder = transitionTrackId
       ? (trackOrderMap.get(transitionTrackId) ?? 0)
@@ -526,7 +497,7 @@ export async function createCompositionRenderer(
     const ids: string[] = [];
 
     for (const track of tracks) {
-      if (!isTrackRenderable(track)) continue;
+      if (!visibleTrackIds.has(track.id)) continue;
       for (const item of track.items ?? []) {
         if (item.type !== 'video') continue;
         const start = item.from;
@@ -1043,12 +1014,14 @@ export async function createCompositionRenderer(
         renderMode === 'preview' ? getPreviewTransformOverride : undefined
       );
 
-      // Find active transitions
-      const { activeTransitions, transitionClipIds } = getTransitionFrameState(
-        transitionFrameIndex,
+      const frameScene = resolveFrameCompositionScene({
+        renderPlan,
         frame,
-        fps
-      );
+        canvas: canvasSettings,
+        getKeyframes: (itemId) => keyframesMap.get(itemId),
+        getPreviewTransform: renderMode === 'preview' ? getPreviewTransformOverride : undefined,
+      });
+      const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
 
       // Debug: Log transition state at key frames (only in development)
       if (import.meta.env.DEV && activeTransitions.length > 0 && (frame === activeTransitions[0]?.transitionStart || frame % 30 === 0)) {
@@ -1078,7 +1051,7 @@ export async function createCompositionRenderer(
       {
         let hasAnyGpuEffects = false;
         for (const track of sortedTracks) {
-          if (!isTrackRenderable(track)) continue;
+          if (!visibleTrackIds.has(track.id)) continue;
           for (const item of track.items ?? []) {
             if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
             if (item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')) {
@@ -1290,17 +1263,6 @@ export async function createCompositionRenderer(
         if (item.type === 'shape' && (item as ShapeItem).isMask) return false;
         return true;
       };
-      // Group transitions by their track order
-      const transitionsByTrackOrder = new Map<number, ActiveTransition[]>();
-      for (const activeTransition of activeTransitions) {
-        const trackOrder = transitionTrackOrderById.get(activeTransition.transition.id) ?? 0;
-
-        if (!transitionsByTrackOrder.has(trackOrder)) {
-          transitionsByTrackOrder.set(trackOrder, []);
-        }
-        transitionsByTrackOrder.get(trackOrder)!.push(activeTransition);
-      }
-
       // === OCCLUSION CULLING OPTIMIZATION ===
       // Find the topmost (lowest order) track with a fully occluding item.
       // Skip rendering all tracks below it (higher order) since they'll be fully covered.
@@ -1372,27 +1334,29 @@ export async function createCompositionRenderer(
 
       // Find occlusion cutoff â€“ the lowest track order with a fully occluding item
       // If masks are active, disable occlusion culling (masks could reveal content)
-      let occlusionCutoffOrder: number | null = null;
+      const {
+        occlusionCutoffOrder,
+        renderTasks,
+      } = resolveFrameRenderScene<ActiveTransition>({
+        tracksByOrderDesc: sortedTracks,
+        tracksByOrderAsc: tracksTopToBottom,
+        visibleTrackIds,
+        activeTransitions,
+        getTransitionTrackOrder: (activeTransition) => (
+          transitionTrackOrderById.get(activeTransition.transition.id) ?? 0
+        ),
+        disableOcclusion: activeMasks.length > 0,
+        shouldRenderItem,
+        isFullyOccluding,
+      });
 
-      if (activeMasks.length === 0) {
-        // Scan tracks from top to bottom (lowest order first) to find first occluding item
-        for (const track of tracksTopToBottom) {
-          if (!isTrackRenderable(track)) continue;
-          const trackOrder = track.order ?? 0;
-
-          for (const item of track.items ?? []) {
-            if (!shouldRenderItem(item)) continue;
-
-            if (isFullyOccluding(item, trackOrder)) {
-              occlusionCutoffOrder = trackOrder;
-              if (import.meta.env.DEV && frame % 30 === 0) {
-                log.debug(`Occlusion culling: item ${item.id.substring(0, 8)} on track order ${trackOrder} fully occludes canvas`);
-              }
-              break;
-            }
-          }
-
-          if (occlusionCutoffOrder !== null) break;
+      if (occlusionCutoffOrder !== null && import.meta.env.DEV && frame % 30 === 0) {
+        const occludingTask = sortedTracks
+          .filter((track) => visibleTrackIds.has(track.id) && (track.order ?? 0) === occlusionCutoffOrder)
+          .flatMap((track) => track.items ?? [])
+          .find((item) => shouldRenderItem(item) && isFullyOccluding(item, occlusionCutoffOrder));
+        if (occludingTask) {
+          log.debug(`Occlusion culling: item ${occludingTask.id.substring(0, 8)} on track order ${occlusionCutoffOrder} fully occludes canvas`);
         }
       }
 
@@ -1404,27 +1368,10 @@ export async function createCompositionRenderer(
       // Collect all renderable items in z-order, fire all renders concurrently,
       // then composite results in z-order.
       {
-        type RenderTask = { type: 'item'; item: TimelineItem; trackOrder: number }
-          | { type: 'transition'; transition: ActiveTransition; trackOrder: number };
-        const renderTasks: RenderTask[] = [];
-
-        for (const track of sortedTracks) {
-          if (!isTrackRenderable(track)) continue;
-          const trackOrder = track.order ?? 0;
-          if (occlusionCutoffOrder !== null && trackOrder > occlusionCutoffOrder) {
-            skippedTracks++;
-            continue;
-          }
-          for (const item of track.items ?? []) {
-            if (!shouldRenderItem(item)) continue;
-            renderTasks.push({ type: 'item', item, trackOrder });
-          }
-          const trackTransitions = transitionsByTrackOrder.get(trackOrder);
-          if (trackTransitions) {
-            for (const at of trackTransitions) {
-              renderTasks.push({ type: 'transition', transition: at, trackOrder });
-            }
-          }
+        if (occlusionCutoffOrder !== null) {
+          skippedTracks = sortedTracks.filter((track) => (
+            visibleTrackIds.has(track.id) && (track.order ?? 0) > occlusionCutoffOrder
+          )).length;
         }
 
         // Fire all item renders in parallel (video decodes run concurrently)
@@ -1590,20 +1537,15 @@ export async function createCompositionRenderer(
       const ctx2d = getPrewarmContext();
       if (!ctx2d) return;
 
-      const candidates: VideoItem[] = [];
       const minFrame = frame - 1;
       const maxFrame = frame + 1;
-
-      for (const track of tracksTopToBottom) {
-        if (!isTrackRenderable(track)) continue;
-        for (const item of track.items ?? []) {
-          if (item.type !== 'video') continue;
-          if (item.from > maxFrame || (item.from + item.durationInFrames) <= minFrame) continue;
-          candidates.push(item as VideoItem);
-          if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
-        }
-        if (candidates.length >= PREWARM_DECODE_MAX_ITEMS) break;
-      }
+      const candidates = collectFrameVideoCandidates({
+        tracksByOrderAsc: tracksTopToBottom,
+        visibleTrackIds,
+        minFrame,
+        maxFrame,
+        maxItems: PREWARM_DECODE_MAX_ITEMS,
+      });
 
       const missingCandidateItemIds = candidates
         .map((item) => item.id)

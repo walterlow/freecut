@@ -203,7 +203,7 @@ export const MaskSection = memo(function MaskSection({
           </div>
           {isPenModeThisItem && (
             <p className="text-[10px] text-muted-foreground mt-1">
-              Click to place points. Drag to create curves. Click first point to close.
+              Click to place points. Drag points or handles to refine. Right-click a point to remove. Click the first point to close.
             </p>
           )}
           {isEditingThisItem && (

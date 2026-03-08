@@ -5,26 +5,29 @@ const mocks = vi.hoisted(() => ({
     (_mask: unknown, transform: { x: number }) => `M ${transform.x} 0 L 10 0 Z`
   ),
   rotatePathMock: vi.fn((path: string) => path),
-  getAnimatedTransformMock: vi.fn(
-    (_item: unknown, _keyframes: unknown, frame: number) => ({
-      x: frame,
-      y: 0,
-      width: 100,
-      height: 100,
-      rotation: 0,
-      opacity: 1,
-      cornerRadius: 0,
-    })
+  resolveActiveShapeMasksAtFrameMock: vi.fn(
+    (masks: Array<{ id: string }>, options: {
+      frame: number;
+      getPreviewTransform?: (itemId: string) => { x?: number } | undefined;
+    }) => masks.map((shape) => ({
+      shape,
+      transform: {
+        x: options.getPreviewTransform?.(shape.id)?.x ?? options.frame,
+        y: 0,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+        cornerRadius: 0,
+      },
+    }))
   ),
 }));
 
 vi.mock('@/features/export/deps/composition-runtime', () => ({
   getShapePath: mocks.getShapePathMock,
   rotatePath: mocks.rotatePathMock,
-}));
-
-vi.mock('./canvas-keyframes', () => ({
-  getAnimatedTransform: mocks.getAnimatedTransformMock,
+  resolveActiveShapeMasksAtFrame: mocks.resolveActiveShapeMasksAtFrameMock,
 }));
 
 import {
@@ -78,7 +81,7 @@ describe('canvas mask animation', () => {
   beforeEach(() => {
     mocks.getShapePathMock.mockClear();
     mocks.rotatePathMock.mockClear();
-    mocks.getAnimatedTransformMock.mockClear();
+    mocks.resolveActiveShapeMasksAtFrameMock.mockClear();
   });
 
   it('recomputes mask geometry from the current frame transform', () => {
@@ -91,8 +94,16 @@ describe('canvas mask animation', () => {
     expect(frame12Masks).toHaveLength(1);
     expect((frame10Masks[0]!.path as { value?: string }).value).toContain('10');
     expect((frame12Masks[0]!.path as { value?: string }).value).toContain('12');
-    expect(mocks.getAnimatedTransformMock).toHaveBeenNthCalledWith(1, track.items[0], undefined, 10, canvas);
-    expect(mocks.getAnimatedTransformMock).toHaveBeenNthCalledWith(2, track.items[0], undefined, 12, canvas);
+    expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
+      1,
+      [track.items[0]],
+      expect.objectContaining({ frame: 10 })
+    );
+    expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
+      2,
+      [track.items[0]],
+      expect.objectContaining({ frame: 12 })
+    );
   });
 
   it('applies preview transform overrides to mask geometry', () => {
