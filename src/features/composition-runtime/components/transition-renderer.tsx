@@ -406,7 +406,7 @@ const ClipContent: React.FC<ClipContentProps> = React.memo(function ClipContent(
     const sourceStart = baseSourceStart + sourceFrameOffset;
 
     mediaContent = (
-      <div ref={videoContainerRef} style={{ ...transformStyle, overflow: 'hidden', position: 'relative' }}>
+      <div ref={videoContainerRef} data-item-id={clip.id} style={{ ...transformStyle, overflow: 'hidden', position: 'relative' }}>
         <NativeTransitionVideo
           poolItemId={poolItemId}
           src={clip.src}
