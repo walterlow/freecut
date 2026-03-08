@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
+import { useItemsStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
 
 /**
- * Detects whether any timeline items have GPU effects enabled.
+ * Detects whether the composition renderer overlay should be forced on.
  *
- * GPU effects are applied per-item inside the composition renderer
- * (client-render-engine.ts). This hook returns the detection state so
- * that the scrub system can force composition renders on every frame
- * change (not just during scrub gestures).
+ * Returns true when any of these conditions exist:
+ * - GPU effects enabled on any item
+ * - Non-normal blend modes
+ * - Active masks
+ * - Active transitions (transitions use separate video elements in the
+ *   Remotion Player, which drift from the base-layer clips and cause
+ *   visible ghosting during semi-transparent phases like fade)
  *
- * The overlay canvas visibility is gated separately — returning true
- * here does NOT mean the overlay should render effects.
+ * When true, the scrub overlay renders every frame through the composition
+ * renderer, which reads from the base-layer DOM video elements directly
+ * via domVideoElementProvider — single decode stream, no drift.
  */
 export function useGpuEffectsOverlay(
   _gpuCanvasRef: React.RefObject<HTMLCanvasElement | null>,
@@ -18,12 +22,15 @@ export function useGpuEffectsOverlay(
   _scrubOffscreenRef: React.RefObject<OffscreenCanvas | null>,
   _scrubFrameDirtyRef: React.RefObject<boolean>,
 ) {
-  const [hasGpuEffects, setHasGpuEffects] = useState(false);
+  const [needsOverlay, setNeedsOverlay] = useState(false);
 
   useEffect(() => {
     const check = () => {
       const items = useItemsStore.getState().items;
-      setHasGpuEffects(
+      const transitions = useTransitionsStore.getState().transitions;
+
+      setNeedsOverlay(
+        transitions.length > 0 ||
         items.some((item) =>
           item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ||
           (item.blendMode && item.blendMode !== 'normal') ||
@@ -32,8 +39,10 @@ export function useGpuEffectsOverlay(
       );
     };
     check();
-    return useItemsStore.subscribe(check);
+    const unsubItems = useItemsStore.subscribe(check);
+    const unsubTransitions = useTransitionsStore.subscribe(check);
+    return () => { unsubItems(); unsubTransitions(); };
   }, []);
 
-  return hasGpuEffects;
+  return needsOverlay;
 }
