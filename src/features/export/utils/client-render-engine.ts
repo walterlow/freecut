@@ -76,6 +76,7 @@ import {
   type ItemRenderContext,
   type SubCompRenderData,
 } from './canvas-item-renderer';
+import { ScrubbingCache } from '@/features/preview/utils/scrubbing-cache';
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator';
@@ -166,12 +167,16 @@ export async function createCompositionRenderer(
   // === PERFORMANCE OPTIMIZATION: Text Measurement Cache ===
   const textMeasureCache = new TextMeasurementCache();
 
-  // === RENDERED FRAME CACHE (preview only) ===
-  // Caches recently rendered frames as ImageBitmaps for instant backward scrubbing.
-  // Without this, every backward seek restarts mediabunny's decoder stream.
-  const FRAME_CACHE_MAX = renderMode === 'preview' ? 300 : 0;
-  const frameCache = new Map<number, ImageBitmap>();
-  const frameCacheOrder: number[] = []; // LRU eviction order
+  // === 3-TIER SCRUBBING CACHE (preview only) ===
+  // Tier 1: GPU textures in VRAM for instant scrub (~0.1ms blit)
+  // Tier 2: Per-video last-frame for instant clip boundary display
+  // Tier 3: Deep RAM ImageBitmap buffer (~900 frames) with GPU promotion
+  // When all tiers are warm, scrubbing doesn't decode at all.
+  const FRAME_CACHE_ENABLED = renderMode === 'preview';
+  const scrubbingCache = FRAME_CACHE_ENABLED
+    ? new ScrubbingCache()
+    : null;
+  let lastRenderedFrame = -1;
 
   // === GPU Effects Pipeline ===
   // Lazily initialized on first use to avoid blocking startup
@@ -1014,9 +1019,10 @@ export async function createCompositionRenderer(
     },
 
     async renderFrame(frame: number) {
-      // Check rendered frame cache (preview only — avoids costly mediabunny restarts)
-      if (FRAME_CACHE_MAX > 0) {
-        const cached = frameCache.get(frame);
+      // 3-tier cache lookup (preview only)
+      // Tier 1 (GPU texture) → Tier 3 (RAM ImageBitmap) → miss → full render
+      if (scrubbingCache) {
+        const cached = scrubbingCache.getFrame(frame);
         if (cached) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(cached, 0, 0);
@@ -1553,23 +1559,22 @@ export async function createCompositionRenderer(
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);
 
-      // Cache the rendered frame (preview only) for instant backward scrubbing
-      if (FRAME_CACHE_MAX > 0) {
-        createImageBitmap(canvas).then((bitmap) => {
-          // Evict oldest if cache is full
-          if (frameCacheOrder.length >= FRAME_CACHE_MAX) {
-            const evicted = frameCacheOrder.shift()!;
-            const old = frameCache.get(evicted);
-            if (old) { old.close(); frameCache.delete(evicted); }
+      // Cache the rendered frame into Tier 1 (GPU) + Tier 3 (RAM).
+      // Skip during rapid forward skimming (frame = last+1..+3) — mediabunny
+      // sequential decode is ~1ms/frame, faster than cache write overhead
+      // (~2-5ms createImageBitmap + GPU upload + GC pressure). Cache on
+      // backward seeks (mediabunny stream restart = seconds), jumps, and
+      // non-sequential access where the cache actually helps.
+      if (scrubbingCache) {
+        const delta = frame - lastRenderedFrame;
+        const isSequentialForward = delta > 0 && delta <= 3;
+        lastRenderedFrame = frame;
+        if (!isSequentialForward) {
+          if (gpuPipeline) {
+            scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), canvas.width, canvas.height);
           }
-          // Don't cache if a newer version already exists (race from rapid scrubbing)
-          if (!frameCache.has(frame)) {
-            frameCache.set(frame, bitmap);
-            frameCacheOrder.push(frame);
-          } else {
-            bitmap.close();
-          }
-        }).catch(() => { /* createImageBitmap can fail if canvas is zero-size */ });
+          scrubbingCache.cacheFrame(frame, canvas).catch(() => {});
+        }
       }
     },
 
@@ -1655,21 +1660,12 @@ export async function createCompositionRenderer(
 
     /** Evict specific frames from the render cache (e.g. after effect param changes). */
     invalidateFrameCache(frames?: number[]) {
-      if (!frames) {
-        for (const bitmap of frameCache.values()) bitmap.close();
-        frameCache.clear();
-        frameCacheOrder.length = 0;
-      } else {
-        for (const f of frames) {
-          const bitmap = frameCache.get(f);
-          if (bitmap) {
-            bitmap.close();
-            frameCache.delete(f);
-            const idx = frameCacheOrder.indexOf(f);
-            if (idx >= 0) frameCacheOrder.splice(idx, 1);
-          }
-        }
-      }
+      scrubbingCache?.invalidate(frames);
+    },
+
+    /** Get the scrubbing cache instance for stats/GPU wiring. */
+    getScrubbingCache(): ScrubbingCache | null {
+      return scrubbingCache;
     },
 
     dispose() {
@@ -1714,10 +1710,7 @@ export async function createCompositionRenderer(
       prewarmAttempted = false;
 
       // === PERFORMANCE: Clean up optimization resources ===
-      // Clean up rendered frame cache
-      for (const bitmap of frameCache.values()) bitmap.close();
-      frameCache.clear();
-      frameCacheOrder.length = 0;
+      scrubbingCache?.dispose();
 
       gpuCompositor?.destroy();
       gpuCompositor = null;
