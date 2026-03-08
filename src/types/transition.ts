@@ -34,7 +34,10 @@ export type BuiltinTransitionPresentation =
   | 'iris'
   | 'dissolve'
   | 'glitch'
-  | 'lightLeak';
+  | 'lightLeak'
+  | 'pixelate'
+  | 'chromatic'
+  | 'radialBlur';
 
 /**
  * Visual presentation styles for transitions.

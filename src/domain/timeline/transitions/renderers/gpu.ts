@@ -178,6 +178,126 @@ const lightLeakDef: TransitionDefinition = {
 };
 
 // ============================================================================
+// Pixelate
+// ============================================================================
+
+const pixelateRenderer: TransitionRenderer = {
+  gpuTransitionId: 'pixelate',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    // CSS approximation: crossfade (GPU version does mosaic pixelation)
+    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) };
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
+    // Canvas 2D fallback: hard cut at midpoint
+    const p = clamp01(progress);
+    if (p < 0.5) {
+      ctx.drawImage(leftCanvas, 0, 0);
+    } else {
+      ctx.drawImage(rightCanvas, 0, 0);
+    }
+  },
+};
+
+const pixelateDef: TransitionDefinition = {
+  id: 'pixelate',
+  label: 'Pixelate',
+  description: 'Mosaic pixelation dissolve between clips',
+  category: 'custom',
+  icon: 'Grid3x3',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 20,
+  minDuration: 8,
+  maxDuration: 60,
+};
+
+// ============================================================================
+// Chromatic
+// ============================================================================
+
+const chromaticRenderer: TransitionRenderer = {
+  gpuTransitionId: 'chromatic',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    // CSS approximation: crossfade with slight blur
+    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) };
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    // Canvas 2D fallback: directional crossfade
+    const p = clamp01(progress);
+    const w = canvas?.width ?? leftCanvas.width;
+    const h = canvas?.height ?? leftCanvas.height;
+
+    ctx.save();
+    ctx.globalAlpha = fadeOpacity(p, false);
+    ctx.drawImage(rightCanvas, 0, 0, w, h);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = fadeOpacity(p, true);
+    ctx.drawImage(leftCanvas, 0, 0, w, h);
+    ctx.restore();
+  },
+};
+
+const chromaticDef: TransitionDefinition = {
+  id: 'chromatic',
+  label: 'Chromatic',
+  description: 'RGB channel split with directional sweep',
+  category: 'custom',
+  icon: 'Aperture',
+  hasDirection: true,
+  directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 25,
+  minDuration: 10,
+  maxDuration: 60,
+};
+
+// ============================================================================
+// Radial Blur
+// ============================================================================
+
+const radialBlurRenderer: TransitionRenderer = {
+  gpuTransitionId: 'radialBlur',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    // CSS approximation: crossfade with slight scale
+    const p = clamp01(progress);
+    const envelope = Math.sin(p * Math.PI);
+    const scale = 1 + envelope * 0.02;
+    return {
+      opacity: fadeOpacity(p, isOutgoing),
+      transform: envelope > 0.1 ? `scale(${scale})` : undefined,
+    };
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
+    // Canvas 2D fallback: crossfade
+    const p = clamp01(progress);
+    ctx.save();
+    ctx.globalAlpha = fadeOpacity(p, false);
+    ctx.drawImage(rightCanvas, 0, 0);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = fadeOpacity(p, true);
+    ctx.drawImage(leftCanvas, 0, 0);
+    ctx.restore();
+  },
+};
+
+const radialBlurDef: TransitionDefinition = {
+  id: 'radialBlur',
+  label: 'Radial Blur',
+  description: 'Zoom and spin blur transition',
+  category: 'custom',
+  icon: 'CircleDot',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 25,
+  minDuration: 10,
+  maxDuration: 60,
+};
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -185,4 +305,7 @@ export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('dissolve', dissolveDef, dissolveRenderer);
   registry.register('glitch', glitchDef, glitchRenderer);
   registry.register('lightLeak', lightLeakDef, lightLeakRenderer);
+  registry.register('pixelate', pixelateDef, pixelateRenderer);
+  registry.register('chromatic', chromaticDef, chromaticRenderer);
+  registry.register('radialBlur', radialBlurDef, radialBlurRenderer);
 }
