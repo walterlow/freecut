@@ -124,11 +124,27 @@ function drawTexturedTriangle(
 ): void {
   ctx.save();
 
-  // Clip to destination triangle
+  // Expand clip triangle slightly outward from centroid to eliminate
+  // anti-aliasing seams between adjacent mesh triangles.
+  const cx = (dx0 + dx1 + dx2) / 3;
+  const cy = (dy0 + dy1 + dy2) / 3;
+  const EXPAND = 1.5;
+  const expand = (vx: number, vy: number): [number, number] => {
+    const ox = vx - cx;
+    const oy = vy - cy;
+    const len = Math.sqrt(ox * ox + oy * oy);
+    if (len < 1e-6) return [vx, vy];
+    return [vx + (ox / len) * EXPAND, vy + (oy / len) * EXPAND];
+  };
+  const [ex0, ey0] = expand(dx0, dy0);
+  const [ex1, ey1] = expand(dx1, dy1);
+  const [ex2, ey2] = expand(dx2, dy2);
+
+  // Clip to expanded destination triangle
   ctx.beginPath();
-  ctx.moveTo(dx0, dy0);
-  ctx.lineTo(dx1, dy1);
-  ctx.lineTo(dx2, dy2);
+  ctx.moveTo(ex0, ey0);
+  ctx.lineTo(ex1, ey1);
+  ctx.lineTo(ex2, ey2);
   ctx.closePath();
   ctx.clip();
 

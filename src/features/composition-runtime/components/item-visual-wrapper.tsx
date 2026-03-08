@@ -215,11 +215,16 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         }}
       >
         {/* Corner Pin wrapper (only when active) */}
+        {/* When corner pin is active, will-change + backfaceVisibility force Chrome
+            to composite through the CSS pipeline instead of video hardware overlay,
+            which would otherwise ignore the matrix3d transform. */}
         <div
           style={cornerPinStyle ? {
             width: '100%',
             height: '100%',
             ...cornerPinStyle,
+            willChange: 'transform',
+            backfaceVisibility: 'hidden' as const,
             overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
           } : {
             width: '100%',

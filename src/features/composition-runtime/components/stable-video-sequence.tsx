@@ -227,7 +227,9 @@ function areGroupPropsEqual(
         prevItem.from !== nextItem.from ||
         prevItem.durationInFrames !== nextItem.durationInFrames ||
         prevItem.trackVisible !== nextItem.trackVisible ||
-        prevItem.muted !== nextItem.muted) {
+        prevItem.muted !== nextItem.muted ||
+        prevItem.cornerPin !== nextItem.cornerPin ||
+        prevItem.blendMode !== nextItem.blendMode) {
       return false;
     }
   }

@@ -65,6 +65,7 @@ import { renderMasks } from '@/lib/masks/mask-renderer';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
+import { hasCornerPin } from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
   renderTransitionToCanvas,
@@ -1106,7 +1107,7 @@ export async function createCompositionRenderer(
 
         // === DIRECT VIDEO→GPU PATH (importExternalTexture) ===
         // When a video item has ONLY GPU effects, a DOM video element is available,
-        // and the transform is simple (no rotation/corner-radius that need canvas 2D),
+        // and the transform is simple (no rotation/corner-radius/corner-pin that need canvas 2D),
         // skip canvas 2D entirely and go: video → importExternalTexture → GPU effects → output.
         if (
           renderMode === 'preview'
@@ -1116,6 +1117,7 @@ export async function createCompositionRenderer(
           && transform.rotation === 0
           && transform.cornerRadius === 0
           && transform.opacity === 1
+          && !hasCornerPin(item.cornerPin)
           && itemRenderContext.domVideoElementProvider
         ) {
           const domVideo = itemRenderContext.domVideoElementProvider(item.id);
