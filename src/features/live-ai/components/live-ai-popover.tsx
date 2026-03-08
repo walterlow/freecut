@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { Component, useEffect, useRef, useCallback, useState } from 'react';
 import { Circle, Settings, CameraOff } from 'lucide-react';
+import { useAccount } from '@account-kit/react';
 import { useBroadcast, usePlayer } from '@daydreamlive/react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -14,9 +15,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useLiveSessionStore } from '../stores/live-session-store';
+import { useBillingLoop } from '../hooks/use-billing-loop';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useProjectStore } from '@/features/editor/deps/projects';
+import { useTimelineStore, useProjectStore } from '../deps/editor';
 import { createStream, isDaydreamConfigured } from '../api/create-stream';
 import {
   createLiveVideoToVideoSession,
@@ -107,8 +108,19 @@ interface LiveAISessionWithBroadcastProps {
   setPreviewView: (v: PreviewView) => void;
 }
 
+/** Optional billing: setOnPause and billingEnabled. When billingEnabled is false, billing UI and loop are skipped. */
+interface LiveAISessionCoreProps extends LiveAISessionWithBroadcastProps {
+  setOnPause: (fn: (() => void) | null) => void;
+  billingEnabled: boolean;
+}
+
+// No-op when wallet not connected; billing loop is not run.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional no-op
+const noopSetOnPause = (_fn: (() => void) | null) => {};
+
 /** Shared panel body (consent, session, settings, footer). Used in sidebar and floating popover. */
 export function LiveAIPanelContent() {
+  const { address } = useAccount({ type: 'LightAccount' });
   const setPermissionsGranted = useLiveSessionStore((s) => s.setPermissionsGranted);
   const includeTimelineAudio = useLiveSessionStore((s) => s.includeTimelineAudio);
   const setIncludeTimelineAudio = useLiveSessionStore((s) => s.setIncludeTimelineAudio);
@@ -312,16 +324,39 @@ export function LiveAIPanelContent() {
           </>
         )}
 
-        {showSession && (
-          <LiveAISessionWithBroadcast
-            streamData={streamData}
-            whipUrl={whipUrl}
-            localStream={localStream}
-            onStreamStopped={handleStreamStopped}
-            previewView={previewView}
-            setPreviewView={setPreviewView}
-          />
-        )}
+        {showSession &&
+          (address ? (
+            <LiveAISessionBillingErrorBoundary
+              sessionProps={{
+                streamData,
+                whipUrl,
+                localStream,
+                onStreamStopped: handleStreamStopped,
+                previewView,
+                setPreviewView,
+              }}
+            >
+              <LiveAISessionWithBroadcastWithBilling
+                streamData={streamData}
+                whipUrl={whipUrl}
+                localStream={localStream}
+                onStreamStopped={handleStreamStopped}
+                previewView={previewView}
+                setPreviewView={setPreviewView}
+              />
+            </LiveAISessionBillingErrorBoundary>
+          ) : (
+            <LiveAISessionWithBroadcastCore
+              streamData={streamData}
+              whipUrl={whipUrl}
+              localStream={localStream}
+              onStreamStopped={handleStreamStopped}
+              previewView={previewView}
+              setPreviewView={setPreviewView}
+              setOnPause={noopSetOnPause}
+              billingEnabled={false}
+            />
+          ))}
       </div>
 
       {settingsOpen && (
@@ -542,13 +577,16 @@ function LiveAIPopoverFloating() {
   return null;
 }
 
-function LiveAISessionWithBroadcast({
+function LiveAISessionWithBroadcastCore({
+  streamData,
   whipUrl,
   localStream,
   onStreamStopped,
   previewView,
   setPreviewView,
-}: Omit<LiveAISessionWithBroadcastProps, 'streamData'>) {
+  setOnPause,
+  billingEnabled,
+}: LiveAISessionCoreProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const broadcast = useBroadcast({ whipUrl, reconnect: { enabled: true } });
@@ -559,9 +597,35 @@ function LiveAISessionWithBroadcast({
   const isRecording = useLiveSessionStore((s) => s.isRecording);
   const setRecording = useLiveSessionStore((s) => s.setRecording);
   const addRecordedTake = useLiveSessionStore((s) => s.addRecordedTake);
+  const setStreamActive = useLiveSessionStore((s) => s.setStreamActive);
+  const setStreamId = useLiveSessionStore((s) => s.setStreamId);
+  const billingError = useLiveSessionStore((s) => s.billingError);
+  const setBillingError = useLiveSessionStore((s) => s.setBillingError);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingStartRef = useRef<number>(0);
   const linkedTimelineStartRef = useRef<number>(0);
+
+  useEffect(() => {
+    const active = broadcast.status.state === 'live';
+    setStreamActive(active);
+    setStreamId(active && streamData?.id ? streamData.id : null);
+  }, [broadcast.status.state, streamData?.id, setStreamActive, setStreamId]);
+
+  useEffect(() => {
+    return () => {
+      setStreamActive(false);
+      setStreamId(null);
+    };
+  }, [setStreamActive, setStreamId]);
+
+  useEffect(() => {
+    setOnPause(() => {
+      broadcast.stop();
+      localStream?.getTracks().forEach((t) => t.stop());
+      onStreamStopped();
+    });
+    return () => setOnPause(null);
+  }, [setOnPause, broadcast, localStream, onStreamStopped]);
 
   useEffect(() => {
     if (!whepUrl || player.status.state === 'playing' || player.status.state === 'connecting') return;
@@ -631,7 +695,7 @@ function LiveAISessionWithBroadcast({
         recordingStartRef.current = Date.now();
         linkedTimelineStartRef.current = usePlaybackStore.getState().currentFrame;
         recorder.start(100);
-      } catch (err) {
+      } catch {
         setRecording(false);
       }
       return;
@@ -646,11 +710,32 @@ function LiveAISessionWithBroadcast({
   const handleStop = useCallback(() => {
     broadcast.stop();
     localStream?.getTracks().forEach((t) => t.stop());
+    setStreamActive(false);
+    setStreamId(null);
+    setBillingError(null);
     onStreamStopped();
-  }, [broadcast, localStream, onStreamStopped]);
+  }, [broadcast, localStream, onStreamStopped, setStreamActive, setStreamId, setBillingError]);
 
   return (
     <>
+      {!billingEnabled && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Connect your wallet to enable billing for this session.
+        </p>
+      )}
+      {billingEnabled && billingError && (
+        <div className="mb-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-xs">
+          {billingError === 'insufficient_balance' && (
+            <p>Top up USDC on Arbitrum to continue.</p>
+          )}
+          {billingError === 'session_limit_exceeded' && (
+            <p>You&apos;ve used 10 USDC this session. Authorize another 10 USDC to continue?</p>
+          )}
+          {billingError === 'rpc_or_unknown' && (
+            <p>Billing failed. Check connection and try again.</p>
+          )}
+        </div>
+      )}
       <div className="flex gap-1 mb-2">
         <Button variant="ghost" size="sm" className="text-xs" onClick={handleStop} aria-label="Stop broadcast">
           Stop
@@ -700,6 +785,43 @@ function LiveAISessionWithBroadcast({
       </p>
     </>
   );
+}
+
+/** Wrapper that runs the billing loop; only mount when user has a connected account (avoids useSmartAccountClient when undefined). */
+function LiveAISessionWithBroadcastWithBilling(props: LiveAISessionWithBroadcastProps) {
+  const { setOnPause } = useBillingLoop();
+  return (
+    <LiveAISessionWithBroadcastCore
+      {...props}
+      setOnPause={setOnPause}
+      billingEnabled
+    />
+  );
+}
+
+/** Catches errors from useSmartAccountClient (e.g. context undefined) and falls back to session without billing. */
+class LiveAISessionBillingErrorBoundary extends Component<
+  { sessionProps: LiveAISessionWithBroadcastProps; children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <LiveAISessionWithBroadcastCore
+          {...this.props.sessionProps}
+          setOnPause={noopSetOnPause}
+          billingEnabled={false}
+        />
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export function LiveAIPopover() {

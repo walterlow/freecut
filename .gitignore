@@ -32,6 +32,15 @@ dist-ssr
 build
 out
 
+# Hardhat
+artifacts/
+cache/
+typechain-types/
+typechain-generated/
+
+# Stylus / Cargo (contracts/stylus)
+contracts/stylus/target/
+
 # Testing
 coverage
 

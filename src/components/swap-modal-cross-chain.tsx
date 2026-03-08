@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { USDC_ADDRESS_BY_CHAIN_ID } from '@/config/chains';
-import { chainIdToHex, decimalAmountToHex, NATIVE_TOKEN_ADDRESS } from '@/lib/swap-utils';
+import { chainIdToHex, decimalAmountToHex, NATIVE_TOKEN_ADDRESS } from '@/shared/utils/swap-utils';
 
 const USDC_DECIMALS = 6;
 

@@ -1,0 +1,22 @@
+[package]
+name = "stylus"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+
+[[bin]]
+name = "entry"
+path = "src/main.rs"
+
+[features]
+export-abi = ["stylus-sdk/export-abi"]
+
+[dependencies]
+alloy-primitives = "0.7.6"
+stylus-sdk = "0.6"
+
+# stylus-sdk 0.6 + ruint 1.17+ hit a const-eval error; use older ruint (repo: recmo/uint)
+[patch.crates-io]
+ruint = { git = "https://github.com/recmo/uint", tag = "v1.12.3" }

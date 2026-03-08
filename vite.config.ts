@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const WHIP_PROXY_PREFIX = '/api/whip-proxy'
 
@@ -10,8 +11,8 @@ const WHIP_PROXY_PREFIX = '/api/whip-proxy'
 function whipProxyCorsPlugin() {
   return {
     name: 'whip-proxy-cors',
-    configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
-      server.middlewares.use((req: any, res: any, next: () => void) => {
+    configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void) => void } }) {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (req.method === 'OPTIONS' && req.url?.startsWith(WHIP_PROXY_PREFIX)) {
           res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
           res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, PUT, DELETE')
@@ -51,9 +52,9 @@ export default defineConfig({
         rewrite: (path: string) => path.replace(WHIP_PROXY_PREFIX, ''),
         secure: true,
         configure: (proxy: {
-          on: (event: string, fn: (proxyRes: any, req: any, res: any) => void) => void
+          on: (event: string, fn: (proxyRes: IncomingMessage, req: IncomingMessage) => void) => void
         }) => {
-          proxy.on('proxyRes', (proxyRes: any, req: any) => {
+          proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage) => {
             // Rewrite redirect Location so the client stays on our origin (avoids CORS on follow)
             if (proxyRes.statusCode >= 301 && proxyRes.statusCode < 400 && proxyRes.headers['location']) {
               const loc = proxyRes.headers['location']

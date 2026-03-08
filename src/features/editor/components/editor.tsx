@@ -30,7 +30,7 @@ import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
-import { LiveAIPopover } from '@/features/live-ai/components/live-ai-popover';
+import { LiveAIPopover } from '@/features/editor/deps/live-ai';
 
 const logger = createLogger('Editor');
 const LazyExportDialog = lazy(() =>
