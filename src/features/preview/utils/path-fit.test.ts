@@ -59,4 +59,26 @@ describe('path-fit utilities', () => {
     expect(result.pathVertices[0]?.outHandle[1]).toBeCloseTo(4 / 3);
     expect(result.pathVertices[1]?.inHandle[1]).toBeCloseTo(4 / 3);
   });
+
+  it('treats near-zero derivative discriminants as a single root', () => {
+    const vertices: MaskVertex[] = [
+      {
+        position: [0, 0],
+        inHandle: [0, 0],
+        outHandle: [1 / 3, 0],
+      },
+      {
+        position: [1, 0],
+        inHandle: [-1 / 3, 1e-12],
+        outHandle: [0, 0],
+      },
+    ];
+
+    const bounds = getPathBounds(vertices);
+
+    expect(bounds).not.toBeNull();
+    expect(bounds?.minX).toBeCloseTo(0);
+    expect(bounds?.maxX).toBeCloseTo(1);
+    expect(bounds?.maxY).toBeGreaterThanOrEqual(0);
+  });
 });

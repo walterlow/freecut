@@ -26,6 +26,7 @@ export function TimelineNavigator({
   const scrollLeft = useTimelineViewportStore((s) => s.scrollLeft);
   const viewportWidth = useTimelineViewportStore((s) => s.viewportWidth);
 
+  const [trackWidth, setTrackWidth] = useState(0);
   const [dragTarget, setDragTarget] = useState<DragTarget>(null);
   const [dragStartX, setDragStartX] = useState(0);
   const [dragStartThumbLeft, setDragStartThumbLeft] = useState(0);
@@ -40,7 +41,6 @@ export function TimelineNavigator({
     return Math.max(actualDuration, furthestEndSeconds, 10);
   }, [actualDuration, fps, maxFrame]);
 
-  const trackWidth = trackRef.current?.clientWidth ?? 0;
   const { maxScrollLeft, thumbWidth, thumbTravel, thumbLeft } = getNavigatorThumbMetrics({
     timelineWidth,
     viewportWidth,
@@ -74,6 +74,30 @@ export function TimelineNavigator({
     const nextScrollLeft = (desiredThumbLeft / thumbTravel) * maxScrollLeft;
     setScrollLeftOnContainer(nextScrollLeft);
   }, [dragTarget, maxScrollLeft, setScrollLeftOnContainer, thumbTravel, thumbWidth]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return;
+
+    setTrackWidth(track.clientWidth);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setTrackWidth(entry.contentRect.width);
+      }
+    });
+
+    observer.observe(track);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {

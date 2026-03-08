@@ -192,7 +192,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   // Now ALL items stay in the same DOM location with per-item effect application
   // via ItemEffectWrapper. This prevents remounts when adjustment layers are added/removed.
 
-  useMemo(() => {
+  React.useEffect(() => {
     const fontFamilies = renderPlan.visibleTextFontFamilies;
     if (fontFamilies.length > 0) loadFonts(fontFamilies);
   }, [renderPlan.visibleTextFontFamilies]);

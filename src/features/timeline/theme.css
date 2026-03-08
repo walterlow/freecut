@@ -82,14 +82,10 @@ body.timeline-item-drag-cursor-not-allowed * {
 .timeline-container {
   overflow-x: auto;
   overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 
 .timeline-container::-webkit-scrollbar {
-  width: 0;
   height: 0;
-  display: none;
 }
 
 /* Waveform gradient background - darker edges, dark center */

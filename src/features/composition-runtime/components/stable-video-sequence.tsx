@@ -69,7 +69,11 @@ function areGroupPropsEqual(
   }
 ): boolean {
   // Quick reference check first
-  if (prevProps.group === nextProps.group && prevProps.renderItem === nextProps.renderItem) {
+  if (
+    prevProps.group === nextProps.group
+    && prevProps.renderItem === nextProps.renderItem
+    && prevProps.transitionWindows === nextProps.transitionWindows
+  ) {
     return true;
   }
 

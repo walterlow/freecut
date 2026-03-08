@@ -319,7 +319,7 @@ export function buildTransitionVideoAudioSegments(
       src: item.src,
       from: item.from - before,
       durationInFrames: item.durationInFrames + before + after,
-      trimBefore: baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps),
+      trimBefore: Math.max(0, baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)),
       playbackRate,
       sourceFps: item.sourceFps,
       volumeDb: item.volume ?? 0,

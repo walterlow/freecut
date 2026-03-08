@@ -2,6 +2,8 @@ import type { MaskVertex } from '@/types/masks';
 import type { TransformProperties } from '@/types/transform';
 import type { Transform } from '../types/gizmo';
 
+const ROOT_EPSILON = 1e-10;
+
 function cubicPointAt(
   p0: number,
   p1: number,
@@ -41,7 +43,7 @@ function cubicDerivativeRoots(
   const discriminant = qb * qb - 4 * qa * qc;
   if (discriminant < 0) return [];
 
-  if (discriminant === 0) {
+  if (Math.abs(discriminant) < ROOT_EPSILON) {
     const t = -qb / (2 * qa);
     return t > 0 && t < 1 ? [t] : [];
   }
@@ -50,7 +52,11 @@ function cubicDerivativeRoots(
   const t1 = (-qb + sqrtDiscriminant) / (2 * qa);
   const t2 = (-qb - sqrtDiscriminant) / (2 * qa);
 
-  return [t1, t2].filter((t) => t > 0 && t < 1);
+  return [t1, t2]
+    .filter((t) => t > 0 && t < 1)
+    .filter((t, index, roots) =>
+      roots.findIndex((candidate) => Math.abs(candidate - t) < ROOT_EPSILON) === index
+    );
 }
 
 export function getPathBounds(vertices: MaskVertex[]): {

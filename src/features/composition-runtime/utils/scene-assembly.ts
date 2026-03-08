@@ -430,6 +430,8 @@ export function collectFrameVideoCandidates({
   maxFrame: number;
   maxItems: number;
 }): VideoItem[] {
+  if (maxItems <= 0) return [];
+
   const candidates: VideoItem[] = [];
 
   for (const track of tracksByOrderAsc) {
