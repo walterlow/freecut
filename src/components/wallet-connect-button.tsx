@@ -3,20 +3,30 @@
 import {
   useAccount,
   useAuthModal,
+  useChain,
   useLogout,
   useSignerStatus,
   useUser,
 } from '@account-kit/react';
 import { useNavigate } from '@tanstack/react-router';
-import { ChevronDown, Wallet } from 'lucide-react';
+import { ChevronDown, Copy, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { alchemyConfig } from '@/config/alchemy';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { alchemyConfig, SWITCHABLE_CHAINS } from '@/config/alchemy';
+import { useUsdcBalance } from '@/hooks/use-usdc-balance';
 
 function truncateAddress(address: string): string {
   if (address.length <= 10) return address;
@@ -67,10 +77,21 @@ function WalletConnectButtonInner({
   const signerStatus = useSignerStatus();
   const { logout } = useLogout();
   const { address } = useAccount({ type: 'LightAccount' });
+  const { chain, setChain, isSettingChain } = useChain();
+  const { formatted: usdcFormatted } = useUsdcBalance(
+    chain,
+    address as `0x${string}` | undefined
+  );
 
   const handleDisconnect = async () => {
     await logout();
     navigate({ to: '/' });
+  };
+
+  const handleCopyAddress = () => {
+    if (address) {
+      void navigator.clipboard.writeText(address);
+    }
   };
 
   const isInitializing = signerStatus.isInitializing;
@@ -110,12 +131,46 @@ function WalletConnectButtonInner({
           <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="min-w-[12rem]">
         {address && (
-          <DropdownMenuItem disabled className="font-mono text-xs">
-            {address}
+          <DropdownMenuItem
+            onClick={handleCopyAddress}
+            className="flex cursor-pointer items-center justify-between gap-2 font-mono text-xs"
+            aria-label="Copy full address"
+          >
+            <span>{truncateAddress(address)}</span>
+            <Copy className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem disabled className="text-muted-foreground">
+          USDC: {usdcFormatted}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="px-2 py-1.5">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Network
+          </label>
+          <Select
+            value={chain?.id?.toString() ?? ''}
+            onValueChange={(value) => {
+              const c = SWITCHABLE_CHAINS.find((ch) => ch.id.toString() === value);
+              if (c) setChain({ chain: c });
+            }}
+            disabled={isSettingChain}
+          >
+            <SelectTrigger className="h-8 w-full text-xs">
+              <SelectValue placeholder="Select network" />
+            </SelectTrigger>
+            <SelectContent className="z-[10000]">
+              {SWITCHABLE_CHAINS.map((c) => (
+                <SelectItem key={c.id} value={c.id.toString()} className="text-xs">
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleDisconnect}>Disconnect</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

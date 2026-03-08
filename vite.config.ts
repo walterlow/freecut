@@ -3,6 +3,30 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
+const WHIP_PROXY_PREFIX = '/api/whip-proxy'
+
+/** Dev-only: handle CORS preflight for WHIP proxy so browser doesn't hit Livepeer's redirect on OPTIONS */
+function whipProxyCorsPlugin() {
+  return {
+    name: 'whip-proxy-cors',
+    configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void) => void } }) {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method === 'OPTIONS' && req.url?.startsWith(WHIP_PROXY_PREFIX)) {
+          res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
+          res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, PUT, DELETE')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+          res.setHeader('Access-Control-Max-Age', '86400')
+          res.statusCode = 200
+          res.end()
+          return
+        }
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,6 +35,7 @@ export default defineConfig({
     tailwindcss(),
     // Polyfill Node stdlib (buffer, etc.) for browser - required by @account-kit deps (elliptic, bn.js, @solana/web3.js)
     nodePolyfills(),
+    whipProxyCorsPlugin(),
   ],
   resolve: {
     alias: {
@@ -20,6 +45,35 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    proxy: {
+      [WHIP_PROXY_PREFIX]: {
+        target: 'https://ai.livepeer.com',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(WHIP_PROXY_PREFIX, ''),
+        secure: true,
+        configure: (proxy: {
+          on: (event: string, fn: (proxyRes: IncomingMessage, req: IncomingMessage) => void) => void
+        }) => {
+          proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage) => {
+            // Rewrite redirect Location so the client stays on our origin (avoids CORS on follow)
+            if (proxyRes.statusCode >= 301 && proxyRes.statusCode < 400 && proxyRes.headers['location']) {
+              const loc = proxyRes.headers['location']
+              const origin = `http://${req.headers.host || 'localhost:5173'}`
+              try {
+                if (loc.includes('livepeer.com')) {
+                  const u = new URL(loc)
+                  proxyRes.headers['location'] = `${origin}${WHIP_PROXY_PREFIX}${u.pathname}${u.search}`
+                } else if (loc.startsWith('/')) {
+                  proxyRes.headers['location'] = `${origin}${WHIP_PROXY_PREFIX}${loc}`
+                }
+              } catch {
+                // leave Location unchanged if URL parse fails
+              }
+            }
+          })
+        },
+      },
+    },
   },
   build: {
     target: 'esnext',

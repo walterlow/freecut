@@ -557,6 +557,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       saveTimeline,
       loadTimeline,
       addMediaToTimeline: timelineActions.addMediaToTimeline,
+      insertRecordedClip: timelineActions.insertRecordedClip,
     };
   }
 

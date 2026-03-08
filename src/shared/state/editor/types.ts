@@ -2,7 +2,7 @@ export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
-  activeTab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions';
+  activeTab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions' | 'live-ai';
   sidebarWidth: number;
   rightSidebarWidth: number;
   timelineHeight: number;
@@ -15,7 +15,7 @@ export interface EditorActions {
   setRightSidebarOpen: (open: boolean) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
-  setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions') => void;
+  setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions' | 'live-ai') => void;
   setSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   setTimelineHeight: (height: number) => void;

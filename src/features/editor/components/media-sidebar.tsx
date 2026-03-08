@@ -48,7 +48,9 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { MediaLibrary } from '@/features/editor/deps/media-library';
+import { useLiveSessionStore } from '@/features/editor/deps/live-ai';
 import { TransitionsPanel } from './transitions-panel';
+import { LiveAIPanelContent } from '@/features/editor/deps/live-ai';
 import { findNearestAvailableSpace } from '@/features/editor/deps/timeline-utils';
 import type { TextItem, ShapeItem, ShapeType, AdjustmentItem } from '@/types/timeline';
 import type { VisualEffect, CSSFilterType, GlitchVariant } from '@/types/effects';
@@ -71,6 +73,42 @@ export interface ToolbarActionsProps {
 
 interface MediaSidebarProps {
   toolbarActions?: ToolbarActionsProps;
+}
+
+function LiveAIButton() {
+  const activeTab = useEditorStore((s) => s.activeTab);
+  const setActiveTab = useEditorStore((s) => s.setActiveTab);
+  const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
+  const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
+  const setOpen = useLiveSessionStore((s) => s.setOpen);
+
+  const isActive = activeTab === 'live-ai';
+
+  const handleClick = useCallback(() => {
+    setActiveTab('live-ai');
+    if (!leftSidebarOpen) toggleLeftSidebar();
+    setOpen(false); // Keep floating popover closed; Live AI always in sidebar (mobile + desktop)
+  }, [setActiveTab, leftSidebarOpen, toggleLeftSidebar, setOpen]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      className={`
+        w-10 h-10 min-h-11 min-w-11 md:min-h-0 md:min-w-0 rounded-lg flex items-center justify-center transition-all mt-1
+        ${isActive
+          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+          : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+        }
+      `}
+      data-tooltip="Live AI Studio"
+      data-tooltip-side="right"
+      aria-label="Live AI Studio"
+      aria-expanded={isActive}
+    >
+      <Wand2 className="w-5 h-5" />
+    </button>
+  );
 }
 
 export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: MediaSidebarProps) {
@@ -465,6 +503,7 @@ export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: Media
             <button
               key={id}
               onClick={() => {
+                useLiveSessionStore.getState().setOpen(false);
                 if (activeTab === id && leftSidebarOpen) {
                   handleLeftSidebarToggle();
                 } else {
@@ -485,6 +524,8 @@ export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: Media
               <Icon className="w-5 h-5" />
             </button>
           ))}
+          {/* Live AI Studio - below Transitions */}
+          <LiveAIButton />
         </div>
 
         {/* Mobile: toolbar actions (Save, Export, Settings, etc.) at bottom of strip */}
@@ -592,7 +633,7 @@ export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: Media
           {/* Panel Header */}
           <div className="h-10 flex items-center px-3 border-b border-border flex-shrink-0">
             <span className="text-sm font-medium text-foreground">
-              {categories.find((c) => c.id === activeTab)?.label}
+              {categories.find((c) => c.id === activeTab)?.label ?? (activeTab === 'live-ai' ? 'Live AI Studio' : '')}
             </span>
           </div>
 
@@ -836,6 +877,13 @@ export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: Media
           <div className={`flex-1 overflow-hidden ${activeTab === 'transitions' ? 'block' : 'hidden'}`}>
             <TransitionsPanel />
           </div>
+
+          {/* Live AI Tab - slide-out panel (same on mobile and desktop) */}
+          {activeTab === 'live-ai' && (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <LiveAIPanelContent />
+            </div>
+          )}
           </div>
         </Activity>
         {/* Resize Handle - desktop only */}

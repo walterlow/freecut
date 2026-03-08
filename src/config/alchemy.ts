@@ -9,22 +9,33 @@ import {
 } from '@account-kit/infra';
 import { createConfig } from '@account-kit/react';
 import { QueryClient } from '@tanstack/react-query';
+import { robinhoodTestnet } from '@/config/chains';
 
 const apiKey = import.meta.env.VITE_ALCHEMY_API_KEY as string | undefined;
 const isProd = import.meta.env.PROD;
 
-/** Testnets for development: Story Aeneid, Base Sepolia, Arbitrum Sepolia */
+/** Set to "true" in .env.local to use mainnet chains (Base, Arbitrum, Story) while running dev server. */
+const useMainnetChains =
+  isProd || import.meta.env.VITE_USE_MAINNET === 'true';
+
+/** Testnets for development: Story Aeneid, Base Sepolia, Arbitrum Sepolia, Robinhood Testnet */
 export const DEVELOPMENT_CHAINS = [
   storyAeneid,
   baseSepolia,
   arbitrumSepolia,
+  robinhoodTestnet,
 ] as const;
 
-/** Mainnets for production: Arbitrum, Base, Story */
+/** Mainnets: Base (creator economy), Arbitrum (Stylus / AI logic & datasets), Story (IP). */
 export const PRODUCTION_CHAINS = [arbitrum, base, storyMainnet] as const;
 
-/** Default chain: Base Sepolia in dev, Base in production */
-const defaultChain = isProd ? base : baseSepolia;
+/** Chains shown in the wallet network selector. Mainnet when PROD or VITE_USE_MAINNET=true. */
+export const SWITCHABLE_CHAINS = useMainnetChains
+  ? ([...PRODUCTION_CHAINS] as const)
+  : ([...DEVELOPMENT_CHAINS] as const);
+
+/** Default chain: Base Sepolia in dev (unless VITE_USE_MAINNET), Base in production. */
+const defaultChain = useMainnetChains ? base : baseSepolia;
 
 export const queryClient = new QueryClient();
 
@@ -32,10 +43,14 @@ const policyId = import.meta.env.VITE_ALCHEMY_POLICY_ID as string | undefined;
 
 function getAlchemyConfig() {
   if (!apiKey) return null;
+  const chains = useMainnetChains
+    ? PRODUCTION_CHAINS.map((chain) => ({ chain }))
+    : DEVELOPMENT_CHAINS.map((chain) => ({ chain }));
   return createConfig(
     {
       transport: alchemy({ apiKey }),
       chain: defaultChain,
+      chains,
       ssr: false,
       enablePopupOauth: true,
       ...(policyId ? { policyId } : {}),

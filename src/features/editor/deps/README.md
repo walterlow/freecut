@@ -32,3 +32,5 @@ Editor-local adapters for external feature dependencies.
   export feature dialogs/helpers.
 - `composition-runtime.ts`: the preferred entry point for editor modules that
   need transform/audio-cache helpers from composition runtime.
+- `live-ai.ts`: adapter for editor → live-ai (LiveAIPopover, LiveAIPanelContent,
+  useLiveSessionStore). Import from here instead of from `@/features/live-ai` directly.

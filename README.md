@@ -170,6 +170,31 @@ npm run routes         # Regenerate TanStack Router route tree
 VITE_SHOW_DEBUG_PANEL=true   # Show debug panel in dev (default: true)
 ```
 
+Copy `.env.example` to `.env.local` and set the variables you need (Alchemy, Live AI keys, payment contract, etc.). See `.env.example` for all options.
+
+### Production
+
+**Build:** `npm run build` (output in `dist/`). Full check before release: `npm run verify`.
+
+**Required env for production (Vite exposes only `VITE_*` at build time):**
+
+| Variable | Purpose |
+|--------|--------|
+| `VITE_ALCHEMY_API_KEY` | Account Kit / Connect Wallet |
+| `VITE_ALCHEMY_POLICY_ID` | Account Kit policy |
+| `VITE_ARBITRUM_PAYMENT_CONTRACT` | Live AI billing (Arbitrum) |
+| `VITE_TREASURY_ADDRESS` | Payment contract treasury |
+| `VITE_DAYDREAM_API_KEY` or `VITE_LIVEPEER_STUDIO_API_KEY` | Live AI streams |
+
+**Optional:** `VITE_USE_MAINNET=true` (mainnet chains in dev); `VITE_STYLUS_STYLE_REGISTRY` (Phase 2 style registry); `VITE_METOKEN_REGISTRY_BASE` (Phase 2 MeToken gating).
+
+**Deploy (e.g. Vercel):** Set the same `VITE_*` variables in the project’s Environment Variables. Do **not** put `DEPLOYER_PRIVATE_KEY` or other secrets in the hosting env; those stay in local `.env.local` for contract deploy scripts only.
+
+**Contracts (already deployed):**
+
+- **PaymentContract (Arbitrum):** Solidity; USDC payments and treasury. Deploy with Hardhat: `npx hardhat run scripts/deploy-payment.ts --network arbitrumOne`.
+- **StyleRegistry (Arbitrum Stylus):** Rust/WASM; style → creator. Deploy from `contracts/stylus`: `cargo stylus deploy --endpoint <RPC> --private-key <KEY>`.
+
 ### Project Structure
 
 ```text

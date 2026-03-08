@@ -867,3 +867,86 @@ export async function addMediaToTimeline(mediaId: string): Promise<void> {
   }
 }
 
+import type { InsertRecordedClipParams } from '../../types';
+
+/**
+ * Import a recorded Live AI blob as media and add it to the timeline at the
+ * recorded start position. Used when committing a take from the Live AI popover.
+ */
+export async function insertRecordedClip(params: InsertRecordedClipParams): Promise<void> {
+  const { blob, durationMs, linkedTimelineStart, projectId } = params;
+  try {
+    const file = new File([blob], 'live-ai-recording.webm', { type: 'video/webm' });
+    const media = await mediaLibraryService.importMediaWithFile(file, projectId);
+    await useMediaLibraryStore.getState().loadMediaItems();
+
+    const { tracks, items } = useItemsStore.getState();
+    const fps = useTimelineSettingsStore.getState().fps;
+    const currentProject = useProjectStore.getState().currentProject;
+    const canvasWidth = currentProject?.metadata?.width ?? 1920;
+    const canvasHeight = currentProject?.metadata?.height ?? 1080;
+
+    const droppableTracks = tracks.filter(
+      (t) => !t.isGroup && t.visible && !t.locked
+    );
+    const activeTrackId = useSelectionStore.getState().activeTrackId;
+    const targetTrack =
+      (activeTrackId && droppableTracks.find((t) => t.id === activeTrackId)) ??
+      droppableTracks[0];
+
+    if (!targetTrack) {
+      toast.error('No track available to add clip');
+      return;
+    }
+
+    const durationInFrames = Math.round((durationMs / 1000) * fps) || fps;
+    const finalPosition = findNearestAvailableSpace(
+      Math.max(0, linkedTimelineStart),
+      durationInFrames,
+      targetTrack.id,
+      items
+    );
+    if (finalPosition === null) {
+      toast.error('No space on track for this clip');
+      return;
+    }
+
+    const blobUrl = await resolveMediaUrl(media.id);
+    if (!blobUrl) {
+      toast.error('Could not load recorded media');
+      return;
+    }
+
+    const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(media.id);
+
+    const baseItem = buildTimelineBaseItem({
+      media,
+      mediaId: media.id,
+      label: media.fileName,
+      trackId: targetTrack.id,
+      from: finalPosition,
+      durationInFrames,
+      timelineFps: fps,
+    });
+    const timelineItem = buildTypedTimelineItem({
+      baseItem,
+      mediaType: 'video',
+      blobUrl,
+      thumbnailUrl,
+      media,
+      canvasWidth,
+      canvasHeight,
+    });
+    if (!timelineItem) {
+      toast.error('Unsupported media type');
+      return;
+    }
+
+    addItem(timelineItem);
+    toast.success('Clip added to timeline');
+  } catch (err) {
+    logger.error('Insert recorded clip failed', { err });
+    toast.error('Could not add clip to timeline');
+  }
+}
+
