@@ -605,9 +605,16 @@ export function renderTransition(
     );
     if (result) {
       ctx.drawImage(result, 0, 0);
+      if (import.meta.env.DEV) {
+        log.debug(`GPU transition "${presentation}" rendered, progress=${progress.toFixed(2)}`);
+      }
       return;
     }
-    // Fall through to Canvas 2D if GPU render failed
+    if (import.meta.env.DEV) {
+      log.debug(`GPU transition "${presentation}" returned null, falling through to canvas`);
+    }
+  } else if (import.meta.env.DEV && renderer?.gpuTransitionId) {
+    log.debug(`GPU transition "${presentation}" not available (pipeline=${!!gpuTransitionPipeline}, has=${gpuTransitionPipeline?.has(renderer.gpuTransitionId)})`);
   }
 
   if (renderer?.renderCanvas) {

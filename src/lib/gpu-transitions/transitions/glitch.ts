@@ -29,46 +29,64 @@ fn glitchFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = input.uv;
   let p = params.progress;
 
-  // Intensity envelope — peaks in the middle of the transition
-  let envelope = sin(p * PI);
+  // Intensity envelope — ramps up, holds, eases out
+  let envelope = smoothstep(0.0, 0.2, p) * (1.0 - smoothstep(0.8, 1.0, p));
   let strength = envelope * params.intensity;
 
-  // Block-based horizontal displacement
-  let blockH = params.blockSize / params.height;
-  let blockY = floor(uv.y / blockH) * blockH;
-  let blockSeed = hash(vec2f(blockY * 17.3, floor(p * 20.0)));
-  let shouldDisplace = step(0.5 - strength * 0.4, blockSeed);
-  let displacement = (hash(vec2f(blockY * 31.7, floor(p * 25.0))) - 0.5) * strength * 0.25 * shouldDisplace;
+  // --- Block displacement (two scales) ---
+  let bigBlockH = params.blockSize * 2.0 / params.height;
+  let bigBlockY = floor(uv.y / bigBlockH);
+  let bigSeed = hash(vec2f(bigBlockY * 17.3, floor(p * 8.0)));
+  let bigActive = step(0.55 - strength * 0.35, bigSeed);
+  let bigShift = (hash(vec2f(bigBlockY * 31.7, floor(p * 10.0))) - 0.5)
+                 * strength * 0.18 * bigActive;
 
-  let displacedUv = vec2f(clamp(uv.x + displacement, 0.0, 1.0), uv.y);
+  let sliceH = max(2.0, params.blockSize * 0.3) / params.height;
+  let sliceY = floor(uv.y / sliceH);
+  let sliceSeed = hash(vec2f(sliceY * 53.1, floor(p * 12.0)));
+  let sliceActive = step(0.65 - strength * 0.25, sliceSeed);
+  let sliceShift = (hash(vec2f(sliceY * 71.3, floor(p * 14.0))) - 0.5)
+                   * strength * 0.1 * sliceActive;
 
-  // RGB channel split amount
-  let split = params.rgbSplit * strength * 0.015;
+  let totalShift = bigShift + sliceShift;
+  let dUv = vec2f(clamp(uv.x + totalShift, 0.0, 1.0), uv.y);
 
-  // Progressive switch from left to right based on noise + progress
-  let switchSeed = hash(vec2f(blockY * 7.3, floor(p * 15.0)));
-  let useRight = smoothstep(0.0, 1.0, (p - switchSeed) * 3.0 + 0.5);
+  // --- RGB split (horizontal chromatic aberration) ---
+  let split = params.rgbSplit * strength * 0.015 + abs(totalShift) * 0.2;
+  let uvR = vec2f(clamp(dUv.x + split, 0.0, 1.0), dUv.y);
+  let uvB = vec2f(clamp(dUv.x - split, 0.0, 1.0), dUv.y);
 
-  // Sample left clip with RGB split
-  let lR = textureSample(leftTex, texSampler, displacedUv + vec2f(split, 0.0)).r;
-  let lG = textureSample(leftTex, texSampler, displacedUv).g;
-  let lB = textureSample(leftTex, texSampler, displacedUv - vec2f(split, 0.0)).b;
-  let lA = textureSample(leftTex, texSampler, displacedUv).a;
+  // --- Per-block clip switching ---
+  let switchBlockH = bigBlockH * 0.7;
+  let switchY = floor(uv.y / switchBlockH);
+  let switchSeed = hash(vec2f(switchY * 7.3, floor(p * 6.0)));
+  let threshold = switchSeed * 0.7 + 0.15;
+  let useRight = smoothstep(threshold - 0.12, threshold + 0.12, p);
+
+  // Sample both clips with chromatic aberration
+  let lR = textureSample(leftTex, texSampler, uvR).r;
+  let lG = textureSample(leftTex, texSampler, dUv).g;
+  let lB = textureSample(leftTex, texSampler, uvB).b;
+  let lA = textureSample(leftTex, texSampler, dUv).a;
   let leftColor = vec4f(lR, lG, lB, lA);
 
-  // Sample right clip with RGB split
-  let rR = textureSample(rightTex, texSampler, displacedUv + vec2f(split, 0.0)).r;
-  let rG = textureSample(rightTex, texSampler, displacedUv).g;
-  let rB = textureSample(rightTex, texSampler, displacedUv - vec2f(split, 0.0)).b;
-  let rA = textureSample(rightTex, texSampler, displacedUv).a;
+  let rR = textureSample(rightTex, texSampler, uvR).r;
+  let rG = textureSample(rightTex, texSampler, dUv).g;
+  let rB = textureSample(rightTex, texSampler, uvB).b;
+  let rA = textureSample(rightTex, texSampler, dUv).a;
   let rightColor = vec4f(rR, rG, rB, rA);
 
-  // Mix based on per-block switching
   var color = mix(leftColor, rightColor, useRight);
 
-  // Occasional scan lines
-  let scanLine = step(0.97 - strength * 0.05, hash(vec2f(uv.y * 500.0, floor(p * 30.0))));
-  color = mix(color, vec4f(1.0, 1.0, 1.0, color.a), scanLine * 0.3 * envelope);
+  // --- Digital noise on glitched regions ---
+  let noiseSeed = hash(vec2f(uv.x * params.width * 0.5,
+                              uv.y * params.height * 0.5 + p * 1000.0));
+  let noiseAmt = strength * 0.1 * max(bigActive, sliceActive);
+  color = vec4f(mix(color.rgb, vec3f(noiseSeed), noiseAmt), color.a);
+
+  // --- Subtle posterization on displaced blocks ---
+  let levels = mix(256.0, 24.0, strength * bigActive * 0.4);
+  color = vec4f(floor(color.rgb * levels + 0.5) / levels, color.a);
 
   return color;
 }`,
