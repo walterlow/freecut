@@ -197,7 +197,6 @@ export async function applyAllEffectsAsync(
   frame: number,
   canvas: EffectCanvasSettings,
   gpuPipeline?: EffectsPipeline | null,
-  _mode: 'preview' | 'export' = 'preview',
 ): Promise<OffscreenCanvas | null> {
   // Both preview and export use the zero-copy canvas→GPU→canvas path.
   return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);

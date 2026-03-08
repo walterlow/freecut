@@ -1146,13 +1146,13 @@ export async function renderTransitionToCanvas(
       const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
       leftEffectPoolCanvas = leftEffectCanvas;
       leftFinalCanvas = leftEffectCanvas;
-      leftGpuPromise = applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
+      leftGpuPromise = applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
     }
     if (hasRightEffects) {
       const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
       rightEffectPoolCanvas = rightEffectCanvas;
       rightFinalCanvas = rightEffectCanvas;
-      rightGpuPromise = applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline, rctx.renderMode);
+      rightGpuPromise = applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
     }
 
     const [leftGpu, rightGpu] = await Promise.all([

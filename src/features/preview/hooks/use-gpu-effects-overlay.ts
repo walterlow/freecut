@@ -16,12 +16,8 @@ import { useItemsStore, useTransitionsStore } from '@/features/preview/deps/time
  * renderer, which reads from the base-layer DOM video elements directly
  * via domVideoElementProvider — single decode stream, no drift.
  */
-export function useGpuEffectsOverlay(
-  _gpuCanvasRef: React.RefObject<HTMLCanvasElement | null>,
-  _playerContainerRef: React.RefObject<HTMLDivElement | null>,
-  _scrubOffscreenRef: React.RefObject<OffscreenCanvas | null>,
-  _scrubFrameDirtyRef: React.RefObject<boolean>,
-) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function useGpuEffectsOverlay(..._args: unknown[]) {
   const [needsOverlay, setNeedsOverlay] = useState(false);
 
   useEffect(() => {

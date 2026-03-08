@@ -1210,7 +1210,7 @@ export async function createCompositionRenderer(
             }
           }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
-          const deferredGpuCanvas = await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline, renderMode);
+          const deferredGpuCanvas = await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
           canvasPool.release(itemCanvas);
 
           let source = deferredGpuCanvas ?? effectCanvas;
