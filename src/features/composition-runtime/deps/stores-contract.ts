@@ -7,6 +7,7 @@ export { useMediaLibraryStore } from '@/features/media-library/stores/media-libr
 export { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 export type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 export { useCornerPinStore } from '@/features/preview/stores/corner-pin-store';
+export { useMaskEditorStore } from '@/features/preview/stores/mask-editor-store';
 export { usePlaybackStore } from '@/shared/state/playback';
 export { useTimelineStore } from '@/features/timeline/stores/timeline-store';
 export { useCompositionsStore } from '@/features/timeline/stores/compositions-store';

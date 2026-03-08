@@ -463,8 +463,10 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
   const penStartRef = useRef<{ screenX: number; screenY: number } | null>(null);
 
-  const handlePenMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const penDraggingRef = useRef(false);
+
+  const handlePenPointerDown = useCallback(
+    (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
 
@@ -492,18 +494,25 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         outHandle: [0, 0],
       };
       addPenVertex(newVertex);
+      penDraggingRef.current = true;
       setPenDragging(true);
       penStartRef.current = { screenX: e.clientX, screenY: e.clientY };
+      canvasRef.current!.setPointerCapture(e.pointerId);
+    },
+    [penVertices, vertexToScreen, screenToNorm, addPenVertex, setPenDragging]
+  );
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
+  const handlePenPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (penDraggingRef.current) {
         const start = penStartRef.current;
         if (!start) return;
 
         // Only start handle drag after threshold (3px)
-        const dist = Math.hypot(moveEvent.clientX - start.screenX, moveEvent.clientY - start.screenY);
+        const dist = Math.hypot(e.clientX - start.screenX, e.clientY - start.screenY);
         if (dist < 3) return;
 
-        const moveNorm = screenToNorm(moveEvent.clientX, moveEvent.clientY);
+        const moveNorm = screenToNorm(e.clientX, e.clientY);
         const lastVerts = useMaskEditorStore.getState().penVertices;
         const last = lastVerts[lastVerts.length - 1];
         if (!last) return;
@@ -513,28 +522,26 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
           moveNorm[1] - last.position[1],
         ];
         updatePenLastHandle(outHandle);
-      };
+        return;
+      }
 
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-        setPenDragging(false);
-        penStartRef.current = null;
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    },
-    [penVertices, vertexToScreen, screenToNorm, addPenVertex, setPenDragging, updatePenLastHandle]
-  );
-
-  const handlePenMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (penStartRef.current) return; // Handled by window listener during drag
       const norm = screenToNorm(e.clientX, e.clientY);
       setPenCursorPos(norm);
     },
-    [screenToNorm, setPenCursorPos]
+    [screenToNorm, setPenCursorPos, updatePenLastHandle]
+  );
+
+  const handlePenPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!penDraggingRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      canvasRef.current?.releasePointerCapture(e.pointerId);
+      penDraggingRef.current = false;
+      setPenDragging(false);
+      penStartRef.current = null;
+    },
+    [setPenDragging]
   );
 
   /** Close pen path and commit as a new mask on the item */
@@ -587,8 +594,21 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   // Edit mode: mouse handlers
   // ============================================================
 
-  const handleEditMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const editDraggingRef = useRef(false);
+
+  // Store values in refs for pointer handlers to avoid stale closures
+  const coordParamsRef = useRef(coordParams);
+  coordParamsRef.current = coordParams;
+  const getItemScreenBoundsRef = useRef(getItemScreenBounds);
+  getItemScreenBoundsRef.current = getItemScreenBounds;
+  const editingItemIdRef = useRef(editingItemId);
+  editingItemIdRef.current = editingItemId;
+  const selectedMaskIndexRef = useRef(selectedMaskIndex);
+  selectedMaskIndexRef.current = selectedMaskIndex;
+
+  const handleEditPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (editDraggingRef.current) return;
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
 
@@ -611,6 +631,9 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         }
         return;
       }
+
+      canvasRef.current!.setPointerCapture(e.pointerId);
+      editDraggingRef.current = true;
 
       const canvasPos = screenToCanvas(e.clientX, e.clientY, coordParams);
 
@@ -640,14 +663,19 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
           startCanvasPos: [canvasPos.x, canvasPos.y],
         };
       }
+    },
+    [hitTest, getVertices, coordParams, startVertexDrag, startHandleDrag]
+  );
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
+  const handleEditPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (editDraggingRef.current) {
         const state = dragStateRef.current;
         if (!state) return;
 
-        const moveCanvas = screenToCanvas(moveEvent.clientX, moveEvent.clientY, coordParams);
-        const bounds = getItemScreenBounds();
-        const scale = getEffectiveScale(coordParams);
+        const moveCanvas = screenToCanvas(e.clientX, e.clientY, coordParamsRef.current);
+        const bounds = getItemScreenBoundsRef.current();
+        const scale = getEffectiveScale(coordParamsRef.current);
         const itemWidth = bounds.width / scale;
         const itemHeight = bounds.height / scale;
 
@@ -676,40 +704,83 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
           if (state.handleType === 'in') {
             v.inHandle = newHandle;
-            if (!moveEvent.altKey) {
+            if (!e.altKey) {
               v.outHandle = [-newHandle[0], -newHandle[1]];
             }
           } else {
             v.outHandle = newHandle;
-            if (!moveEvent.altKey) {
+            if (!e.altKey) {
               v.inHandle = [-newHandle[0], -newHandle[1]];
             }
           }
         }
 
         updatePreview(newVertices);
-      };
+        return;
+      }
 
-      const handleMouseUp = () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+      // Hover detection (not dragging)
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-        const state = dragStateRef.current;
-        if (!state) return;
+      const localX = e.clientX - rect.left;
+      const localY = e.clientY - rect.top;
+      const hit = hitTest(localX, localY);
 
-        const finalVertices = useMaskEditorStore.getState().previewVertices;
-        if (finalVertices) {
-          commitVertices(finalVertices);
-        }
-
-        endDrag();
-        dragStateRef.current = null;
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      if (!hit) {
+        setHover(null);
+      } else if (hit.type === 'vertex') {
+        setHover(hit.index, null);
+      } else if (hit.type === 'inHandle') {
+        setHover(hit.index, 'in');
+      } else if (hit.type === 'outHandle') {
+        setHover(hit.index, 'out');
+      } else {
+        setHover(null);
+      }
     },
-    [hitTest, getVertices, coordParams, startVertexDrag, startHandleDrag, updatePreview, endDrag, getItemScreenBounds]
+    [hitTest, setHover, updatePreview]
+  );
+
+  const handleEditPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!editDraggingRef.current) return;
+      e.stopPropagation();
+      e.preventDefault();
+      canvasRef.current?.releasePointerCapture(e.pointerId);
+
+      editDraggingRef.current = false;
+
+      const state = dragStateRef.current;
+      if (state) {
+        const finalVertices = useMaskEditorStore.getState().previewVertices;
+        const itemId = editingItemIdRef.current;
+        const maskIdx = selectedMaskIndexRef.current;
+        if (finalVertices && itemId) {
+          const items = useItemsStore.getState().items;
+          const item = items.find((i) => i.id === itemId);
+          if (item) {
+            const masks = [...(item.masks ?? [])];
+            const mask = masks[maskIdx];
+            if (mask) {
+              masks[maskIdx] = { ...mask, vertices: finalVertices };
+              useItemsStore.getState()._updateItem(itemId, { masks });
+            }
+          }
+        }
+      }
+
+      dragStateRef.current = null;
+
+      // Wait 2 animation frames before clearing drag state to ensure React has
+      // processed the timeline store update (same pattern as corner-pin-overlay)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          endDrag();
+        });
+      });
+    },
+    [endDrag]
   );
 
   const handleEditContextMenu = useCallback(
@@ -733,31 +804,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       }
     },
     [hitTest, getVertices]
-  );
-
-  const handleEditMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (dragStateRef.current) return;
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const localX = e.clientX - rect.left;
-      const localY = e.clientY - rect.top;
-      const hit = hitTest(localX, localY);
-
-      if (!hit) {
-        setHover(null);
-      } else if (hit.type === 'vertex') {
-        setHover(hit.index, null);
-      } else if (hit.type === 'inHandle') {
-        setHover(hit.index, 'in');
-      } else if (hit.type === 'outHandle') {
-        setHover(hit.index, 'out');
-      } else {
-        setHover(null);
-      }
-    },
-    [hitTest, setHover]
   );
 
   // ============================================================
@@ -805,8 +851,9 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         pointerEvents: 'auto',
         cursor,
       }}
-      onMouseDown={penMode ? handlePenMouseDown : handleEditMouseDown}
-      onMouseMove={penMode ? handlePenMouseMove : handleEditMouseMove}
+      onPointerDown={penMode ? handlePenPointerDown : handleEditPointerDown}
+      onPointerMove={penMode ? handlePenPointerMove : handleEditPointerMove}
+      onPointerUp={penMode ? handlePenPointerUp : handleEditPointerUp}
       onContextMenu={penMode ? undefined : handleEditContextMenu}
     />
   );

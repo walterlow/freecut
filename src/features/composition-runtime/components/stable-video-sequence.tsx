@@ -229,7 +229,8 @@ function areGroupPropsEqual(
         prevItem.trackVisible !== nextItem.trackVisible ||
         prevItem.muted !== nextItem.muted ||
         prevItem.cornerPin !== nextItem.cornerPin ||
-        prevItem.blendMode !== nextItem.blendMode) {
+        prevItem.blendMode !== nextItem.blendMode ||
+        prevItem.masks !== nextItem.masks) {
       return false;
     }
   }

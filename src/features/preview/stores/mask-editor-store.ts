@@ -7,7 +7,7 @@
  */
 
 import { create } from 'zustand';
-import type { MaskVertex } from '@/types/masks';
+import type { MaskVertex, ClipMask } from '@/types/masks';
 
 export interface MaskEditorState {
   /** Whether mask editing mode is active */
@@ -36,6 +36,10 @@ export interface MaskEditorState {
   penDraggingHandle: boolean;
   /** Current mouse position in normalized coords (for rubber-band line) */
   penCursorPos: [number, number] | null;
+
+  // --- Live mask property preview (feather/opacity slider drag) ---
+  /** Live preview of all masks during sidebar slider drag */
+  previewMasks: ClipMask[] | null;
 }
 
 export interface MaskEditorActions {
@@ -71,6 +75,12 @@ export interface MaskEditorActions {
   setPenCursorPos: (pos: [number, number] | null) => void;
   /** Get the pen vertices (for closing/committing the path) */
   getPenVertices: () => MaskVertex[];
+
+  // --- Live mask property preview ---
+  /** Set live preview masks during slider drag */
+  setPreviewMasks: (masks: ClipMask[]) => void;
+  /** Clear preview masks (on mouse up, after committing) */
+  clearPreviewMasks: () => void;
 }
 
 export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()((set, get) => ({
@@ -86,6 +96,7 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
   penVertices: [],
   penDraggingHandle: false,
   penCursorPos: null,
+  previewMasks: null,
 
   startEditing: (itemId, maskIndex = 0) =>
     set({
@@ -187,4 +198,7 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
     set({ penCursorPos: pos }),
 
   getPenVertices: () => get().penVertices,
+
+  setPreviewMasks: (masks) => set({ previewMasks: masks }),
+  clearPreviewMasks: () => set({ previewMasks: null }),
 }));

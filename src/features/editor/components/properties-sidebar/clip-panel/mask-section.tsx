@@ -1,5 +1,5 @@
 import { useCallback, useMemo, memo } from 'react';
-import { Layers, Trash2, Eye, EyeOff, Circle, Square, Pen } from 'lucide-react';
+import { Layers, Trash2, Eye, EyeOff, Circle, Square, Pen, MousePointer2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -99,26 +99,53 @@ export const MaskSection = memo(function MaskSection({
     [item, masks, selectedMaskIndex, selectedMask, updateItem]
   );
 
-  // Update mask opacity
-  const handleOpacityChange = useCallback(
-    (value: number) => {
-      if (!item || !selectedMask) return;
-      const newMasks = [...masks];
-      newMasks[selectedMaskIndex] = { ...selectedMask, opacity: value / 100 };
-      updateItem(item.id, { masks: newMasks });
+  // Build updated masks array with property changes on the selected mask
+  const buildMasks = useCallback(
+    (updates: Partial<{ opacity: number; feather: number }>) => {
+      if (!item) return null;
+      const currentMasks = [...(item.masks ?? [])];
+      const mask = currentMasks[selectedMaskIndex];
+      if (!mask) return null;
+      currentMasks[selectedMaskIndex] = { ...mask, ...updates };
+      return currentMasks;
     },
-    [item, masks, selectedMaskIndex, selectedMask, updateItem]
+    [item, selectedMaskIndex]
   );
 
-  // Update mask feather
+  // Live: write to preview store for instant visual feedback (bypasses React prop chain)
+  const handleFeatherLiveChange = useCallback(
+    (value: number) => {
+      const newMasks = buildMasks({ feather: value });
+      if (newMasks) useMaskEditorStore.getState().setPreviewMasks(newMasks);
+    },
+    [buildMasks]
+  );
+
+  const handleOpacityLiveChange = useCallback(
+    (value: number) => {
+      const newMasks = buildMasks({ opacity: value / 100 });
+      if (newMasks) useMaskEditorStore.getState().setPreviewMasks(newMasks);
+    },
+    [buildMasks]
+  );
+
+  // Commit: update store with undo support (on mouse up), clear preview
   const handleFeatherChange = useCallback(
     (value: number) => {
-      if (!item || !selectedMask) return;
-      const newMasks = [...masks];
-      newMasks[selectedMaskIndex] = { ...selectedMask, feather: value };
-      updateItem(item.id, { masks: newMasks });
+      useMaskEditorStore.getState().clearPreviewMasks();
+      const newMasks = buildMasks({ feather: value });
+      if (item && newMasks) updateItem(item.id, { masks: newMasks });
     },
-    [item, masks, selectedMaskIndex, selectedMask, updateItem]
+    [buildMasks, item, updateItem]
+  );
+
+  const handleOpacityChange = useCallback(
+    (value: number) => {
+      useMaskEditorStore.getState().clearPreviewMasks();
+      const newMasks = buildMasks({ opacity: value / 100 });
+      if (item && newMasks) updateItem(item.id, { masks: newMasks });
+    },
+    [buildMasks, item, updateItem]
   );
 
   // Toggle edit mode
@@ -147,42 +174,77 @@ export const MaskSection = memo(function MaskSection({
 
   if (!item || items.length > 1) return null;
 
+  const isActiveEditing = isEditingThisItem || isPenModeThisItem;
+
   return (
     <PropertySection title="Masks" icon={Layers} defaultOpen={true}>
-      {/* Add mask buttons */}
-      <div className="flex items-center gap-1 px-1 mb-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs flex-1 gap-1"
-          onClick={() => addMask('rectangle')}
-        >
-          <Square className="w-3 h-3" />
-          Rect
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs flex-1 gap-1"
-          onClick={() => addMask('ellipse')}
-        >
-          <Circle className="w-3 h-3" />
-          Ellipse
-        </Button>
-        <Button
-          variant={isPenModeThisItem ? 'default' : 'outline'}
-          size="sm"
-          className="h-7 text-xs flex-1 gap-1"
-          onClick={togglePenMode}
-          title={isPenModeThisItem ? 'Cancel pen tool (Esc)' : 'Draw mask with pen tool'}
-        >
-          <Pen className="w-3 h-3" />
-          Pen
-        </Button>
-      </div>
-      {isPenModeThisItem && (
-        <div className="px-1 mb-2 text-[10px] text-muted-foreground">
-          Click to place points. Drag to create curves. Click first point to close.
+      {/* Editing banner — shown when editing or drawing a mask */}
+      {isActiveEditing && (
+        <div className="mx-1 mb-2 px-2 py-1.5 rounded-md bg-accent/50 border border-accent">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              {isPenModeThisItem ? (
+                <Pen className="w-3 h-3 text-foreground" />
+              ) : (
+                <MousePointer2 className="w-3 h-3 text-foreground" />
+              )}
+              <span className="text-[11px] font-medium text-foreground">
+                {isPenModeThisItem ? 'Drawing mask' : 'Editing path'}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-[11px] px-2"
+              onClick={isPenModeThisItem ? cancelPenMode : stopEditing}
+            >
+              Done
+            </Button>
+          </div>
+          {isPenModeThisItem && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Click to place points. Drag to create curves. Click first point to close.
+            </p>
+          )}
+          {isEditingThisItem && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Drag points to reshape. Double-click segment to add. Right-click to remove.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Add mask buttons — hidden while editing */}
+      {!isActiveEditing && (
+        <div className="flex items-center gap-1 px-1 mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs flex-1 gap-1"
+            onClick={() => addMask('rectangle')}
+          >
+            <Square className="w-3 h-3" />
+            Rect
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs flex-1 gap-1"
+            onClick={() => addMask('ellipse')}
+          >
+            <Circle className="w-3 h-3" />
+            Ellipse
+          </Button>
+          <Button
+            variant={isPenModeThisItem ? 'default' : 'outline'}
+            size="sm"
+            className="h-7 text-xs flex-1 gap-1"
+            onClick={togglePenMode}
+            title="Draw mask with pen tool"
+          >
+            <Pen className="w-3 h-3" />
+            Pen
+          </Button>
         </div>
       )}
 
@@ -211,15 +273,18 @@ export const MaskSection = memo(function MaskSection({
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              variant={isEditingThisItem ? 'default' : 'outline'}
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={toggleEditMode}
-              title={isEditingThisItem ? 'Exit mask editor' : 'Edit mask path'}
-            >
-              <Layers className="w-3.5 h-3.5" />
-            </Button>
+            {/* Edit toggle — only when not in pen mode */}
+            {!isPenModeThisItem && (
+              <Button
+                variant={isEditingThisItem ? 'default' : 'outline'}
+                size="icon"
+                className="h-7 w-7 flex-shrink-0"
+                onClick={toggleEditMode}
+                title={isEditingThisItem ? 'Exit mask editor' : 'Edit mask path'}
+              >
+                <MousePointer2 className="w-3.5 h-3.5" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -265,6 +330,7 @@ export const MaskSection = memo(function MaskSection({
                   <SliderInput
                     value={Math.round(selectedMask.opacity * 100)}
                     onChange={handleOpacityChange}
+                    onLiveChange={handleOpacityLiveChange}
                     min={0}
                     max={100}
                     step={1}
@@ -279,6 +345,7 @@ export const MaskSection = memo(function MaskSection({
                   <SliderInput
                     value={selectedMask.feather}
                     onChange={handleFeatherChange}
+                    onLiveChange={handleFeatherLiveChange}
                     min={0}
                     max={200}
                     step={0.5}

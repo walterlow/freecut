@@ -86,13 +86,29 @@ export function renderMasks(
   ctx.globalCompositeOperation = 'source-over';
   ctx.fillRect(0, 0, width, height);
 
-  // Draw each mask
+  // Draw each mask with per-mask inversion support.
+  // Non-inverted add → white (reveal), inverted add → black (hide)
+  // Non-inverted subtract → destination-out, inverted subtract → draw white (reveal)
   for (const mask of enabled) {
-    ctx.globalCompositeOperation = getCompositeOp(mask.mode);
     ctx.globalAlpha = mask.opacity;
 
     drawMaskPath(ctx, mask.vertices, width, height);
-    ctx.fillStyle = '#ffffff';
+
+    if (mask.inverted) {
+      // Inverted: flip the effect — add hides, subtract reveals
+      if (mask.mode === 'add' || mask.mode === 'intersect') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillStyle = '#ffffff';
+      } else {
+        // subtract inverted → reveal (add white)
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = '#ffffff';
+      }
+    } else {
+      ctx.globalCompositeOperation = getCompositeOp(mask.mode);
+      ctx.fillStyle = '#ffffff';
+    }
+
     ctx.fill();
   }
 
@@ -112,18 +128,45 @@ export function renderMasks(
     ctx.filter = 'none';
   }
 
-  // Handle inversion — if all masks share same inversion, apply globally
-  const allInverted = enabled.length > 0 && enabled.every((m) => m.inverted);
-  if (allInverted) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 255 - data[i]!;
-      data[i + 1] = 255 - data[i + 1]!;
-      data[i + 2] = 255 - data[i + 2]!;
-    }
-    return imageData;
-  }
-
   return ctx.getImageData(0, 0, width, height);
+}
+
+/**
+ * Render masks to a data URL for use as CSS mask-image.
+ * Uses Canvas2D blur (GPU-accelerated via Skia) at reduced resolution
+ * instead of SVG feGaussianBlur (CPU-rendered, slow).
+ */
+let urlCanvas: HTMLCanvasElement | null = null;
+let urlCtx: CanvasRenderingContext2D | null = null;
+
+export function renderMasksToDataUrl(
+  masks: ClipMask[],
+  width: number,
+  height: number,
+  maxDimension = 384,
+): string | null {
+  const enabled = masks.filter((m) => m.enabled && m.vertices.length >= 2);
+  if (enabled.length === 0) return null;
+
+  const scale = Math.min(1, maxDimension / Math.max(width, height));
+  const rw = Math.max(1, Math.round(width * scale));
+  const rh = Math.max(1, Math.round(height * scale));
+
+  // Scale feather values to match reduced resolution
+  const scaled = scale < 1
+    ? enabled.map((m) => ({ ...m, feather: m.feather * scale }))
+    : enabled;
+
+  const imageData = renderMasks(scaled, rw, rh);
+
+  // Convert to data URL via reusable canvas
+  if (!urlCanvas || urlCanvas.width !== rw || urlCanvas.height !== rh) {
+    urlCanvas = document.createElement('canvas');
+    urlCanvas.width = rw;
+    urlCanvas.height = rh;
+    urlCtx = urlCanvas.getContext('2d')!;
+  }
+  urlCtx!.putImageData(imageData, 0, 0);
+
+  return urlCanvas.toDataURL();
 }
