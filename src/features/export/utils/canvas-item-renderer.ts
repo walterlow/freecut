@@ -343,20 +343,28 @@ async function renderVideoItem(
   if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
-      const drawDimensions = calculateMediaDrawDimensions(
-        domVideo.videoWidth,
-        domVideo.videoHeight,
-        transform,
-        canvasSettings,
-      );
-      ctx.drawImage(
-        domVideo,
-        drawDimensions.x,
-        drawDimensions.y,
-        drawDimensions.width,
-        drawDimensions.height,
-      );
-      return;
+      // Reject videos that are too far from the expected time. This catches
+      // transition layer videos that haven't finished seeking yet — drawing
+      // from a stale video produces a wrong frame and causes visible jitter
+      // at transition boundaries.
+      const drift = Math.abs(domVideo.currentTime - sourceTime);
+      const driftThreshold = 2 / fps; // ~2 frames tolerance
+      if (drift <= driftThreshold) {
+        const drawDimensions = calculateMediaDrawDimensions(
+          domVideo.videoWidth,
+          domVideo.videoHeight,
+          transform,
+          canvasSettings,
+        );
+        ctx.drawImage(
+          domVideo,
+          drawDimensions.x,
+          drawDimensions.y,
+          drawDimensions.width,
+          drawDimensions.height,
+        );
+        return;
+      }
     }
   }
 
