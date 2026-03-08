@@ -26,9 +26,11 @@ import { importBundleExportDialog } from '@/features/editor/deps/project-bundle'
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useEditorStore } from '@/shared/state/editor';
+import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
+import { LiveAIPopover } from '@/features/live-ai/components/live-ai-popover';
 
 const logger = createLogger('Editor');
 const LazyExportDialog = lazy(() =>
@@ -257,6 +259,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   const timelineDuration = 30;
 
+  const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const mobileLeftInset = isMobile && leftSidebarOpen ? 'min(calc(100vw - 3rem), 320px)' : '0';
+
   // Track whether graph panel is currently open to avoid storing expanded size as base
   const isGraphOpenRef = useRef(false);
 
@@ -314,33 +320,44 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
                 />
               </ErrorBoundary>
 
-              {/* Center - Preview */}
-              <ErrorBoundary level="feature">
-                <PreviewArea project={project} />
-              </ErrorBoundary>
+              {/* Center + Right: inset on mobile when left sidebar open so timeline/preview don't overlap fixed panel */}
+              <div
+                className="flex-1 flex min-w-0 overflow-hidden transition-[margin] duration-200"
+                style={mobileLeftInset !== '0' ? { marginLeft: mobileLeftInset } : undefined}
+              >
+                {/* Center - Preview */}
+                <ErrorBoundary level="feature">
+                  <PreviewArea project={project} />
+                </ErrorBoundary>
 
-              {/* Right Sidebar - Properties */}
-              <ErrorBoundary level="feature">
-                <PropertiesSidebar />
-              </ErrorBoundary>
+                {/* Right Sidebar - Properties */}
+                <ErrorBoundary level="feature">
+                  <PropertiesSidebar />
+                </ErrorBoundary>
+              </div>
             </div>
           </ResizablePanel>
 
           <ResizableHandle withHandle className="hidden md:flex" />
 
-          {/* Bottom - Timeline */}
+          {/* Bottom - Timeline (same left inset on mobile when left sidebar open) */}
           <ResizablePanel
             ref={timelinePanelRef}
             defaultSize={30}
             minSize={15}
             maxSize={50}
           >
-            <ErrorBoundary level="feature">
-              <Timeline
-                duration={timelineDuration}
-                onGraphPanelOpenChange={handleGraphPanelOpenChange}
-              />
-            </ErrorBoundary>
+            <div
+              className="h-full min-w-0 transition-[margin] duration-200"
+              style={mobileLeftInset !== '0' ? { marginLeft: mobileLeftInset } : undefined}
+            >
+              <ErrorBoundary level="feature">
+                <Timeline
+                  duration={timelineDuration}
+                  onGraphPanelOpenChange={handleGraphPanelOpenChange}
+                />
+              </ErrorBoundary>
+            </div>
           </ResizablePanel>
         </ResizablePanelGroup>
 
@@ -382,6 +399,9 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
       {/* Debug Panel (dev mode only) */}
       <ProjectDebugPanel projectId={projectId} />
+
+      {/* Live AI Studio - dockable popover */}
+      <LiveAIPopover />
     </div>
   );
 });

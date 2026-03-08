@@ -114,4 +114,13 @@ export interface TimelineActions {
   markClean: () => void;
   /** Add media to timeline at playhead (mobile-friendly, no drag required) */
   addMediaToTimeline: (mediaId: string) => Promise<void>;
+  /** Insert a recorded Live AI clip (blob) at the given timeline position */
+  insertRecordedClip: (params: InsertRecordedClipParams) => Promise<void>;
+}
+
+export interface InsertRecordedClipParams {
+  blob: Blob;
+  durationMs: number;
+  linkedTimelineStart: number;
+  projectId: string;
 }
