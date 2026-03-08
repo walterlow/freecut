@@ -52,6 +52,10 @@ interface TimelineContentProps {
     handleZoomOut: () => void;
     handleZoomToFit: () => void;
   }) => void;
+  onMetricsChange?: (metrics: {
+    actualDuration: number;
+    timelineWidth: number;
+  }) => void;
 }
 
 /**
@@ -66,7 +70,12 @@ interface TimelineContentProps {
  * Dynamically calculates width based on furthest item
  * Memoized to prevent re-renders when props haven't changed.
  */
-export const TimelineContent = memo(function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: TimelineContentProps) {
+export const TimelineContent = memo(function TimelineContent({
+  duration,
+  scrollRef,
+  onZoomHandlersReady,
+  onMetricsChange,
+}: TimelineContentProps) {
   void duration;
 
   // Prefetch waveforms for clips approaching the viewport
@@ -724,6 +733,13 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
       });
     }
   }, []); // Empty deps - only call once on mount
+
+  useEffect(() => {
+    onMetricsChange?.({
+      actualDuration,
+      timelineWidth,
+    });
+  }, [actualDuration, onMetricsChange, timelineWidth]);
 
   // Momentum scroll/zoom loop using requestAnimationFrame
   const startMomentumScroll = useCallback(() => {
