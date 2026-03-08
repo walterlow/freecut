@@ -123,11 +123,15 @@ const FilmstripTile = memo(function FilmstripTile({
 
   // Draw bitmap to canvas when ref is attached or bitmap changes
   const canvasRefCallback: RefCallback<HTMLCanvasElement> = useCallback((canvas: HTMLCanvasElement | null) => {
-    if (!canvas || !bitmap) return;
+    if (!canvas || !bitmap || bitmap.width === 0 || bitmap.height === 0) return;
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
     const ctx = canvas.getContext('2d');
-    if (ctx) ctx.drawImage(bitmap, 0, 0);
+    try {
+      if (ctx) ctx.drawImage(bitmap, 0, 0);
+    } catch {
+      // Bitmap may have been closed/detached by the time React renders
+    }
   }, [bitmap]);
 
   const handleError = useCallback(() => {

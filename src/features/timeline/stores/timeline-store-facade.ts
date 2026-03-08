@@ -51,6 +51,39 @@ import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrat
 
 
 /**
+ * Progressive downscale a canvas to a JPEG blob.
+ * Halves dimensions repeatedly to avoid aliasing with high-frequency effects.
+ */
+async function scaleCanvasToBlob(
+  source: OffscreenCanvas | HTMLCanvasElement,
+  targetW: number,
+  targetH: number,
+  quality: number,
+): Promise<Blob> {
+  let srcW = source.width;
+  let srcH = source.height;
+  let current: OffscreenCanvas | HTMLCanvasElement = source;
+
+  while (srcW > targetW * 2 || srcH > targetH * 2) {
+    const nextW = Math.max(Math.ceil(srcW / 2), targetW);
+    const nextH = Math.max(Math.ceil(srcH / 2), targetH);
+    const step = new OffscreenCanvas(nextW, nextH);
+    const ctx = step.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(current, 0, 0, nextW, nextH);
+    current = step;
+    srcW = nextW;
+    srcH = nextH;
+  }
+
+  const out = new OffscreenCanvas(targetW, targetH);
+  const outCtx = out.getContext('2d')!;
+  outCtx.imageSmoothingQuality = 'high';
+  outCtx.drawImage(current, 0, 0, targetW, targetH);
+  return out.convertToBlob({ type: 'image/jpeg', quality });
+}
+
+/**
  * Save timeline to project in IndexedDB.
  */
 async function saveTimeline(projectId: string): Promise<void> {
@@ -148,35 +181,17 @@ async function saveTimeline(projectId: string): Promise<void> {
       })(),
     };
 
-    // Generate thumbnail using the client render engine (renders all layers)
+    // Generate thumbnail — prefer capturing the existing preview canvas
+    // (near-free: reuses the already-initialized scrub renderer with cached
+    // media + GPU pipeline) and fall back to a full renderSingleFrame only
+    // when the preview capture path is unavailable.
     let thumbnailId: string | undefined;
     if (itemsState.items.length > 0) {
       try {
-        const fps = project.metadata?.fps || 30;
         const width = project.metadata?.width || 1920;
         const height = project.metadata?.height || 1080;
-        const backgroundColor = project.metadata?.backgroundColor;
-
-        // Convert timeline to Composition composition format
-        const composition = convertTimelineToComposition(
-          itemsState.tracks,
-          itemsState.items,
-          transitionsState.transitions,
-          fps,
-          width,
-          height,
-          null, // inPoint - render full timeline
-          null, // outPoint
-          keyframesState.keyframes,
-          backgroundColor
-        );
-
-        // Resolve media URLs (convert mediaId to blob URLs)
-        const resolvedTracks = await resolveMediaUrls(composition.tracks);
-        const resolvedComposition = { ...composition, tracks: resolvedTracks };
 
         // Calculate thumbnail dimensions preserving project aspect ratio
-        // Fit within 320x180 bounds while maintaining aspect ratio
         const maxThumbWidth = 320;
         const maxThumbHeight = 180;
         const projectAspectRatio = width / height;
@@ -185,24 +200,54 @@ async function saveTimeline(projectId: string): Promise<void> {
         let thumbWidth: number;
         let thumbHeight: number;
         if (projectAspectRatio > targetAspectRatio) {
-          // Wider than 16:9 - constrained by width
           thumbWidth = maxThumbWidth;
           thumbHeight = Math.round(maxThumbWidth / projectAspectRatio);
         } else {
-          // Taller than 16:9 (portrait) - constrained by height
           thumbHeight = maxThumbHeight;
           thumbWidth = Math.round(maxThumbHeight * projectAspectRatio);
         }
 
-        // Render single frame at current playhead position
-        const thumbnailBlob = await renderSingleFrame({
-          composition: resolvedComposition,
-          frame: currentFrame,
-          width: thumbWidth,
-          height: thumbHeight,
-          quality: 0.85,
-          format: 'image/jpeg',
-        });
+        let thumbnailBlob: Blob | null = null;
+
+        // Fast path: capture from existing preview renderer (avoids full re-init)
+        const captureCanvasSource = usePlaybackStore.getState().captureCanvasSource;
+        if (captureCanvasSource) {
+          try {
+            const sourceCanvas = await captureCanvasSource();
+            if (sourceCanvas) {
+              thumbnailBlob = await scaleCanvasToBlob(sourceCanvas, thumbWidth, thumbHeight, 0.85);
+            }
+          } catch {
+            // Fall through to slow path
+          }
+        }
+
+        // Slow path: full render from scratch (when preview isn't available)
+        if (!thumbnailBlob) {
+          const fps = project.metadata?.fps || 30;
+          const backgroundColor = project.metadata?.backgroundColor;
+          const composition = convertTimelineToComposition(
+            itemsState.tracks,
+            itemsState.items,
+            transitionsState.transitions,
+            fps,
+            width,
+            height,
+            null, null,
+            keyframesState.keyframes,
+            backgroundColor
+          );
+          const resolvedTracks = await resolveMediaUrls(composition.tracks);
+          const resolvedComposition = { ...composition, tracks: resolvedTracks };
+          thumbnailBlob = await renderSingleFrame({
+            composition: resolvedComposition,
+            frame: currentFrame,
+            width: thumbWidth,
+            height: thumbHeight,
+            quality: 0.85,
+            format: 'image/jpeg',
+          });
+        }
 
         // Save thumbnail to IndexedDB
         thumbnailId = `project:${projectId}:cover`;
