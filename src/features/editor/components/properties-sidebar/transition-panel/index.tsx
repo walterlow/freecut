@@ -164,6 +164,9 @@ export function TransitionPanel() {
     []
   );
 
+  const minDuration = fps;
+  const maxDuration = fps * 3;
+
   // Handle presentation change
   const handlePresentationChange = useCallback(
     (
@@ -187,13 +190,13 @@ export function TransitionPanel() {
     (durationInFrames: number) => {
       if (selectedTransitionId && transitionConfig) {
         const clamped = Math.max(
-          transitionConfig.minDuration,
-          Math.min(transitionConfig.maxDuration, Math.round(durationInFrames))
+          minDuration,
+          Math.min(maxDuration, Math.round(durationInFrames))
         );
         updateTransition(selectedTransitionId, { durationInFrames: clamped });
       }
     },
-    [selectedTransitionId, transitionConfig, updateTransition]
+    [selectedTransitionId, transitionConfig, updateTransition, minDuration, maxDuration]
   );
 
   // Default duration is 1 second (fps frames)
@@ -203,12 +206,12 @@ export function TransitionPanel() {
   const handleResetDuration = useCallback(() => {
     if (selectedTransitionId && transitionConfig) {
       const clamped = Math.max(
-        transitionConfig.minDuration,
-        Math.min(transitionConfig.maxDuration, defaultDuration)
+        minDuration,
+        Math.min(maxDuration, defaultDuration)
       );
       updateTransition(selectedTransitionId, { durationInFrames: clamped });
     }
-  }, [selectedTransitionId, transitionConfig, updateTransition, defaultDuration]);
+  }, [selectedTransitionId, transitionConfig, updateTransition, defaultDuration, minDuration, maxDuration]);
 
   // Handle timing change
   const handleTimingChange = useCallback(
@@ -264,6 +267,20 @@ export function TransitionPanel() {
     [fps]
   );
 
+  const formatDurationInput = useCallback(
+    (frames: number): string => (frames / fps).toFixed(2),
+    [fps]
+  );
+
+  const parseDurationInput = useCallback(
+    (rawValue: string): number => {
+      const normalized = rawValue.trim().replace(/s$/i, '');
+      const seconds = parseFloat(normalized);
+      return Number.isFinite(seconds) ? seconds * fps : Number.NaN;
+    },
+    [fps]
+  );
+
   if (!selectedTransition || !transitionConfig) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -291,10 +308,12 @@ export function TransitionPanel() {
             <SliderInput
               value={selectedTransition.durationInFrames}
               onChange={handleDurationChange}
-              min={transitionConfig.minDuration}
-              max={transitionConfig.maxDuration}
+              min={minDuration}
+              max={maxDuration}
               step={1}
               formatValue={formatDuration}
+              formatInputValue={formatDurationInput}
+              parseInputValue={parseDurationInput}
               className="flex-1 min-w-0"
             />
             <Button
@@ -372,5 +391,3 @@ export function TransitionPanel() {
     </div>
   );
 }
-
-

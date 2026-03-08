@@ -264,11 +264,10 @@ export const CanvasPanel = memo(function CanvasPanel() {
 
         <PropertyRow label="Total Frames">
           <span className="text-xs text-muted-foreground tabular-nums">
-            {timelineDuration}
+            {timelineDuration} fr
           </span>
         </PropertyRow>
       </PropertySection>
     </div>
   );
 });
-

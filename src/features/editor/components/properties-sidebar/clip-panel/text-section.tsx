@@ -476,10 +476,10 @@ export function TextSection({ items }: TextSectionProps) {
           min={0.5}
           max={3}
           step={0.1}
+          unit="x"
           className="flex-1 min-w-0"
         />
       </PropertyRow>
     </PropertySection>
   );
 }
-

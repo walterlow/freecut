@@ -14,7 +14,7 @@ import {
 import {
   PropertySection,
   PropertyRow,
-  NumberInput,
+  SliderInput,
 } from '../components';
 import { getMixedValue } from '../utils';
 
@@ -221,7 +221,7 @@ export function AudioSection({ items }: AudioSectionProps) {
             property="volume"
             currentValue={volume === 'mixed' ? 0 : volume}
           />
-          <NumberInput
+          <SliderInput
             value={volume}
             onChange={handleVolumeChange}
             onLiveChange={handleVolumeLiveChange}
@@ -246,7 +246,7 @@ export function AudioSection({ items }: AudioSectionProps) {
       {/* Audio Fades */}
       <PropertyRow label="Fade In">
         <div className="flex items-center gap-1 w-full">
-          <NumberInput
+          <SliderInput
             value={fadeIn}
             onChange={handleFadeInChange}
             onLiveChange={handleFadeInLiveChange}
@@ -270,7 +270,7 @@ export function AudioSection({ items }: AudioSectionProps) {
 
       <PropertyRow label="Fade Out">
         <div className="flex items-center gap-1 w-full">
-          <NumberInput
+          <SliderInput
             value={fadeOut}
             onChange={handleFadeOutChange}
             onLiveChange={handleFadeOutLiveChange}

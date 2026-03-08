@@ -192,8 +192,8 @@ export const TRANSITION_CONFIGS: Record<TransitionType, TransitionConfig> = {
     label: 'Crossfade',
     description: 'Smooth opacity blend between clips',
     defaultDuration: 30, // 1 second at 30fps
-    minDuration: 5,
-    maxDuration: 90,
+    minDuration: 30, // 1 second at 30fps
+    maxDuration: 90, // 3 seconds at 30fps
   },
 };
 

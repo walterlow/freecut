@@ -21,6 +21,7 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
+  SliderInput,
   AlignmentButtons,
   type AlignmentType,
 } from '../components';
@@ -689,7 +690,7 @@ export const LayoutSection = memo(function LayoutSection({
             property="rotation"
             currentValue={rotation === 'mixed' ? 0 : rotation}
           />
-          <NumberInput
+          <SliderInput
             value={rotation}
             onChange={handleRotationChange}
             onLiveChange={handleRotationLiveChange}

@@ -19,7 +19,7 @@ import {
 import {
   PropertySection,
   PropertyRow,
-  NumberInput,
+  SliderInput,
 } from '../components';
 
 interface MaskSectionProps {
@@ -262,7 +262,7 @@ export const MaskSection = memo(function MaskSection({
 
               <PropertyRow label="Opacity">
                 <div className="flex items-center gap-1 w-full">
-                  <NumberInput
+                  <SliderInput
                     value={Math.round(selectedMask.opacity * 100)}
                     onChange={handleOpacityChange}
                     min={0}
@@ -276,7 +276,7 @@ export const MaskSection = memo(function MaskSection({
 
               <PropertyRow label="Feather">
                 <div className="flex items-center gap-1 w-full">
-                  <NumberInput
+                  <SliderInput
                     value={selectedMask.feather}
                     onChange={handleFeatherChange}
                     min={0}

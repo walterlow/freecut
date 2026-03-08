@@ -30,6 +30,7 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
+  SliderInput,
 } from '../components';
 
 interface FillSectionProps {
@@ -254,7 +255,7 @@ export const FillSection = memo(function FillSection({
             property="opacity"
             currentValue={opacityRaw === 'mixed' ? 1 : opacityRaw}
           />
-          <NumberInput
+          <SliderInput
             value={opacity}
             onChange={handleOpacityChange}
             onLiveChange={handleOpacityLiveChange}

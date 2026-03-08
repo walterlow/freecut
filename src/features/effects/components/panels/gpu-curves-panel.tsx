@@ -4,7 +4,7 @@ import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/lib/gpu-effects/types';
-import { PropertyRow, NumberInput } from '@/shared/ui/property-controls';
+import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuCurvesPanelProps {
   effect: ItemEffect;
@@ -502,7 +502,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             if (!param) return null;
             return (
               <PropertyRow key={key} label={param.label}>
-                <NumberInput
+                <SliderInput
                   value={draft[key]}
                   onChange={(v) => onParamChange(effect.id, key, v)}
                   onLiveChange={(v) => handleSliderLiveChange(key, v)}
@@ -523,7 +523,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             if (!param) return null;
             return (
               <PropertyRow key={key} label={param.label}>
-                <NumberInput
+                <SliderInput
                   value={draft[key]}
                   onChange={(v) => onParamChange(effect.id, key, v)}
                   onLiveChange={(v) => handleSliderLiveChange(key, v)}

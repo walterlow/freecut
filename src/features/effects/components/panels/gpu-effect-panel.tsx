@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/lib/gpu-effects/types';
-import { PropertyRow, NumberInput } from '@/shared/ui/property-controls';
+import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuEffectPanelProps {
   effect: ItemEffect;
@@ -95,7 +95,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
     return (
       <PropertyRow label={definition.name}>
         <div className="flex items-center gap-1 min-w-0 w-full">
-          <NumberInput
+          <SliderInput
             value={currentValue}
             onChange={(v) => onParamChange(effect.id, key, v)}
             onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
@@ -158,7 +158,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
         if (param.type === 'number') {
           return (
             <PropertyRow key={key} label={param.label}>
-              <NumberInput
+              <SliderInput
                 value={currentValue as number}
                 onChange={(v) => onParamChange(effect.id, key, v)}
                 onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}

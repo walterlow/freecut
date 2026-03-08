@@ -4,7 +4,7 @@ import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/lib/gpu-effects/types';
-import { PropertyRow, NumberInput } from '@/shared/ui/property-controls';
+import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuWheelsPanelProps {
   effect: ItemEffect;
@@ -296,7 +296,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
         return (
           <PropertyRow key={key} label={param.label} className={tonalRowClass}>
             <div className="flex items-center gap-1 min-w-0 w-full">
-              <NumberInput
+              <SliderInput
                 value={value}
                 onChange={(v) => onParamChange(effect.id, key, v)}
                 onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
