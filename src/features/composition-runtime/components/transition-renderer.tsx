@@ -65,6 +65,12 @@ interface NativeTransitionVideoProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
 }
 
+/**
+ * Detect requestVideoFrameCallback support once.
+ */
+const supportsRVFC = typeof HTMLVideoElement !== 'undefined'
+  && 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+
 const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   poolItemId,
   src,
@@ -83,6 +89,16 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
 
+  // Stable refs for rVFC callback (avoids stale closures)
+  const sourceStartRef = useRef(sourceStart);
+  const sourceFpsRef = useRef(sourceFps);
+  const playbackRateRef = useRef(playbackRate);
+  const fpsRef = useRef(fps);
+  sourceStartRef.current = sourceStart;
+  sourceFpsRef.current = sourceFps;
+  playbackRateRef.current = playbackRate;
+  fpsRef.current = fps;
+
   // Transition clips should advance continuously across the overlap window.
   const advancingFrame = Math.max(0, frame);
   const targetTime = (sourceStart / sourceFps) + (advancingFrame * playbackRate / fps);
@@ -93,7 +109,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
 
     // Pre-load the source
     pool.preloadSource(src).catch(() => {
-      // Preload failed â€” pool will still work, just slower
+      // Preload failed — pool will still work, just slower
     });
 
     // Acquire a video element for this transition clip
@@ -123,7 +139,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     const clampedTime = Math.min(initialTime, (element.duration || Infinity) - 0.05);
     element.currentTime = Math.max(0, clampedTime);
 
-    // Force a frame render â€” some browsers need play/pause after seek
+    // Force a frame render — some browsers need play/pause after seek
     let forceFrameTimer: ReturnType<typeof setTimeout> | null = null;
     const forceFrameRender = () => {
       if (elementRef.current !== element) return;
@@ -133,7 +149,7 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
             element.pause();
           }
         }).catch(() => {
-          // Autoplay blocked â€” fine for muted transition video
+          // Autoplay blocked — fine for muted transition video
         });
       }
     };
@@ -154,10 +170,46 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     // Only re-acquire when identity changes, not on every frame
   }, [poolItemId, src, pool, containerRef]);
 
-  // Sync video with timeline â€” mirrors NativePreviewVideo's approach:
-  // During playback: let video play naturally, only seek to correct drift
-  // During scrub: pause and seek frame-by-frame
+  // Layout-phase sync: immediate seeks before paint to avoid stale frames
+  // at transition boundaries. Matches NativePreviewVideo's approach.
   useLayoutEffect(() => {
+    const video = elementRef.current;
+    if (!video) return;
+
+    video.playbackRate = playbackRate;
+
+    const canSeek = video.readyState >= 1;
+    const videoDuration = video.duration || Infinity;
+    const clampedTargetTime = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
+
+    if (!canSeek) return;
+
+    // During premount (frame < 0), seek to target and stay paused.
+    if (frame < 0) {
+      if (!video.paused) video.pause();
+      if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+        video.currentTime = clampedTargetTime;
+      }
+      return;
+    }
+
+    // Immediate seek on initial sync or scrub (before paint)
+    const mustHardSync = needsInitialSyncRef.current;
+    if (mustHardSync || (!isPlaying && Math.abs(video.currentTime - clampedTargetTime) > 0.016)) {
+      try {
+        video.currentTime = clampedTargetTime;
+        lastSyncTimeRef.current = Date.now();
+        if (mustHardSync) {
+          needsInitialSyncRef.current = false;
+        }
+      } catch {
+        // Seek failed
+      }
+    }
+  }, [frame, playbackRate, targetTime, isPlaying]);
+
+  // Runtime sync: playback control + drift correction
+  useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
 
@@ -170,39 +222,44 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
     const videoDuration = video.duration || Infinity;
     const clampedTargetTime = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
 
-    // During premount (frame < 0), seek to target and stay paused.
+    // During premount, stay paused
     if (frame < 0) {
       if (!video.paused) video.pause();
-      if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.05) {
-        video.currentTime = clampedTargetTime;
-      }
       return;
     }
 
     if (isPlaying) {
-      // Playing: let video play naturally, only seek to correct drift
-      const drift = video.currentTime - clampedTargetTime;
-      const now = Date.now();
-      const timeSinceLastSync = now - lastSyncTimeRef.current;
-
-      const videoBehind = drift < -0.2;
-      const videoFarAhead = drift > 0.5;
-      const needsSync = needsInitialSyncRef.current
-        || videoFarAhead
-        || (videoBehind && timeSinceLastSync > 80);
-
-      if (needsSync && canSeek) {
+      // Initial sync always needed
+      if (needsInitialSyncRef.current && canSeek) {
         try {
           video.currentTime = clampedTargetTime;
-          lastSyncTimeRef.current = now;
+          lastSyncTimeRef.current = Date.now();
           needsInitialSyncRef.current = false;
         } catch {
           // Seek failed
         }
       }
 
-      // Play if paused and ready
-      if (video.paused && video.readyState >= 2) {
+      // React-based drift correction (fallback when rVFC unavailable)
+      if (!supportsRVFC) {
+        const drift = video.currentTime - clampedTargetTime;
+        const now = Date.now();
+        const timeSinceLastSync = now - lastSyncTimeRef.current;
+
+        const videoBehind = drift < -0.1;
+        const videoFarAhead = drift > 0.3;
+        if ((videoFarAhead || (videoBehind && timeSinceLastSync > 80)) && canSeek) {
+          try {
+            video.currentTime = clampedTargetTime;
+            lastSyncTimeRef.current = now;
+          } catch {
+            // Seek failed
+          }
+        }
+      }
+
+      // Play if paused and decoder has buffered ahead (HAVE_FUTURE_DATA)
+      if (video.paused && video.readyState >= 3) {
         video.play().catch(() => {
           // Autoplay might be blocked
         });
@@ -213,16 +270,63 @@ const NativeTransitionVideo: React.FC<NativeTransitionVideoProps> = ({
         video.pause();
       }
       if (frameChanged && canSeek) {
-        try {
-          video.currentTime = clampedTargetTime;
-        } catch {
-          // Seek failed
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed
+          }
         }
       }
     }
   }, [frame, playbackRate, targetTime, sourceStart, sourceFps, fps, isPlaying]);
 
-  // Render nothing â€” the pool element is mounted directly into the container
+  // requestVideoFrameCallback-based drift correction.
+  // Runs outside React's render cycle — the browser calls us exactly when a
+  // video frame is presented, so we can nudge currentTime with minimal overhead.
+  useEffect(() => {
+    const video = elementRef.current;
+    if (!video || !isPlaying || !supportsRVFC) return;
+
+    let handle: number;
+    const onVideoFrame = () => {
+      const v = elementRef.current;
+      if (!v) return;
+
+      const now = Date.now();
+      const timeSinceLastSync = now - lastSyncTimeRef.current;
+      const sr = sourceStartRef.current;
+      const sf = sourceFpsRef.current;
+      const pr = playbackRateRef.current;
+      const fp = fpsRef.current;
+
+      // Approximate current local frame from the video's currentTime
+      const currentVideoTime = v.currentTime;
+      const expectedTime = (sr / sf) + (Math.max(0, lastFrameRef.current) * pr / fp);
+
+      const drift = currentVideoTime - expectedTime;
+      const videoBehind = drift < -0.1;
+      const videoFarAhead = drift > 0.3;
+
+      if ((videoFarAhead || (videoBehind && timeSinceLastSync > 80)) && v.readyState >= 1) {
+        try {
+          v.currentTime = expectedTime;
+          lastSyncTimeRef.current = now;
+        } catch {
+          // Seek failed
+        }
+      }
+
+      handle = v.requestVideoFrameCallback(onVideoFrame);
+    };
+
+    handle = video.requestVideoFrameCallback(onVideoFrame);
+    return () => {
+      video.cancelVideoFrameCallback(handle);
+    };
+  }, [isPlaying]);
+
+  // Render nothing — the pool element is mounted directly into the container
   return null;
 };
 
