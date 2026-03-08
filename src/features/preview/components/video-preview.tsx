@@ -64,6 +64,7 @@ import {
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
+import { usePreviewOverlayStore } from '../stores/preview-overlay-store';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 
 // Preload media files ahead of the playhead to reduce buffering
@@ -1882,6 +1883,13 @@ export const VideoPreview = memo(function VideoPreview({
   ]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
+  useEffect(() => {
+    usePreviewOverlayStore.getState().setVisualBypassActive(showFastScrubOverlay);
+    return () => {
+      usePreviewOverlayStore.getState().setVisualBypassActive(false);
+    };
+  }, [showFastScrubOverlay]);
+
   const preferPlayerForTextGizmo = (
     !forceFastScrubOverlay
     && isGizmoInteracting

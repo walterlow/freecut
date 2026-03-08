@@ -8,6 +8,7 @@ export { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 export type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 export { useCornerPinStore } from '@/features/preview/stores/corner-pin-store';
 export { useMaskEditorStore } from '@/features/preview/stores/mask-editor-store';
+export { usePreviewOverlayStore } from '@/features/preview/stores/preview-overlay-store';
 export { maskVerticesToSvgPath } from '@/features/preview/utils/mask-path-utils';
 export { usePlaybackStore } from '@/shared/state/playback';
 export { useTimelineStore } from '@/features/timeline/stores/timeline-store';

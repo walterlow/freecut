@@ -593,6 +593,69 @@ export class CompositorPipeline {
     return this.outputCanvas;
   }
 
+  renderLayerToTexture(
+    layer: CompositeLayer,
+    width: number,
+    height: number,
+    commandEncoder: GPUCommandEncoder,
+  ): { texture: GPUTexture; view: GPUTextureView } | null {
+    if (!this.regularPipeline || !this.regularLayout) return null;
+
+    let bindGroup: GPUBindGroup;
+    let pipeline: GPURenderPipeline;
+
+    this.writeUniforms(layer.params);
+
+    if (layer.externalTexture && this.externalPipeline && this.externalLayout) {
+      pipeline = this.externalPipeline;
+      bindGroup = this.device.createBindGroup({
+        layout: this.externalLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: this.transparentView },
+          { binding: 2, resource: layer.externalTexture },
+          { binding: 3, resource: { buffer: this.uniformBuffer } },
+          { binding: 4, resource: layer.maskView },
+        ],
+      });
+    } else if (layer.textureView) {
+      pipeline = this.regularPipeline;
+      bindGroup = this.device.createBindGroup({
+        layout: this.regularLayout,
+        entries: [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: this.transparentView },
+          { binding: 2, resource: layer.textureView },
+          { binding: 3, resource: { buffer: this.uniformBuffer } },
+          { binding: 4, resource: layer.maskView },
+        ],
+      });
+    } else {
+      return null;
+    }
+
+    const outputTexture = this.device.createTexture({
+      size: { width, height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+    });
+    const outputView = outputTexture.createView();
+
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outputView,
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(6);
+    pass.end();
+
+    return { texture: outputTexture, view: outputView };
+  }
+
   /**
    * Apply a mask to a texture produced by this compositor.
    * The source texture must not be the same texture currently used as the render target.

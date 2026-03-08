@@ -181,6 +181,46 @@ export class VideoFrameExtractor {
     }
   }
 
+  async acquireVideoFrame(timestamp: number): Promise<VideoFrame | null> {
+    if (!this.ready || !this.sink) {
+      return null;
+    }
+
+    const maxTime = Math.max(0, this.duration - 0.001);
+    const clampedTime = Math.max(0, Math.min(timestamp, maxTime));
+    let lastError: unknown = this.sampleLoopError;
+
+    try {
+      await this.ensureSampleForTimestamp(clampedTime);
+      const videoFrame = this.cloneCurrentVideoFrame();
+      if (videoFrame) {
+        this.drawFailureCount = 0;
+        this.lastFailureKind = 'none';
+        return videoFrame;
+      }
+
+      lastError = this.sampleLoopError;
+      return this.reportFrameFailure(timestamp, clampedTime, lastError);
+    } catch (error) {
+      lastError = error;
+      this.sampleLoopError = error;
+
+      const recovered = await this.recoverAndPrime(clampedTime, error);
+      if (recovered) {
+        const videoFrame = this.cloneCurrentVideoFrame();
+        if (videoFrame) {
+          this.drawFailureCount = 0;
+          this.lastFailureKind = 'none';
+          return videoFrame;
+        }
+        lastError = this.sampleLoopError;
+      }
+
+      this.lastFailureKind = this.lastFailureKind === 'no-sample' ? 'no-sample' : 'decode-error';
+      return this.reportFrameFailure(timestamp, clampedTime, lastError);
+    }
+  }
+
   private async ensureSampleForTimestamp(timestamp: number): Promise<void> {
     if (!this.sink) return;
 
@@ -320,6 +360,44 @@ export class VideoFrameExtractor {
     }
   }
 
+  private cloneCurrentVideoFrame(): VideoFrame | null {
+    const videoFrame = this.getOrCreateCurrentVideoFrame();
+    if (!videoFrame) {
+      return null;
+    }
+
+    try {
+      return new VideoFrame(videoFrame);
+    } catch (error) {
+      this.sampleLoopError = error;
+      this.lastFailureKind = 'decode-error';
+      return null;
+    }
+  }
+
+  private getOrCreateCurrentVideoFrame(): VideoFrame | null {
+    const sample = this.currentSample;
+    if (!sample) {
+      this.lastFailureKind = 'no-sample';
+      return null;
+    }
+
+    let videoFrame = this.cachedVideoFrame;
+    if (!videoFrame || this.cachedVideoFrameSample !== sample) {
+      this.closeCachedVideoFrame();
+      videoFrame = sample.toVideoFrame();
+      if (!videoFrame) {
+        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
+        this.lastFailureKind = 'decode-error';
+        return null;
+      }
+      this.cachedVideoFrame = videoFrame;
+      this.cachedVideoFrameSample = sample;
+    }
+
+    return videoFrame;
+  }
+
   private closeCachedVideoFrame(): void {
     if (this.cachedVideoFrame) {
       try {
@@ -396,6 +474,11 @@ export class VideoFrameExtractor {
     return false;
   }
 
+  private reportFrameFailure(timestamp: number, clampedTime: number, error: unknown): VideoFrame | null {
+    this.reportDrawFailure(timestamp, clampedTime, error);
+    return null;
+  }
+
   getLastFailureKind(): 'none' | 'no-sample' | 'decode-error' {
     return this.lastFailureKind;
   }
@@ -440,4 +523,3 @@ export class VideoFrameExtractor {
     this.lastFailureKind = 'none';
   }
 }
-

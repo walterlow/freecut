@@ -4,7 +4,7 @@ import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import { maskVerticesToSvgPath } from '@/features/composition-runtime/deps/stores';
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
-import { useCornerPinStore, useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
+import { useCornerPinStore, useMaskEditorStore, usePreviewOverlayStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import type { MaskInfo } from './item';
 
@@ -36,9 +36,11 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
 
   // Get all visual state from consolidated hook
   const state = useItemVisualState(item, masks);
+  const bypassVisualLayers = usePreviewOverlayStore((s) => s.isVisualBypassActive);
 
   // Compute mask style based on mask type
   const maskStyle = useMemo((): React.CSSProperties => {
+    if (bypassVisualLayers) return {};
     if (state.maskType === 'clip' && state.maskClipPath) {
       return { clipPath: state.maskClipPath };
     }
@@ -49,18 +51,19 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       };
     }
     return {};
-  }, [state.maskType, state.maskClipPath, state.svgMaskId]);
+  }, [bypassVisualLayers, state.maskType, state.maskClipPath, state.svgMaskId]);
 
   // Live mask preview during slider drag — reads from lightweight preview store
   // so updates bypass the slow React prop chain (items-store → tracks → composition).
   const previewMasks = useMaskEditorStore((s) =>
     s.editingItemId === item.id ? s.previewMasks : null
   );
-  const effectiveMasks = previewMasks ?? item.masks;
+  const effectiveMasks = bypassVisualLayers ? null : (previewMasks ?? item.masks);
 
   // Simple masks (no feather, full opacity, add mode): use clip-path (GPU geometry, lightweight).
   // Complex masks (feather, partial opacity, subtract/intersect): use SVG mask.
   const clipMaskResult = useMemo(() => {
+    if (bypassVisualLayers) return { style: {} as React.CSSProperties, svgDefs: null };
     const clipMasks = effectiveMasks?.filter((m) => m.enabled && m.vertices.length >= 2);
     if (!clipMasks || clipMasks.length === 0) return { style: {} as React.CSSProperties, svgDefs: null };
 
@@ -125,15 +128,16 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         </svg>
       ),
     };
-  }, [effectiveMasks, item.id, state.transform.width, state.transform.height]);
+  }, [bypassVisualLayers, effectiveMasks, item.id, state.transform.width, state.transform.height]);
 
   // Corner pin CSS matrix3d — use preview during drag for smooth interaction
   const cornerPinPreview = useCornerPinStore((s) =>
     s.editingItemId === item.id ? s.previewCornerPin : null
   );
-  const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
+  const effectiveCornerPin = bypassVisualLayers ? null : (cornerPinPreview ?? item.cornerPin);
 
   const cornerPinStyle = useMemo((): React.CSSProperties | null => {
+    if (bypassVisualLayers) return null;
     if (!hasCornerPin(effectiveCornerPin)) return null;
     const w = state.transform.width;
     const h = state.transform.height;
@@ -141,10 +145,11 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       transformOrigin: '0 0',
       transform: computeCornerPinMatrix3d(w, h, effectiveCornerPin!),
     };
-  }, [effectiveCornerPin, state.transform.width, state.transform.height]);
+  }, [bypassVisualLayers, effectiveCornerPin, state.transform.width, state.transform.height]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
+    if (bypassVisualLayers) return null;
     if (state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
       return null;
     }
@@ -197,9 +202,9 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
             ))}
           </mask>
         </defs>
-      </svg>
-    );
-  }, [state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
+        </svg>
+      );
+  }, [bypassVisualLayers, state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
 
   return (
     <>
@@ -212,8 +217,8 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         style={{
           ...state.transformStyle,
           ...maskStyle,
-          overflow: state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
-          mixBlendMode: item.blendMode && item.blendMode !== 'normal'
+          overflow: !bypassVisualLayers && state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
+          mixBlendMode: !bypassVisualLayers && item.blendMode && item.blendMode !== 'normal'
             ? BLEND_MODE_CSS[item.blendMode]
             : undefined,
         }}
@@ -241,7 +246,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
               width: '100%',
               height: '100%',
               position: 'relative',
-              filter: state.cssFilter || undefined,
+              filter: bypassVisualLayers ? undefined : (state.cssFilter || undefined),
               ...clipMaskResult.style,
             }}
           >

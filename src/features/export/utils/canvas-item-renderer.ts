@@ -59,6 +59,14 @@ import {
 import { hasCornerPin, drawCornerPinImage } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
+let gpuOnlyPlaceholderCanvas: OffscreenCanvas | null = null;
+
+function getGpuOnlyPlaceholderCanvas(): OffscreenCanvas {
+  if (!gpuOnlyPlaceholderCanvas) {
+    gpuOnlyPlaceholderCanvas = new OffscreenCanvas(1, 1);
+  }
+  return gpuOnlyPlaceholderCanvas;
+}
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -671,6 +679,30 @@ function renderImageItem(
   );
 }
 
+function resolveImageSourceForFrame(
+  item: ImageItem,
+  frame: number,
+  rctx: ItemRenderContext,
+): { source: RenderImageSource; width: number; height: number } | null {
+  const { fps, imageElements, gifFramesMap } = rctx;
+  const cachedGif = gifFramesMap.get(item.id);
+  if (cachedGif && cachedGif.frames.length > 0) {
+    const localFrame = frame - item.from;
+    const playbackRate = item.speed ?? 1;
+    const timeMs = (localFrame / fps) * 1000 * playbackRate;
+    const { frame: gifFrame } = gifFrameCache.getFrameAtTime(cachedGif, timeMs);
+    return {
+      source: gifFrame,
+      width: cachedGif.width,
+      height: cachedGif.height,
+    };
+  }
+
+  const loadedImage = imageElements.get(item.id);
+  if (!loadedImage) return null;
+  return loadedImage;
+}
+
 // ---------------------------------------------------------------------------
 // Text item
 // ---------------------------------------------------------------------------
@@ -1157,12 +1189,134 @@ async function renderItemWithEffectsToCanvas(
     transform,
     itemEffects,
   } = resolvePreviewItemOverrides(item, animatedTransform, rctx);
-  const { canvas: itemCanvas, ctx: itemCtx } = rctx.canvasPool.acquire();
-
-  await renderItem(itemCtx, effectiveItem, transform, frame, rctx);
-
   const adjustmentEffects = getAdjustmentLayerEffects(trackOrder, rctx.adjustmentLayers, frame);
   const combinedEffects = combineEffects(itemEffects, adjustmentEffects);
+
+  if (
+    effectiveItem.type === 'video'
+    && deferClipMaskToGpu
+    && preferGpuSource
+    && combinedEffects.length === 0
+  ) {
+    const videoGpuResult = await renderVideoItemToTexture(
+      effectiveItem as VideoItem,
+      transform,
+      frame,
+      rctx,
+    );
+    if (videoGpuResult?.gpuSource) {
+      return {
+        source: getGpuOnlyPlaceholderCanvas(),
+        poolCanvases: videoGpuResult.poolCanvases,
+        maskImageData: createPositionedItemClipMask(effectiveItem, transform, rctx),
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource: videoGpuResult.gpuSource,
+      };
+    }
+  }
+
+  if (
+    effectiveItem.type === 'image'
+    && deferClipMaskToGpu
+    && preferGpuSource
+    && combinedEffects.length === 0
+  ) {
+    const imageGpuResult = await renderImageItemToTexture(
+      effectiveItem as ImageItem,
+      transform,
+      frame,
+      rctx,
+    );
+    if (imageGpuResult?.gpuSource) {
+      return {
+        source: getGpuOnlyPlaceholderCanvas(),
+        poolCanvases: imageGpuResult.poolCanvases,
+        maskImageData: createPositionedItemClipMask(effectiveItem, transform, rctx),
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource: imageGpuResult.gpuSource,
+      };
+    }
+  }
+
+  if (
+    effectiveItem.type === 'text'
+    && deferClipMaskToGpu
+    && preferGpuSource
+    && combinedEffects.length === 0
+  ) {
+    const textGpuResult = await renderTextItemToTexture(
+      effectiveItem as TextItem,
+      transform,
+      rctx,
+    );
+    if (textGpuResult?.gpuSource) {
+      return {
+        source: getGpuOnlyPlaceholderCanvas(),
+        poolCanvases: textGpuResult.poolCanvases,
+        maskImageData: createPositionedItemClipMask(effectiveItem, transform, rctx),
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource: textGpuResult.gpuSource,
+      };
+    }
+  }
+
+  if (
+    effectiveItem.type === 'shape'
+    && deferClipMaskToGpu
+    && preferGpuSource
+    && combinedEffects.length === 0
+  ) {
+    const shapeGpuResult = await renderShapeItemToTexture(
+      effectiveItem as ShapeItem,
+      transform,
+      rctx,
+    );
+    if (shapeGpuResult?.gpuSource) {
+      return {
+        source: getGpuOnlyPlaceholderCanvas(),
+        poolCanvases: shapeGpuResult.poolCanvases,
+        maskImageData: createPositionedItemClipMask(effectiveItem, transform, rctx),
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource: shapeGpuResult.gpuSource,
+      };
+    }
+  }
+
+  if (
+    effectiveItem.type === 'composition'
+    && deferClipMaskToGpu
+    && preferGpuSource
+    && combinedEffects.length === 0
+  ) {
+    const compositionGpuResult = await renderCompositionItemToTexture(
+      effectiveItem as CompositionItem,
+      transform,
+      frame,
+      rctx,
+    );
+    if (compositionGpuResult?.gpuSource) {
+      return {
+        source: getGpuOnlyPlaceholderCanvas(),
+        poolCanvases: compositionGpuResult.poolCanvases,
+        maskImageData: createPositionedItemClipMask(effectiveItem, transform, rctx),
+        itemId: effectiveItem.id,
+        effectiveItem,
+        transform,
+        gpuSource: compositionGpuResult.gpuSource,
+      };
+    }
+  }
+
+  const { canvas: itemCanvas, ctx: itemCtx } = rctx.canvasPool.acquire();
+  await renderItem(itemCtx, effectiveItem, transform, frame, rctx);
 
   let source = itemCanvas;
   const poolCanvases: OffscreenCanvas[] = [itemCanvas];
@@ -1579,6 +1733,761 @@ async function renderCompositionItem(
     rctx.canvasPool.release(subContentCanvas);
     rctx.canvasPool.release(subCanvas);
   }
+}
+
+function buildFullscreenLayerParams(
+  sourceWidth: number,
+  sourceHeight: number,
+  transform: ItemTransform,
+  canvas: CanvasSettings,
+): CompositeLayer['params'] {
+  const drawDimensions = calculateMediaDrawDimensions(
+    sourceWidth,
+    sourceHeight,
+    transform,
+    canvas,
+  );
+  const centerX = drawDimensions.x + drawDimensions.width / 2;
+  const centerY = drawDimensions.y + drawDimensions.height / 2;
+  const outputAspect = canvas.width / canvas.height;
+
+  return {
+    ...DEFAULT_LAYER_PARAMS,
+    opacity: transform.opacity,
+    posX: centerX / canvas.width - 0.5,
+    posY: centerY / canvas.height - 0.5,
+    scaleX: drawDimensions.width / canvas.width,
+    scaleY: drawDimensions.height / canvas.height,
+    rotationZ: (transform.rotation * Math.PI) / 180,
+    sourceAspect: outputAspect,
+    outputAspect,
+  };
+}
+
+export async function renderCompositionItemToTexture(
+  item: CompositionItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<{ gpuSource: { texture: GPUTexture; view: GPUTextureView }; poolCanvases: OffscreenCanvas[] } | null> {
+  const subData = rctx.subCompRenderData.get(item.compositionId);
+  if (!subData) return null;
+
+  const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
+  const localFrame = frame - item.from + sourceOffset;
+  if (localFrame < 0 || localFrame >= subData.durationInFrames) {
+    return null;
+  }
+
+  const { canvas: subCanvas, ctx: subCtx } = rctx.canvasPool.acquire();
+  const { canvas: subContentCanvas, ctx: subContentCtx } = rctx.canvasPool.acquire();
+
+  try {
+    subCanvas.width = item.compositionWidth;
+    subCanvas.height = item.compositionHeight;
+    subContentCanvas.width = item.compositionWidth;
+    subContentCanvas.height = item.compositionHeight;
+    subCtx.clearRect(0, 0, subCanvas.width, subCanvas.height);
+    subContentCtx.clearRect(0, 0, subContentCanvas.width, subContentCanvas.height);
+
+    const subCanvasSettings: CanvasSettings = {
+      width: item.compositionWidth,
+      height: item.compositionHeight,
+      fps: subData.fps,
+    };
+    const subMaskSettings: MaskCanvasSettings = {
+      width: item.compositionWidth,
+      height: item.compositionHeight,
+      fps: subData.fps,
+    };
+    const subRenderPlan = subData.renderPlan;
+    const subRctx: ItemRenderContext = {
+      ...rctx,
+      fps: subData.fps,
+      canvasSettings: subCanvasSettings,
+      keyframesMap: subData.keyframesMap,
+      adjustmentLayers: subRenderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[],
+    };
+
+    const frameScene = resolveFrameCompositionScene({
+      renderPlan: subRenderPlan,
+      frame: localFrame,
+      canvas: subCanvasSettings,
+      getKeyframes: (itemId) => subData.keyframesMap.get(itemId),
+      getPreviewTransform: subRctx.getPreviewTransformOverride,
+    });
+    const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
+
+    const activeSubMasks = frameScene.activeShapeMasks.map(({ shape, transform: maskTransform }) => {
+      const maskType = shape.maskType ?? 'clip';
+      const feather = maskType === 'alpha' ? (shape.maskFeather ?? 0) : 0;
+      let svgPath = getShapePath(
+        shape,
+        {
+          x: maskTransform.x,
+          y: maskTransform.y,
+          width: maskTransform.width,
+          height: maskTransform.height,
+          rotation: 0,
+          opacity: maskTransform.opacity,
+        },
+        {
+          canvasWidth: subCanvasSettings.width,
+          canvasHeight: subCanvasSettings.height,
+        },
+      );
+
+      if (maskTransform.rotation !== 0) {
+        const centerX = subCanvasSettings.width / 2 + maskTransform.x;
+        const centerY = subCanvasSettings.height / 2 + maskTransform.y;
+        svgPath = rotatePath(svgPath, maskTransform.rotation, centerX, centerY);
+      }
+
+      return {
+        path: svgPathToPath2D(svgPath),
+        inverted: shape.maskInvert ?? false,
+        feather,
+        maskType,
+      };
+    });
+
+    const renderScene = resolveFrameRenderScene<ActiveTransition>({
+      tracksByOrderDesc: subRenderPlan.trackRenderState.visibleTracksByOrderDesc,
+      tracksByOrderAsc: subRenderPlan.trackRenderState.visibleTracksByOrderAsc,
+      visibleTrackIds: subRenderPlan.trackRenderState.visibleTrackIds,
+      activeTransitions,
+      getTransitionTrackOrder: (activeTransition) => (
+        subRenderPlan.trackRenderState.trackOrderMap.get(activeTransition.transition.trackId ?? '') ?? 0
+      ),
+      disableOcclusion: true,
+      shouldRenderItem: (subItem) => {
+        if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+          return false;
+        }
+        if (transitionClipIds.has(subItem.id)) return false;
+        if (subItem.type === 'audio' || subItem.type === 'adjustment') return false;
+        if (subItem.type === 'shape' && subItem.isMask) return false;
+        return true;
+      },
+      isFullyOccluding: () => false,
+    });
+
+    const hasNonNormalBlend = renderScene.renderTasks.some(
+      (task) => task.type === 'item' && Boolean(task.item.blendMode && task.item.blendMode !== 'normal'),
+    );
+    const hasItemClipMasks = renderScene.renderTasks.some(
+      (task) => task.type === 'item' && Boolean(task.item.masks?.some((mask) => mask.enabled && mask.vertices.length >= 2)),
+    );
+    const useGpuLayerCompositor = Boolean(
+      (hasNonNormalBlend || hasItemClipMasks)
+      && subRctx.gpuPipeline
+      && subRctx.gpuCompositor
+      && subRctx.gpuMaskManager
+    );
+    if (!useGpuLayerCompositor || !subRctx.gpuCompositor || !subRctx.gpuMaskManager || !subRctx.gpuPipeline) {
+      return null;
+    }
+
+    const renderResults = await Promise.all(
+      renderScene.renderTasks.map(async (task) => {
+        if (task.type === 'transition') {
+          return renderTransitionLayer(
+            task.transition,
+            localFrame,
+            subRctx,
+            task.trackOrder,
+            'texture',
+          );
+        }
+
+        return renderItemWithEffectsToCanvas(
+          task.item,
+          task.trackOrder,
+          localFrame,
+          subRctx,
+          true,
+          true,
+        );
+      }),
+    );
+
+    const device = subRctx.gpuPipeline.getDevice();
+    const layers: CompositeLayer[] = [];
+    const layerTextures: GPUTexture[] = [];
+
+    for (let i = 0; i < renderResults.length; i++) {
+      const result = renderResults[i];
+      if (!result) continue;
+
+      const task = renderScene.renderTasks[i]!;
+      const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+      const maskInfo = task.type === 'item' && result.itemId
+        ? (() => {
+            subRctx.gpuMaskManager!.updateMask(result.itemId, result.maskImageData ?? null);
+            return subRctx.gpuMaskManager!.getMaskInfo(result.itemId);
+          })()
+        : { hasMask: false, view: subRctx.gpuMaskManager.getFallbackView() };
+
+      const tex = result.gpuSource?.texture ?? device.createTexture({
+        size: [subCanvasSettings.width, subCanvasSettings.height],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      if (!result.gpuSource) {
+        if (!result.source) continue;
+        device.queue.copyExternalImageToTexture(
+          { source: result.source, flipY: false },
+          { texture: tex },
+          { width: subCanvasSettings.width, height: subCanvasSettings.height },
+        );
+      }
+      layerTextures.push(tex);
+
+      layers.push({
+        params: {
+          ...DEFAULT_LAYER_PARAMS,
+          blendMode,
+          sourceAspect: subCanvasSettings.width / subCanvasSettings.height,
+          outputAspect: subCanvasSettings.width / subCanvasSettings.height,
+          hasMask: maskInfo.hasMask,
+        },
+        textureView: result.gpuSource?.view ?? tex.createView(),
+        maskView: maskInfo.view,
+      });
+
+      for (const poolCanvas of result.poolCanvases) {
+        rctx.canvasPool.release(poolCanvas);
+      }
+    }
+
+    if (layers.length === 0) {
+      for (const tex of layerTextures) tex.destroy();
+      return null;
+    }
+
+    const commandEncoder = device.createCommandEncoder();
+    let composited = subRctx.gpuCompositor.compositeToTexture(
+      layers,
+      subCanvasSettings.width,
+      subCanvasSettings.height,
+      commandEncoder,
+    );
+    if (!composited) {
+      device.queue.submit([commandEncoder.finish()]);
+      for (const tex of layerTextures) tex.destroy();
+      return null;
+    }
+
+    if (activeSubMasks.length > 0) {
+      const frameMaskImageData = createFrameMaskImageData(activeSubMasks, subMaskSettings);
+      if (frameMaskImageData) {
+        const frameMaskId = `__subframe__:${item.id}`;
+        subRctx.gpuMaskManager.updateMask(frameMaskId, frameMaskImageData);
+        const frameMaskInfo = subRctx.gpuMaskManager.getMaskInfo(frameMaskId);
+        if (frameMaskInfo.hasMask) {
+          composited = subRctx.gpuCompositor.applyMaskToTexture(
+            composited,
+            frameMaskInfo.view,
+            subCanvasSettings.width,
+            subCanvasSettings.height,
+            commandEncoder,
+          ) ?? composited;
+        }
+      }
+    }
+
+    const placed = subRctx.gpuCompositor.renderLayerToTexture(
+      {
+        params: buildFullscreenLayerParams(
+          subCanvas.width,
+          subCanvas.height,
+          transform,
+          rctx.canvasSettings,
+        ),
+        textureView: composited.view,
+        maskView: subRctx.gpuMaskManager.getFallbackView(),
+      },
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+      commandEncoder,
+    );
+    device.queue.submit([commandEncoder.finish()]);
+
+    for (const tex of layerTextures) {
+      tex.destroy();
+    }
+
+    if (!placed) {
+      return null;
+    }
+
+    return {
+      gpuSource: placed,
+      poolCanvases: [],
+    };
+  } finally {
+    rctx.canvasPool.release(subContentCanvas);
+    rctx.canvasPool.release(subCanvas);
+  }
+}
+
+export async function renderImageItemToTexture(
+  item: ImageItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<{ gpuSource: { texture: GPUTexture; view: GPUTextureView }; poolCanvases: OffscreenCanvas[] } | null> {
+  if (!rctx.gpuPipeline || !rctx.gpuCompositor || !rctx.gpuMaskManager) {
+    return null;
+  }
+  if (hasCornerPin(item.cornerPin) || transform.cornerRadius > 0) {
+    return null;
+  }
+
+  const resolved = resolveImageSourceForFrame(item, frame, rctx);
+  if (!resolved) return null;
+
+  const device = rctx.gpuPipeline.getDevice();
+  const sourceTexture = device.createTexture({
+    size: [resolved.width, resolved.height],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  try {
+    device.queue.copyExternalImageToTexture(
+      { source: resolved.source, flipY: false },
+      { texture: sourceTexture },
+      { width: resolved.width, height: resolved.height },
+    );
+
+    const commandEncoder = device.createCommandEncoder();
+    const placed = rctx.gpuCompositor.renderLayerToTexture(
+      {
+        params: buildFullscreenLayerParams(
+          resolved.width,
+          resolved.height,
+          transform,
+          rctx.canvasSettings,
+        ),
+        textureView: sourceTexture.createView(),
+        maskView: rctx.gpuMaskManager.getFallbackView(),
+      },
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+      commandEncoder,
+    );
+    device.queue.submit([commandEncoder.finish()]);
+
+    if (!placed) {
+      return null;
+    }
+
+    return {
+      gpuSource: placed,
+      poolCanvases: [],
+    };
+  } finally {
+    sourceTexture.destroy();
+  }
+}
+
+export async function renderTextItemToTexture(
+  item: TextItem,
+  transform: ItemTransform,
+  rctx: ItemRenderContext,
+): Promise<{ gpuSource: { texture: GPUTexture; view: GPUTextureView }; poolCanvases: OffscreenCanvas[] } | null> {
+  if (!rctx.gpuPipeline || !rctx.gpuCompositor || !rctx.gpuMaskManager) {
+    return null;
+  }
+  if (hasCornerPin(item.cornerPin) || transform.cornerRadius > 0) {
+    return null;
+  }
+  if (transform.width <= 0 || transform.height <= 0) {
+    return null;
+  }
+
+  const sourceWidth = Math.max(1, Math.ceil(transform.width));
+  const sourceHeight = Math.max(1, Math.ceil(transform.height));
+  const sourceCanvas = new OffscreenCanvas(sourceWidth, sourceHeight);
+  const sourceCtx = sourceCanvas.getContext('2d');
+  if (!sourceCtx) {
+    return null;
+  }
+
+  renderTextItem(
+    sourceCtx,
+    item,
+    {
+      ...transform,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    },
+    {
+      ...rctx,
+      canvasSettings: {
+        ...rctx.canvasSettings,
+        width: sourceWidth,
+        height: sourceHeight,
+      },
+    },
+  );
+
+  const device = rctx.gpuPipeline.getDevice();
+  const sourceTexture = device.createTexture({
+    size: [sourceWidth, sourceHeight],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  try {
+    device.queue.copyExternalImageToTexture(
+      { source: sourceCanvas, flipY: false },
+      { texture: sourceTexture },
+      { width: sourceWidth, height: sourceHeight },
+    );
+
+    const commandEncoder = device.createCommandEncoder();
+    const placed = rctx.gpuCompositor.renderLayerToTexture(
+      {
+        params: buildFullscreenLayerParams(
+          sourceWidth,
+          sourceHeight,
+          transform,
+          rctx.canvasSettings,
+        ),
+        textureView: sourceTexture.createView(),
+        maskView: rctx.gpuMaskManager.getFallbackView(),
+      },
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+      commandEncoder,
+    );
+    device.queue.submit([commandEncoder.finish()]);
+
+    if (!placed) {
+      return null;
+    }
+
+    return {
+      gpuSource: placed,
+      poolCanvases: [],
+    };
+  } finally {
+    sourceTexture.destroy();
+  }
+}
+
+export async function renderShapeItemToTexture(
+  item: ShapeItem,
+  transform: ItemTransform,
+  rctx: ItemRenderContext,
+): Promise<{ gpuSource: { texture: GPUTexture; view: GPUTextureView }; poolCanvases: OffscreenCanvas[] } | null> {
+  if (!rctx.gpuPipeline || !rctx.gpuCompositor || !rctx.gpuMaskManager) {
+    return null;
+  }
+  if (item.isMask || hasCornerPin(item.cornerPin) || transform.cornerRadius > 0) {
+    return null;
+  }
+  if (transform.width <= 0 || transform.height <= 0) {
+    return null;
+  }
+
+  const strokePadding = Math.max(0, Math.ceil((item.strokeWidth ?? 0) / 2) + 1);
+  const sourceWidth = Math.max(1, Math.ceil(transform.width + strokePadding * 2));
+  const sourceHeight = Math.max(1, Math.ceil(transform.height + strokePadding * 2));
+  const sourceCanvas = new OffscreenCanvas(sourceWidth, sourceHeight);
+  const sourceCtx = sourceCanvas.getContext('2d');
+  if (!sourceCtx) {
+    return null;
+  }
+
+  renderShape(
+    sourceCtx,
+    item,
+    {
+      ...transform,
+      x: 0,
+      y: 0,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    },
+    {
+      width: sourceWidth,
+      height: sourceHeight,
+    },
+  );
+
+  const device = rctx.gpuPipeline.getDevice();
+  const sourceTexture = device.createTexture({
+    size: [sourceWidth, sourceHeight],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  try {
+    device.queue.copyExternalImageToTexture(
+      { source: sourceCanvas, flipY: false },
+      { texture: sourceTexture },
+      { width: sourceWidth, height: sourceHeight },
+    );
+
+    const commandEncoder = device.createCommandEncoder();
+    const placed = rctx.gpuCompositor.renderLayerToTexture(
+      {
+        params: buildFullscreenLayerParams(
+          sourceWidth,
+          sourceHeight,
+          strokePadding > 0
+            ? {
+                ...transform,
+                width: transform.width + strokePadding * 2,
+                height: transform.height + strokePadding * 2,
+              }
+            : transform,
+          rctx.canvasSettings,
+        ),
+        textureView: sourceTexture.createView(),
+        maskView: rctx.gpuMaskManager.getFallbackView(),
+      },
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+      commandEncoder,
+    );
+    device.queue.submit([commandEncoder.finish()]);
+
+    if (!placed) {
+      return null;
+    }
+
+    return {
+      gpuSource: placed,
+      poolCanvases: [],
+    };
+  } finally {
+    sourceTexture.destroy();
+  }
+}
+
+export async function renderVideoItemToTexture(
+  item: VideoItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+): Promise<{ gpuSource: { texture: GPUTexture; view: GPUTextureView }; poolCanvases: OffscreenCanvas[] } | null> {
+  if (!rctx.gpuPipeline || !rctx.gpuCompositor || !rctx.gpuMaskManager) {
+    return null;
+  }
+  if (hasCornerPin(item.cornerPin) || transform.cornerRadius > 0) {
+    return null;
+  }
+
+  let video: HTMLVideoElement | null = null;
+  const localFrame = frame - item.from;
+  const localTime = localFrame / rctx.fps;
+  const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+  const sourceFps = item.sourceFps ?? rctx.fps;
+  const speed = item.speed ?? 1;
+  const sourceTime = sourceStart / sourceFps + localTime * speed;
+
+  if (rctx.domVideoElementProvider) {
+    const domVideo = rctx.domVideoElementProvider(item.id);
+    if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+      const drift = Math.abs(domVideo.currentTime - sourceTime);
+      if (drift <= 0.2) {
+        video = domVideo;
+      }
+    }
+  }
+
+  if (!video) {
+    const fallbackVideo = rctx.videoElements.get(item.id);
+    if (fallbackVideo && fallbackVideo.readyState >= 2 && fallbackVideo.videoWidth > 0) {
+      const clampedTime = Math.max(0, Math.min(sourceTime, fallbackVideo.duration - 0.01));
+      const needsSeek = Math.abs(fallbackVideo.currentTime - clampedTime) > 0.034;
+      if (needsSeek) {
+        fallbackVideo.currentTime = clampedTime;
+        await new Promise<void>((resolve) => {
+          const onSeeked = () => {
+            fallbackVideo.removeEventListener('seeked', onSeeked);
+            resolve();
+          };
+          fallbackVideo.addEventListener('seeked', onSeeked);
+          setTimeout(() => {
+            fallbackVideo.removeEventListener('seeked', onSeeked);
+            resolve();
+          }, 150);
+        });
+      }
+      if (fallbackVideo.readyState >= 2 && fallbackVideo.videoWidth > 0) {
+        video = fallbackVideo;
+      }
+    }
+  }
+
+  if (!video) {
+    const extractor = rctx.videoExtractors.get(item.id);
+    if (
+      extractor
+      && rctx.useMediabunny.has(item.id)
+      && !rctx.mediabunnyDisabledItems.has(item.id)
+    ) {
+      const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
+      const acquiredFrame = await extractor.acquireVideoFrame(clampedTime);
+      if (acquiredFrame) {
+        const sourceWidth = Math.max(1, acquiredFrame.frame.displayWidth || acquiredFrame.frame.codedWidth);
+        const sourceHeight = Math.max(1, acquiredFrame.frame.displayHeight || acquiredFrame.frame.codedHeight);
+        const device = rctx.gpuPipeline.getDevice();
+        const sourceTexture = device.createTexture({
+          size: [sourceWidth, sourceHeight],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+
+        try {
+          device.queue.copyExternalImageToTexture(
+            { source: acquiredFrame.frame, flipY: false },
+            { texture: sourceTexture },
+            { width: sourceWidth, height: sourceHeight },
+          );
+
+          const commandEncoder = device.createCommandEncoder();
+          const placed = rctx.gpuCompositor.renderLayerToTexture(
+            {
+              params: buildFullscreenLayerParams(
+                sourceWidth,
+                sourceHeight,
+                transform,
+                rctx.canvasSettings,
+              ),
+              textureView: sourceTexture.createView(),
+              maskView: rctx.gpuMaskManager.getFallbackView(),
+            },
+            rctx.canvasSettings.width,
+            rctx.canvasSettings.height,
+            commandEncoder,
+          );
+          device.queue.submit([commandEncoder.finish()]);
+
+          if (!placed) {
+            return null;
+          }
+
+          return {
+            gpuSource: placed,
+            poolCanvases: [],
+          };
+        } finally {
+          acquiredFrame.release();
+          sourceTexture.destroy();
+        }
+      }
+
+      const sourceWidth = Math.max(1, Math.ceil(transform.width));
+      const sourceHeight = Math.max(1, Math.ceil(transform.height));
+      const sourceCanvas = new OffscreenCanvas(sourceWidth, sourceHeight);
+      const sourceCtx = sourceCanvas.getContext('2d');
+      if (!sourceCtx) {
+        return null;
+      }
+
+      const success = await extractor.drawFrame(
+        sourceCtx,
+        clampedTime,
+        0,
+        0,
+        sourceWidth,
+        sourceHeight,
+      );
+      if (!success) {
+        return null;
+      }
+
+      const device = rctx.gpuPipeline.getDevice();
+      const sourceTexture = device.createTexture({
+        size: [sourceWidth, sourceHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+
+      try {
+        device.queue.copyExternalImageToTexture(
+          { source: sourceCanvas, flipY: false },
+          { texture: sourceTexture },
+          { width: sourceWidth, height: sourceHeight },
+        );
+
+        const commandEncoder = device.createCommandEncoder();
+        const placed = rctx.gpuCompositor.renderLayerToTexture(
+          {
+            params: buildFullscreenLayerParams(
+              sourceWidth,
+              sourceHeight,
+              transform,
+              rctx.canvasSettings,
+            ),
+            textureView: sourceTexture.createView(),
+            maskView: rctx.gpuMaskManager.getFallbackView(),
+          },
+          rctx.canvasSettings.width,
+          rctx.canvasSettings.height,
+          commandEncoder,
+        );
+        device.queue.submit([commandEncoder.finish()]);
+
+        if (!placed) {
+          return null;
+        }
+
+        return {
+          gpuSource: placed,
+          poolCanvases: [],
+        };
+      } finally {
+        sourceTexture.destroy();
+      }
+    }
+
+    return null;
+  }
+
+  let externalTexture: GPUExternalTexture;
+  try {
+    externalTexture = rctx.gpuPipeline.getDevice().importExternalTexture({ source: video });
+  } catch {
+    return null;
+  }
+
+  const commandEncoder = rctx.gpuPipeline.getDevice().createCommandEncoder();
+  const placed = rctx.gpuCompositor.renderLayerToTexture(
+    {
+      params: buildFullscreenLayerParams(
+        video.videoWidth,
+        video.videoHeight,
+        transform,
+        rctx.canvasSettings,
+      ),
+      externalTexture,
+      maskView: rctx.gpuMaskManager.getFallbackView(),
+    },
+    rctx.canvasSettings.width,
+    rctx.canvasSettings.height,
+    commandEncoder,
+  );
+  rctx.gpuPipeline.getDevice().queue.submit([commandEncoder.finish()]);
+
+  if (!placed) {
+    return null;
+  }
+
+  return {
+    gpuSource: placed,
+    poolCanvases: [],
+  };
 }
 
 // ---------------------------------------------------------------------------

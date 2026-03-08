@@ -19,6 +19,7 @@ import type {
   TimelineItem,
   VideoItem,
   ImageItem,
+  TextItem,
   ShapeItem,
   CompositionItem,
 } from '@/types/timeline';
@@ -73,6 +74,11 @@ import {
 } from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
+  renderCompositionItemToTexture,
+  renderImageItemToTexture,
+  renderTextItemToTexture,
+  renderShapeItemToTexture,
+  renderVideoItemToTexture,
   renderTransitionLayer,
   renderTransitionToCanvas,
   calculateMediaDrawDimensions,
@@ -1143,6 +1149,119 @@ export async function createCompositionRenderer(
           frame
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
+
+        if (
+          effectiveItem.type === 'video'
+          && useGpuLayerCompositor
+          && deferred
+          && combinedEffects.length === 0
+        ) {
+          const videoGpuResult = await renderVideoItemToTexture(
+            effectiveItem as VideoItem,
+            transform,
+            frame,
+            itemRenderContext,
+          );
+          if (videoGpuResult?.gpuSource) {
+            return {
+              source: new OffscreenCanvas(1, 1),
+              poolCanvases: videoGpuResult.poolCanvases,
+              maskImageData: createPositionedItemClipMask(effectiveItem, transform),
+              itemId: effectiveItem.id,
+              gpuSource: videoGpuResult.gpuSource,
+            };
+          }
+        }
+
+        if (
+          effectiveItem.type === 'image'
+          && useGpuLayerCompositor
+          && deferred
+          && combinedEffects.length === 0
+        ) {
+          const imageGpuResult = await renderImageItemToTexture(
+            effectiveItem as ImageItem,
+            transform,
+            frame,
+            itemRenderContext,
+          );
+          if (imageGpuResult?.gpuSource) {
+            return {
+              source: new OffscreenCanvas(1, 1),
+              poolCanvases: imageGpuResult.poolCanvases,
+              maskImageData: createPositionedItemClipMask(effectiveItem, transform),
+              itemId: effectiveItem.id,
+              gpuSource: imageGpuResult.gpuSource,
+            };
+          }
+        }
+
+        if (
+          effectiveItem.type === 'text'
+          && useGpuLayerCompositor
+          && deferred
+          && combinedEffects.length === 0
+        ) {
+          const textGpuResult = await renderTextItemToTexture(
+            effectiveItem as TextItem,
+            transform,
+            itemRenderContext,
+          );
+          if (textGpuResult?.gpuSource) {
+            return {
+              source: new OffscreenCanvas(1, 1),
+              poolCanvases: textGpuResult.poolCanvases,
+              maskImageData: createPositionedItemClipMask(effectiveItem, transform),
+              itemId: effectiveItem.id,
+              gpuSource: textGpuResult.gpuSource,
+            };
+          }
+        }
+
+        if (
+          effectiveItem.type === 'composition'
+          && useGpuLayerCompositor
+          && deferred
+          && combinedEffects.length === 0
+        ) {
+          const compositionGpuResult = await renderCompositionItemToTexture(
+            effectiveItem as CompositionItem,
+            transform,
+            frame,
+            itemRenderContext,
+          );
+          if (compositionGpuResult?.gpuSource) {
+            return {
+              source: new OffscreenCanvas(canvasSettings.width, canvasSettings.height),
+              poolCanvases: compositionGpuResult.poolCanvases,
+              maskImageData: createPositionedItemClipMask(effectiveItem, transform),
+              itemId: effectiveItem.id,
+              gpuSource: compositionGpuResult.gpuSource,
+            };
+          }
+        }
+
+        if (
+          effectiveItem.type === 'shape'
+          && useGpuLayerCompositor
+          && deferred
+          && combinedEffects.length === 0
+        ) {
+          const shapeGpuResult = await renderShapeItemToTexture(
+            effectiveItem as ShapeItem,
+            transform,
+            itemRenderContext,
+          );
+          if (shapeGpuResult?.gpuSource) {
+            return {
+              source: new OffscreenCanvas(1, 1),
+              poolCanvases: shapeGpuResult.poolCanvases,
+              maskImageData: createPositionedItemClipMask(effectiveItem, transform),
+              itemId: effectiveItem.id,
+              gpuSource: shapeGpuResult.gpuSource,
+            };
+          }
+        }
 
         // === DIRECT VIDEO→GPU PATH (importExternalTexture) ===
         // When a video item has ONLY GPU effects, a DOM video element is available,
