@@ -143,6 +143,19 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     };
   }, [effectiveCornerPin, state.transform.width, state.transform.height]);
 
+  const clipMaskCompositingStyle = useMemo((): React.CSSProperties | null => {
+    if (Object.keys(clipMaskResult.style).length === 0) return null;
+
+    // Force masked content through the CSS compositor so native video stays
+    // visually locked to clip-path/mask updates instead of jittering on the
+    // hardware-overlay path.
+    return {
+      willChange: 'clip-path, mask, transform',
+      backfaceVisibility: 'hidden',
+      transform: 'translateZ(0)',
+    };
+  }, [clipMaskResult.style]);
+
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
     if (state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
@@ -242,6 +255,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
               height: '100%',
               position: 'relative',
               filter: state.cssFilter || undefined,
+              ...clipMaskCompositingStyle,
               ...clipMaskResult.style,
             }}
           >

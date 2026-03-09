@@ -139,7 +139,9 @@ function itemNeedsPlaybackCompositionRendererOverlay(
   visited: Set<string>,
 ): boolean {
   return (
-    (
+    hasSoftClipMasks(item.masks)
+    || hasSoftShapeMask(item)
+    || (
       item.type === 'composition'
       && compositionNeedsPlaybackCompositionRendererOverlay(item.compositionId, compositionById, visited)
     )
@@ -214,9 +216,10 @@ export function shouldForcePlaybackCompositionRendererOverlay(args: {
  * renderer, which keeps the skim path aligned with the canvas export path.
  *
  * Playback is intentionally narrower. Transitions still force the playback
- * overlay, but standalone GPU effects do not. That avoids running a second
- * full-resolution composition render on every playback frame for effect-heavy
- * clips.
+ * overlay, and soft masks do too because the native video path can jitter
+ * against feathered/per-pixel masking. Standalone GPU effects still do not.
+ * That avoids running a second full-resolution composition render on every
+ * playback frame for effect-heavy clips.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {

@@ -213,7 +213,7 @@ describe('shouldForceCompositionRendererOverlay', () => {
 });
 
 describe('shouldForcePlaybackCompositionRendererOverlay', () => {
-  it('returns false for soft masks without transitions or GPU effects', () => {
+  it('returns true for soft masks during playback', () => {
     expect(shouldForcePlaybackCompositionRendererOverlay({
       items: [
         createItem({
@@ -222,7 +222,7 @@ describe('shouldForcePlaybackCompositionRendererOverlay', () => {
       ],
       transitions: [],
       compositionById: {},
-    })).toBe(false);
+    })).toBe(true);
   });
 
   it('returns false for direct GPU effects during playback', () => {
@@ -298,5 +298,36 @@ describe('shouldForcePlaybackCompositionRendererOverlay', () => {
         },
       },
     })).toBe(false);
+  });
+
+  it('returns true for nested soft shape masks during playback', () => {
+    expect(shouldForcePlaybackCompositionRendererOverlay({
+      items: [
+        createItem({
+          id: 'comp-soft-mask',
+          type: 'composition',
+          compositionId: 'sub-soft-mask',
+          compositionWidth: 640,
+          compositionHeight: 360,
+        }),
+      ],
+      transitions: [],
+      compositionById: {
+        'sub-soft-mask': {
+          items: [
+            createItem({
+              id: 'soft-shape-mask',
+              type: 'shape',
+              shapeType: 'rectangle',
+              fillColor: '#ffffff',
+              isMask: true,
+              maskType: 'alpha',
+              maskFeather: 8,
+            }),
+          ],
+          transitions: [],
+        },
+      },
+    })).toBe(true);
   });
 });

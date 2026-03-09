@@ -192,6 +192,8 @@ vi.mock('@/features/preview/deps/player-core', async () => {
 });
 
 vi.mock('@/features/preview/deps/composition-runtime', () => ({
+  hasCornerPin: () => false,
+  getBestDomVideoElementForItem: () => null,
   MainComposition: (props: {
     tracks?: Array<{ items?: Array<{ id?: string; src?: string; transform?: { x?: number } }> }>;
     keyframes?: Array<{

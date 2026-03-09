@@ -2658,7 +2658,7 @@ export const VideoPreview = memo(function VideoPreview({
           // the correct frame — reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
-            if (playbackNow.isPlaying) {
+            if (playbackNow.isPlaying && !forceFastPlaybackOverlay) {
               renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
             } else {
               renderer.setDomVideoElementProvider(undefined);
@@ -2693,6 +2693,13 @@ export const VideoPreview = memo(function VideoPreview({
               });
             if (!shouldPresentOverlayFrame) {
               previewPerfRef.current.staleScrubOverlayDrops += 1;
+              if (playbackState.isPlaying && forceFastPlaybackOverlay && showFastScrubOverlay) {
+                // During forced playback overlay (soft masks, transitions), keep
+                // the last composited frame visible until the renderer catches up.
+                // Falling back to the native Player reintroduces the exact path
+                // that cannot reproduce these visuals cleanly.
+                continue;
+              }
               if (playbackState.isPlaying) {
                 playbackOverlayStaleCountRef.current += 1;
                 if (playbackOverlayStaleCountRef.current >= FAST_PLAYBACK_OVERLAY_STALE_THRESHOLD) {
@@ -2768,16 +2775,6 @@ export const VideoPreview = memo(function VideoPreview({
         lastBackwardRequestedFrameRef.current = null;
         scrubPrewarmQueueRef.current = [];
         scrubPrewarmQueuedSetRef.current.clear();
-        setShowFastScrubOverlay(false);
-        bypassPreviewSeekRef.current = false;
-        return;
-      }
-      if (
-        state.isPlaying
-        && forceFastPlaybackOverlay
-        && performance.now() < playbackOverlayFallbackUntilRef.current
-      ) {
-        scrubRequestedFrameRef.current = null;
         setShowFastScrubOverlay(false);
         bypassPreviewSeekRef.current = false;
         return;

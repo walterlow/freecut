@@ -310,4 +310,50 @@ describe('CompositionContent masks', () => {
     expect(container.querySelectorAll('[data-sequence-from]')).toHaveLength(1);
     expect(container.querySelector('[style*="clip-path"]')).not.toBeNull();
   });
+
+  it('adds compositing hints to clip-masked content wrappers', () => {
+    const item: ShapeItem = {
+      id: 'clip-masked-shape',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Masked shape',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      masks: [{
+        id: 'clip-mask-2',
+        vertices: [
+          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
+        ],
+        mode: 'add',
+        opacity: 1,
+        feather: 0,
+        inverted: false,
+        enabled: true,
+      }],
+      transform: {
+        x: 0,
+        y: 0,
+        width: 1280,
+        height: 720,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const { container } = render(
+      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+        <Item item={item} muted={false} masks={[]} />
+      </VideoConfigProvider>
+    );
+
+    const maskedLayer = container.querySelector('[style*="clip-path"]') as HTMLElement | null;
+    expect(maskedLayer).not.toBeNull();
+    expect(maskedLayer?.style.backfaceVisibility).toBe('hidden');
+    expect(maskedLayer?.style.transform).toBe('translateZ(0)');
+    expect(maskedLayer?.style.willChange).toContain('clip-path');
+  });
 });
