@@ -44,7 +44,7 @@ import { EffectsPipeline } from '@/infrastructure/gpu/effects';
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions';
 import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/infrastructure/gpu/compositor';
 import type { CompositeLayer } from '@/infrastructure/gpu/compositor';
-import { MaskTextureManager } from '@/infrastructure/gpu/masks';
+import { MaskTextureManager, renderMasksToCanvas } from '@/infrastructure/gpu/masks';
 import {
   applyMasks,
   buildMaskFrameIndex,
@@ -59,7 +59,6 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
-import { renderMasks } from '@/infrastructure/gpu/masks';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
@@ -213,6 +212,16 @@ export async function createCompositionRenderer(
   // Lazily created from the effects pipeline's GPU device
   let gpuCompositor: CompositorPipeline | null = null;
   let gpuMaskManager: MaskTextureManager | null = null;
+  let positionedMaskCanvas: OffscreenCanvas | null = null;
+  let positionedMaskCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+  const getPositionedMaskContext = (): OffscreenCanvasRenderingContext2D => {
+    if (!positionedMaskCanvas || positionedMaskCanvas.width !== canvas.width || positionedMaskCanvas.height !== canvas.height) {
+      positionedMaskCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+      positionedMaskCtx = positionedMaskCanvas.getContext('2d', { willReadFrequently: true })!;
+    }
+    return positionedMaskCtx!;
+  };
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -546,13 +555,18 @@ export async function createCompositionRenderer(
   };
   itemRenderContext.ensureVideoItemReady = ensureVideoItemReady;
 
-  const assertPreviewStrictDecode = () => {
-    if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
-      const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
-      throw new Error(
-        `PREVIEW_REQUIRES_MEDIABUNNY: ${failedItemIds.length} video item(s) are not decodable (failed: ${failedItemIds.join(', ')})`
-      );
-    }
+  const getPreviewStrictDecodeFailures = (): string[] => {
+    if (!previewStrictDecode) return [];
+    return [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
+  };
+
+  const logPreviewStrictDecodeStatus = (stage: 'main' | 'subcomp'): void => {
+    const failedItemIds = getPreviewStrictDecodeFailures();
+    if (failedItemIds.length === 0) return;
+    log.debug('Preview strict decode preload incomplete; renderer will continue warming lazily', {
+      stage,
+      failedItemIds,
+    });
   };
 
   return {
@@ -609,7 +623,7 @@ export async function createCompositionRenderer(
         uniqueSources: new Set(videoSourceByItemId.values()).size,
       });
 
-      assertPreviewStrictDecode();
+      logPreviewStrictDecodeStatus('main');
 
       // === Preload ALL fallback video elements ===
       // Load every video element (not just those that failed mediabunny init)
@@ -841,7 +855,7 @@ export async function createCompositionRenderer(
           await initializeMediabunnyForItems(remainingSubVideoItemIds);
         }
 
-        assertPreviewStrictDecode();
+        logPreviewStrictDecodeStatus('subcomp');
 
         // Load fallback video elements for sub-comp items that failed mediabunny init
         if (hasDom && !previewStrictDecode) {
@@ -1242,8 +1256,8 @@ export async function createCompositionRenderer(
 
       /**
        * Apply per-item bezier ClipMask paths.
-       * Uses the CPU mask renderer to generate a mask ImageData,
-       * then composites it onto the item canvas via destination-in.
+       * Renders the mask once at item resolution and draws it directly into
+       * the pooled destination canvas to avoid ImageData round-trips.
        */
       const applyItemClipMasks = (
         item: TimelineItem,
@@ -1270,12 +1284,8 @@ export async function createCompositionRenderer(
         const maskH = Math.round(transform.height);
         if (maskW <= 0 || maskH <= 0) return source;
 
-        const positionedMask = renderMasks(clipMasks, maskW, maskH);
-        const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-        const tempCtx = tempCanvas.getContext('2d')!;
-        tempCtx.putImageData(positionedMask, itemLeft, itemTop);
-
-        maskCtx.drawImage(tempCanvas, 0, 0);
+        const itemMaskCanvas = renderMasksToCanvas(clipMasks, maskW, maskH);
+        maskCtx.drawImage(itemMaskCanvas, itemLeft, itemTop);
         maskCtx.globalCompositeOperation = 'source-over';
 
         return maskCanvas;
@@ -1309,42 +1319,17 @@ export async function createCompositionRenderer(
         const maskH = Math.round(transform.height);
         if (maskW <= 0 || maskH <= 0) return null;
 
-        const maskImage = renderMasks(clipMasks, maskW, maskH);
-        const fullWidth = canvas.width;
-        const fullHeight = canvas.height;
-        const fullData = new Uint8ClampedArray(fullWidth * fullHeight * 4);
-
-        const itemLeft = Math.round(fullWidth / 2 + transform.x - transform.width / 2);
-        const itemTop = Math.round(fullHeight / 2 + transform.y - transform.height / 2);
-        const srcData = maskImage.data;
-
-        for (let srcY = 0; srcY < maskH; srcY++) {
-          const dstY = itemTop + srcY;
-          if (dstY < 0 || dstY >= fullHeight) continue;
-
-          const srcRowStart = srcY * maskW * 4;
-          const dstRowStart = dstY * fullWidth * 4;
-
-          let copyStartX = 0;
-          let copyWidth = maskW;
-          let dstX = itemLeft;
-
-          if (dstX < 0) {
-            copyStartX = -dstX;
-            copyWidth -= copyStartX;
-            dstX = 0;
-          }
-          if (dstX + copyWidth > fullWidth) {
-            copyWidth = fullWidth - dstX;
-          }
-          if (copyWidth <= 0) continue;
-
-          const srcOffset = srcRowStart + copyStartX * 4;
-          const dstOffset = dstRowStart + dstX * 4;
-          fullData.set(srcData.subarray(srcOffset, srcOffset + copyWidth * 4), dstOffset);
-        }
-
-        return new ImageData(fullData, fullWidth, fullHeight);
+        const itemLeft = Math.round(canvas.width / 2 + transform.x - transform.width / 2);
+        const itemTop = Math.round(canvas.height / 2 + transform.y - transform.height / 2);
+        const itemMaskCanvas = renderMasksToCanvas(clipMasks, maskW, maskH);
+        const positionedCtx = getPositionedMaskContext();
+        positionedCtx.setTransform(1, 0, 0, 1, 0, 0);
+        positionedCtx.globalAlpha = 1;
+        positionedCtx.globalCompositeOperation = 'source-over';
+        positionedCtx.filter = 'none';
+        positionedCtx.clearRect(0, 0, canvas.width, canvas.height);
+        positionedCtx.drawImage(itemMaskCanvas, itemLeft, itemTop);
+        return positionedCtx.getImageData(0, 0, canvas.width, canvas.height);
       };
 
       // Helper to check if item should be rendered

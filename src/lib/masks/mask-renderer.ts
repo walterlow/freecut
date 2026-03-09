@@ -1,21 +1,46 @@
 /**
- * CPU-side mask renderer: bezier mask paths -> ImageData via OffscreenCanvas 2D.
+ * CPU-side mask renderer: bezier mask paths -> item-sized mask canvases/ImageData.
  *
  * Renders at the requested resolution; callers can pass reduced dimensions
- * for performance — GPU sampling with linear filtering handles upscale.
+ * for performance and then scale up the result when compositing.
  */
 
 import type { ClipMask, MaskVertex, MaskMode } from '@/types/masks';
 
-let maskCanvas: OffscreenCanvas | null = null;
-let maskCtx: OffscreenCanvasRenderingContext2D | null = null;
+const MASK_CACHE_LIMIT = 48;
 
-function ensureCanvas(w: number, h: number): OffscreenCanvasRenderingContext2D {
-  if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
-    maskCanvas = new OffscreenCanvas(w, h);
-    maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true })!;
+let blurCanvas: OffscreenCanvas | null = null;
+let blurCtx: OffscreenCanvasRenderingContext2D | null = null;
+let readbackCanvas: OffscreenCanvas | null = null;
+let readbackCtx: OffscreenCanvasRenderingContext2D | null = null;
+const maskCanvasCache = new Map<string, OffscreenCanvas>();
+
+function ensureBlurCanvas(w: number, h: number): OffscreenCanvasRenderingContext2D {
+  if (!blurCanvas || blurCanvas.width !== w || blurCanvas.height !== h) {
+    blurCanvas = new OffscreenCanvas(w, h);
+    blurCtx = blurCanvas.getContext('2d')!;
   }
-  return maskCtx!;
+  return blurCtx!;
+}
+
+function ensureReadbackCanvas(w: number, h: number): OffscreenCanvasRenderingContext2D {
+  if (!readbackCanvas || readbackCanvas.width !== w || readbackCanvas.height !== h) {
+    readbackCanvas = new OffscreenCanvas(w, h);
+    readbackCtx = readbackCanvas.getContext('2d', { willReadFrequently: true })!;
+  }
+  return readbackCtx!;
+}
+
+function resetContext(
+  ctx: OffscreenCanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  ctx.clearRect(0, 0, width, height);
 }
 
 function getCompositeOp(mode: MaskMode): GlobalCompositeOperation {
@@ -64,43 +89,60 @@ function drawMaskPath(
   ctx.closePath();
 }
 
-/**
- * Render mask paths to grayscale ImageData.
- * White = masked (visible), black = unmasked (hidden).
- */
-export function renderMasks(
+function buildMaskCacheKey(
   masks: ClipMask[],
   width: number,
   height: number,
-): ImageData {
-  const enabled = masks.filter((m) => m.enabled && m.vertices.length >= 2);
-  const ctx = ensureCanvas(width, height);
-
-  // Background fill based on first mask mode
-  const firstMode = enabled[0]?.mode ?? 'add';
-  if (firstMode === 'add') {
-    ctx.fillStyle = '#000000';
-  } else {
-    ctx.fillStyle = '#ffffff';
+): string {
+  const parts = [`${width}x${height}`];
+  for (const mask of masks) {
+    parts.push(mask.id, mask.mode, `${mask.opacity}`, `${mask.feather}`, mask.inverted ? '1' : '0');
+    for (const vertex of mask.vertices) {
+      parts.push(
+        `${vertex.position[0]},${vertex.position[1]}`,
+        `${vertex.inHandle[0]},${vertex.inHandle[1]}`,
+        `${vertex.outHandle[0]},${vertex.outHandle[1]}`,
+      );
+    }
   }
-  ctx.globalCompositeOperation = 'source-over';
+  return parts.join('|');
+}
+
+function cacheMaskCanvas(key: string, canvas: OffscreenCanvas): void {
+  if (maskCanvasCache.has(key)) {
+    maskCanvasCache.delete(key);
+  }
+  maskCanvasCache.set(key, canvas);
+
+  if (maskCanvasCache.size <= MASK_CACHE_LIMIT) return;
+
+  const oldestKey = maskCanvasCache.keys().next().value;
+  if (oldestKey !== undefined) {
+    maskCanvasCache.delete(oldestKey);
+  }
+}
+
+function renderMasksToContext(
+  ctx: OffscreenCanvasRenderingContext2D,
+  masks: ClipMask[],
+  width: number,
+  height: number,
+): void {
+  resetContext(ctx, width, height);
+
+  const firstMode = masks[0]?.mode ?? 'add';
+  ctx.fillStyle = firstMode === 'add' ? '#000000' : '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
-  // Draw each mask with per-mask inversion support.
-  // Non-inverted add → white (reveal), inverted add → black (hide)
-  // Non-inverted subtract → destination-out, inverted subtract → draw white (reveal)
-  for (const mask of enabled) {
+  for (const mask of masks) {
     ctx.globalAlpha = mask.opacity;
-
     drawMaskPath(ctx, mask.vertices, width, height);
 
     if (mask.inverted) {
-      // Inverted: flip the effect — add hides, subtract reveals
       if (mask.mode === 'add' || mask.mode === 'intersect') {
         ctx.globalCompositeOperation = 'destination-out';
         ctx.fillStyle = '#ffffff';
       } else {
-        // subtract inverted → reveal (add white)
         ctx.globalCompositeOperation = 'lighter';
         ctx.fillStyle = '#ffffff';
       }
@@ -114,19 +156,78 @@ export function renderMasks(
 
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
+}
 
-  // Apply feather (blur) if any mask has feather > 0.5
-  const maxFeather = enabled.reduce((max, m) => Math.max(max, m.feather), 0);
-  if (maxFeather > 0.5) {
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const tempCanvas = new OffscreenCanvas(width, height);
-    const tempCtx = tempCanvas.getContext('2d')!;
-    tempCtx.putImageData(imageData, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-    ctx.filter = `blur(${maxFeather}px)`;
-    ctx.drawImage(tempCanvas, 0, 0);
-    ctx.filter = 'none';
+function normalizeMaskAlpha(
+  ctx: OffscreenCanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const value = data[i]!;
+    data[i] = value;
+    data[i + 1] = value;
+    data[i + 2] = value;
+    data[i + 3] = value;
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Render mask paths to an item-sized canvas.
+ * White = masked (visible), black = unmasked (hidden).
+ */
+export function renderMasksToCanvas(
+  masks: ClipMask[],
+  width: number,
+  height: number,
+): OffscreenCanvas {
+  const enabled = masks.filter((m) => m.enabled && m.vertices.length >= 2);
+  const cacheKey = buildMaskCacheKey(enabled, width, height);
+  const cachedCanvas = maskCanvasCache.get(cacheKey);
+  if (cachedCanvas) {
+    cacheMaskCanvas(cacheKey, cachedCanvas);
+    return cachedCanvas;
   }
 
+  const outputCanvas = new OffscreenCanvas(width, height);
+  const outputCtx = outputCanvas.getContext('2d')!;
+  renderMasksToContext(outputCtx, enabled, width, height);
+
+  const maxFeather = enabled.reduce((max, m) => Math.max(max, m.feather), 0);
+  if (maxFeather > 0.5) {
+    const blurContext = ensureBlurCanvas(width, height);
+    resetContext(blurContext, width, height);
+    blurContext.filter = `blur(${maxFeather}px)`;
+    blurContext.drawImage(outputCanvas, 0, 0);
+    blurContext.filter = 'none';
+
+    resetContext(outputCtx, width, height);
+    outputCtx.drawImage(blurCanvas!, 0, 0);
+  }
+
+  // Keep CPU destination-in and GPU mask sampling in sync by storing the
+  // mask strength in alpha as well as RGB. Cache misses pay this cost once.
+  normalizeMaskAlpha(outputCtx, width, height);
+
+  cacheMaskCanvas(cacheKey, outputCanvas);
+  return outputCanvas;
+}
+
+/**
+ * Render mask paths to grayscale ImageData.
+ * White = masked (visible), black = unmasked (hidden).
+ */
+export function renderMasks(
+  masks: ClipMask[],
+  width: number,
+  height: number,
+): ImageData {
+  const renderedCanvas = renderMasksToCanvas(masks, width, height);
+  const ctx = ensureReadbackCanvas(width, height);
+  resetContext(ctx, width, height);
+  ctx.drawImage(renderedCanvas, 0, 0);
   return ctx.getImageData(0, 0, width, height);
 }

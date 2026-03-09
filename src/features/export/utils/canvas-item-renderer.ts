@@ -437,22 +437,30 @@ async function renderVideoItem(
       } else {
         const failureCount = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
         mediabunnyFailureCountByItem.set(item.id, failureCount);
+        const hasVideoFallbackPath = allowVideoElementFallback || hasFallbackVideoElement;
 
         if (failureCount >= 3) {
           mediabunnyDisabledItems.add(item.id);
-          log.warn('Disabling mediabunny for item after repeated failures; using fallback for remainder of export', {
+          log.warn(hasVideoFallbackPath
+            ? 'Disabling mediabunny for item after repeated failures; using fallback for remainder of export'
+            : 'Disabling mediabunny for item after repeated failures in preview strict mode', {
             itemId: item.id,
             frame,
             sourceTime: clampedTime,
             failureCount,
           });
         } else {
-          log.warn('Mediabunny frame draw failed, using fallback', {
+          const logData = {
             itemId: item.id,
             frame,
             sourceTime: clampedTime,
             failureCount,
-          });
+          };
+          if (hasVideoFallbackPath) {
+            log.warn('Mediabunny frame draw failed, using fallback', logData);
+          } else {
+            log.debug('Mediabunny frame draw failed in preview strict mode', logData);
+          }
         }
       }
     }
