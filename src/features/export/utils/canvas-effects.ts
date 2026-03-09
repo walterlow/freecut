@@ -201,27 +201,3 @@ export async function applyAllEffectsAsync(
   // Both preview and export use the zero-copy canvas→GPU→canvas path.
   return applyAllEffects(ctx, sourceCanvas, effects, frame, canvas, gpuPipeline);
 }
-
-export function applyAllEffectsToTexture(
-  sourceCanvas: OffscreenCanvas,
-  effects: ItemEffect[],
-  _frame: number,
-  _canvas: EffectCanvasSettings,
-  gpuPipeline?: EffectsPipeline | null,
-): { texture: GPUTexture; view: GPUTextureView } | null {
-  if (effects.length === 0 || !gpuPipeline) {
-    return null;
-  }
-
-  const gpuInstances = getGpuEffectInstances(effects);
-  if (gpuInstances.length === 0) {
-    return null;
-  }
-
-  try {
-    return gpuPipeline.applyEffectsToTexture(sourceCanvas, gpuInstances);
-  } catch (error) {
-    log.warn('GPU effects texture path failed, falling back to canvas output', error);
-    return null;
-  }
-}

@@ -4,10 +4,6 @@ import { VideoFrameExtractor } from './canvas-video-extractor';
 const log = createLogger('SharedVideoExtractorPool');
 
 export type VideoFrameFailureKind = 'none' | 'no-sample' | 'decode-error';
-export interface AcquiredVideoFrame {
-  frame: VideoFrame;
-  release(): void;
-}
 
 export interface VideoFrameSource {
   init(): Promise<boolean>;
@@ -19,7 +15,6 @@ export interface VideoFrameSource {
     width: number,
     height: number
   ): Promise<boolean>;
-  acquireVideoFrame(timestamp: number): Promise<AcquiredVideoFrame | null>;
   getLastFailureKind(): VideoFrameFailureKind;
   getDimensions(): { width: number; height: number };
   getDuration(): number;
@@ -66,10 +61,6 @@ class SharedItemVideoSource implements VideoFrameSource {
     height: number
   ): Promise<boolean> {
     return this.pool.drawItemFrame(this.itemId, this.src, ctx, timestamp, x, y, width, height);
-  }
-
-  acquireVideoFrame(timestamp: number): Promise<AcquiredVideoFrame | null> {
-    return this.pool.acquireItemVideoFrame(this.itemId, this.src, timestamp);
   }
 
   getLastFailureKind(): VideoFrameFailureKind {
@@ -181,45 +172,6 @@ export class SharedVideoExtractorPool {
     );
     lane.drawLock = result.then(() => undefined, () => undefined);
     return result;
-  }
-
-  async acquireItemVideoFrame(
-    itemId: string,
-    src: string,
-    timestamp: number,
-  ): Promise<AcquiredVideoFrame | null> {
-    const state = this.ensureSourceState(src);
-    const sourceReady = await this.initSource(src);
-    if (!sourceReady) return null;
-
-    let laneIndex = this.getAssignedLaneIndex(state, itemId);
-    let laneReady = await this.ensureLaneInitialized(state, laneIndex);
-
-    if (!laneReady && laneIndex !== 0) {
-      laneIndex = 0;
-      laneReady = await this.ensureLaneInitialized(state, laneIndex);
-    }
-    if (!laneReady) return null;
-
-    const lane = state.lanes[laneIndex]!;
-    const prev = lane.drawLock ?? Promise.resolve();
-    const resultPromise = prev.then(() => lane.extractor.acquireVideoFrame(timestamp));
-    lane.drawLock = resultPromise.then(() => undefined, () => undefined);
-    const frame = await resultPromise;
-    if (!frame) {
-      return null;
-    }
-
-    return {
-      frame,
-      release: () => {
-        try {
-          frame.close();
-        } catch {
-          // Ignore close errors
-        }
-      },
-    };
   }
 
   getItemLastFailureKind(itemId: string, src: string): VideoFrameFailureKind {
@@ -351,3 +303,4 @@ export class SharedVideoExtractorPool {
     }
   }
 }
+

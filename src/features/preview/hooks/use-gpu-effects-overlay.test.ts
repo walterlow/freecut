@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ClipMask } from '@/types/masks';
 import type { TimelineItem } from '@/types/timeline';
 import { shouldForceCompositionRendererOverlay } from './use-gpu-effects-overlay';
 
@@ -15,24 +16,57 @@ function createItem(overrides: Partial<TimelineItem>): TimelineItem {
   } as TimelineItem;
 }
 
+function createMask(overrides: Partial<ClipMask> = {}): ClipMask {
+  return {
+    id: 'mask-1',
+    vertices: [
+      { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+      { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+      { position: [1, 1], inHandle: [0, 0], outHandle: [0, 0] },
+    ],
+    mode: 'add',
+    opacity: 1,
+    feather: 0,
+    inverted: false,
+    enabled: true,
+    ...overrides,
+  };
+}
+
 describe('shouldForceCompositionRendererOverlay', () => {
-  it('returns false for plain items without overlay-only features', () => {
+  it('returns false for plain items without skim-only features', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [createItem({})],
       transitions: [],
       isCornerPinEditing: false,
       previewCornerPin: null,
-      hasMaskPreview: false,
       compositionById: {},
     })).toBe(false);
   });
 
-  it('returns true when an adjustment layer has enabled effects', () => {
+  it('returns true when the timeline contains a transition', () => {
+    expect(shouldForceCompositionRendererOverlay({
+      items: [createItem({})],
+      transitions: [
+        {
+          id: 'transition-1',
+          type: 'fade',
+          timing: 'linear',
+          durationInFrames: 12,
+          leftClipId: 'left',
+          rightClipId: 'right',
+        } as never,
+      ],
+      isCornerPinEditing: false,
+      previewCornerPin: null,
+      compositionById: {},
+    })).toBe(true);
+  });
+
+  it('returns true when an item has an enabled GPU effect', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
-          id: 'adjustment-1',
-          type: 'adjustment',
           effects: [
             {
               id: 'fx-1',
@@ -49,94 +83,78 @@ describe('shouldForceCompositionRendererOverlay', () => {
       transitions: [],
       isCornerPinEditing: false,
       previewCornerPin: null,
-      hasMaskPreview: false,
       compositionById: {},
     })).toBe(true);
   });
 
-  it('returns true when the timeline contains an authored shape mask', () => {
+  it('does not force overlay for hard clip masks', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
-          id: 'mask-shape-1',
+          masks: [createMask()],
+        }),
+      ],
+      transitions: [],
+      isCornerPinEditing: false,
+      previewCornerPin: null,
+      compositionById: {},
+    })).toBe(false);
+  });
+
+  it('returns true for soft clip masks and live soft-mask preview edits', () => {
+    expect(shouldForceCompositionRendererOverlay({
+      items: [
+        createItem({
+          id: 'masked-item',
+          masks: [createMask({ feather: 12 })],
+        }),
+      ],
+      transitions: [],
+      isCornerPinEditing: false,
+      previewCornerPin: null,
+      previewMaskEditingItemId: 'masked-item',
+      previewMasks: [createMask({ opacity: 0.6 })],
+      compositionById: {},
+    })).toBe(true);
+  });
+
+  it('only forces shape-mask overlay for soft shape masks', () => {
+    expect(shouldForceCompositionRendererOverlay({
+      items: [
+        createItem({
           type: 'shape',
           shapeType: 'rectangle',
           fillColor: '#ffffff',
           isMask: true,
+          maskType: 'clip',
+          maskFeather: 0,
         }),
       ],
       transitions: [],
       isCornerPinEditing: false,
       previewCornerPin: null,
-      hasMaskPreview: false,
       compositionById: {},
-    })).toBe(true);
-  });
+    })).toBe(false);
 
-  it('returns true during live corner pin preview', () => {
-    expect(shouldForceCompositionRendererOverlay({
-      items: [createItem({})],
-      transitions: [],
-      isCornerPinEditing: false,
-      previewCornerPin: {
-        topLeft: [12, 0],
-        topRight: [0, 0],
-        bottomRight: [0, 0],
-        bottomLeft: [0, 0],
-      },
-      hasMaskPreview: false,
-      compositionById: {},
-    })).toBe(true);
-  });
-
-  it('returns true during live clip-mask preview edits', () => {
-    expect(shouldForceCompositionRendererOverlay({
-      items: [createItem({})],
-      transitions: [],
-      isCornerPinEditing: false,
-      previewCornerPin: null,
-      hasMaskPreview: true,
-      compositionById: {},
-    })).toBe(true);
-  });
-
-  it('returns true when a composition item contains internal transitions', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
-          id: 'comp-1',
-          type: 'composition',
-          compositionId: 'sub-comp-1',
-          compositionWidth: 640,
-          compositionHeight: 360,
+          type: 'shape',
+          shapeType: 'rectangle',
+          fillColor: '#ffffff',
+          isMask: true,
+          maskType: 'alpha',
+          maskFeather: 12,
         }),
       ],
       transitions: [],
       isCornerPinEditing: false,
       previewCornerPin: null,
-      hasMaskPreview: false,
-      compositionById: {
-        'sub-comp-1': {
-          items: [
-            createItem({ id: 'sub-left', type: 'image', src: 'blob:left' }),
-            createItem({ id: 'sub-right', type: 'image', src: 'blob:right' }),
-          ],
-          transitions: [
-            {
-              id: 'transition-1',
-              type: 'fade',
-              timing: 'linear',
-              durationInFrames: 12,
-              leftClipId: 'sub-left',
-              rightClipId: 'sub-right',
-            } as never,
-          ],
-        },
-      },
+      compositionById: {},
     })).toBe(true);
   });
 
-  it('returns true when a composition item contains nested overlay-only features', () => {
+  it('recurses into sub-compositions for transitions and soft masks', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
@@ -150,7 +168,6 @@ describe('shouldForceCompositionRendererOverlay', () => {
       transitions: [],
       isCornerPinEditing: false,
       previewCornerPin: null,
-      hasMaskPreview: false,
       compositionById: {
         'sub-parent': {
           items: [
@@ -172,9 +189,20 @@ describe('shouldForceCompositionRendererOverlay', () => {
               shapeType: 'rectangle',
               fillColor: '#ffffff',
               isMask: true,
+              maskType: 'alpha',
+              maskFeather: 10,
             }),
           ],
-          transitions: [],
+          transitions: [
+            {
+              id: 'transition-2',
+              type: 'slide',
+              timing: 'linear',
+              durationInFrames: 10,
+              leftClipId: 'a',
+              rightClipId: 'b',
+            } as never,
+          ],
         },
       },
     })).toBe(true);

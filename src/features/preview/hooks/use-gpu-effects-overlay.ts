@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useItemsStore, useTransitionsStore, useCompositionsStore } from '@/features/preview/deps/timeline-store';
+import { useCompositionsStore, useItemsStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
 import { hasCornerPin } from '@/features/preview/deps/composition-runtime';
 import { useCornerPinStore } from '../stores/corner-pin-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
+import type { ClipMask } from '@/types/masks';
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
+
+const SOFT_MASK_FEATHER_THRESHOLD = 0.5;
+const SOFT_MASK_OPACITY_THRESHOLD = 0.99;
 
 type OverlayComposition = {
   items: TimelineItem[];
@@ -17,20 +21,52 @@ function hasEnabledGpuEffects(item: TimelineItem): boolean {
   );
 }
 
+function hasSoftClipMasks(masks: readonly ClipMask[] | null | undefined): boolean {
+  return Boolean(
+    masks?.some((mask) => (
+      mask.enabled
+      && (
+        mask.feather > SOFT_MASK_FEATHER_THRESHOLD
+        || mask.opacity < SOFT_MASK_OPACITY_THRESHOLD
+        || mask.inverted
+        || mask.mode !== 'add'
+      )
+    ))
+  );
+}
+
+function hasSoftShapeMask(item: TimelineItem): boolean {
+  if (item.type !== 'shape' || item.isMask !== true) return false;
+  return (item.maskType ?? 'clip') === 'alpha' || (item.maskFeather ?? 0) > SOFT_MASK_FEATHER_THRESHOLD;
+}
+
 function compositionNeedsCompositionRendererOverlay(
   compositionId: string,
   compositionById: Record<string, OverlayComposition>,
   visited: Set<string>,
+  previewMaskEditingItemId: string | null,
+  previewMasks: readonly ClipMask[] | null,
 ): boolean {
   if (visited.has(compositionId)) return false;
+
   const composition = compositionById[compositionId];
   if (!composition) return false;
 
   visited.add(compositionId);
-  const needsOverlay = (
-    composition.transitions.length > 0
-    || composition.items.some((item) => itemNeedsCompositionRendererOverlay(item, compositionById, visited))
-  );
+
+  if (composition.transitions.length > 0) {
+    visited.delete(compositionId);
+    return true;
+  }
+
+  const needsOverlay = composition.items.some((item) => itemNeedsCompositionRendererOverlay(
+    item,
+    compositionById,
+    visited,
+    previewMaskEditingItemId,
+    previewMasks,
+  ));
+
   visited.delete(compositionId);
   return needsOverlay;
 }
@@ -39,15 +75,29 @@ function itemNeedsCompositionRendererOverlay(
   item: TimelineItem,
   compositionById: Record<string, OverlayComposition>,
   visited: Set<string>,
+  previewMaskEditingItemId: string | null,
+  previewMasks: readonly ClipMask[] | null,
 ): boolean {
+  const effectiveMasks = previewMaskEditingItemId === item.id && previewMasks
+    ? previewMasks
+    : item.masks;
+
   return (
     hasEnabledGpuEffects(item)
-    || (item.type === 'adjustment' && Boolean(item.effects?.some((effect) => effect.enabled)))
-    || (item.type === 'shape' && item.isMask === true)
+    || hasSoftClipMasks(effectiveMasks)
+    || hasSoftShapeMask(item)
     || Boolean(item.blendMode && item.blendMode !== 'normal')
-    || Boolean(item.masks?.some((mask) => mask.enabled))
     || hasCornerPin(item.cornerPin)
-    || (item.type === 'composition' && compositionNeedsCompositionRendererOverlay(item.compositionId, compositionById, visited))
+    || (
+      item.type === 'composition'
+      && compositionNeedsCompositionRendererOverlay(
+        item.compositionId,
+        compositionById,
+        visited,
+        previewMaskEditingItemId,
+        previewMasks,
+      )
+    )
   );
 }
 
@@ -56,7 +106,8 @@ export function shouldForceCompositionRendererOverlay(args: {
   transitions: Transition[];
   isCornerPinEditing: boolean;
   previewCornerPin: TimelineItem['cornerPin'] | null;
-  hasMaskPreview: boolean;
+  previewMaskEditingItemId?: string | null;
+  previewMasks?: readonly ClipMask[] | null;
   compositionById?: Record<string, OverlayComposition>;
 }): boolean {
   const {
@@ -64,38 +115,38 @@ export function shouldForceCompositionRendererOverlay(args: {
     transitions,
     isCornerPinEditing,
     previewCornerPin,
-    hasMaskPreview,
+    previewMaskEditingItemId = null,
+    previewMasks = null,
     compositionById = {},
   } = args;
 
-  return (
-    transitions.length > 0
-    || isCornerPinEditing
-    || hasMaskPreview
-    || hasCornerPin(previewCornerPin ?? undefined)
-    || items.some((item) => itemNeedsCompositionRendererOverlay(item, compositionById, new Set<string>()))
-  );
+  if (transitions.length > 0) return true;
+  if (isCornerPinEditing || hasCornerPin(previewCornerPin ?? undefined)) return true;
+  if (hasSoftClipMasks(previewMasks)) return true;
+
+  return items.some((item) => itemNeedsCompositionRendererOverlay(
+    item,
+    compositionById,
+    new Set<string>(),
+    previewMaskEditingItemId,
+    previewMasks,
+  ));
 }
 
 /**
  * Detects whether the composition renderer overlay should be forced on.
  *
  * Returns true when any of these conditions exist:
- * - GPU effects enabled on any item
- * - Active adjustment-layer effects
- * - Authored shape masks
- * - Live clip-mask preview edits
- * - Sub-compositions with those same overlay-worthy features
+ * - Active transitions
+ * - Enabled GPU effects
  * - Non-normal blend modes
- * - Active masks
+ * - Soft clip masks (feathered, partial-opacity, inverted, subtract/intersect)
+ * - Soft shape masks (alpha masks / feathered shape masks)
  * - Corner pin distortion or active corner pin editing
- * - Active transitions (transitions use separate video elements in the
- *   Remotion Player, which drift from the base-layer clips and cause
- *   visible ghosting during semi-transparent phases like fade)
+ * - Nested sub-compositions with those same overlay-only features
  *
  * When true, the scrub overlay renders every frame through the composition
- * renderer, which reads from the base-layer DOM video elements directly
- * via domVideoElementProvider — single decode stream, no drift.
+ * renderer, which keeps the skim path aligned with the canvas export path.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {
@@ -114,17 +165,27 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
         transitions,
         isCornerPinEditing: cornerPinState.isEditing,
         previewCornerPin: cornerPinState.previewCornerPin,
-        hasMaskPreview: maskEditorState.previewMasks !== null,
+        previewMaskEditingItemId: maskEditorState.editingItemId,
+        previewMasks: maskEditorState.previewMasks,
         compositionById,
       }));
     };
+
     check();
+
     const unsubItems = useItemsStore.subscribe(check);
     const unsubTransitions = useTransitionsStore.subscribe(check);
     const unsubCompositions = useCompositionsStore.subscribe(check);
     const unsubCornerPin = useCornerPinStore.subscribe(check);
     const unsubMaskEditor = useMaskEditorStore.subscribe(check);
-    return () => { unsubItems(); unsubTransitions(); unsubCompositions(); unsubCornerPin(); unsubMaskEditor(); };
+
+    return () => {
+      unsubItems();
+      unsubTransitions();
+      unsubCompositions();
+      unsubCornerPin();
+      unsubMaskEditor();
+    };
   }, []);
 
   return needsOverlay;

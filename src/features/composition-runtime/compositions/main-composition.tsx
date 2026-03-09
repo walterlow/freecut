@@ -12,7 +12,6 @@ import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 import { StableVideoSequence, type StableVideoSequenceItem } from '../components/stable-video-sequence';
 import { loadFonts } from '../utils/fonts';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
-import { usePreviewOverlayStore } from '@/features/composition-runtime/deps/stores';
 import { ItemEffectWrapper, type AdjustmentLayerWithTrackOrder } from '../components/item-effect-wrapper';
 import { KeyframesProvider } from '../contexts/keyframes-context';
 import { CompositionSpaceProvider } from '../contexts/composition-space-context';
@@ -118,7 +117,6 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   // Read preview color directly from store to avoid inputProps changes during color picker drag
   // This prevents Player from seeking/refreshing when user scrubs the color picker
   const canvasBackgroundPreview = useGizmoStore((s) => s.canvasBackgroundPreview);
-  const bypassVisualLayers = usePreviewOverlayStore((s) => s.isVisualBypassActive);
   const effectiveBackgroundColor = canvasBackgroundPreview ?? backgroundColor;
 
   const renderPlan = useMemo(
@@ -243,6 +241,9 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           {/* SVG MASK DEFINITIONS - kept for backward compat with feather/invert that need SVG mask */}
           {/* Shape mask animation is now handled per-item via ActiveMasksProvider + MaskedItem */}
 
+          {/* BACKGROUND LAYER */}
+          <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
+
           {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
           {/* Video audio is decoupled from visual video elements for transition stability */}
           {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
@@ -335,57 +336,47 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
             );
           })}
 
-          {/* VISUAL LAYERS - hidden while the preview overlay owns the frame */}
-          <AbsoluteFill
-            style={{
-              visibility: bypassVisualLayers ? 'hidden' : 'visible',
-            }}
-          >
-            {/* BACKGROUND LAYER */}
-            <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
+          {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
+          {/* This ensures items from different tracks respect z-index across all types */}
+          <AbsoluteFill>
+            {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
+            {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
+            <StableVideoSequence
+              items={videoItems}
+              transitionWindows={renderPlan.transitionWindows}
+              premountFor={Math.round(fps * 1)}
+              renderItem={renderVideoItem}
+            />
 
-            {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
-            {/* This ensures items from different tracks respect z-index across all types */}
-            <AbsoluteFill>
-              {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
-              {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
-              <StableVideoSequence
-                items={videoItems}
-                transitionWindows={renderPlan.transitionWindows}
-                premountFor={Math.round(fps * 1)}
-                renderItem={renderVideoItem}
-              />
-
-              {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
-              {/* No more above/below split - items never move between DOM parents */}
-              {nonMediaByTrack
-                .filter((track) => track.items.length > 0)
-                .map((track) => {
-                  const trackOrder = track.order ?? 0;
-                  return (
-                    <AbsoluteFill
-                      key={track.id}
-                      style={{
-                        // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
-                        zIndex: (maxOrder - trackOrder) * 1000 + 100,
-                        visibility: track.trackVisible ? 'visible' : 'hidden',
-                      }}
-                    >
-                      {track.items.map((item) => (
-                        <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
-                          <ItemEffectWrapper
-                            itemTrackOrder={trackOrder}
-                            adjustmentLayers={visibleAdjustmentLayers}
-                            sequenceFrom={item.from}
-                          >
-                            <MaskedItem item={item} muted={track.muted || !track.trackVisible} renderPlan={renderPlan} canvasWidth={canvasWidth} canvasHeight={canvasHeight} />
-                          </ItemEffectWrapper>
-                        </Sequence>
-                      ))}
-                    </AbsoluteFill>
-                  );
-                })}
-            </AbsoluteFill>
+            {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
+            {/* No more above/below split - items never move between DOM parents */}
+            {nonMediaByTrack
+              .filter((track) => track.items.length > 0)
+              .map((track) => {
+                const trackOrder = track.order ?? 0;
+                return (
+                  <AbsoluteFill
+                    key={track.id}
+                    style={{
+                      // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
+                      zIndex: (maxOrder - trackOrder) * 1000 + 100,
+                      visibility: track.trackVisible ? 'visible' : 'hidden',
+                    }}
+                  >
+                    {track.items.map((item) => (
+                      <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
+                        <ItemEffectWrapper
+                          itemTrackOrder={trackOrder}
+                          adjustmentLayers={visibleAdjustmentLayers}
+                          sequenceFrom={item.from}
+                        >
+                          <MaskedItem item={item} muted={track.muted || !track.trackVisible} renderPlan={renderPlan} canvasWidth={canvasWidth} canvasHeight={canvasHeight} />
+                        </ItemEffectWrapper>
+                      </Sequence>
+                    ))}
+                  </AbsoluteFill>
+                );
+              })}
           </AbsoluteFill>
         </AbsoluteFill>
       </CompositionSpaceProvider>

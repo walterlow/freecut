@@ -64,7 +64,6 @@ import {
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
-import { usePreviewOverlayStore } from '../stores/preview-overlay-store';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 
 // Preload media files ahead of the playhead to reduce buffering
@@ -1883,13 +1882,6 @@ export const VideoPreview = memo(function VideoPreview({
   ]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
-  useEffect(() => {
-    usePreviewOverlayStore.getState().setVisualBypassActive(showFastScrubOverlay);
-    return () => {
-      usePreviewOverlayStore.getState().setVisualBypassActive(false);
-    };
-  }, [showFastScrubOverlay]);
-
   const preferPlayerForTextGizmo = (
     !forceFastScrubOverlay
     && isGizmoInteracting
@@ -1953,7 +1945,6 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
           getPreviewMasksOverride,
-          domVideoElementProvider: getBestDomVideoElementForItem,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -2418,11 +2409,16 @@ export const VideoPreview = memo(function VideoPreview({
             break;
           }
 
-          // Keep DOM video element provider attached for all overlay renders.
-          // Paused/scrubbed frames still validate drift per item before using the
-          // DOM element, so stale shadow elements are rejected automatically.
+          // Enable DOM video element provider during playback for zero-copy rendering.
+          // During playback, the Remotion Player's <video> elements are already at
+          // the correct frame — reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
-            renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
+            const playbackNow = usePlaybackStore.getState();
+            if (playbackNow.isPlaying) {
+              renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
+            } else {
+              renderer.setDomVideoElementProvider(undefined);
+            }
           }
 
           // Use full renderFrame for both priority and prewarm frames.
@@ -3372,7 +3368,6 @@ export const VideoPreview = memo(function VideoPreview({
               style={{
                 width: '100%',
                 height: '100%',
-                transition: 'none',
               }}
               onFrameChange={handleFrameChange}
               onPlayStateChange={handlePlayStateChange}
