@@ -32,6 +32,13 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 const PI: f32 = 3.14159265359;
 const TAU: f32 = 6.28318530718;
 
+fn unitUvMask(uv: vec2f) -> f32 {
+  return step(0.0, uv.x)
+    * step(uv.x, 1.0)
+    * step(0.0, uv.y)
+    * step(uv.y, 1.0);
+}
+
 fn hash(p: vec2f) -> f32 {
   let p2 = vec2f(dot(p, vec2f(127.1, 311.7)), dot(p, vec2f(269.5, 183.3)));
   return fract(sin(dot(p2, vec2f(12.9898, 78.233))) * 43758.5453);

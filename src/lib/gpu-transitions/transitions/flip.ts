@@ -34,10 +34,9 @@ fn sampleFlip(tex: texture_2d<f32>, uv: vec2f, scale: f32, horizontal: bool, sig
     warped.y = centered.y / max(scale, 0.001) + signedOffset * (1.0 - scale);
   }
   let sampleUv = warped + vec2f(0.5);
-  if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) {
-    return vec4f(0.0);
-  }
-  return textureSample(tex, texSampler, sampleUv);
+  let mask = unitUvMask(sampleUv);
+  let clampedUv = clamp(sampleUv, vec2f(0.0), vec2f(1.0));
+  return textureSample(tex, texSampler, clampedUv) * mask;
 }
 
 @fragment

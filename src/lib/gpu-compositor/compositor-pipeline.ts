@@ -80,6 +80,13 @@ ${COMPOSITE_UNIFORMS}
 @group(0) @binding(3) var<uniform> u: CompositeUniforms;
 @group(0) @binding(4) var maskTex: texture_2d<f32>;
 
+fn unitUvMask(uv: vec2f) -> f32 {
+  return step(0.0, uv.x)
+    * step(uv.x, 1.0)
+    * step(0.0, uv.y)
+    * step(uv.y, 1.0);
+}
+
 fn transformUV(uv: vec2f) -> vec2f {
   // Center UV around origin
   var p = uv - vec2f(0.5);
@@ -127,18 +134,14 @@ fn compositeFragment(input: VertexOutput) -> @location(0) vec4f {
 
   // Transform UV to sample layer texture
   let layerUV = transformUV(input.uv);
-
-  // Out-of-bounds check
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-
-  var layerColor = textureSample(layerTex, texSampler, layerUV);
+  let layerMask = unitUvMask(layerUV);
+  let layerSampleUv = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSample(layerTex, texSampler, layerSampleUv) * layerMask;
 
   // Apply mask
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSample(maskTex, texSampler, layerSampleUv).r;
     if (u.maskInvert != 0u) {
       maskValue = 1.0 - maskValue;
     }
@@ -170,6 +173,13 @@ ${COMPOSITE_UNIFORMS}
 @group(0) @binding(3) var<uniform> u: CompositeUniforms;
 @group(0) @binding(4) var maskTex: texture_2d<f32>;
 
+fn unitUvMask_ext(uv: vec2f) -> f32 {
+  return step(0.0, uv.x)
+    * step(uv.x, 1.0)
+    * step(0.0, uv.y)
+    * step(uv.y, 1.0);
+}
+
 fn transformUV_ext(uv: vec2f) -> vec2f {
   var p = uv - vec2f(0.5);
   p /= vec2f(u.scaleX, u.scaleY);
@@ -198,13 +208,12 @@ fn transformUV_ext(uv: vec2f) -> vec2f {
 fn compositeExternalFragment(input: VertexOutput) -> @location(0) vec4f {
   let baseColor = textureSample(baseTex, texSampler, input.uv);
   let layerUV = transformUV_ext(input.uv);
-  if (layerUV.x < 0.0 || layerUV.x > 1.0 || layerUV.y < 0.0 || layerUV.y > 1.0) {
-    return baseColor;
-  }
-  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, layerUV);
+  let layerMask = unitUvMask_ext(layerUV);
+  let layerSampleUv = clamp(layerUV, vec2f(0.0), vec2f(1.0));
+  var layerColor = textureSampleBaseClampToEdge(layerTex, texSampler, layerSampleUv) * layerMask;
   var maskValue = 1.0;
   if (u.hasMask != 0u) {
-    maskValue = textureSample(maskTex, texSampler, layerUV).r;
+    maskValue = textureSample(maskTex, texSampler, layerSampleUv).r;
     if (u.maskInvert != 0u) { maskValue = 1.0 - maskValue; }
   }
   let layerAlpha = layerColor.a * u.opacity * maskValue;
@@ -591,69 +600,6 @@ export class CompositorPipeline {
     pass.end();
 
     return this.outputCanvas;
-  }
-
-  renderLayerToTexture(
-    layer: CompositeLayer,
-    width: number,
-    height: number,
-    commandEncoder: GPUCommandEncoder,
-  ): { texture: GPUTexture; view: GPUTextureView } | null {
-    if (!this.regularPipeline || !this.regularLayout) return null;
-
-    let bindGroup: GPUBindGroup;
-    let pipeline: GPURenderPipeline;
-
-    this.writeUniforms(layer.params);
-
-    if (layer.externalTexture && this.externalPipeline && this.externalLayout) {
-      pipeline = this.externalPipeline;
-      bindGroup = this.device.createBindGroup({
-        layout: this.externalLayout,
-        entries: [
-          { binding: 0, resource: this.sampler },
-          { binding: 1, resource: this.transparentView },
-          { binding: 2, resource: layer.externalTexture },
-          { binding: 3, resource: { buffer: this.uniformBuffer } },
-          { binding: 4, resource: layer.maskView },
-        ],
-      });
-    } else if (layer.textureView) {
-      pipeline = this.regularPipeline;
-      bindGroup = this.device.createBindGroup({
-        layout: this.regularLayout,
-        entries: [
-          { binding: 0, resource: this.sampler },
-          { binding: 1, resource: this.transparentView },
-          { binding: 2, resource: layer.textureView },
-          { binding: 3, resource: { buffer: this.uniformBuffer } },
-          { binding: 4, resource: layer.maskView },
-        ],
-      });
-    } else {
-      return null;
-    }
-
-    const outputTexture = this.device.createTexture({
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const outputView = outputTexture.createView();
-
-    const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: outputView,
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.draw(6);
-    pass.end();
-
-    return { texture: outputTexture, view: outputView };
   }
 
   /**

@@ -13,7 +13,7 @@ let maskCtx: OffscreenCanvasRenderingContext2D | null = null;
 function ensureCanvas(w: number, h: number): OffscreenCanvasRenderingContext2D {
   if (!maskCanvas || maskCanvas.width !== w || maskCanvas.height !== h) {
     maskCanvas = new OffscreenCanvas(w, h);
-    maskCtx = maskCanvas.getContext('2d')!;
+    maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true })!;
   }
   return maskCtx!;
 }

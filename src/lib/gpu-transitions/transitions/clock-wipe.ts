@@ -26,10 +26,9 @@ struct ClockWipeParams {
 
 fn sampleScaled(tex: texture_2d<f32>, uv: vec2f, scale: f32) -> vec4f {
   let centered = (uv - vec2f(0.5)) / max(scale, 0.001) + vec2f(0.5);
-  if (centered.x < 0.0 || centered.x > 1.0 || centered.y < 0.0 || centered.y > 1.0) {
-    return vec4f(0.0);
-  }
-  return textureSample(tex, texSampler, centered);
+  let mask = unitUvMask(centered);
+  let sampleUv = clamp(centered, vec2f(0.0), vec2f(1.0));
+  return textureSample(tex, texSampler, sampleUv) * mask;
 }
 
 @fragment

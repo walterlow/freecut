@@ -34,10 +34,9 @@ fn axisOffset(progress: f32, dir: u32, isOutgoing: bool) -> vec2f {
 }
 
 fn sampleIfInBounds(tex: texture_2d<f32>, uv: vec2f) -> vec4f {
-  if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-    return vec4f(0.0);
-  }
-  return textureSample(tex, texSampler, uv);
+  let mask = unitUvMask(uv);
+  let sampleUv = clamp(uv, vec2f(0.0), vec2f(1.0));
+  return textureSample(tex, texSampler, sampleUv) * mask;
 }
 
 @fragment
