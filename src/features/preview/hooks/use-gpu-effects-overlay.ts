@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useItemsStore, useTransitionsStore, useCompositionsStore } from '@/features/preview/deps/timeline-store';
+import { hasCornerPin } from '@/features/preview/deps/composition-runtime';
 import { useCornerPinStore } from '../stores/corner-pin-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
-import { hasCornerPin } from '@/features/composition-runtime/utils/corner-pin';
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 

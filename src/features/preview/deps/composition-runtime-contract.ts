@@ -13,5 +13,6 @@ export {
   resolveItemTransformAtFrame,
   resolveActiveShapeMasksAtFrame,
 } from '@/features/composition-runtime/utils/frame-scene';
+export { hasCornerPin } from '@/features/composition-runtime/utils/corner-pin';
 export { getBestDomVideoElementForItem } from '@/features/composition-runtime/utils/dom-video-element-registry';
 export { getVideoTargetTimeSeconds } from '@/features/composition-runtime/utils/video-timing';
