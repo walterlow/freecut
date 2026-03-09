@@ -1043,7 +1043,7 @@ async function renderCompositionItem(
         }
 
         if (frame === 0) {
-          log.info('Rendering sub-comp item', {
+          log.debug('Rendering sub-comp item', {
             itemId: subItem.id.substring(0, 8),
             type: subItem.type,
             localFrame,
@@ -1061,7 +1061,7 @@ async function renderCompositionItem(
     }
 
     if (frame === 0) {
-      log.info('Sub-comp render complete', {
+      log.debug('Sub-comp render complete', {
         compositionId: item.compositionId.substring(0, 8),
         localFrame,
         renderedSubItems,

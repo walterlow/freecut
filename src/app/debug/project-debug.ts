@@ -34,11 +34,14 @@ import {
   getDBStats,
   createProject,
 } from '@/infrastructure/storage/indexeddb';
+import { getLoggerControls, type LoggerControls } from '@/shared/logging/logger';
 
 /**
  * Debug API interface
  */
 interface ProjectDebugAPI {
+  logger: LoggerControls;
+
   // Export functions
   exportProject: (projectId: string, options?: SnapshotExportOptions) => Promise<ProjectSnapshot>;
   exportProjectString: (projectId: string, options?: SnapshotExportOptions) => Promise<string>;
@@ -80,6 +83,8 @@ interface ProjectDebugAPI {
  */
 function createDebugAPI(): ProjectDebugAPI {
   return {
+    logger: getLoggerControls(),
+
     // Export functions
     exportProject: async (projectId, options) => {
       return exportProjectJson(projectId, options);
@@ -205,6 +210,7 @@ export function initializeDebugUtils(): void {
     const api = createDebugAPI();
     // Extend window type
     (window as unknown as { __DEBUG__: ProjectDebugAPI }).__DEBUG__ = api;
+    (window as Window & { __LOGGER__?: LoggerControls }).__LOGGER__ = api.logger;
   }
 }
 
@@ -212,6 +218,6 @@ export function initializeDebugUtils(): void {
 declare global {
   interface Window {
     __DEBUG__?: ProjectDebugAPI;
+    __LOGGER__?: LoggerControls;
   }
 }
-

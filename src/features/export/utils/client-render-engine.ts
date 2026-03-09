@@ -617,7 +617,7 @@ export async function createCompositionRenderer(
         await initializeMediabunnyForItems(remainingMainVideoIds);
       }
 
-      log.info('Video initialization complete', {
+      log.debug('Video initialization complete', {
         mediabunny: useMediabunny.size,
         fallback: videoExtractors.size - useMediabunny.size,
         uniqueSources: new Set(videoSourceByItemId.values()).size,
@@ -732,7 +732,7 @@ export async function createCompositionRenderer(
         for (const item of track.items ?? []) {
           if (item.type !== 'composition') continue;
           const compItem = item as CompositionItem;
-          log.info('Found composition item in export tracks', {
+          log.debug('Found composition item in export tracks', {
             itemId: compItem.id.substring(0, 8),
             compositionId: compItem.compositionId.substring(0, 8),
             from: compItem.from,
@@ -747,7 +747,7 @@ export async function createCompositionRenderer(
             });
             continue;
           }
-          log.info('Sub-composition loaded', {
+          log.debug('Sub-composition loaded', {
             compositionId: subComp.id.substring(0, 8),
             name: subComp.name,
             items: subComp.items.length,
@@ -1042,7 +1042,11 @@ export async function createCompositionRenderer(
 
       // Debug: Log transition state at key frames (only in development)
       if (import.meta.env.DEV && activeTransitions.length > 0 && (frame === activeTransitions[0]?.transitionStart || frame % 30 === 0)) {
-        log.info(`TRANSITION STATE: frame=${frame} activeTransitions=${activeTransitions.length} skippedClipIds=${Array.from(transitionClipIds).map(id => id.substring(0,8)).join(',')}`);
+        log.debug('Transition state', {
+          frame,
+          activeTransitions: activeTransitions.length,
+          skippedClipIds: Array.from(transitionClipIds).map((id) => id.substring(0, 8)),
+        });
       }
 
       // Log periodically (only in development)
