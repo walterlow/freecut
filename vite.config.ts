@@ -36,6 +36,13 @@ export default defineConfig({
     // Polyfill Node stdlib (buffer, etc.) for browser - required by @account-kit deps (elliptic, bn.js, @solana/web3.js)
     nodePolyfills(),
     whipProxyCorsPlugin(),
+  {
+    name: 'html-transform-og-url',
+    transformIndexHtml(html) {
+      const baseUrl = process.env.VITE_APP_URL ?? 'https://pixels.example.com';
+      return html.replace(/%VITE_APP_URL%/g, baseUrl);
+    },
+  },
   ],
   resolve: {
     alias: {

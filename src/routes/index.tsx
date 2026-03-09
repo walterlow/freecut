@@ -189,7 +189,7 @@ function LandingPage() {
           </div>
 
           <h1 className="mb-4 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-            Edit videos.{' '}
+            Edit AI-generated videos.{' '}
             <span className="text-primary">In your browser.</span>
           </h1>
 

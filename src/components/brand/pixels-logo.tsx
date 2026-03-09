@@ -24,7 +24,7 @@ const sizeConfig = {
   },
 };
 
-const LOGO_SRC = '/assets/landing/Asset1.svg';
+const LOGO_SRC = '/assets/landing/pixels-logo.svg';
 
 function LogoImage({ className }: { className?: string }) {
   return (
