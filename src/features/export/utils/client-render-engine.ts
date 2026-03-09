@@ -80,7 +80,6 @@ import {
   renderShapeItemToTexture,
   renderVideoItemToTexture,
   renderTransitionLayer,
-  renderTransitionToCanvas,
   calculateMediaDrawDimensions,
   type CanvasSettings,
   type WorkerLoadedImage,

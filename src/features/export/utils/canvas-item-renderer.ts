@@ -42,7 +42,6 @@ import {
 import {
   renderTransition,
   type ActiveTransition,
-  type TransitionCanvasSettings,
 } from './canvas-transitions';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
