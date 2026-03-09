@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ClipMask } from '@/types/masks';
 import type { TimelineItem } from '@/types/timeline';
-import { shouldForceCompositionRendererOverlay } from './use-gpu-effects-overlay';
+import {
+  shouldForceCompositionRendererOverlay,
+  shouldForcePlaybackCompositionRendererOverlay,
+} from './use-gpu-effects-overlay';
 
 function createItem(overrides: Partial<TimelineItem>): TimelineItem {
   return {
@@ -203,6 +206,73 @@ describe('shouldForceCompositionRendererOverlay', () => {
               rightClipId: 'b',
             } as never,
           ],
+        },
+      },
+    })).toBe(true);
+  });
+});
+
+describe('shouldForcePlaybackCompositionRendererOverlay', () => {
+  it('returns false for soft masks without transitions or GPU effects', () => {
+    expect(shouldForcePlaybackCompositionRendererOverlay({
+      items: [
+        createItem({
+          masks: [createMask({ feather: 12 })],
+        }),
+      ],
+      transitions: [],
+      compositionById: {},
+    })).toBe(false);
+  });
+
+  it('returns true when the timeline contains a transition', () => {
+    expect(shouldForcePlaybackCompositionRendererOverlay({
+      items: [createItem({})],
+      transitions: [
+        {
+          id: 'transition-3',
+          type: 'fade',
+          timing: 'linear',
+          durationInFrames: 12,
+          leftClipId: 'left',
+          rightClipId: 'right',
+        } as never,
+      ],
+      compositionById: {},
+    })).toBe(true);
+  });
+
+  it('returns true when a nested composition contains an enabled GPU effect', () => {
+    expect(shouldForcePlaybackCompositionRendererOverlay({
+      items: [
+        createItem({
+          id: 'comp-playback',
+          type: 'composition',
+          compositionId: 'sub-playback',
+          compositionWidth: 640,
+          compositionHeight: 360,
+        }),
+      ],
+      transitions: [],
+      compositionById: {
+        'sub-playback': {
+          items: [
+            createItem({
+              id: 'gpu-child',
+              effects: [
+                {
+                  id: 'fx-2',
+                  enabled: true,
+                  effect: {
+                    type: 'gpu-effect',
+                    gpuEffectType: 'gpu-contrast',
+                    params: { amount: 0.5 },
+                  },
+                },
+              ],
+            }),
+          ],
+          transitions: [],
         },
       },
     })).toBe(true);

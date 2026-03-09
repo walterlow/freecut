@@ -694,7 +694,7 @@ export const VideoPreview = memo(function VideoPreview({
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
+  const overlayNeeds = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
@@ -1881,9 +1881,11 @@ export const VideoPreview = memo(function VideoPreview({
     fastScrubScaledKeyframes,
   ]);
 
-  const forceFastScrubOverlay = showGpuEffectsOverlay;
+  const forceFastScrubOverlay = overlayNeeds.scrub;
+  const forceFastPlaybackOverlay = overlayNeeds.playback;
+  const forceFastOverlayNow = isPlaying ? forceFastPlaybackOverlay : forceFastScrubOverlay;
   const preferPlayerForTextGizmo = (
-    !forceFastScrubOverlay
+    !forceFastOverlayNow
     && isGizmoInteracting
     && activeGizmoItemType === 'text'
   );
@@ -2438,7 +2440,10 @@ export const VideoPreview = memo(function VideoPreview({
             // Guard against stale in-flight renders that finish after scrub has ended.
             // Without this, a completed old render can re-show the overlay and hide
             // live Player updates (e.g. ruler click + gizmo interaction).
-            if (!forceFastScrubOverlay && !shouldShowFastScrubOverlay({
+            const forceFastOverlayForPlaybackState = playbackState.isPlaying
+              ? forceFastPlaybackOverlay
+              : forceFastScrubOverlay;
+            if (!forceFastOverlayForPlaybackState && !shouldShowFastScrubOverlay({
               isGizmoInteracting: isGizmoInteractingRef.current,
               isPlaying: playbackState.isPlaying,
               currentFrame: playbackState.currentFrame,
@@ -2490,7 +2495,7 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
-      if (state.isPlaying && !forceFastScrubOverlay) {
+      if (state.isPlaying && !forceFastPlaybackOverlay) {
         scrubRequestedFrameRef.current = null;
         scrubDirectionRef.current = 0;
         suppressScrubBackgroundPrewarmRef.current = false;
@@ -2506,11 +2511,15 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       const useCurrentFrameAsTarget = (
-        forceFastScrubOverlay
+        (state.isPlaying ? forceFastPlaybackOverlay : forceFastScrubOverlay)
+        || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current)
+      );
+      const usePrevCurrentFrameAsTarget = (
+        (prev.isPlaying ? forceFastPlaybackOverlay : forceFastScrubOverlay)
         || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current)
       );
       const targetFrame = state.previewFrame ?? (useCurrentFrameAsTarget ? state.currentFrame : null);
-      const prevTargetFrame = prev.previewFrame ?? (useCurrentFrameAsTarget ? prev.currentFrame : null);
+      const prevTargetFrame = prev.previewFrame ?? (usePrevCurrentFrameAsTarget ? prev.currentFrame : null);
       const playStateChanged = state.isPlaying !== prev.isPlaying;
 
       if (targetFrame === prevTargetFrame && !playStateChanged) return;
@@ -2626,13 +2635,16 @@ export const VideoPreview = memo(function VideoPreview({
     // even when frame is unchanged so previews stay on the fast-scrub render path.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
       if (preferPlayerForTextGizmoRef.current) return;
-      if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
+      const playbackState = usePlaybackStore.getState();
+      const forceFastOverlayForPlaybackState = playbackState.isPlaying
+        ? forceFastPlaybackOverlay
+        : forceFastScrubOverlay;
+      if (!forceFastOverlayForPlaybackState && !isGizmoInteractingRef.current) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
       const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
       // Gizmo transform changes require an active gizmo; effect preview changes don't.
       if (!unifiedPreviewChanged && !(transformPreviewChanged && state.activeGizmo)) return;
 
-      const playbackState = usePlaybackStore.getState();
       const currentFrame = playbackState.currentFrame;
 
       // Effect param changes don't change the frame number, so the frame cache
@@ -2649,10 +2661,14 @@ export const VideoPreview = memo(function VideoPreview({
     // During corner pin drag, re-render with the live preview values so the
     // scrub overlay reflects the warp in real-time instead of waiting for commit.
     const unsubscribeCornerPin = useCornerPinStore.subscribe((state, prev) => {
-      if (!forceFastScrubOverlay) return;
+      const playbackState = usePlaybackStore.getState();
+      const forceFastOverlayForPlaybackState = playbackState.isPlaying
+        ? forceFastPlaybackOverlay
+        : forceFastScrubOverlay;
+      if (!forceFastOverlayForPlaybackState) return;
       if (state.previewCornerPin === prev.previewCornerPin) return;
 
-      const currentFrame = usePlaybackStore.getState().currentFrame;
+      const currentFrame = playbackState.currentFrame;
       if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache([currentFrame]);
       }
@@ -2661,10 +2677,14 @@ export const VideoPreview = memo(function VideoPreview({
     });
 
     const unsubscribeMaskEditor = useMaskEditorStore.subscribe((state, prev) => {
-      if (!forceFastScrubOverlay) return;
+      const playbackState = usePlaybackStore.getState();
+      const forceFastOverlayForPlaybackState = playbackState.isPlaying
+        ? forceFastPlaybackOverlay
+        : forceFastScrubOverlay;
+      if (!forceFastOverlayForPlaybackState) return;
       if (state.previewMasks === prev.previewMasks) return;
 
-      const currentFrame = usePlaybackStore.getState().currentFrame;
+      const currentFrame = playbackState.currentFrame;
       if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache([currentFrame]);
       }
@@ -2672,7 +2692,7 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
-    if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
+    if (forceFastOverlayNow || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
@@ -2698,6 +2718,8 @@ export const VideoPreview = memo(function VideoPreview({
     ensureFastScrubRenderer,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
+    forceFastOverlayNow,
+    forceFastPlaybackOverlay,
     forceFastScrubOverlay,
     fps,
     // Re-run when gizmo interaction toggles so drag overlays are requested

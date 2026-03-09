@@ -15,6 +15,11 @@ type OverlayComposition = {
   transitions: Transition[];
 };
 
+export type CompositionRendererOverlayNeeds = {
+  scrub: boolean;
+  playback: boolean;
+};
+
 function hasEnabledGpuEffects(item: TimelineItem): boolean {
   return Boolean(
     item.effects?.some((effect) => effect.enabled && effect.effect.type === 'gpu-effect')
@@ -38,6 +43,33 @@ function hasSoftClipMasks(masks: readonly ClipMask[] | null | undefined): boolea
 function hasSoftShapeMask(item: TimelineItem): boolean {
   if (item.type !== 'shape' || item.isMask !== true) return false;
   return (item.maskType ?? 'clip') === 'alpha' || (item.maskFeather ?? 0) > SOFT_MASK_FEATHER_THRESHOLD;
+}
+
+function compositionNeedsPlaybackCompositionRendererOverlay(
+  compositionId: string,
+  compositionById: Record<string, OverlayComposition>,
+  visited: Set<string>,
+): boolean {
+  if (visited.has(compositionId)) return false;
+
+  const composition = compositionById[compositionId];
+  if (!composition) return false;
+
+  visited.add(compositionId);
+
+  if (composition.transitions.length > 0) {
+    visited.delete(compositionId);
+    return true;
+  }
+
+  const needsOverlay = composition.items.some((item) => itemNeedsPlaybackCompositionRendererOverlay(
+    item,
+    compositionById,
+    visited,
+  ));
+
+  visited.delete(compositionId);
+  return needsOverlay;
 }
 
 function compositionNeedsCompositionRendererOverlay(
@@ -101,6 +133,20 @@ function itemNeedsCompositionRendererOverlay(
   );
 }
 
+function itemNeedsPlaybackCompositionRendererOverlay(
+  item: TimelineItem,
+  compositionById: Record<string, OverlayComposition>,
+  visited: Set<string>,
+): boolean {
+  return (
+    hasEnabledGpuEffects(item)
+    || (
+      item.type === 'composition'
+      && compositionNeedsPlaybackCompositionRendererOverlay(item.compositionId, compositionById, visited)
+    )
+  );
+}
+
 export function shouldForceCompositionRendererOverlay(args: {
   items: TimelineItem[];
   transitions: Transition[];
@@ -133,6 +179,26 @@ export function shouldForceCompositionRendererOverlay(args: {
   ));
 }
 
+export function shouldForcePlaybackCompositionRendererOverlay(args: {
+  items: TimelineItem[];
+  transitions: Transition[];
+  compositionById?: Record<string, OverlayComposition>;
+}): boolean {
+  const {
+    items,
+    transitions,
+    compositionById = {},
+  } = args;
+
+  if (transitions.length > 0) return true;
+
+  return items.some((item) => itemNeedsPlaybackCompositionRendererOverlay(
+    item,
+    compositionById,
+    new Set<string>(),
+  ));
+}
+
 /**
  * Detects whether the composition renderer overlay should be forced on.
  *
@@ -150,7 +216,10 @@ export function shouldForceCompositionRendererOverlay(args: {
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {
-  const [needsOverlay, setNeedsOverlay] = useState(false);
+  const [overlayNeeds, setOverlayNeeds] = useState<CompositionRendererOverlayNeeds>({
+    scrub: false,
+    playback: false,
+  });
 
   useEffect(() => {
     const check = () => {
@@ -160,15 +229,28 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
       const cornerPinState = useCornerPinStore.getState();
       const maskEditorState = useMaskEditorStore.getState();
 
-      setNeedsOverlay(shouldForceCompositionRendererOverlay({
-        items,
-        transitions,
-        isCornerPinEditing: cornerPinState.isEditing,
-        previewCornerPin: cornerPinState.previewCornerPin,
-        previewMaskEditingItemId: maskEditorState.editingItemId,
-        previewMasks: maskEditorState.previewMasks,
-        compositionById,
-      }));
+      const nextOverlayNeeds: CompositionRendererOverlayNeeds = {
+        scrub: shouldForceCompositionRendererOverlay({
+          items,
+          transitions,
+          isCornerPinEditing: cornerPinState.isEditing,
+          previewCornerPin: cornerPinState.previewCornerPin,
+          previewMaskEditingItemId: maskEditorState.editingItemId,
+          previewMasks: maskEditorState.previewMasks,
+          compositionById,
+        }),
+        playback: shouldForcePlaybackCompositionRendererOverlay({
+          items,
+          transitions,
+          compositionById,
+        }),
+      };
+
+      setOverlayNeeds((prev) => (
+        prev.scrub === nextOverlayNeeds.scrub && prev.playback === nextOverlayNeeds.playback
+          ? prev
+          : nextOverlayNeeds
+      ));
     };
 
     check();
@@ -188,5 +270,5 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
     };
   }, []);
 
-  return needsOverlay;
+  return overlayNeeds;
 }
