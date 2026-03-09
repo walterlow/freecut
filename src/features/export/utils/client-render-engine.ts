@@ -1717,9 +1717,9 @@ export async function createCompositionRenderer(
           if (success) {
             mediabunnyFailureCountByItem.set(item.id, 0);
           } else {
-            // Skip transient "no-sample" misses (same guard as renderVideoItem).
+            // Skip transient "no-sample" misses and disposed-input aborts.
             const failureKind = extractor.getLastFailureKind();
-            if (failureKind !== 'no-sample') {
+            if (failureKind !== 'no-sample' && failureKind !== 'aborted') {
               const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
               mediabunnyFailureCountByItem.set(item.id, failures);
               if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {

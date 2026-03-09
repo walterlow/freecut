@@ -1,9 +1,7 @@
 ﻿import { createLogger } from '@/shared/logging/logger';
-import { VideoFrameExtractor } from './canvas-video-extractor';
+import { VideoFrameExtractor, type VideoFrameFailureKind } from './canvas-video-extractor';
 
 const log = createLogger('SharedVideoExtractorPool');
-
-export type VideoFrameFailureKind = 'none' | 'no-sample' | 'decode-error';
 
 export interface VideoFrameSource {
   init(): Promise<boolean>;
@@ -85,12 +83,18 @@ export class SharedVideoExtractorPool {
   private itemSources = new Map<string, string>();
   private itemWrappers = new Map<string, SharedItemVideoSource>();
   private laneIdCounter = 0;
+  private pendingOperations = new Set<Promise<boolean>>();
+  private disposed = false;
 
   constructor(options?: { maxLanesPerSource?: number }) {
     this.maxLanesPerSource = Math.max(1, options?.maxLanesPerSource ?? DEFAULT_MAX_LANES_PER_SOURCE);
   }
 
   getOrCreateItemExtractor(itemId: string, src: string): VideoFrameSource {
+    if (this.disposed) {
+      return new SharedItemVideoSource(this, itemId, src);
+    }
+
     const existing = this.itemWrappers.get(itemId);
     const existingSrc = this.itemSources.get(itemId);
     if (existing && existingSrc === src) {
@@ -110,6 +114,8 @@ export class SharedVideoExtractorPool {
   }
 
   async initSource(src: string): Promise<boolean> {
+    if (this.disposed) return false;
+
     const state = this.ensureSourceState(src);
     if (state.sourceReady) return true;
     if (state.sourceInitAttempted) return false;
@@ -128,6 +134,12 @@ export class SharedVideoExtractorPool {
   }
 
   releaseItem(itemId: string): void {
+    if (this.disposed) {
+      this.itemSources.delete(itemId);
+      this.itemWrappers.delete(itemId);
+      return;
+    }
+
     const src = this.itemSources.get(itemId);
     if (src) {
       this.unassignItem(itemId, src);
@@ -140,7 +152,7 @@ export class SharedVideoExtractorPool {
     this.itemWrappers.delete(itemId);
   }
 
-  async drawItemFrame(
+  drawItemFrame(
     itemId: string,
     src: string,
     ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
@@ -150,31 +162,45 @@ export class SharedVideoExtractorPool {
     width: number,
     height: number
   ): Promise<boolean> {
-    const state = this.ensureSourceState(src);
-    const sourceReady = await this.initSource(src);
-    if (!sourceReady) return false;
+    if (this.disposed) return Promise.resolve(false);
 
-    let laneIndex = this.getAssignedLaneIndex(state, itemId);
-    let laneReady = await this.ensureLaneInitialized(state, laneIndex);
+    const operation = (async () => {
+      const state = this.ensureSourceState(src);
+      const sourceReady = await this.initSource(src);
+      if (this.disposed) return false;
+      if (!sourceReady) return false;
 
-    if (!laneReady && laneIndex !== 0) {
-      laneIndex = 0;
-      laneReady = await this.ensureLaneInitialized(state, laneIndex);
-    }
-    if (!laneReady) return false;
+      let laneIndex = this.getAssignedLaneIndex(state, itemId);
+      let laneReady = await this.ensureLaneInitialized(state, laneIndex);
+      if (this.disposed) return false;
 
-    // Serialize drawFrame calls per lane to prevent concurrent mutable-state corruption
-    // inside VideoFrameExtractor (ensureSampleForTimestamp / recoverAndPrime).
-    const lane = state.lanes[laneIndex]!;
-    const prev = lane.drawLock ?? Promise.resolve();
-    const result = prev.then(() =>
-      lane.extractor.drawFrame(ctx, timestamp, x, y, width, height)
-    );
-    lane.drawLock = result.then(() => undefined, () => undefined);
-    return result;
+      if (!laneReady && laneIndex !== 0) {
+        laneIndex = 0;
+        laneReady = await this.ensureLaneInitialized(state, laneIndex);
+        if (this.disposed) return false;
+      }
+      if (!laneReady) return false;
+
+      // Serialize drawFrame calls per lane to prevent concurrent mutable-state corruption
+      // inside VideoFrameExtractor (ensureSampleForTimestamp / recoverAndPrime).
+      const lane = state.lanes[laneIndex]!;
+      const prev = lane.drawLock ?? Promise.resolve();
+      const result = prev.then(() =>
+        lane.extractor.drawFrame(ctx, timestamp, x, y, width, height)
+      );
+      lane.drawLock = result.then(() => undefined, () => undefined);
+      return result;
+    })();
+
+    this.pendingOperations.add(operation);
+    return operation.finally(() => {
+      this.pendingOperations.delete(operation);
+    });
   }
 
   getItemLastFailureKind(itemId: string, src: string): VideoFrameFailureKind {
+    if (this.disposed) return 'aborted';
+
     const extractor = this.getExtractorForItem(itemId, src);
     return extractor?.getLastFailureKind() ?? 'none';
   }
@@ -190,9 +216,25 @@ export class SharedVideoExtractorPool {
   }
 
   dispose(): void {
+    this.disposed = true;
+    const pendingOperations = [...this.pendingOperations];
+
     for (const state of this.sourceStates.values()) {
       for (const lane of state.lanes) {
-        lane.extractor.dispose();
+        const finalizeDispose = () => {
+          lane.extractor.dispose();
+        };
+        const pendingWork = [...pendingOperations, lane.initPromise, lane.drawLock].filter(
+          (promise): promise is Promise<unknown> => promise !== null,
+        );
+        if (pendingWork.length > 0) {
+          void Promise.allSettled(pendingWork).finally(finalizeDispose);
+        } else {
+          finalizeDispose();
+        }
+        lane.initialized = false;
+        lane.initPromise = null;
+        lane.drawLock = null;
       }
       state.lanes = [];
       state.itemLaneById.clear();
@@ -303,4 +345,3 @@ export class SharedVideoExtractorPool {
     }
   }
 }
-

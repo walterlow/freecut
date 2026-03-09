@@ -12,6 +12,8 @@ import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('VideoFrameExtractor');
 
+export type VideoFrameFailureKind = 'none' | 'no-sample' | 'aborted' | 'decode-error';
+
 /** Types for dynamically imported mediabunny module */
 interface MediabunnySink {
   samples(startTimestamp?: number, endTimestamp?: number): AsyncGenerator<MediabunnySample, void, unknown>;
@@ -59,10 +61,12 @@ export class VideoFrameExtractor {
   private sampleIterator: AsyncGenerator<MediabunnySample, void, unknown> | null = null;
   private currentSample: MediabunnySample | null = null;
   private nextSample: MediabunnySample | null = null;
+  private pendingIteratorClose: Promise<void> | null = null;
   private iteratorDone = false;
   private lastRequestedTimestamp: number | null = null;
   private sampleLoopError: unknown = null;
-  private lastFailureKind: 'none' | 'no-sample' | 'decode-error' = 'none';
+  private lastFailureKind: VideoFrameFailureKind = 'none';
+  private disposed = false;
   /**
    * Cached VideoFrame from the current sample.  Kept alive between draws so
    * that repeated draws of the same sample (common during transitions past the
@@ -82,6 +86,7 @@ export class VideoFrameExtractor {
    */
   async init(): Promise<boolean> {
     try {
+      this.disposed = false;
       const mb = await import('mediabunny');
 
       // Create input directly from source URL/blob URL.
@@ -125,6 +130,10 @@ export class VideoFrameExtractor {
 
       return true;
     } catch (error) {
+      if (this.isAbortLikeError(error)) {
+        this.lastFailureKind = 'aborted';
+        return false;
+      }
       log.error('Failed to initialize', { itemId: this.itemId, error });
       return false;
     }
@@ -142,6 +151,9 @@ export class VideoFrameExtractor {
     width: number,
     height: number
   ): Promise<boolean> {
+    if (this.disposed) {
+      return this.reportAbortedDraw();
+    }
     if (!this.ready || !this.sink) {
       return false;
     }
@@ -152,6 +164,9 @@ export class VideoFrameExtractor {
 
     try {
       await this.ensureSampleForTimestamp(clampedTime);
+      if (this.disposed) {
+        return this.reportAbortedDraw();
+      }
       const drawOk = this.drawCurrentSample(ctx, x, y, width, height);
       if (drawOk) {
         this.drawFailureCount = 0;
@@ -162,11 +177,17 @@ export class VideoFrameExtractor {
       lastError = this.sampleLoopError;
       return this.reportDrawFailure(timestamp, clampedTime, lastError);
     } catch (error) {
+      if (this.isAbortLikeError(error)) {
+        return this.reportAbortedDraw();
+      }
       lastError = error;
       this.sampleLoopError = error;
 
       const recovered = await this.recoverAndPrime(clampedTime, error);
       if (recovered) {
+        if (this.disposed) {
+          return this.reportAbortedDraw();
+        }
         const drawOk = this.drawCurrentSample(ctx, x, y, width, height);
         if (drawOk) {
           this.drawFailureCount = 0;
@@ -315,7 +336,7 @@ export class VideoFrameExtractor {
       // Draw failed â€” discard the cached frame so next attempt gets a fresh one
       this.closeCachedVideoFrame();
       this.sampleLoopError = error;
-      this.lastFailureKind = 'decode-error';
+      this.lastFailureKind = this.isAbortLikeError(error) ? 'aborted' : 'decode-error';
       return false;
     }
   }
@@ -333,6 +354,11 @@ export class VideoFrameExtractor {
   }
 
   private async recoverAndPrime(timestamp: number, error: unknown): Promise<boolean> {
+    if (this.isAbortLikeError(error)) {
+      this.lastFailureKind = 'aborted';
+      return false;
+    }
+
     const message = error instanceof Error ? error.message : String(error);
     const looksRecoverable = /key frame|configure\(\)|flush\(\)|InvalidStateError|decode/i.test(message);
     if (!looksRecoverable) {
@@ -345,15 +371,25 @@ export class VideoFrameExtractor {
       return this.currentSample !== null;
     } catch (recoveryError) {
       this.sampleLoopError = recoveryError;
-      this.lastFailureKind = 'decode-error';
+      this.lastFailureKind = this.isAbortLikeError(recoveryError) ? 'aborted' : 'decode-error';
       return false;
     }
   }
 
-  private closeStreamState(): void {
-    if (this.sampleIterator) {
-      void this.sampleIterator.return?.();
+  private closeStreamState(): Promise<void> | null {
+    const iterator = this.sampleIterator;
+    let iteratorClose: Promise<void> | null = null;
+    if (iterator?.return) {
+      iteratorClose = Promise.resolve(iterator.return())
+        .then(() => undefined, () => undefined);
+      this.pendingIteratorClose = iteratorClose;
+      void iteratorClose.finally(() => {
+        if (this.pendingIteratorClose === iteratorClose) {
+          this.pendingIteratorClose = null;
+        }
+      });
     }
+
     this.sampleIterator = null;
     this.iteratorDone = true;
     this.lastRequestedTimestamp = null;
@@ -364,6 +400,7 @@ export class VideoFrameExtractor {
     this.closeSample(this.nextSample);
     this.currentSample = null;
     this.nextSample = null;
+    return iteratorClose;
   }
 
   private closeSample(sample: MediabunnySample | null): void {
@@ -376,6 +413,10 @@ export class VideoFrameExtractor {
   }
 
   private reportDrawFailure(timestamp: number, clampedTime: number, error: unknown): boolean {
+    if (this.lastFailureKind === 'aborted') {
+      return this.reportAbortedDraw();
+    }
+
     this.drawFailureCount += 1;
     const shouldWarn = this.drawFailureCount <= 3 || this.drawFailureCount % 20 === 0;
     const logData = {
@@ -396,7 +437,19 @@ export class VideoFrameExtractor {
     return false;
   }
 
-  getLastFailureKind(): 'none' | 'no-sample' | 'decode-error' {
+  private reportAbortedDraw(): boolean {
+    this.sampleLoopError = null;
+    this.lastFailureKind = 'aborted';
+    return false;
+  }
+
+  private isAbortLikeError(error: unknown): boolean {
+    if (this.disposed) return true;
+    const message = error instanceof Error ? error.message : String(error);
+    return /Input has been disposed|AbortError|aborted/i.test(message);
+  }
+
+  getLastFailureKind(): VideoFrameFailureKind {
     return this.lastFailureKind;
   }
 
@@ -424,20 +477,30 @@ export class VideoFrameExtractor {
    * Clean up resources
    */
   dispose(): void {
-    this.closeStreamState();
+    this.disposed = true;
+    const pendingIteratorClose = this.closeStreamState() ?? this.pendingIteratorClose;
+    const input = this.input;
 
-    try {
-      // mediabunny Input lifecycle API is dispose(); close() is not guaranteed.
-      this.input?.dispose();
-    } catch {
-      // Ignore dispose errors
-    }
     this.sink = null;
     this.input = null;
     this.videoTrack = null;
     this.ready = false;
     this.drawFailureCount = 0;
-    this.lastFailureKind = 'none';
+    this.lastFailureKind = 'aborted';
+
+    const finalizeInputDispose = () => {
+      try {
+        // mediabunny Input lifecycle API is dispose(); close() is not guaranteed.
+        input?.dispose();
+      } catch {
+        // Ignore dispose errors
+      }
+    };
+
+    if (pendingIteratorClose) {
+      void pendingIteratorClose.finally(finalizeInputDispose);
+    } else {
+      finalizeInputDispose();
+    }
   }
 }
-

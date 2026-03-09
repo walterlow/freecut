@@ -452,14 +452,18 @@ async function renderVideoItem(
         drawDimensions.height,
       );
 
+      const failureKind = extractor.getLastFailureKind();
       if (success) {
         mediabunnyFailureCountByItem.set(item.id, 0);
+        return;
+      }
+
+      if (failureKind === 'aborted') {
         return;
       }
       mediabunnyFailedThisFrame = true;
 
       // Distinguish transient misses from decode failures.
-      const failureKind = extractor.getLastFailureKind();
       if (failureKind === 'no-sample') {
         if (log.isEnabled('debug')) {
           log.debug('Mediabunny had no sample for timestamp, using per-frame fallback', {
