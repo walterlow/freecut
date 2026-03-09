@@ -41,6 +41,7 @@ export interface Logger {
   warn(message: string, ...args: unknown[]): void;
   error(message: string, ...args: unknown[]): void;
   child(prefix: string): Logger;
+  isEnabled(level: LogLevelName | LogLevelValue): boolean;
   setLevel(level: LogLevelName | LogLevelValue): void;
 }
 
@@ -481,6 +482,10 @@ export function getLoggerControls(): LoggerControls {
 export function createLogger(module: string): Logger {
   let localLevel: LogLevelValue | null = null;
 
+  function isEnabled(level: LogLevelName | LogLevelValue): boolean {
+    return shouldLog(normalizeLevel(level), localLevel ?? resolveLevel(module));
+  }
+
   return {
     debug(message: string, ...args: unknown[]): void {
       writeLog(0, module, localLevel, message, args);
@@ -501,6 +506,7 @@ export function createLogger(module: string): Logger {
       }
       return child;
     },
+    isEnabled,
     setLevel(level: LogLevelName | LogLevelValue): void {
       localLevel = normalizeLevel(level);
     },

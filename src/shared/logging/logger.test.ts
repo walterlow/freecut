@@ -65,6 +65,17 @@ describe('logger', () => {
     expect(debugSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('exposes level checks for hot-path lazy logging', () => {
+    const controls = getLoggerControls();
+    const log = createLogger('ClientRenderEngine');
+
+    expect(log.isEnabled('debug')).toBe(false);
+
+    controls.setModuleLevel('ClientRenderEngine', 'debug');
+    expect(log.isEnabled('debug')).toBe(true);
+    expect(log.isEnabled('info')).toBe(true);
+  });
+
   it('keeps recent emitted logs for later inspection', () => {
     const controls = getLoggerControls();
     controls.setGlobalLevel('info');

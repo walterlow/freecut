@@ -1041,7 +1041,12 @@ export async function createCompositionRenderer(
       const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
 
       // Debug: Log transition state at key frames (only in development)
-      if (import.meta.env.DEV && activeTransitions.length > 0 && (frame === activeTransitions[0]?.transitionStart || frame % 30 === 0)) {
+      if (
+        import.meta.env.DEV
+        && log.isEnabled('debug')
+        && activeTransitions.length > 0
+        && (frame === activeTransitions[0]?.transitionStart || frame % 30 === 0)
+      ) {
         log.debug('Transition state', {
           frame,
           activeTransitions: activeTransitions.length,
@@ -1050,7 +1055,7 @@ export async function createCompositionRenderer(
       }
 
       // Log periodically (only in development)
-      if (import.meta.env.DEV && frame % 30 === 0) {
+      if (import.meta.env.DEV && log.isEnabled('debug') && frame % 30 === 0) {
         log.debug('Rendering frame', {
           frame,
           tracksCount: sortedTracks.length,
@@ -1441,7 +1446,7 @@ export async function createCompositionRenderer(
         isFullyOccluding,
       });
 
-      if (occlusionCutoffOrder !== null && import.meta.env.DEV && frame % 30 === 0) {
+      if (occlusionCutoffOrder !== null && import.meta.env.DEV && log.isEnabled('debug') && frame % 30 === 0) {
         const occludingTask = sortedTracks
           .filter((track) => visibleTrackIds.has(track.id) && (track.order ?? 0) === occlusionCutoffOrder)
           .flatMap((track) => track.items ?? [])
@@ -1632,7 +1637,7 @@ export async function createCompositionRenderer(
       }
 
       // Log occlusion culling stats periodically (only in development)
-      if (import.meta.env.DEV && skippedTracks > 0 && frame % 30 === 0) {
+      if (import.meta.env.DEV && log.isEnabled('debug') && skippedTracks > 0 && frame % 30 === 0) {
         log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
@@ -1806,7 +1811,7 @@ export async function createCompositionRenderer(
       textMeasureCache.clear();
 
       // Log pool stats in development
-      if (import.meta.env.DEV) {
+      if (import.meta.env.DEV && log.isEnabled('debug')) {
         log.debug('Canvas pool disposed', canvasPool.getStats());
       }
     },
