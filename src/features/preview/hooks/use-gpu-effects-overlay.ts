@@ -139,8 +139,7 @@ function itemNeedsPlaybackCompositionRendererOverlay(
   visited: Set<string>,
 ): boolean {
   return (
-    hasEnabledGpuEffects(item)
-    || (
+    (
       item.type === 'composition'
       && compositionNeedsPlaybackCompositionRendererOverlay(item.compositionId, compositionById, visited)
     )
@@ -213,6 +212,11 @@ export function shouldForcePlaybackCompositionRendererOverlay(args: {
  *
  * When true, the scrub overlay renders every frame through the composition
  * renderer, which keeps the skim path aligned with the canvas export path.
+ *
+ * Playback is intentionally narrower. Transitions still force the playback
+ * overlay, but standalone GPU effects do not. That avoids running a second
+ * full-resolution composition render on every playback frame for effect-heavy
+ * clips.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {

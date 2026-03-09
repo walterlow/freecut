@@ -225,6 +225,28 @@ describe('shouldForcePlaybackCompositionRendererOverlay', () => {
     })).toBe(false);
   });
 
+  it('returns false for direct GPU effects during playback', () => {
+    expect(shouldForcePlaybackCompositionRendererOverlay({
+      items: [
+        createItem({
+          effects: [
+            {
+              id: 'fx-playback',
+              enabled: true,
+              effect: {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-brightness',
+                params: { amount: 0.35 },
+              },
+            },
+          ],
+        }),
+      ],
+      transitions: [],
+      compositionById: {},
+    })).toBe(false);
+  });
+
   it('returns true when the timeline contains a transition', () => {
     expect(shouldForcePlaybackCompositionRendererOverlay({
       items: [createItem({})],
@@ -242,7 +264,7 @@ describe('shouldForcePlaybackCompositionRendererOverlay', () => {
     })).toBe(true);
   });
 
-  it('returns true when a nested composition contains an enabled GPU effect', () => {
+  it('returns false when playback-only content is a nested GPU effect without transitions', () => {
     expect(shouldForcePlaybackCompositionRendererOverlay({
       items: [
         createItem({
@@ -275,6 +297,6 @@ describe('shouldForcePlaybackCompositionRendererOverlay', () => {
           transitions: [],
         },
       },
-    })).toBe(true);
+    })).toBe(false);
   });
 });

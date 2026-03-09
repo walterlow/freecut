@@ -79,6 +79,7 @@ import {
   type SubCompRenderData,
 } from './canvas-item-renderer';
 import { ScrubbingCache } from '@/features/export/deps/preview';
+import { shouldCacheRenderedPreviewFrame } from './preview-frame-cache-policy';
 
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator';
@@ -1656,12 +1657,16 @@ export async function createCompositionRenderer(
       // sequential decode is ~1ms/frame, faster than cache write overhead
       // (~2-5ms createImageBitmap + GPU upload + GC pressure). Cache on
       // backward seeks (mediabunny stream restart = seconds), jumps, and
-      // non-sequential access where the cache actually helps.
+      // non-sequential access where the cache actually helps. Transition
+      // frames are always cached so fast skim can hit exact in-between frames.
       if (scrubbingCache) {
-        const delta = frame - lastRenderedFrame;
-        const isSequentialForward = delta > 0 && delta <= 3;
+        const shouldCacheFrame = shouldCacheRenderedPreviewFrame({
+          frame,
+          lastRenderedFrame,
+          activeTransitionCount: activeTransitions.length,
+        });
         lastRenderedFrame = frame;
-        if (!isSequentialForward) {
+        if (shouldCacheFrame) {
           if (gpuPipeline) {
             scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), canvas.width, canvas.height);
           }

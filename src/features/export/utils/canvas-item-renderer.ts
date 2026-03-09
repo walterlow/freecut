@@ -34,6 +34,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
+import { shouldUseDomVideoForPreviewPlayback } from './preview-dom-video-guard';
 import { renderMasksToCanvas } from '@/infrastructure/gpu/masks';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
@@ -375,15 +376,13 @@ async function renderVideoItem(
   if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
-      // Reject videos that are too far from the expected time. This catches
-      // videos that haven't finished seeking yet (e.g. newly mounted shadow
-      // elements during transitions). The threshold must align with the RVFC
-      // drift correction in video-content.tsx (corrects at ±150ms), otherwise
-      // the render engine rejects frames that RVFC hasn't corrected yet,
-      // causing intermittent mediabunny fallback and visible jitter.
-      const drift = Math.abs(domVideo.currentTime - sourceTime);
-      const driftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
-      if (drift <= driftThreshold) {
+      // During active playback, prefer the live DOM video even when it runs
+      // somewhat ahead of the composition clock under heavy main-thread load.
+      // Falling back to mediabunny in that state is slower and can make the
+      // overlay look like it is rewinding relative to audio.
+      const driftSeconds = domVideo.currentTime - sourceTime;
+      const isActivelyPlaying = !domVideo.paused && !domVideo.ended;
+      if (shouldUseDomVideoForPreviewPlayback({ driftSeconds, isActivelyPlaying })) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
           domVideo.videoHeight,

@@ -10,6 +10,11 @@ import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/playe
 import { createLogger } from '@/shared/logging/logger';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
+  getPlaybackRateForDrift,
+  shouldHardSeekForPlaybackDrift,
+  VIDEO_DRIFT_RATE_CORRECTION_THRESHOLD_SECONDS,
+} from '../utils/video-drift-correction';
+import {
   registerDomVideoElement,
   unregisterDomVideoElement,
 } from '../utils/dom-video-element-registry';
@@ -509,11 +514,10 @@ const NativePreviewVideo: React.FC<{
         const now = Date.now();
         const drift = currentTime - clampedTargetTime;
         const timeSinceLastSync = now - lastSyncTimeRef.current;
-        const videoBehind = drift < -0.2;
-        const videoFarAhead = drift > 0.5;
-        // Keep correction responsive for segment/transition boundaries.
-        // A 500ms backoff can leak stale frames in preview.
-        if ((videoFarAhead || (videoBehind && timeSinceLastSync > 80)) && canSeek) {
+        if (shouldHardSeekForPlaybackDrift({
+          driftSeconds: drift,
+          timeSinceLastSyncMs: timeSinceLastSync,
+        }) && canSeek) {
           try {
             video.currentTime = clampedTargetTime;
             lastSyncTimeRef.current = now;
@@ -590,9 +594,10 @@ const NativePreviewVideo: React.FC<{
   // requestVideoFrameCallback-based drift correction.
   // Runs outside React's render cycle — the browser calls us exactly when a
   // video frame is presented. Uses rate-based correction for small drifts
-  // (adjusts playbackRate ±2-5% to smoothly converge) and hard seeks only
-  // for large drifts (>200ms). This eliminates the visible “drift then jump”
-  // jitter pattern that hard-seek-only correction causes.
+  // and hard seeks only when the clip is materially behind or far enough ahead
+  // that slowing down will not converge quickly. This avoids the visible
+  // rewind/jump pattern that symmetric hard-seek correction can cause under
+  // heavy preview load.
   useEffect(() => {
     const video = elementRef.current;
     if (!video || !isPlaying || !supportsRVFC) return;
@@ -636,10 +641,11 @@ const NativePreviewVideo: React.FC<{
       const clamped = Math.min(Math.max(0, target), dur - 0.05);
 
       const drift = v.currentTime - clamped;
-      const absDrift = Math.abs(drift);
-
-      if (absDrift > 0.2) {
-        // Large drift (>200ms) — hard seek, reset rate
+      if (shouldHardSeekForPlaybackDrift({
+        driftSeconds: drift,
+        timeSinceLastSyncMs: Date.now() - lastSyncTimeRef.current,
+      })) {
+        // Large drift — hard seek, reset rate
         if (v.readyState >= 1) {
           try {
             v.currentTime = clamped;
@@ -649,14 +655,14 @@ const NativePreviewVideo: React.FC<{
           }
         }
         v.playbackRate = nominalRate;
-      } else if (absDrift > 0.016) {
-        // Small drift (16-200ms) — smooth rate-based correction.
-        // Proportional: larger drift → stronger correction (up to ±5%).
-        // Converges in ~0.3-0.5s without visible jumps.
-        const correction = Math.min(0.05, absDrift * 0.3);
-        v.playbackRate = drift > 0
-          ? nominalRate * (1 - correction) // ahead → slow down
-          : nominalRate * (1 + correction); // behind → speed up
+      } else if (Math.abs(drift) > VIDEO_DRIFT_RATE_CORRECTION_THRESHOLD_SECONDS) {
+        // Small-to-medium drift — smooth rate-based correction.
+        // Allow a stronger slow-down when video is ahead so main-thread load
+        // doesn't trigger visible backward seeks during heavy preview renders.
+        v.playbackRate = getPlaybackRateForDrift({
+          driftSeconds: drift,
+          nominalRate,
+        });
       } else {
         // In sync (within ~1 frame) — nominal rate
         v.playbackRate = nominalRate;
