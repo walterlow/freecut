@@ -117,7 +117,6 @@ function itemNeedsCompositionRendererOverlay(
   return (
     hasEnabledGpuEffects(item)
     || hasSoftClipMasks(effectiveMasks)
-    || hasSoftShapeMask(item)
     || Boolean(item.blendMode && item.blendMode !== 'normal')
     || hasCornerPin(item.cornerPin)
     || (
@@ -208,7 +207,6 @@ export function shouldForcePlaybackCompositionRendererOverlay(args: {
  * - Enabled GPU effects
  * - Non-normal blend modes
  * - Soft clip masks (feathered, partial-opacity, inverted, subtract/intersect)
- * - Soft shape masks (alpha masks / feathered shape masks)
  * - Corner pin distortion or active corner pin editing
  * - Nested sub-compositions with those same overlay-only features
  *
@@ -217,9 +215,10 @@ export function shouldForcePlaybackCompositionRendererOverlay(args: {
  *
  * Playback is intentionally narrower. Transitions still force the playback
  * overlay, and soft masks do too because the native video path can jitter
- * against feathered/per-pixel masking. Standalone GPU effects still do not.
- * That avoids running a second full-resolution composition render on every
- * playback frame for effect-heavy clips.
+ * against feathered/per-pixel masking. Shape masks stay on the DOM skim path
+ * for responsiveness, but playback still forces the overlay for soft shape
+ * masks. Standalone GPU effects still do not. That avoids running a second
+ * full-resolution composition render on every playback frame for effect-heavy clips.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {

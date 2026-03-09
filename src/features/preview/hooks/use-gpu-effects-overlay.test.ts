@@ -121,7 +121,7 @@ describe('shouldForceCompositionRendererOverlay', () => {
     })).toBe(true);
   });
 
-  it('only forces shape-mask overlay for soft shape masks', () => {
+  it('does not force scrub overlay for shape masks', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
@@ -154,10 +154,10 @@ describe('shouldForceCompositionRendererOverlay', () => {
       isCornerPinEditing: false,
       previewCornerPin: null,
       compositionById: {},
-    })).toBe(true);
+    })).toBe(false);
   });
 
-  it('recurses into sub-compositions for transitions and soft masks', () => {
+  it('recurses into sub-compositions for transitions and soft clip masks', () => {
     expect(shouldForceCompositionRendererOverlay({
       items: [
         createItem({
@@ -188,12 +188,7 @@ describe('shouldForceCompositionRendererOverlay', () => {
           items: [
             createItem({
               id: 'child-mask',
-              type: 'shape',
-              shapeType: 'rectangle',
-              fillColor: '#ffffff',
-              isMask: true,
-              maskType: 'alpha',
-              maskFeather: 10,
+              masks: [createMask({ feather: 10 })],
             }),
           ],
           transitions: [
