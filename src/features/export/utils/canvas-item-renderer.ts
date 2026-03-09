@@ -17,6 +17,7 @@ import type {
   ShapeItem,
   CompositionItem,
 } from '@/types/timeline';
+import type { ClipMask } from '@/types/masks';
 import type { ItemKeyframes } from '@/types/keyframe';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -33,6 +34,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
+import { renderMasksToCanvas } from '@/infrastructure/gpu/masks';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
@@ -42,6 +44,36 @@ import { getShapePath, rotatePath } from '@/features/export/deps/composition-run
 import { hasCornerPin, drawCornerPinImage } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
+
+function getActiveClipMasks(item: TimelineItem): ClipMask[] {
+  return item.masks?.filter((mask) => mask.enabled && mask.vertices.length >= 2) ?? [];
+}
+
+function applySubItemClipMasks(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  canvasSettings: CanvasSettings,
+): boolean {
+  const clipMasks = getActiveClipMasks(item);
+  if (clipMasks.length === 0) return false;
+
+  const maskCanvas = renderMasksToCanvas(
+    clipMasks,
+    Math.max(1, Math.ceil(transform.width)),
+    Math.max(1, Math.ceil(transform.height)),
+  );
+
+  const itemLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const itemTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(maskCanvas, itemLeft, itemTop);
+  ctx.restore();
+
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -407,7 +439,7 @@ async function renderVideoItem(
         canvasSettings,
       );
 
-      if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
+      if (import.meta.env.DEV && log.isEnabled('debug') && (frame < 5 || frame % 60 === 0)) {
         log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
       }
 
@@ -429,11 +461,13 @@ async function renderVideoItem(
       // Distinguish transient misses from decode failures.
       const failureKind = extractor.getLastFailureKind();
       if (failureKind === 'no-sample') {
-        log.debug('Mediabunny had no sample for timestamp, using per-frame fallback', {
-          itemId: item.id,
-          frame,
-          sourceTime: clampedTime,
-        });
+        if (log.isEnabled('debug')) {
+          log.debug('Mediabunny had no sample for timestamp, using per-frame fallback', {
+            itemId: item.id,
+            frame,
+            sourceTime: clampedTime,
+          });
+        }
       } else {
         const failureCount = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
         mediabunnyFailureCountByItem.set(item.id, failureCount);
@@ -459,7 +493,9 @@ async function renderVideoItem(
           if (hasVideoFallbackPath) {
             log.warn('Mediabunny frame draw failed, using fallback', logData);
           } else {
-            log.debug('Mediabunny frame draw failed in preview strict mode', logData);
+            if (log.isEnabled('debug')) {
+              log.debug('Mediabunny frame draw failed in preview strict mode', logData);
+            }
           }
         }
       }
@@ -540,7 +576,7 @@ async function renderVideoItem(
     canvasSettings,
   );
 
-  if (import.meta.env.DEV && (frame < 5 || frame % 30 === 0)) {
+  if (import.meta.env.DEV && log.isEnabled('debug') && (frame < 5 || frame % 30 === 0)) {
     log.debug(`VIDEO DRAW (fallback) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s readyState=${video.readyState}`);
   }
 
@@ -1055,7 +1091,23 @@ async function renderCompositionItem(
           });
         }
 
-        await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        const hasClipMasks = getActiveClipMasks(subItem).length > 0;
+        if (!hasClipMasks) {
+          await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        } else {
+          const { canvas: subItemCanvas, ctx: subItemCtx } = rctx.canvasPool.acquire();
+          try {
+            subItemCanvas.width = item.compositionWidth;
+            subItemCanvas.height = item.compositionHeight;
+            subItemCtx.clearRect(0, 0, subItemCanvas.width, subItemCanvas.height);
+
+            await renderItem(subItemCtx, subItem, subItemTransform, localFrame, subRctx);
+            applySubItemClipMasks(subItemCtx, subItem, subItemTransform, subCanvasSettings);
+            subContentCtx.drawImage(subItemCanvas, 0, 0);
+          } finally {
+            rctx.canvasPool.release(subItemCanvas);
+          }
+        }
         renderedSubItems++;
       }
     }
