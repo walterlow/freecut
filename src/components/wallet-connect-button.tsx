@@ -9,7 +9,10 @@ import {
   useUser,
 } from '@account-kit/react';
 import { useNavigate } from '@tanstack/react-router';
-import { ChevronDown, Copy, Wallet } from 'lucide-react';
+import { useEffect } from 'react';
+import { ChevronDown, Copy, DollarSign, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
+import { useBuyUsdcOnramp } from '@/hooks/use-buy-usdc-onramp';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -82,6 +85,17 @@ function WalletConnectButtonInner({
     chain,
     address as `0x${string}` | undefined
   );
+  const { openBuyUsdc, isLoading: isOnrampLoading, error: onrampError } = useBuyUsdcOnramp();
+
+  useEffect(() => {
+    if (onrampError) {
+      toast.error('Buy USDC', { description: onrampError });
+    }
+  }, [onrampError]);
+
+  const handleBuyUsdc = () => {
+    void openBuyUsdc({ address: address ?? undefined });
+  };
 
   const handleDisconnect = async () => {
     await logout();
@@ -144,6 +158,15 @@ function WalletConnectButtonInner({
         )}
         <DropdownMenuItem disabled className="text-muted-foreground">
           USDC: {usdcFormatted}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={handleBuyUsdc}
+          disabled={isOnrampLoading}
+          className="flex cursor-pointer items-center gap-2"
+          aria-label="Buy USDC"
+        >
+          <DollarSign className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
+          {isOnrampLoading ? 'Opening…' : 'Buy USDC'}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5">

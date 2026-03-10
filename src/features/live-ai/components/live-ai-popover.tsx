@@ -1,7 +1,7 @@
 'use client';
 
 import { Component, useEffect, useRef, useCallback, useState } from 'react';
-import { Circle, Settings, CameraOff } from 'lucide-react';
+import { Circle, Settings, CameraOff, Maximize2, Minimize } from 'lucide-react';
 import { useAccount } from '@account-kit/react';
 import { useBroadcast, usePlayer } from '@daydreamlive/react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useBuyUsdcOnramp } from '@/hooks/use-buy-usdc-onramp';
 import { useLiveSessionStore } from '../stores/live-session-store';
 import { useBillingLoop } from '../hooks/use-billing-loop';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -594,13 +595,17 @@ function LiveAISessionWithBroadcastCore({
   const whepUrl = isLive && 'whepUrl' in broadcast.status ? broadcast.status.whepUrl : '';
   const player = usePlayer({ whepUrl: whepUrl || null, autoPlay: true, reconnect: { enabled: true } });
 
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const isRecording = useLiveSessionStore((s) => s.isRecording);
   const setRecording = useLiveSessionStore((s) => s.setRecording);
+  const includeTimelineAudio = useLiveSessionStore((s) => s.includeTimelineAudio);
   const addRecordedTake = useLiveSessionStore((s) => s.addRecordedTake);
   const setStreamActive = useLiveSessionStore((s) => s.setStreamActive);
   const setStreamId = useLiveSessionStore((s) => s.setStreamId);
   const billingError = useLiveSessionStore((s) => s.billingError);
   const setBillingError = useLiveSessionStore((s) => s.setBillingError);
+  const { address } = useAccount({ type: 'LightAccount' });
+  const { openBuyUsdc, isLoading: isOnrampLoading } = useBuyUsdcOnramp();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingStartRef = useRef<number>(0);
   const linkedTimelineStartRef = useRef<number>(0);
@@ -726,7 +731,18 @@ function LiveAISessionWithBroadcastCore({
       {billingEnabled && billingError && (
         <div className="mb-2 p-2 rounded-md bg-destructive/10 border border-destructive/20 text-xs">
           {billingError === 'insufficient_balance' && (
-            <p>Top up USDC on Arbitrum to continue.</p>
+            <div className="flex flex-col gap-2">
+              <p>Top up USDC on Arbitrum to continue.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit text-xs"
+                onClick={() => void openBuyUsdc({ address: address ?? undefined })}
+                disabled={isOnrampLoading}
+              >
+                {isOnrampLoading ? 'Opening…' : 'Buy USDC'}
+              </Button>
+            </div>
           )}
           {billingError === 'session_limit_exceeded' && (
             <p>You&apos;ve used 10 USDC this session. Authorize another 10 USDC to continue?</p>
@@ -759,26 +775,93 @@ function LiveAISessionWithBroadcastCore({
           </Button>
         </div>
       </div>
-      <div className="aspect-video w-full bg-muted rounded-md overflow-hidden relative">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover absolute inset-0"
-          style={{ display: previewView === 'camera' ? 'block' : 'none' }}
-          aria-hidden
-        />
-        <video
-          ref={player.videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover absolute inset-0"
-          style={{ display: previewView === 'ai' ? 'block' : 'none' }}
-          aria-hidden
-        />
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ visibility: 'hidden' }} aria-hidden />
+      <div
+        className={
+          isPreviewFullscreen
+            ? 'fixed inset-0 z-50 bg-black flex flex-col'
+            : 'aspect-video w-full bg-muted rounded-md overflow-hidden relative'
+        }
+      >
+        <div
+          className={
+            isPreviewFullscreen ? 'flex-1 min-h-0 relative' : 'absolute inset-0'
+          }
+        >
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`w-full h-full absolute inset-0 ${isPreviewFullscreen ? 'object-contain' : 'object-cover'}`}
+            style={{ display: previewView === 'camera' ? 'block' : 'none' }}
+            aria-hidden
+          />
+          <video
+            ref={player.videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`w-full h-full absolute inset-0 ${isPreviewFullscreen ? 'object-contain' : 'object-cover'}`}
+            style={{ display: previewView === 'ai' ? 'block' : 'none' }}
+            aria-hidden
+          />
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" style={{ visibility: 'hidden' }} aria-hidden />
+        </div>
+        {!isPreviewFullscreen && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon"
+            className="absolute top-2 right-2 z-10 h-10 w-10 rounded-full shadow-md min-h-[44px] min-w-[44px]"
+            onClick={() => setIsPreviewFullscreen(true)}
+            aria-label="Fullscreen"
+          >
+            <Maximize2 className="w-5 h-5" />
+          </Button>
+        )}
+        {isPreviewFullscreen && (
+          <div
+            className="flex items-center justify-between gap-3 px-3 py-3 border-t border-border bg-background/95 flex-shrink-0"
+            style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-[44px] min-w-[44px] shrink-0"
+              onClick={() => setIsPreviewFullscreen(false)}
+              aria-label="Exit fullscreen"
+            >
+              <Minimize className="w-5 h-5" />
+            </Button>
+            {!isRecording ? (
+              <Button
+                variant="destructive"
+                size="icon"
+                className="h-12 w-12 rounded-full shrink-0 min-h-[44px] min-w-[44px]"
+                aria-label="Record"
+                onClick={() => {
+                  if (includeTimelineAudio) {
+                    usePlaybackStore.getState().play();
+                  }
+                  setRecording(true);
+                }}
+              >
+                <Circle className="w-6 h-6 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] shrink-0"
+                aria-label="Stop recording"
+                onClick={() => setRecording(false)}
+              >
+                Stop
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       <p className="text-xs text-muted-foreground mt-1">
         Broadcast: {broadcast.status.state} · Player: {player.status.state}

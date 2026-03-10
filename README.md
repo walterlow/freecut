@@ -188,6 +188,8 @@ Copy `.env.example` to `.env.local` and set the variables you need (Alchemy, Liv
 
 **Optional:** `VITE_USE_MAINNET=true` (mainnet chains in dev); `VITE_STYLUS_STYLE_REGISTRY` (Phase 2 style registry); `VITE_METOKEN_REGISTRY_BASE` (Phase 2 MeToken gating).
 
+**Coinbase-hosted onramp (Buy USDC):** The wallet dropdown and Live AI “Top up USDC” flow open a Coinbase-hosted onramp URL. The serverless endpoint `api/onramp-url` must be configured with **server-side only** env vars (Vercel: Project → Settings → Environment Variables): `COINBASE_CDP_API_KEY_NAME` and `COINBASE_CDP_API_KEY_SECRET` from the [Coinbase CDP Portal](https://portal.cdp.coinbase.com/projects/api-keys). Optional frontend `VITE_ONRAMP_API_URL` if the onramp API is on a different origin.
+
 **Deploy (e.g. Vercel):** Set the same `VITE_*` variables in the project’s Environment Variables. Do **not** put `DEPLOYER_PRIVATE_KEY` or other secrets in the hosting env; those stay in local `.env.local` for contract deploy scripts only.
 
 **Contracts (already deployed):**

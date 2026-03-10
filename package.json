@@ -30,6 +30,7 @@
   "dependencies": {
     "@account-kit/infra": "^4.9.0",
     "@account-kit/react": "^4.32.0",
+    "@coinbase/cdp-sdk": "^1.45.0",
     "@daydreamlive/react": "^0.3.2",
     "@daydreamlive/sdk": "^0.1.1",
     "@hookform/resolvers": "^5.2.2",
