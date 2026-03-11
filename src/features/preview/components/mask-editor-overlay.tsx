@@ -229,6 +229,23 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     }
   }, [getVertices, vertexToScreen, handleToScreen, draggingVertexIndex, draggingHandle, hoveredVertexIndex, hoveredHandle]);
 
+  /** Draw a single bezier/line segment between two vertices */
+  const drawSegment = useCallback((ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => {
+    const outH = curr.outHandle;
+    const inH = next.inHandle;
+    const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
+
+    if (isStraight) {
+      const [nx, ny] = vertexToScreen(next);
+      ctx.lineTo(nx, ny);
+    } else {
+      const [cp1x, cp1y] = handleToScreen(curr, 'out');
+      const [cp2x, cp2y] = handleToScreen(next, 'in');
+      const [nx, ny] = vertexToScreen(next);
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, nx, ny);
+    }
+  }, [vertexToScreen, handleToScreen]);
+
   /** Draw open pen path with rubber-band line */
   const drawPenPath = useCallback((ctx: CanvasRenderingContext2D) => {
     if (penVertices.length === 0) {
@@ -256,8 +273,29 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
+    const isClosingPreview =
+      penVertices.length >= 3 &&
+      draggingVertexIndex === 0 &&
+      draggingHandle === 'out';
+
+    // Preview the closing segment while shaping the final bezier.
+    if (isClosingPreview) {
+      const last = penVertices[penVertices.length - 1]!;
+      const first = penVertices[0]!;
+
+      ctx.beginPath();
+      const [lx, ly] = vertexToScreen(last);
+      ctx.moveTo(lx, ly);
+      drawSegment(ctx, last, first);
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // Rubber-band line from last vertex to cursor
-    if (penCursorPos && !penDraggingHandle) {
+    if (penCursorPos && !penDraggingHandle && !isClosingPreview) {
       const last = penVertices[penVertices.length - 1]!;
       const [lx, ly] = vertexToScreen(last);
       const [cx, cy] = normToScreen(penCursorPos);
@@ -347,24 +385,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       ctx.lineWidth = isCloseHovered ? 2.5 : 1.5;
       ctx.stroke();
     }
-  }, [penVertices, penCursorPos, penDraggingHandle, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, hoveredVertexIndex, hoveredHandle]);
-
-  /** Draw a single bezier/line segment between two vertices */
-  const drawSegment = useCallback((ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => {
-    const outH = curr.outHandle;
-    const inH = next.inHandle;
-    const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
-
-    if (isStraight) {
-      const [nx, ny] = vertexToScreen(next);
-      ctx.lineTo(nx, ny);
-    } else {
-      const [cp1x, cp1y] = handleToScreen(curr, 'out');
-      const [cp2x, cp2y] = handleToScreen(next, 'in');
-      const [nx, ny] = vertexToScreen(next);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, nx, ny);
-    }
-  }, [vertexToScreen, handleToScreen]);
+  }, [penVertices, penCursorPos, penDraggingHandle, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, hoveredVertexIndex, hoveredHandle, drawSegment]);
 
   /** Draw a single vertex with its handles */
   const drawVertexWithHandles = useCallback((ctx: CanvasRenderingContext2D, v: MaskVertex, i: number) => {
@@ -599,12 +620,14 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
       if (hit) {
         const handleType = hit.type === 'inHandle' ? 'in' : hit.type === 'outHandle' ? 'out' : null;
+        const isClosingVertex = hit.type === 'vertex' && hit.index === 0 && penVertices.length >= 3;
         penInteractionRef.current =
-          hit.type === 'vertex' && hit.index === 0 && penVertices.length >= 3
+          isClosingVertex
             ? {
                 type: 'close-or-drag',
                 vertexIndex: hit.index,
-                handleType: null,
+                // Match normal point placement: drag sets the anchor's outgoing direction.
+                handleType: 'out',
                 startScreenPos: [e.clientX, e.clientY],
                 startCanvasPos: [canvasPos.x, canvasPos.y],
                 startVertices: cloneVertices(penVertices),
@@ -631,7 +654,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
                 };
         setPenDragging(true);
         setHover(hit.index, handleType);
-        if (hit.type === 'vertex' && !(hit.index === 0 && penVertices.length >= 3)) {
+        if (hit.type === 'vertex' && !isClosingVertex) {
           startVertexDrag(hit.index);
         } else if (handleType) {
           startHandleDrag(hit.index, handleType);
@@ -701,8 +724,10 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
         if (!interaction.hasMoved) {
           interaction.hasMoved = true;
-          if (interaction.type === 'close-or-drag' || interaction.type === 'vertex') {
+          if (interaction.type === 'vertex') {
             startVertexDrag(interaction.vertexIndex);
+          } else if (interaction.type === 'close-or-drag') {
+            startHandleDrag(interaction.vertexIndex, interaction.handleType ?? 'in');
           } else if (interaction.handleType) {
             startHandleDrag(interaction.vertexIndex, interaction.handleType);
           }
@@ -750,7 +775,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       setPenDragging(false);
       endDrag();
 
-      if (interaction.type === 'close-or-drag' && !interaction.hasMoved) {
+      if (interaction.type === 'close-or-drag') {
         closePenPathRef.current?.();
         return;
       }
@@ -898,18 +923,34 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   }, [cancelPenMode, commitShapePenPath]);
   closePenPathRef.current = closePenPath;
 
-  // Escape key to cancel pen mode
+  // Keyboard shortcuts for the in-progress pen path.
   useEffect(() => {
     if (!penMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
         cancelPenMode();
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        const state = useMaskEditorStore.getState();
+        if (state.penVertices.length === 0) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const nextVertices = state.penVertices.slice(0, -1);
+        penInteractionRef.current = null;
+        setPenDragging(false);
+        endDrag();
+        setPenVertices(nextVertices);
+        setHover(nextVertices.length > 0 ? nextVertices.length - 1 : null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [penMode, cancelPenMode]);
+  }, [penMode, cancelPenMode, endDrag, setHover, setPenDragging, setPenVertices]);
 
   // ============================================================
   // Edit mode: mouse handlers
