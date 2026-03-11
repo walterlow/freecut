@@ -8,6 +8,7 @@ import { useCornerPinStore, useMaskEditorStore } from '@/features/composition-ru
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
   renderClipMasksToDataUrl,
+  renderSvgMaskPathsToDataUrl,
   shouldUseComplexClipMask,
 } from '../utils/clip-mask-raster';
 import type { MaskInfo } from './item';
@@ -42,9 +43,45 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
   const state = useItemVisualState(item, masks);
 
   // Compute mask style based on mask type
+  const rasterSvgMaskDataUrl = useMemo(() => {
+    if (state.maskType !== 'svg-mask' || !state.svgMaskPaths) {
+      return null;
+    }
+
+    return renderSvgMaskPathsToDataUrl(
+      state.svgMaskPaths,
+      canvasWidth,
+      canvasHeight,
+      state.maskFeather,
+      state.maskInvert,
+    );
+  }, [
+    state.maskType,
+    state.svgMaskPaths,
+    state.maskFeather,
+    state.maskInvert,
+    canvasWidth,
+    canvasHeight,
+  ]);
+
   const maskStyle = useMemo((): React.CSSProperties => {
     if (state.maskType === 'clip' && state.maskClipPath) {
       return { clipPath: state.maskClipPath };
+    }
+    if (state.maskType === 'svg-mask' && rasterSvgMaskDataUrl) {
+      return {
+        maskImage: `url("${rasterSvgMaskDataUrl}")`,
+        WebkitMaskImage: `url("${rasterSvgMaskDataUrl}")`,
+        maskRepeat: 'no-repeat',
+        WebkitMaskRepeat: 'no-repeat',
+        maskSize: '100% 100%',
+        WebkitMaskSize: '100% 100%',
+        maskPosition: '0 0',
+        WebkitMaskPosition: '0 0',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden' as const,
+        contain: 'paint',
+      };
     }
     if (state.maskType === 'svg-mask' && state.svgMaskId) {
       return {
@@ -53,7 +90,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       };
     }
     return {};
-  }, [state.maskType, state.maskClipPath, state.svgMaskId]);
+  }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterSvgMaskDataUrl]);
 
   // Live mask preview during slider drag — reads from lightweight preview store
   // so updates bypass the slow React prop chain (items-store → tracks → composition).
@@ -167,7 +204,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
-    if (state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
+    if (rasterSvgMaskDataUrl || state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
       return null;
     }
 
@@ -221,7 +258,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         </defs>
       </svg>
     );
-  }, [state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
+  }, [rasterSvgMaskDataUrl, state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
 
   return (
     <>

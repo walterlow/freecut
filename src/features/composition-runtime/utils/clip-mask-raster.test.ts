@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getClipMaskRasterScale,
+  getClipMaskRasterSize,
   remapMaskImageDataToAlpha,
   shouldUseComplexClipMask,
 } from './clip-mask-raster';
@@ -29,6 +31,26 @@ describe('shouldUseComplexClipMask', () => {
 
   it('returns true for feathered clip masks', () => {
     expect(shouldUseComplexClipMask([createMask({ feather: 16 })])).toBe(true);
+  });
+});
+
+describe('getClipMaskRasterScale', () => {
+  it('keeps native resolution for non-feathered masks', () => {
+    expect(getClipMaskRasterScale([createMask()], 1920, 1080)).toBe(1);
+  });
+
+  it('downscales large feathered masks', () => {
+    expect(getClipMaskRasterScale([createMask({ feather: 24 })], 1920, 1080)).toBeLessThan(1);
+  });
+});
+
+describe('getClipMaskRasterSize', () => {
+  it('returns scaled raster dimensions for large feathered masks', () => {
+    const size = getClipMaskRasterSize([createMask({ feather: 24 })], 1920, 1080);
+
+    expect(size.width).toBe(960);
+    expect(size.height).toBe(540);
+    expect(size.scale).toBe(0.5);
   });
 });
 

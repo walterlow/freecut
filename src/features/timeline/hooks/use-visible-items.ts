@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
@@ -17,65 +17,160 @@ const BUFFER_PX = 500;
 const EMPTY_ITEMS: TimelineItem[] = [];
 const EMPTY_TRANSITIONS: Transition[] = [];
 
+interface VisibleFrameRange {
+  start: number;
+  end: number;
+}
+
+interface VisibleItemsSnapshot {
+  visibleItems: TimelineItem[];
+  visibleTransitions: Transition[];
+}
+
 /**
  * Returns only the items and transitions that overlap the visible viewport + buffer
  * for a given track. Items fully outside the range are not rendered as React components.
  */
 export function useVisibleItems(trackId: string) {
-  const scrollLeft = useTimelineViewportStore((s) => s.scrollLeft);
-  const viewportWidth = useTimelineViewportStore((s) => s.viewportWidth);
-  const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
-  const fps = useTimelineSettingsStore((s) => s.fps);
-  const items = useItemsStore((s) => s.itemsByTrackId[trackId]);
-  const transitions = useTransitionsStore((s) => s.transitionsByTrackId[trackId]);
+  const [snapshot, setSnapshot] = useState<VisibleItemsSnapshot>(() => computeVisibleItemsSnapshot(trackId));
 
-  // Convert pixel range to frame range once
-  const visibleFrameRange = useMemo(() => {
-    if (pixelsPerSecond <= 0 || fps <= 0) return { start: 0, end: Infinity };
-    const leftPx = scrollLeft - BUFFER_PX;
-    const rightPx = scrollLeft + viewportWidth + BUFFER_PX;
-    const startFrame = Math.max(0, Math.floor((leftPx / pixelsPerSecond) * fps));
-    const endFrame = Math.ceil((rightPx / pixelsPerSecond) * fps);
-    return { start: startFrame, end: endFrame };
-  }, [scrollLeft, viewportWidth, pixelsPerSecond, fps]);
+  useEffect(() => {
+    const apply = () => {
+      const next = computeVisibleItemsSnapshot(trackId);
+      setSnapshot((prev) => (areVisibleSnapshotsEqual(prev, next) ? prev : next));
+    };
 
-  // Filter items by frame overlap
-  const visibleItems = useMemo(() => {
-    if (!items || items.length === 0) return EMPTY_ITEMS;
-    const { start, end } = visibleFrameRange;
-    const filtered = items.filter((item) => {
-      const itemEnd = item.from + item.durationInFrames;
-      return itemEnd > start && item.from < end;
-    });
-    // Return original array if nothing was filtered out (referential stability)
-    return filtered.length === items.length ? items : filtered;
-  }, [items, visibleFrameRange]);
+    apply();
 
-  // Filter transitions — a transition is visible if either of its adjacent clips is visible
-  const visibleTransitions = useMemo(() => {
-    if (!transitions || transitions.length === 0) return EMPTY_TRANSITIONS;
-    if (!items || items.length === 0) return EMPTY_TRANSITIONS;
+    const unsubscribers = [
+      useTimelineViewportStore.subscribe(apply),
+      useZoomStore.subscribe(apply),
+      useTimelineSettingsStore.subscribe(apply),
+      useItemsStore.subscribe(apply),
+      useTransitionsStore.subscribe(apply),
+    ];
 
-    const { start, end } = visibleFrameRange;
-    const visibleItemIds = new Set(visibleItems.map((item) => item.id));
-
-    const filtered = transitions.filter((t) => {
-      if (visibleItemIds.has(t.leftClipId) || visibleItemIds.has(t.rightClipId)) {
-        return true;
+    return () => {
+      for (const unsubscribe of unsubscribers) {
+        unsubscribe();
       }
-      // Fallback: check if transition spans the visible range even if both clips are outside buffer
-      const leftClip = items.find((item) => item.id === t.leftClipId);
-      const rightClip = items.find((item) => item.id === t.rightClipId);
-      if (leftClip && rightClip) {
-        const transStart = leftClip.from + leftClip.durationInFrames - t.durationInFrames;
-        const transEnd = rightClip.from + t.durationInFrames;
-        return transEnd > start && transStart < end;
-      }
-      return false;
-    });
+    };
+  }, [trackId]);
 
-    return filtered.length === transitions.length ? transitions : filtered;
-  }, [transitions, items, visibleFrameRange, visibleItems]);
+  return snapshot;
+}
+
+function computeVisibleItemsSnapshot(trackId: string): VisibleItemsSnapshot {
+  const { scrollLeft, viewportWidth } = useTimelineViewportStore.getState();
+  const { pixelsPerSecond } = useZoomStore.getState();
+  const { fps } = useTimelineSettingsStore.getState();
+  const items = useItemsStore.getState().itemsByTrackId[trackId];
+  const transitions = useTransitionsStore.getState().transitionsByTrackId[trackId];
+  const visibleFrameRange = getVisibleFrameRange(scrollLeft, viewportWidth, pixelsPerSecond, fps);
+  const visibleItems = getVisibleItemsForRange(items, visibleFrameRange);
+  const visibleTransitions = getVisibleTransitionsForRange(
+    transitions,
+    items,
+    visibleItems,
+    visibleFrameRange
+  );
 
   return { visibleItems, visibleTransitions };
+}
+
+function getVisibleFrameRange(
+  scrollLeft: number,
+  viewportWidth: number,
+  pixelsPerSecond: number,
+  fps: number
+): VisibleFrameRange {
+  if (pixelsPerSecond <= 0 || fps <= 0) {
+    return { start: 0, end: Infinity };
+  }
+
+  const leftPx = scrollLeft - BUFFER_PX;
+  const rightPx = scrollLeft + viewportWidth + BUFFER_PX;
+  const startFrame = Math.max(0, Math.floor((leftPx / pixelsPerSecond) * fps));
+  const endFrame = Math.ceil((rightPx / pixelsPerSecond) * fps);
+
+  return { start: startFrame, end: endFrame };
+}
+
+function getVisibleItemsForRange(
+  items: TimelineItem[] | undefined,
+  visibleFrameRange: VisibleFrameRange
+): TimelineItem[] {
+  if (!items || items.length === 0) {
+    return EMPTY_ITEMS;
+  }
+
+  const { start, end } = visibleFrameRange;
+  const filtered = items.filter((item) => {
+    const itemEnd = item.from + item.durationInFrames;
+    return itemEnd > start && item.from < end;
+  });
+
+  return filtered.length === items.length ? items : filtered;
+}
+
+function getVisibleTransitionsForRange(
+  transitions: Transition[] | undefined,
+  items: TimelineItem[] | undefined,
+  visibleItems: TimelineItem[],
+  visibleFrameRange: VisibleFrameRange
+): Transition[] {
+  if (!transitions || transitions.length === 0) {
+    return EMPTY_TRANSITIONS;
+  }
+
+  if (!items || items.length === 0) {
+    return EMPTY_TRANSITIONS;
+  }
+
+  const { start, end } = visibleFrameRange;
+  const visibleItemIds = new Set(visibleItems.map((item) => item.id));
+
+  const filtered = transitions.filter((transition) => {
+    if (visibleItemIds.has(transition.leftClipId) || visibleItemIds.has(transition.rightClipId)) {
+      return true;
+    }
+
+    const leftClip = items.find((item) => item.id === transition.leftClipId);
+    const rightClip = items.find((item) => item.id === transition.rightClipId);
+    if (!leftClip || !rightClip) {
+      return false;
+    }
+
+    const transitionStart = leftClip.from + leftClip.durationInFrames - transition.durationInFrames;
+    const transitionEnd = rightClip.from + transition.durationInFrames;
+    return transitionEnd > start && transitionStart < end;
+  });
+
+  return filtered.length === transitions.length ? transitions : filtered;
+}
+
+function areVisibleSnapshotsEqual(
+  prev: VisibleItemsSnapshot,
+  next: VisibleItemsSnapshot
+): boolean {
+  return areArraysShallowEqual(prev.visibleItems, next.visibleItems)
+    && areArraysShallowEqual(prev.visibleTransitions, next.visibleTransitions);
+}
+
+function areArraysShallowEqual<T>(prev: T[], next: T[]): boolean {
+  if (prev === next) {
+    return true;
+  }
+
+  if (prev.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < prev.length; index++) {
+    if (prev[index] !== next[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
