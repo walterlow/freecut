@@ -45,7 +45,20 @@ const NativePreviewVideo: React.FC<{
   audioVolume: number;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ poolClipId, itemId, src, safeTrimBefore, sequenceFrameOffset = 0, sourceFps, playbackRate, audioVolume, onError, containerRef }) => {
+  forceCssComposite?: boolean;
+}> = ({
+  poolClipId,
+  itemId,
+  src,
+  safeTrimBefore,
+  sequenceFrameOffset = 0,
+  sourceFps,
+  playbackRate,
+  audioVolume,
+  onError,
+  containerRef,
+  forceCssComposite = false,
+}) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
   const sequenceContext = useSequenceContext();
@@ -271,6 +284,15 @@ const NativePreviewVideo: React.FC<{
       element.style.position = 'absolute';
       element.style.top = '0';
       element.style.left = '0';
+      if (forceCssComposite) {
+        element.style.transform = 'translateZ(0)';
+        element.style.backfaceVisibility = 'hidden';
+        element.style.willChange = 'transform, opacity';
+      } else {
+        element.style.transform = '';
+        element.style.backfaceVisibility = '';
+        element.style.willChange = '';
+      }
       element.id = `pooled-video-${poolClipId}`;
       container.appendChild(element);
 
@@ -359,6 +381,20 @@ const NativePreviewVideo: React.FC<{
     // Note: frame, fps, targetTime intentionally NOT in deps - we only want to acquire once on mount
     // Ongoing seeking is handled by the separate sync effect
   }, [poolClipId, src, pool, containerRef, shortId, itemId, syncRegisteredVideoElement, clearRegisteredVideoElement]);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    if (forceCssComposite) {
+      element.style.transform = 'translateZ(0)';
+      element.style.backfaceVisibility = 'hidden';
+      element.style.willChange = 'transform, opacity';
+      return;
+    }
+    element.style.transform = '';
+    element.style.backfaceVisibility = '';
+    element.style.willChange = '';
+  }, [forceCssComposite]);
 
   // Sync video playback with timeline
   // Layout pass handles immediate seeks before paint to avoid one-frame stale
@@ -705,6 +741,12 @@ const NativePreviewVideo: React.FC<{
         position: 'relative',
         // Hide when premounted (frame < 0), otherwise inherit parent visibility
         visibility: isVisible ? undefined : 'hidden',
+        ...(forceCssComposite ? {
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden' as const,
+          willChange: 'transform, opacity',
+          contain: 'paint',
+        } : {}),
       }}
     >
       {/* Video element is mounted here by the useEffect */}
@@ -724,7 +766,8 @@ export const VideoContent: React.FC<{
   safeTrimBefore: number;
   playbackRate: number;
   sourceFps: number;
-}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps }) => {
+  forceCssComposite?: boolean;
+}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
   const audioVolume = useVideoAudioVolume(item, muted);
   const [hasError, setHasError] = useState(false);
 
@@ -769,6 +812,7 @@ export const VideoContent: React.FC<{
       audioVolume={audioVolume}
       onError={handleError}
       containerRef={containerRef}
+      forceCssComposite={forceCssComposite}
     />
   );
 };
