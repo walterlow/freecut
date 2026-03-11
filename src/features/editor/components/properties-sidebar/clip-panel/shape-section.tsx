@@ -339,7 +339,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
                 if (isEditingPathShape) {
                   stopEditing();
                 } else {
-                  startEditing(singlePathShape.id, 0);
+                  startEditing(singlePathShape.id);
                 }
               }}
             >

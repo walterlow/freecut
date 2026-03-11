@@ -58,7 +58,6 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
-import { renderMasks } from '@/infrastructure/gpu/masks';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
@@ -1186,8 +1185,7 @@ export async function createCompositionRenderer(
           const deferredGpuCanvas = await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
           canvasPool.release(itemCanvas);
 
-          let source = deferredGpuCanvas ?? effectCanvas;
-          source = applyItemClipMasks(item, source, transform);
+          const source = deferredGpuCanvas ?? effectCanvas;
           if (deferred) {
             return { source, poolCanvases: [effectCanvas] };
           }
@@ -1196,53 +1194,12 @@ export async function createCompositionRenderer(
           return null;
         }
 
-        const maskedCanvas = applyItemClipMasks(item, itemCanvas, transform);
         if (deferred) {
-          return { source: maskedCanvas, poolCanvases: [itemCanvas] };
+          return { source: itemCanvas, poolCanvases: [itemCanvas] };
         }
-        contentCtx.drawImage(maskedCanvas, 0, 0);
+        contentCtx.drawImage(itemCanvas, 0, 0);
         canvasPool.release(itemCanvas);
         return null;
-      };
-
-      /**
-       * Apply per-item bezier ClipMask paths.
-       * Uses the CPU mask renderer to generate a mask ImageData,
-       * then composites it onto the item canvas via destination-in.
-       */
-      const applyItemClipMasks = (
-        item: TimelineItem,
-        source: OffscreenCanvas,
-        transform: ResolvedTransform,
-      ): OffscreenCanvas => {
-        const clipMasks = item.masks?.filter((m) => m.enabled && m.vertices.length >= 2);
-        if (!clipMasks || clipMasks.length === 0) return source;
-
-        const { canvas: maskCanvas, ctx: maskCtx } = canvasPool.acquire();
-
-        // Draw the item content first
-        maskCtx.clearRect(0, 0, canvas.width, canvas.height);
-        maskCtx.drawImage(source, 0, 0);
-
-        // Apply mask: only keep pixels where mask is white (destination-in)
-        maskCtx.globalCompositeOperation = 'destination-in';
-
-        // Mask vertices are in normalized 0-1 space relative to item bounds.
-        // Render mask at item dimensions, then place at item position on canvas.
-        const itemLeft = Math.round(canvas.width / 2 + transform.x - transform.width / 2);
-        const itemTop = Math.round(canvas.height / 2 + transform.y - transform.height / 2);
-        const maskW = Math.round(transform.width);
-        const maskH = Math.round(transform.height);
-
-        const positionedMask = renderMasks(clipMasks, maskW, maskH);
-        const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
-        const tempCtx = tempCanvas.getContext('2d')!;
-        tempCtx.putImageData(positionedMask, itemLeft, itemTop);
-
-        maskCtx.drawImage(tempCanvas, 0, 0);
-        maskCtx.globalCompositeOperation = 'source-over';
-
-        return maskCanvas;
       };
 
       // Helper to check if item should be rendered

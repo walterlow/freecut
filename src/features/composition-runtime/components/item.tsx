@@ -171,9 +171,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
           safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
           sourceFps={sourceFps}
-          forceCssComposite={
-            (item.masks?.some((mask) => mask.enabled) ?? false) || masks.length > 0
-          }
+          forceCssComposite={masks.length > 0}
         />
         {showDebugOverlay && (
           <DebugOverlay

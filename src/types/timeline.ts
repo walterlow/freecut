@@ -1,7 +1,6 @@
 import type { TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
-import type { ClipMask } from './masks';
 
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
@@ -33,8 +32,6 @@ type BaseTimelineItem = {
   effects?: ItemEffect[];
   // Blend mode for layer compositing (default: 'normal')
   blendMode?: BlendMode;
-  // Bezier mask paths
-  masks?: ClipMask[];
   // Corner pin transform (perspective warp)
   cornerPin?: {
     topLeft: [number, number];

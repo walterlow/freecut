@@ -18,7 +18,6 @@ import { GifSection } from './gif-section';
 import { AudioSection } from './audio-section';
 import { TextSection } from './text-section';
 import { ShapeSection } from './shape-section';
-import { MaskSection } from './mask-section';
 import { CornerPinSection } from './corner-pin-section';
 import { EffectsSection } from '@/features/editor/deps/effects-contract';
 
@@ -219,8 +218,6 @@ export const ClipPanel = memo(function ClipPanel() {
                 onTransformChange={handleTransformChange}
               />
               <Separator />
-              <MaskSection items={layoutFillItems} />
-              <Separator />
               <CornerPinSection items={layoutFillItems} />
             </>
           )}
@@ -282,4 +279,3 @@ export const ClipPanel = memo(function ClipPanel() {
     </div>
   );
 });
-

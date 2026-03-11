@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { shouldForceContinuousPreviewOverlay } from './use-gpu-effects-overlay';
 import type { TimelineItem } from '@/types/timeline';
-import type { ClipMask } from '@/types/masks';
 
 function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   return {
@@ -16,44 +15,7 @@ function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   } as TimelineItem;
 }
 
-function createClipMask(overrides: Partial<ClipMask> = {}): ClipMask {
-  return {
-    id: 'mask-1',
-    enabled: true,
-    feather: 24,
-    inverted: false,
-    mode: 'add',
-    opacity: 1,
-    vertices: [
-      {
-        position: [0.1, 0.1],
-        inHandle: [0, 0],
-        outHandle: [0, 0],
-      },
-      {
-        position: [0.9, 0.1],
-        inHandle: [0, 0],
-        outHandle: [0, 0],
-      },
-      {
-        position: [0.9, 0.9],
-        inHandle: [0, 0],
-        outHandle: [0, 0],
-      },
-    ],
-    ...overrides,
-  };
-}
-
 describe('shouldForceContinuousPreviewOverlay', () => {
-  it('does not force continuous overlay for item clip masks alone', () => {
-    const maskedItem = createVideoItem({
-      masks: [createClipMask()],
-    });
-
-    expect(shouldForceContinuousPreviewOverlay([maskedItem], 0)).toBe(false);
-  });
-
   it('forces continuous overlay for active transitions', () => {
     expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1)).toBe(true);
   });

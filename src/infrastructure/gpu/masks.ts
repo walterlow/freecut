@@ -4,4 +4,3 @@
  */
 
 export { MaskTextureManager } from '@/lib/masks/mask-texture-manager';
-export { renderMasks } from '@/lib/masks/mask-renderer';

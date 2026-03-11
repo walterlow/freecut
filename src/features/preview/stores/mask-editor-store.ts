@@ -1,21 +1,19 @@
 /**
  * Mask Editor Store
  *
- * Manages state for the interactive bezier mask path editor overlay.
- * Tracks which mask/vertex is being edited and provides live preview
- * during drag operations.
+ * Manages state for the interactive bezier path editor overlay used by
+ * shape masks. Tracks which path/vertex is being edited and provides
+ * live preview during drag operations.
  */
 
 import { create } from 'zustand';
-import type { MaskVertex, ClipMask } from '@/types/masks';
+import type { MaskVertex } from '@/types/masks';
 
 export interface MaskEditorState {
   /** Whether mask editing mode is active */
   isEditing: boolean;
-  /** The item ID being mask-edited */
+  /** The path shape item currently being edited */
   editingItemId: string | null;
-  /** Which mask index within item.masks is selected */
-  selectedMaskIndex: number;
   /** Which vertex index is being dragged (null if none) */
   draggingVertexIndex: number | null;
   /** Which handle is being dragged: 'in' or 'out' (null if dragging vertex position) */
@@ -38,21 +36,15 @@ export interface MaskEditorState {
   penCursorPos: [number, number] | null;
 
   // --- Shape pen tool state ---
-  /** Whether drawing a shape mask path (creates a ShapeItem instead of ClipMask) */
+  /** Whether drawing a new shape mask path */
   shapePenMode: boolean;
-
-  // --- Live mask property preview (feather/opacity slider drag) ---
-  /** Live preview of all masks during sidebar slider drag */
-  previewMasks: ClipMask[] | null;
 }
 
 export interface MaskEditorActions {
-  /** Enter mask editing mode for a specific item */
-  startEditing: (itemId: string, maskIndex?: number) => void;
+  /** Enter path editing mode for a specific item */
+  startEditing: (itemId: string) => void;
   /** Exit mask editing mode */
   stopEditing: () => void;
-  /** Select a different mask on the same item */
-  selectMask: (maskIndex: number) => void;
   /** Start dragging a vertex position */
   startVertexDrag: (vertexIndex: number) => void;
   /** Start dragging a bezier handle */
@@ -85,18 +77,11 @@ export interface MaskEditorActions {
   // --- Shape pen tool ---
   /** Enter shape pen mode (draws a new ShapeItem with shapeType='path') */
   startShapePenMode: () => void;
-
-  // --- Live mask property preview ---
-  /** Set live preview masks during slider drag */
-  setPreviewMasks: (masks: ClipMask[]) => void;
-  /** Clear preview masks (on mouse up, after committing) */
-  clearPreviewMasks: () => void;
 }
 
 export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()((set, get) => ({
   isEditing: false,
   editingItemId: null,
-  selectedMaskIndex: 0,
   draggingVertexIndex: null,
   draggingHandle: null,
   previewVertices: null,
@@ -107,17 +92,14 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
   penDraggingHandle: false,
   penCursorPos: null,
   shapePenMode: false,
-  previewMasks: null,
 
-  startEditing: (itemId, maskIndex = 0) =>
+  startEditing: (itemId) =>
     set({
       isEditing: true,
       editingItemId: itemId,
-      selectedMaskIndex: maskIndex,
       draggingVertexIndex: null,
       draggingHandle: null,
       previewVertices: null,
-      previewMasks: null,
       hoveredVertexIndex: null,
       hoveredHandle: null,
       penMode: false,
@@ -131,7 +113,6 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
     set({
       isEditing: false,
       editingItemId: null,
-      selectedMaskIndex: 0,
       draggingVertexIndex: null,
       draggingHandle: null,
       previewVertices: null,
@@ -142,16 +123,6 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       penVertices: [],
       penDraggingHandle: false,
       penCursorPos: null,
-      previewMasks: null,
-    }),
-
-  selectMask: (maskIndex) =>
-    set({
-      selectedMaskIndex: maskIndex,
-      draggingVertexIndex: null,
-      draggingHandle: null,
-      previewVertices: null,
-      previewMasks: null,
     }),
 
   startVertexDrag: (vertexIndex) =>
@@ -168,7 +139,6 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingVertexIndex: null,
       draggingHandle: null,
       previewVertices: null,
-      previewMasks: null,
     }),
 
   setHover: (vertexIndex, handle = null) =>
@@ -186,7 +156,6 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingVertexIndex: null,
       draggingHandle: null,
       previewVertices: null,
-      previewMasks: null,
       hoveredVertexIndex: null,
       hoveredHandle: null,
     }),
@@ -205,7 +174,6 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       previewVertices: null,
       hoveredVertexIndex: null,
       hoveredHandle: null,
-      previewMasks: null,
     }),
 
   addPenVertex: (vertex) =>
@@ -249,11 +217,7 @@ export const useMaskEditorStore = create<MaskEditorState & MaskEditorActions>()(
       draggingVertexIndex: null,
       draggingHandle: null,
       previewVertices: null,
-      previewMasks: null,
       hoveredVertexIndex: null,
       hoveredHandle: null,
     }),
-
-  setPreviewMasks: (masks) => set({ previewMasks: masks }),
-  clearPreviewMasks: () => set({ previewMasks: null }),
 }));

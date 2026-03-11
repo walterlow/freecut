@@ -256,7 +256,7 @@ export class VideoFrameExtractor {
     if (!this.sink) return;
 
     const streamStart = Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS);
-    if (reason !== 'init') {
+    if (reason === 'recover') {
       log.debug('Restarting mediabunny sample stream', {
         itemId: this.itemId,
         reason,
@@ -440,4 +440,3 @@ export class VideoFrameExtractor {
     this.lastFailureKind = 'none';
   }
 }
-

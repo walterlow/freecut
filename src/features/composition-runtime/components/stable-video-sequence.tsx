@@ -107,8 +107,7 @@ function areGroupPropsEqual(
         prevItem.trackVisible !== nextItem.trackVisible ||
         prevItem.muted !== nextItem.muted ||
         prevItem.cornerPin !== nextItem.cornerPin ||
-        prevItem.blendMode !== nextItem.blendMode ||
-        prevItem.masks !== nextItem.masks) {
+        prevItem.blendMode !== nextItem.blendMode) {
       return false;
     }
   }

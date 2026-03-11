@@ -12,11 +12,6 @@ import type { TimelineItem } from '@/types/timeline';
  * - Active transitions (transitions use separate video elements in the
  *   Remotion Player, which drift from the base-layer clips and cause
  *   visible ghosting during semi-transparent phases like fade)
- *
- * Item-local clip masks intentionally do NOT force this path. The live
- * Player already renders them against the item's own DOM subtree, while the
- * canvas overlay re-renders feathered masks through the CPU mask renderer
- * every frame, which is noticeably heavier during playback.
  */
 export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],

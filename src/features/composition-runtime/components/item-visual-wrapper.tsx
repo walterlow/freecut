@@ -2,14 +2,11 @@ import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
-import { maskVerticesToSvgPath } from '@/features/composition-runtime/deps/stores';
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
-import { useCornerPinStore, useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
+import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
-  renderClipMasksToDataUrl,
   renderSvgMaskPathsToDataUrl,
-  shouldUseComplexClipMask,
 } from '../utils/clip-mask-raster';
 import type { MaskInfo } from './item';
 
@@ -92,100 +89,6 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     return {};
   }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterSvgMaskDataUrl]);
 
-  // Live mask preview during slider drag — reads from lightweight preview store
-  // so updates bypass the slow React prop chain (items-store → tracks → composition).
-  const previewMasks = useMaskEditorStore((s) =>
-    s.editingItemId === item.id ? s.previewMasks : null
-  );
-  const effectiveMasks = previewMasks ?? item.masks;
-
-  // Simple masks (no feather, full opacity, add mode): use clip-path (GPU geometry, lightweight).
-  // Complex masks (feather, partial opacity, subtract/intersect): use SVG mask.
-  const clipMaskResult = useMemo(() => {
-    const clipMasks = effectiveMasks?.filter((m) => m.enabled && m.vertices.length >= 2);
-    if (!clipMasks || clipMasks.length === 0) return { style: {} as React.CSSProperties, svgDefs: null };
-
-    const needsSvgMask = shouldUseComplexClipMask(clipMasks);
-
-    const w = state.transform.width;
-    const h = state.transform.height;
-
-    if (!needsSvgMask) {
-      // clip-path: GPU geometry clipping, no per-pixel compositing
-      const combinedPath = clipMasks
-        .map((m) => maskVerticesToSvgPath(m.vertices, w, h))
-        .join(' ');
-      return {
-        style: { clipPath: `path('${combinedPath}')` } as React.CSSProperties,
-        svgDefs: null,
-      };
-    }
-
-    const rasterMaskDataUrl = renderClipMasksToDataUrl(clipMasks, w, h);
-    if (rasterMaskDataUrl) {
-      return {
-        style: {
-          maskImage: `url("${rasterMaskDataUrl}")`,
-          WebkitMaskImage: `url("${rasterMaskDataUrl}")`,
-          maskRepeat: 'no-repeat',
-          WebkitMaskRepeat: 'no-repeat',
-          maskSize: '100% 100%',
-          WebkitMaskSize: '100% 100%',
-          maskPosition: '0 0',
-          WebkitMaskPosition: '0 0',
-          transform: 'translateZ(0)',
-          backfaceVisibility: 'hidden' as const,
-          contain: 'paint',
-        } as React.CSSProperties,
-        svgDefs: null,
-      };
-    }
-
-    // SVG mask for complex cases
-    const maskId = `clip-mask-${item.id}`;
-    const filterId = `clip-mask-blur-${item.id}`;
-    const maxFeather = clipMasks.reduce((max, m) => Math.max(max, m.feather), 0);
-    const firstMode = clipMasks[0]?.mode ?? 'add';
-    const bgFill = firstMode === 'add' ? 'black' : 'white';
-
-    return {
-      style: {
-        mask: `url(#${maskId})`,
-        WebkitMask: `url(#${maskId})`,
-      } as React.CSSProperties,
-      svgDefs: (
-        <svg
-          style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}
-          aria-hidden="true"
-        >
-          <defs>
-            {maxFeather > 0.5 && (
-              <filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation={maxFeather} />
-              </filter>
-            )}
-            <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width={w} height={h}>
-              <rect x="0" y="0" width={w} height={h} fill={bgFill} />
-              {clipMasks.map((m) => {
-                const isAdditive = m.mode === 'add' || m.mode === 'intersect';
-                const fill = (isAdditive ? !m.inverted : m.inverted) ? 'white' : 'black';
-                return (
-                  <path
-                    key={m.id}
-                    d={maskVerticesToSvgPath(m.vertices, w, h)}
-                    fill={fill}
-                    opacity={m.opacity}
-                    filter={maxFeather > 0.5 ? `url(#${filterId})` : undefined}
-                  />
-                );
-              })}
-            </mask>
-          </defs>
-        </svg>
-      ),
-    };
-  }, [effectiveMasks, item.id, state.transform.width, state.transform.height]);
-
   // Corner pin CSS matrix3d — use preview during drag for smooth interaction
   const cornerPinPreview = useCornerPinStore((s) =>
     s.editingItemId === item.id ? s.previewCornerPin : null
@@ -264,7 +167,6 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     <>
       {/* SVG mask definitions (hidden, referenced via CSS) */}
       {svgMaskDefs}
-      {clipMaskResult.svgDefs}
 
       {/* Outer: Transform + Mask + Blend Mode */}
       <div
@@ -294,14 +196,13 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
             height: '100%',
           }}
         >
-          {/* Inner: Effects + Per-item ClipMask + Content */}
+          {/* Inner: Effects + Content */}
           <div
             style={{
               width: '100%',
               height: '100%',
               position: 'relative',
               filter: state.cssFilter || undefined,
-              ...clipMaskResult.style,
             }}
           >
             {children}

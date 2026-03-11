@@ -23,12 +23,11 @@ import {
 import {
   insertVertexBetween,
   removeVertex,
-  generateMaskId,
 } from '../utils/mask-path-utils';
 import { getPathBounds, fitShapePathToBounds } from '../utils/path-fit';
 import { useSelectionStore } from '@/shared/state/selection';
 import type { CoordinateParams, Transform } from '../types/gizmo';
-import type { ClipMask, MaskVertex } from '@/types/masks';
+import type { MaskVertex } from '@/types/masks';
 import type { ShapeItem } from '@/types/timeline';
 
 /** Radius of vertex control points in screen pixels */
@@ -84,7 +83,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   // Edit mode state
   const isEditing = useMaskEditorStore((s) => s.isEditing);
   const editingItemId = useMaskEditorStore((s) => s.editingItemId);
-  const selectedMaskIndex = useMaskEditorStore((s) => s.selectedMaskIndex);
   const draggingVertexIndex = useMaskEditorStore((s) => s.draggingVertexIndex);
   const draggingHandle = useMaskEditorStore((s) => s.draggingHandle);
   const previewVertices = useMaskEditorStore((s) => s.previewVertices);
@@ -110,8 +108,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const setPenDragging = useMaskEditorStore((s) => s.setPenDragging);
   const setPenCursorPos = useMaskEditorStore((s) => s.setPenCursorPos);
   const cancelPenMode = useMaskEditorStore((s) => s.cancelPenMode);
-  const setPreviewMasks = useMaskEditorStore((s) => s.setPreviewMasks);
-  const clearPreviewMasks = useMaskEditorStore((s) => s.clearPreviewMasks);
 
   // ============================================================
   // Shared coordinate helpers
@@ -148,7 +144,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [normToScreen]
   );
 
-  /** Convert screen position to normalized mask coords */
+  /** Convert screen position to normalized path coords */
   const screenToNorm = useCallback(
     (sx: number, sy: number): [number, number] => {
       const canvasPos = screenToCanvas(sx, sy, coordParams);
@@ -167,7 +163,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   );
 
   // ============================================================
-  // Edit mode: get existing mask vertices
+  // Edit mode: get existing path vertices
   // ============================================================
 
   const getVertices = useCallback((): MaskVertex[] | null => {
@@ -175,13 +171,11 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     if (!editingItemId) return null;
     const items = useItemsStore.getState().items;
     const item = items.find((i) => i.id === editingItemId);
-    if (!item) return null;
-    if (item.type === 'shape' && item.shapeType === 'path') {
+    if (item?.type === 'shape' && item.shapeType === 'path') {
       return item.pathVertices ?? null;
     }
-    const mask = item.masks?.[selectedMaskIndex];
-    return mask?.vertices ?? null;
-  }, [editingItemId, selectedMaskIndex, previewVertices]);
+    return null;
+  }, [editingItemId, previewVertices]);
 
   // ============================================================
   // Drawing
@@ -206,7 +200,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     }
   }, [playerSize, penMode, penVertices, penCursorPos, penDraggingHandle, getVertices, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, hoveredVertexIndex, hoveredHandle]);
 
-  /** Draw closed mask path with handles (edit mode) */
+  /** Draw closed path with handles (edit mode) */
   const drawEditPath = useCallback((ctx: CanvasRenderingContext2D) => {
     const vertices = getVertices();
     if (!vertices || vertices.length < 2) return;
@@ -891,48 +885,17 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     stopEditing();
   }, [coordParams, cancelPenMode, stopEditing]);
 
-  /** Close pen path and commit as a new mask on the item (or as a new ShapeItem) */
+  /** Close pen path and commit as a new shape mask item. */
   const closePenPath = useCallback(() => {
     const state = useMaskEditorStore.getState();
     const verts = state.penVertices;
 
-    if (state.shapePenMode) {
-      // Shape pen mode: create a new ShapeItem with shapeType='path'
-      if (verts.length < 3) {
-        cancelPenMode();
-        return;
-      }
-      commitShapePenPath(verts);
-      return;
-    }
-
-    if (verts.length < 3 || !editingItemId) {
+    if (!state.shapePenMode || verts.length < 3) {
       cancelPenMode();
       return;
     }
-
-    const items = useItemsStore.getState().items;
-    const item = items.find((i) => i.id === editingItemId);
-    if (!item) {
-      cancelPenMode();
-      return;
-    }
-
-    const newMask = {
-      id: generateMaskId(),
-      vertices: verts,
-      mode: 'add' as const,
-      opacity: 1,
-      feather: 0,
-      inverted: false,
-      enabled: true,
-    };
-
-    const existingMasks = item.masks ?? [];
-    const newMasks = [...existingMasks, newMask];
-    useItemsStore.getState()._updateItem(editingItemId, { masks: newMasks });
-    stopEditing();
-  }, [editingItemId, cancelPenMode, stopEditing]);
+    commitShapePenPath(verts);
+  }, [cancelPenMode, commitShapePenPath]);
   closePenPathRef.current = closePenPath;
 
   // Escape key to cancel pen mode
@@ -961,38 +924,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   getItemScreenBoundsRef.current = getItemScreenBounds;
   const editingItemIdRef = useRef(editingItemId);
   editingItemIdRef.current = editingItemId;
-  const selectedMaskIndexRef = useRef(selectedMaskIndex);
-  selectedMaskIndexRef.current = selectedMaskIndex;
-
-  const syncPreviewMaskVertices = useCallback(
-    (
-      vertices: MaskVertex[],
-      itemId: string | null = editingItemIdRef.current,
-      maskIndex: number = selectedMaskIndexRef.current
-    ) => {
-      if (!itemId) {
-        clearPreviewMasks();
-        return;
-      }
-      const item = useItemsStore.getState().items.find((i) => i.id === itemId);
-      if (item?.type === 'shape' && item.shapeType === 'path') {
-        clearPreviewMasks();
-        return;
-      }
-
-      const masks = item?.masks;
-      const mask = masks?.[maskIndex];
-      if (!masks || !mask) {
-        clearPreviewMasks();
-        return;
-      }
-
-      const previewMasks: ClipMask[] = [...masks];
-      previewMasks[maskIndex] = { ...mask, vertices };
-      setPreviewMasks(previewMasks);
-    },
-    [setPreviewMasks, clearPreviewMasks]
-  );
 
   const handleEditPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -1104,7 +1035,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         }
 
         updatePreview(newVertices);
-        syncPreviewMaskVertices(newVertices);
         return;
       }
 
@@ -1140,36 +1070,15 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
       editDraggingRef.current = false;
 
-      const state = dragStateRef.current;
-      if (state) {
-        const finalVertices = useMaskEditorStore.getState().previewVertices;
-        const itemId = editingItemIdRef.current;
-        const maskIdx = selectedMaskIndexRef.current;
-        if (finalVertices && itemId) {
-          const items = useItemsStore.getState().items;
-            const item = items.find((i) => i.id === itemId);
-            if (item) {
-              if (item.type === 'shape' && item.shapeType === 'path') {
-                useItemsStore.getState()._updateItem(
-                  itemId,
-                  fitShapePathToBounds(finalVertices, itemTransform, item.transform)
-                );
-                dragStateRef.current = null;
-                requestAnimationFrame(() => {
-                  requestAnimationFrame(() => {
-                  clearPreviewMasks();
-                  endDrag();
-                });
-              });
-              return;
-            }
-            const masks = [...(item.masks ?? [])];
-            const mask = masks[maskIdx];
-            if (mask) {
-              masks[maskIdx] = { ...mask, vertices: finalVertices };
-              useItemsStore.getState()._updateItem(itemId, { masks });
-            }
-          }
+      const finalVertices = useMaskEditorStore.getState().previewVertices;
+      const itemId = editingItemIdRef.current;
+      if (finalVertices && itemId) {
+        const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId);
+        if (item?.type === 'shape' && item.shapeType === 'path') {
+          useItemsStore.getState()._updateItem(
+            itemId,
+            fitShapePathToBounds(finalVertices, itemTransform, item.transform)
+          );
         }
       }
 
@@ -1179,12 +1088,11 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       // processed the timeline store update (same pattern as corner-pin-overlay)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          clearPreviewMasks();
           endDrag();
         });
       });
     },
-    [clearPreviewMasks, endDrag, itemTransform]
+    [endDrag, itemTransform]
   );
 
   const handleEditContextMenu = useCallback(
@@ -1219,24 +1127,14 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       if (!editingItemId) return;
       const items = useItemsStore.getState().items;
       const item = items.find((i) => i.id === editingItemId);
-      if (!item) return;
-
-      if (item.type === 'shape' && item.shapeType === 'path') {
+      if (item?.type === 'shape' && item.shapeType === 'path') {
         useItemsStore.getState()._updateItem(
           editingItemId,
           fitShapePathToBounds(vertices, itemTransform, item.transform)
         );
-        return;
       }
-
-      const masks = [...(item.masks ?? [])];
-      const mask = masks[selectedMaskIndex];
-      if (!mask) return;
-
-      masks[selectedMaskIndex] = { ...mask, vertices };
-      useItemsStore.getState()._updateItem(editingItemId, { masks });
     },
-    [editingItemId, selectedMaskIndex, itemTransform]
+    [editingItemId, itemTransform]
   );
 
   // ============================================================
