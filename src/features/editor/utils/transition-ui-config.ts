@@ -72,39 +72,57 @@ const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
   'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
 };
 
+function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.getDefinitions>[number]): PresentationConfig[] {
+  if (def.hasDirection && def.directions && def.directions.length > 0) {
+    return def.directions.map((dir) => {
+      const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon };
+      return {
+        id: def.id,
+        label: dirInfo.label,
+        description: `${def.label} ${dirInfo.label.toLowerCase()}`,
+        icon: dirInfo.icon,
+        category: def.category,
+        direction: dir,
+      };
+    });
+  }
+
+  return [{
+    id: def.id,
+    label: def.label,
+    description: def.description,
+    icon: def.icon,
+    category: def.category,
+  }];
+}
+
 /**
  * Generate PresentationConfig array from the transition registry.
  * Directional transitions produce one config per direction.
+ * The flat list is grouped in the same category order used by picker UIs so
+ * category-based index math stays stable.
  */
 function generateConfigsFromRegistry(): PresentationConfig[] {
-  const configs: PresentationConfig[] = [];
-  const definitions = transitionRegistry.getDefinitions();
+  const groupedConfigs = new Map<string, PresentationConfig[]>();
+  const uncategorizedConfigs: PresentationConfig[] = [];
+  const categoryOrder = new Set<string>(TRANSITION_CATEGORY_ORDER);
 
-  for (const def of definitions) {
-    if (def.hasDirection && def.directions && def.directions.length > 0) {
-      for (const dir of def.directions) {
-        const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon };
-        configs.push({
-          id: def.id,
-          label: dirInfo.label,
-          description: `${def.label} ${dirInfo.label.toLowerCase()}`,
-          icon: dirInfo.icon,
-          category: def.category,
-          direction: dir,
-        });
-      }
-    } else {
-      configs.push({
-        id: def.id,
-        label: def.label,
-        description: def.description,
-        icon: def.icon,
-        category: def.category,
-      });
+  for (const def of transitionRegistry.getDefinitions()) {
+    const configs = createConfigsForDefinition(def);
+    if (!categoryOrder.has(def.category)) {
+      uncategorizedConfigs.push(...configs);
+      continue;
     }
+
+    const existing = groupedConfigs.get(def.category) ?? [];
+    existing.push(...configs);
+    groupedConfigs.set(def.category, existing);
   }
 
-  return configs;
+  return [
+    ...TRANSITION_CATEGORY_ORDER.flatMap((category) => groupedConfigs.get(category) ?? []),
+    ...uncategorizedConfigs,
+  ];
 }
 
 /** All presentation configs, generated once from the registry */
