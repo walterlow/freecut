@@ -13,6 +13,7 @@ export {
   resolveActiveShapeMasksAtFrame,
   resolveFrameCompositionScene,
 } from '@/features/composition-runtime/utils/frame-scene';
+export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout';
 export {
   resolveTrackRenderState,
   resolveCompositionRenderPlan,

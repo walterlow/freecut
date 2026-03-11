@@ -17,6 +17,7 @@ import {
   applyTransformOverride,
   resolveItemTransformAtRelativeFrame,
 } from '../../utils/frame-scene';
+import { expandTextTransformToFitContent } from '../../utils/text-layout';
 
 /**
  * Consolidated visual state for an item.
@@ -139,6 +140,10 @@ export function useItemVisualState(
       resolved = applyTransformOverride(animatedResolved, unifiedPreviewTransform);
     } else if (isGizmoPreviewActive && previewTransform) {
       resolved = applyTransformOverride(animatedResolved, previewTransform);
+    }
+
+    if (item.type === 'text') {
+      resolved = expandTextTransformToFitContent(item, resolved, propertiesPreview);
     }
 
     // Calculate fade opacity based on fadeIn/fadeOut (in seconds)

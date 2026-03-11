@@ -6,6 +6,7 @@ import {
   resolveTransform,
   getSourceDimensions,
 } from './transform-resolver';
+import { expandTextTransformToFitContent } from './text-layout';
 import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
@@ -61,7 +62,11 @@ export function resolveItemTransformAtRelativeFrame(
     ? resolveAnimatedTransform(baseResolved, keyframes, relativeFrame)
     : baseResolved;
 
-  return applyTransformOverride(animatedResolved, previewTransform);
+  const resolved = applyTransformOverride(animatedResolved, previewTransform);
+
+  return item.type === 'text'
+    ? expandTextTransformToFitContent(item, resolved)
+    : resolved;
 }
 
 export function resolveItemTransformAtFrame(
