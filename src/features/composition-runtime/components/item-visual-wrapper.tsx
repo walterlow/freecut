@@ -6,6 +6,10 @@ import { maskVerticesToSvgPath } from '@/features/composition-runtime/deps/store
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
 import { useCornerPinStore, useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
+import {
+  renderClipMasksToDataUrl,
+  shouldUseComplexClipMask,
+} from '../utils/clip-mask-raster';
 import type { MaskInfo } from './item';
 
 interface ItemVisualWrapperProps {
@@ -64,9 +68,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     const clipMasks = effectiveMasks?.filter((m) => m.enabled && m.vertices.length >= 2);
     if (!clipMasks || clipMasks.length === 0) return { style: {} as React.CSSProperties, svgDefs: null };
 
-    const needsSvgMask = clipMasks.some((m) =>
-      m.feather > 0.5 || m.opacity < 0.99 || m.inverted || m.mode !== 'add'
-    );
+    const needsSvgMask = shouldUseComplexClipMask(clipMasks);
 
     const w = state.transform.width;
     const h = state.transform.height;
@@ -78,6 +80,26 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         .join(' ');
       return {
         style: { clipPath: `path('${combinedPath}')` } as React.CSSProperties,
+        svgDefs: null,
+      };
+    }
+
+    const rasterMaskDataUrl = renderClipMasksToDataUrl(clipMasks, w, h);
+    if (rasterMaskDataUrl) {
+      return {
+        style: {
+          maskImage: `url("${rasterMaskDataUrl}")`,
+          WebkitMaskImage: `url("${rasterMaskDataUrl}")`,
+          maskRepeat: 'no-repeat',
+          WebkitMaskRepeat: 'no-repeat',
+          maskSize: '100% 100%',
+          WebkitMaskSize: '100% 100%',
+          maskPosition: '0 0',
+          WebkitMaskPosition: '0 0',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden' as const,
+          contain: 'paint',
+        } as React.CSSProperties,
         svgDefs: null,
       };
     }

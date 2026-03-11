@@ -1,21 +1,36 @@
 import { useEffect, useState } from 'react';
 import { useItemsStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
+import type { TimelineItem } from '@/types/timeline';
 
 /**
- * Detects whether the composition renderer overlay should be forced on.
+ * Detects whether the composition renderer overlay should stay active
+ * outside of scrub-driven updates.
  *
  * Returns true when any of these conditions exist:
  * - GPU effects enabled on any item
  * - Non-normal blend modes
- * - Active masks
  * - Active transitions (transitions use separate video elements in the
  *   Remotion Player, which drift from the base-layer clips and cause
  *   visible ghosting during semi-transparent phases like fade)
  *
- * When true, the scrub overlay renders every frame through the composition
- * renderer, which reads from the base-layer DOM video elements directly
- * via domVideoElementProvider — single decode stream, no drift.
+ * Item-local clip masks intentionally do NOT force this path. The live
+ * Player already renders them against the item's own DOM subtree, while the
+ * canvas overlay re-renders feathered masks through the CPU mask renderer
+ * every frame, which is noticeably heavier during playback.
  */
+export function shouldForceContinuousPreviewOverlay(
+  items: TimelineItem[],
+  transitionCount: number,
+): boolean {
+  return (
+    transitionCount > 0
+    || items.some((item) =>
+      item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')
+      || (item.blendMode && item.blendMode !== 'normal')
+    )
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useGpuEffectsOverlay(..._args: unknown[]) {
   const [needsOverlay, setNeedsOverlay] = useState(false);
@@ -25,14 +40,7 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
       const items = useItemsStore.getState().items;
       const transitions = useTransitionsStore.getState().transitions;
 
-      setNeedsOverlay(
-        transitions.length > 0 ||
-        items.some((item) =>
-          item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ||
-          (item.blendMode && item.blendMode !== 'normal') ||
-          (item.masks && item.masks.some((m) => m.enabled))
-        )
-      );
+      setNeedsOverlay(shouldForceContinuousPreviewOverlay(items, transitions.length));
     };
     check();
     const unsubItems = useItemsStore.subscribe(check);
