@@ -19,6 +19,7 @@ export type TransitionCategory =
   | 'flip'
   | 'mask'
   | 'light'
+  | 'chromatic'
   | 'custom';
 
 /**

@@ -243,7 +243,7 @@ const chromaticDef: TransitionDefinition = {
   id: 'chromatic',
   label: 'Chromatic',
   description: 'RGB channel split with directional sweep',
-  category: 'custom',
+  category: 'chromatic',
   icon: 'Aperture',
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],

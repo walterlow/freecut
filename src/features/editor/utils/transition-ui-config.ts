@@ -56,12 +56,13 @@ export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
   flip: { title: 'Flip' },
   mask: { title: 'Mask' },
   light: { title: 'Light' },
+  chromatic: { title: 'Chromatic' },
   custom: { title: 'Custom' },
 };
 
 /** Ordered list of categories for UI rendering */
 export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
-  'basic', 'wipe', 'slide', 'flip', 'mask', 'light', 'custom',
+  'basic', 'wipe', 'slide', 'flip', 'mask', 'light', 'chromatic', 'custom',
 ];
 
 /** Direction string → display label + icon name */

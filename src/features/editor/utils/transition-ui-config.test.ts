@@ -38,4 +38,12 @@ describe('transition-ui-config', () => {
     expect(groupedConfig).toBeDefined();
     expect(toConfigKey(flatConfig!)).toBe(toConfigKey(groupedConfig!));
   });
+
+  it('shows chromatic in its own category instead of custom', () => {
+    const chromaticConfigs = TRANSITION_CONFIGS_BY_CATEGORY.chromatic ?? [];
+    const customConfigs = TRANSITION_CONFIGS_BY_CATEGORY.custom ?? [];
+
+    expect(chromaticConfigs.some((config) => config.id === 'chromatic')).toBe(true);
+    expect(customConfigs.some((config) => config.id === 'chromatic')).toBe(false);
+  });
 });
