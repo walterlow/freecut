@@ -562,6 +562,17 @@ function useCustomPlayer(
         lastBackwardScrubSeekFrameRef.current = null;
         return;
       }
+      const shouldUseFastScrubOnly = (
+        interactionMode === 'scrubbing'
+        && state.previewFrame !== null
+        && state.currentFrame === state.previewFrame
+        && state.currentFrameEpoch === state.previewFrameEpoch
+      );
+      if (shouldUseFastScrubOnly) {
+        lastBackwardScrubSeekAtRef.current = 0;
+        lastBackwardScrubSeekFrameRef.current = null;
+        return;
+      }
 
       const targetFrame = transition.next.anchorFrame;
       const scrubDirection = interactionMode === 'scrubbing'
@@ -2506,6 +2517,11 @@ export const VideoPreview = memo(function VideoPreview({
       const targetFrame = state.previewFrame ?? (useCurrentFrameAsTarget ? state.currentFrame : null);
       const prevTargetFrame = prev.previewFrame ?? (useCurrentFrameAsTarget ? prev.currentFrame : null);
       const playStateChanged = state.isPlaying !== prev.isPlaying;
+      const isAtomicScrubTarget = (
+        state.previewFrame !== null
+        && state.currentFrame === state.previewFrame
+        && state.currentFrameEpoch === state.previewFrameEpoch
+      );
 
       if (targetFrame === prevTargetFrame && !playStateChanged) return;
 
@@ -2528,7 +2544,8 @@ export const VideoPreview = memo(function VideoPreview({
         && scrubDirectionRef.current < 0;
       const nextFallbackToPlayer = !forceFastScrubOverlay
         && FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD
-        && scrubDirectionRef.current < 0;
+        && scrubDirectionRef.current < 0
+        && !isAtomicScrubTarget;
       if (nextSuppressBackgroundPrewarm !== suppressScrubBackgroundPrewarmRef.current) {
         suppressScrubBackgroundPrewarmRef.current = nextSuppressBackgroundPrewarm;
         scrubPrewarmQueueRef.current = [];
@@ -2584,7 +2601,7 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       let nextRequestedFrame = targetFrame;
-      if (scrubDirectionRef.current < 0) {
+      if (scrubDirectionRef.current < 0 && !isAtomicScrubTarget) {
         const nowMs = performance.now();
         const quantizedFrame = Math.floor(
           targetFrame / FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES

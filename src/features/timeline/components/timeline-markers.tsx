@@ -285,6 +285,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   const outPoint = useTimelineStore((s) => s.outPoint);
   const markDirty = useTimelineStore((s) => s.markDirty);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame);
   const pause = usePlaybackStore((s) => s.pause);
   const selectMarker = useSelectionStore((s) => s.selectMarker);
 
@@ -302,6 +303,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Refs for drag handlers
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
+  const setScrubFrameRef = useRef(setScrubFrame);
   const setPreviewFrameRef = useRef(usePlaybackStore.getState().setPreviewFrame);
   useEffect(() => {
     return usePlaybackStore.subscribe((state) => {
@@ -324,6 +326,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
+    setScrubFrameRef.current = setScrubFrame;
     markDirtyRef.current = markDirty;
     pauseRef.current = pause;
     fpsRef.current = fps;
@@ -331,7 +334,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     durationRef.current = duration;
     inPointRef.current = inPoint;
     outPointRef.current = outPoint;
-  }, [pixelsToFrame, setCurrentFrame, markDirty, pause, fps, pixelsPerSecond, duration, inPoint, outPoint]);
+  }, [pixelsToFrame, setCurrentFrame, setScrubFrame, markDirty, pause, fps, pixelsPerSecond, duration, inPoint, outPoint]);
 
   // Track viewport and scroll
   const scrollLeftRef = useRef(0);
@@ -663,8 +666,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       pixelsPerSecond: pixelsPerSecondRef.current,
       nowMs,
     })) {
-      setCurrentFrameRef.current(frame);
-      setPreviewFrameRef.current(frame);
+      setScrubFrameRef.current(frame);
     }
 
     // --- STEP 3: Continue loop while scrubbing ---
@@ -732,8 +734,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     }
     const maxFrame = Math.floor(durationRef.current * fpsRef.current);
     const frame = Math.min(maxFrame, Math.max(0, Math.round(pixelsToFrameRef.current(x))));
-    setCurrentFrameRef.current(frame);
-    setPreviewFrameRef.current(frame);
+    setScrubFrameRef.current(frame);
     scrubThrottleStateRef.current = createScrubThrottleState({
       pointerX: x,
       frame,

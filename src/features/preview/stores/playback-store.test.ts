@@ -16,7 +16,10 @@ describe('playback-store', () => {
       previewFrame: null,
       previewFrameEpoch: 0,
       frameUpdateEpoch: 0,
+      previewItemId: null,
       captureFrame: null,
+      captureFrameImageData: null,
+      captureCanvasSource: null,
       previewQuality: 1,
     });
   });
@@ -185,6 +188,15 @@ describe('playback-store', () => {
       usePlaybackStore.getState().setPreviewFrame(42);
       const stateB = usePlaybackStore.getState();
       expect(stateA).toBe(stateB);
+    });
+
+    it('updates currentFrame and previewFrame atomically for scrub frames', () => {
+      usePlaybackStore.getState().setScrubFrame(42, 'item-1');
+      const state = usePlaybackStore.getState();
+      expect(state.currentFrame).toBe(42);
+      expect(state.previewFrame).toBe(42);
+      expect(state.previewItemId).toBe('item-1');
+      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
   });
 });

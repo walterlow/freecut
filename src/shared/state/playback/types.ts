@@ -43,6 +43,8 @@ export interface PlaybackState {
 
 export interface PlaybackActions {
   setCurrentFrame: (frame: number) => void;
+  /** Update the authoritative playhead and transient scrub preview atomically. */
+  setScrubFrame: (frame: number, itemId?: string | null) => void;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;

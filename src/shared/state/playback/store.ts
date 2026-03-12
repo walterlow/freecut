@@ -42,6 +42,27 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             frameUpdateEpoch: nextEpoch,
           };
         }),
+      setScrubFrame: (frame, itemId) =>
+        set((state) => {
+          const nextFrame = normalizeFrame(frame);
+          const nextItemId = itemId ?? null;
+          if (
+            state.currentFrame === nextFrame
+            && state.previewFrame === nextFrame
+            && state.previewItemId === nextItemId
+          ) {
+            return state;
+          }
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            currentFrame: nextFrame,
+            currentFrameEpoch: nextEpoch,
+            previewFrame: nextFrame,
+            previewItemId: nextItemId,
+            previewFrameEpoch: nextEpoch,
+            frameUpdateEpoch: nextEpoch,
+          };
+        }),
       play: () => set((state) => (state.isPlaying ? state : { isPlaying: true })),
       pause: () => set((state) => (state.isPlaying ? { isPlaying: false } : state)),
       togglePlayPause: () => set((state) => ({ isPlaying: !state.isPlaying })),

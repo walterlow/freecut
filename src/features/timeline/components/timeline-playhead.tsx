@@ -26,6 +26,7 @@ interface TimelinePlayheadProps {
 export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayheadProps) {
   // Don't subscribe to currentFrame - use ref + manual subscription instead
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame);
   const { frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -44,6 +45,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   // Use refs to avoid stale closures
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
+  const setScrubFrameRef = useRef(setScrubFrame);
   const maxFrameRef = useRef(maxFrame);
   const frameToPixelsRef = useRef(frameToPixels);
   const pixelsPerSecondRef = useRef(pixelsPerSecond);
@@ -67,10 +69,11 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
+    setScrubFrameRef.current = setScrubFrame;
     maxFrameRef.current = maxFrame;
     frameToPixelsRef.current = frameToPixels;
     pixelsPerSecondRef.current = pixelsPerSecond;
-  }, [pixelsToFrame, setCurrentFrame, maxFrame, frameToPixels, pixelsPerSecond]);
+  }, [pixelsToFrame, setCurrentFrame, setScrubFrame, maxFrame, frameToPixels, pixelsPerSecond]);
 
   // Subscribe to currentFrame changes and update position directly (no React re-renders)
   useEffect(() => {
@@ -176,8 +179,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
               pixelsPerSecond: pixelsPerSecondRef.current,
               nowMs: performance.now(),
             })) {
-              setCurrentFrameRef.current(targetFrame);
-              setPreviewFrameRef.current(targetFrame);
+              setScrubFrameRef.current(targetFrame);
             }
           }
         });

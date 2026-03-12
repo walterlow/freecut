@@ -437,6 +437,72 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(48);
+    });
+  });
+
+  it('keeps backward ruler drag on fast-scrub presentation', async () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(46);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+  });
+
   it('on play start, clears previewFrame and seeks to current playhead frame', async () => {
     render(
       <VideoPreview
