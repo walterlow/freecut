@@ -156,11 +156,17 @@ describe('playback-store', () => {
       expect(usePlaybackStore.getState().previewQuality).toBe(1);
     });
 
-    it('keeps preview quality locked to full', () => {
+    it('stores user-selected fast scrub quality', () => {
       usePlaybackStore.getState().setPreviewQuality(0.5);
-      expect(usePlaybackStore.getState().previewQuality).toBe(1);
+      expect(usePlaybackStore.getState().previewQuality).toBe(0.5);
+
+      usePlaybackStore.getState().setPreviewQuality(0.33);
+      expect(usePlaybackStore.getState().previewQuality).toBe(0.33);
 
       usePlaybackStore.getState().setPreviewQuality(0.25);
+      expect(usePlaybackStore.getState().previewQuality).toBe(0.25);
+
+      usePlaybackStore.getState().setPreviewQuality(1);
       expect(usePlaybackStore.getState().previewQuality).toBe(1);
     });
   });

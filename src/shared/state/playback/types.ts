@@ -7,7 +7,7 @@ export interface CaptureOptions {
   fullResolution?: boolean;
 }
 
-export type PreviewQuality = 1 | 0.5 | 0.25;
+export type PreviewQuality = 1 | 0.5 | 0.33 | 0.25;
 
 export interface PlaybackState {
   currentFrame: number;
@@ -37,7 +37,7 @@ export interface PlaybackState {
   captureCanvasSource?: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null;
   /** Whether to use proxy videos for preview playback (true = use 720p proxies when available) */
   useProxy: boolean;
-  /** Preview render resolution multiplier (1 = full, 0.5 = half, 0.25 = quarter) */
+  /** Fast-scrub render resolution multiplier (1 = full, 0.5 = half, 0.33 = third, 0.25 = quarter) */
   previewQuality: PreviewQuality;
 }
 
@@ -63,6 +63,6 @@ export interface PlaybackActions {
   setCaptureCanvasSource?: (fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null) => void;
   /** Toggle proxy playback mode */
   toggleUseProxy: () => void;
-  /** Set preview render quality */
+  /** Set fast-scrub render quality */
   setPreviewQuality: (quality: PreviewQuality) => void;
 }

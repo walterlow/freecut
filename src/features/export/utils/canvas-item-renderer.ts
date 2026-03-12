@@ -35,6 +35,7 @@ import {
 } from './canvas-transitions';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
+import type { ScrubbingCache } from '@/features/export/deps/preview';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
@@ -85,6 +86,8 @@ const FONT_WEIGHT_MAP: Record<string, number> = {
   bold: 700,
 };
 
+const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9;
+
 // ---------------------------------------------------------------------------
 // ItemRenderContext â€“ closure state passed explicitly
 // ---------------------------------------------------------------------------
@@ -100,6 +103,7 @@ export interface ItemRenderContext {
   canvasPool: CanvasPool;
   textMeasureCache: TextMeasurementCache;
   renderMode: 'export' | 'preview';
+  scrubbingCache?: ScrubbingCache | null;
 
   // Video state
   videoExtractors: Map<string, VideoFrameSource>;
@@ -308,6 +312,32 @@ async function renderItemWithCornerPin(
 // Video item
 // ---------------------------------------------------------------------------
 
+function getTier2VideoFrameToleranceSeconds(sourceFps: number): number {
+  const normalizedSourceFps = Number.isFinite(sourceFps) && sourceFps > 0
+    ? sourceFps
+    : 30;
+  return (1 / normalizedSourceFps) * TIER2_VIDEO_FRAME_TOLERANCE_FACTOR;
+}
+
+function drawTier2VideoFrame(
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  frame: ImageBitmap | VideoFrame,
+  drawDimensions: { x: number; y: number; width: number; height: number },
+): boolean {
+  try {
+    ctx.drawImage(
+      frame,
+      drawDimensions.x,
+      drawDimensions.y,
+      drawDimensions.width,
+      drawDimensions.height,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Render video item using mediabunny (fast) or HTML5 video element (fallback).
  */
@@ -319,10 +349,20 @@ async function renderVideoItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
 ): Promise<void> {
-  const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
+  const {
+    fps,
+    videoExtractors,
+    videoElements,
+    useMediabunny,
+    mediabunnyDisabledItems,
+    mediabunnyFailureCountByItem,
+    canvasSettings,
+    scrubbingCache,
+  } = rctx;
   const isPreviewMode = rctx.renderMode === 'preview';
   const allowVideoElementFallback = !isPreviewMode;
   const hasFallbackVideoElement = videoElements.has(item.id);
+  const extractor = videoExtractors.get(item.id);
   let mediabunnyFailedThisFrame = false;
 
   // Calculate source time
@@ -336,6 +376,7 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+  const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
 
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Remotion Player's <video> elements are already playing
@@ -388,6 +429,19 @@ async function renderVideoItem(
   // In that window, skip drawing this item for the frame instead of logging a
   // misleading "Video element not found" warning.
   if (isPreviewMode && !useMediabunny.has(item.id) && !hasFallbackVideoElement) {
+    if (scrubbingCache && extractor) {
+      const dims = extractor.getDimensions();
+      const drawDimensions = calculateMediaDrawDimensions(
+        dims.width,
+        dims.height,
+        transform,
+        canvasSettings,
+      );
+      const cachedEntry = scrubbingCache.getVideoFrameEntry(item.id);
+      if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+        return;
+      }
+    }
     return;
   }
 
@@ -395,9 +449,7 @@ async function renderVideoItem(
   // With the overlap model, source times are always valid during transitions
   // (both clips have real content in the overlap region), so no past-duration
   // workaround is needed.
-  if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id)) {
-    const extractor = videoExtractors.get(item.id);
-    if (extractor) {
+  if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id) && extractor) {
       const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
       const dims = extractor.getDimensions();
       const drawDimensions = calculateMediaDrawDimensions(
@@ -407,27 +459,66 @@ async function renderVideoItem(
         canvasSettings,
       );
 
+      if (isPreviewMode && scrubbingCache) {
+        const cachedEntry = scrubbingCache.getVideoFrameEntry(
+          item.id,
+          clampedTime,
+          tier2ToleranceSeconds,
+        );
+        if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+          return;
+        }
+      }
+
       if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
         log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
       }
 
-      const success = await extractor.drawFrame(
-        ctx,
-        clampedTime,
-        drawDimensions.x,
-        drawDimensions.y,
-        drawDimensions.width,
-        drawDimensions.height,
+      const { success, capturedFrame, capturedSourceTime } = (
+        isPreviewMode && scrubbingCache
+          ? await extractor.drawFrameWithCapture(
+            ctx,
+            clampedTime,
+            drawDimensions.x,
+            drawDimensions.y,
+            drawDimensions.width,
+            drawDimensions.height,
+          )
+          : {
+            success: await extractor.drawFrame(
+              ctx,
+              clampedTime,
+              drawDimensions.x,
+              drawDimensions.y,
+              drawDimensions.width,
+              drawDimensions.height,
+            ),
+            capturedFrame: null,
+            capturedSourceTime: null,
+          }
       );
 
       if (success) {
         mediabunnyFailureCountByItem.set(item.id, 0);
+        if (scrubbingCache && capturedFrame) {
+          scrubbingCache.putVideoFrame(item.id, capturedFrame, capturedSourceTime ?? clampedTime);
+        }
         return;
       }
       mediabunnyFailedThisFrame = true;
 
       // Distinguish transient misses from decode failures.
       const failureKind = extractor.getLastFailureKind();
+      if (
+        isPreviewMode
+        && scrubbingCache
+        && failureKind === 'no-sample'
+      ) {
+        const cachedEntry = scrubbingCache.getVideoFrameEntry(item.id);
+        if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+          return;
+        }
+      }
       if (failureKind === 'no-sample') {
         log.debug('Mediabunny had no sample for timestamp, using per-frame fallback', {
           itemId: item.id,
@@ -455,7 +546,6 @@ async function renderVideoItem(
           });
         }
       }
-    }
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===

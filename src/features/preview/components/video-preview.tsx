@@ -1819,8 +1819,8 @@ export const VideoPreview = memo(function VideoPreview({
     return { width: w, height: h };
   }, [project.width, project.height]);
 
-  // Keep fast-scrub renderer at project resolution to avoid diverging
-  // coordinate/render paths across quality modes.
+  // Keep fast-scrub renderer at project resolution until the renderer
+  // separates logical composition space from physical canvas size.
   const renderSize = useMemo(() => {
     const projectWidth = Math.max(1, Math.round(project.width));
     const projectHeight = Math.max(1, Math.round(project.height));
@@ -1867,16 +1867,16 @@ export const VideoPreview = memo(function VideoPreview({
 
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
-    width: renderSize.width,
-    height: renderSize.height,
+    width: project.width,
+    height: project.height,
     tracks: fastScrubScaledTracks,
     transitions,
     backgroundColor: project.backgroundColor,
     keyframes: fastScrubScaledKeyframes,
   }), [
     fps,
-    renderSize.width,
-    renderSize.height,
+    project.width,
+    project.height,
     fastScrubScaledTracks,
     transitions,
     project.backgroundColor,

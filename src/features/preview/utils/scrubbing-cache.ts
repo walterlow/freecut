@@ -110,8 +110,10 @@ class GpuTextureCache {
 // Tier 2 — Per-Video Last-Frame Cache
 // ---------------------------------------------------------------------------
 
-interface VideoFrameEntry {
-  bitmap: ImageBitmap;
+export type Tier2VideoFrame = ImageBitmap | VideoFrame;
+
+export interface VideoFrameEntry {
+  frame: Tier2VideoFrame;
   sourceTime: number;
 }
 
@@ -122,10 +124,10 @@ class VideoFrameCache {
     return this.cache.get(itemId);
   }
 
-  put(itemId: string, bitmap: ImageBitmap, sourceTime: number): void {
+  put(itemId: string, frame: Tier2VideoFrame, sourceTime: number): void {
     const old = this.cache.get(itemId);
-    if (old) old.bitmap.close();
-    this.cache.set(itemId, { bitmap, sourceTime });
+    if (old) old.frame.close();
+    this.cache.set(itemId, { frame, sourceTime });
   }
 
   has(itemId: string): boolean {
@@ -138,7 +140,7 @@ class VideoFrameCache {
 
   clear(): void {
     for (const entry of this.cache.values()) {
-      entry.bitmap.close();
+      entry.frame.close();
     }
     this.cache.clear();
   }
@@ -309,18 +311,28 @@ export class ScrubbingCache {
   // -----------------------------------------------------------------------
 
   /** Get the last decoded frame for a video item (for instant clip-boundary display). */
-  getVideoFrame(itemId: string): ImageBitmap | undefined {
+  getVideoFrameEntry(
+    itemId: string,
+    sourceTime?: number,
+    maxSourceTimeDelta = Number.POSITIVE_INFINITY,
+  ): VideoFrameEntry | undefined {
     const entry = this.tier2.get(itemId);
-    if (entry) {
-      this._tier2Hits++;
-      return entry.bitmap;
+    if (!entry) {
+      return undefined;
     }
-    return undefined;
+    if (
+      sourceTime !== undefined
+      && Math.abs(entry.sourceTime - sourceTime) > maxSourceTimeDelta
+    ) {
+      return undefined;
+    }
+    this._tier2Hits++;
+    return entry;
   }
 
   /** Cache a decoded video frame for a specific item. */
-  putVideoFrame(itemId: string, bitmap: ImageBitmap, sourceTime: number): void {
-    this.tier2.put(itemId, bitmap, sourceTime);
+  putVideoFrame(itemId: string, frame: Tier2VideoFrame, sourceTime: number): void {
+    this.tier2.put(itemId, frame, sourceTime);
   }
 
   // -----------------------------------------------------------------------

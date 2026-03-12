@@ -161,7 +161,6 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
 
       <Separator orientation="vertical" className="h-8 flex-shrink-0" />
 
-      {/* Proxy toggle */}
       <Button
         variant="ghost"
         size="icon"

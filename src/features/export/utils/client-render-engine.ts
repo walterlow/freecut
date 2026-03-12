@@ -410,6 +410,7 @@ export async function createCompositionRenderer(
     canvasPool,
     textMeasureCache,
     renderMode,
+    scrubbingCache,
     videoExtractors,
     videoElements,
     useMediabunny,

@@ -43,6 +43,12 @@ interface MediabunnyVideoTrack {
   canDecode?: () => Promise<boolean>;
 }
 
+export interface DrawFrameCaptureResult {
+  success: boolean;
+  capturedFrame: VideoFrame | null;
+  capturedSourceTime: number | null;
+}
+
 export class VideoFrameExtractor {
   private static readonly TIMESTAMP_EPSILON = 1e-4;
   private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
@@ -181,6 +187,30 @@ export class VideoFrameExtractor {
     }
   }
 
+  async drawFrameWithCapture(
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    timestamp: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<DrawFrameCaptureResult> {
+    const success = await this.drawFrame(ctx, timestamp, x, y, width, height);
+    if (!success) {
+      return {
+        success: false,
+        capturedFrame: null,
+        capturedSourceTime: null,
+      };
+    }
+
+    return {
+      success: true,
+      capturedFrame: this.cloneCurrentVideoFrame(),
+      capturedSourceTime: this.currentSample?.timestamp ?? null,
+    };
+  }
+
   private async ensureSampleForTimestamp(timestamp: number): Promise<void> {
     if (!this.sink) return;
 
@@ -289,24 +319,9 @@ export class VideoFrameExtractor {
         return true;
       }
 
-      // Reuse cached VideoFrame if we're drawing the same sample again.
-      // This is critical for transitions: the outgoing clip is rendered past
-      // its timeline end, which means the sample iterator is exhausted and
-      // the same last sample is drawn for many consecutive frames.  Calling
-      // toVideoFrame() after a previous VideoFrame was closed can return an
-      // empty/invalidated frame because the decoded buffer was released.
-      let videoFrame = this.cachedVideoFrame;
-      if (!videoFrame || this.cachedVideoFrameSample !== sample) {
-        // Different sample â€” release old cached frame and create new one
-        this.closeCachedVideoFrame();
-        videoFrame = sample.toVideoFrame();
-        if (!videoFrame) {
-          this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
-          this.lastFailureKind = 'decode-error';
-          return false;
-        }
-        this.cachedVideoFrame = videoFrame;
-        this.cachedVideoFrameSample = sample;
+      const videoFrame = this.getOrCreateCurrentVideoFrame();
+      if (!videoFrame) {
+        return false;
       }
 
       ctx.drawImage(videoFrame, x, y, width, height);
@@ -317,6 +332,49 @@ export class VideoFrameExtractor {
       this.sampleLoopError = error;
       this.lastFailureKind = 'decode-error';
       return false;
+    }
+  }
+
+  private getOrCreateCurrentVideoFrame(): VideoFrame | null {
+    const sample = this.currentSample;
+    if (!sample) {
+      this.lastFailureKind = 'no-sample';
+      return null;
+    }
+
+    // Reuse cached VideoFrame if we're drawing the same sample again.
+    // This is critical for transitions: the outgoing clip is rendered past
+    // its timeline end, which means the sample iterator is exhausted and
+    // the same last sample is drawn for many consecutive frames. Calling
+    // toVideoFrame() after a previous VideoFrame was closed can return an
+    // empty/invalidated frame because the decoded buffer was released.
+    let videoFrame = this.cachedVideoFrame;
+    if (!videoFrame || this.cachedVideoFrameSample !== sample) {
+      this.closeCachedVideoFrame();
+      videoFrame = sample.toVideoFrame();
+      if (!videoFrame) {
+        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
+        this.lastFailureKind = 'decode-error';
+        return null;
+      }
+      this.cachedVideoFrame = videoFrame;
+      this.cachedVideoFrameSample = sample;
+    }
+
+    return videoFrame;
+  }
+
+  private cloneCurrentVideoFrame(): VideoFrame | null {
+    const videoFrame = this.getOrCreateCurrentVideoFrame();
+    if (!videoFrame) {
+      return null;
+    }
+
+    try {
+      return videoFrame.clone();
+    } catch (error) {
+      this.sampleLoopError = error;
+      return null;
     }
   }
 

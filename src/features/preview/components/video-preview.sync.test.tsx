@@ -673,7 +673,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     act(() => {
-      usePlaybackStore.getState().setPreviewQuality(0.25);
+      usePlaybackStore.getState().setPreviewQuality(0.33);
     });
 
     await waitFor(() => {

@@ -44,12 +44,14 @@ const DEFAULT_OPTIONS: AdaptivePreviewQualityOptions = {
 
 function getLowerQuality(quality: PreviewQuality): PreviewQuality {
   if (quality === 1) return 0.5;
-  if (quality === 0.5) return 0.25;
+  if (quality === 0.5) return 0.33;
+  if (quality === 0.33) return 0.25;
   return 0.25;
 }
 
 function getHigherQuality(quality: PreviewQuality): PreviewQuality {
-  if (quality === 0.25) return 0.5;
+  if (quality === 0.25) return 0.33;
+  if (quality === 0.33) return 0.5;
   if (quality === 0.5) return 1;
   return 1;
 }
