@@ -69,8 +69,11 @@ const {
 } = mockState;
 let mockedPlayerFrame = 0;
 let mockedPlayerIsPlaying = false;
+let deferPlayerSeekCompletion = false;
+let completeDeferredPlayerSeek: (() => void) | null = null;
 let lastPlayerDimensions: { width: number; height: number } | null = null;
 let playerDimensionsHistory: Array<{ width: number; height: number }> = [];
+let canvasGetContextSpy: ReturnType<typeof vi.spyOn> | null = null;
 let lastCompositionKeyframes: Array<{
   itemId: string;
   properties: Array<{
@@ -79,6 +82,56 @@ let lastCompositionKeyframes: Array<{
   }>;
 }> = [];
 let lastCompositionMediaSources: string[] = [];
+const createCompositionRendererMock = vi.hoisted(() => vi.fn(async () => ({
+  preload: vi.fn(async () => {}),
+  renderFrame: vi.fn(async () => {}),
+  prewarmFrame: vi.fn(async () => {}),
+  invalidateFrameCache: vi.fn(),
+  setDomVideoElementProvider: vi.fn(),
+  getScrubbingCache: () => null,
+  dispose: vi.fn(),
+})));
+
+function createMockCanvasContext(): CanvasRenderingContext2D {
+  return {
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    getImageData: vi.fn(),
+    putImageData: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+    roundRect: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    measureText: vi.fn(() => ({
+      width: 0,
+      fontBoundingBoxAscent: 0,
+      fontBoundingBoxDescent: 0,
+    })),
+    fillText: vi.fn(),
+    strokeText: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    globalCompositeOperation: 'source-over',
+    globalAlpha: 1,
+    fillStyle: '#000000',
+    strokeStyle: '#000000',
+    lineWidth: 1,
+    textAlign: 'left',
+    textBaseline: 'alphabetic',
+    font: '',
+    shadowColor: '',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+  } as unknown as CanvasRenderingContext2D;
+}
 
 class ResizeObserverMock {
   observe() {}
@@ -134,6 +187,10 @@ vi.mock('../utils/media-resolver', () => ({
   resolveProxyUrl: mockState.resolveProxyUrlMock,
 }));
 
+vi.mock('@/features/preview/deps/export', () => ({
+  createCompositionRenderer: createCompositionRendererMock,
+}));
+
 vi.mock('@/features/preview/deps/player-core', async () => {
   const React = await import('react');
 
@@ -145,19 +202,39 @@ vi.mock('@/features/preview/deps/player-core', async () => {
       getCurrentFrame: () => number;
       isPlaying: () => boolean;
     },
-    React.PropsWithChildren<{ width?: number; height?: number } & Record<string, unknown>>
-  >(({ children, width, height }, ref) => {
+    React.PropsWithChildren<{
+      width?: number;
+      height?: number;
+      onFrameChange?: (frame: number) => void;
+    } & Record<string, unknown>>
+  >(({ children, width, height, onFrameChange }, ref) => {
     const [renderTick, setRenderTick] = React.useState(0);
+    const onFrameChangeRef = React.useRef(onFrameChange);
     const safeWidth = Number.isFinite(width) ? Number(width) : 0;
     const safeHeight = Number.isFinite(height) ? Number(height) : 0;
     lastPlayerDimensions = { width: safeWidth, height: safeHeight };
     playerDimensionsHistory.push(lastPlayerDimensions);
 
+    React.useEffect(() => {
+      onFrameChangeRef.current = onFrameChange;
+    }, [onFrameChange]);
+
     React.useImperativeHandle(ref, () => ({
       seekTo: (frame: number) => {
-        mockedPlayerFrame = Math.round(frame);
-        seekToMock(mockedPlayerFrame);
+        const nextFrame = Math.round(frame);
+        seekToMock(nextFrame);
+        if (deferPlayerSeekCompletion) {
+          completeDeferredPlayerSeek = () => {
+            mockedPlayerFrame = nextFrame;
+            setRenderTick((value) => value + 1);
+            onFrameChangeRef.current?.(nextFrame);
+            completeDeferredPlayerSeek = null;
+          };
+          return;
+        }
+        mockedPlayerFrame = nextFrame;
         setRenderTick((value) => value + 1);
+        onFrameChangeRef.current?.(nextFrame);
       },
       play: () => {
         mockedPlayerIsPlaying = true;
@@ -295,6 +372,8 @@ describe('VideoPreview sync behavior', () => {
   beforeEach(() => {
     mockedPlayerFrame = 0;
     mockedPlayerIsPlaying = false;
+    deferPlayerSeekCompletion = false;
+    completeDeferredPlayerSeek = null;
     lastPlayerDimensions = null;
     playerDimensionsHistory = [];
     seekToMock.mockReset();
@@ -307,9 +386,26 @@ describe('VideoPreview sync behavior', () => {
     mockBlobUrlVersion.current = 0;
     resolveMediaUrlMock.mockClear();
     resolveProxyUrlMock.mockClear();
+    createCompositionRendererMock.mockClear();
+    canvasGetContextSpy?.mockRestore();
+    canvasGetContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
+      if (contextId === '2d') {
+        return createMockCanvasContext();
+      }
+      return null;
+    });
     localStorage.clear();
     setDocumentVisibility(false);
     resetStores();
+    (globalThis as unknown as { OffscreenCanvas: typeof HTMLCanvasElement }).OffscreenCanvas = function OffscreenCanvasMock(
+      width: number,
+      height: number,
+    ) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      return canvas as unknown as HTMLCanvasElement;
+    } as unknown as typeof HTMLCanvasElement;
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock;
   });
 
@@ -501,6 +597,52 @@ describe('VideoPreview sync behavior', () => {
     });
 
     expect(seekToMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps fast-scrub overlay visible until Player confirms scrub release frame', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+    seekToMock.mockClear();
+
+    deferPlayerSeekCompletion = true;
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(null);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(48);
+    });
+    expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+    expect(scrubCanvas.style.visibility).toBe('visible');
+
+    act(() => {
+      completeDeferredPlayerSeek?.();
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
   });
 
   it('on play start, clears previewFrame and seeks to current playhead frame', async () => {
