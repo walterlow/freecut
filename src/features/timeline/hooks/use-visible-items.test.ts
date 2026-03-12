@@ -68,7 +68,6 @@ describe('useVisibleItems filtering logic', () => {
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
     useTransitionsStore.getState().setTransitions([]);
-    useTransitionsStore.getState().setPendingBreakages([]);
     useTimelineViewportStore.getState().setViewport({
       scrollLeft: 0,
       scrollTop: 0,

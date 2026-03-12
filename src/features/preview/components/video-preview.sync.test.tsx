@@ -257,7 +257,6 @@ function resetStores() {
   useItemsStore.getState().setItems([]);
   useTimelineStore.setState({ keyframes: [] });
   useTransitionsStore.getState().setTransitions([]);
-  useTransitionsStore.getState().setPendingBreakages([]);
   useTimelineSettingsStore.setState({
     fps: 30,
     scrollPosition: 0,

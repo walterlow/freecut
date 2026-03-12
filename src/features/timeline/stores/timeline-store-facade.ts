@@ -359,7 +359,6 @@ async function loadTimeline(projectId: string): Promise<void> {
       useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[]);
       useItemsStore.getState().setItems((t.items || []) as TimelineItem[]);
       useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[]);
-      useTransitionsStore.getState().setPendingBreakages([]);
       useKeyframesStore.getState().setKeyframes((t.keyframes || []) as ItemKeyframes[]);
       useMarkersStore.getState().setMarkers(t.markers || []);
       useMarkersStore.getState().setInPoint(t.inPoint ?? null);
@@ -420,7 +419,6 @@ async function loadTimeline(projectId: string): Promise<void> {
       ]);
       useItemsStore.getState().setItems([]);
       useTransitionsStore.getState().setTransitions([]);
-      useTransitionsStore.getState().setPendingBreakages([]);
       useKeyframesStore.getState().setKeyframes([]);
       useMarkersStore.getState().setMarkers([]);
       useMarkersStore.getState().setInPoint(null);
@@ -474,7 +472,6 @@ let cachedSnapshot: (TimelineState & TimelineActions) | null = null;
 let lastItemsRef: unknown = null;
 let lastTracksRef: unknown = null;
 let lastTransitionsRef: unknown = null;
-let lastPendingBreakagesRef: unknown = null;
 let lastKeyframesRef: unknown = null;
 let lastMarkersRef: unknown = null;
 let lastInPointRef: unknown = null;
@@ -499,7 +496,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastItemsRef !== itemsState.items ||
     lastTracksRef !== itemsState.tracks ||
     lastTransitionsRef !== transitionsState.transitions ||
-    lastPendingBreakagesRef !== transitionsState.pendingBreakages ||
     lastKeyframesRef !== keyframesState.keyframes ||
     lastMarkersRef !== markersState.markers ||
     lastInPointRef !== markersState.inPoint ||
@@ -514,7 +510,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastItemsRef = itemsState.items;
     lastTracksRef = itemsState.tracks;
     lastTransitionsRef = transitionsState.transitions;
-    lastPendingBreakagesRef = transitionsState.pendingBreakages;
     lastKeyframesRef = keyframesState.keyframes;
     lastMarkersRef = markersState.markers;
     lastInPointRef = markersState.inPoint;
@@ -530,7 +525,6 @@ function getSnapshot(): TimelineState & TimelineActions {
       items: itemsState.items,
       tracks: itemsState.tracks,
       transitions: transitionsState.transitions,
-      pendingBreakages: transitionsState.pendingBreakages,
       keyframes: keyframesState.keyframes,
       markers: markersState.markers,
       inPoint: markersState.inPoint,
@@ -586,7 +580,6 @@ function getSnapshot(): TimelineState & TimelineActions {
       updateTransition: timelineActions.updateTransition,
       updateTransitions: timelineActions.updateTransitions,
       removeTransition: timelineActions.removeTransition,
-      clearPendingBreakages: timelineActions.clearPendingBreakages,
       addKeyframe: timelineActions.addKeyframe,
       addKeyframes: timelineActions.addKeyframes,
       updateKeyframe: timelineActions.updateKeyframe,
@@ -707,9 +700,6 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
     if ('transitions' in partial && partial.transitions !== undefined) {
       useTransitionsStore.getState().setTransitions(partial.transitions);
     }
-    if ('pendingBreakages' in partial && partial.pendingBreakages !== undefined) {
-      useTransitionsStore.getState().setPendingBreakages(partial.pendingBreakages);
-    }
     if ('keyframes' in partial && partial.keyframes !== undefined) {
       useKeyframesStore.getState().setKeyframes(partial.keyframes);
     }
@@ -757,4 +747,3 @@ export const useTimelineStore = createTimelineStoreFacade();
 
 // Re-export actions for direct use
 export * from './timeline-actions';
-

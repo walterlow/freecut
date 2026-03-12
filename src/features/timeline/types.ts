@@ -1,7 +1,7 @@
 import type { TimelineTrack, TimelineItem, ProjectMarker } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect } from '@/types/effects';
-import type { Transition, TransitionType, TransitionPresentation, WipeDirection, SlideDirection, FlipDirection, TransitionBreakage } from '@/types/transition';
+import type { Transition, TransitionType, TransitionPresentation, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType, EasingConfig } from '@/types/keyframe';
 import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 
@@ -29,8 +29,6 @@ export interface TimelineState {
   inPoint: number | null;
   outPoint: number | null;
   isDirty: boolean; // Track unsaved changes
-  /** Pending transition breakages to notify user about */
-  pendingBreakages: TransitionBreakage[];
 }
 
 export interface TimelineActions {
@@ -95,8 +93,6 @@ export interface TimelineActions {
   updateTransition: (id: string, updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>) => void;
   updateTransitions: (updates: Array<{ id: string; updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>> }>) => void;
   removeTransition: (id: string) => void;
-  /** Clear pending breakages after user has been notified */
-  clearPendingBreakages: () => void;
   // Keyframe actions
   addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => string;
   addKeyframes: (payloads: Array<{ itemId: string; property: AnimatableProperty; frame: number; value: number; easing?: EasingType; easingConfig?: EasingConfig }>) => string[];
