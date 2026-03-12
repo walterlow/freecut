@@ -18,6 +18,12 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
+function smoothStep(edge0: number, edge1: number, x: number): number {
+  const width = Math.max(edge1 - edge0, Number.EPSILON);
+  const t = clamp01((x - edge0) / width);
+  return t * t * (3 - (2 * t));
+}
+
 function getNumericProperty(
   properties: Record<string, unknown> | undefined,
   key: string,
@@ -98,11 +104,9 @@ function renderSparklesCanvas(
   const intensity = Math.max(0.35, getNumericProperty(properties, 'intensity', 1));
   const density = Math.max(0.5, getNumericProperty(properties, 'density', 1));
   const glow = Math.max(0, getNumericProperty(properties, 'glow', 1));
-  const envelope = Math.sin(p * Math.PI);
-  const incomingAlpha = Math.min(1, 0.18 + (p * 1.05));
+  const outgoingHold = 1 - smoothStep(0.74, 1, p);
 
   ctx.save();
-  ctx.globalAlpha = incomingAlpha;
   ctx.drawImage(rightCanvas, 0, 0, w, h);
   ctx.restore();
 
@@ -118,40 +122,46 @@ function renderSparklesCanvas(
 
   leftCtx.clearRect(0, 0, w, h);
   leftCtx.save();
-  leftCtx.globalAlpha = Math.max(0, 1.04 - (p * 0.94));
   leftCtx.drawImage(leftCanvas, 0, 0, w, h);
   leftCtx.restore();
 
-  const sparkleWindow = 0.2;
   const sparkleCount = Math.round(24 + (density * 22));
   const glowBursts: Array<{ x: number; y: number; radius: number; alpha: number; veilRadius: number }> = [];
 
   for (let i = 0; i < sparkleCount; i += 1) {
     const seed = i + 1;
-    const revealPoint = seededRandom(seed * 31.7);
-    const distance = Math.abs(revealPoint - p);
-    if (distance > sparkleWindow) continue;
+    const revealPoint = Math.min(
+      0.94,
+      0.04
+        + (seededRandom(seed * 31.7) * 0.72)
+        + (seededRandom(seed * 7.9) * 0.16)
+    );
+    const igniteDuration = 0.14 + (seededRandom(seed * 41.9) * 0.18);
+    const igniteProgress = clamp01((p - revealPoint) / igniteDuration);
+    const igniteIn = smoothStep(0, 0.16, igniteProgress);
+    const igniteOut = 1 - smoothStep(0.3, 0.95, igniteProgress);
+    const activation = igniteIn * igniteOut;
+    const afterglow = smoothStep(0.06, 0.72, igniteProgress);
+    if (activation <= 0.01 && afterglow <= 0.02) continue;
 
-    const activation = (1 - (distance / sparkleWindow)) * envelope;
-    const twinklePhase = (p * (6 + (seededRandom(seed * 5.3) * 5))) + seededRandom(seed * 11.1);
+    const twinklePhase = (igniteProgress * (3.6 + (seededRandom(seed * 5.3) * 3.8))) + seededRandom(seed * 11.1);
     const twinkle = 0.35 + (0.65 * ((Math.sin(twinklePhase * Math.PI * 2) + 1) / 2));
     const alpha = Math.min(1, activation * twinkle * intensity);
-    if (alpha <= 0.02) continue;
+    const breakupAlpha = Math.min(1, afterglow * (0.25 + (twinkle * 0.35)) * intensity);
 
     const baseX = seededRandom(seed * 13.1) * w;
     const baseY = seededRandom(seed * 17.9) * h;
     const sizeSeed = Math.pow(seededRandom(seed * 19.7), 0.55);
-    const radius = (4 + (sizeSeed * 34)) * sparkleScale * (0.5 + (activation * 1.2));
-    const motionPhase = (p - revealPoint) / sparkleWindow;
+    const radius = (4 + (sizeSeed * 34)) * sparkleScale * (0.55 + (activation * 1.15));
     const angle = seededRandom(seed * 23.3) * Math.PI * 2;
     const dirX = Math.cos(angle);
     const dirY = Math.sin(angle);
-    const drift = (10 + (sizeSeed * 32)) * envelope;
-    const orbitRadius = (3 + (sizeSeed * 10)) * envelope;
-    const orbitAngle = angle + (p * (3 + (seededRandom(seed * 29.1) * 6)) * Math.PI);
-    const x = baseX + (dirX * drift * motionPhase) + (Math.cos(orbitAngle) * orbitRadius);
-    const y = baseY + (dirY * drift * motionPhase) + (Math.sin(orbitAngle) * orbitRadius * 0.8);
-    const rotation = angle + (p * (2 + (sizeSeed * 4)) * Math.PI);
+    const drift = (10 + (sizeSeed * 28)) * activation;
+    const orbitRadius = (3 + (sizeSeed * 10)) * activation;
+    const orbitAngle = angle + (igniteProgress * (2.4 + (seededRandom(seed * 29.1) * 4.5)) * Math.PI);
+    const x = baseX + (dirX * drift) + (Math.cos(orbitAngle) * orbitRadius);
+    const y = baseY + (dirY * drift) + (Math.sin(orbitAngle) * orbitRadius * 0.8);
+    const rotation = angle + (igniteProgress * (2 + (sizeSeed * 3.5)) * Math.PI);
 
     leftCtx.save();
     leftCtx.globalCompositeOperation = 'destination-out';
@@ -183,6 +193,28 @@ function renderSparklesCanvas(
       0.42
     );
 
+    const dustCount = 3 + Math.round(sizeSeed * 2);
+    leftCtx.globalAlpha = breakupAlpha * 0.08;
+    for (let dustIndex = 0; dustIndex < dustCount; dustIndex += 1) {
+      const dustSeed = (seed * 53.1) + (dustIndex * 7.3);
+      const dustAngle = seededRandom(dustSeed) * Math.PI * 2;
+      const dustDistance = radius
+        * (1.3 + (seededRandom(dustSeed * 1.7) * 2.1))
+        * (0.5 + afterglow);
+      const dustRadius = radius
+        * (0.14 + (seededRandom(dustSeed * 2.9) * 0.24))
+        * (0.55 + afterglow);
+      leftCtx.beginPath();
+      leftCtx.arc(
+        x + (Math.cos(dustAngle) * dustDistance),
+        y + (Math.sin(dustAngle) * dustDistance * 0.85),
+        dustRadius,
+        0,
+        Math.PI * 2
+      );
+      leftCtx.fill();
+    }
+
     leftCtx.beginPath();
     leftCtx.arc(x, y, radius * 0.24, 0, Math.PI * 2);
     leftCtx.fill();
@@ -192,7 +224,7 @@ function renderSparklesCanvas(
       x,
       y,
       radius: radius * 2.6,
-      alpha,
+      alpha: Math.min(1, alpha + (breakupAlpha * 0.45)),
       veilRadius: radius * 5.4,
     });
   }
@@ -223,7 +255,10 @@ function renderSparklesCanvas(
     ctx.restore();
   }
 
+  ctx.save();
+  ctx.globalAlpha = outgoingHold;
   ctx.drawImage(leftLayer, 0, 0);
+  ctx.restore();
 
   if (glowBursts.length === 0 || glow <= 0) {
     return;
@@ -309,9 +344,12 @@ const sparklesRenderer: TransitionRenderer = {
     const scale = isOutgoing
       ? 1 - (0.03 * p)
       : 1.03 - (0.03 * p);
+    const opacity = isOutgoing
+      ? 1 - smoothStep(0.2, 0.94, p)
+      : smoothStep(0.06, 0.8, p);
 
     return {
-      opacity: fadeOpacity(p, isOutgoing),
+      opacity,
       transform: envelope > 0.08
         ? `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`
         : undefined,
@@ -326,7 +364,7 @@ const sparklesDef: TransitionDefinition = {
   id: 'sparkles',
   label: 'Sparkles',
   description: 'Twinkling star bursts reveal the next clip',
-  category: 'light',
+  category: 'custom',
   icon: 'Sparkles',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],

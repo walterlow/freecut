@@ -47,11 +47,10 @@ describe('transition-ui-config', () => {
     expect(customConfigs.some((config) => config.id === 'chromatic')).toBe(false);
   });
 
-  it('shows sparkles in the light category', () => {
-    const lightConfigs = TRANSITION_CONFIGS_BY_CATEGORY.light ?? [];
+  it('shows sparkles in the custom category', () => {
     const customConfigs = TRANSITION_CONFIGS_BY_CATEGORY.custom ?? [];
 
-    expect(lightConfigs.some((config) => config.id === 'sparkles')).toBe(true);
-    expect(customConfigs.some((config) => config.id === 'sparkles')).toBe(false);
+    expect(customConfigs.some((config) => config.id === 'sparkles')).toBe(true);
+    expect((TRANSITION_CONFIGS_BY_CATEGORY.light ?? []).some((config) => config.id === 'sparkles')).toBe(false);
   });
 });

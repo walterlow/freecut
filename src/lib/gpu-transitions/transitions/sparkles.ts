@@ -3,7 +3,7 @@ import type { GpuTransitionDefinition } from '../types';
 export const sparkles: GpuTransitionDefinition = {
   id: 'sparkles',
   name: 'Sparkles',
-  category: 'light',
+  category: 'custom',
   hasDirection: false,
   entryPoint: 'sparklesFragment',
   uniformSize: 32,
@@ -67,55 +67,69 @@ fn sparkleLayer(
   ) - vec2f(0.5, 0.5);
   let sizeSeed = hash(cell + vec2f(phase + 2.4, phase + 9.7));
   let orbitSeed = hash(cell + vec2f(phase + 4.6, phase + 11.2));
+  let ignitePoint = clamp(
+    0.04
+      + (seed * 0.72)
+      + (noise2d((cell * 0.17) + vec2f(phase * 0.31, phase * 0.67)) * 0.16),
+    0.04,
+    0.94
+  );
+  let igniteDuration = 0.14 + (sizeSeed * 0.18);
+  let igniteProgress = clamp((progress - ignitePoint) / igniteDuration, 0.0, 1.0);
+  let igniteIn = smoothstep(0.0, 0.16, igniteProgress);
+  let igniteOut = 1.0 - smoothstep(0.3, 0.95, igniteProgress);
+  let pulse = igniteIn * igniteOut;
+  let afterglow = smoothstep(0.06, 0.72, igniteProgress);
 
   let directionAngle = seed * TAU;
   let direction = vec2f(cos(directionAngle), sin(directionAngle));
-  let motionEnvelope = sin(progress * PI);
+  let motionEnvelope = pulse * (0.6 + (0.4 * sin(progress * PI)));
   let drift = direction
     * motionScale
-    * (0.35 + (sizeSeed * 1.4))
+    * (0.42 + (sizeSeed * 1.45))
     * motionEnvelope;
   let orbit = rotateVec2(
     vec2f(0.0, 1.0),
-    directionAngle + (progress * (1.8 + (orbitSeed * 2.7)) * PI)
-  ) * motionScale * 0.55 * (0.3 + orbitSeed) * motionEnvelope;
+    directionAngle + (igniteProgress * (1.5 + (orbitSeed * 2.6)) * PI)
+  ) * motionScale * 0.62 * (0.28 + orbitSeed) * motionEnvelope;
 
   let center = (centerSeed * 0.72) + drift + orbit;
-  let rotation = (seed * TAU) + (progress * (1.0 + (sizeSeed * 3.5)) * PI);
+  let rotation = (seed * TAU) + (igniteProgress * (1.2 + (sizeSeed * 3.1)) * PI);
   let size = sizeBase + (sizeSeed * sizeVariance);
-  let twinkle = 0.25 + (0.75 * ((sin((progress * (5.0 + (sizeSeed * 8.0)) + seed) * TAU) + 1.0) * 0.5));
+  let twinkle = 0.35 + (0.65 * ((sin((igniteProgress * (2.8 + (sizeSeed * 4.5)) + seed) * TAU) + 1.0) * 0.5));
   let activation = smoothstep(threshold, 1.0, seed);
 
   let starLocal = rotateVec2(local - center, rotation);
-  let main = sparkleShape(starLocal, size) * activation * twinkle;
+  let main = sparkleShape(starLocal, size) * activation * twinkle * pulse;
 
   let trailCenter = center - (
     direction
     * motionScale
-    * (0.45 + sizeSeed)
-    * (0.25 + (motionEnvelope * 0.75))
+    * (0.6 + sizeSeed)
+    * (0.25 + (pulse * 0.95))
   );
   let trailLocal = rotateVec2(local - trailCenter, rotation - 0.4);
-  let trailShape = vec2f(trailLocal.x * 1.5, trailLocal.y * 0.62);
+  let trailShape = vec2f(trailLocal.x * 1.7, trailLocal.y * 0.58);
   let trail = sparkleShape(trailShape, size * 0.72)
     * activation
     * twinkle
-    * motionEnvelope
-    * (0.45 + (sizeSeed * 0.25));
+    * pulse
+    * (0.42 + (sizeSeed * 0.28));
 
-  let flicker = smoothstep(
-    0.48,
-    1.0,
-    noise2d((cell * 0.9) + vec2f((progress * 3.0) + phase, phase))
-  );
+  let dustNoise = noise2d((cell * 0.85) + vec2f((igniteProgress * 4.2) + phase, phase * 0.37));
+  let dust = smoothstep(0.62, 1.0, dustNoise)
+    * afterglow
+    * activation
+    * (0.16 + (sizeSeed * 0.34));
   let reveal = clamp(
-    (main * (0.55 + (flicker * 0.2)))
-      + (trail * 0.38)
-      + (seed * 0.05),
+    (main * 0.72)
+      + (trail * 0.34)
+      + (afterglow * activation * 0.24)
+      + (dust * 0.12),
     0.0,
     1.0
   );
-  let glow = max(main, trail * 0.85) * (0.65 + (sizeSeed * 0.7));
+  let glow = max(main, trail * 0.88) * (0.65 + (sizeSeed * 0.75)) + (dust * 0.3);
 
   return vec4f(main, reveal, glow, seed);
 }
@@ -153,35 +167,62 @@ fn sparklesFragment(input: VertexOutput) -> @location(0) vec4f {
 
   let heroMix = step(microLayer.z, coarseLayer.z);
   let heroSeed = mix(microLayer.w, coarseLayer.w, heroMix);
-  let sparkleMask = max(coarseLayer.x, microLayer.x * 0.75);
-  let trailGlow = max(coarseLayer.z, microLayer.z * 0.6);
-  let sparkleReveal = max(coarseLayer.y, microLayer.y * 0.82);
-  let haloReveal = max(trailGlow, sparkleMask * 0.72);
-  let baseWash = smoothstep(0.0, 1.0, p);
-  let reveal = clamp(
-    ((baseWash * baseWash) * 1.08) - 0.08
-      + (sparkleReveal * (0.52 + (params.intensity * 0.12)))
-      + (haloReveal * (0.22 + (params.glow * 0.14))),
+  let sparkleCore = max(coarseLayer.x, microLayer.x * 0.78);
+  let sparkleField = max(coarseLayer.y, microLayer.y * 0.86);
+  let glowField = max(coarseLayer.z, microLayer.z * 0.74);
+  let macroNoise = fbm((scaledUv * (2.6 + (params.density * 0.9))) + vec2f(0.0, p * 0.7));
+  let dustNoise = noise2d(
+    (scaledUv * (13.0 + (params.density * 7.0)))
+      + vec2f((p * 5.2) + (heroSeed * 3.1), heroSeed * 7.4)
+  );
+  let dissolveCurve = smoothstep(0.03, 0.97, p);
+  let sparkleWindow = smoothstep(0.02, 0.28, p) * (1.0 - smoothstep(0.8, 1.0, p));
+  let dustField = smoothstep(0.58, 1.0, dustNoise)
+    * (0.12 + (sparkleField * 0.88))
+    * sin(p * PI);
+  let thresholdMap = clamp(
+    (macroNoise * 0.58)
+      + (dustNoise * 0.14)
+      + ((1.0 - sparkleField) * 0.18)
+      + ((1.0 - glowField) * 0.08),
     0.0,
     1.0
   );
-  let t = smoothstep(0.03, 0.97, reveal);
+  let dissolveProgress = clamp(
+    (dissolveCurve * 1.08) - 0.04
+      + (sparkleField * (0.28 + (params.intensity * 0.12)) * sparkleWindow)
+      + (glowField * (0.1 + (params.glow * 0.08)))
+      + (dustField * 0.12),
+    0.0,
+    1.0
+  );
+  let edge = 0.075 + (0.018 * params.sparkleScale);
+  let leftPresence = 1.0 - smoothstep(thresholdMap - edge, thresholdMap + edge, dissolveProgress);
+  let rightPresence = 1.0 - leftPresence;
 
-  var color = mix(right, left, t);
-  let frontPresence = smoothstep(0.05, 0.4, t) * (1.0 - smoothstep(0.58, 0.98, t));
-  let starPulse = sin(p * PI) * (0.75 + (sparkleMask * 0.45));
-  let edgeGlow = frontPresence
-    * haloReveal
+  var color = mix(right, left, leftPresence);
+  let dissolveEdge = clamp(leftPresence * rightPresence * 4.0, 0.0, 1.0);
+  let sparkleEnvelope = sin(p * PI);
+  let edgeGlow = dissolveEdge
+    * glowField
     * params.intensity
     * params.glow
-    * starPulse;
+    * (0.5 + (sparkleEnvelope * 0.4));
+  let sparkleFlash = sparkleCore
+    * (0.38 + (params.intensity * 0.52))
+    * (0.62 + (sparkleEnvelope * 0.38));
   let glowColor = mix(vec3f(1.0, 0.97, 0.88), vec3f(1.0, 0.82, 0.56), heroSeed);
-  let veilGlow = glowColor * haloReveal * params.glow * frontPresence * 0.18;
-  let lifted = color.rgb + veilGlow + (glowColor * edgeGlow * 1.08);
-  let compressed = 1.0 - exp(-lifted * (1.0 + (edgeGlow * 0.6)));
+  let warmVeil = glowColor * glowField * params.glow * (0.06 + (rightPresence * 0.12));
+  let incomingLift = right.rgb * (glowField * rightPresence * 0.05 * params.glow);
+  let lifted = color.rgb
+    + warmVeil
+    + incomingLift
+    + (glowColor * edgeGlow * 0.95)
+    + (glowColor * sparkleFlash * 0.72);
+  let compressed = 1.0 - exp(-lifted * (1.0 + (edgeGlow * 0.45)));
 
   return vec4f(
-    clamp(mix(lifted, compressed, 0.42), vec3f(0.0), vec3f(1.0)),
+    clamp(mix(lifted, compressed, 0.46), vec3f(0.0), vec3f(1.0)),
     color.a
   );
 }`,
