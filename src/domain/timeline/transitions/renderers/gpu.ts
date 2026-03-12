@@ -18,10 +18,240 @@ function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
+function getNumericProperty(
+  properties: Record<string, unknown> | undefined,
+  key: string,
+  fallback: number
+): number {
+  const value = properties?.[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return value;
+}
+
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453123;
+  return x - Math.floor(x);
+}
+
 function fadeOpacity(progress: number, isOutgoing: boolean): number {
   return isOutgoing
     ? Math.cos((progress * Math.PI) / 2)
     : Math.sin((progress * Math.PI) / 2);
+}
+
+function traceSparklePath(
+  ctx: OffscreenCanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  innerRadius: number,
+  rotation: number
+): void {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i += 1) {
+    const angle = rotation + ((Math.PI / 4) * i);
+    const r = i % 2 === 0 ? radius : innerRadius;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) {
+      ctx.moveTo(px, py);
+    } else {
+      ctx.lineTo(px, py);
+    }
+  }
+  ctx.closePath();
+}
+
+function fillSparkleShape(
+  ctx: OffscreenCanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  innerRadius: number,
+  rotation: number,
+  stretchX = 1,
+  stretchY = 1
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.scale(stretchX, stretchY);
+  traceSparklePath(ctx, 0, 0, radius, innerRadius, 0);
+  ctx.fill();
+  ctx.restore();
+}
+
+function renderSparklesCanvas(
+  ctx: OffscreenCanvasRenderingContext2D,
+  leftCanvas: OffscreenCanvas,
+  rightCanvas: OffscreenCanvas,
+  progress: number,
+  canvas?: { width: number; height: number },
+  properties?: Record<string, unknown>
+): void {
+  const p = clamp01(progress);
+  const w = canvas?.width ?? leftCanvas.width;
+  const h = canvas?.height ?? leftCanvas.height;
+  const sparkleScale = Math.max(0.55, getNumericProperty(properties, 'sparkleScale', 1));
+  const intensity = Math.max(0.35, getNumericProperty(properties, 'intensity', 1));
+  const density = Math.max(0.5, getNumericProperty(properties, 'density', 1));
+  const glow = Math.max(0, getNumericProperty(properties, 'glow', 1));
+  const envelope = Math.sin(p * Math.PI);
+  const incomingAlpha = Math.min(1, 0.18 + (p * 1.05));
+
+  ctx.save();
+  ctx.globalAlpha = incomingAlpha;
+  ctx.drawImage(rightCanvas, 0, 0, w, h);
+  ctx.restore();
+
+  const leftLayer = new OffscreenCanvas(w, h);
+  const leftCtx = leftLayer.getContext('2d');
+  if (!leftCtx) {
+    ctx.save();
+    ctx.globalAlpha = fadeOpacity(p, true);
+    ctx.drawImage(leftCanvas, 0, 0, w, h);
+    ctx.restore();
+    return;
+  }
+
+  leftCtx.clearRect(0, 0, w, h);
+  leftCtx.save();
+  leftCtx.globalAlpha = Math.max(0, 1.04 - (p * 0.94));
+  leftCtx.drawImage(leftCanvas, 0, 0, w, h);
+  leftCtx.restore();
+
+  const sparkleWindow = 0.2;
+  const sparkleCount = Math.round(24 + (density * 22));
+  const glowBursts: Array<{ x: number; y: number; radius: number; alpha: number; veilRadius: number }> = [];
+
+  for (let i = 0; i < sparkleCount; i += 1) {
+    const seed = i + 1;
+    const revealPoint = seededRandom(seed * 31.7);
+    const distance = Math.abs(revealPoint - p);
+    if (distance > sparkleWindow) continue;
+
+    const activation = (1 - (distance / sparkleWindow)) * envelope;
+    const twinklePhase = (p * (6 + (seededRandom(seed * 5.3) * 5))) + seededRandom(seed * 11.1);
+    const twinkle = 0.35 + (0.65 * ((Math.sin(twinklePhase * Math.PI * 2) + 1) / 2));
+    const alpha = Math.min(1, activation * twinkle * intensity);
+    if (alpha <= 0.02) continue;
+
+    const baseX = seededRandom(seed * 13.1) * w;
+    const baseY = seededRandom(seed * 17.9) * h;
+    const sizeSeed = Math.pow(seededRandom(seed * 19.7), 0.55);
+    const radius = (4 + (sizeSeed * 34)) * sparkleScale * (0.5 + (activation * 1.2));
+    const motionPhase = (p - revealPoint) / sparkleWindow;
+    const angle = seededRandom(seed * 23.3) * Math.PI * 2;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const drift = (10 + (sizeSeed * 32)) * envelope;
+    const orbitRadius = (3 + (sizeSeed * 10)) * envelope;
+    const orbitAngle = angle + (p * (3 + (seededRandom(seed * 29.1) * 6)) * Math.PI);
+    const x = baseX + (dirX * drift * motionPhase) + (Math.cos(orbitAngle) * orbitRadius);
+    const y = baseY + (dirY * drift * motionPhase) + (Math.sin(orbitAngle) * orbitRadius * 0.8);
+    const rotation = angle + (p * (2 + (sizeSeed * 4)) * Math.PI);
+
+    leftCtx.save();
+    leftCtx.globalCompositeOperation = 'destination-out';
+    leftCtx.globalAlpha = alpha;
+    leftCtx.fillStyle = 'rgba(0, 0, 0, 1)';
+    fillSparkleShape(leftCtx, x, y, radius, radius * 0.24, rotation);
+
+    leftCtx.globalAlpha = alpha * 0.46;
+    fillSparkleShape(
+      leftCtx,
+      x - (dirX * radius * 0.9),
+      y - (dirY * radius * 0.9),
+      radius * 0.78,
+      radius * 0.14,
+      rotation - 0.45,
+      1.9,
+      0.58
+    );
+
+    leftCtx.globalAlpha = alpha * 0.22;
+    fillSparkleShape(
+      leftCtx,
+      x - (dirX * radius * 1.55),
+      y - (dirY * radius * 1.55),
+      radius * 0.52,
+      radius * 0.12,
+      rotation - 0.7,
+      2.4,
+      0.42
+    );
+
+    leftCtx.beginPath();
+    leftCtx.arc(x, y, radius * 0.24, 0, Math.PI * 2);
+    leftCtx.fill();
+    leftCtx.restore();
+
+    glowBursts.push({
+      x,
+      y,
+      radius: radius * 2.6,
+      alpha,
+      veilRadius: radius * 5.4,
+    });
+  }
+
+  if (glowBursts.length > 0 && glow > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    for (const burst of glowBursts) {
+      const veil = ctx.createRadialGradient(
+        burst.x,
+        burst.y,
+        0,
+        burst.x,
+        burst.y,
+        burst.veilRadius
+      );
+      veil.addColorStop(0, `rgba(255, 245, 228, ${0.12 * burst.alpha * glow})`);
+      veil.addColorStop(0.45, `rgba(255, 226, 184, ${0.06 * burst.alpha * glow})`);
+      veil.addColorStop(1, 'rgba(255, 214, 165, 0)');
+      ctx.fillStyle = veil;
+      ctx.fillRect(
+        burst.x - burst.veilRadius,
+        burst.y - burst.veilRadius,
+        burst.veilRadius * 2,
+        burst.veilRadius * 2
+      );
+    }
+    ctx.restore();
+  }
+
+  ctx.drawImage(leftLayer, 0, 0);
+
+  if (glowBursts.length === 0 || glow <= 0) {
+    return;
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const burst of glowBursts) {
+    const gradient = ctx.createRadialGradient(
+      burst.x,
+      burst.y,
+      0,
+      burst.x,
+      burst.y,
+      burst.radius
+    );
+    gradient.addColorStop(0, `rgba(255, 252, 240, ${0.38 * burst.alpha * glow})`);
+    gradient.addColorStop(0.32, `rgba(255, 224, 170, ${0.26 * burst.alpha * glow})`);
+    gradient.addColorStop(1, 'rgba(255, 210, 150, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(
+      burst.x - burst.radius,
+      burst.y - burst.radius,
+      burst.radius * 2,
+      burst.radius * 2
+    );
+  }
+  ctx.restore();
 }
 
 // ============================================================================
@@ -60,6 +290,49 @@ const dissolveDef: TransitionDefinition = {
   defaultDuration: 30,
   minDuration: 10,
   maxDuration: 90,
+};
+
+// ============================================================================
+// Sparkles
+// ============================================================================
+
+const sparklesRenderer: TransitionRenderer = {
+  gpuTransitionId: 'sparkles',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress);
+    const envelope = Math.sin(p * Math.PI);
+    const phase = isOutgoing ? 0.2 : 1.05;
+    const drift = 14 * envelope;
+    const x = Math.sin((p * Math.PI * 2.2) + phase) * drift * 0.55;
+    const y = Math.cos((p * Math.PI * 1.6) + phase) * drift * 0.28;
+    const rotate = Math.sin((p * Math.PI * 1.8) + phase) * envelope * 1.6;
+    const scale = isOutgoing
+      ? 1 - (0.03 * p)
+      : 1.03 - (0.03 * p);
+
+    return {
+      opacity: fadeOpacity(p, isOutgoing),
+      transform: envelope > 0.08
+        ? `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`
+        : undefined,
+    };
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas, properties) {
+    renderSparklesCanvas(ctx, leftCanvas, rightCanvas, progress, canvas, properties);
+  },
+};
+
+const sparklesDef: TransitionDefinition = {
+  id: 'sparkles',
+  label: 'Sparkles',
+  description: 'Twinkling star bursts reveal the next clip',
+  category: 'light',
+  icon: 'Sparkles',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 24,
+  minDuration: 8,
+  maxDuration: 72,
 };
 
 // ============================================================================
@@ -303,6 +576,7 @@ const radialBlurDef: TransitionDefinition = {
 
 export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('dissolve', dissolveDef, dissolveRenderer);
+  registry.register('sparkles', sparklesDef, sparklesRenderer);
   registry.register('glitch', glitchDef, glitchRenderer);
   registry.register('lightLeak', lightLeakDef, lightLeakRenderer);
   registry.register('pixelate', pixelateDef, pixelateRenderer);

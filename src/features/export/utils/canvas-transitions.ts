@@ -545,7 +545,7 @@ export function renderTransition(
   }
 
   if (renderer?.renderCanvas) {
-    renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas);
+    renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas, transition.properties);
     return;
   }
 

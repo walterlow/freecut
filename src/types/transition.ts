@@ -34,6 +34,7 @@ export type BuiltinTransitionPresentation =
   | 'clockWipe'
   | 'iris'
   | 'dissolve'
+  | 'sparkles'
   | 'glitch'
   | 'lightLeak'
   | 'pixelate'

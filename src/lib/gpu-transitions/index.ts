@@ -3,6 +3,7 @@ export type { GpuTransitionDefinition } from './types';
 export { TransitionPipeline } from './transition-pipeline';
 
 import { dissolve } from './transitions/dissolve';
+import { sparkles } from './transitions/sparkles';
 import { glitch } from './transitions/glitch';
 import { lightLeak } from './transitions/light-leak';
 import { pixelate } from './transitions/pixelate';
@@ -16,6 +17,7 @@ function register(def: GpuTransitionDefinition) {
 }
 
 register(dissolve);
+register(sparkles);
 register(glitch);
 register(lightLeak);
 register(pixelate);
