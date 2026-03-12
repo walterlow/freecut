@@ -280,6 +280,17 @@ function resetStores() {
   });
 }
 
+function setDocumentVisibility(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', {
+    configurable: true,
+    value: hidden,
+  });
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    value: hidden ? 'hidden' : 'visible',
+  });
+}
+
 describe('VideoPreview sync behavior', () => {
   beforeEach(() => {
     mockedPlayerFrame = 0;
@@ -297,6 +308,7 @@ describe('VideoPreview sync behavior', () => {
     resolveMediaUrlMock.mockClear();
     resolveProxyUrlMock.mockClear();
     localStorage.clear();
+    setDocumentVisibility(false);
     resetStores();
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock;
   });
@@ -457,6 +469,49 @@ describe('VideoPreview sync behavior', () => {
       expect(seekToMock).toHaveBeenCalledWith(72);
       expect(playMock).toHaveBeenCalled();
     });
+  });
+
+  it('keeps playback running across tab visibility changes', async () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+      expect(playMock).toHaveBeenCalled();
+    });
+    playMock.mockClear();
+
+    act(() => {
+      setDocumentVisibility(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    });
+
+    act(() => {
+      setDocumentVisibility(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    });
+    expect(pauseMock).not.toHaveBeenCalled();
   });
 
   it('renders keyframed transform values correctly after scrub and seek handoff', async () => {

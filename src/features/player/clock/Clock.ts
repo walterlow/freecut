@@ -72,6 +72,17 @@ export class Clock {
   // Throttling for timeupdate events
   private _lastTimeUpdateEmit: number = 0;
   private readonly TIME_UPDATE_INTERVAL_MS = 100;
+  private readonly _handleVisibilityChange = (): void => {
+    if (typeof document !== 'undefined' && !document.hidden) {
+      this._catchUpToCurrentTime();
+    }
+  };
+  private readonly _handleWindowFocus = (): void => {
+    this._catchUpToCurrentTime();
+  };
+  private readonly _handlePageShow = (): void => {
+    this._catchUpToCurrentTime();
+  };
 
   constructor(config: ClockConfig) {
     this._fps = config.fps;
@@ -93,6 +104,14 @@ export class Clock {
     eventTypes.forEach((type) => {
       this._listeners.set(type, new Set());
     });
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this._handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', this._handleWindowFocus);
+      window.addEventListener('pageshow', this._handlePageShow);
+    }
   }
 
   // ============================================
@@ -404,6 +423,13 @@ export class Clock {
   dispose(): void {
     this._stopAnimationLoop();
     this._listeners.forEach((listeners) => listeners.clear());
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('focus', this._handleWindowFocus);
+      window.removeEventListener('pageshow', this._handlePageShow);
+    }
   }
 
   // ============================================
@@ -437,6 +463,74 @@ export class Clock {
     }
   }
 
+  private _computeFrameAtTime(now: number): number {
+    const elapsedMs = now - this._playbackStartTime;
+    const elapsedSeconds = elapsedMs / 1000;
+    const framesElapsed = elapsedSeconds * this._fps * this._playbackRate;
+
+    if (this._playbackRate >= 0) {
+      return Math.floor(this._playbackStartFrame + framesElapsed);
+    }
+
+    return Math.ceil(this._playbackStartFrame + framesElapsed);
+  }
+
+  private _advancePlaybackTo(now: number): boolean {
+    const newFrame = this._computeFrameAtTime(now);
+
+    const hasReachedEnd =
+      this._playbackRate >= 0
+        ? newFrame > this.actualLastFrame
+        : newFrame < this.actualFirstFrame;
+
+    if (hasReachedEnd) {
+      if (this._loop) {
+        const targetFrame =
+          this._playbackRate >= 0 ? this.actualFirstFrame : this.actualLastFrame;
+        this._currentFrame = targetFrame;
+        this._playbackStartTime = now;
+        this._playbackStartFrame = targetFrame;
+        this._emit('framechange');
+      } else {
+        this._currentFrame =
+          this._playbackRate >= 0 ? this.actualLastFrame : this.actualFirstFrame;
+        this._isPlaying = false;
+        this._emit('framechange');
+        this._emit('ended');
+        this._onEnded?.();
+        this._stopAnimationLoop();
+        return true;
+      }
+    } else if (newFrame !== this._currentFrame) {
+      this._currentFrame = newFrame;
+      this._emit('framechange');
+    }
+
+    if (now - this._lastTimeUpdateEmit >= this.TIME_UPDATE_INTERVAL_MS) {
+      this._lastTimeUpdateEmit = now;
+      this._emit('timeupdate');
+    }
+
+    return false;
+  }
+
+  private _catchUpToCurrentTime(): void {
+    if (!this._isPlaying) {
+      return;
+    }
+
+    const now = performance.now();
+    const playbackEnded = this._advancePlaybackTo(now);
+    if (playbackEnded) {
+      return;
+    }
+
+    // Re-anchor to "now" so the next visible RAF continues smoothly instead of
+    // replaying the same background catch-up delta.
+    this._playbackStartTime = now;
+    this._playbackStartFrame = this._currentFrame;
+  }
+
   private _startAnimationLoop(): void {
     if (this._animationFrameId !== null) {
       return;
@@ -450,64 +544,9 @@ export class Clock {
 
       const now = performance.now();
 
-      // While the tab is hidden, browsers throttle RAF to ~1fps.
-      // Don't advance the frame — just keep the loop alive and reset
-      // the timing reference so the first visible tick starts fresh.
-      if (document.hidden) {
-        this._playbackStartTime = now;
-        this._playbackStartFrame = this._currentFrame;
-        this._animationFrameId = requestAnimationFrame(tick);
+      if (this._advancePlaybackTo(now)) {
+        this._animationFrameId = null;
         return;
-      }
-
-      const elapsedMs = now - this._playbackStartTime;
-      const elapsedSeconds = elapsedMs / 1000;
-
-      // Calculate new frame based on elapsed time and playback rate
-      const framesElapsed = elapsedSeconds * this._fps * this._playbackRate;
-      let newFrame: number;
-
-      if (this._playbackRate >= 0) {
-        newFrame = Math.floor(this._playbackStartFrame + framesElapsed);
-      } else {
-        newFrame = Math.ceil(this._playbackStartFrame + framesElapsed);
-      }
-
-      // Check boundaries
-      const hasReachedEnd =
-        this._playbackRate >= 0
-          ? newFrame > this.actualLastFrame
-          : newFrame < this.actualFirstFrame;
-
-      if (hasReachedEnd) {
-        if (this._loop) {
-          // Loop back to start/end
-          const targetFrame =
-            this._playbackRate >= 0 ? this.actualFirstFrame : this.actualLastFrame;
-          this._currentFrame = targetFrame;
-          this._playbackStartTime = now;
-          this._playbackStartFrame = targetFrame;
-          this._emit('framechange');
-        } else {
-          // Stop at boundary
-          this._currentFrame =
-            this._playbackRate >= 0 ? this.actualLastFrame : this.actualFirstFrame;
-          this._isPlaying = false;
-          this._emit('framechange');
-          this._emit('ended');
-          this._onEnded?.();
-          this._animationFrameId = null;
-          return;
-        }
-      } else if (newFrame !== this._currentFrame) {
-        this._currentFrame = newFrame;
-        this._emit('framechange');
-      }
-
-      // Emit throttled timeupdate events
-      if (now - this._lastTimeUpdateEmit >= this.TIME_UPDATE_INTERVAL_MS) {
-        this._lastTimeUpdateEmit = now;
-        this._emit('timeupdate');
       }
 
       // Continue the loop
