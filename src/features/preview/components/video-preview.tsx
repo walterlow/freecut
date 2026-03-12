@@ -2411,10 +2411,14 @@ export const VideoPreview = memo(function VideoPreview({
             }
           }
 
-          // Use full renderFrame for both priority and prewarm frames.
-          // Prewarm renders populate the frame cache so subsequent scrubs
-          // to those frames are instant cache hits (~0.1ms vs 5-80ms).
-          await renderer.renderFrame(frameToRender);
+          if (isPriorityFrame) {
+            // Visible scrub targets still use full composition rendering.
+            await renderer.renderFrame(frameToRender);
+          } else {
+            // Background scrub prewarm only needs to advance decode state for
+            // nearby sources. Avoid full composition work for non-visible frames.
+            await renderer.prewarmFrame(frameToRender);
+          }
           if (!scrubMountedRef.current) break;
 
           if (isPriorityFrame) {
