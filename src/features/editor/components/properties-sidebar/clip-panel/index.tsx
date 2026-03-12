@@ -243,7 +243,7 @@ export const ClipPanel = memo(function ClipPanel() {
           {/* Text - only for text items */}
           {hasTextItems && (
             <>
-              <TextSection items={selectedItems} />
+              <TextSection items={selectedItems} canvas={canvas} />
               {(hasShapeItems || hasVideoItems || hasGifItems || hasAudioItems) && <Separator />}
             </>
           )}

@@ -5,6 +5,8 @@ export interface TextLayoutPreviewProperties {
   fontSize?: number;
   letterSpacing?: number;
   lineHeight?: number;
+  textShadow?: TextItem['textShadow'];
+  stroke?: TextItem['stroke'];
 }
 
 const FONT_WEIGHT_MAP: Record<string, number> = {
@@ -161,9 +163,18 @@ function getTextRequiredHeight(
   const lineHeightPx = fontSize * lineHeight;
   const contentHeight = lines.length * lineHeightPx;
 
-  const strokePad = (item.stroke?.width ?? 0) * 2;
-  const shadowPad = item.textShadow
-    ? Math.abs(item.textShadow.offsetY) + item.textShadow.blur
+  const hasPreviewStroke = previewProperties
+    ? Object.prototype.hasOwnProperty.call(previewProperties, 'stroke')
+    : false;
+  const hasPreviewShadow = previewProperties
+    ? Object.prototype.hasOwnProperty.call(previewProperties, 'textShadow')
+    : false;
+  const stroke = hasPreviewStroke ? previewProperties?.stroke : item.stroke;
+  const textShadow = hasPreviewShadow ? previewProperties?.textShadow : item.textShadow;
+
+  const strokePad = (stroke?.width ?? 0) * 2;
+  const shadowPad = textShadow
+    ? Math.abs(textShadow.offsetY) + textShadow.blur
     : 0;
 
   return contentHeight + TEXT_PADDING * 2 + strokePad + shadowPad * 2;
