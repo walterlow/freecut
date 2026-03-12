@@ -39,7 +39,8 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
     }
   }, [media, onClose]);
 
-  // Resolve blob URL
+  // Resolve the original source URL once. SourceComposition can swap to a
+  // ready proxy for video preview without losing the original fallback URL.
   useEffect(() => {
     let cancelled = false;
     resolveMediaUrl(mediaId).then((url) => {
@@ -76,6 +77,7 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
           durationInFrames={durationInFrames}
         >
           <SourceMonitorInner
+            mediaId={mediaId}
             src={blobUrl}
             mediaType={mediaType}
             fileName={media.fileName}
@@ -94,6 +96,7 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
 // -- Inner component (rendered inside provider tree) --
 
 interface SourceMonitorInnerProps {
+  mediaId: string;
   src: string;
   mediaType: 'video' | 'audio' | 'image';
   fileName: string;
@@ -105,6 +108,7 @@ interface SourceMonitorInnerProps {
 }
 
 function SourceMonitorInner({
+  mediaId,
   src,
   mediaType,
   fileName,
@@ -270,6 +274,7 @@ function SourceMonitorInner({
               style={{ transformOrigin: 'top left' }}
             >
               <SourceComposition
+                mediaId={mediaId}
                 src={src}
                 mediaType={mediaType}
                 fileName={fileName}
@@ -597,4 +602,3 @@ function SourcePlaybackControls({
     </div>
   );
 }
-
