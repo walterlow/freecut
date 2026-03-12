@@ -84,7 +84,7 @@ export const TrackHeader = memo(function TrackHeader({
       <ContextMenuTrigger asChild>
         <div
           className={`
-            flex items-center px-1 border-b border-border
+            flex items-center px-1
             cursor-grab active:cursor-grabbing relative
             ${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/50'}
             ${isActive ? 'border-l-3 border-l-primary' : 'border-l-3 border-l-transparent'}

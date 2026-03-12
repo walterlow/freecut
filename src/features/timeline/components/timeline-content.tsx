@@ -32,6 +32,7 @@ import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
 import { GroupSummaryTrack } from './group-summary-track';
 import { TimelineGuidelines } from './timeline-guidelines';
+import { TrackRowFrame } from './track-row-frame';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
@@ -931,13 +932,15 @@ export const TimelineContent = memo(function TimelineContent({
         >
           {/* Render all visible tracks - virtualization removed as it caused drag lag */}
           {/* Video editors typically have <10 tracks, making virtualization overhead not worth it */}
-          {tracks.map((track) =>
-            track.isGroup && track.isCollapsed ? (
-              <GroupSummaryTrack key={track.id} track={track} />
-            ) : (
-              <TimelineTrack key={track.id} track={track} timelineWidth={timelineWidth} />
-            )
-          )}
+          {tracks.map((track) => (
+            <TrackRowFrame key={track.id}>
+              {track.isGroup && track.isCollapsed ? (
+                <GroupSummaryTrack track={track} />
+              ) : (
+                <TimelineTrack track={track} timelineWidth={timelineWidth} />
+              )}
+            </TrackRowFrame>
+          ))}
 
           {/* Snap guidelines (shown during drag) */}
           {isDragging && (

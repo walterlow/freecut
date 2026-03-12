@@ -717,7 +717,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         <div
           ref={trackRef}
           data-track-id={track.id}
-          className={`relative border-b border-border${track.isGroup ? ' bg-group-stripes' : ''}`}
+          className={`relative${track.isGroup ? ' bg-group-stripes' : ''}`}
           style={{
             height: `${track.height}px`,
             // CSS containment tells browser this element's layout is independent
@@ -762,7 +762,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
           {/* Render transitions for this track */}
           {trackTransitions.map((transition) => (
-            <TransitionItem key={transition.id} transition={transition} trackHeight={track.height} trackHidden={!track.visible} />
+            <TransitionItem key={transition.id} transition={transition} trackHidden={!track.visible} />
           ))}
 
           {/* Locked track overlay indicator */}
@@ -783,4 +783,3 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     </ContextMenu>
   );
 }, areTrackPropsEqual);
-
