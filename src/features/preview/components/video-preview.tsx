@@ -3356,6 +3356,11 @@ export const VideoPreview = memo(function VideoPreview({
     const nextFrame = Math.round(frame);
     resolvePendingSeekLatency(nextFrame);
     maybeCompleteFastScrubHandoff(nextFrame);
+    const pendingHandoffFrame = pendingFastScrubHandoffFrameRef.current;
+    if (pendingHandoffFrame !== null && nextFrame !== pendingHandoffFrame) {
+      scheduleFastScrubHandoffCheck();
+      return;
+    }
     if (ignorePlayerUpdatesRef.current) return;
     const playbackState = usePlaybackStore.getState();
     const interactionMode = getPreviewInteractionMode({
@@ -3409,7 +3414,12 @@ export const VideoPreview = memo(function VideoPreview({
     const { currentFrame, setCurrentFrame } = playbackState;
     if (currentFrame === nextFrame) return;
     setCurrentFrame(nextFrame);
-  }, [fps, maybeCompleteFastScrubHandoff, resolvePendingSeekLatency]);
+  }, [
+    fps,
+    maybeCompleteFastScrubHandoff,
+    resolvePendingSeekLatency,
+    scheduleFastScrubHandoffCheck,
+  ]);
 
   // Handle play state change from player
   const handlePlayStateChange = useCallback((playing: boolean) => {

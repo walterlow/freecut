@@ -70,7 +70,7 @@ const {
 let mockedPlayerFrame = 0;
 let mockedPlayerIsPlaying = false;
 let deferPlayerSeekCompletion = false;
-let completeDeferredPlayerSeek: (() => void) | null = null;
+let completeDeferredPlayerSeek: ((frameOverride?: number) => void) | null = null;
 let lastPlayerDimensions: { width: number; height: number } | null = null;
 let playerDimensionsHistory: Array<{ width: number; height: number }> = [];
 let canvasGetContextSpy: ReturnType<typeof vi.spyOn> | null = null;
@@ -224,11 +224,14 @@ vi.mock('@/features/preview/deps/player-core', async () => {
         const nextFrame = Math.round(frame);
         seekToMock(nextFrame);
         if (deferPlayerSeekCompletion) {
-          completeDeferredPlayerSeek = () => {
-            mockedPlayerFrame = nextFrame;
+          completeDeferredPlayerSeek = (frameOverride) => {
+            const resolvedFrame = frameOverride ?? nextFrame;
+            mockedPlayerFrame = resolvedFrame;
             setRenderTick((value) => value + 1);
-            onFrameChangeRef.current?.(nextFrame);
-            completeDeferredPlayerSeek = null;
+            onFrameChangeRef.current?.(resolvedFrame);
+            if (resolvedFrame === nextFrame) {
+              completeDeferredPlayerSeek = null;
+            }
           };
           return;
         }
@@ -599,7 +602,7 @@ describe('VideoPreview sync behavior', () => {
     expect(seekToMock).not.toHaveBeenCalled();
   });
 
-  it('keeps fast-scrub overlay visible until Player confirms scrub release frame', async () => {
+  it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
     const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -636,7 +639,17 @@ describe('VideoPreview sync behavior', () => {
     expect(scrubCanvas.style.visibility).toBe('visible');
 
     act(() => {
-      completeDeferredPlayerSeek?.();
+      completeDeferredPlayerSeek?.(47);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().currentFrame).toBe(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      completeDeferredPlayerSeek?.(48);
     });
 
     await waitFor(() => {
