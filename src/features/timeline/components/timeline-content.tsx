@@ -92,11 +92,8 @@ export const TimelineContent = memo(function TimelineContent({
   // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
   // when ANY item changes. Instead, use derived selectors for specific needs.
 
-  // Derived selector: only returns the furthest item end frame (for timeline width)
-  // This only triggers re-render when the timeline's actual end position changes
-  const furthestItemEndFrame = useTimelineStore((s) =>
-    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
-  );
+  // O(1) pre-computed value from items store instead of O(n) reduce on every change
+  const furthestItemEndFrame = useItemsStore((s) => s.maxItemEndFrame);
   const maxTimelineFrame = Math.floor(Math.max(furthestItemEndFrame / fps, 10) * fps);
   const { timeToPixels, frameToPixels, pixelsToFrame, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
     minZoom: 0.01,

@@ -3,6 +3,7 @@ import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useKeyframesStore } from '../../stores/keyframes-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
@@ -96,13 +97,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     )
   );
 
-  // Selector returns stable item keyframe entry reference when unrelated store
-  // state updates occur, avoiding object-allocation churn in selectors.
-  const itemKeyframes = useTimelineStore(
+  // O(1) lookup via keyframesByItemId index instead of O(n) array scan
+  const itemKeyframes = useKeyframesStore(
     useCallback(
-      (s) => {
-        return s.keyframes.find((k) => k.itemId === item.id) ?? null;
-      },
+      (s) => s.keyframesByItemId[item.id] ?? null,
       [item.id]
     )
   );
@@ -921,13 +919,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Reactive neighbor detection: recompute join indicators when adjacent items
   // change (covers deletion, moves to another track, and position shifts).
-  // The selector is O(n) but only triggers re-render when neighbor IDs change.
-  const neighborKey = useTimelineStore(
+  // Uses itemsByTrackId for O(trackItems) instead of O(allItems) lookup.
+  const neighborKey = useItemsStore(
     useCallback((s) => {
+      const trackItems = s.itemsByTrackId[item.trackId];
+      if (!trackItems) return '|';
       let leftId = '';
       let rightId = '';
-      for (const other of s.items) {
-        if (other.id === item.id || other.trackId !== item.trackId) continue;
+      for (const other of trackItems) {
+        if (other.id === item.id) continue;
         if (other.from + other.durationInFrames === item.from) leftId = other.id;
         else if (other.from === item.from + item.durationInFrames) rightId = other.id;
       }
@@ -936,19 +936,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
 
   const getNeighbors = useCallback(() => {
-    const items = useTimelineStore.getState().items;
+    const trackItems = useItemsStore.getState().itemsByTrackId[item.trackId] ?? [];
 
-    const left = items.find(
+    const left = trackItems.find(
       (other) =>
         other.id !== item.id &&
-        other.trackId === item.trackId &&
         other.from + other.durationInFrames === item.from
     ) ?? null;
 
-    const right = items.find(
+    const right = trackItems.find(
       (other) =>
         other.id !== item.id &&
-        other.trackId === item.trackId &&
         other.from === item.from + item.durationInFrames
     ) ?? null;
 
@@ -970,9 +968,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const handleJoinSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds;
     if (selectedItemIds.length >= 2) {
-      const items = useTimelineStore.getState().items;
+      const itemById = useItemsStore.getState().itemById;
       const selectedItems = selectedItemIds
-        .map((id) => items.find((i) => i.id === id))
+        .map((id) => itemById[id])
         .filter((i): i is NonNullable<typeof i> => i !== undefined);
       if (canJoinMultipleItems(selectedItems)) {
         useTimelineStore.getState().joinItems(selectedItemIds);
