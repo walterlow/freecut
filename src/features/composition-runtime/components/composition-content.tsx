@@ -76,8 +76,18 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   // === Compute parent container dimensions ===
   // Replicates the same priority chain as useItemVisualState:
   // unified preview > gizmo preview > keyframes > base
-  const activeGizmo = useGizmoStore((s) => s.activeGizmo);
-  const previewTransform = useGizmoStore((s) => s.previewTransform);
+  //
+  // Granular selectors: extract only the values we need to avoid
+  // re-renders when unrelated gizmo store fields change reference.
+  const isGizmoTarget = useGizmoStore(
+    useCallback((s) => s.activeGizmo?.itemId === item.id, [item.id])
+  );
+  const previewTransform = useGizmoStore(
+    useCallback(
+      (s) => (s.activeGizmo?.itemId === item.id ? s.previewTransform : null),
+      [item.id]
+    )
+  );
   const itemPreview = useGizmoStore(
     useCallback((s) => s.preview?.[item.id], [item.id])
   );
@@ -90,12 +100,17 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     )
   );
   const itemKeyframes = contextKeyframes ?? storeKeyframes;
+  const hasAnimatedKeyframes = !!(itemKeyframes && hasKeyframeAnimation(itemKeyframes));
 
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
   const relativeFrame = frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0);
   const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
   const subCompFrame = relativeFrame + sourceOffset;
+
+  // Only include relativeFrame as a dependency when keyframes are actually animated.
+  // This prevents per-frame recomputation during playback for non-animated sub-comps.
+  const keyframeFrame = hasAnimatedKeyframes ? relativeFrame : 0;
 
   const containerDims = useMemo(() => {
     const canvas = { width: projectWidth, height: projectHeight, fps: mainFps };
@@ -104,8 +119,8 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
 
     // Apply keyframe animation if present
     let animatedResolved = baseResolved;
-    if (itemKeyframes && hasKeyframeAnimation(itemKeyframes)) {
-      animatedResolved = resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
+    if (hasAnimatedKeyframes) {
+      animatedResolved = resolveAnimatedTransform(baseResolved, itemKeyframes!, keyframeFrame);
     }
 
     // Priority: unified preview > gizmo preview > keyframes > base
@@ -117,7 +132,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
         ...unifiedPreviewTransform,
         cornerRadius: unifiedPreviewTransform.cornerRadius ?? animatedResolved.cornerRadius,
       } as ResolvedTransform;
-    } else if (activeGizmo?.itemId === item.id && previewTransform !== null) {
+    } else if (isGizmoTarget && previewTransform !== null) {
       resolved = {
         ...previewTransform,
         cornerRadius: previewTransform.cornerRadius ?? animatedResolved.cornerRadius,
@@ -134,9 +149,10 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     mainFps,
     item,
     itemKeyframes,
-    relativeFrame,
+    hasAnimatedKeyframes,
+    keyframeFrame,
     itemPreview,
-    activeGizmo,
+    isGizmoTarget,
     previewTransform,
     renderScaleX,
     renderScaleY,

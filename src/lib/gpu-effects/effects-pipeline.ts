@@ -82,8 +82,14 @@ export class EffectsPipeline {
   // Cached texture views for ping/pong (recreated when textures change)
   private pingView: GPUTextureView | null = null;
   private pongView: GPUTextureView | null = null;
-  // GPU backpressure: true while GPU is processing a frame
-  private gpuBusy = false;
+  // Cached bind groups keyed by "effectId:ping|pong" — invalidated when textures change
+  private effectBindGroupCache = new Map<string, GPUBindGroup>();
+  // Cached blit bind groups for ping/pong input views
+  private blitBindGroupPing: GPUBindGroup | null = null;
+  private blitBindGroupPong: GPUBindGroup | null = null;
+  // GPU backpressure: count of frames still in-flight on the GPU queue
+  private gpuFramesInFlight = 0;
+  private static MAX_FRAMES_IN_FLIGHT = 2;
   // Reusable offscreen canvas for applyEffectsToCanvas output (non-batch)
   private outputCanvas: OffscreenCanvas | null = null;
   private outputCtx: GPUCanvasContext | null = null;
@@ -221,6 +227,10 @@ export class EffectsPipeline {
     this.pongTexture = this.device.createTexture(desc);
     this.pingView = this.pingTexture.createView();
     this.pongView = this.pongTexture.createView();
+    // Invalidate bind group caches — they reference old texture views
+    this.effectBindGroupCache.clear();
+    this.blitBindGroupPing = null;
+    this.blitBindGroupPong = null;
     this.texW = w;
     this.texH = h;
   }
@@ -265,15 +275,23 @@ export class EffectsPipeline {
         this.device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer);
       }
 
-      const bindEntries: GPUBindGroupEntry[] = [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: inputView },
-      ];
-      if (uniformBuffer) {
-        bindEntries.push({ binding: 2, resource: { buffer: uniformBuffer } });
+      // Cache bind groups keyed by effect type + input view identity.
+      // Uniform buffer data changes via writeBuffer but the buffer object stays the same,
+      // so the bind group remains valid across frames.
+      const viewKey = inputView === this.pingView ? 'ping' : 'pong';
+      const cacheKey = `${effect.type}:${viewKey}`;
+      let bindGroup = this.effectBindGroupCache.get(cacheKey);
+      if (!bindGroup) {
+        const bindEntries: GPUBindGroupEntry[] = [
+          { binding: 0, resource: this.sampler },
+          { binding: 1, resource: inputView },
+        ];
+        if (uniformBuffer) {
+          bindEntries.push({ binding: 2, resource: { buffer: uniformBuffer } });
+        }
+        bindGroup = this.device.createBindGroup({ layout, entries: bindEntries });
+        this.effectBindGroupCache.set(cacheKey, bindGroup);
       }
-
-      const bindGroup = this.device.createBindGroup({ layout, entries: bindEntries });
 
       const pass = commandEncoder.beginRenderPass({
         colorAttachments: [{
@@ -323,8 +341,8 @@ export class EffectsPipeline {
     if (enabled.length === 0) return false;
     if (!this.blitPipeline || !this.blitBindGroupLayout) return false;
 
-    // Backpressure: skip if GPU is still processing the previous frame
-    if (this.gpuBusy) return false;
+    // Backpressure: skip if too many frames are already in-flight on the GPU
+    if (this.gpuFramesInFlight >= EffectsPipeline.MAX_FRAMES_IN_FLIGHT) return false;
 
     // Get dimensions — HTMLVideoElement uses videoWidth/videoHeight
     const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
@@ -348,15 +366,23 @@ export class EffectsPipeline {
       commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
     );
 
-    // Blit final result to output canvas
-    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
-    const blitBindGroup = this.device.createBindGroup({
-      layout: this.blitBindGroupLayout,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: finalView },
-      ],
-    });
+    // Blit final result to output canvas (cached bind group for ping/pong input)
+    const isPingFinal = finalTex === this.pingTexture;
+    const blitBindGroup = isPingFinal
+      ? (this.blitBindGroupPing ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pingView! },
+          ],
+        }))
+      : (this.blitBindGroupPong ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pongView! },
+          ],
+        }));
 
     const outputPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
@@ -372,10 +398,10 @@ export class EffectsPipeline {
 
     this.device.queue.submit([commandEncoder.finish()]);
 
-    // Track GPU completion to prevent queue buildup
-    this.gpuBusy = true;
+    // Track GPU completion — allow up to MAX_FRAMES_IN_FLIGHT concurrent frames
+    this.gpuFramesInFlight++;
     this.device.queue.onSubmittedWorkDone().then(() => {
-      this.gpuBusy = false;
+      this.gpuFramesInFlight--;
     });
 
     return true;
@@ -547,15 +573,23 @@ export class EffectsPipeline {
       commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
     );
 
-    // Blit to output canvas
-    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
-    const blitBindGroup = this.device.createBindGroup({
-      layout: this.blitBindGroupLayout!,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: finalView },
-      ],
-    });
+    // Blit to output canvas (cached bind group for ping/pong input)
+    const isPingFinal = finalTex === this.pingTexture;
+    const blitBindGroup = isPingFinal
+      ? (this.blitBindGroupPing ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pingView! },
+          ],
+        }))
+      : (this.blitBindGroupPong ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pongView! },
+          ],
+        }));
 
     const outputPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
@@ -668,15 +702,23 @@ export class EffectsPipeline {
       commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
     );
 
-    // Final blit to output canvas
-    const finalView = finalTex === this.pingTexture ? this.pingView! : this.pongView!;
-    const blitBindGroup = this.device.createBindGroup({
-      layout: this.blitBindGroupLayout!,
-      entries: [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: finalView },
-      ],
-    });
+    // Final blit to output canvas (cached bind group for ping/pong input)
+    const isPingFinal = finalTex === this.pingTexture;
+    const blitBindGroup = isPingFinal
+      ? (this.blitBindGroupPing ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pingView! },
+          ],
+        }))
+      : (this.blitBindGroupPong ??= this.device.createBindGroup({
+          layout: this.blitBindGroupLayout!,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pongView! },
+          ],
+        }));
 
     const outputPass = commandEncoder.beginRenderPass({
       colorAttachments: [{
@@ -721,6 +763,10 @@ export class EffectsPipeline {
       buf.destroy();
     }
     this.uniformBuffers.clear();
+    this.effectBindGroupCache.clear();
+    this.blitBindGroupPing = null;
+    this.blitBindGroupPong = null;
+    this.gpuFramesInFlight = 0;
     this.pipelines.clear();
     this.bindGroupLayouts.clear();
     this.blitPipeline = null;

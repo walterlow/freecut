@@ -1472,10 +1472,11 @@ export async function createCompositionRenderer(
 
       // Cache the rendered frame into Tier 1 (GPU) + Tier 3 (RAM).
       // Skip during rapid forward skimming (frame = last+1..+3) — mediabunny
-      // sequential decode is ~1ms/frame, faster than cache write overhead
-      // (~2-5ms createImageBitmap + GPU upload + GC pressure). Cache on
-      // backward seeks (mediabunny stream restart = seconds), jumps, and
-      // non-sequential access where the cache actually helps.
+      // sequential decode is ~1ms/frame, faster than cache write overhead.
+      // Cache on backward seeks (mediabunny stream restart = seconds), jumps,
+      // and non-sequential access where the cache actually helps.
+      // Tier 1 uploads from canvas synchronously (<1ms). Tier 3 bitmap
+      // creation runs in the background asynchronously.
       if (scrubbingCache) {
         const delta = frame - lastRenderedFrame;
         const isSequentialForward = delta > 0 && delta <= 3;
@@ -1484,7 +1485,7 @@ export async function createCompositionRenderer(
           if (gpuPipeline) {
             scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), canvas.width, canvas.height);
           }
-          scrubbingCache.cacheFrame(frame, canvas).catch(() => {});
+          scrubbingCache.cacheFrame(frame, canvas);
         }
       }
     },
