@@ -218,6 +218,8 @@ export const useKeyframeSelectionStore = create<
         easingConfig: keyframe.easingConfig,
       })),
       sourceItemId: selectedKeyframes[0]?.itemId,
+      originFrame: minFrame,
+      sourceRefs: keyframeData.map(({ ref }) => ({ ...ref })),
     };
 
     set({ clipboard, isCut: false });

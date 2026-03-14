@@ -130,9 +130,9 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   ZOOM_TO_100: 'Zoom to 100% at cursor or playhead',
 
   // Clipboard
-  COPY: 'Copy selected items',
-  CUT: 'Cut selected items',
-  PASTE: 'Paste items',
+  COPY: 'Copy selected items or keyframes',
+  CUT: 'Cut selected items or keyframes',
+  PASTE: 'Paste items or keyframes',
 
   // Tools
   SELECTION_TOOL: 'Selection tool',

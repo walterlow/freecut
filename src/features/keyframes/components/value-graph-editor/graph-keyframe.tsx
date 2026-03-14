@@ -13,7 +13,7 @@ interface GraphKeyframeProps {
   /** Size of the point in pixels */
   size?: number;
   /** Preview values during drag (frame and value the keyframe will move to) */
-  previewValues?: { frame: number; value: number } | null;
+  previewValue?: { frame: number; value: number } | null;
   /** Callback when pointer down on point (starts drag) */
   onPointerDown?: (point: GraphKeyframePoint, event: React.PointerEvent) => void;
   /** Callback when point is clicked (selection only, no drag) */
@@ -31,7 +31,7 @@ interface GraphKeyframeProps {
 const GraphKeyframe = memo(function GraphKeyframe({
   point,
   size = 10,
-  previewValues,
+  previewValue,
   onPointerDown,
   onClick,
   onDoubleClick,
@@ -67,8 +67,8 @@ const GraphKeyframe = memo(function GraphKeyframe({
   const halfSize = size / 2;
 
   // Use preview values when dragging, otherwise use current keyframe values
-  const displayFrame = point.isDragging && previewValues ? previewValues.frame : point.keyframe.frame;
-  const displayValue = point.isDragging && previewValues ? previewValues.value : point.keyframe.value;
+  const displayFrame = point.isDragging && previewValue ? previewValue.frame : point.keyframe.frame;
+  const displayValue = point.isDragging && previewValue ? previewValue.value : point.keyframe.value;
 
   const cursorStyle = disabled ? 'default' : 'pointer';
 
@@ -152,7 +152,7 @@ const GraphKeyframe = memo(function GraphKeyframe({
 export const GraphKeyframes = memo(function GraphKeyframes({
   points,
   size = 10,
-  previewValues,
+  previewValuesById,
   onPointerDown,
   onClick,
   onDoubleClick,
@@ -160,7 +160,7 @@ export const GraphKeyframes = memo(function GraphKeyframes({
 }: {
   points: GraphKeyframePoint[];
   size?: number;
-  previewValues?: { frame: number; value: number } | null;
+  previewValuesById?: Record<string, { frame: number; value: number }> | null;
   onPointerDown?: (point: GraphKeyframePoint, event: React.PointerEvent) => void;
   onClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
   onDoubleClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
@@ -173,7 +173,7 @@ export const GraphKeyframes = memo(function GraphKeyframes({
           key={point.keyframe.id}
           point={point}
           size={size}
-          previewValues={point.isDragging ? previewValues : null}
+          previewValue={point.isDragging ? previewValuesById?.[point.keyframe.id] ?? null : null}
           onPointerDown={onPointerDown}
           onClick={onClick}
           onDoubleClick={onDoubleClick}

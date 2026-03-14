@@ -15,6 +15,10 @@ import type {
 import type { KeyframeRef, BezierControlPoints } from '@/types/keyframe';
 import { updateBezierFromHandle } from './bezier-utils';
 import type { BlockedFrameRange } from '../../utils/transition-region';
+import {
+  KEYFRAME_MARQUEE_THRESHOLD,
+  type KeyframeMarqueeRect,
+} from '../keyframe-marquee';
 
 /** Movement threshold in pixels before committing to drag (vs click) */
 const DRAG_THRESHOLD = 3;
@@ -31,6 +35,12 @@ interface DragStartState {
   boundingRect: DOMRect;
   pointerId: number;
   point: GraphKeyframePoint;
+  initialKeyframeStates: Map<string, {
+    itemId: string;
+    property: GraphKeyframePoint['property'];
+    frame: number;
+    value: number;
+  }>;
 }
 
 /** Bezier drag start state */
@@ -43,6 +53,19 @@ interface BezierDragStartState {
   startPoint: GraphKeyframePoint;
   endPoint: GraphKeyframePoint;
   initialBezier: BezierControlPoints;
+}
+
+type MarqueeMode = 'replace' | 'add' | 'toggle';
+
+interface MarqueeState {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  mode: MarqueeMode;
+  baseSelection: Set<string>;
+  started: boolean;
 }
 
 interface UseGraphInteractionOptions {
@@ -89,8 +112,8 @@ interface UseGraphInteractionReturn {
   dragState: GraphDragState | null;
   /** Whether actively dragging (past threshold) */
   isDragging: boolean;
-  /** Preview values during drag */
-  previewValues: { frame: number; value: number } | null;
+  /** Preview values during drag keyed by keyframe ID */
+  previewValues: Record<string, { frame: number; value: number }> | null;
   /** Currently dragging handle info */
   draggingHandle: { keyframeId: string; type: 'in' | 'out' } | null;
   /** Current constraint axis when Shift is held ('x' = frame only, 'y' = value only, null = no constraint) */
@@ -107,8 +130,12 @@ interface UseGraphInteractionReturn {
   handlePointerUp: (event: React.PointerEvent) => void;
   /** Handle wheel (zoom) */
   handleWheel: (event: React.WheelEvent) => void;
+  /** Handle pointer down on graph background (starts marquee selection) */
+  handleBackgroundPointerDown: (event: React.PointerEvent<SVGElement>) => void;
   /** Handle graph background click (deselect) */
-  handleBackgroundClick: (event: React.MouseEvent) => void;
+  handleBackgroundClick: (event: React.MouseEvent<SVGElement>) => void;
+  /** Active marquee rect while selecting */
+  marqueeRect: KeyframeMarqueeRect | null;
   /** Zoom in */
   zoomIn: () => void;
   /** Zoom out */
@@ -143,14 +170,21 @@ export function useGraphInteraction({
   const [dragState, setDragState] = useState<GraphDragState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPendingDrag, setIsPendingDrag] = useState(false);
-  const [previewValues, setPreviewValues] = useState<{ frame: number; value: number } | null>(null);
+  const [previewValues, setPreviewValues] = useState<Record<string, { frame: number; value: number }> | null>(null);
   const [draggingHandle, setDraggingHandle] = useState<{ keyframeId: string; type: 'in' | 'out' } | null>(null);
   const [constraintAxis, setConstraintAxis] = useState<'x' | 'y' | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<KeyframeMarqueeRect | null>(null);
 
   // Refs for stable values during drag
   const dragStartRef = useRef<DragStartState | null>(null);
   const bezierDragStartRef = useRef<BezierDragStartState | null>(null);
+  const marqueeStateRef = useRef<MarqueeState | null>(null);
+  const marqueeJustEndedRef = useRef(false);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const pointsRef = useRef(points);
+  useEffect(() => {
+    pointsRef.current = points;
+  }, [points]);
 
   // Ref for latest callbacks to avoid stale closures
   const callbacksRef = useRef({ onKeyframeMove, onBezierHandleMove, onSelectionChange, onViewportChange, onDragStart, onDragEnd });
@@ -247,6 +281,104 @@ export function useGraphInteraction({
     [blockedFrameRanges]
   );
 
+  const updateSelectionFromMarquee = useCallback(
+    (state: MarqueeState) => {
+      const minX = Math.min(state.startX, state.currentX);
+      const maxX = Math.max(state.startX, state.currentX);
+      const minY = Math.min(state.startY, state.currentY);
+      const maxY = Math.max(state.startY, state.currentY);
+
+      const hitIds = new Set<string>();
+      for (const point of pointsRef.current) {
+        if (point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY) {
+          hitIds.add(point.keyframe.id);
+        }
+      }
+
+      let nextSelection = new Set<string>();
+      if (state.mode === 'replace') {
+        nextSelection = hitIds;
+      } else if (state.mode === 'add') {
+        nextSelection = new Set([...state.baseSelection, ...hitIds]);
+      } else {
+        nextSelection = new Set(state.baseSelection);
+        for (const keyframeId of hitIds) {
+          if (nextSelection.has(keyframeId)) {
+            nextSelection.delete(keyframeId);
+          } else {
+            nextSelection.add(keyframeId);
+          }
+        }
+      }
+
+      callbacksRef.current.onSelectionChange?.(nextSelection);
+      setMarqueeRect({
+        x: minX,
+        y: minY,
+        width: Math.max(1, maxX - minX),
+        height: Math.max(1, maxY - minY),
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    const handleMarqueePointerMove = (event: PointerEvent) => {
+      const marqueeState = marqueeStateRef.current;
+      const svg = svgRef.current;
+      if (!marqueeState || marqueeState.pointerId !== event.pointerId || !svg) return;
+
+      const rect = svg.getBoundingClientRect();
+      const x = Math.max(0, Math.min(viewport.width, event.clientX - rect.left));
+      const y = Math.max(0, Math.min(viewport.height, event.clientY - rect.top));
+
+      const movedEnough =
+        Math.abs(x - marqueeState.startX) > KEYFRAME_MARQUEE_THRESHOLD ||
+        Math.abs(y - marqueeState.startY) > KEYFRAME_MARQUEE_THRESHOLD;
+      if (!marqueeState.started && movedEnough) {
+        marqueeState.started = true;
+      }
+      if (!marqueeState.started) return;
+
+      marqueeState.currentX = x;
+      marqueeState.currentY = y;
+      updateSelectionFromMarquee(marqueeState);
+    };
+
+    const handleMarqueePointerUp = (event: PointerEvent) => {
+      const marqueeState = marqueeStateRef.current;
+      if (!marqueeState || marqueeState.pointerId !== event.pointerId) return;
+
+      const svg = svgRef.current;
+      if (svg) {
+        try {
+          svg.releasePointerCapture(event.pointerId);
+        } catch {
+          // Pointer capture may already be released.
+        }
+      }
+
+      if (marqueeState.started) {
+        marqueeJustEndedRef.current = true;
+        setTimeout(() => {
+          marqueeJustEndedRef.current = false;
+        }, 100);
+      }
+
+      marqueeStateRef.current = null;
+      svgRef.current = null;
+      setMarqueeRect(null);
+    };
+
+    window.addEventListener('pointermove', handleMarqueePointerMove);
+    window.addEventListener('pointerup', handleMarqueePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleMarqueePointerMove);
+      window.removeEventListener('pointerup', handleMarqueePointerUp);
+    };
+  }, [updateSelectionFromMarquee, viewport.height, viewport.width]);
+
   // Handle keyframe pointer down (start potential drag)
   const handleKeyframePointerDown = useCallback(
     (point: GraphKeyframePoint, event: React.PointerEvent) => {
@@ -263,12 +395,28 @@ export function useGraphInteraction({
       }
 
       // If not already selected, select it (clear others unless shift)
-      if (!selectedKeyframeIds.has(point.keyframe.id)) {
-        const newSelection = event.shiftKey
+      const selectionForDrag = selectedKeyframeIds.has(point.keyframe.id)
+        ? new Set(selectedKeyframeIds)
+        : event.shiftKey
           ? new Set([...selectedKeyframeIds, point.keyframe.id])
           : new Set([point.keyframe.id]);
-        callbacksRef.current.onSelectionChange?.(newSelection);
+      if (!selectedKeyframeIds.has(point.keyframe.id)) {
+        callbacksRef.current.onSelectionChange?.(selectionForDrag);
       }
+
+      const draggedPoints = points.filter((candidate) => selectionForDrag.has(candidate.keyframe.id));
+      const pointsForDrag = draggedPoints.length > 1 ? draggedPoints : [point];
+      const initialKeyframeStates = new Map(
+        pointsForDrag.map((dragPoint) => [
+          dragPoint.keyframe.id,
+          {
+            itemId: dragPoint.itemId,
+            property: dragPoint.property,
+            frame: dragPoint.keyframe.frame,
+            value: dragPoint.keyframe.value,
+          },
+        ])
+      );
 
       // Store initial state in ref (with cached bounding rect!)
       dragStartRef.current = {
@@ -279,12 +427,14 @@ export function useGraphInteraction({
         boundingRect: svg?.getBoundingClientRect() || new DOMRect(),
         pointerId: event.pointerId,
         point,
+        initialKeyframeStates,
       };
 
       setIsPendingDrag(true);
       setDragState({
         type: 'keyframe',
         keyframeId: point.keyframe.id,
+        draggedKeyframeIds: pointsForDrag.map((dragPoint) => dragPoint.keyframe.id),
         itemId: point.itemId,
         property: point.property,
         startMouseX: event.clientX,
@@ -293,7 +443,7 @@ export function useGraphInteraction({
         initialValue: point.keyframe.value,
       });
     },
-    [disabled, selectedKeyframeIds]
+    [disabled, points, selectedKeyframeIds]
   );
 
   // Handle keyframe click (selection only - called when drag threshold not met)
@@ -389,6 +539,46 @@ export function useGraphInteraction({
     [disabled, points]
   );
 
+  const handleBackgroundPointerDown = useCallback(
+    (event: React.PointerEvent<SVGElement>) => {
+      if (disabled) return;
+      if (event.button !== 0) return;
+      if (dragStartRef.current || bezierDragStartRef.current) return;
+
+      event.preventDefault();
+
+      const svg =
+        event.currentTarget.ownerSVGElement ??
+        (event.currentTarget instanceof SVGSVGElement ? event.currentTarget : null);
+      if (!svg) return;
+
+      svg.setPointerCapture(event.pointerId);
+      svgRef.current = svg;
+
+      const rect = svg.getBoundingClientRect();
+      const startX = Math.max(0, Math.min(viewport.width, event.clientX - rect.left));
+      const startY = Math.max(0, Math.min(viewport.height, event.clientY - rect.top));
+      const mode: MarqueeMode = event.shiftKey
+        ? 'add'
+        : (event.ctrlKey || event.metaKey)
+          ? 'toggle'
+          : 'replace';
+
+      marqueeStateRef.current = {
+        pointerId: event.pointerId,
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+        mode,
+        baseSelection: new Set(selectedKeyframeIds),
+        started: false,
+      };
+      setMarqueeRect(null);
+    },
+    [disabled, selectedKeyframeIds, viewport.height, viewport.width]
+  );
+
   // Handle pointer move (SVG level)
   const handlePointerMove = useCallback(
     (event: React.PointerEvent) => {
@@ -396,7 +586,9 @@ export function useGraphInteraction({
 
       // Handle keyframe dragging
       if (dragStartRef.current && dragState?.type === 'keyframe') {
-        const { mouseX, mouseY, initialFrame, initialValue, point } = dragStartRef.current;
+        const { mouseX, mouseY, point, initialKeyframeStates } = dragStartRef.current;
+        const anchorInitialState = initialKeyframeStates.get(point.keyframe.id);
+        if (!anchorInitialState) return;
         
         // Use fresh viewport dimensions (not cached) to handle resize during drag
         const graphWidth = viewport.width - padding.left - padding.right;
@@ -431,16 +623,16 @@ export function useGraphInteraction({
           valueDelta *= 0.5;
         }
 
-        let newFrame = initialFrame + frameDelta;
-        let newValue = initialValue + valueDelta;
+        let newFrame = anchorInitialState.frame + frameDelta;
+        let newValue = anchorInitialState.value + valueDelta;
 
         // Shift = constrain to axis
         if (event.shiftKey) {
           if (Math.abs(dx) > Math.abs(dy)) {
-            newValue = initialValue; // Lock Y (only change frame)
+            newValue = anchorInitialState.value; // Lock Y (only change frame)
             setConstraintAxis('x'); // Horizontal constraint (frame only)
           } else {
-            newFrame = initialFrame; // Lock X (only change value)
+            newFrame = anchorInitialState.frame; // Lock X (only change value)
             setConstraintAxis('y'); // Vertical constraint (value only)
           }
         } else {
@@ -474,21 +666,42 @@ export function useGraphInteraction({
         }
 
         // Prevent dragging into blocked (transition) regions
-        newFrame = clampToAvoidBlockedRanges(newFrame, initialFrame);
+        newFrame = clampToAvoidBlockedRanges(newFrame, anchorInitialState.frame);
 
-        // Update preview values
-        setPreviewValues({ frame: newFrame, value: newValue });
+        const appliedFrameDelta = newFrame - anchorInitialState.frame;
+        const appliedValueDelta = newValue - anchorInitialState.value;
+        const nextPreviewValues: Record<string, { frame: number; value: number }> = {};
 
-        // Call the move callback
-        callbacksRef.current.onKeyframeMove?.(
-          {
-            itemId: point.itemId,
-            property: point.property,
-            keyframeId: point.keyframe.id,
-          },
-          newFrame,
-          newValue
-        );
+        for (const [keyframeId, initialState] of initialKeyframeStates) {
+          let nextFrame = Math.round(initialState.frame + appliedFrameDelta);
+          nextFrame = Math.max(0, nextFrame);
+          if (maxFrame !== undefined) {
+            nextFrame = Math.min(maxFrame - 1, nextFrame);
+          }
+          nextFrame = clampToAvoidBlockedRanges(nextFrame, initialState.frame);
+
+          let nextValue = initialState.value + appliedValueDelta;
+          if (clampMinValue !== undefined) {
+            nextValue = Math.max(clampMinValue, nextValue);
+          }
+          if (clampMaxValue !== undefined) {
+            nextValue = Math.min(clampMaxValue, nextValue);
+          }
+
+          nextPreviewValues[keyframeId] = { frame: nextFrame, value: nextValue };
+
+          callbacksRef.current.onKeyframeMove?.(
+            {
+              itemId: initialState.itemId,
+              property: initialState.property,
+              keyframeId,
+            },
+            nextFrame,
+            nextValue
+          );
+        }
+
+        setPreviewValues(nextPreviewValues);
         return;
       }
 
@@ -533,7 +746,7 @@ export function useGraphInteraction({
   const handlePointerUp = useCallback(
     (event: React.PointerEvent) => {
       // Release pointer capture
-      if (svgRef.current && (dragStartRef.current || bezierDragStartRef.current)) {
+      if (svgRef.current && (dragStartRef.current || bezierDragStartRef.current || marqueeStateRef.current)) {
         try {
           svgRef.current.releasePointerCapture(event.pointerId);
         } catch {
@@ -611,8 +824,9 @@ export function useGraphInteraction({
 
   // Handle background click (deselect)
   const handleBackgroundClick = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.MouseEvent<SVGElement>) => {
       if (disabled) return;
+      if (marqueeJustEndedRef.current) return;
       if (event.target === event.currentTarget) {
         callbacksRef.current.onSelectionChange?.(new Set());
       }
@@ -677,7 +891,9 @@ export function useGraphInteraction({
     handlePointerMove,
     handlePointerUp,
     handleWheel,
+    handleBackgroundPointerDown,
     handleBackgroundClick,
+    marqueeRect,
     zoomIn,
     zoomOut,
     fitToContent,

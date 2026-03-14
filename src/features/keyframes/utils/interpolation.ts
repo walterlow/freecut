@@ -4,7 +4,7 @@
  */
 
 import type { Keyframe, ItemKeyframes, AnimatableProperty } from '@/types/keyframe';
-import { applyEasing } from './easing';
+import { applyEasing, applyEasingConfig } from './easing';
 
 /**
  * Interpolate a value between two keyframes at a given frame.
@@ -27,7 +27,9 @@ function interpolateBetweenKeyframes(
   const progress = (frame - prevKf.frame) / frameRange;
 
   // Apply easing (uses the "from" keyframe's easing)
-  const easedProgress = applyEasing(progress, prevKf.easing);
+  const easedProgress = prevKf.easingConfig
+    ? applyEasingConfig(progress, prevKf.easingConfig)
+    : applyEasing(progress, prevKf.easing);
 
   // Linear interpolation with eased progress
   return prevKf.value + (nextKf.value - prevKf.value) * easedProgress;

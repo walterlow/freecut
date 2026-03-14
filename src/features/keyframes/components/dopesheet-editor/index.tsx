@@ -15,12 +15,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  KEYFRAME_MARQUEE_THRESHOLD,
+  KeyframeMarqueeOverlay,
+  type KeyframeMarqueeRect,
+} from '../keyframe-marquee';
 import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe';
 import { PROPERTY_LABELS } from '@/types/keyframe';
 import type { BlockedFrameRange } from '../../utils/transition-region';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 
 interface DopesheetEditorProps {
+  /** Shared time viewport when split mode needs synchronized frame zoom/pan */
+  frameViewport?: Viewport;
+  /** Callback when the shared time viewport changes */
+  onFrameViewportChange?: (viewport: Viewport) => void;
   /** Item ID to show keyframes for */
   itemId: string;
   /** Keyframes organized by property */
@@ -95,13 +104,6 @@ interface MarqueeState {
   started: boolean;
 }
 
-interface MarqueeRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 const PROPERTY_COLUMN_WIDTH = 140;
 const MIN_VISIBLE_FRAMES = 20;
 const DEFAULT_VISIBLE_FRAMES = 120;
@@ -148,6 +150,8 @@ function clampToAvoidBlockedRanges(
 }
 
 export const DopesheetEditor = memo(function DopesheetEditor({
+  frameViewport,
+  onFrameViewportChange,
   itemId,
   keyframesByProperty,
   selectedProperty = null,
@@ -173,7 +177,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [timelineWidth, setTimelineWidth] = useState(0);
   const [snapEnabled, setSnapEnabled] = useState(true);
-  const [marqueeRect, setMarqueeRect] = useState<MarqueeRect | null>(null);
+  const [marqueeRect, setMarqueeRect] = useState<KeyframeMarqueeRect | null>(null);
 
   const buildDefaultViewport = useCallback((): Viewport => {
     return {
@@ -182,11 +186,36 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     };
   }, [totalFrames]);
 
-  const [viewport, setViewport] = useState<Viewport>(() => buildDefaultViewport());
+  const [viewport, setViewport] = useState<Viewport>(() => frameViewport ?? buildDefaultViewport());
+  const updateViewport = useCallback(
+    (next: Viewport | ((prev: Viewport) => Viewport)) => {
+      setViewport((prev) => {
+        const resolved = typeof next === 'function' ? next(prev) : next;
+        if (resolved.startFrame !== prev.startFrame || resolved.endFrame !== prev.endFrame) {
+          onFrameViewportChange?.(resolved);
+        }
+        return resolved;
+      });
+    },
+    [onFrameViewportChange]
+  );
 
   useEffect(() => {
-    setViewport(buildDefaultViewport());
-  }, [buildDefaultViewport, selectedProperty]);
+    setViewport(frameViewport ?? buildDefaultViewport());
+  }, [buildDefaultViewport, frameViewport, selectedProperty]);
+
+  useEffect(() => {
+    if (!frameViewport) return;
+    setViewport((prev) => {
+      if (
+        prev.startFrame === frameViewport.startFrame &&
+        prev.endFrame === frameViewport.endFrame
+      ) {
+        return prev;
+      }
+      return frameViewport;
+    });
+  }, [frameViewport]);
 
   useEffect(() => {
     const node = timelineRef.current;
@@ -206,13 +235,16 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     () => Object.keys(keyframesByProperty) as AnimatableProperty[],
     [keyframesByProperty]
   );
+  const activeSelectedProperty = selectedProperty && availableProperties.includes(selectedProperty)
+    ? selectedProperty
+    : null;
 
   const visibleProperties = useMemo(() => {
-    if (selectedProperty) {
-      return availableProperties.filter((p) => p === selectedProperty);
+    if (activeSelectedProperty) {
+      return availableProperties.filter((p) => p === activeSelectedProperty);
     }
     return availableProperties;
-  }, [availableProperties, selectedProperty]);
+  }, [availableProperties, activeSelectedProperty]);
 
   const rows = useMemo(
     () =>
@@ -365,7 +397,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     return null;
   }, [sortedFrames, currentFrame]);
 
-  const editProperty = selectedProperty ?? availableProperties[0] ?? null;
+  const editProperty = activeSelectedProperty ?? availableProperties[0] ?? null;
   const activePropertyKeyframes = editProperty ? keyframesByProperty[editProperty] ?? [] : [];
   const hasKeyframeAtCurrentFrame = activePropertyKeyframes.some((keyframe) => keyframe.frame === currentFrame);
 
@@ -402,7 +434,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const zoomAroundFrame = useCallback(
     (centerFrame: number, factor: number) => {
-      setViewport((prev) => {
+      updateViewport((prev) => {
         const prevRange = Math.max(1, prev.endFrame - prev.startFrame);
         const nextRange = Math.max(MIN_VISIBLE_FRAMES, Math.round(prevRange * factor));
         const ratio = (centerFrame - prev.startFrame) / prevRange;
@@ -421,13 +453,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         return { startFrame: nextStart, endFrame: nextEnd };
       });
     },
-    [timelineFrameMax]
+    [timelineFrameMax, updateViewport]
   );
 
   const panFrames = useCallback(
     (deltaFrames: number) => {
       if (deltaFrames === 0) return;
-      setViewport((prev) => {
+      updateViewport((prev) => {
         const range = Math.max(1, prev.endFrame - prev.startFrame);
         const maxStart = Math.max(0, timelineFrameMax - range);
         const nextStart = Math.max(0, Math.min(maxStart, prev.startFrame + deltaFrames));
@@ -437,12 +469,12 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         };
       });
     },
-    [timelineFrameMax]
+    [timelineFrameMax, updateViewport]
   );
 
   const resetViewport = useCallback(() => {
-    setViewport(buildDefaultViewport());
-  }, [buildDefaultViewport]);
+    updateViewport(buildDefaultViewport());
+  }, [buildDefaultViewport, updateViewport]);
 
   const handlePropertySelect = useCallback(
     (value: string) => {
@@ -854,7 +886,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
       const x = getTimelineXFromClientX(event.clientX);
       const y = getContentYFromClientY(event.clientY);
-      const movedEnough = Math.abs(x - marqueeState.startX) > DRAG_THRESHOLD || Math.abs(y - marqueeState.startY) > DRAG_THRESHOLD;
+      const movedEnough =
+        Math.abs(x - marqueeState.startX) > KEYFRAME_MARQUEE_THRESHOLD ||
+        Math.abs(y - marqueeState.startY) > KEYFRAME_MARQUEE_THRESHOLD;
       if (!marqueeState.started && movedEnough) {
         marqueeState.started = true;
       }
@@ -913,7 +947,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       <div className="flex items-center justify-between px-2 flex-shrink-0 min-h-7">
         <div className="flex items-center gap-2">
           <Select
-            value={selectedProperty ?? 'all'}
+            value={activeSelectedProperty ?? 'all'}
             onValueChange={handlePropertySelect}
             disabled={disabled || availableProperties.length === 0}
           >
@@ -1131,13 +1165,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 </div>
               ))}
               {marqueeRect && !marqueeJustEndedRef.current && (
-                <div
-                  className="absolute border border-primary/70 bg-primary/20 pointer-events-none z-20"
-                  style={{
-                    left: PROPERTY_COLUMN_WIDTH + marqueeRect.x,
-                    top: marqueeRect.y,
-                    width: marqueeRect.width,
-                    height: marqueeRect.height,
+                <KeyframeMarqueeOverlay
+                  rect={{
+                    ...marqueeRect,
+                    x: PROPERTY_COLUMN_WIDTH + marqueeRect.x,
                   }}
                 />
               )}
@@ -1148,4 +1179,3 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     </div>
   );
 });
-

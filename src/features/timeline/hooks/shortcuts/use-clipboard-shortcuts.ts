@@ -8,12 +8,14 @@ import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useClipboardStore } from '@/shared/state/clipboard';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
+import { useKeyframeSelectionStore } from '../../stores/keyframe-selection-store';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { Transition } from '@/types/transition';
 
 export function useClipboardShortcuts() {
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
+  const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes);
   const selectItems = useSelectionStore((s) => s.selectItems);
   const activeTrackId = useSelectionStore((s) => s.activeTrackId);
   const items = useTimelineStore((s) => s.items);
@@ -55,8 +57,8 @@ export function useClipboardShortcuts() {
         }
       }
     },
-    HOTKEY_OPTIONS,
-    [selectedTransitionId, transitions, copyTransition, selectedItemIds, items, copyItems]
+    { ...HOTKEY_OPTIONS, enabled: selectedKeyframes.length === 0 },
+    [selectedTransitionId, transitions, copyTransition, selectedItemIds, items, copyItems, selectedKeyframes.length]
   );
 
   // Clipboard: Ctrl+X - Cut selected items
@@ -72,8 +74,8 @@ export function useClipboardShortcuts() {
         }
       }
     },
-    HOTKEY_OPTIONS,
-    [selectedItemIds, items, copyItems]
+    { ...HOTKEY_OPTIONS, enabled: selectedKeyframes.length === 0 },
+    [selectedItemIds, items, copyItems, selectedKeyframes.length]
   );
 
   // Clipboard: Ctrl+V - Paste transition properties or timeline items
@@ -188,7 +190,7 @@ export function useClipboardShortcuts() {
         }
       }
     },
-    HOTKEY_OPTIONS,
-    [selectedTransitionId, transitionClipboard, updateTransition, itemsClipboard, tracks, addItem, selectItems, removeItems, activeTrackId]
+    { ...HOTKEY_OPTIONS, enabled: selectedKeyframes.length === 0 },
+    [selectedTransitionId, transitionClipboard, updateTransition, itemsClipboard, tracks, addItem, selectItems, removeItems, activeTrackId, selectedKeyframes.length]
   );
 }

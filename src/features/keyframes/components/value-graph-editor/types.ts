@@ -67,6 +67,8 @@ export interface GraphDragState {
   type: 'keyframe' | 'bezier-handle';
   /** Keyframe ID being dragged */
   keyframeId: string;
+  /** All keyframe IDs participating in the drag */
+  draggedKeyframeIds?: string[];
   /** Item ID of the keyframe */
   itemId: string;
   /** Property of the keyframe */

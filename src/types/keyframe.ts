@@ -106,6 +106,10 @@ export interface KeyframeClipboard {
   }>;
   /** Original item ID (for smart paste within same item) */
   sourceItemId?: string;
+  /** Absolute frame of the earliest copied keyframe */
+  originFrame: number;
+  /** Original keyframe refs, used for cut/paste moves */
+  sourceRefs: KeyframeRef[];
 }
 
 /**

@@ -2,8 +2,8 @@
  * Keyframe Actions - Animation keyframe operations with undo/redo support.
  */
 
-import type { AnimatableProperty, EasingType, KeyframeRef } from '@/types/keyframe';
-import type { KeyframeAddPayload } from '../keyframes-store';
+import type { AnimatableProperty, EasingType, Keyframe, KeyframeRef } from '@/types/keyframe';
+import type { KeyframeAddPayload, KeyframeUpdatePayload } from '../keyframes-store';
 import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
@@ -63,12 +63,50 @@ export function updateKeyframe(
   itemId: string,
   property: AnimatableProperty,
   keyframeId: string,
-  updates: Partial<{ frame: number; value: number; easing: EasingType }>
+  updates: Partial<Omit<Keyframe, 'id'>>
 ): void {
+  if (typeof updates.frame === 'number' && !canAddKeyframeAtFrame(itemId, updates.frame)) {
+    logger.warn('Cannot move keyframe into transition region', {
+      itemId,
+      property,
+      keyframeId,
+      frame: updates.frame,
+    });
+    return;
+  }
+
   execute('UPDATE_KEYFRAME', () => {
     useKeyframesStore.getState()._updateKeyframe(itemId, property, keyframeId, updates);
     useTimelineSettingsStore.getState().markDirty();
   }, { itemId, property, keyframeId });
+}
+
+export function updateKeyframes(updates: KeyframeUpdatePayload[]): void {
+  if (updates.length === 0) return;
+
+  const validUpdates = updates.filter((update) => {
+    if (typeof update.updates.frame !== 'number') {
+      return true;
+    }
+
+    const allowed = canAddKeyframeAtFrame(update.itemId, update.updates.frame);
+    if (!allowed) {
+      logger.warn('Cannot move keyframe into transition region', {
+        itemId: update.itemId,
+        property: update.property,
+        keyframeId: update.keyframeId,
+        frame: update.updates.frame,
+      });
+    }
+    return allowed;
+  });
+
+  if (validUpdates.length === 0) return;
+
+  execute('UPDATE_KEYFRAMES', () => {
+    useKeyframesStore.getState()._updateKeyframes(validUpdates);
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: validUpdates.length });
 }
 
 /**
