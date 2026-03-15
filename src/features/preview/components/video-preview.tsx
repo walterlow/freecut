@@ -62,6 +62,7 @@ import {
   getFrameBudgetMs,
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
+import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledTextScrubGuard } from '../utils/text-render-guard';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 
@@ -363,6 +364,7 @@ interface VideoPreviewProps {
 function useCustomPlayer(
   playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
   bypassPreviewSeekRef?: React.RefObject<boolean>,
+  preferPlayerForStyledTextScrubRef?: React.RefObject<boolean>,
   isGizmoInteractingRef?: React.RefObject<boolean>,
   onPlayerSeek?: (targetFrame: number) => void,
 ) {
@@ -564,6 +566,8 @@ function useCustomPlayer(
         return;
       }
       const shouldUseFastScrubOnly = (
+        !preferPlayerForStyledTextScrubRef?.current
+        &&
         interactionMode === 'scrubbing'
         && state.previewFrame !== null
         && state.currentFrame === state.previewFrame
@@ -609,7 +613,7 @@ function useCustomPlayer(
       lastBackwardScrubSeekFrameRef.current = null;
       seekPlayerToFrame(targetFrame);
     });
-  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, isGizmoInteractingRef]);
+  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef]);
 
   return { ignorePlayerUpdatesRef };
 }
@@ -731,9 +735,17 @@ export const VideoPreview = memo(function VideoPreview({
   const isGizmoInteractingRef = useRef(isGizmoInteracting);
   isGizmoInteractingRef.current = isGizmoInteracting;
   const preferPlayerForTextGizmoRef = useRef(false);
+  const preferPlayerForStyledTextScrubRef = useRef(false);
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
+
+  const shouldPreferPlayerForPreview = useCallback((previewFrame: number | null) => {
+    return (
+      preferPlayerForTextGizmoRef.current
+      || (preferPlayerForStyledTextScrubRef.current && previewFrame !== null)
+    );
+  }, []);
 
   const trackPlayerSeek = useCallback((targetFrame: number) => {
     if (!import.meta.env.DEV) return;
@@ -801,7 +813,7 @@ export const VideoPreview = memo(function VideoPreview({
         clearPendingFastScrubHandoff();
         return;
       }
-      if (playbackState.isPlaying || preferPlayerForTextGizmoRef.current) {
+      if (playbackState.isPlaying || shouldPreferPlayerForPreview(playbackState.previewFrame)) {
         hideFastScrubOverlay();
         return;
       }
@@ -821,6 +833,7 @@ export const VideoPreview = memo(function VideoPreview({
     clearPendingFastScrubHandoff,
     hideFastScrubOverlay,
     maybeCompleteFastScrubHandoff,
+    shouldPreferPlayerForPreview,
   ]);
 
   const beginFastScrubHandoff = useCallback((targetFrame: number) => {
@@ -840,6 +853,7 @@ export const VideoPreview = memo(function VideoPreview({
   const { ignorePlayerUpdatesRef } = useCustomPlayer(
     playerRef,
     bypassPreviewSeekRef,
+    preferPlayerForStyledTextScrubRef,
     isGizmoInteractingRef,
     trackPlayerSeek,
   );
@@ -1971,12 +1985,19 @@ export const VideoPreview = memo(function VideoPreview({
   ]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
+  // Styled, animated text can visibly flip between the DOM Player renderer
+  // and the fast-scrub canvas renderer. Keep scrub preview on the Player path.
+  const preferPlayerForStyledTextScrub = (
+    !forceFastScrubOverlay
+    && shouldPreferPlayerForStyledTextScrubGuard(combinedTracks, keyframes)
+  );
   const preferPlayerForTextGizmo = (
     !forceFastScrubOverlay
     && isGizmoInteracting
     && activeGizmoItemType === 'text'
   );
   preferPlayerForTextGizmoRef.current = preferPlayerForTextGizmo;
+  preferPlayerForStyledTextScrubRef.current = preferPlayerForStyledTextScrub;
 
   // Keep the on-screen scrub canvas at project resolution so quality toggles
   // only change offscreen sampling, not display buffer geometry.
@@ -2443,7 +2464,7 @@ export const VideoPreview = memo(function VideoPreview({
 
         let prewarmBudgetStart = 0;
         while (scrubMountedRef.current) {
-          if (preferPlayerForTextGizmoRef.current) {
+          if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) {
             hideFastScrubOverlay();
             scrubRequestedFrameRef.current = null;
             break;
@@ -2561,7 +2582,7 @@ export const VideoPreview = memo(function VideoPreview({
     };
 
     const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
-      if (preferPlayerForTextGizmoRef.current) {
+      if (shouldPreferPlayerForPreview(state.previewFrame)) {
         scrubRequestedFrameRef.current = null;
         scrubDirectionRef.current = 0;
         suppressScrubBackgroundPrewarmRef.current = false;
@@ -2730,7 +2751,7 @@ export const VideoPreview = memo(function VideoPreview({
     // During gizmo drags or live effect parameter changes, trigger re-renders
     // even when frame is unchanged so previews stay on the fast-scrub render path.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
-      if (preferPlayerForTextGizmoRef.current) return;
+      if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) return;
       if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
       const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
@@ -2770,6 +2791,8 @@ export const VideoPreview = memo(function VideoPreview({
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
       void pumpRenderLoop();
+    } else if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) {
+      hideFastScrubOverlay();
     } else if (usePlaybackStore.getState().previewFrame === null) {
       hideFastScrubOverlay();
     }
@@ -2795,6 +2818,7 @@ export const VideoPreview = memo(function VideoPreview({
     // Re-run when gizmo interaction toggles so drag overlays are requested
     // immediately on interaction start/end.
     isGizmoInteracting,
+    preferPlayerForStyledTextScrub,
     preferPlayerForTextGizmo,
     clearPendingFastScrubHandoff,
     hideFastScrubOverlay,
@@ -2802,6 +2826,7 @@ export const VideoPreview = memo(function VideoPreview({
     maybeCompleteFastScrubHandoff,
     scheduleFastScrubHandoffCheck,
     setDisplayedFrame,
+    shouldPreferPlayerForPreview,
     trackPlayerSeek,
   ]);
 

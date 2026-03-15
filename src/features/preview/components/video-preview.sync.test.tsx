@@ -602,6 +602,81 @@ describe('VideoPreview sync behavior', () => {
     expect(seekToMock).not.toHaveBeenCalled();
   });
 
+  it('prefers the Player path for glowing animated text scrubs', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-text',
+        name: 'Text',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'text-1',
+        type: 'text',
+        trackId: 'track-text',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Glow text',
+        text: 'Glow',
+        color: '#ffffff',
+        textShadow: {
+          offsetX: 0,
+          offsetY: 0,
+          blur: 18,
+          color: '#00ffff',
+        },
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+    useTimelineStore.setState({
+      keyframes: [
+        {
+          itemId: 'text-1',
+          properties: [
+            {
+              property: 'opacity',
+              keyframes: [
+                { id: 'kf-1', frame: 0, value: 0, easing: 'linear' },
+                { id: 'kf-2', frame: 12, value: 1, easing: 'linear' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(48);
+    });
+
+    expect(scrubCanvas.style.visibility).toBe('hidden');
+    expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+  });
+
   it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
     const { container } = render(
       <VideoPreview
