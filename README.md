@@ -153,11 +153,10 @@ npm run check:deps-contracts # Enforce deps contract seam routing
 npm run check:legacy-lib-imports # Block any "@/lib/*" usage
 npm run check:deps-wrapper-health # Fail on unused pass-through deps wrappers
 npm run check:edge-budgets # Feature seam coupling budget check
-npm run check:bundle-budgets # Build chunk size budget check
 npm run report:feature-edges # Feature dependency edge report
 npm run report:feature-edges:json # JSON feature edge report
 npm run report:deps-wrapper-health:json # JSON deps wrapper health report
-npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + build + bundle budgets
+npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + build
 npm run test           # Vitest (watch mode)
 npm run test:run       # Vitest (single run)
 npm run test:coverage  # Vitest with coverage
