@@ -290,82 +290,451 @@ fn colorGlitchFragment(input: VertexOutput) -> @location(0) vec4f {
   },
 };
 
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function parseHexColor(color: string, fallback: [number, number, number, number]): [number, number, number, number] {
+  if (!color.startsWith('#')) return fallback;
+
+  const hex = color.slice(1);
+  if (hex.length === 3 || hex.length === 4) {
+    const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255);
+    return [
+      values[0] ?? fallback[0],
+      values[1] ?? fallback[1],
+      values[2] ?? fallback[2],
+      values[3] ?? 1,
+    ];
+  }
+
+  if (hex.length === 6 || hex.length === 8) {
+    const values = [
+      parseInt(hex.slice(0, 2), 16) / 255,
+      parseInt(hex.slice(2, 4), 16) / 255,
+      parseInt(hex.slice(4, 6), 16) / 255,
+      hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1,
+    ];
+    if (values.every((value) => Number.isFinite(value))) {
+      return values as [number, number, number, number];
+    }
+  }
+
+  return fallback;
+}
+
+function legacySpacingToPaperSize(spacing: number | undefined, height: number): number {
+  if (!spacing || spacing <= 0 || !Number.isFinite(spacing)) return 0.5;
+  const cellsPerSide = Math.max(7, Math.min(300, height / spacing));
+  const normalized = clamp01((300 - cellsPerSide) / 293);
+  return Math.pow(normalized, 1 / 0.7);
+}
+
+function legacyDotRatioToRadius(dotSize: number | undefined, spacing: number | undefined): number {
+  if (!dotSize || !spacing || spacing <= 0) return 1.25;
+  return Math.max(0, Math.min(2, (dotSize / spacing) * 2));
+}
+
+// Adapted from Paper Design's halftone-dots shader (MIT, Lost Coast Labs, Inc.):
+// https://github.com/paper-design/shaders
 export const halftone: GpuEffectDefinition = {
   id: 'gpu-halftone',
   name: 'Halftone',
   category: 'stylize',
   entryPoint: 'halftoneFragment',
-  uniformSize: 32,
+  uniformSize: 80,
   shader: /* wgsl */ `
 struct HalftoneParams {
-  dotSize: f32, spacing: f32, angle: f32, intensity: f32,
-  width: f32, height: f32, invertFlag: f32, patternType: f32,
+  colorFront: vec4f,
+  colorBack: vec4f,
+  primary: vec4f,
+  secondary: vec4f,
+  tertiary: vec4f,
 };
+
+struct HalftoneSample {
+  shape: f32,
+  color: vec4f,
+};
+
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: HalftoneParams;
+
+fn rotateHalftonePoint(p: vec2f, angleRad: f32) -> vec2f {
+  let c = cos(angleRad);
+  let s = sin(angleRad);
+  return vec2f(p.x * c - p.y * s, p.x * s + p.y * c);
+}
+
+fn halftoneLinearStep(edge0: f32, edge1: f32, x: f32) -> f32 {
+  return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+}
+
+fn halftoneSmoothStep(edge0: f32, edge1: f32, x: f32) -> f32 {
+  return smoothstep(edge0, edge1, x);
+}
+
+fn halftoneSigmoid(x: f32, k: f32) -> f32 {
+  return 1.0 / (1.0 + exp(-k * (x - 0.5)));
+}
+
+fn getCircle(uv: vec2f, r: f32, baseR: f32) -> f32 {
+  let rr = mix(0.25 * baseR, 0.0, r);
+  let d = length(uv - 0.5);
+  let aa = 0.02;
+  return 1.0 - smoothstep(rr - aa, rr + aa, d);
+}
+
+fn getCell(uv: vec2f) -> f32 {
+  let insideX = step(0.0, uv.x) * (1.0 - step(1.0, uv.x));
+  let insideY = step(0.0, uv.y) * (1.0 - step(1.0, uv.y));
+  return insideX * insideY;
+}
+
+fn getCircleWithHole(uv: vec2f, r: f32, baseR: f32) -> f32 {
+  let cell = getCell(uv);
+  let rr = mix(0.75 * baseR, 0.0, r);
+  let rMod = rr - floor(rr / 0.5) * 0.5;
+  let d = length(uv - 0.5);
+  let aa = 0.02;
+  let circle = 1.0 - smoothstep(rMod - aa, rMod + aa, d);
+  if (rr < 0.5) {
+    return circle;
+  }
+  return cell - circle;
+}
+
+fn getGooeyBall(uv: vec2f, r: f32, baseR: f32, gridType: i32) -> f32 {
+  var d = length(uv - 0.5);
+  var sizeRadius = 0.3;
+  if (gridType == 1) {
+    sizeRadius = 0.42;
+  }
+  sizeRadius = mix(sizeRadius * baseR, 0.0, r);
+  d = 1.0 - halftoneSmoothStep(0.0, sizeRadius, d);
+  d = pow(d, 2.0 + baseR);
+  return d;
+}
+
+fn getSoftBall(uv: vec2f, r: f32, baseR: f32) -> f32 {
+  var d = length(uv - 0.5);
+  var sizeRadius = clamp(baseR, 0.0, 1.0);
+  sizeRadius = mix(0.5 * sizeRadius, 0.0, r);
+  d = 1.0 - halftoneLinearStep(0.0, sizeRadius, d);
+  let powRadius = 1.0 - halftoneLinearStep(0.0, 2.0, baseR);
+  d = pow(d, 4.0 + 3.0 * powRadius);
+  return d;
+}
+
+fn getUvFrame(uv: vec2f, pad: vec2f) -> f32 {
+  let aa = 0.0001;
+  let left = smoothstep(-pad.x, -pad.x + aa, uv.x);
+  let right = smoothstep(1.0 + pad.x, 1.0 + pad.x - aa, uv.x);
+  let bottom = smoothstep(-pad.y, -pad.y + aa, uv.y);
+  let top = smoothstep(1.0 + pad.y, 1.0 + pad.y - aa, uv.y);
+  return left * right * bottom * top;
+}
+
+fn getLumAtPx(uv: vec2f, contrast: f32, inverted: bool) -> f32 {
+  let tex = textureSampleLevel(inputTex, texSampler, uv, 0.0);
+  let color = vec3f(
+    halftoneSigmoid(tex.r, contrast),
+    halftoneSigmoid(tex.g, contrast),
+    halftoneSigmoid(tex.b, contrast)
+  );
+  var lum = luminance(color);
+  lum = mix(1.0, lum, tex.a);
+  if (inverted) {
+    lum = 1.0 - lum;
+  }
+  return lum;
+}
+
+fn getLumBall(
+  p: vec2f,
+  pad: vec2f,
+  inCellOffset: vec2f,
+  contrast: f32,
+  baseR: f32,
+  stepSize: f32,
+  styleType: i32,
+  gridType: i32,
+  inverted: bool,
+  grainMixer: f32,
+  grainSizeParam: f32
+) -> HalftoneSample {
+  let pp = p + inCellOffset;
+  let uv_i = floor(pp);
+  let uv_f = fract(pp);
+  let samplingUV = (uv_i + 0.5 - inCellOffset) * pad + 0.5;
+  let outOfFrame = getUvFrame(samplingUV, pad * stepSize);
+  var lum = getLumAtPx(samplingUV, contrast, inverted);
+  if (grainMixer > 0.001) {
+    let grainSizeCurve = pow(grainSizeParam, 0.72);
+    let grainDomainScale = mix(2600.0, 55.0, grainSizeCurve);
+    let grainDomain = samplingUV * grainDomainScale + inCellOffset * 37.0 + vec2f(21.0, -14.0);
+    let grainPrimary = halftoneOverlayNoise(grainDomain * mix(1.15, 0.2, grainSizeCurve));
+    let grainSecondary = halftoneNoise(
+      grainDomain * mix(2.1, 0.38, grainSizeCurve) +
+      uv_f * mix(14.0, 4.0, grainSizeCurve)
+    );
+    let edgeWeight = 1.0 - abs(lum * 2.0 - 1.0);
+    let lumJitter = (grainSecondary * 2.0 - 1.0) * (0.08 + 0.32 * grainMixer) * (0.3 + 0.7 * edgeWeight);
+    let lumCut = smoothstep(0.45, 0.85 - 0.2 * grainMixer, grainPrimary) * grainMixer * (0.1 + 0.8 * edgeWeight);
+    lum = clamp(lum + lumJitter - lumCut, 0.0, 1.0);
+  }
+  var ballColor = textureSampleLevel(inputTex, texSampler, samplingUV, 0.0);
+  ballColor = ballColor * outOfFrame;
+  ballColor = vec4f(ballColor.rgb * ballColor.a, ballColor.a);
+  var ball = 0.0;
+  if (styleType == 0) {
+    ball = getCircle(uv_f, lum, baseR);
+  } else if (styleType == 1) {
+    ball = getGooeyBall(uv_f, lum, baseR, gridType);
+  } else if (styleType == 2) {
+    ball = getCircleWithHole(uv_f, lum, baseR);
+  } else {
+    ball = getSoftBall(uv_f, lum, baseR);
+  }
+  return HalftoneSample(ball * outOfFrame, ballColor);
+}
+
+fn halftoneNoise(p: vec2f) -> f32 {
+  let layerA = noise2d(p);
+  let layerB = noise2d(vec2f(
+    p.x * 1.31 + p.y * 0.74,
+    p.x * -0.68 + p.y * 1.27
+  ) + vec2f(11.7, 3.9));
+  let layerC = noise2d(vec2f(
+    p.x * -0.57 + p.y * 1.43,
+    p.x * 1.19 + p.y * 0.53
+  ) + vec2f(-7.4, 13.1));
+  return (layerA + layerB + layerC) / 3.0;
+}
+
+fn halftoneOverlayNoise(p: vec2f) -> f32 {
+  let coarse = halftoneNoise(p * 0.73 + vec2f(5.31, -8.17));
+  let medium = halftoneNoise(vec2f(
+    p.x * 1.41 - p.y * 0.52,
+    p.x * 0.67 + p.y * 1.28
+  ) + vec2f(-11.4, 4.6));
+  let fine = halftoneNoise(vec2f(
+    p.x * -0.88 + p.y * 1.19,
+    p.x * -1.07 - p.y * 0.79
+  ) + vec2f(8.2, 10.7));
+  return coarse * 0.45 + medium * 0.35 + fine * 0.2;
+}
+
+fn getStepCount(styleType: i32) -> i32 {
+  if (styleType == 1) {
+    return 6;
+  }
+  if (styleType == 3) {
+    return 6;
+  }
+  if (styleType == 0) {
+    return 2;
+  }
+  return 1;
+}
+
 @fragment
 fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
-  let color = textureSample(inputTex, texSampler, input.uv);
-  let luma = luminance601(color.rgb);
-  let pixelPos = input.uv * vec2f(params.width, params.height);
-  let angleRad = params.angle * PI / 180.0;
-  let cosA = cos(angleRad);
-  let sinA = sin(angleRad);
-  let rotated = vec2f(
-    pixelPos.x * cosA - pixelPos.y * sinA,
-    pixelPos.x * sinA + pixelPos.y * cosA
-  );
-  var pattern: f32;
-  let pType = i32(params.patternType);
-  if (pType == 1) {
-    let linePos = fract(rotated.y / params.spacing);
-    let lineWidth = luma * 0.8;
-    pattern = smoothstep(lineWidth - 0.05, lineWidth + 0.05, abs(linePos - 0.5) * 2.0);
-  } else if (pType == 2) {
-    let center = vec2f(params.width * 0.5, params.height * 0.5);
-    let fromCenter = pixelPos - center;
-    let ray = atan2(fromCenter.y, fromCenter.x);
-    let rayPattern = fract(ray * params.spacing / TAU);
-    pattern = smoothstep(luma - 0.1, luma + 0.1, abs(rayPattern - 0.5) * 2.0);
-  } else if (pType == 3) {
-    let center = vec2f(params.width * 0.5, params.height * 0.5);
-    let dist = length(pixelPos - center);
-    let ripple = fract(dist / params.spacing);
-    pattern = smoothstep(luma - 0.1, luma + 0.1, abs(ripple - 0.5) * 2.0);
-  } else {
-    let cell = floor(rotated / params.spacing);
-    let cellCenter = (cell + 0.5) * params.spacing;
-    let dist = length(rotated - cellCenter);
-    let dotRadius = params.dotSize * (1.0 - luma) * 0.5;
-    pattern = smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist);
+  let dims = vec2f(textureDimensions(inputTex));
+  let aspect = max(dims.x / max(dims.y, 1.0), 0.0001);
+  let size = clamp(params.primary.x, 0.0, 1.0);
+  let radius = clamp(params.primary.y, 0.0, 2.0);
+  let contrastParam = clamp(params.primary.z, 0.0, 1.0);
+  let originalColors = params.secondary.x > 0.5;
+  let inverted = params.secondary.y > 0.5;
+  let grainMixer = clamp(params.secondary.z, 0.0, 1.0);
+  let grainOverlay = clamp(params.secondary.w, 0.0, 1.0);
+  let grainSizeParam = clamp(params.tertiary.x, 0.0, 1.0);
+  let gridType = i32(params.tertiary.y);
+  let styleType = i32(params.tertiary.z);
+
+  let stepCount = getStepCount(styleType);
+  let stepSize = 1.0 / f32(stepCount);
+
+  var cellsPerSide = mix(300.0, 7.0, pow(size, 0.7));
+  cellsPerSide /= f32(stepCount);
+  let cellSizeY = 1.0 / cellsPerSide;
+  var pad = cellSizeY * vec2f(1.0 / aspect, 1.0);
+  if (styleType == 1 && gridType == 1) {
+    pad *= 0.7;
   }
-  if (params.invertFlag > 0.5) { pattern = 1.0 - pattern; }
-  let result = mix(color.rgb, mix(vec3f(0.0), color.rgb, pattern), params.intensity);
-  return vec4f(result, color.a);
+
+  var uv = input.uv - 0.5;
+  uv /= pad;
+
+  var contrast = mix(0.0, 15.0, pow(contrastParam, 1.5));
+  var baseRadius = radius;
+  if (originalColors) {
+    contrast = mix(0.1, 4.0, pow(contrastParam, 2.0));
+    baseRadius = 2.0 * pow(0.5 * radius, 0.3);
+  }
+
+  var totalShape = 0.0;
+  var totalColor = vec3f(0.0);
+  var totalOpacity = 0.0;
+
+  for (var xi = 0; xi < 6; xi = xi + 1) {
+    if (xi >= stepCount) {
+      continue;
+    }
+
+    for (var yi = 0; yi < 6; yi = yi + 1) {
+      if (yi >= stepCount) {
+        continue;
+      }
+
+      var offset = vec2f(f32(xi) / f32(stepCount) - 0.5, f32(yi) / f32(stepCount) - 0.5);
+      if (gridType == 1) {
+        var rowIndex = f32(yi);
+        var colIndex = f32(xi);
+        if (stepCount == 1) {
+          rowIndex = floor(uv.y + offset.y + 1.0);
+          if (styleType == 1) {
+            colIndex = floor(uv.x + offset.x + 1.0);
+          }
+        }
+        if (styleType == 1) {
+          if (fract((rowIndex + colIndex) * 0.5) >= 0.5) {
+            continue;
+          }
+        } else if (fract(rowIndex * 0.5) >= 0.5) {
+          offset.x += 0.5 * stepSize;
+        }
+      }
+
+      let sample = getLumBall(
+        uv,
+        pad,
+        offset,
+        contrast,
+        baseRadius,
+        stepSize,
+        styleType,
+        gridType,
+        inverted,
+        grainMixer,
+        grainSizeParam
+      );
+      totalColor += sample.color.rgb * sample.shape;
+      totalShape += sample.shape;
+      totalOpacity += sample.shape;
+    }
+  }
+
+  let eps = 1e-4;
+  totalColor /= max(totalShape, eps);
+  totalOpacity /= max(totalShape, eps);
+
+  var finalShape = 0.0;
+  if (styleType == 0) {
+    finalShape = min(1.0, totalShape);
+  } else if (styleType == 1) {
+    let aa = 0.08;
+    finalShape = smoothstep(0.5 - aa, 0.5 + aa, totalShape);
+  } else if (styleType == 2) {
+    finalShape = min(1.0, totalShape);
+  } else {
+    finalShape = totalShape;
+  }
+
+  let grainSizeCurve = pow(grainSizeParam, 0.72);
+  let grainScale = mix(3200.0, 42.0, grainSizeCurve) * vec2f(1.0, 1.0 / aspect);
+  let grainUV = input.uv * grainScale + vec2f(13.1, -9.7);
+  let edgeBand = pow(clamp(1.0 - abs(finalShape * 2.0 - 1.0), 0.0, 1.0), 0.55);
+  let grainField = halftoneOverlayNoise(grainUV * mix(0.95, 0.16, grainSizeCurve));
+  let grainDetail = halftoneNoise(
+    grainUV * mix(1.9, 0.28, grainSizeCurve) +
+    vec2f(-17.3, 6.4)
+  );
+  let grainCut = smoothstep(0.42, 0.9, grainField);
+  let grainWarp = (grainDetail * 2.0 - 1.0) * edgeBand * grainMixer * 0.24;
+  let grainErode = edgeBand * grainCut * grainMixer * (0.35 + 1.75 * grainMixer);
+  finalShape = clamp(finalShape + grainWarp - grainErode, 0.0, 1.0);
+
+  var color = vec3f(0.0);
+  var opacity = 0.0;
+  if (originalColors) {
+    color = totalColor * finalShape;
+    opacity = totalOpacity * finalShape;
+    let bgColor = params.colorBack.rgb * params.colorBack.a;
+    color += bgColor * (1.0 - opacity);
+    opacity += params.colorBack.a * (1.0 - opacity);
+  } else {
+    let fgColor = params.colorFront.rgb * params.colorFront.a;
+    let bgColor = params.colorBack.rgb * params.colorBack.a;
+    color = fgColor * finalShape;
+    opacity = params.colorFront.a * finalShape;
+    color += bgColor * (1.0 - opacity);
+    opacity += params.colorBack.a * (1.0 - opacity);
+  }
+
+  var grainOverlayNoise = halftoneOverlayNoise(grainUV * mix(0.9, 0.14, grainSizeCurve));
+  grainOverlayNoise = pow(grainOverlayNoise, 1.3);
+  let grainOverlayV = grainOverlayNoise * 2.0 - 1.0;
+  let grainOverlayColor = vec3f(select(0.0, 1.0, grainOverlayV >= 0.0));
+  var grainOverlayStrength = grainOverlay * abs(grainOverlayV);
+  grainOverlayStrength = pow(grainOverlayStrength, 0.8);
+  color = mix(color, grainOverlayColor, 0.5 * grainOverlayStrength);
+  opacity += 0.5 * grainOverlayStrength;
+  opacity = clamp(opacity, 0.0, 1.0);
+
+  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), opacity);
 }`,
   params: {
-    patternType: {
-      type: 'select', label: 'Pattern', default: 'dots',
+    colorFront: { type: 'color', label: 'Front Color', default: '#2b2b2b' },
+    colorBack: { type: 'color', label: 'Back Color', default: '#f2f1e8' },
+    originalColors: { type: 'boolean', label: 'Original Colors', default: false },
+    inverted: { type: 'boolean', label: 'Inverted', default: false },
+    grid: {
+      type: 'select', label: 'Grid', default: 'hex',
       options: [
-        { value: 'dots', label: 'Dots' },
-        { value: 'lines', label: 'Lines' },
-        { value: 'rays', label: 'Rays' },
-        { value: 'ripples', label: 'Ripples' },
+        { value: 'hex', label: 'Hex' },
+        { value: 'square', label: 'Square' },
       ],
     },
-    dotSize: { type: 'number', label: 'Dot Size', default: 8, min: 2, max: 20, step: 1, animatable: true },
-    spacing: { type: 'number', label: 'Spacing', default: 10, min: 4, max: 40, step: 1, animatable: true },
-    angle: { type: 'number', label: 'Angle', default: 45, min: 0, max: 360, step: 1, animatable: true },
-    intensity: { type: 'number', label: 'Intensity', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
-    invert: { type: 'boolean', label: 'Invert', default: false },
+    type: {
+      type: 'select', label: 'Type', default: 'gooey',
+      options: [
+        { value: 'classic', label: 'Classic' },
+        { value: 'gooey', label: 'Gooey' },
+        { value: 'holes', label: 'Holes' },
+        { value: 'soft', label: 'Soft' },
+      ],
+    },
+    size: { type: 'number', label: 'Size', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
+    radius: { type: 'number', label: 'Radius', default: 1.25, min: 0, max: 2, step: 0.01, animatable: true },
+    contrast: { type: 'number', label: 'Contrast', default: 0.4, min: 0, max: 1, step: 0.01, animatable: true },
+    grainMixer: { type: 'number', label: 'Grain Mixer', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true },
+    grainOverlay: { type: 'number', label: 'Grain Overlay', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true },
+    grainSize: { type: 'number', label: 'Grain Size', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
   },
   packUniforms: (p, w, h) => {
-    const patternMap: Record<string, number> = { dots: 0, lines: 1, rays: 2, ripples: 3 };
+    const gridMap: Record<string, number> = { square: 0, hex: 1 };
+    const styleMap: Record<string, number> = { classic: 0, gooey: 1, holes: 2, soft: 3 };
+    const colorFront = parseHexColor((p.colorFront as string) ?? '#2b2b2b', [43 / 255, 43 / 255, 43 / 255, 1]);
+    const colorBack = parseHexColor((p.colorBack as string) ?? '#f2f1e8', [242 / 255, 241 / 255, 232 / 255, 1]);
+    const size = (p.size as number | undefined) ?? legacySpacingToPaperSize(p.spacing as number | undefined, h);
+    const radius = (p.radius as number | undefined) ?? legacyDotRatioToRadius(p.dotSize as number | undefined, p.spacing as number | undefined);
+    const contrast = (p.contrast as number | undefined) ?? 0.4;
+    const originalColors = (p.originalColors as boolean | undefined) ?? false;
+    const inverted = (p.inverted as boolean | undefined) ?? (p.invert as boolean | undefined) ?? false;
+    const grainMixer = (p.grainMixer as number | undefined) ?? 0.2;
+    const grainOverlay = (p.grainOverlay as number | undefined) ?? 0.2;
+    const grainSize = (p.grainSize as number | undefined) ?? 0.5;
+    const grid = (p.grid as string | undefined) ?? 'hex';
+    const type = (p.type as string | undefined) ?? (p.dotStyle as string | undefined) ?? 'gooey';
     return new Float32Array([
-      p.dotSize as number ?? 8, p.spacing as number ?? 10,
-      p.angle as number ?? 45, p.intensity as number ?? 0.5,
-      w, h, p.invert ? 1 : 0, patternMap[p.patternType as string] ?? 0,
+      colorFront[0], colorFront[1], colorFront[2], colorFront[3],
+      colorBack[0], colorBack[1], colorBack[2], colorBack[3],
+      size, radius, contrast, w / Math.max(h, 1),
+      originalColors ? 1 : 0, inverted ? 1 : 0, grainMixer, grainOverlay,
+      grainSize, gridMap[grid] ?? 1, styleMap[type] ?? 1, 0,
     ]);
   },
 };

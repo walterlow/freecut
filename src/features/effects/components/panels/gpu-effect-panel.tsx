@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
-import { PropertyRow, SliderInput } from '@/shared/ui/property-controls';
+import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
 interface GpuEffectPanelProps {
   effect: ItemEffect;
@@ -222,6 +222,23 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                   ))}
                 </SelectContent>
               </Select>
+            </PropertyRow>
+          );
+        }
+
+        if (param.type === 'color') {
+          return (
+            <PropertyRow
+              key={key}
+              label={param.label}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+            >
+              <ColorPicker
+                color={currentValue as string}
+                onChange={(v) => onParamChange(effect.id, key, v)}
+                onLiveChange={(v) => onParamLiveChange(effect.id, key, v)}
+                disabled={!paramEnabled}
+              />
             </PropertyRow>
           );
         }
