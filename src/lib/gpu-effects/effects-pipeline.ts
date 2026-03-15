@@ -401,7 +401,9 @@ export class EffectsPipeline {
     // Track GPU completion — allow up to MAX_FRAMES_IN_FLIGHT concurrent frames
     this.gpuFramesInFlight++;
     this.device.queue.onSubmittedWorkDone().then(() => {
-      this.gpuFramesInFlight--;
+      this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1);
+    }, () => {
+      this.gpuFramesInFlight = Math.max(0, this.gpuFramesInFlight - 1);
     });
 
     return true;

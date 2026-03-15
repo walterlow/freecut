@@ -389,12 +389,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const frameDelta = frame - lastObservedFrameRef.current;
     lastObservedFrameRef.current = frame;
     const frameSeekJumpThreshold = Math.max(8, Math.round(fps * 0.5));
-    const backgroundGraceActive = performance.now() < backgroundResyncGraceUntilRef.current;
-    const shouldIgnoreBackgroundResync =
+    const isBackgrounded =
       document.hidden
-      || (typeof document.hasFocus === 'function' && !document.hasFocus())
-      || wasBackgroundedRef.current
-      || backgroundGraceActive;
+      || (typeof document.hasFocus === 'function' && !document.hasFocus());
+    const backgroundGraceActive = performance.now() < backgroundResyncGraceUntilRef.current;
+    const shouldIgnoreBackgroundResync = isBackgrounded || backgroundGraceActive;
 
     if (isPremounted) {
       stopSource(false);
@@ -495,7 +494,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       needsInitialSyncRef.current = true;
     }
 
-    if (!shouldIgnoreBackgroundResync && wasBackgroundedRef.current) {
+    if (!isBackgrounded && !backgroundGraceActive && wasBackgroundedRef.current) {
       wasBackgroundedRef.current = false;
     }
   }, [frame, fps, playing, playbackRate, trimBefore, audioBuffer, mediaId, sourceFps, stopSource]);
