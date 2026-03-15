@@ -252,6 +252,7 @@ export const GraphPlayhead = memo(function GraphPlayhead({
 
     // Capture pointer for drag
     svg.setPointerCapture(event.pointerId);
+    let lastScrubbedFrame: number | null = null;
 
     const handlePointerMove = (e: PointerEvent) => {
       e.preventDefault();
@@ -259,6 +260,10 @@ export const GraphPlayhead = memo(function GraphPlayhead({
       const rect = svg.getBoundingClientRect();
       const localX = e.clientX - rect.left;
       const newFrame = screenXToFrame(localX);
+      if (newFrame === lastScrubbedFrame) {
+        return;
+      }
+      lastScrubbedFrame = newFrame;
       onScrub(newFrame);
     };
 

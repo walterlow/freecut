@@ -1062,11 +1062,16 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       // Convert clip-relative frame to absolute frame
       const absoluteFrame = selectedItemForEditor.from + clipRelativeFrame;
       
-      // Update the playback store's current frame
-      usePlaybackStore.getState().setCurrentFrame(absoluteFrame);
+      // Route editor scrubbing through the preview scrub path so the preview
+      // can stay on its fast-scrub presentation instead of doing full seeks.
+      usePlaybackStore.getState().setScrubFrame(absoluteFrame, selectedItemForEditor.id);
     },
     [selectedItemForEditor]
   );
+
+  const handleScrubEnd = useCallback(() => {
+    usePlaybackStore.getState().setPreviewFrame(null);
+  }, []);
 
   // Handle adding a keyframe at the current frame
   const handleAddKeyframe = useCallback(
@@ -1491,6 +1496,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                     onSelectionChange={handleSelectionChange}
                     onPropertyChange={handlePropertyChange}
                     onScrub={handleScrub}
+                    onScrubEnd={handleScrubEnd}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onAddKeyframe={handleAddKeyframe}
@@ -1539,6 +1545,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                     onSelectionChange={handleSelectionChange}
                     onPropertyChange={handlePropertyChange}
                     onScrub={handleScrub}
+                    onScrubEnd={handleScrubEnd}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onAddKeyframe={handleAddKeyframe}
@@ -1562,6 +1569,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 onSelectionChange={handleSelectionChange}
                 onPropertyChange={handlePropertyChange}
                 onScrub={handleScrub}
+                onScrubEnd={handleScrubEnd}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onAddKeyframe={handleAddKeyframe}
@@ -1584,6 +1592,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 onSelectionChange={handleSelectionChange}
                 onPropertyChange={handlePropertyChange}
                 onScrub={handleScrub}
+                onScrubEnd={handleScrubEnd}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onAddKeyframe={handleAddKeyframe}

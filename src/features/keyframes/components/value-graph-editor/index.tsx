@@ -60,6 +60,8 @@ interface ValueGraphEditorProps {
   onPropertyChange?: (property: AnimatableProperty | null) => void;
   /** Callback when playhead is scrubbed (frame is clip-relative) */
   onScrub?: (frame: number) => void;
+  /** Callback when scrubbing ends */
+  onScrubEnd?: () => void;
   /** Callback when drag starts (for undo batching) */
   onDragStart?: () => void;
   /** Callback when drag ends (for undo batching) */
@@ -98,6 +100,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   onSelectionChange,
   onPropertyChange,
   onScrub,
+  onScrubEnd,
   onDragStart,
   onDragEnd,
   onAddKeyframe,
@@ -552,11 +555,12 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   }, []);
 
   const handlePlayheadScrubEnd = useCallback(() => {
+    onScrubEnd?.();
     // Delay clearing the flag to prevent click event from deselecting
     setTimeout(() => {
       isScrrubbingRef.current = false;
     }, 100);
-  }, []);
+  }, [onScrubEnd]);
 
   // Custom background click that respects scrubbing state
   const handleGraphBackgroundClick = useCallback(

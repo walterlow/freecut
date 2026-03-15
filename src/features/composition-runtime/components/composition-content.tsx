@@ -17,6 +17,11 @@ import { Item } from './item';
 import type { MaskInfo } from './item';
 import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
 import {
+  EMPTY_MASK_INFOS,
+  materializeMaskInfos,
+  reuseStableMaskInfos,
+} from '../utils/mask-info';
+import {
   resolveTrackRenderState,
 } from '../utils/scene-assembly';
 
@@ -164,12 +169,16 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   );
   const visibleTrackIds = trackRenderState?.visibleTrackIds ?? new Set<string>();
   const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
+  const previousMaskInfosRef = React.useRef<MaskInfo[]>(EMPTY_MASK_INFOS);
 
   // Resolve active sub-comp masks for the current local frame.
   // This allows masks authored inside a pre-comp to clip items when viewed
   // from the parent timeline.
   const activeMaskInfos = useMemo<MaskInfo[]>(() => {
-    if (!subComp) return [];
+    if (!subComp) {
+      previousMaskInfosRef.current = EMPTY_MASK_INFOS;
+      return EMPTY_MASK_INFOS;
+    }
     const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
     const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
     const activeMasks = resolvedItems.filter((subItem): subItem is ShapeItem => (
@@ -178,25 +187,17 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       && visibleTrackIds.has(subItem.trackId)
     ));
 
-    return resolveActiveShapeMasksAtFrame(
+    const nextMaskInfos = materializeMaskInfos(resolveActiveShapeMasksAtFrame(
       activeMasks,
       {
         canvas,
         frame: subCompFrame,
         getKeyframes: (itemId) => keyframesById.get(itemId),
       }
-    ).map(({ shape, transform }) => ({
-      shape,
-      transform: {
-        x: transform.x,
-        y: transform.y,
-        width: transform.width,
-        height: transform.height,
-        rotation: transform.rotation,
-        opacity: transform.opacity,
-        cornerRadius: transform.cornerRadius,
-      },
-    }));
+    ));
+    const stableMaskInfos = reuseStableMaskInfos(previousMaskInfosRef.current, nextMaskInfos);
+    previousMaskInfosRef.current = stableMaskInfos;
+    return stableMaskInfos;
   }, [resolvedItems, visibleTrackIds, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
 
   if (!subComp) {

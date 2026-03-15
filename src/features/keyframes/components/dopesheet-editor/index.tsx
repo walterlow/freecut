@@ -54,6 +54,8 @@ interface DopesheetEditorProps {
   onPropertyChange?: (property: AnimatableProperty | null) => void;
   /** Callback when playhead is scrubbed (frame is clip-relative) */
   onScrub?: (frame: number) => void;
+  /** Callback when scrubbing ends */
+  onScrubEnd?: () => void;
   /** Callback when drag starts (for undo batching) */
   onDragStart?: () => void;
   /** Callback when drag ends (for undo batching) */
@@ -164,6 +166,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   onSelectionChange,
   onPropertyChange,
   onScrub,
+  onScrubEnd,
   onDragStart,
   onDragEnd,
   onAddKeyframe,
@@ -825,13 +828,16 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   ]);
 
   const scrubPointerIdRef = useRef<number | null>(null);
+  const lastScrubbedFrameRef = useRef<number | null>(null);
   const handleRulerPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       event.preventDefault();
       scrubPointerIdRef.current = event.pointerId;
       event.currentTarget.setPointerCapture(event.pointerId);
-      onScrub?.(getFrameFromClientX(event.clientX));
+      const frame = getFrameFromClientX(event.clientX);
+      lastScrubbedFrameRef.current = frame;
+      onScrub?.(frame);
     },
     [disabled, onScrub, getFrameFromClientX]
   );
@@ -840,7 +846,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       if (scrubPointerIdRef.current !== event.pointerId) return;
-      onScrub?.(getFrameFromClientX(event.clientX));
+      const frame = getFrameFromClientX(event.clientX);
+      if (frame === lastScrubbedFrameRef.current) return;
+      lastScrubbedFrameRef.current = frame;
+      onScrub?.(frame);
     },
     [disabled, onScrub, getFrameFromClientX]
   );
@@ -853,7 +862,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       // ignore pointer capture errors
     }
     scrubPointerIdRef.current = null;
-  }, []);
+    lastScrubbedFrameRef.current = null;
+    onScrubEnd?.();
+  }, [onScrubEnd]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -940,6 +951,92 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       panFrames(deltaFrames);
     },
     [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange]
+  );
+
+  const playheadLeft = frameToX(currentFrame);
+  const rowContentHeight = rows.length * ROW_HEIGHT;
+  const rulerTickElements = useMemo(
+    () =>
+      ticks.map((frame) => (
+        <div
+          key={frame}
+          className="absolute inset-y-0 border-l border-border/60"
+          style={{ left: frameToX(frame) }}
+        >
+          <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">
+            {frame}
+          </span>
+        </div>
+      )),
+    [ticks, frameToX]
+  );
+  const rowElements = useMemo(
+    () =>
+      rows.map((row) => (
+        <div key={row.property} className="grid border-b border-border/60" style={{ ...propertyGridStyle, height: ROW_HEIGHT }}>
+          <div className="px-2 flex items-center text-xs text-muted-foreground bg-muted/10">
+            {PROPERTY_LABELS[row.property]}
+          </div>
+          <div
+            className="relative border-l border-border/60 overflow-hidden"
+            onPointerDown={handleRowPointerDown}
+          >
+            {ticks.map((frame) => (
+              <div
+                key={frame}
+                className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
+                style={{ left: frameToX(frame) }}
+              />
+            ))}
+
+            {transitionBlockedRanges.map((range, index) => (
+              <div
+                key={`${row.property}-${index}-${range.start}-${range.end}`}
+                className="absolute inset-y-0 bg-destructive/10 border-x border-destructive/20 pointer-events-none"
+                style={{
+                  left: frameToX(range.start),
+                  width: frameToX(range.end) - frameToX(range.start),
+                }}
+              />
+            ))}
+
+            {row.keyframes.map((keyframe) => {
+              const selected = selectedKeyframeIds.has(keyframe.id);
+              return (
+                <button
+                  key={keyframe.id}
+                  type="button"
+                  className={cn(
+                    'absolute w-3 h-3 -ml-1.5 -mt-1.5 rotate-45 border z-10',
+                    selected
+                      ? 'bg-primary border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.25)]'
+                      : 'bg-orange-500 border-orange-300 hover:bg-orange-400'
+                  )}
+                  style={{
+                    left: frameToX(keyframe.frame),
+                    top: '50%',
+                  }}
+                  onPointerDown={(event) =>
+                    handleKeyframePointerDown(row.property, keyframe.id, event)
+                  }
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={`Keyframe at frame ${keyframe.frame}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )),
+    [
+      rows,
+      propertyGridStyle,
+      handleRowPointerDown,
+      ticks,
+      frameToX,
+      transitionBlockedRanges,
+      selectedKeyframeIds,
+      handleKeyframePointerDown,
+    ]
   );
 
   return (
@@ -1079,20 +1176,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             onPointerUp={handleRulerPointerUp}
             onPointerCancel={handleRulerPointerUp}
           >
-            {ticks.map((frame) => (
-              <div
-                key={frame}
-                className="absolute inset-y-0 border-l border-border/60"
-                style={{ left: frameToX(frame) }}
-              >
-                <span className="absolute top-0.5 left-1 text-[10px] text-muted-foreground">
-                  {frame}
-                </span>
-              </div>
-            ))}
+            {rulerTickElements}
             <div
               className="absolute inset-y-0 w-px bg-primary/90 pointer-events-none"
-              style={{ left: frameToX(currentFrame) }}
+              style={{ left: playheadLeft }}
             />
           </div>
         </div>
@@ -1104,66 +1191,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             </div>
           ) : (
             <div className="relative">
-              {rows.map((row) => (
-                <div key={row.property} className="grid border-b border-border/60" style={{ ...propertyGridStyle, height: ROW_HEIGHT }}>
-                  <div className="px-2 flex items-center text-xs text-muted-foreground bg-muted/10">
-                    {PROPERTY_LABELS[row.property]}
-                  </div>
-                  <div
-                    className="relative border-l border-border/60 overflow-hidden"
-                    onPointerDown={handleRowPointerDown}
-                  >
-                    {ticks.map((frame) => (
-                      <div
-                        key={frame}
-                        className="absolute inset-y-0 border-l border-border/30 pointer-events-none"
-                        style={{ left: frameToX(frame) }}
-                      />
-                    ))}
-
-                    {transitionBlockedRanges.map((range, index) => (
-                      <div
-                        key={`${row.property}-${index}-${range.start}-${range.end}`}
-                        className="absolute inset-y-0 bg-destructive/10 border-x border-destructive/20 pointer-events-none"
-                        style={{
-                          left: frameToX(range.start),
-                          width: frameToX(range.end) - frameToX(range.start),
-                        }}
-                      />
-                    ))}
-
-                    <div
-                      className="absolute inset-y-0 w-px bg-primary/70 pointer-events-none"
-                      style={{ left: frameToX(currentFrame) }}
-                    />
-
-                    {row.keyframes.map((keyframe) => {
-                      const selected = selectedKeyframeIds.has(keyframe.id);
-                      return (
-                        <button
-                          key={keyframe.id}
-                          type="button"
-                          className={cn(
-                            'absolute w-3 h-3 -ml-1.5 -mt-1.5 rotate-45 border z-10',
-                            selected
-                              ? 'bg-primary border-primary shadow-[0_0_0_1px_rgba(255,255,255,0.25)]'
-                              : 'bg-orange-500 border-orange-300 hover:bg-orange-400'
-                          )}
-                          style={{
-                            left: frameToX(keyframe.frame),
-                            top: '50%',
-                          }}
-                          onPointerDown={(event) =>
-                            handleKeyframePointerDown(row.property, keyframe.id, event)
-                          }
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label={`Keyframe at frame ${keyframe.frame}`}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+              <div
+                className="absolute top-0 w-px bg-primary/70 pointer-events-none z-20"
+                style={{
+                  left: PROPERTY_COLUMN_WIDTH + playheadLeft,
+                  height: rowContentHeight,
+                }}
+              />
+              {rowElements}
               {marqueeRect && !marqueeJustEndedRef.current && (
                 <KeyframeMarqueeOverlay
                   rect={{

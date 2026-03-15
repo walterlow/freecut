@@ -1,9 +1,8 @@
 ﻿import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence } from '@/features/composition-runtime/deps/player';
-import { useFrameCompositionScene } from '../hooks/use-frame-composition-scene';
-import { useVideoConfig } from '../hooks/use-player-compat';
+import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
 import type { CompositionInputProps } from '@/types/export';
-import type { TimelineItem } from '@/types/timeline';
+import type { ShapeItem, TimelineItem } from '@/types/timeline';
 import { Item, type MaskInfo } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
@@ -24,41 +23,53 @@ import {
 import {
   resolveCompositionRenderPlan,
   type AudioTrackItem,
-  type CompositionRenderPlan,
   type VideoTrackItem,
 } from '../utils/scene-assembly';
+import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
+import { KeyframesContext } from '../contexts/keyframes-context-core';
+import {
+  EMPTY_MASK_INFOS,
+  materializeMaskInfos,
+  reuseStableMaskInfos,
+} from '../utils/mask-info';
 
 type EnrichedVideoItem = VideoTrackItem;
 
-/**
- * Resolve active shape masks from the shared frame scene for the current sequence frame.
- */
-function useActiveMasks(
-  renderPlan: CompositionRenderPlan,
-  canvasWidth: number,
-  canvasHeight: number,
-): MaskInfo[] {
-  const frameScene = useFrameCompositionScene(renderPlan, {
-    canvasWidth,
-    canvasHeight,
-  });
+const ActiveMasksContext = React.createContext<MaskInfo[]>(EMPTY_MASK_INFOS);
 
-  return useMemo<MaskInfo[]>(() => {
-    if (frameScene.activeShapeMasks.length === 0) return [];
-    return frameScene.activeShapeMasks.map(({ shape, transform }) => ({
-      shape,
-      transform: {
-        x: transform.x,
-        y: transform.y,
-        width: transform.width,
-        height: transform.height,
-        rotation: transform.rotation,
-        opacity: transform.opacity,
-        cornerRadius: transform.cornerRadius,
-      },
+const FrameActiveMasksProvider: React.FC<{
+  masks: ShapeItem[];
+  canvasWidth: number;
+  canvasHeight: number;
+  children: React.ReactNode;
+}> = ({ masks, canvasWidth, canvasHeight, children }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const keyframesCtx = React.useContext(KeyframesContext);
+  const previousMasksRef = React.useRef<MaskInfo[]>(EMPTY_MASK_INFOS);
+
+  const activeMasks = useMemo<MaskInfo[]>(() => {
+    if (masks.length === 0) {
+      previousMasksRef.current = EMPTY_MASK_INFOS;
+      return EMPTY_MASK_INFOS;
+    }
+
+    const nextMasks = materializeMaskInfos(resolveActiveShapeMasksAtFrame(masks, {
+      canvas: { width: canvasWidth, height: canvasHeight, fps },
+      frame,
+      getKeyframes: keyframesCtx?.getItemKeyframes,
     }));
-  }, [frameScene]);
-}
+    const stableMasks = reuseStableMaskInfos(previousMasksRef.current, nextMasks);
+    previousMasksRef.current = stableMasks;
+    return stableMasks;
+  }, [masks, canvasWidth, canvasHeight, fps, frame, keyframesCtx]);
+
+  return (
+    <ActiveMasksContext.Provider value={activeMasks}>
+      {children}
+    </ActiveMasksContext.Provider>
+  );
+};
 
 /**
  * Enriched audio item with track rendering metadata (parallel to EnrichedVideoItem)
@@ -72,11 +83,8 @@ type EnrichedAudioItem = AudioTrackItem;
 const MaskedItem: React.FC<{
   item: TimelineItem;
   muted: boolean;
-  renderPlan: CompositionRenderPlan;
-  canvasWidth: number;
-  canvasHeight: number;
-}> = ({ item, muted, renderPlan, canvasWidth, canvasHeight }) => {
-  const masks = useActiveMasks(renderPlan, canvasWidth, canvasHeight);
+}> = ({ item, muted }) => {
+  const masks = React.useContext(ActiveMasksContext);
   return <Item item={item} muted={muted} masks={masks} />;
 };
 
@@ -186,6 +194,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
 
   // Use ALL tracks for stable DOM structure, with visibility flag for CSS-based hiding
   const nonMediaByTrack = renderPlan.stableDomTracks;
+  const visibleShapeMasks = useMemo(
+    () => renderPlan.visibleShapeMasks.map(({ mask }) => mask),
+    [renderPlan.visibleShapeMasks]
+  );
 
   // NOTE: DOM structure is now fully stable regardless of adjustment layer changes.
   // Previously, items would split between above/below adjustment groups â†’ remounts.
@@ -223,11 +235,11 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           adjustmentLayers={visibleAdjustmentLayers}
           sequenceFrom={sequenceFrom}
         >
-          <MaskedItem item={item} muted={true} renderPlan={renderPlan} canvasWidth={canvasWidth} canvasHeight={canvasHeight} />
+          <MaskedItem item={item} muted={true} />
         </ItemEffectWrapper>
       </AbsoluteFill>
     );
-  }, [visibleAdjustmentLayers, renderPlan, canvasWidth, canvasHeight]);
+  }, [visibleAdjustmentLayers]);
 
   return (
     <KeyframesProvider keyframes={keyframes}>
@@ -338,46 +350,52 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
 
           {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
           {/* This ensures items from different tracks respect z-index across all types */}
-          <AbsoluteFill>
-            {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
-            {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
-            <StableVideoSequence
-              items={videoItems}
-              transitionWindows={renderPlan.transitionWindows}
-              premountFor={Math.round(fps * 1)}
-              renderItem={renderVideoItem}
-            />
+          <FrameActiveMasksProvider
+            masks={visibleShapeMasks}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+          >
+            <AbsoluteFill>
+              {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
+              {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
+              <StableVideoSequence
+                items={videoItems}
+                transitionWindows={renderPlan.transitionWindows}
+                premountFor={Math.round(fps * 1)}
+                renderItem={renderVideoItem}
+              />
 
-            {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
-            {/* No more above/below split - items never move between DOM parents */}
-            {nonMediaByTrack
-              .filter((track) => track.items.length > 0)
-              .map((track) => {
-                const trackOrder = track.order ?? 0;
-                return (
-                  <AbsoluteFill
-                    key={track.id}
-                    style={{
-                      // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
-                      zIndex: (maxOrder - trackOrder) * 1000 + 100,
-                      visibility: track.trackVisible ? 'visible' : 'hidden',
-                    }}
-                  >
-                    {track.items.map((item) => (
-                      <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
-                        <ItemEffectWrapper
-                          itemTrackOrder={trackOrder}
-                          adjustmentLayers={visibleAdjustmentLayers}
-                          sequenceFrom={item.from}
-                        >
-                          <MaskedItem item={item} muted={track.muted || !track.trackVisible} renderPlan={renderPlan} canvasWidth={canvasWidth} canvasHeight={canvasHeight} />
-                        </ItemEffectWrapper>
-                      </Sequence>
-                    ))}
-                  </AbsoluteFill>
-                );
-              })}
-          </AbsoluteFill>
+              {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
+              {/* No more above/below split - items never move between DOM parents */}
+              {nonMediaByTrack
+                .filter((track) => track.items.length > 0)
+                .map((track) => {
+                  const trackOrder = track.order ?? 0;
+                  return (
+                    <AbsoluteFill
+                      key={track.id}
+                      style={{
+                        // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
+                        zIndex: (maxOrder - trackOrder) * 1000 + 100,
+                        visibility: track.trackVisible ? 'visible' : 'hidden',
+                      }}
+                    >
+                      {track.items.map((item) => (
+                        <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
+                          <ItemEffectWrapper
+                            itemTrackOrder={trackOrder}
+                            adjustmentLayers={visibleAdjustmentLayers}
+                            sequenceFrom={item.from}
+                          >
+                            <MaskedItem item={item} muted={track.muted || !track.trackVisible} />
+                          </ItemEffectWrapper>
+                        </Sequence>
+                      ))}
+                    </AbsoluteFill>
+                  );
+                })}
+            </AbsoluteFill>
+          </FrameActiveMasksProvider>
         </AbsoluteFill>
       </CompositionSpaceProvider>
     </KeyframesProvider>

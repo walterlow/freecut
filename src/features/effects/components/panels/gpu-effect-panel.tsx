@@ -154,10 +154,17 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
 
       {paramEntries.map(([key, param]) => {
         const currentValue = gpuEffect.params[key] ?? param.default;
+        const paramVisible = param.visibleWhen?.(gpuEffect.params) ?? true;
+        if (!paramVisible) return null;
+        const paramEnabled = effect.enabled;
 
         if (param.type === 'number') {
           return (
-            <PropertyRow key={key} label={param.label}>
+            <PropertyRow
+              key={key}
+              label={param.label}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+            >
               <SliderInput
                 value={currentValue as number}
                 onChange={(v) => onParamChange(effect.id, key, v)}
@@ -165,7 +172,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 min={param.min ?? 0}
                 max={param.max ?? 1}
                 step={param.step ?? 0.01}
-                disabled={!effect.enabled}
+                disabled={!paramEnabled}
                 className="flex-1 min-w-0"
               />
             </PropertyRow>
@@ -174,13 +181,17 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
 
         if (param.type === 'boolean') {
           return (
-            <PropertyRow key={key} label={param.label}>
+            <PropertyRow
+              key={key}
+              label={param.label}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+            >
               <Button
                 variant={currentValue ? 'default' : 'outline'}
                 size="sm"
                 className="h-6 text-xs"
                 onClick={() => onParamChange(effect.id, key, !currentValue)}
-                disabled={!effect.enabled}
+                disabled={!paramEnabled}
               >
                 {currentValue ? 'On' : 'Off'}
               </Button>
@@ -190,11 +201,15 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
 
         if (param.type === 'select' && param.options) {
           return (
-            <PropertyRow key={key} label={param.label}>
+            <PropertyRow
+              key={key}
+              label={param.label}
+              className={!paramEnabled ? 'opacity-50' : undefined}
+            >
               <Select
                 value={currentValue as string}
                 onValueChange={(v) => onParamChange(effect.id, key, v)}
-                disabled={!effect.enabled}
+                disabled={!paramEnabled}
               >
                 <SelectTrigger className="h-6 text-xs flex-1 min-w-0">
                   <SelectValue />

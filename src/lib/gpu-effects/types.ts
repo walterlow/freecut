@@ -8,6 +8,7 @@ export interface EffectParam {
   options?: { value: string; label: string }[];
   animatable?: boolean;
   quality?: boolean;
+  visibleWhen?: (params: Record<string, number | boolean | string>) => boolean;
 }
 
 export interface GpuEffectDefinition {

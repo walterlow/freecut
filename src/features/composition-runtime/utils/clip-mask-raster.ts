@@ -1,6 +1,9 @@
 const FEATHERED_MASK_MAX_DIMENSION = 960;
 const MASK_URL_CACHE_MAX_ENTRIES = 48;
+const PATH2D_CACHE_MAX_ENTRIES = 256;
 const maskUrlCache = new Map<string, string>();
+const path2dCache = new Map<string, Path2D>();
+let sharedMaskCanvas: HTMLCanvasElement | null = null;
 
 type SvgMaskPath = { path: string; strokeWidth: number };
 
@@ -26,21 +29,56 @@ function setCachedMaskUrl(key: string, value: string): void {
   }
 }
 
+function getCachedPath2D(path: string): Path2D {
+  const cached = path2dCache.get(path);
+  if (cached) {
+    path2dCache.delete(path);
+    path2dCache.set(path, cached);
+    return cached;
+  }
+
+  const path2d = new Path2D(path);
+  path2dCache.set(path, path2d);
+  while (path2dCache.size > PATH2D_CACHE_MAX_ENTRIES) {
+    const oldestKey = path2dCache.keys().next().value;
+    if (!oldestKey) break;
+    path2dCache.delete(oldestKey);
+  }
+  return path2d;
+}
+
 function getMaskCanvasContext(
   width: number,
   height: number,
 ): CanvasRenderingContext2D | null {
   if (typeof document === 'undefined') return null;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-
+  const sharedCanvas = sharedMaskCanvas ?? document.createElement('canvas');
+  sharedMaskCanvas = sharedCanvas;
+  if (sharedCanvas.width !== width) sharedCanvas.width = width;
+  if (sharedCanvas.height !== height) sharedCanvas.height = height;
   try {
-    return canvas.getContext('2d');
+    return sharedCanvas.getContext('2d');
   } catch {
     return null;
   }
+}
+
+function roundCacheFloat(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function hashSvgMaskPaths(paths: SvgMaskPath[]): string {
+  let hash = 2166136261;
+  for (const { path, strokeWidth } of paths) {
+    for (let index = 0; index < path.length; index += 1) {
+      hash ^= path.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    hash ^= Math.round(strokeWidth * 1000);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }
 
 export function getMaskRasterScale(
@@ -95,10 +133,10 @@ export function renderSvgMaskPathsToDataUrl(
     type: 'svg-mask',
     width: maskWidth,
     height: maskHeight,
-    scale: Math.round(scale * 1000) / 1000,
-    feather: Math.round(feather * 1000) / 1000,
+    scale: roundCacheFloat(scale),
+    feather: roundCacheFloat(feather),
     invert,
-    paths,
+    pathHash: hashSvgMaskPaths(paths),
   });
   const cached = getCachedMaskUrl(cacheKey);
   if (cached) return cached;
@@ -106,6 +144,9 @@ export function renderSvgMaskPathsToDataUrl(
   const ctx = getMaskCanvasContext(maskWidth, maskHeight);
   if (!ctx) return null;
 
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = 'none';
+  ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, maskWidth, maskHeight);
   if (invert) {
     ctx.fillStyle = '#ffffff';
@@ -125,7 +166,7 @@ export function renderSvgMaskPathsToDataUrl(
   ctx.save();
   ctx.scale(scale, scale);
   for (const { path, strokeWidth } of paths) {
-    const path2d = new Path2D(path);
+    const path2d = getCachedPath2D(path);
     ctx.fill(path2d);
     if (strokeWidth > 0) {
       ctx.lineWidth = strokeWidth;

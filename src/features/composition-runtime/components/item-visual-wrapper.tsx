@@ -3,7 +3,7 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
 import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
 import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
-import { useCornerPinStore } from '@/features/composition-runtime/deps/stores';
+import { useCornerPinStore, usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
   renderSvgMaskPathsToDataUrl,
@@ -38,10 +38,15 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
 
   // Get all visual state from consolidated hook
   const state = useItemVisualState(item, masks);
+  const isInteractivePreviewScrub = usePlaybackStore((s) => s.previewFrame !== null);
+  const shouldRasterizeSvgMask = state.maskType === 'svg-mask'
+    && !!state.svgMaskPaths
+    && state.maskFeather > 0
+    && !isInteractivePreviewScrub;
 
   // Compute mask style based on mask type
   const rasterSvgMaskDataUrl = useMemo(() => {
-    if (state.maskType !== 'svg-mask' || !state.svgMaskPaths) {
+    if (!shouldRasterizeSvgMask || !state.svgMaskPaths) {
       return null;
     }
 
@@ -53,7 +58,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       state.maskInvert,
     );
   }, [
-    state.maskType,
+    shouldRasterizeSvgMask,
     state.svgMaskPaths,
     state.maskFeather,
     state.maskInvert,

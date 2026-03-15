@@ -370,6 +370,425 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
   },
 };
 
+const DITHER_PATTERN_MAP: Record<string, number> = {
+  bayer2: 0,
+  bayer4: 1,
+  bayer8: 2,
+  halftone: 3,
+  lines: 4,
+  crosses: 5,
+  dots: 6,
+  grid: 7,
+  scales: 8,
+};
+
+const DITHER_MODE_MAP: Record<string, number> = {
+  image: 0,
+  linear: 1,
+  radial: 2,
+};
+
+const DITHER_STYLE_MAP: Record<string, number> = {
+  threshold: 0,
+  scaled: 1,
+};
+
+const DITHER_SHAPE_MAP: Record<string, number> = {
+  circle: 0,
+  square: 1,
+  diamond: 2,
+};
+
+const DITHER_PALETTE_MAP: Record<string, number> = {
+  bw: 0,
+  gameboy: 1,
+  cga: 2,
+  sepia: 3,
+};
+
+export const dither: GpuEffectDefinition = {
+  id: 'gpu-dither',
+  name: 'Dither',
+  category: 'stylize',
+  entryPoint: 'ditherFragment',
+  uniformSize: 48,
+  shader: /* wgsl */ `
+struct DitherParams {
+  cellSize: f32, angleDeg: f32, scalePercent: f32, width: f32,
+  height: f32, offsetX: f32, offsetY: f32, patternKind: f32,
+  modeKind: f32, styleKind: f32, shapeKind: f32, paletteKind: f32,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: DitherParams;
+
+fn bayer2Threshold(cell: vec2i) -> f32 {
+  let x = cell.x % 2;
+  let y = cell.y % 2;
+  var raw = 0.0;
+  if (y == 0) {
+    raw = select(0.0, 2.0, x == 1);
+  } else {
+    raw = select(3.0, 1.0, x == 1);
+  }
+  return (raw + 0.5) / 4.0;
+}
+
+fn bayer4Index(cell: vec2i) -> i32 {
+  let x = cell.x % 4;
+  let y = cell.y % 4;
+  if (y == 0) {
+    if (x == 0) { return 0; }
+    if (x == 1) { return 8; }
+    if (x == 2) { return 2; }
+    return 10;
+  }
+  if (y == 1) {
+    if (x == 0) { return 12; }
+    if (x == 1) { return 4; }
+    if (x == 2) { return 14; }
+    return 6;
+  }
+  if (y == 2) {
+    if (x == 0) { return 3; }
+    if (x == 1) { return 11; }
+    if (x == 2) { return 1; }
+    return 9;
+  }
+  if (x == 0) { return 15; }
+  if (x == 1) { return 7; }
+  if (x == 2) { return 13; }
+  return 5;
+}
+
+fn bayer4Threshold(cell: vec2i) -> f32 {
+  return (f32(bayer4Index(cell)) + 0.5) / 16.0;
+}
+
+fn bayer8Threshold(cell: vec2i) -> f32 {
+  let base = bayer4Index(vec2i(cell.x % 4, cell.y % 4));
+  let quad = select(0, 1, (cell.x % 8) >= 4) + select(0, 2, (cell.y % 8) >= 4);
+  let offset = select(0, select(2, select(3, 1, quad == 3), quad == 2), quad > 0);
+  let raw = 4 * base + offset;
+  return (f32(raw) + 0.5) / 64.0;
+}
+
+fn patternThreshold(patternKind: i32, cell: vec2f, patternCellSize: f32) -> f32 {
+  if (patternKind == 0) {
+    return bayer2Threshold(vec2i(cell));
+  }
+  if (patternKind == 1) {
+    return bayer4Threshold(vec2i(cell));
+  }
+  if (patternKind == 2) {
+    return bayer8Threshold(vec2i(cell));
+  }
+
+  let safeCellSize = max(2.0, patternCellSize);
+  let nx = fract(cell.x / safeCellSize);
+  let ny = fract(cell.y / safeCellSize);
+  let cx = 0.5;
+  let cy = 0.5;
+
+  if (patternKind == 3 || patternKind == 6) {
+    let dx = nx - cx;
+    let dy = ny - cy;
+    return sqrt(dx * dx + dy * dy) * 1.41421356237;
+  }
+  if (patternKind == 4) {
+    return ny;
+  }
+  if (patternKind == 5) {
+    let distX = abs(nx - cx);
+    let distY = abs(ny - cy);
+    return min(distX, distY) * 2.0;
+  }
+  if (patternKind == 7) {
+    let distX = abs(nx - cx);
+    let distY = abs(ny - cy);
+    return max(distX, distY) * 2.0;
+  }
+  if (patternKind == 8) {
+    let sx = fract(nx * 2.0);
+    let sy = fract(ny * 2.0);
+    let dx = sx - 0.5;
+    let dy = sy - 0.5;
+    return sqrt(dx * dx + dy * dy) * 1.41421356237;
+  }
+  return 0.5;
+}
+
+fn paletteLastIndex(paletteKind: i32) -> i32 {
+  if (paletteKind == 0) { return 1; }
+  return 3;
+}
+
+fn paletteIndex(value: f32, paletteKind: i32) -> i32 {
+  if (paletteKind == 0) {
+    return select(1, 0, value <= 0.5);
+  }
+  if (value <= 0.25) { return 0; }
+  if (value <= 0.5) { return 1; }
+  if (value <= 0.75) { return 2; }
+  return 3;
+}
+
+fn paletteColor(paletteKind: i32, colorIndex: i32) -> vec3f {
+  if (paletteKind == 0) {
+    if (colorIndex == 0) { return vec3f(0.0, 0.0, 0.0); }
+    return vec3f(1.0, 1.0, 1.0);
+  }
+  if (paletteKind == 1) {
+    if (colorIndex == 0) { return vec3f(0.0588, 0.2196, 0.0588); }
+    if (colorIndex == 1) { return vec3f(0.1882, 0.3843, 0.1882); }
+    if (colorIndex == 2) { return vec3f(0.5451, 0.6745, 0.0588); }
+    return vec3f(0.6078, 0.7373, 0.0588);
+  }
+  if (paletteKind == 2) {
+    if (colorIndex == 0) { return vec3f(0.0, 0.0, 0.0); }
+    if (colorIndex == 1) { return vec3f(0.3333, 1.0, 1.0); }
+    if (colorIndex == 2) { return vec3f(1.0, 0.3333, 1.0); }
+    return vec3f(1.0, 1.0, 1.0);
+  }
+  if (colorIndex == 0) { return vec3f(0.1686, 0.1137, 0.0549); }
+  if (colorIndex == 1) { return vec3f(0.4196, 0.2588, 0.1490); }
+  if (colorIndex == 2) { return vec3f(0.7686, 0.5843, 0.4157); }
+  return vec3f(0.9608, 0.9020, 0.7843);
+}
+
+fn clampTexelCoord(coord: vec2i, texSize: vec2i) -> vec2i {
+  return vec2i(
+    clamp(coord.x, 0, max(texSize.x - 1, 0)),
+    clamp(coord.y, 0, max(texSize.y - 1, 0))
+  );
+}
+
+fn loadInputTexel(coord: vec2i, texSize: vec2i) -> vec4f {
+  return textureLoad(inputTex, clampTexelCoord(coord, texSize), 0);
+}
+
+fn sampleCellBrightness(cell: vec2f, cellSize: f32, texSizeI: vec2i) -> f32 {
+  let sampleOffsets = array<vec2f, 4>(
+    vec2f(0.25, 0.25),
+    vec2f(0.75, 0.25),
+    vec2f(0.25, 0.75),
+    vec2f(0.75, 0.75)
+  );
+  var luminanceSum = 0.0;
+  var alphaSum = 0.0;
+  for (var i = 0; i < 4; i++) {
+    let sampleCoord = vec2i((cell + sampleOffsets[i]) * cellSize);
+    let sampleColor = loadInputTexel(sampleCoord, texSizeI);
+    luminanceSum += luminance601(sampleColor.rgb) * sampleColor.a;
+    alphaSum += sampleColor.a;
+  }
+  if (alphaSum <= 0.0001) {
+    return 0.0;
+  }
+  return luminanceSum / alphaSum;
+}
+
+fn applyMode(brightness: f32, cell: vec2f, gridSize: vec2f, modeKind: i32, angleDeg: f32, scalePercent: f32, offsetX: f32, offsetY: f32) -> f32 {
+  var adjusted = brightness;
+  let nx = cell.x / max(gridSize.x, 1.0);
+  let ny = cell.y / max(gridSize.y, 1.0);
+  if (modeKind == 1) {
+    let angleRad = angleDeg * PI / 180.0;
+    let gradient = nx * cos(angleRad) + ny * sin(angleRad);
+    adjusted = clamp(adjusted * 0.7 + gradient * 0.3, 0.0, 1.0);
+  } else if (modeKind == 2) {
+    let ox = offsetX / 100.0;
+    let oy = offsetY / 100.0;
+    let dx = nx - (0.5 + ox);
+    let dy = ny - (0.5 + oy);
+    let dist = length(vec2f(dx, dy)) * (scalePercent / 100.0) * 2.0;
+    adjusted = clamp(adjusted * 0.7 + dist * 0.3, 0.0, 1.0);
+  }
+  return adjusted;
+}
+
+fn shapeMask(shapeKind: i32, localUv: vec2f, sizeFactor: f32, cellSize: f32) -> f32 {
+  let centered = abs(localUv - 0.5) * 2.0;
+  let radius = clamp(sizeFactor, 0.0, 1.0);
+  let aa = max(1.0 / max(cellSize, 1.0), 0.003);
+
+  if (shapeKind == 0) {
+    return 1.0 - smoothstep(radius, radius + aa, length(centered));
+  }
+  if (shapeKind == 2) {
+    return 1.0 - smoothstep(radius, radius + aa, centered.x + centered.y);
+  }
+  return 1.0 - smoothstep(radius, radius + aa, max(centered.x, centered.y));
+}
+
+@fragment
+fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
+  let texSize = vec2f(params.width, params.height);
+  let texSizeI = vec2i(max(i32(params.width), 1), max(i32(params.height), 1));
+  let cellSize = max(params.cellSize, 1.0);
+  let pixelPos = input.uv * texSize;
+  let base = loadInputTexel(vec2i(pixelPos), texSizeI);
+  if (base.a <= 0.0001) {
+    return vec4f(0.0);
+  }
+
+  let cell = floor(pixelPos / cellSize);
+  let localUv = fract(pixelPos / cellSize);
+  let gridSize = vec2f(
+    max(1.0, ceil(texSize.x / cellSize)),
+    max(1.0, ceil(texSize.y / cellSize))
+  );
+
+  let modeKind = i32(params.modeKind + 0.5);
+  let styleKind = i32(params.styleKind + 0.5);
+  let shapeKind = i32(params.shapeKind + 0.5);
+  let paletteKind = i32(params.paletteKind + 0.5);
+  let patternKind = i32(params.patternKind + 0.5);
+
+  var brightness = sampleCellBrightness(cell, cellSize, texSizeI);
+  brightness = applyMode(
+    brightness,
+    cell,
+    gridSize,
+    modeKind,
+    params.angleDeg,
+    params.scalePercent,
+    params.offsetX,
+    params.offsetY
+  );
+
+  var quantized = brightness;
+  var sizeFactor = 1.0;
+  if (styleKind == 1) {
+    sizeFactor = 1.0 - brightness;
+  } else {
+    let threshold = patternThreshold(patternKind, cell, max(2.0, floor(cellSize * 0.5)));
+    quantized = clamp(brightness + (threshold - 0.5) * 0.5, 0.0, 1.0);
+  }
+
+  let colorIndex = paletteIndex(quantized, paletteKind);
+  let background = paletteColor(paletteKind, paletteLastIndex(paletteKind));
+  let foreground = paletteColor(paletteKind, colorIndex);
+  let mask = shapeMask(shapeKind, localUv, sizeFactor, cellSize);
+  let color = mix(background, foreground, mask);
+
+  return vec4f(color, base.a);
+}`,
+  params: {
+    pattern: {
+      type: 'select',
+      label: 'Pattern',
+      default: 'bayer4',
+      options: [
+        { value: 'bayer2', label: 'Bayer 2x2' },
+        { value: 'bayer4', label: 'Bayer 4x4' },
+        { value: 'bayer8', label: 'Bayer 8x8' },
+        { value: 'halftone', label: 'Halftone' },
+        { value: 'lines', label: 'Lines' },
+        { value: 'crosses', label: 'Crosses' },
+        { value: 'dots', label: 'Dots' },
+        { value: 'grid', label: 'Grid' },
+        { value: 'scales', label: 'Scales' },
+      ],
+    },
+    mode: {
+      type: 'select',
+      label: 'Mode',
+      default: 'image',
+      options: [
+        { value: 'image', label: 'Image' },
+        { value: 'linear', label: 'Linear' },
+        { value: 'radial', label: 'Radial' },
+      ],
+    },
+    style: {
+      type: 'select',
+      label: 'Style',
+      default: 'threshold',
+      options: [
+        { value: 'threshold', label: 'Threshold' },
+        { value: 'scaled', label: 'Scaled' },
+      ],
+    },
+    shape: {
+      type: 'select',
+      label: 'Shape',
+      default: 'square',
+      options: [
+        { value: 'circle', label: 'Circle' },
+        { value: 'square', label: 'Square' },
+        { value: 'diamond', label: 'Diamond' },
+      ],
+    },
+    palette: {
+      type: 'select',
+      label: 'Palette',
+      default: 'gameboy',
+      options: [
+        { value: 'bw', label: 'B&W' },
+        { value: 'gameboy', label: 'Game Boy' },
+        { value: 'cga', label: 'CGA' },
+        { value: 'sepia', label: 'Sepia' },
+      ],
+    },
+    cellSize: { type: 'number', label: 'Cell Size', default: 8, min: 2, max: 32, step: 1, animatable: true },
+    angle: {
+      type: 'number',
+      label: 'Angle',
+      default: 45,
+      min: 0,
+      max: 360,
+      step: 1,
+      animatable: true,
+      visibleWhen: (params) => params.mode === 'linear',
+    },
+    scale: {
+      type: 'number',
+      label: 'Scale',
+      default: 100,
+      min: 25,
+      max: 200,
+      step: 1,
+      animatable: true,
+      visibleWhen: (params) => params.mode === 'radial',
+    },
+    offsetX: {
+      type: 'number',
+      label: 'Offset X',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+      visibleWhen: (params) => params.mode === 'radial',
+    },
+    offsetY: {
+      type: 'number',
+      label: 'Offset Y',
+      default: 0,
+      min: -100,
+      max: 100,
+      step: 1,
+      animatable: true,
+      visibleWhen: (params) => params.mode === 'radial',
+    },
+  },
+  packUniforms: (p, w, h) => new Float32Array([
+    p.cellSize as number ?? 8,
+    p.angle as number ?? 45,
+    p.scale as number ?? 100,
+    w,
+    h,
+    p.offsetX as number ?? 0,
+    p.offsetY as number ?? 0,
+    DITHER_PATTERN_MAP[p.pattern as string] ?? DITHER_PATTERN_MAP.bayer4,
+    DITHER_MODE_MAP[p.mode as string] ?? DITHER_MODE_MAP.image,
+    DITHER_STYLE_MAP[p.style as string] ?? DITHER_STYLE_MAP.threshold,
+    DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square,
+    DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy,
+  ]),
+};
+
 export const threshold: GpuEffectDefinition = {
   id: 'gpu-threshold',
   name: 'Threshold',
