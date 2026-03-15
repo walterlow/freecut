@@ -14,6 +14,16 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
   },
   build: {
     target: 'esnext',

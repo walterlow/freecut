@@ -4,6 +4,7 @@
 
 export { useMediaLibraryStore } from '../stores/media-library-store';
 export { mediaLibraryService } from '../services/media-library-service';
+export { mediaTranscriptionService } from '../services/media-transcription-service';
 export { opfsService } from '../services/opfs-service';
 export {
   resolveMediaUrl,

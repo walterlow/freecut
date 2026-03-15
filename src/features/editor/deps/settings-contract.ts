@@ -4,3 +4,4 @@
  */
 
 export { useSettingsStore } from '@/features/settings/stores/settings-store';
+export { LocalInferenceUnloadControl } from '@/features/settings/components/local-inference-unload-control';

@@ -15,6 +15,8 @@ import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
@@ -29,6 +31,7 @@ import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
 import { JoinIndicators } from './join-indicators';
+import { SegmentStatusOverlays } from './segment-status-overlays';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
@@ -47,8 +50,15 @@ import {
   createPreComp,
   dissolvePreComp,
 } from '../../stores/actions/composition-actions';
+import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import type { MediaTranscriptModel } from '@/types/storage';
+import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
+import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
+import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
+const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
+const EMPTY_SEGMENT_OVERLAYS = [] as const;
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
@@ -95,6 +105,38 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       },
       [item.mediaId, item.id]
     )
+  );
+  const transcriptStatus = useMediaLibraryStore(
+    useCallback(
+      (s) => (item.mediaId ? s.transcriptStatus.get(item.mediaId) ?? 'idle' : 'idle'),
+      [item.mediaId]
+    )
+  );
+  const hasGeneratedCaptions = useItemsStore(
+    useCallback(
+      (s) => s.items.some((timelineItem) =>
+        timelineItem.type === 'text'
+        && (
+          (
+            timelineItem.captionSource?.type === 'transcript'
+            && timelineItem.captionSource.clipId === item.id
+          )
+          || (
+            !timelineItem.captionSource
+            && timelineItem.mediaId === item.mediaId
+            && timelineItem.from >= item.from
+            && timelineItem.from + timelineItem.durationInFrames <= item.from + item.durationInFrames
+            && timelineItem.text.trim().length > 0
+            && timelineItem.label === timelineItem.text.slice(0, 48)
+          )
+        )
+      ),
+      [item.durationInFrames, item.from, item.id, item.mediaId]
+    )
+  );
+  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const segmentOverlays = useTimelineItemOverlayStore(
+    useCallback((s) => s.overlaysByItemId[item.id] ?? EMPTY_SEGMENT_OVERLAYS, [item.id])
   );
 
   // O(1) lookup via keyframesByItemId index instead of O(n) array scan
@@ -1026,6 +1068,127 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
+  const handleCaptionGeneration = useCallback((
+    model: MediaTranscriptModel,
+    options?: {
+      forceTranscription?: boolean;
+      replaceExisting?: boolean;
+    },
+  ) => {
+    if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
+      return;
+    }
+
+    const mediaId = item.mediaId;
+    const clipId = item.id;
+    const store = useMediaLibraryStore.getState();
+    const overlayStore = useTimelineItemOverlayStore.getState();
+    const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
+    const forceTranscription = options?.forceTranscription ?? false;
+    const replaceExisting = options?.replaceExisting ?? false;
+    const overlayLabel = forceTranscription ? 'Regenerating captions' : 'Generating captions';
+
+    const run = async () => {
+      let updatedTranscriptStatus = previousStatus;
+
+      try {
+        const existingTranscript = await mediaTranscriptionService.getTranscript(mediaId);
+        const needsTranscription =
+          forceTranscription || !existingTranscript || existingTranscript.model !== model;
+
+        if (needsTranscription) {
+          overlayStore.upsertOverlay(clipId, {
+            id: CAPTION_GENERATION_OVERLAY_ID,
+            label: overlayLabel,
+            progress: 0,
+            tone: 'info',
+          });
+          store.setTranscriptStatus(mediaId, 'transcribing');
+          store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
+
+          await mediaTranscriptionService.transcribeMedia(mediaId, {
+            model,
+            onProgress: (progress) => {
+              const mediaLibraryStore = useMediaLibraryStore.getState();
+              mediaLibraryStore.setTranscriptProgress(mediaId, progress);
+              const mergedProgress = mediaLibraryStore.transcriptProgress.get(mediaId) ?? progress;
+
+              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
+                id: CAPTION_GENERATION_OVERLAY_ID,
+                label: overlayLabel,
+                progress: getTranscriptionOverallPercent(mergedProgress),
+                tone: 'info',
+              });
+            },
+          });
+
+          updatedTranscriptStatus = 'ready';
+          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
+          store.clearTranscriptProgress(mediaId);
+        } else {
+          overlayStore.upsertOverlay(clipId, {
+            id: CAPTION_GENERATION_OVERLAY_ID,
+            label: replaceExisting ? 'Replacing captions' : 'Adding captions',
+            tone: 'info',
+          });
+          updatedTranscriptStatus = 'ready';
+          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
+          store.clearTranscriptProgress(mediaId);
+        }
+
+        const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
+          clipIds: [clipId],
+          replaceExisting,
+        });
+
+        const successMessage = replaceExisting
+          ? result.insertedItemCount > 0
+            ? result.removedItemCount > 0
+              ? `Replaced ${result.removedItemCount} caption clip${result.removedItemCount === 1 ? '' : 's'} with ${result.insertedItemCount} updated clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+              : `Regenerated ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+            : `Removed ${result.removedItemCount} generated caption clip${result.removedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+          : `Inserted ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment with ${WHISPER_MODEL_LABELS[model]}`;
+
+        store.showNotification({
+          type: 'success',
+          message: successMessage,
+        });
+      } catch (error) {
+        if (isLocalInferenceCancellationError(error)) {
+          store.setTranscriptStatus(mediaId, previousStatus);
+          store.clearTranscriptProgress(mediaId);
+          return;
+        }
+
+        store.setTranscriptStatus(mediaId, updatedTranscriptStatus === 'ready' ? 'ready' : 'error');
+        store.clearTranscriptProgress(mediaId);
+        store.showNotification({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate captions for segment',
+        });
+      } finally {
+        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
+      }
+    };
+
+    void run();
+  }, [item.id, item.mediaId, item.type, isBroken]);
+
+  const handleGenerateCaptions = useCallback((model: MediaTranscriptModel) => {
+    handleCaptionGeneration(model);
+  }, [handleCaptionGeneration]);
+
+  const handleRegenerateCaptions = useCallback((model: MediaTranscriptModel) => {
+    handleCaptionGeneration(model, {
+      forceTranscription: true,
+      replaceExisting: true,
+    });
+  }, [handleCaptionGeneration]);
+
+  const isCaptionGenerationActive = segmentOverlays.some(
+    (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
+  );
+
   // Composition operations
   const isCompositionItem = item.type === 'composition';
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
@@ -1105,6 +1268,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           return frame > item.from && frame < item.from + item.durationInFrames;
         })()}
         onFreezeFrame={handleFreezeFrame}
+        canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
+        canRegenerateCaptions={hasGeneratedCaptions}
+        isGeneratingCaptions={isCaptionGenerationActive || transcriptStatus === 'transcribing'}
+        defaultCaptionModel={defaultWhisperModel}
+        onGenerateCaptions={handleGenerateCaptions}
+        onRegenerateCaptions={handleRegenerateCaptions}
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
@@ -1144,6 +1313,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           {isSelected && !trackLocked && (
             <div className="absolute inset-0 rounded pointer-events-none z-20 ring-2 ring-inset ring-primary" />
           )}
+
+          <SegmentStatusOverlays overlays={segmentOverlays} />
 
           {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
           {overlapLeftPixels > 0 ? (
@@ -1292,4 +1463,3 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevProps.trackHidden === nextProps.trackHidden
   );
 });
-

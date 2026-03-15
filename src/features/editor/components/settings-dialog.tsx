@@ -17,12 +17,23 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RotateCcw, Trash2, Loader2, Check, ImagePlus, Film } from 'lucide-react';
-import { useSettingsStore } from '@/features/editor/deps/settings';
+import {
+  LocalInferenceUnloadControl,
+  useSettingsStore,
+} from '@/features/editor/deps/settings';
 import {
   useMediaLibraryStore,
   getSharedProxyKey,
@@ -37,6 +48,15 @@ import {
 } from '@/features/editor/deps/timeline-cache';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
+import {
+  getWhisperQuantizationOption,
+  getWhisperLanguageSelectValue,
+  getWhisperLanguageSettingValue,
+  WHISPER_LANGUAGE_OPTIONS,
+  WHISPER_MODEL_OPTIONS,
+  WHISPER_QUANTIZATION_OPTIONS,
+} from '@/shared/utils/whisper-settings';
+import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
 
 const log = createLogger('SettingsDialog');
 
@@ -174,6 +194,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
+  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const defaultWhisperQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
+  const defaultWhisperLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
   const setSetting = useSettingsStore((s) => s.setSetting);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
 
@@ -230,18 +253,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   }, [mediaItems]);
 
+  const defaultWhisperLanguageValue = getWhisperLanguageSelectValue(defaultWhisperLanguage);
+  const defaultWhisperQuantizationOption = getWhisperQuantizationOption(defaultWhisperQuantization);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader className="flex flex-row items-center justify-between">
+      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+        <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
           <DialogTitle>Editor Settings</DialogTitle>
-          <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 gap-1.5 mr-6">
+          <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 shrink-0 gap-1.5">
             <RotateCcw className="w-3.5 h-3.5" />
             Reset
           </Button>
         </DialogHeader>
-        <ScrollArea className="max-h-[70vh] pr-4">
-          <div className="space-y-6">
+        <ScrollArea className="max-h-[70vh]">
+          <div className="space-y-6 px-6 py-5 pr-7">
             {/* General */}
             <section className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground">General</h3>
@@ -303,6 +329,79 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <span className="text-xs text-muted-foreground w-6">{maxUndoHistory}</span>
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* Whisper */}            
+            <section className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Whisper</h3>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Model</Label>
+                  <Select
+                    value={defaultWhisperModel}
+                    onValueChange={(value) =>
+                      setSetting('defaultWhisperModel', value as MediaTranscriptModel)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WHISPER_MODEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Used when transcription starts without an explicit model override.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Quantization</Label>
+                  <Select
+                    value={defaultWhisperQuantization}
+                    onValueChange={(value) =>
+                      setSetting('defaultWhisperQuantization', value as MediaTranscriptQuantization)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WHISPER_QUANTIZATION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Pick based on memory first. {defaultWhisperQuantizationOption.description}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Language</Label>
+                  <Combobox
+                    value={defaultWhisperLanguageValue}
+                    onValueChange={(value) =>
+                      setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
+                    }
+                    options={WHISPER_LANGUAGE_OPTIONS}
+                    placeholder="Auto-detect"
+                    searchPlaceholder="Search languages..."
+                    emptyMessage="No languages match that search."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Choose Auto-detect to infer the language, or lock transcription to a known language for faster startup.
+                  </p>
+                </div>
+
+                <LocalInferenceUnloadControl />
               </div>
             </section>
 
@@ -403,5 +502,3 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     </Dialog>
   );
 }
-
-

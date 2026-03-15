@@ -41,6 +41,12 @@ type BaseTimelineItem = {
   };
 };
 
+export interface GeneratedCaptionSource {
+  type: 'transcript';
+  clipId: string;
+  mediaId: string;
+}
+
 // Discriminated union types for different item types
 export type VideoItem = BaseTimelineItem & {
   type: 'video';
@@ -62,6 +68,7 @@ export type AudioItem = BaseTimelineItem & {
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
+  captionSource?: GeneratedCaptionSource;
   // Typography
   fontSize?: number; // Font size in pixels (default: 60)
   fontFamily?: string; // Font family name (default: 'Inter')

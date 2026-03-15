@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Layers, ArrowRight, Play, FolderOpen, Download, Star } from 'lucide-react';
+import { Layers, ArrowRight, Play, FolderOpen, Download, Star, ExternalLink } from 'lucide-react';
 import { FreeCutLogo } from '@/components/brand/freecut-logo';
 import { Button } from '@/components/ui/button';
 import {
@@ -247,18 +247,30 @@ function LandingPage() {
             </p>
           </div>
 
-          {/* YouTube Embed Container */}
-          <div className="relative overflow-hidden rounded-xl border border-border bg-card shadow-lg">
-            <div className="aspect-video w-full">
-              <iframe
-                className="h-full w-full"
-                src="https://www.youtube.com/embed/2EWVUXpNntk"
-                title="FreeCut Demo"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
+          <a
+            href="https://www.youtube.com/watch?v=2EWVUXpNntk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block overflow-hidden rounded-xl border border-border bg-card shadow-lg transition-colors hover:border-primary/50"
+          >
+            <div className="relative aspect-video w-full overflow-hidden bg-muted">
+              <img
+                src="/assets/landing/timeline.png"
+                alt="FreeCut demo preview"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
+              <div className="absolute inset-0 bg-black/30 transition-colors group-hover:bg-black/20" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-black/55 text-white shadow-2xl backdrop-blur-sm">
+                  <Play className="ml-1 h-8 w-8 fill-current" />
+                </div>
+              </div>
+              <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-1.5 text-sm text-white backdrop-blur-sm">
+                <span>Watch Demo on YouTube</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </div>
             </div>
-          </div>
+          </a>
         </div>
       </section>
 

@@ -21,6 +21,7 @@ import {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
+  deleteTranscript,
 } from '@/infrastructure/storage/indexeddb';
 import { gifFrameCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
@@ -287,6 +288,12 @@ class MediaLibraryService {
       // Delete media metadata
       await deleteMediaDB(mediaId);
 
+      try {
+        await deleteTranscript(mediaId);
+      } catch (error) {
+        logger.warn('Failed to delete transcript:', error);
+      }
+
       // Delete thumbnails (clear cache first)
       this.clearThumbnailCache(mediaId);
       try {
@@ -457,6 +464,12 @@ class MediaLibraryService {
     }
 
     await deleteMediaDB(id);
+
+    try {
+      await deleteTranscript(id);
+    } catch (error) {
+      logger.warn('Failed to delete transcript:', error);
+    }
   }
 
   /**
@@ -796,4 +809,3 @@ class MediaLibraryService {
 
 // Singleton instance
 export const mediaLibraryService = new MediaLibraryService();
-

@@ -8,6 +8,8 @@ Timeline-local adapters for external feature dependencies.
 - `media-library-store.ts`: media-library store selectors used by timeline.
 - `media-library-service.ts`: media-library services (including OPFS service
   re-exports) used by timeline.
+- `media-transcription-service.ts`: media transcription/caption insertion
+  services consumed by timeline clip actions.
 - `media-library-resolver.ts`: media URL resolver utilities, media drag-data
   cache helpers, and media-library helper exports used by timeline.
 - `media-library.ts`: compatibility barrel that re-exports the adapters above.

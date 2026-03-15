@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Combobox } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -12,8 +13,18 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { LocalInferenceUnloadControl } from '@/features/settings/components/local-inference-unload-control';
 import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import { HOTKEYS, HOTKEY_DESCRIPTIONS, type HotkeyKey } from '@/config/hotkeys';
+import {
+  getWhisperQuantizationOption,
+  getWhisperLanguageSelectValue,
+  getWhisperLanguageSettingValue,
+  WHISPER_LANGUAGE_OPTIONS,
+  WHISPER_MODEL_OPTIONS,
+  WHISPER_QUANTIZATION_OPTIONS,
+} from '@/shared/utils/whisper-settings';
+import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
 
 export const Route = createFileRoute('/settings')({
   component: Settings,
@@ -27,8 +38,13 @@ function Settings() {
   const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
   const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
+  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const defaultWhisperQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
+  const defaultWhisperLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
   const setSetting = useSettingsStore((s) => s.setSetting);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
+  const defaultWhisperLanguageValue = getWhisperLanguageSelectValue(defaultWhisperLanguage);
+  const defaultWhisperQuantizationOption = getWhisperQuantizationOption(defaultWhisperQuantization);
 
   // Format hotkey for display
   const formatHotkey = (hotkey: string): string => {
@@ -205,6 +221,84 @@ function Settings() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </section>
+
+        {/* Whisper Section */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold border-b border-border pb-2">Whisper Defaults</h2>
+
+          <div className="grid gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Default Model</Label>
+                <p className="text-sm text-muted-foreground">Used when a transcription flow does not explicitly choose a model</p>
+              </div>
+              <Select
+                value={defaultWhisperModel}
+                onValueChange={(value) => setSetting('defaultWhisperModel', value as MediaTranscriptModel)}
+              >
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WHISPER_MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Default Quantization</Label>
+                <p className="text-sm text-muted-foreground">
+                  Pick based on memory first. {defaultWhisperQuantizationOption.description}
+                </p>
+              </div>
+              <Select
+                value={defaultWhisperQuantization}
+                onValueChange={(value) =>
+                  setSetting('defaultWhisperQuantization', value as MediaTranscriptQuantization)
+                }
+              >
+                <SelectTrigger className="w-72">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {WHISPER_QUANTIZATION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Label>Default Language</Label>
+                <p className="text-sm text-muted-foreground">Choose Auto-detect or lock transcription to a known language</p>
+              </div>
+              <Combobox
+                value={defaultWhisperLanguageValue}
+                onValueChange={(value) =>
+                  setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
+                }
+                options={WHISPER_LANGUAGE_OPTIONS}
+                className="w-48"
+                placeholder="Auto-detect"
+                searchPlaceholder="Search languages..."
+                emptyMessage="No languages match that search."
+              />
+            </div>
+
+            <LocalInferenceUnloadControl
+              buttonClassName="h-9 w-32 gap-2"
+              descriptionClassName="text-sm"
+            />
           </div>
         </section>
 

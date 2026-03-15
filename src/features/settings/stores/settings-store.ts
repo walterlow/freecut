@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
+import {
+  DEFAULT_WHISPER_LANGUAGE,
+  DEFAULT_WHISPER_MODEL,
+  DEFAULT_WHISPER_QUANTIZATION,
+} from '@/shared/utils/whisper-settings';
 
 /**
  * App-wide settings stored in localStorage
@@ -22,6 +28,10 @@ interface AppSettings {
   maxUndoHistory: number;
   autoSaveInterval: number; // minutes (0 = disabled)
 
+  // Whisper defaults
+  defaultWhisperModel: MediaTranscriptModel;
+  defaultWhisperQuantization: MediaTranscriptQuantization;
+  defaultWhisperLanguage: string;
 }
 
 interface SettingsActions {
@@ -48,6 +58,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   // Performance
   maxUndoHistory: 50,
   autoSaveInterval: 0, // Auto-save disabled by default
+
+  // Whisper defaults
+  defaultWhisperModel: DEFAULT_WHISPER_MODEL,
+  defaultWhisperQuantization: DEFAULT_WHISPER_QUANTIZATION,
+  defaultWhisperLanguage: DEFAULT_WHISPER_LANGUAGE,
 };
 
 /**

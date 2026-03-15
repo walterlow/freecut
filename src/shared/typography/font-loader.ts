@@ -122,6 +122,7 @@ async function loadGoogleFont(fontName: string): Promise<string> {
         const link = document.createElement('link');
         link.rel = 'stylesheet';
         link.href = buildGoogleFontsUrl(config);
+        link.crossOrigin = 'anonymous';
         link.setAttribute('data-font', fontName);
         document.head.appendChild(link);
 
