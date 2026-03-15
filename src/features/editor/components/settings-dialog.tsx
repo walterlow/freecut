@@ -48,6 +48,7 @@ import {
 } from '@/features/editor/deps/timeline-cache';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
+import { EDITOR_DENSITY_OPTIONS } from '@/shared/ui/editor-layout';
 import {
   getWhisperQuantizationOption,
   getWhisperLanguageSelectValue,
@@ -190,6 +191,7 @@ async function regenerateProjectThumbnails(
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
@@ -268,6 +270,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </DialogHeader>
         <ScrollArea className="max-h-[70vh]">
           <div className="space-y-6 px-6 py-5 pr-7">
+            {/* Interface */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Interface</h3>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Editor Density</Label>
+                <Select
+                  value={editorDensity}
+                  onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EDITOR_DENSITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Compact fits more of the editor into a 1080p screen. Default restores the roomier layout.
+                </p>
+              </div>
+            </section>
+
             {/* General */}
             <section className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground">General</h3>

@@ -23,6 +23,7 @@ import { LocalInferenceStatusPill } from './local-inference-status-pill';
 import { SettingsDialog } from './settings-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 interface ToolbarProps {
   projectId: string;
@@ -66,12 +67,15 @@ export const Toolbar = memo(function Toolbar({
   };
 
   return (
-    <div className="panel-header flex h-14 flex-shrink-0 items-center gap-3 border-b border-border px-4">
-      <div className="flex items-center gap-3">
+    <div
+      className="panel-header flex flex-shrink-0 items-center gap-2.5 border-b border-border px-3"
+      style={{ height: EDITOR_LAYOUT_CSS_VALUES.toolbarHeight }}
+    >
+      <div className="flex items-center gap-2.5">
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="h-8 w-8"
           onClick={handleBackClick}
           data-tooltip="Back to Projects"
           data-tooltip-side="right"
@@ -87,13 +91,13 @@ export const Toolbar = memo(function Toolbar({
           projectName={project?.name}
         />
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="h-5" />
 
         <div className="flex flex-col -space-y-0.5">
           <h1 className="text-sm font-medium leading-none">
             {project?.name || 'Untitled Project'}
           </h1>
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-[11px] text-muted-foreground">
             {project?.width}x{project?.height} | {project?.fps}fps
           </span>
         </div>
@@ -113,11 +117,11 @@ export const Toolbar = memo(function Toolbar({
         onOpenChange={setShowSettingsDialog}
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => setShowSettingsDialog(true)}
           data-tooltip="Settings"
           data-tooltip-side="left"
@@ -128,7 +132,7 @@ export const Toolbar = memo(function Toolbar({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           onClick={() => setShowShortcutsDialog(true)}
           data-tooltip="Keyboard Shortcuts"
           data-tooltip-side="left"
@@ -139,7 +143,7 @@ export const Toolbar = memo(function Toolbar({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8"
+          className="h-7 w-7"
           asChild
         >
           <a
@@ -156,7 +160,7 @@ export const Toolbar = memo(function Toolbar({
         <Button
           variant="outline"
           size="sm"
-          className="gap-2"
+          className="gap-1.5"
           onClick={handleSave}
           aria-label="Save project"
         >
@@ -171,7 +175,7 @@ export const Toolbar = memo(function Toolbar({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-2 glow-primary-sm">
+            <Button size="sm" className="gap-1.5 glow-primary-sm">
               <Download className="h-4 w-4" />
               Export
               <ChevronDown className="h-3 w-3" />

@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   showWaveforms: true,
   showFilmstrips: true,
   previewQuality: 'high' as const,
+  editorDensity: 'compact' as const,
   defaultExportFormat: 'mp4' as const,
   defaultExportQuality: 'high' as const,
   maxUndoHistory: 50,
@@ -28,6 +29,7 @@ describe('settings-store', () => {
     expect(state.showWaveforms).toBe(true);
     expect(state.showFilmstrips).toBe(true);
     expect(state.previewQuality).toBe('high');
+    expect(state.editorDensity).toBe('compact');
     expect(state.defaultExportFormat).toBe('mp4');
     expect(state.defaultExportQuality).toBe('high');
     expect(state.maxUndoHistory).toBe(50);
@@ -57,6 +59,9 @@ describe('settings-store', () => {
 
       useSettingsStore.getState().setSetting('defaultWhisperLanguage', 'en');
       expect(useSettingsStore.getState().defaultWhisperLanguage).toBe('en');
+
+      useSettingsStore.getState().setSetting('editorDensity', 'default');
+      expect(useSettingsStore.getState().editorDensity).toBe('default');
     });
 
     it('updates whisper defaults', () => {
@@ -96,6 +101,7 @@ describe('settings-store', () => {
       expect(state.defaultFps).toBe(DEFAULT_SETTINGS.defaultFps);
       expect(state.snapEnabled).toBe(DEFAULT_SETTINGS.snapEnabled);
       expect(state.previewQuality).toBe(DEFAULT_SETTINGS.previewQuality);
+      expect(state.editorDensity).toBe(DEFAULT_SETTINGS.editorDensity);
       expect(state.autoSaveInterval).toBe(DEFAULT_SETTINGS.autoSaveInterval);
       expect(state.defaultWhisperModel).toBe(DEFAULT_SETTINGS.defaultWhisperModel);
       expect(state.defaultWhisperLanguage).toBe(DEFAULT_SETTINGS.defaultWhisperLanguage);

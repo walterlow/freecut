@@ -1,16 +1,24 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useEditorStore } from './editor-store';
+import {
+  DEFAULT_EDITOR_DENSITY_PRESET,
+  getEditorLayout,
+} from '@/shared/ui/editor-layout';
+import { useSettingsStore } from '@/features/editor/deps/settings';
 
 describe('editor-store', () => {
   beforeEach(() => {
+    useSettingsStore.getState().setSetting('editorDensity', DEFAULT_EDITOR_DENSITY_PRESET);
+    const editorLayout = getEditorLayout(DEFAULT_EDITOR_DENSITY_PRESET);
+
     // Reset store to defaults between tests
     useEditorStore.setState({
       activePanel: null,
       leftSidebarOpen: true,
       rightSidebarOpen: true,
       activeTab: 'media',
-      sidebarWidth: 320,
-      rightSidebarWidth: 320,
+      sidebarWidth: editorLayout.sidebarDefaultWidth,
+      rightSidebarWidth: editorLayout.sidebarDefaultWidth,
       timelineHeight: 250,
       sourcePreviewMediaId: null,
     });
@@ -88,5 +96,16 @@ describe('editor-store', () => {
 
     useEditorStore.getState().setRightSidebarOpen(false);
     expect(useEditorStore.getState().rightSidebarOpen).toBe(false);
+  });
+
+  it('reclamps sidebar widths when syncing sidebar layout', () => {
+    useEditorStore.getState().setSidebarWidth(480);
+    useEditorStore.getState().setRightSidebarWidth(480);
+
+    const compactLayout = getEditorLayout('compact');
+    useEditorStore.getState().syncSidebarLayout(compactLayout);
+
+    expect(useEditorStore.getState().sidebarWidth).toBe(compactLayout.sidebarMaxWidth);
+    expect(useEditorStore.getState().rightSidebarWidth).toBe(compactLayout.sidebarMaxWidth);
   });
 });

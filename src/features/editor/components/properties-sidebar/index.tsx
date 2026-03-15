@@ -7,6 +7,12 @@ import { CanvasPanel } from './canvas-panel';
 import { ClipPanel } from './clip-panel';
 import { MarkerPanel } from './marker-panel';
 import { TransitionPanel } from './transition-panel';
+import { useSettingsStore } from '@/features/editor/deps/settings';
+import {
+  EDITOR_LAYOUT_CSS_VALUES,
+  clampEditorSidebarWidth,
+  getEditorLayout,
+} from '@/shared/ui/editor-layout';
 
 /**
  * Properties sidebar - right panel for editing properties.
@@ -14,6 +20,8 @@ import { TransitionPanel } from './transition-panel';
  * is selected, ClipPanel when clips are selected, CanvasPanel otherwise.
  */
 export const PropertiesSidebar = memo(function PropertiesSidebar() {
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
   // Use granular selectors - Zustand v5 best practice
   const rightSidebarOpen = useEditorStore((s) => s.rightSidebarOpen);
   const toggleRightSidebar = useEditorStore((s) => s.toggleRightSidebar);
@@ -44,7 +52,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       if (!isResizingRef.current) return;
       // Dragging left increases width for right sidebar
       const delta = startXRef.current - e.clientX;
-      const newWidth = Math.min(500, Math.max(320, startWidthRef.current + delta));
+      const newWidth = clampEditorSidebarWidth(startWidthRef.current + delta, editorLayout);
       setRightSidebarWidth(newWidth);
     };
 
@@ -64,7 +72,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [setRightSidebarWidth]);
+  }, [editorLayout, setRightSidebarWidth]);
 
   return (
     <>
@@ -79,7 +87,10 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
         <Activity mode={rightSidebarOpen ? 'visible' : 'hidden'}>
           <div className="h-full flex flex-col" style={{ width: rightSidebarWidth }}>
             {/* Sidebar Header */}
-            <div className="h-11 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
+            <div
+              className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
+              style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
+            >
               <h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-2">
                 <Settings2 className="w-3 h-3" />
                 Properties
@@ -87,15 +98,15 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-6 w-6"
                 onClick={toggleRightSidebar}
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </div>
 
             {/* Properties Panel */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 [scrollbar-gutter:stable]">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 [scrollbar-gutter:stable]">
               {selectedTransitionId ? (
                 <TransitionPanel />
               ) : selectedMarkerId ? (
@@ -121,7 +132,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
       {!rightSidebarOpen && (
         <button
           onClick={toggleRightSidebar}
-          className="absolute right-0 top-3 z-10 w-6 h-20 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
+          className="absolute right-0 top-3 z-10 w-6 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
+          style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarRevealToggleHeight }}
           data-tooltip="Show Properties Panel"
           data-tooltip-side="left"
         >

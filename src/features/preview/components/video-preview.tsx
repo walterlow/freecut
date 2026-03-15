@@ -66,6 +66,7 @@ import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledText
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 const logger = createLogger('VideoPreview');
 
@@ -3469,7 +3470,8 @@ export const VideoPreview = memo(function VideoPreview({
       onClick={handleBackgroundClick}
     >
       <div
-        className="min-w-full min-h-full grid place-items-center p-6"
+        className="min-w-full min-h-full grid place-items-center"
+        style={{ padding: `calc(${EDITOR_LAYOUT_CSS_VALUES.previewPadding} / 2)` }}
         onClick={handleBackgroundClick}
       >
         <div className="relative">

@@ -2,13 +2,10 @@ import { memo, useCallback } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { ClipFilmstrip } from '../clip-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
-import {
-  CLIP_LABEL_ROW_HEIGHT,
-  VIDEO_WAVEFORM_HEIGHT,
-} from '@/features/timeline/constants';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 interface ClipContentProps {
   item: TimelineItem;
@@ -105,7 +102,10 @@ export const ClipContent = memo(function ClipContent({
         {/* Row 1: Label - fixed height */}
         <div
           className="px-2 text-[11px] font-medium truncate shrink-0"
-          style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
+          style={{
+            height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+            lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+          }}
         >
           {item.label}
         </div>
@@ -130,7 +130,10 @@ export const ClipContent = memo(function ClipContent({
         </div>
         {/* Row 3: Waveform - fixed height with gradient bg */}
         {showWaveforms && (
-          <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
+          <div
+            className="relative overflow-hidden bg-waveform-gradient"
+            style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineVideoWaveformHeight }}
+          >
             <ClipWaveform
               mediaId={item.mediaId}
               clipWidth={clipWidth}
@@ -155,7 +158,10 @@ export const ClipContent = memo(function ClipContent({
         {/* Row 1: Label - fixed height */}
         <div
           className="px-2 text-[11px] font-medium truncate shrink-0"
-          style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
+          style={{
+            height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+            lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+          }}
         >
           {item.label}
         </div>
@@ -199,7 +205,10 @@ export const ClipContent = memo(function ClipContent({
           {/* Row 1: Label - fixed height */}
           <div
             className="px-2 text-[11px] font-medium truncate shrink-0"
-            style={{ height: CLIP_LABEL_ROW_HEIGHT, lineHeight: `${CLIP_LABEL_ROW_HEIGHT}px` }}
+            style={{
+              height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+              lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+            }}
           >
             {item.label || 'Composition'}
           </div>
@@ -224,7 +233,10 @@ export const ClipContent = memo(function ClipContent({
           </div>
           {/* Row 3: Waveform */}
           {showWaveforms && (
-            <div className="relative overflow-hidden bg-waveform-gradient" style={{ height: VIDEO_WAVEFORM_HEIGHT }}>
+            <div
+              className="relative overflow-hidden bg-waveform-gradient"
+              style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineVideoWaveformHeight }}
+            >
               <ClipWaveform
                 mediaId={compTopVideoMediaId}
                 clipWidth={clipWidth}

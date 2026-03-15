@@ -10,6 +10,7 @@ import {
 import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown, FoldHorizontal } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
+import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
 
 interface TrackHeaderProps {
   track: TimelineTrack;
@@ -94,18 +95,18 @@ export const TrackHeader = memo(function TrackHeader({
           `}
           style={{
             height: `${track.height}px`,
-            paddingLeft: `${4 + groupDepth * 16}px`,
+            paddingLeft: `${4 + groupDepth * 14}px`,
             // content-visibility optimization for long track lists (rendering-content-visibility)
             contentVisibility: 'auto',
-            containIntrinsicSize: `192px ${track.height}px`,
+            containIntrinsicSize: `${TIMELINE_SIDEBAR_WIDTH}px ${track.height}px`,
           }}
           onClick={onSelect}
           onMouseDown={handleDragStart}
           data-track-id={track.id}
         >
           {/* Left column: Drag handle + collapse toggle */}
-          <div className="flex items-center shrink-0 mr-1">
-            <GripVertical className="w-4 h-4 text-muted-foreground" />
+          <div className="flex items-center shrink-0 mr-0.5">
+            <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
             {isGroup && (
               <Button
                 variant="ghost"
@@ -130,7 +131,7 @@ export const TrackHeader = memo(function TrackHeader({
           <div className="flex items-center justify-center min-w-0 flex-1">
           <div className="flex flex-col items-start">
             {/* Row 1: Name */}
-            <span className="text-sm font-bold font-mono truncate">
+            <span className="text-xs font-semibold leading-none font-mono truncate">
               {track.name}
             </span>
 

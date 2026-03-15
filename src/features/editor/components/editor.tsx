@@ -22,10 +22,13 @@ import { initTransitionChainSubscription } from '@/features/editor/deps/timeline
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
+import { useSettingsStore } from '@/features/editor/deps/settings';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
+import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
 
 const logger = createLogger('Editor');
 const LazyExportDialog = lazy(() =>
@@ -64,13 +67,14 @@ interface EditorProps {
  * Video Editor Component
  * Memoized to prevent re-renders from route changes cascading to all children.
  */
-/** Extra percentage to add to timeline panel when graph editor is open */
-const GRAPH_PANEL_SIZE_INCREASE = 12; // ~12% extra height
-
 export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
+  const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
+  const syncSidebarLayout = useEditorStore((s) => s.syncSidebarLayout);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -151,6 +155,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   // Track unsaved changes
   const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty);
+
+  useEffect(() => {
+    syncSidebarLayout(editorLayout);
+  }, [editorLayout, syncSidebarLayout]);
 
   // Save timeline to project (with guard against concurrent saves)
   const handleSave = useCallback(async () => {
@@ -245,7 +253,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       // Opening: store current size before expanding (only if not already open)
       baseTimelineSizeRef.current = panel.getSize();
       // Expand panel to accommodate graph editor
-      const newSize = Math.min(50, baseTimelineSizeRef.current + GRAPH_PANEL_SIZE_INCREASE);
+      const newSize = Math.min(
+        editorLayout.timelineMaxSize,
+        baseTimelineSizeRef.current + editorLayout.graphPanelSizeIncrease
+      );
       panel.resize(newSize);
       isGraphOpenRef.current = true;
     } else if (!isOpen && isGraphOpenRef.current) {
@@ -253,10 +264,13 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       panel.resize(baseTimelineSizeRef.current);
       isGraphOpenRef.current = false;
     }
-  }, []);
+  }, [editorLayout.graphPanelSizeIncrease, editorLayout.timelineMaxSize]);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div
+      className="h-screen bg-background flex flex-col overflow-hidden"
+      style={editorLayoutCssVars as import('react').CSSProperties}
+    >
         {/* Top Toolbar */}
         <Toolbar
           projectId={projectId}
@@ -270,7 +284,11 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         {/* Resizable Layout: Main Content + Timeline */}
         <ResizablePanelGroup direction="vertical" className="flex-1">
           {/* Main Content Area */}
-          <ResizablePanel defaultSize={70} minSize={50} maxSize={85}>
+          <ResizablePanel
+            defaultSize={100 - editorLayout.timelineDefaultSize}
+            minSize={100 - editorLayout.timelineMaxSize}
+            maxSize={100 - editorLayout.timelineMinSize}
+          >
             <div className="h-full flex overflow-hidden relative">
               {/* Left Sidebar - Media Library */}
               <ErrorBoundary level="feature">
@@ -294,9 +312,9 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           {/* Bottom - Timeline */}
           <ResizablePanel
             ref={timelinePanelRef}
-            defaultSize={30}
-            minSize={15}
-            maxSize={50}
+            defaultSize={editorLayout.timelineDefaultSize}
+            minSize={editorLayout.timelineMinSize}
+            maxSize={editorLayout.timelineMaxSize}
           >
             <ErrorBoundary level="feature">
               <Timeline

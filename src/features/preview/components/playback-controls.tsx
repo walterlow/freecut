@@ -12,10 +12,16 @@ import {
   Zap,
 } from 'lucide-react';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 interface PlaybackControlsProps {
   totalFrames: number;
 }
+
+const PREVIEW_CONTROL_BUTTON_STYLE = {
+  height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
+  width: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
+};
 
 /**
  * Playback Controls Component
@@ -72,7 +78,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           onClick={handleGoToStart}
           data-tooltip="Go to Start (Home)"
           aria-label="Go to start"
@@ -83,7 +90,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           onClick={handlePreviousFrame}
           data-tooltip="Previous Frame (Left Arrow)"
           aria-label="Previous frame"
@@ -93,7 +101,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
 
         <Button
           size="icon"
-          className="h-11 w-11 glow-primary-sm"
+          className="glow-primary-sm flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           onClick={togglePlayPause}
           data-tooltip={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           aria-label={isPlaying ? 'Pause' : 'Play'}
@@ -108,7 +117,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           onClick={handleNextFrame}
           data-tooltip="Next Frame (Right Arrow)"
           aria-label="Next frame"
@@ -119,7 +129,8 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9"
+          className="flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           onClick={handleGoToEnd}
           data-tooltip="Go to End (End)"
           aria-label="Go to end"
@@ -128,14 +139,15 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
         </Button>
       </div>
 
-      <Separator orientation="vertical" className="h-8 flex-shrink-0" />
+      <Separator orientation="vertical" className="h-6 flex-shrink-0" />
 
       {/* Volume Control — shrinks and clips when panel is narrow */}
       <div className="flex items-center gap-2 min-w-0 overflow-hidden flex-shrink">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 flex-shrink-0"
+          className="flex-shrink-0"
+          style={PREVIEW_CONTROL_BUTTON_STYLE}
           data-tooltip="Volume"
           aria-label="Volume"
         >
@@ -151,24 +163,25 @@ export function PlaybackControls({ totalFrames }: PlaybackControlsProps) {
           }}
           max={100}
           step={1}
-          className="w-24 flex-shrink-0"
+          className="w-20 flex-shrink-0"
           aria-label="Volume control"
         />
-        <span className="text-xs text-muted-foreground font-mono w-8 flex-shrink-0">
+        <span className="text-[11px] text-muted-foreground font-mono w-7 flex-shrink-0">
           {Math.round(volume * 100)}%
         </span>
       </div>
 
-      <Separator orientation="vertical" className="h-8 flex-shrink-0" />
+      <Separator orientation="vertical" className="h-6 flex-shrink-0" />
 
       <Button
         variant="ghost"
         size="icon"
-        className={`h-8 w-8 flex-shrink-0 ${
+        className={`flex-shrink-0 ${
           useProxy
             ? 'text-green-500 hover:text-green-400 hover:bg-green-500/10'
             : 'text-muted-foreground hover:text-foreground'
         }`}
+        style={PREVIEW_CONTROL_BUTTON_STYLE}
         onClick={toggleUseProxy}
         data-tooltip={useProxy ? 'Proxy Playback: On' : 'Proxy Playback: Off'}
         aria-label={useProxy ? 'Disable proxy playback' : 'Enable proxy playback'}

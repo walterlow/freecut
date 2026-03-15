@@ -67,26 +67,25 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
     : 11; // SMPTE "HH:MM:SS:FF" is always 11 chars
 
   return (
-    <div
-      className="px-4 py-2.5 bg-secondary/50 rounded-md border border-border cursor-pointer select-none hover:bg-secondary/70 transition-colors"
+    <button
+      type="button"
+      className="inline-flex items-center gap-2 bg-transparent p-0 font-mono text-[13px] tabular-nums text-left transition-colors select-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
       onClick={() => setShowFrames((prev) => !prev)}
     >
-      <div className="flex items-center gap-2 font-mono text-sm tabular-nums">
-        <span
-          ref={currentTimeRef}
-          className="text-primary font-semibold inline-block text-right"
-          style={{ width: `${charWidth}ch` }}
-        >
-          {showFrames ? formatFrameNumber(usePlaybackStore.getState().currentFrame) : formatTimecode(usePlaybackStore.getState().currentFrame, fps)}
-        </span>
-        <span className="text-muted-foreground/50">/</span>
-        <span
-          className="text-muted-foreground inline-block text-right"
-          style={{ width: `${charWidth}ch` }}
-        >
-          {showFrames ? formatFrameNumber(Math.max(0, totalFrames - 1)) : formatTimecode(Math.max(0, totalFrames - 1), fps)}
-        </span>
-      </div>
-    </div>
+      <span
+        ref={currentTimeRef}
+        className="text-primary font-semibold inline-block text-right"
+        style={{ width: `${charWidth}ch` }}
+      >
+        {showFrames ? formatFrameNumber(usePlaybackStore.getState().currentFrame) : formatTimecode(usePlaybackStore.getState().currentFrame, fps)}
+      </span>
+      <span className="text-muted-foreground/50">/</span>
+      <span
+        className="inline-block text-right"
+        style={{ width: `${charWidth}ch` }}
+      >
+        {showFrames ? formatFrameNumber(Math.max(0, totalFrames - 1)) : formatTimecode(Math.max(0, totalFrames - 1), fps)}
+      </span>
+    </button>
   );
 }

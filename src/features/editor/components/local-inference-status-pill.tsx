@@ -36,17 +36,17 @@ export function LocalInferenceStatusPill() {
   ].filter(Boolean);
 
   return (
-    <div className="hidden items-center gap-2 rounded-md border border-border/70 bg-secondary/35 px-3 py-1.5 lg:flex">
+    <div className="hidden items-center gap-2 rounded-md border border-border/70 bg-secondary/35 px-2.5 py-1 lg:flex">
       {summary.state === 'loading' || summary.state === 'running' ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin text-orange-500" />
       ) : (
         <Cpu className="h-3.5 w-3.5 text-orange-500" />
       )}
       <div className="min-w-0">
-        <div className="text-[11px] font-medium leading-none">
+        <div className="text-[10px] font-medium leading-none">
           {getStateLabel(summary.state)}
         </div>
-        <div className="mt-1 truncate text-[10px] text-muted-foreground">
+        <div className="mt-0.5 truncate text-[9px] text-muted-foreground">
           {detailParts.join(' | ')}
         </div>
       </div>

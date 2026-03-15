@@ -144,12 +144,14 @@ body.timeline-item-drag-cursor-not-allowed * {
  */
 .timeline-item {
   content-visibility: auto;
-  contain-intrinsic-size: auto 80px; /* width auto, estimated height matches DEFAULT_TRACK_HEIGHT */
+  contain-intrinsic-size: auto var(--editor-timeline-track-height, 72px);
 }
 
 .track-header-item {
   content-visibility: auto;
-  contain-intrinsic-size: 192px 80px; /* sidebar width, estimated height matches DEFAULT_TRACK_HEIGHT */
+  contain-intrinsic-size:
+    var(--editor-timeline-sidebar-width, 176px)
+    var(--editor-timeline-track-height, 72px);
 }
 
 /* Filmstrip loading shimmer animation */

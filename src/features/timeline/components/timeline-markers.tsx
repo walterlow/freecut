@@ -9,11 +9,13 @@ import { useSelectionStore } from '@/shared/state/selection';
 // Components
 import { TimelineInOutMarkers } from './timeline-in-out-markers';
 import { TimelineProjectMarkers } from './timeline-project-markers';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { formatTimecode, secondsToFrames } from '@/utils/time-utils';
 import { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 
 // Edge-scrolling configuration
 const EDGE_SCROLL_MAX_SPEED = 20; // Max pixels per frame at max distance
@@ -128,6 +130,8 @@ function drawTile(
   // Use pre-computed marker interval (intervalInSeconds is already set correctly in config)
   const intervalInSeconds = markerConfig.intervalInSeconds;
   const markerWidthPx = timeToPixels(intervalInSeconds);
+  const minorTickTop = canvasHeight - 16;
+  const minorTickBottom = canvasHeight - 8;
 
   if (markerWidthPx <= 0) return;
 
@@ -177,8 +181,8 @@ function drawTile(
         if (tickX < 0 || tickX > actualTileWidth) continue;
 
         ctx.beginPath();
-        ctx.moveTo(tickX, 28);
-        ctx.lineTo(tickX, 36);
+        ctx.moveTo(tickX, minorTickTop);
+        ctx.lineTo(tickX, minorTickBottom);
         ctx.stroke();
       }
     }
@@ -254,7 +258,7 @@ const TimelineMarkerLabels = memo(function TimelineMarkerLabels({
       {labels.map(({ time, x, label }) => (
         <span
           key={time}
-          className="absolute text-[13px] text-white/60 select-none whitespace-nowrap"
+          className="absolute text-xs text-white/60 select-none whitespace-nowrap"
           style={{
             left: `${x + 6}px`,
             top: '2px',
@@ -279,6 +283,8 @@ const TimelineMarkerLabels = memo(function TimelineMarkerLabels({
  * Each tile is 2000px wide, only visible tiles are rendered.
  */
 export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
   const { timeToPixels, pixelsPerSecond, pixelsToFrame } = useTimelineZoomContext();
   const fps = useTimelineStore((s) => s.fps);
   const inPoint = useTimelineStore((s) => s.inPoint);
@@ -392,7 +398,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Calculate dimensions
   const timelineContentWidth = timeToPixels(duration);
   const displayWidth = width || Math.max(timelineContentWidth, viewportWidth);
-  const canvasHeight = 44;
+  const canvasHeight = editorLayout.timelineRulerHeight;
 
   // Calculate visible tiles
   const startTile = Math.max(0, Math.floor(scrollLeft / TILE_WIDTH));
@@ -836,11 +842,12 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   return (
     <div
       ref={containerRef}
-      className="h-11 border-b border-border/80 relative"
+      className="border-b border-border/80 relative"
       onMouseDown={handleMouseDown}
       style={{
         background: 'linear-gradient(to bottom, oklch(0.22 0 0 / 0.30), oklch(0.22 0 0 / 0.20), oklch(0.22 0 0 / 0.10))',
         userSelect: 'none',
+        height: EDITOR_LAYOUT_CSS_VALUES.timelineRulerHeight,
         width: width ? `${width}px` : undefined,
         minWidth: width ? `${width}px` : undefined,
       }}

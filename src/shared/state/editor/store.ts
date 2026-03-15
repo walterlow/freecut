@@ -1,10 +1,35 @@
 import { create } from 'zustand';
 import type { EditorState, EditorActions } from './types';
+import {
+  clampEditorSidebarWidth,
+  EDITOR_LAYOUT,
+  type EditorLayout,
+} from '@/shared/ui/editor-layout';
 
-function loadNumber(key: string, fallback: number): number {
+const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
+
+function normalizeSidebarWidth(
+  width: number,
+  fallback: number,
+  layout: Pick<EditorLayout, 'sidebarMinWidth' | 'sidebarMaxWidth'>
+): number {
+  if (!Number.isFinite(width)) return fallback;
+  const nextWidth = (
+    width === LEGACY_SIDEBAR_DEFAULT_WIDTH
+    && fallback !== LEGACY_SIDEBAR_DEFAULT_WIDTH
+  )
+    ? fallback
+    : width;
+  return clampEditorSidebarWidth(nextWidth, layout);
+}
+
+function loadSidebarWidth(key: string, fallback: number): number {
   try {
     const v = localStorage.getItem(key);
-    if (v !== null) return Number(v);
+    if (v !== null) {
+      const parsedWidth = Number(v);
+      return Number.isFinite(parsedWidth) ? parsedWidth : fallback;
+    }
   } catch { /* noop */ }
   return fallback;
 }
@@ -15,8 +40,8 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   leftSidebarOpen: true,
   rightSidebarOpen: true,
   activeTab: 'media',
-  sidebarWidth: loadNumber('editor:sidebarWidth', 320),
-  rightSidebarWidth: loadNumber('editor:rightSidebarWidth', 320),
+  sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
+  rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
 
@@ -35,6 +60,18 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     try { localStorage.setItem('editor:rightSidebarWidth', String(width)); } catch { /* noop */ }
     set({ rightSidebarWidth: width });
   },
+  syncSidebarLayout: (layout) => set((currentState) => ({
+    sidebarWidth: normalizeSidebarWidth(
+      currentState.sidebarWidth,
+      layout.sidebarDefaultWidth,
+      layout
+    ),
+    rightSidebarWidth: normalizeSidebarWidth(
+      currentState.rightSidebarWidth,
+      layout.sidebarDefaultWidth,
+      layout
+    ),
+  })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
 }));

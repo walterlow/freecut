@@ -31,10 +31,18 @@ import { EFFECT_PRESETS } from '@/types/effects';
 import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 import { createLogger } from '@/shared/logging/logger';
+import { useSettingsStore } from '@/features/editor/deps/settings';
+import {
+  EDITOR_LAYOUT_CSS_VALUES,
+  clampEditorSidebarWidth,
+  getEditorLayout,
+} from '@/shared/ui/editor-layout';
 
 const logger = createLogger('MediaSidebar');
 
 export const MediaSidebar = memo(function MediaSidebar() {
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
   // Use granular selectors - Zustand v5 best practice
   const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
@@ -61,7 +69,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
       const delta = e.clientX - startXRef.current;
-      const newWidth = Math.min(500, Math.max(320, startWidthRef.current + delta));
+      const newWidth = clampEditorSidebarWidth(startWidthRef.current + delta, editorLayout);
       setSidebarWidth(newWidth);
     };
 
@@ -81,7 +89,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [setSidebarWidth]);
+  }, [editorLayout, setSidebarWidth]);
 
   // NOTE: Don't subscribe to tracks, items, currentProject here!
   // These change frequently and would cause re-renders cascading to MediaLibrary/MediaCards
@@ -349,25 +357,31 @@ export const MediaSidebar = memo(function MediaSidebar() {
   return (
     <div className="flex h-full flex-shrink-0">
       {/* Vertical Category Bar */}
-      <div className="w-12 panel-header border-r border-border flex flex-col items-center flex-shrink-0">
+      <div
+        className="panel-header border-r border-border flex flex-col items-center flex-shrink-0"
+        style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarRailWidth }}
+      >
         {/* Header row - aligned with content panel header */}
-        <div className="h-10 flex items-center justify-center border-b border-border w-full">
+        <div
+          className="flex items-center justify-center border-b border-border w-full"
+          style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
+        >
           <button
             onClick={toggleLeftSidebar}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
             data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
             data-tooltip-side="right"
           >
             {leftSidebarOpen ? (
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             ) : (
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             )}
           </button>
         </div>
 
         {/* Category Icons */}
-        <div className="flex flex-col gap-1 py-2">
+        <div className="flex flex-col gap-1 py-1.5">
           {categories.map(({ id, icon: Icon, label }) => (
             <button
               key={id}
@@ -381,7 +395,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 }
               }}
               className={`
-                w-10 h-10 rounded-lg flex items-center justify-center transition-all
+                w-9 h-9 rounded-lg flex items-center justify-center transition-all
                 ${activeTab === id && leftSidebarOpen
                   ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
@@ -390,7 +404,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               data-tooltip={label}
               data-tooltip-side="right"
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-4 h-4" />
             </button>
           ))}
         </div>
@@ -407,7 +421,10 @@ export const MediaSidebar = memo(function MediaSidebar() {
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>
           <div className="h-full flex flex-col" style={{ width: sidebarWidth }}>
           {/* Panel Header */}
-          <div className="h-10 flex items-center px-3 border-b border-border flex-shrink-0">
+          <div
+            className="flex items-center px-3 border-b border-border flex-shrink-0"
+            style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
+          >
             <span className="text-sm font-medium text-foreground">
               {categories.find((c) => c.id === activeTab)?.label}
             </span>

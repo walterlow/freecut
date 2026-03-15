@@ -34,6 +34,7 @@ import {
   ZOOM_MIN,
   ZOOM_MAX,
 } from '../constants';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 interface TimelineHeaderProps {
   onZoomChange?: (newZoom: number) => void;
@@ -228,9 +229,12 @@ export const TimelineHeader = memo(function TimelineHeader({
   };
 
   return (
-    <div className="h-11 flex items-center justify-between px-4 border-b border-border">
+    <div
+      className="flex items-center justify-between px-3 border-b border-border"
+      style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineHeaderHeight }}
+    >
       {/* Left: Title & Tools */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-2">
           <Film className="w-3 h-3" />
           Timeline
@@ -323,7 +327,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           </Button>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
 
         {/* Undo/Redo */}
         <div className="flex items-center gap-1">
@@ -350,7 +354,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           </Button>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
 
         {/* In/Out Points */}
         <div className="flex items-center gap-1">
@@ -386,7 +390,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           </Button>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
 
         {/* Markers */}
         <div className="flex items-center gap-1">
@@ -428,7 +432,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           </Button>
         </div>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
 
         {/* Snap Toggle */}
         <Button
@@ -443,7 +447,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Magnet className="w-3.5 h-3.5" />
         </Button>
 
-        <Separator orientation="vertical" className="h-6 mx-2" />
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
 
         {/* Editor Panel Toggles */}
         <Button
@@ -472,7 +476,7 @@ export const TimelineHeader = memo(function TimelineHeader({
       </div>
 
       {/* Right: Zoom Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Button
           variant="ghost"
           size="icon"

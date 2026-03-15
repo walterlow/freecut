@@ -6,6 +6,8 @@ import {
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
 } from '@/shared/utils/whisper-settings';
+import type { EditorDensityPresetName } from '@/shared/ui/editor-layout';
+import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/shared/ui/editor-layout';
 
 /**
  * App-wide settings stored in localStorage
@@ -19,6 +21,7 @@ interface AppSettings {
 
   // Preview
   previewQuality: 'low' | 'medium' | 'high';
+  editorDensity: EditorDensityPresetName;
 
   // Export defaults
   defaultExportFormat: 'mp4' | 'webm';
@@ -50,6 +53,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Preview
   previewQuality: 'high',
+  editorDensity: DEFAULT_EDITOR_DENSITY_PRESET,
 
   // Export defaults
   defaultExportFormat: 'mp4',

@@ -18,6 +18,11 @@ export interface EditorActions {
   setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions') => void;
   setSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
+  syncSidebarLayout: (layout: {
+    sidebarDefaultWidth: number;
+    sidebarMinWidth: number;
+    sidebarMaxWidth: number;
+  }) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
 }

@@ -9,7 +9,9 @@ import {
 } from '@/features/editor/deps/preview';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
+import { useSettingsStore } from '@/features/editor/deps/settings';
 import { useEditorStore } from '@/shared/state/editor';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 
 interface PreviewAreaProps {
   project: {
@@ -19,7 +21,6 @@ interface PreviewAreaProps {
   };
 }
 
-const PREVIEW_PADDING_PX = 48;
 const DEFAULT_EMPTY_TIMELINE_SECONDS = 10;
 const PREVIEW_RESIZE_MIN_UPDATE_MS = 33;
 const SPLIT_DRAG_MIN_UPDATE_MS = 33;
@@ -38,6 +39,8 @@ const SPLIT_DRAG_MIN_UPDATE_MS = 33;
 export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaProps) {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
 
   // Read current project from store for live updates (e.g., dimension swaps)
   // Use granular selectors to avoid re-renders when unrelated properties change
@@ -75,8 +78,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
     const updateSize = () => {
       const rect = element.getBoundingClientRect();
-      const nextWidth = Math.max(0, Math.floor(rect.width - PREVIEW_PADDING_PX));
-      const nextHeight = Math.max(0, Math.floor(rect.height - PREVIEW_PADDING_PX));
+      const nextWidth = Math.max(0, Math.floor(rect.width - editorLayout.previewPadding));
+      const nextHeight = Math.max(0, Math.floor(rect.height - editorLayout.previewPadding));
 
       // Bail out when dimensions are unchanged to avoid redundant re-renders.
       setContainerSize((prev) => {
@@ -120,7 +123,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         cancelAnimationFrame(rafId);
       }
     };
-  }, []);
+  }, [editorLayout.previewPadding]);
 
   // Build project object with live values from store
   // Memoize to prevent VideoPreview re-renders when reference changes
@@ -239,11 +242,11 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               <button
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={handleResetSplit}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-muted border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-primary hover:border-primary hover:[&>svg]:text-primary-foreground"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-primary hover:border-primary hover:[&>svg]:text-primary-foreground"
                 aria-label="Reset split to 50/50"
                 data-tooltip="Reset Split View"
               >
-                <Columns2 className="w-4 h-4 text-muted-foreground" />
+                <Columns2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             )}
           </div>
@@ -257,7 +260,10 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
       >
         {/* Header — only shown in split mode */}
         {isSplit && (
-          <div className="h-9 border-b border-border flex items-center px-3 flex-shrink-0">
+          <div
+            className="border-b border-border flex items-center px-3 flex-shrink-0"
+            style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
+          >
             <span className="text-xs text-muted-foreground">Program</span>
           </div>
         )}
@@ -273,7 +279,10 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
           </div>
 
           {/* Playback Controls */}
-          <div className="h-16 border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden">
+          <div
+            className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
+            style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+          >
             <div className="flex-shrink-0">
               <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
             </div>

@@ -16,6 +16,7 @@ import { FreeCutLogo } from '@/components/brand/freecut-logo';
 import { LocalInferenceUnloadControl } from '@/features/settings/components/local-inference-unload-control';
 import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import { HOTKEYS, HOTKEY_DESCRIPTIONS, type HotkeyKey } from '@/config/hotkeys';
+import { EDITOR_DENSITY_OPTIONS } from '@/shared/ui/editor-layout';
 import {
   getWhisperQuantizationOption,
   getWhisperLanguageSelectValue,
@@ -35,6 +36,7 @@ function Settings() {
   const snapEnabled = useSettingsStore((s) => s.snapEnabled);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
   const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
   const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
@@ -95,6 +97,37 @@ function Settings() {
       {/* Content */}
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         <h1 className="text-2xl font-bold">Settings</h1>
+
+        {/* Interface Section */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold border-b border-border pb-2">Interface</h2>
+
+          <div className="grid gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Editor Density</Label>
+                <p className="text-sm text-muted-foreground">
+                  Compact shows more of the editor at once. Default restores the roomier shell.
+                </p>
+              </div>
+              <Select
+                value={editorDensity}
+                onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {EDITOR_DENSITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </section>
 
         {/* General Section */}
         <section className="space-y-4">
