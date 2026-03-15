@@ -6,12 +6,15 @@ function parseHexColor(color: string, fallback: [number, number, number, number]
   const hex = color.slice(1);
   if (hex.length === 3 || hex.length === 4) {
     const values = hex.split('').map((ch) => parseInt(ch + ch, 16) / 255);
-    return [
-      values[0] ?? fallback[0],
-      values[1] ?? fallback[1],
-      values[2] ?? fallback[2],
-      values[3] ?? 1,
-    ];
+    if (values.slice(0, 3).every((v) => Number.isFinite(v))) {
+      return [
+        values[0] ?? fallback[0],
+        values[1] ?? fallback[1],
+        values[2] ?? fallback[2],
+        values[3] ?? 1,
+      ];
+    }
+    return fallback;
   }
 
   if (hex.length === 6 || hex.length === 8) {
