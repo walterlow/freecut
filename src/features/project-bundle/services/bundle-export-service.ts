@@ -21,6 +21,9 @@ import {
 } from '@/features/project-bundle/deps/media-library';
 
 import type { ProjectTimeline } from '@/types/project';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('BundleExportService');
 
 // App version - should be imported from a config
 const APP_VERSION = '1.0.0';
@@ -114,7 +117,7 @@ export async function exportProjectBundle(
     // Get media file content
     const blob = await mediaLibraryService.getMediaFile(media.id);
     if (!blob) {
-      console.warn(`Could not get file for media: ${media.id}`);
+      logger.warn(`Could not get file for media: ${media.id}`);
       continue;
     }
 
@@ -202,7 +205,7 @@ export async function exportProjectBundle(
       }
     } catch (err) {
       // Thumbnail is optional, continue without it
-      console.warn('Could not export project thumbnail:', err);
+      logger.warn('Could not export project thumbnail:', err);
     }
   }
 
@@ -328,7 +331,7 @@ export async function exportProjectBundleStreaming(
 
       const blob = await mediaLibraryService.getMediaFile(media.id);
       if (!blob) {
-        console.warn(`Could not get file for media: ${media.id}`);
+        logger.warn(`Could not get file for media: ${media.id}`);
         continue;
       }
 
@@ -412,7 +415,7 @@ export async function exportProjectBundleStreaming(
           thumbnailFile.push(new Uint8Array(thumbnailBuffer), true);
         }
       } catch (err) {
-        console.warn('Could not export project thumbnail:', err);
+        logger.warn('Could not export project thumbnail:', err);
       }
     }
 

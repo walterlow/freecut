@@ -1,6 +1,9 @@
+import { createLogger } from '@/shared/logging/logger';
 import { TRANSITION_COMMON_WGSL } from './common';
 import type { GpuTransitionDefinition } from './types';
 import { GPU_TRANSITION_REGISTRY, getGpuTransition } from './index';
+
+const logger = createLogger('TransitionPipeline');
 
 /**
  * GPU Transition Pipeline
@@ -68,7 +71,7 @@ export class TransitionPipeline {
       shaderModule.getCompilationInfo().then((info) => {
         for (const msg of info.messages) {
           if (msg.type === 'error') {
-            console.error(`[TransitionPipeline] Shader "${id}" error at line ${msg.lineNum}:${msg.linePos}: ${msg.message}`);
+            logger.error(`Shader "${id}" error at line ${msg.lineNum}:${msg.linePos}: ${msg.message}`);
           }
         }
       }).catch(() => { /* getCompilationInfo not supported */ });
@@ -99,7 +102,7 @@ export class TransitionPipeline {
       });
       this.pipelines.set(id, pipeline);
     } catch (e) {
-      console.warn(`[TransitionPipeline] Failed to create pipeline for "${id}"`, e);
+      logger.warn(`Failed to create pipeline for "${id}"`, e);
     }
   }
 

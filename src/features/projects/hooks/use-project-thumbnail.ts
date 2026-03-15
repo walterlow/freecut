@@ -1,6 +1,9 @@
 ﻿import { useState, useEffect } from 'react';
 import { getThumbnail } from '@/infrastructure/storage/indexeddb';
 import type { Project } from '@/types/project';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('ProjectThumbnail');
 
 /**
  * Hook to load project thumbnail from IndexedDB Blob storage.
@@ -27,7 +30,7 @@ export function useProjectThumbnail(project: Project): string | undefined {
             return;
           }
         } catch (error) {
-          console.warn('Failed to load thumbnail from IndexedDB:', error);
+          logger.warn('Failed to load thumbnail from IndexedDB:', error);
         }
       }
 

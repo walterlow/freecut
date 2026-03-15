@@ -20,6 +20,9 @@ import type { TimelineTrack } from '@/types/timeline';
 import { trackDropIndexRef, trackDropGroupIdRef, trackDropParentIdRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { getVisibleTracks, getGroupDepth, getChildTrackIds } from '../utils/group-utils';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('Timeline');
 
 // Hoisted RegExp - avoids recreation on every render (js-hoist-regexp)
 const TRACK_NUMBER_REGEX = /^Track (\d+)$/;
@@ -473,7 +476,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     // Don't allow removing all tracks
     const tracksToRemoveSet = new Set(tracksToRemove);
     if (tracksToRemoveSet.size >= tracks.length) {
-      console.warn('Cannot remove all tracks');
+      logger.warn('Cannot remove all tracks');
       return;
     }
 

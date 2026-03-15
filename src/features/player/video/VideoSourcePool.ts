@@ -1,3 +1,7 @@
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('VideoSourcePool');
+
 /**
  * VideoSourcePool.ts - Manages video elements by source URL
  *
@@ -216,8 +220,8 @@ class SourceController {
     // Do NOT reuse an in-use element: this can cause cross-clip state conflicts
     // (mute/seek/playback race) and audible dropouts during transitions.
     // Instead, create an extra overflow element for this rare overlap.
-    console.warn(
-      `[SourceController] All pooled elements in use for ${this.sourceUrl}, creating extra overflow element`
+    logger.warn(
+      `All pooled elements in use for ${this.sourceUrl}, creating extra overflow element`
     );
     const extraElement = this.createElementSync();
     this.overflow.push(extraElement);

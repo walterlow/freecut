@@ -1,12 +1,12 @@
-﻿import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
+import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
 import { getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 
-const logger = createLogger('MediaImportActions');
+const logger = createLogger('MediaImport');
 
 type Set = (
   partial:
@@ -15,13 +15,96 @@ type Set = (
 ) => void;
 type Get = () => MediaLibraryState & MediaLibraryActions;
 
+type ImportedMetadata = MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean };
+
+function processImportResults(
+  importResults: PromiseSettledResult<{ metadata: ImportedMetadata; tempId: string; file: File; handle: FileSystemFileHandle }>[],
+  importTasks: Array<{ handle: FileSystemFileHandle; tempId: string; file: File }>,
+  set: Set,
+): { results: MediaMetadata[]; duplicateNames: string[]; unsupportedCodecFiles: UnsupportedCodecFile[]; failedCount: number } {
+  const results: MediaMetadata[] = [];
+  const duplicateNames: string[] = [];
+  const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+  let failedCount = 0;
+
+  for (const result of importResults) {
+    if (result.status === 'fulfilled') {
+      const { metadata, tempId, file, handle } = result.value;
+
+      if (metadata.isDuplicate) {
+        set((state) => ({
+          mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
+          importingIds: state.importingIds.filter((id) => id !== tempId),
+        }));
+        duplicateNames.push(file.name);
+      } else {
+        set((state) => ({
+          mediaItems: state.mediaItems.map((item) =>
+            item.id === tempId ? metadata : item
+          ),
+          importingIds: state.importingIds.filter((id) => id !== tempId),
+        }));
+
+        if (metadata.mimeType.startsWith('video/')) {
+          proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+        }
+        results.push(metadata);
+
+        if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+          unsupportedCodecFiles.push({
+            fileName: file.name,
+            audioCodec: metadata.audioCodec,
+            handle,
+          });
+        }
+      }
+    } else {
+      failedCount++;
+      const failedTask = importTasks.find(
+        (_, i) => importResults[i] === result
+      );
+      if (failedTask) {
+        set((state) => ({
+          mediaItems: state.mediaItems.filter((item) => item.id !== failedTask.tempId),
+          importingIds: state.importingIds.filter((id) => id !== failedTask.tempId),
+        }));
+        logger.error(`Failed to import ${failedTask.file.name}`, result.reason);
+      }
+    }
+  }
+
+  return { results, duplicateNames, unsupportedCodecFiles, failedCount };
+}
+
+function showImportNotifications(
+  duplicateNames: string[],
+  unsupportedCodecFiles: UnsupportedCodecFile[],
+  get: Get,
+): void {
+  if (duplicateNames.length > 0) {
+    const message =
+      duplicateNames.length === 1
+        ? `"${duplicateNames[0]}" already exists in library`
+        : `${duplicateNames.length} files already exist in library`;
+    get().showNotification({ type: 'info', message });
+  }
+
+  if (unsupportedCodecFiles.length > 0) {
+    const codecList = [
+      ...new Set(unsupportedCodecFiles.map((f) => f.audioCodec)),
+    ].join(', ');
+    get().showNotification({
+      type: 'warning',
+      message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
+    });
+  }
+}
+
 export function createImportActions(
   set: Set,
   get: Get
 ): Pick<MediaLibraryActions, 'importMedia' | 'importHandles'> {
   return {
-    // Import media using file picker (instant, no copy - local-first)
-    // Now runs processing in worker to avoid blocking UI
     importMedia: async () => {
       const { currentProjectId } = get();
 
@@ -42,6 +125,11 @@ export function createImportActions(
         return [];
       }
 
+      const opId = createOperationId();
+      const event = logger.startEvent('import', opId);
+      event.set('source', 'picker');
+      event.set('projectId', currentProjectId);
+
       try {
         // Open file picker
         const handles = await window.showOpenFilePicker({
@@ -58,6 +146,8 @@ export function createImportActions(
           ],
         });
 
+        event.set('fileCount', handles.length);
+
         // Create optimistic placeholders for all files immediately
         const importTasks: Array<{
           handle: FileSystemFileHandle;
@@ -69,7 +159,6 @@ export function createImportActions(
           const tempId = crypto.randomUUID();
           const file = await handle.getFile();
 
-          // Create temporary placeholder with 'handle' storage type
           const tempItem: MediaMetadata = {
             id: tempId,
             storageType: 'handle',
@@ -89,7 +178,6 @@ export function createImportActions(
             updatedAt: Date.now(),
           };
 
-          // Add placeholder immediately
           set((state) => ({
             mediaItems: [tempItem, ...state.mediaItems],
             importingIds: [...state.importingIds, tempId],
@@ -99,11 +187,7 @@ export function createImportActions(
           importTasks.push({ handle, tempId, file });
         }
 
-        // Process all imports in parallel (worker handles heavy lifting off main thread)
-        const results: MediaMetadata[] = [];
-        const duplicateNames: string[] = [];
-        const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
-
+        // Process all imports in parallel
         const importResults = await Promise.allSettled(
           importTasks.map(async ({ handle, tempId, file }) => {
             const metadata = await mediaLibraryService.importMediaWithHandle(
@@ -114,96 +198,47 @@ export function createImportActions(
           })
         );
 
-        // Process results
-        for (const result of importResults) {
-          if (result.status === 'fulfilled') {
-            const { metadata, tempId, file, handle } = result.value;
+        const { results, duplicateNames, unsupportedCodecFiles, failedCount } =
+          processImportResults(importResults, importTasks, set);
 
-            if (metadata.isDuplicate) {
-              // File already exists - remove temp item
-              set((state) => ({
-                mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
-                importingIds: state.importingIds.filter((id) => id !== tempId),
-              }));
-              duplicateNames.push(file.name);
-            } else {
-              // Replace temp with actual metadata
-              set((state) => ({
-                mediaItems: state.mediaItems.map((item) =>
-                  item.id === tempId ? metadata : item
-                ),
-                importingIds: state.importingIds.filter((id) => id !== tempId),
-              }));
+        showImportNotifications(duplicateNames, unsupportedCodecFiles, get);
 
-              if (metadata.mimeType.startsWith('video/')) {
-                proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
-              }
-              results.push(metadata);
-
-              // Track unsupported codec files (check happens in worker now)
-              if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
-                unsupportedCodecFiles.push({
-                  fileName: file.name,
-                  audioCodec: metadata.audioCodec,
-                  handle,
-                });
-              }
-            }
-          } else {
-            // Find the failed task to get tempId
-            const failedTask = importTasks.find(
-              (_, i) => importResults[i] === result
-            );
-            if (failedTask) {
-              set((state) => ({
-                mediaItems: state.mediaItems.filter((item) => item.id !== failedTask.tempId),
-                importingIds: state.importingIds.filter((id) => id !== failedTask.tempId),
-              }));
-              logger.error(`Failed to import ${failedTask.file.name}:`, result.reason);
-            }
-          }
-        }
-
-        // Show batched notification for duplicates
-        if (duplicateNames.length > 0) {
-          const message =
-            duplicateNames.length === 1
-              ? `"${duplicateNames[0]}" already exists in library`
-              : `${duplicateNames.length} files already exist in library`;
-          get().showNotification({ type: 'info', message });
-        }
-
-        // Show notification for unsupported codecs (non-blocking, files are already imported)
-        if (unsupportedCodecFiles.length > 0) {
-          const codecList = [
-            ...new Set(unsupportedCodecFiles.map((f) => f.audioCodec)),
-          ].join(', ');
-          get().showNotification({
-            type: 'warning',
-            message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
-          });
-        }
+        event.success({
+          imported: results.length,
+          duplicates: duplicateNames.length,
+          failed: failedCount,
+          unsupportedCodecs: unsupportedCodecFiles.length,
+        });
 
         return results;
       } catch (error) {
         // User cancelled or error
         if (error instanceof Error && error.name !== 'AbortError') {
           set({ error: error.message });
+          event.failure(error);
+        } else {
+          event.set('outcome', 'cancelled');
+          logger.event('import', { opId, outcome: 'cancelled' });
         }
         return [];
       }
     },
 
-    // Import media from file handles (for drag-drop)
-    // Now runs processing in worker to avoid blocking UI
     importHandles: async (handles: FileSystemFileHandle[]) => {
       const { currentProjectId } = get();
-      logger.debug('[importHandles] Starting import for', handles.length, 'handles');
 
       if (!currentProjectId) {
         set({ error: 'No project selected' });
         return [];
       }
+
+      const opId = createOperationId();
+      const event = logger.startEvent('import', opId);
+      event.merge({
+        source: 'drag-drop',
+        projectId: currentProjectId,
+        fileCount: handles.length,
+      });
 
       // Create optimistic placeholders for all files immediately
       const importTasks: Array<{
@@ -217,7 +252,6 @@ export function createImportActions(
         const tempId = crypto.randomUUID();
         const file = await handle.getFile();
 
-        // Create temporary placeholder with 'handle' storage type
         const tempItem: MediaMetadata = {
           id: tempId,
           storageType: 'handle',
@@ -237,7 +271,6 @@ export function createImportActions(
           updatedAt: Date.now(),
         };
 
-        // Add placeholder immediately
         set((state) => ({
           mediaItems: [tempItem, ...state.mediaItems],
           importingIds: [...state.importingIds, tempId],
@@ -247,117 +280,30 @@ export function createImportActions(
         importTasks.push({ handle, tempId, file });
       }
 
-      // Process all imports in parallel (worker handles heavy lifting off main thread)
-      const results: MediaMetadata[] = [];
-      const duplicateNames: string[] = [];
-      const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
-
+      // Process all imports in parallel
       const importResults = await Promise.allSettled(
         importTasks.map(async ({ handle, tempId, file }) => {
-          logger.debug(
-            `[importHandles] Processing ${file.name} (${file.size} bytes)`
-          );
           const metadata = await mediaLibraryService.importMediaWithHandle(
             handle,
             currentProjectId
           );
-          logger.debug(`[importHandles] Result for ${file.name}:`, {
-            isDuplicate: metadata.isDuplicate,
-            id: metadata.id,
-          });
           return { metadata, tempId, file, handle };
         })
       );
 
-      // Process results
-      for (const result of importResults) {
-        if (result.status === 'fulfilled') {
-          const { metadata, tempId, file, handle } = result.value;
+      const { results, duplicateNames, unsupportedCodecFiles, failedCount } =
+        processImportResults(importResults, importTasks, set);
 
-          if (metadata.isDuplicate) {
-            // File already exists - remove temp item
-            logger.debug(
-              `[importHandles] ${file.name} is duplicate, removing temp item`
-            );
-            set((state) => ({
-              mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
-              importingIds: state.importingIds.filter((id) => id !== tempId),
-            }));
-            duplicateNames.push(file.name);
-          } else {
-            // Replace temp with actual metadata
-            logger.debug(
-              `[importHandles] ${file.name} imported successfully with id ${metadata.id}`
-            );
-            set((state) => ({
-              mediaItems: state.mediaItems.map((item) =>
-                item.id === tempId ? metadata : item
-              ),
-              importingIds: state.importingIds.filter((id) => id !== tempId),
-            }));
+      showImportNotifications(duplicateNames, unsupportedCodecFiles, get);
 
-            if (metadata.mimeType.startsWith('video/')) {
-              proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
-            }
-            results.push(metadata);
-
-            // Track unsupported codec files (check happens in worker now)
-            if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
-              unsupportedCodecFiles.push({
-                fileName: file.name,
-                audioCodec: metadata.audioCodec,
-                handle,
-              });
-            }
-          }
-        } else {
-          // Find the failed task to get tempId
-          const failedTask = importTasks.find(
-            (_, i) => importResults[i] === result
-          );
-          if (failedTask) {
-            set((state) => ({
-              mediaItems: state.mediaItems.filter(
-                (item) => item.id !== failedTask.tempId
-              ),
-              importingIds: state.importingIds.filter(
-                (id) => id !== failedTask.tempId
-              ),
-            }));
-            logger.error(
-              `[importHandles] Failed to import ${failedTask.file.name}:`,
-              result.reason
-            );
-          }
-        }
-      }
-
-      logger.debug(
-        `[importHandles] Import complete. Results: ${results.length}, Duplicates: ${duplicateNames.length}`
-      );
-
-      // Show batched notification for duplicates
-      if (duplicateNames.length > 0) {
-        const message =
-          duplicateNames.length === 1
-            ? `"${duplicateNames[0]}" already exists in library`
-            : `${duplicateNames.length} files already exist in library`;
-        get().showNotification({ type: 'info', message });
-      }
-
-      // Show notification for unsupported codecs (non-blocking, files are already imported)
-      if (unsupportedCodecFiles.length > 0) {
-        const codecList = [
-          ...new Set(unsupportedCodecFiles.map((f) => f.audioCodec)),
-        ].join(', ');
-        get().showNotification({
-          type: 'warning',
-          message: `${unsupportedCodecFiles.length} file(s) have unsupported audio codec (${codecList}). Waveforms may not be available.`,
-        });
-      }
+      event.success({
+        imported: results.length,
+        duplicates: duplicateNames.length,
+        failed: failedCount,
+        unsupportedCodecs: unsupportedCodecFiles.length,
+      });
 
       return results;
     },
   };
 }
-

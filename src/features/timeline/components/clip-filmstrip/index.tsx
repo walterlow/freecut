@@ -4,6 +4,9 @@ import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('ClipFilmstrip');
 
 const ZOOM_SETTLE_MS = 80;
 const PRIORITY_PAD_SECONDS = 0.75;
@@ -333,7 +336,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           setBlobUrl(url);
         }
       } catch (error) {
-        console.error('Failed to load media blob URL:', error);
+        logger.error('Failed to load media blob URL:', error);
       }
     };
 

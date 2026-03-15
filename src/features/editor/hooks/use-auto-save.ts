@@ -52,13 +52,14 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
         async () => {
           if (isSavingRef.current) return;
           isSavingRef.current = true;
-          logger.debug(`Auto-saving (interval: ${autoSaveInterval}m)...`);
+          const event = logger.startEvent('save');
+          event.set('interval_min', autoSaveInterval);
 
           try {
             await onSave();
-            logger.debug('Auto-save completed');
+            event.success();
           } catch (error) {
-            logger.error('Auto-save failed:', error);
+            event.failure(error);
             toast.error('Auto-save failed');
           } finally {
             isSavingRef.current = false;

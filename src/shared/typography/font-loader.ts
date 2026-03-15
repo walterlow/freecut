@@ -9,6 +9,9 @@ import {
   FONT_CATALOG,
   type FontCatalogEntry,
 } from './font-catalog';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('FontLoader');
 
 // Font weight CSS value mapping
 export const FONT_WEIGHT_MAP: Record<string, number> = {
@@ -148,7 +151,7 @@ async function loadGoogleFont(fontName: string): Promise<string> {
       loadedFontFamilies.set(fontName, fontFamily);
       return fontFamily;
     } catch (error) {
-      console.warn(`Failed to load font "${fontName}":`, error);
+      logger.warn(`Failed to load font "${fontName}":`, error);
       return fontName;
     } finally {
       loadingPromises.delete(fontName);

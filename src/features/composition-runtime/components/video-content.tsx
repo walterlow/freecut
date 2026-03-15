@@ -22,6 +22,7 @@ import {
 } from './video-audio-context';
 
 const videoLog = createLogger('NativePreviewVideo');
+const contentLog = createLogger('VideoContent');
 videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
@@ -156,7 +157,7 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     // Guard: poolClipId and src are required
     if (!poolClipId || !src) {
-      console.error('[NativePreviewVideo] Missing poolClipId or src');
+      videoLog.error('Missing poolClipId or src');
       return;
     }
 
@@ -177,13 +178,13 @@ const NativePreviewVideo: React.FC<{
       if (cancelled || isVideoPoolAbortError(error)) {
         return;
       }
-      console.warn(`[NativePreviewVideo] Failed to preload ${src}:`, error);
+      videoLog.warn(`Failed to preload ${src}:`, error);
     });
 
     // Acquire element for this clip
     const element = pool.acquireForClip(poolClipId, src);
     if (!element) {
-      console.error(`[NativePreviewVideo] Failed to acquire element for ${poolClipId}`);
+      videoLog.error(`Failed to acquire element for ${poolClipId}`);
       return;
     }
 
@@ -336,7 +337,7 @@ const NativePreviewVideo: React.FC<{
       stallTimerId = window.setTimeout(() => {
         stallTimerId = null;
         if (elementRef.current === element && element.readyState === 0) {
-          console.warn(`[NativePreviewVideo] Video stalled at readyState 0 for ${shortId}, retrying load`);
+          videoLog.warn(`Video stalled at readyState 0 for ${shortId}, retrying load`);
           try {
             element.load();
           } catch {
@@ -776,7 +777,7 @@ export const VideoContent: React.FC<{
 
   // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup)
   const handleError = useCallback((error: Error) => {
-    console.warn(`[VideoContent] Media error for item ${item.id}:`, error.message);
+    contentLog.warn(`Media error for item ${item.id}:`, error.message);
     setHasError(true);
   }, [item.id]);
 

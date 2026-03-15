@@ -65,6 +65,9 @@ import {
 import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledTextScrubGuard } from '../utils/text-render-guard';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('VideoPreview');
 
 // Preload media files ahead of the playhead to reduce buffering
 const PRELOAD_AHEAD_SECONDS = 5;
@@ -401,7 +404,7 @@ function useCustomPlayer(
       lastSyncedFrameRef.current = targetFrame;
       lastSeekTargetRef.current = targetFrame;
     } catch (error) {
-      console.error('Failed to seek Player:', error);
+      logger.error('Failed to seek Player:', error);
     }
 
     requestAnimationFrame(() => {
@@ -464,7 +467,7 @@ function useCustomPlayer(
         playerRef.current.pause();
       }
     } catch (error) {
-      console.error('[Player Sync] Failed to control playback:', error);
+      logger.error('Failed to control playback:', error);
     }
   }, [isPlaying, playerRef, getPlayerFrame, onPlayerSeek]);
 
@@ -1547,7 +1550,7 @@ export const VideoPreview = memo(function VideoPreview({
           setResolvedUrls(newUrls);
         }
       } catch (error) {
-        console.error('Failed to resolve media URLs:', error);
+        logger.error('Failed to resolve media URLs:', error);
       } finally {
         setIsResolving(false);
       }
@@ -1657,7 +1660,7 @@ export const VideoPreview = memo(function VideoPreview({
 
       window.__PREVIEW_PERF__ = snapshot;
       if (window.__PREVIEW_PERF_LOG__) {
-        console.warn('[PreviewPerf]', snapshot);
+        logger.warn('PreviewPerf', snapshot);
       }
     };
 
@@ -2028,7 +2031,7 @@ export const VideoPreview = memo(function VideoPreview({
       try {
         scrubRendererRef.current.dispose();
       } catch (error) {
-        console.warn('[FastScrub] Failed to dispose renderer:', error);
+        logger.warn('Failed to dispose renderer:', error);
       }
       scrubRendererRef.current = null;
     }
@@ -2071,7 +2074,7 @@ export const VideoPreview = memo(function VideoPreview({
           priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
         })
           .catch((error) => {
-            console.warn('[FastScrub] Renderer preload failed:', error);
+            logger.warn('Renderer preload failed:', error);
           })
           .finally(() => {
             if (scrubPreloadPromiseRef.current === preloadPromise) {
@@ -2092,7 +2095,7 @@ export const VideoPreview = memo(function VideoPreview({
         scrubRendererRef.current = renderer;
         return renderer;
       } catch (error) {
-        console.warn('[FastScrub] Failed to initialize renderer, falling back to Player seeks:', error);
+        logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
         scrubRendererRef.current = null;
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
@@ -2153,7 +2156,7 @@ export const VideoPreview = memo(function VideoPreview({
         if (!blob) return null;
         return blobToDataUrl(blob);
       } catch (error) {
-        console.warn('[PreviewCapture] Failed to capture frame:', error);
+        logger.warn('Failed to capture frame:', error);
         return null;
       } finally {
         captureInFlightRef.current = null;
@@ -2207,7 +2210,7 @@ export const VideoPreview = memo(function VideoPreview({
         scaleCtx.drawImage(offscreen, 0, 0, targetWidth, targetHeight);
         return scaleCtx.getImageData(0, 0, targetWidth, targetHeight);
       } catch (error) {
-        console.warn('[PreviewCapture] Failed to capture raw frame:', error);
+        logger.warn('Failed to capture raw frame:', error);
         return null;
       } finally {
         captureImageDataInFlightRef.current = null;
@@ -2229,7 +2232,7 @@ export const VideoPreview = memo(function VideoPreview({
       await renderer.renderFrame(targetFrame);
       return offscreen;
     } catch (error) {
-      console.warn('[PreviewCapture] Failed to capture canvas source:', error);
+      logger.warn('Failed to capture canvas source:', error);
       return null;
     }
   }, [ensureFastScrubRenderer]);
@@ -2573,7 +2576,7 @@ export const VideoPreview = memo(function VideoPreview({
           }
         }
       } catch (error) {
-        console.warn('[FastScrub] Render failed, using Player seek fallback:', error);
+        logger.warn('Render failed, using Player seek fallback:', error);
         hideFastScrubOverlay();
         disposeFastScrubRenderer();
       } finally {

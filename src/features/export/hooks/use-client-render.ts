@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Client-side render hook
  *
  * Provides a React hook for video rendering using mediabunny.
@@ -22,13 +22,13 @@ import { convertTimelineToComposition } from '../utils/timeline-to-composition';
 import { useTimelineStore } from '@/features/export/deps/timeline';
 import { useProjectStore } from '@/features/export/deps/projects';
 import { resolveMediaUrls } from '@/features/export/deps/media-library';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,
 } from '../workers/export-render-worker.types';
 
-const log = createLogger('useClientRender');
+const log = createLogger('Export');
 
 type ClientRenderStatus =
   | 'idle'
@@ -106,8 +106,6 @@ export function useClientRender(): UseClientRenderReturn {
         setStatus('finalizing');
         break;
     }
-
-    log.debug('Progress:', progressData.message, `${progressData.progress}%`);
   }, []);
 
   /**
@@ -227,6 +225,9 @@ export function useClientRender(): UseClientRenderReturn {
    */
   const startExport = useCallback(
     async (settings: ExportSettings | ExtendedExportSettings) => {
+      const opId = createOperationId();
+      const event = log.startEvent('render', opId);
+
       try {
         setIsExporting(true);
         setProgress(0);
@@ -258,19 +259,19 @@ export function useClientRender(): UseClientRenderReturn {
         const effectiveInPoint = renderWholeProject ? null : inPoint;
         const effectiveOutPoint = renderWholeProject ? null : outPoint;
 
-        log.debug('Starting client export', {
+        event.merge({
+          mode: exportMode,
           fps,
-          tracksCount: tracks.length,
-          itemsCount: items.length,
+          tracks: tracks.length,
+          items: items.length,
           inPoint: effectiveInPoint,
           outPoint: effectiveOutPoint,
           renderWholeProject,
-          keyframeCount: keyframes?.length ?? 0,
-          backgroundColor,
-          projectResolution: { width: projectWidth, height: projectHeight },
-          exportMode,
+          keyframes: keyframes?.length ?? 0,
+          projectResolution: `${projectWidth}x${projectHeight}`,
           videoContainer,
           audioContainer,
+          projectId: currentProject?.id,
         });
 
         // Map settings to client-compatible settings
@@ -305,11 +306,11 @@ export function useClientRender(): UseClientRenderReturn {
           if (!supportedCodecs.includes(clientSettings.codec)) {
             // Try fallback to H.264 if available
             if (supportedCodecs.includes('avc')) {
-              log.warn(`Codec ${clientSettings.codec} not supported, falling back to H.264`);
               clientSettings.codec = 'avc';
               if (!videoContainer) {
                 clientSettings.container = 'mp4';
               }
+              event.set('codecFallback', 'avc');
             } else if (supportedCodecs.length > 0) {
               // Use first available codec
               const fallbackCodec = supportedCodecs[0]!;
@@ -317,12 +318,16 @@ export function useClientRender(): UseClientRenderReturn {
               if (!videoContainer) {
                 clientSettings.container = ['vp8', 'vp9', 'av1'].includes(fallbackCodec) ? 'webm' : 'mp4';
               }
-              log.warn(`Using fallback codec: ${fallbackCodec}`);
+              event.set('codecFallback', fallbackCodec);
             } else {
               throw new Error('No supported video codecs available in this browser');
             }
           }
         }
+
+        event.set('codec', clientSettings.codec);
+        event.set('container', clientSettings.container);
+        event.set('resolution', `${clientSettings.resolution.width}x${clientSettings.resolution.height}`);
 
         // Convert timeline to Composition format (handles I/O point trimming)
         // Use PROJECT resolution so transforms match preview (will scale to export res later)
@@ -339,24 +344,14 @@ export function useClientRender(): UseClientRenderReturn {
           backgroundColor
         );
 
-        // Count items per track for debugging
-        const itemsPerTrack = composition.tracks.map(t => ({
-          trackId: t.id,
-          itemCount: t.items?.length ?? 0,
-        }));
         const totalCompositionItems = composition.tracks.reduce((sum, t) => sum + (t.items?.length ?? 0), 0);
         const compositionDuration = composition.durationInFrames ?? 0;
 
-        log.debug('Composition created', {
-          durationInFrames: compositionDuration,
-          durationSeconds: compositionDuration / fps,
-          tracksCount: composition.tracks.length,
-          totalItems: totalCompositionItems,
-          itemsPerTrack,
-          inPoint: effectiveInPoint,
-          outPoint: effectiveOutPoint,
-          renderWholeProject,
-          hasInOutRange: effectiveInPoint !== null && effectiveOutPoint !== null && effectiveOutPoint > effectiveInPoint,
+        event.merge({
+          compositionDuration: compositionDuration,
+          compositionDurationSec: compositionDuration / fps,
+          compositionTracks: composition.tracks.length,
+          compositionItems: totalCompositionItems,
         });
 
         // Resolve media URLs (convert mediaIds to blob URLs)
@@ -364,23 +359,19 @@ export function useClientRender(): UseClientRenderReturn {
         const resolvedTracks = await resolveMediaUrls(composition.tracks, { useProxy: false });
         composition.tracks = resolvedTracks;
 
-        // Log resolved items to verify src is set
+        // Count resolved items for diagnostics
         let totalResolvedItems = 0;
         let itemsWithSrc = 0;
+        let itemsMissingSrc = 0;
         for (const track of resolvedTracks) {
           for (const item of track.items ?? []) {
             totalResolvedItems++;
             if ('src' in item && item.src) {
               itemsWithSrc++;
-              log.debug('Item with resolved src', {
-                itemId: item.id,
-                type: item.type,
-                from: item.from,
-                duration: item.durationInFrames,
-                srcPrefix: (item.src as string)?.substring(0, 50),
-              });
             } else if (item.type === 'video' || item.type === 'audio' || item.type === 'image') {
-              log.warn('Media item missing src', {
+              itemsMissingSrc++;
+              log.warn('Media item missing src after resolve', {
+                opId,
                 itemId: item.id,
                 type: item.type,
                 mediaId: item.mediaId,
@@ -389,14 +380,16 @@ export function useClientRender(): UseClientRenderReturn {
           }
         }
 
-        log.debug('Media URLs resolved', {
-          totalItems: totalResolvedItems,
+        event.merge({
+          resolvedItems: totalResolvedItems,
           itemsWithSrc,
+          itemsMissingSrc,
         });
 
         // Run the render based on export mode
         let renderResult: ClientRenderResult;
         const signal = abortControllerRef.current.signal;
+        let renderPath: 'worker' | 'main-thread' = 'worker';
 
         try {
           renderResult = await renderInWorker(clientSettings, composition, signal);
@@ -417,9 +410,8 @@ export function useClientRender(): UseClientRenderReturn {
             throw workerError;
           }
 
-          log.warn(
-            `Worker export unavailable for this composition, falling back to main thread (${workerMessage})`
-          );
+          renderPath = 'main-thread';
+          event.set('workerFallbackReason', workerMessage);
 
           renderResult = await renderOnMainThread(exportMode, clientSettings, composition, signal);
         }
@@ -428,16 +420,20 @@ export function useClientRender(): UseClientRenderReturn {
         setStatus('completed');
         setProgress(100);
 
-        log.debug('Render completed', {
-          fileSize: formatBytes(renderResult.fileSize),
+        event.set('renderPath', renderPath);
+        event.success({
+          fileSize: renderResult.fileSize,
+          fileSizeFormatted: formatBytes(renderResult.fileSize),
           duration: renderResult.duration,
         });
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
-          log.debug('Render cancelled');
+          event.set('outcome', 'cancelled');
+          event.set('duration_ms', Date.now());
+          log.event('render', { opId, outcome: 'cancelled' });
           setStatus('cancelled');
         } else {
-          log.error('Export error:', err);
+          event.failure(err);
           const message = err instanceof Error ? err.message : 'Failed to export';
           setError(message);
           setStatus('failed');
@@ -497,7 +493,7 @@ export function useClientRender(): UseClientRenderReturn {
     a.click();
     document.body.removeChild(a);
 
-    // Revoke during idle â€” download has already started by then
+    // Revoke during idle — download has already started by then
     requestIdleCallback(() => URL.revokeObjectURL(url));
   }, [result]);
 
@@ -557,4 +553,3 @@ export function useClientRender(): UseClientRenderReturn {
     estimateFileSize: estimateFileSizeForSettings,
   };
 }
-

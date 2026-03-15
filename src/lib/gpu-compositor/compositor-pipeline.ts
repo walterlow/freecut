@@ -12,7 +12,10 @@
 
 import type { BlendMode } from '@/types/blend-modes';
 import { BLEND_MODE_INDEX } from '@/types/blend-modes';
+import { createLogger } from '@/shared/logging/logger';
 import { BLEND_MODES_WGSL } from './blend-modes';
+
+const logger = createLogger('CompositorPipeline');
 
 // ─── Shader ───
 
@@ -327,7 +330,7 @@ export class CompositorPipeline {
         primitive: { topology: 'triangle-list' },
       });
     } catch (e) {
-      console.warn('Failed to create regular compositor pipeline', e);
+      logger.warn('Failed to create regular compositor pipeline', e);
     }
 
     // External composite pipeline (texture_external layer — zero-copy video)

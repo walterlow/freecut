@@ -1,3 +1,7 @@
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('Clock');
+
 /**
  * Clock.ts - Central timing system for the video player
  *
@@ -457,7 +461,7 @@ export class Clock {
         try {
           callback(event);
         } catch (error) {
-          console.error(`Error in clock event listener (${type}):`, error);
+          logger.error(`Error in clock event listener (${type}):`, error);
         }
       });
     }

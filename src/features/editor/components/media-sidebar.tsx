@@ -30,6 +30,9 @@ import type { VisualEffect, GpuEffect } from '@/types/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
 import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('MediaSidebar');
 
 export const MediaSidebar = memo(function MediaSidebar() {
   // Use granular selectors - Zustand v5 best practice
@@ -102,7 +105,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     }
 
     if (!targetTrack) {
-      console.warn('No available track for text item');
+      logger.warn('No available track for text item');
       return;
     }
 
@@ -174,7 +177,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     }
 
     if (!targetTrack) {
-      console.warn('No available track for shape item');
+      logger.warn('No available track for shape item');
       return;
     }
 
@@ -248,7 +251,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
     }
 
     if (!targetTrack) {
-      console.warn('No available track for adjustment layer');
+      logger.warn('No available track for adjustment layer');
       return;
     }
 

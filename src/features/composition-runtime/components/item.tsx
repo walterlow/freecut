@@ -22,6 +22,9 @@ import {
 } from '@/features/composition-runtime/deps/timeline';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('CompositionItem');
 
 /** Mask information passed from composition to items */
 export interface MaskInfo {
@@ -115,7 +118,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
     const hasCorruptedMetadata = sourceDuration === 0 && effectiveSourceSegment === 0 && trimBefore > MAX_REASONABLE_FRAMES;
 
     if (hasCorruptedMetadata || isInvalidSeek) {
-      console.error('[Composition Item] Invalid source position detected:', {
+      logger.error('Invalid source position detected:', {
         itemId: item.id,
         sourceStart: item.sourceStart,
         trimBefore,
@@ -149,7 +152,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         1,
         sourceToTimelineFrames(effectiveDuration, playbackRate, sourceFps, timelineFps)
       );
-      console.warn('[Composition Item] Clip duration exceeds source duration (graceful clamp):', {
+      logger.warn('Clip duration exceeds source duration (graceful clamp):', {
         itemId: item.id,
         sourceFramesNeeded,
         sourceDuration,

@@ -1179,7 +1179,7 @@ export async function createCompositionRenderer(
           if (hasGpu && !itemRenderContext.gpuPipeline) {
             itemRenderContext.gpuPipeline = await ensureGpuPipeline();
             if (!itemRenderContext.gpuPipeline) {
-              console.warn('[CompositionRenderer] GPU pipeline init failed — GPU effects will be skipped');
+              log.warn('GPU pipeline init failed — GPU effects will be skipped');
             }
           }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();

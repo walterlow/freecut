@@ -1,6 +1,9 @@
+import { createLogger } from '@/shared/logging/logger';
 import { COMMON_WGSL } from './common';
 import type { GpuEffectDefinition, GpuEffectInstance } from './types';
 import { GPU_EFFECT_REGISTRY, getGpuEffect } from './index';
+
+const logger = createLogger('EffectsPipeline');
 
 const FULLSCREEN_VERTEX = /* wgsl */ `
 struct VertexOutput {
@@ -210,7 +213,7 @@ export class EffectsPipeline {
       });
       this.pipelines.set(id, pipeline);
     } catch (e) {
-      console.warn(`Failed to create pipeline for ${id}`, e);
+      logger.warn(`Failed to create pipeline for ${id}`, e);
     }
   }
 

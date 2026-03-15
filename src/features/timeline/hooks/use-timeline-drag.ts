@@ -8,6 +8,9 @@ import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('TimelineDrag');
 
 // Shared ref for drag offset (avoids re-renders from store updates)
 export const dragOffsetRef = { current: { x: 0, y: 0 } };
@@ -615,7 +618,7 @@ export function useTimelineDrag(
           );
 
           if (finalPosition === null) {
-            console.warn(isAltDrag ? 'Cannot duplicate items: no available space' : 'Cannot move items: no available space');
+            logger.warn(isAltDrag ? 'Cannot duplicate items: no available space' : 'Cannot move items: no available space');
             // Clean up and cancel - defer drag state to avoid render cascade
             if (elementRef?.current) {
               elementRef.current.style.transform = '';
@@ -697,7 +700,7 @@ export function useTimelineDrag(
           }
         } else {
           // No space available - cancel drag (keep at original position)
-          console.warn(isAltDrag ? 'Cannot duplicate item: no available space' : 'Cannot move item: no available space');
+          logger.warn(isAltDrag ? 'Cannot duplicate item: no available space' : 'Cannot move item: no available space');
         }
       }
 

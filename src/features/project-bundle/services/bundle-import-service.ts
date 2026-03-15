@@ -25,7 +25,10 @@ import {
   updateProject,
 } from '@/infrastructure/storage/indexeddb';
 import { generateThumbnail } from '@/features/project-bundle/deps/media-library';
+import { createLogger } from '@/shared/logging/logger';
 import { fileSystemService } from './file-system-service';
+
+const logger = createLogger('BundleImportService');
 
 /**
  * Import a project bundle
@@ -87,7 +90,7 @@ export async function importProjectBundle(
       // Get the file data from the unzipped bundle
       const fileData = files[entry.relativePath];
       if (!fileData) {
-        console.warn(`Missing file in bundle: ${entry.relativePath}`);
+        logger.warn(`Missing file in bundle: ${entry.relativePath}`);
         skipped++;
         continue;
       }
@@ -132,7 +135,7 @@ export async function importProjectBundle(
         };
         await saveThumbnail(thumbnailData);
       } catch (thumbnailError) {
-        console.warn(
+        logger.warn(
           `Failed to generate thumbnail for ${entry.fileName}:`,
           thumbnailError
         );
@@ -163,7 +166,7 @@ export async function importProjectBundle(
       await createMedia(mediaMetadata);
       imported++;
     } catch (error) {
-      console.error(`Failed to import media ${entry.fileName}:`, error);
+      logger.error(`Failed to import media ${entry.fileName}:`, error);
       conflicts.push({
         type: 'media_duplicate',
         description: `Failed to import: ${entry.fileName}`,
@@ -250,7 +253,7 @@ export async function importProjectBundle(
       await updateProject(newProjectId, { thumbnailId });
     } catch (err) {
       // Thumbnail restoration is optional, continue without it
-      console.warn('Could not restore project thumbnail:', err);
+      logger.warn('Could not restore project thumbnail:', err);
     }
   }
 
