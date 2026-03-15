@@ -22,7 +22,7 @@ import {
 } from '../utils/caption-items';
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
-import { useSettingsStore } from '@/features/settings/stores/settings-store';
+import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
 import {
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
