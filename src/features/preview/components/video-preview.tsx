@@ -2777,8 +2777,9 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
-    // During gizmo drags or live effect parameter changes, trigger re-renders
-    // even when frame is unchanged so previews stay on the fast-scrub render path.
+    // During gizmo drags or live preview changes, trigger re-renders even when
+    // the frame is unchanged so the fast-scrub overlay does not reuse a stale
+    // cached bitmap for the current frame.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
       if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) return;
       if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
@@ -2790,10 +2791,11 @@ export const VideoPreview = memo(function VideoPreview({
       const playbackState = usePlaybackStore.getState();
       const currentFrame = playbackState.currentFrame;
 
-      // Effect param changes don't change the frame number, so the frame cache
-      // would return the stale bitmap. Invalidate the current frame so the
-      // renderer re-composites with the updated effect params.
-      if (unifiedPreviewChanged && scrubRendererRef.current) {
+      // Preview-only changes don't advance the frame number, so the frame
+      // cache would otherwise return the stale bitmap for the current frame.
+      // Invalidate before requesting a repaint so gizmo resize/translate and
+      // live panel previews re-composite immediately.
+      if ((unifiedPreviewChanged || transformPreviewChanged) && scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache([currentFrame]);
       }
 

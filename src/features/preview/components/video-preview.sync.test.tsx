@@ -82,15 +82,39 @@ let lastCompositionKeyframes: Array<{
   }>;
 }> = [];
 let lastCompositionMediaSources: string[] = [];
-const createCompositionRendererMock = vi.hoisted(() => vi.fn(async () => ({
-  preload: vi.fn(async () => {}),
-  renderFrame: vi.fn(async () => {}),
-  prewarmFrame: vi.fn(async () => {}),
-  invalidateFrameCache: vi.fn(),
-  setDomVideoElementProvider: vi.fn(),
-  getScrubbingCache: () => null,
-  dispose: vi.fn(),
-})));
+const rendererMockState = vi.hoisted(() => {
+  type RendererMock = {
+    preload: ReturnType<typeof vi.fn>;
+    renderFrame: ReturnType<typeof vi.fn>;
+    prewarmFrame: ReturnType<typeof vi.fn>;
+    invalidateFrameCache: ReturnType<typeof vi.fn>;
+    setDomVideoElementProvider: ReturnType<typeof vi.fn>;
+    getScrubbingCache: () => null;
+    dispose: ReturnType<typeof vi.fn>;
+  };
+
+  const instances: RendererMock[] = [];
+  const create = vi.fn(async () => {
+    const renderer: RendererMock = {
+      preload: vi.fn(async () => {}),
+      renderFrame: vi.fn(async () => {}),
+      prewarmFrame: vi.fn(async () => {}),
+      invalidateFrameCache: vi.fn(),
+      setDomVideoElementProvider: vi.fn(),
+      getScrubbingCache: () => null,
+      dispose: vi.fn(),
+    };
+    instances.push(renderer);
+    return renderer;
+  });
+
+  return {
+    create,
+    instances,
+  };
+});
+
+const createCompositionRendererMock = rendererMockState.create;
 
 function createMockCanvasContext(): CanvasRenderingContext2D {
   return {
@@ -188,7 +212,7 @@ vi.mock('../utils/media-resolver', () => ({
 }));
 
 vi.mock('@/features/preview/deps/export', () => ({
-  createCompositionRenderer: createCompositionRendererMock,
+  createCompositionRenderer: rendererMockState.create,
 }));
 
 vi.mock('@/features/preview/deps/player-core', async () => {
@@ -390,6 +414,7 @@ describe('VideoPreview sync behavior', () => {
     resolveMediaUrlMock.mockClear();
     resolveProxyUrlMock.mockClear();
     createCompositionRendererMock.mockClear();
+    rendererMockState.instances.length = 0;
     canvasGetContextSpy?.mockRestore();
     canvasGetContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
       if (contextId === '2d') {
@@ -481,6 +506,103 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().previewFrame).toBeNull();
+    });
+  });
+
+  it('invalidates the current fast-scrub frame when single-item gizmo preview changes', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      useGizmoStore.setState({
+        activeGizmo: {
+          mode: 'scale',
+          activeHandle: 'se',
+          startPoint: { x: 0, y: 0 },
+          startTransform: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+          },
+          currentPoint: { x: 0, y: 0 },
+          shiftKey: false,
+          ctrlKey: false,
+          altKey: false,
+          itemId: 'item-1',
+          itemType: 'video',
+        },
+        previewTransform: {
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalled();
+    });
+    renderer.invalidateFrameCache.mockClear();
+
+    act(() => {
+      useGizmoStore.setState({
+        previewTransform: {
+          x: 0,
+          y: 0,
+          width: 180,
+          height: 180,
+          rotation: 0,
+          opacity: 1,
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith([0]);
     });
   });
 

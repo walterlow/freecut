@@ -120,7 +120,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   const handleWidthChange = useCallback(
     (newWidth: number) => {
       if (projectId) {
-        updateProject(projectId, { width: newWidth });
+        updateProject(projectId, { width: Math.round(newWidth / 2) * 2 });
         markDirty();
       }
     },
@@ -130,7 +130,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   const handleHeightChange = useCallback(
     (newHeight: number) => {
       if (projectId) {
-        updateProject(projectId, { height: newHeight });
+        updateProject(projectId, { height: Math.round(newHeight / 2) * 2 });
         markDirty();
       }
     },
@@ -203,6 +203,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
           minHeight={240}
           maxWidth={7680}
           maxHeight={4320}
+          step={2}
         />
 
         <div className="flex gap-2 mt-2">
