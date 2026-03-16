@@ -102,6 +102,11 @@ export interface MediaLibraryActions {
    * Uses FileSystemFileHandle directly without file picker
    */
   importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
+  /**
+   * Import media for direct placement flows.
+   * Existing media are returned too so drop targets can place duplicates without re-importing.
+   */
+  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
   deleteMedia: (id: string) => Promise<void>;
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 

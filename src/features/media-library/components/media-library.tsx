@@ -42,7 +42,7 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
-import { validateMediaFile } from '../utils/validation';
+import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 
 function CopyButton({ text }: { text: string }) {
@@ -286,47 +286,17 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       // Not JSON data, continue with file handling
     }
 
-    // Check if getAsFileSystemHandle is supported (Chrome/Edge only)
-    const firstItem = e.dataTransfer.items[0];
-    if (!firstItem || !('getAsFileSystemHandle' in firstItem)) {
+    const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
+    if (!supported) {
       showNotification({ type: 'warning', message: 'Drag-drop not supported. Please use Google Chrome.' });
       return;
-    }
-
-    // Collect all handle promises SYNCHRONOUSLY before any await
-    const items = Array.from(e.dataTransfer.items);
-    const handlePromises: Promise<FileSystemHandle | null>[] = [];
-    for (const item of items) {
-      if ('getAsFileSystemHandle' in item) {
-        handlePromises.push(item.getAsFileSystemHandle());
-      }
-    }
-
-    const rawHandles = await Promise.all(handlePromises);
-
-    const handles: FileSystemFileHandle[] = [];
-    const errors: string[] = [];
-    for (const handle of rawHandles) {
-      if (handle?.kind === 'file') {
-        try {
-          const file = await (handle as FileSystemFileHandle).getFile();
-          const validation = validateMediaFile(file);
-          if (validation.valid) {
-            handles.push(handle as FileSystemFileHandle);
-          } else {
-            errors.push(`${file.name}: ${validation.error}`);
-          }
-        } catch (error) {
-          logger.warn('Failed to get file from handle:', error);
-        }
-      }
     }
 
     if (errors.length > 0) {
       showNotification({ type: 'error', message: `Some files were rejected: ${errors.join(', ')}` });
     }
-    if (handles.length > 0) {
-      await handleImportHandles(handles);
+    if (entries.length > 0) {
+      await handleImportHandles(entries.map((entry) => entry.handle));
     }
   }, [showNotification, handleImportHandles]);
 
@@ -876,4 +846,3 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     </div>
   );
 });
-

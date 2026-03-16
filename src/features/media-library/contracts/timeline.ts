@@ -18,5 +18,9 @@ export {
   clearMediaDragData,
   type CompositionDragData,
 } from '../utils/drag-data-cache';
+export {
+  extractValidMediaFileEntriesFromDataTransfer,
+  supportsFileSystemDragDrop,
+} from '../utils/file-drop';
 export type { OrphanedClipInfo } from '../types';
 export { getMediaType } from '../utils/validation';

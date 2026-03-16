@@ -16,6 +16,7 @@ import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-tra
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
+import { useCanvasMediaDrop } from '../hooks/use-canvas-media-drop';
 import {
   getAutoKeyframeOperation,
   GIZMO_ANIMATABLE_PROPS,
@@ -221,6 +222,17 @@ export function GizmoOverlay({
       zoom,
     };
   }, [containerRect, playerSize, projectSize, zoom]);
+
+  const {
+    dropState,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+  } = useCanvasMediaDrop({
+    coordParams,
+    projectSize,
+  });
 
   // Get visual transforms for all visible items (base + keyframes + preview).
   const visualTransformsMap = useVisualTransforms(visibleItems, projectSize);
@@ -600,7 +612,30 @@ export function GizmoOverlay({
         }}
         onClick={handleBackgroundClick}
         onContextMenu={handleContextMenu}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
+        {dropState && (
+          <div
+            className={`absolute inset-0 pointer-events-none z-20 flex items-center justify-center border-2 border-dashed ${
+              dropState.allowed
+                ? 'border-primary/70 bg-primary/10'
+                : 'border-destructive/60 bg-destructive/10'
+            }`}
+          >
+            <div className="rounded-lg border border-border/70 bg-background/90 px-4 py-3 text-center shadow-lg backdrop-blur-sm">
+              <p className={`text-sm font-semibold ${dropState.allowed ? 'text-primary' : 'text-destructive'}`}>
+                {dropState.title}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dropState.description}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Clickable areas for UNSELECTED visible items */}
         {/* Selected items are handled by their respective gizmos (TransformGizmo or GroupGizmo) */}
         {unselectedItems.map((item) => {
