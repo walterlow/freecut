@@ -36,7 +36,6 @@ import {
   applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
-  getGpuEffectInstances,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
 import { EffectsPipeline } from '@/infrastructure/gpu/effects';
@@ -62,7 +61,6 @@ import { useCompositionsStore } from '@/features/export/deps/timeline';
 
 // Item renderer
 import {
-  hasCornerPin,
   resolveFrameCompositionScene,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
@@ -71,7 +69,6 @@ import {
 import {
   renderItem,
   renderTransitionToCanvas,
-  calculateMediaDrawDimensions,
   type CanvasSettings,
   type WorkerLoadedImage,
   type ItemRenderContext,

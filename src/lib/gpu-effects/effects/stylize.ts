@@ -567,10 +567,14 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
   if (styleType == 1 && gridType == 1) {
     pad *= 0.7;
   }
-  // Snap the grid to whole cells so tiny-dot settings do not leave a
-  // fractional border column that reads as a bright edge.
-  let cols = max(1.0, round(1.0 / max(pad.x, 1e-4)));
-  let rows = max(1.0, round(1.0 / max(pad.y, 1e-4)));
+  // Snap to whole cells AND force odd counts.  With an odd cell count the
+  // centered grid puts uv = ±N.5 at the texture edges, which lands at
+  // fract = 0.5 — right on the dot center.  Even counts land at fract = 0
+  // (cell boundary), exposing the paper/background as a rectangular border.
+  var rawCols = max(1.0, round(1.0 / max(pad.x, 1e-4)));
+  var rawRows = max(1.0, round(1.0 / max(pad.y, 1e-4)));
+  let cols = rawCols + select(0.0, 1.0, fract(rawCols * 0.5) < 0.25);
+  let rows = rawRows + select(0.0, 1.0, fract(rawRows * 0.5) < 0.25);
   pad = vec2f(1.0 / cols, 1.0 / rows);
   let texelSize = 1.0 / max(dims, vec2f(1.0));
 
