@@ -659,6 +659,8 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubPrewarmedSourcesRef = useRef<Set<string>>(new Set());
   const scrubPrewarmedSourceOrderRef = useRef<string[]>([]);
   const scrubPrewarmedSourceTouchFrameRef = useRef<Map<string, number>>(new Map());
+  const scrubOffscreenRenderedFrameRef = useRef<number | null>(null);
+  const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
   const captureScaleCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -2025,6 +2027,8 @@ export const VideoPreview = memo(function VideoPreview({
     scrubPrewarmedSourcesRef.current.clear();
     scrubPrewarmedSourceOrderRef.current = [];
     scrubPrewarmedSourceTouchFrameRef.current.clear();
+    scrubOffscreenRenderedFrameRef.current = null;
+    captureCanvasSourceInFlightRef.current = null;
     previewPerfRef.current.fastScrubPrewarmedSources = 0;
     bypassPreviewSeekRef.current = false;
 
@@ -2093,6 +2097,7 @@ export const VideoPreview = memo(function VideoPreview({
 
         scrubOffscreenCanvasRef.current = offscreen;
         scrubOffscreenCtxRef.current = offscreenCtx;
+        scrubOffscreenRenderedFrameRef.current = null;
         scrubRendererRef.current = renderer;
         return renderer;
       } catch (error) {
@@ -2100,6 +2105,7 @@ export const VideoPreview = memo(function VideoPreview({
         scrubRendererRef.current = null;
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
+        scrubOffscreenRenderedFrameRef.current = null;
         return null;
       } finally {
         scrubInitPromiseRef.current = null;
@@ -2108,6 +2114,24 @@ export const VideoPreview = memo(function VideoPreview({
 
     return scrubInitPromiseRef.current;
   }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, isResolving, renderSize.height, renderSize.width]);
+
+  const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<OffscreenCanvas | null> => {
+    const offscreen = scrubOffscreenCanvasRef.current;
+    if (offscreen && scrubOffscreenRenderedFrameRef.current === targetFrame) {
+      return offscreen;
+    }
+
+    const renderer = await ensureFastScrubRenderer();
+    const nextOffscreen = scrubOffscreenCanvasRef.current;
+    if (!renderer || !nextOffscreen) return null;
+
+    if (scrubOffscreenRenderedFrameRef.current !== targetFrame) {
+      await renderer.renderFrame(targetFrame);
+      scrubOffscreenRenderedFrameRef.current = targetFrame;
+    }
+
+    return nextOffscreen;
+  }, [ensureFastScrubRenderer]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -2121,13 +2145,10 @@ export const VideoPreview = memo(function VideoPreview({
 
     const task = (async () => {
       try {
-        const renderer = await ensureFastScrubRenderer();
-        const offscreen = scrubOffscreenCanvasRef.current;
-        if (!renderer || !offscreen) return null;
-
         const playback = usePlaybackStore.getState();
         const targetFrame = playback.previewFrame ?? playback.currentFrame;
-        await renderer.renderFrame(targetFrame);
+        const offscreen = await renderOffscreenFrame(targetFrame);
+        if (!offscreen) return null;
 
         const format = options?.format ?? 'image/jpeg';
         const quality = options?.quality ?? 0.9;
@@ -2166,7 +2187,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     captureInFlightRef.current = task;
     return task;
-  }, [ensureFastScrubRenderer]);
+  }, [renderOffscreenFrame]);
 
   const captureCurrentFrameImageData = useCallback(async (options?: CaptureOptions): Promise<ImageData | null> => {
     if (captureImageDataInFlightRef.current) {
@@ -2175,13 +2196,10 @@ export const VideoPreview = memo(function VideoPreview({
 
     const task = (async () => {
       try {
-        const renderer = await ensureFastScrubRenderer();
-        const offscreen = scrubOffscreenCanvasRef.current;
-        if (!renderer || !offscreen) return null;
-
         const playback = usePlaybackStore.getState();
         const targetFrame = playback.previewFrame ?? playback.currentFrame;
-        await renderer.renderFrame(targetFrame);
+        const offscreen = await renderOffscreenFrame(targetFrame);
+        if (!offscreen) return null;
 
         const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width));
         const targetHeight = Math.max(2, Math.round(options?.height ?? offscreen.height));
@@ -2220,23 +2238,29 @@ export const VideoPreview = memo(function VideoPreview({
 
     captureImageDataInFlightRef.current = task;
     return task;
-  }, [ensureFastScrubRenderer]);
+  }, [renderOffscreenFrame]);
 
   const captureCanvasSource = useCallback(async (): Promise<OffscreenCanvas | HTMLCanvasElement | null> => {
-    try {
-      const renderer = await ensureFastScrubRenderer();
-      const offscreen = scrubOffscreenCanvasRef.current;
-      if (!renderer || !offscreen) return null;
-
-      const playback = usePlaybackStore.getState();
-      const targetFrame = playback.previewFrame ?? playback.currentFrame;
-      await renderer.renderFrame(targetFrame);
-      return offscreen;
-    } catch (error) {
-      logger.warn('Failed to capture canvas source:', error);
-      return null;
+    if (captureCanvasSourceInFlightRef.current) {
+      return captureCanvasSourceInFlightRef.current;
     }
-  }, [ensureFastScrubRenderer]);
+
+    const task = (async () => {
+      try {
+        const playback = usePlaybackStore.getState();
+        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        return await renderOffscreenFrame(targetFrame);
+      } catch (error) {
+        logger.warn('Failed to capture canvas source:', error);
+        return null;
+      } finally {
+        captureCanvasSourceInFlightRef.current = null;
+      }
+    })();
+
+    captureCanvasSourceInFlightRef.current = task;
+    return task;
+  }, [renderOffscreenFrame]);
 
   const setCaptureCanvasSource = usePlaybackStore((s) => s.setCaptureCanvasSource);
 
@@ -2535,6 +2559,7 @@ export const VideoPreview = memo(function VideoPreview({
           if (isPriorityFrame) {
             // Visible scrub targets still use full composition rendering.
             await renderer.renderFrame(frameToRender);
+            scrubOffscreenRenderedFrameRef.current = frameToRender;
           } else {
             // Background scrub prewarm only needs to advance decode state for
             // nearby sources. Avoid full composition work for non-visible frames.

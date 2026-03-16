@@ -278,19 +278,6 @@ fn fs(in: VertexOutput) -> @location(0) vec4f {
 }
 `;
 
-const DECAY_COMPUTE = /* wgsl */ `
-struct Params { len: u32, _p0: u32, _p1: u32, _p2: u32 }
-
-@group(0) @binding(0) var<storage, read_write> buf: array<u32>;
-@group(0) @binding(1) var<uniform> params: Params;
-
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3u) {
-  if (gid.x >= params.len) { return; }
-  buf[gid.x] = 0u;
-}
-`;
-
 export const OUT_W = 1024;
 export const OUT_H = 512;
 
@@ -306,9 +293,6 @@ export class WaveformScope {
   private accumL: GPUBuffer;
   private computeParams: GPUBuffer;
   private renderParams: GPUBuffer;
-  private decayPipeline: GPUComputePipeline;
-  private decayBGL: GPUBindGroupLayout;
-  private decayParams: GPUBuffer;
 
   constructor(device: GPUDevice, format: GPUTextureFormat) {
     this.device = device;
@@ -353,30 +337,15 @@ export class WaveformScope {
       vertex: { module: renderModule, entryPoint: 'vs' },
       fragment: { module: renderModule, entryPoint: 'fs', targets: [{ format }] },
     });
-
-    // Decay pipeline
-    this.decayBGL = device.createBindGroupLayout({
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-      ],
-    });
-    this.decayPipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.decayBGL] }),
-      compute: { module: device.createShaderModule({ code: DECAY_COMPUTE }), entryPoint: 'main' },
-    });
-    this.decayParams = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
   }
 
-  render(
+  private accumulate(
     sourceTexture: GPUTexture,
-    ctx: GPUCanvasContext,
-    mode: number,
     kr: number,
     kb: number,
     rangeMin: number,
     rangeMax: number,
-  ) {
+  ): number {
     const d = this.device;
     const srcW = sourceTexture.width;
     const srcH = sourceTexture.height;
@@ -386,34 +355,12 @@ export class WaveformScope {
     new Float32Array(cpData, 16, 4).set([kr, kb, rangeMin, rangeMax]);
     d.queue.writeBuffer(this.computeParams, 0, cpData);
 
-    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
-    const rpData = new ArrayBuffer(32);
-    new Float32Array(rpData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9]);
-    new Uint32Array(rpData, 16, 4).set([mode, 0, 0, 0]);
-    d.queue.writeBuffer(this.renderParams, 0, rpData);
-
     const encoder = d.createCommandEncoder();
+    encoder.clearBuffer(this.accumR);
+    encoder.clearBuffer(this.accumG);
+    encoder.clearBuffer(this.accumB);
+    encoder.clearBuffer(this.accumL);
 
-    // Clear accumulators
-    const bufLen = OUT_W * OUT_H;
-    d.queue.writeBuffer(this.decayParams, 0, new Uint32Array([bufLen, 0, 0, 0]));
-
-    const dp = encoder.beginComputePass();
-    dp.setPipeline(this.decayPipeline);
-    for (const buf of [this.accumR, this.accumG, this.accumB, this.accumL]) {
-      const bg = d.createBindGroup({
-        layout: this.decayBGL,
-        entries: [
-          { binding: 0, resource: { buffer: buf } },
-          { binding: 1, resource: { buffer: this.decayParams } },
-        ],
-      });
-      dp.setBindGroup(0, bg);
-      dp.dispatchWorkgroups(Math.ceil(bufLen / 256));
-    }
-    dp.end();
-
-    // Compute pass
     const computeBG = d.createBindGroup({
       layout: this.computeBGL,
       entries: [
@@ -432,7 +379,18 @@ export class WaveformScope {
     cp.dispatchWorkgroups(Math.ceil(srcW / 16), Math.ceil(srcH / 16));
     cp.end();
 
-    // Render pass
+    d.queue.submit([encoder.finish()]);
+    return srcH;
+  }
+
+  private renderAccumulated(ctx: GPUCanvasContext, mode: number, srcH: number) {
+    const d = this.device;
+    const refValue = Math.sqrt(srcH / OUT_H) * 40.0;
+    const rpData = new ArrayBuffer(32);
+    new Float32Array(rpData, 0, 4).set([OUT_W, OUT_H, refValue, 0.9]);
+    new Uint32Array(rpData, 16, 4).set([mode, 0, 0, 0]);
+    d.queue.writeBuffer(this.renderParams, 0, rpData);
+
     const renderBG = d.createBindGroup({
       layout: this.renderBGL,
       entries: [
@@ -444,6 +402,7 @@ export class WaveformScope {
       ],
     });
 
+    const encoder = d.createCommandEncoder();
     const rp = encoder.beginRenderPass({
       colorAttachments: [{
         view: ctx.getCurrentTexture().createView(),
@@ -460,8 +419,35 @@ export class WaveformScope {
     d.queue.submit([encoder.finish()]);
   }
 
+  render(
+    sourceTexture: GPUTexture,
+    ctx: GPUCanvasContext,
+    mode: number,
+    kr: number,
+    kb: number,
+    rangeMin: number,
+    rangeMax: number,
+  ) {
+    this.renderBatch(sourceTexture, [{ ctx, mode }], kr, kb, rangeMin, rangeMax);
+  }
+
+  renderBatch(
+    sourceTexture: GPUTexture,
+    requests: Array<{ ctx: GPUCanvasContext; mode: number }>,
+    kr: number,
+    kb: number,
+    rangeMin: number,
+    rangeMax: number,
+  ) {
+    if (requests.length === 0) return;
+    const srcH = this.accumulate(sourceTexture, kr, kb, rangeMin, rangeMax);
+    for (const { ctx, mode } of requests) {
+      this.renderAccumulated(ctx, mode, srcH);
+    }
+  }
+
   destroy() {
-    for (const b of [this.accumR, this.accumG, this.accumB, this.accumL, this.computeParams, this.renderParams, this.decayParams]) {
+    for (const b of [this.accumR, this.accumG, this.accumB, this.accumL, this.computeParams, this.renderParams]) {
       b?.destroy();
     }
   }

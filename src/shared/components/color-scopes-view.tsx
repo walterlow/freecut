@@ -13,10 +13,12 @@ const GPU_INTERVAL = 66; // ~15fps
 const CPU_INTERVAL = 220;
 const COLOR_MATRIX_STORAGE_KEY = 'timeline:scopes:colorMatrix';
 const RANGE_MODE_STORAGE_KEY = 'timeline:scopes:rangeMode';
+const STACK_LAYOUT_STORAGE_KEY = 'timeline:scopes:stackLayout';
 
 type ScopeColorMatrix = 'bt709' | 'bt601';
 type ScopeRangeMode = 'full' | 'legal';
 type ScopeViewMode = 'rgb' | 'r' | 'g' | 'b' | 'luma';
+type StackScopeLayout = 'three-up' | 'all';
 
 const VIEW_MODE_NUM: Record<ScopeViewMode, number> = { rgb: 0, r: 1, g: 2, b: 3, luma: 4 };
 
@@ -40,6 +42,14 @@ function loadRangeMode(): ScopeRangeMode {
     if (v === 'full' || v === 'legal') return v;
   } catch { /* ignore */ }
   return 'full';
+}
+
+function loadStackLayout(): StackScopeLayout {
+  try {
+    const v = localStorage.getItem(STACK_LAYOUT_STORAGE_KEY);
+    if (v === 'three-up' || v === 'all') return v;
+  } catch { /* ignore */ }
+  return 'three-up';
 }
 
 // ── CPU fallback drawing functions ──────────────────────────────────────────
@@ -341,9 +351,11 @@ function ScopeModeBar({
 function useGpuCanvasResize(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   containerRef: React.RefObject<HTMLDivElement | null>,
-  square = false,
+  aspectRatio?: number,
+  enabled = true,
 ) {
   useEffect(() => {
+    if (!enabled) return;
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
@@ -352,8 +364,17 @@ function useGpuCanvasResize(
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const dpr = window.devicePixelRatio || 1;
-      const w = square ? Math.min(width, height) : width;
-      const h = square ? Math.min(width, height) : height;
+      let w = width;
+      let h = height;
+      if (aspectRatio) {
+        const containedHeight = width / aspectRatio;
+        if (containedHeight <= height) {
+          h = containedHeight;
+        } else {
+          h = height;
+          w = height * aspectRatio;
+        }
+      }
       const pw = Math.round(w * dpr);
       const ph = Math.round(h * dpr);
       if (canvas.width !== pw || canvas.height !== ph) {
@@ -365,7 +386,7 @@ function useGpuCanvasResize(
     });
     ro.observe(container);
     return () => ro.disconnect();
-  }, [canvasRef, containerRef, square]);
+  }, [aspectRatio, canvasRef, containerRef, enabled]);
 }
 
 // ── Main component ──────────────────────────────────────────────────────────
@@ -387,12 +408,15 @@ export const ColorScopesView = memo(function ColorScopesView({
   const [gpuReady, setGpuReady] = useState<boolean | null>(null); // null = pending
   const [waveformMode, setWaveformMode] = useState<ScopeViewMode>('luma');
   const [histogramMode, setHistogramMode] = useState<ScopeViewMode>('rgb');
+  const [stackLayout, setStackLayout] = useState<StackScopeLayout>(() => loadStackLayout());
 
   const captureFrameImageData = usePlaybackStore((s) => s.captureFrameImageData);
   const captureFrame = usePlaybackStore((s) => s.captureFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const isEmbeddedStackLayout = embedded && embeddedLayout === 'stack';
+  const showHistogram = embedded && (!isEmbeddedStackLayout || stackLayout === 'all');
 
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
   const paradeCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -406,6 +430,7 @@ export const ColorScopesView = memo(function ColorScopesView({
   const rendererRef = useRef<ScopeRenderer | null>(null);
   const gpuCtxCacheRef = useRef(new Map<HTMLCanvasElement, GPUCanvasContext>());
   const gpuInitedRef = useRef(false);
+  const gpuRenderInFlightRef = useRef(false);
   const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveTickRef = useRef(0);
 
@@ -418,6 +443,8 @@ export const ColorScopesView = memo(function ColorScopesView({
   isPlayingRef.current = isPlaying;
   const embeddedRef = useRef(embedded);
   embeddedRef.current = embedded;
+  const showHistogramRef = useRef(showHistogram);
+  showHistogramRef.current = showHistogram;
   const waveformModeRef = useRef(waveformMode);
   waveformModeRef.current = waveformMode;
   const histogramModeRef = useRef(histogramMode);
@@ -430,12 +457,15 @@ export const ColorScopesView = memo(function ColorScopesView({
   useEffect(() => {
     try { localStorage.setItem(RANGE_MODE_STORAGE_KEY, rangeMode); } catch { /* ignore */ }
   }, [rangeMode]);
+  useEffect(() => {
+    try { localStorage.setItem(STACK_LAYOUT_STORAGE_KEY, stackLayout); } catch { /* ignore */ }
+  }, [stackLayout]);
 
   // DPR-aware sizing for GPU canvases
   useGpuCanvasResize(waveformCanvasRef, waveformContainerRef);
   useGpuCanvasResize(paradeCanvasRef, paradeContainerRef);
-  useGpuCanvasResize(histogramCanvasRef, histogramContainerRef);
-  useGpuCanvasResize(vectorscopeCanvasRef, vectorscopeContainerRef, true);
+  useGpuCanvasResize(histogramCanvasRef, histogramContainerRef, undefined, showHistogram);
+  useGpuCanvasResize(vectorscopeCanvasRef, vectorscopeContainerRef, 1);
 
   // ── GPU initialization ──────────────────────────────────────────────────
 
@@ -484,7 +514,7 @@ export const ColorScopesView = memo(function ColorScopesView({
 
     const tick = (time: number) => {
       if (cancelled) return;
-      if (time - lastTime >= GPU_INTERVAL) {
+      if (time - lastTime >= GPU_INTERVAL && !gpuRenderInFlightRef.current) {
         lastTime = time;
         void renderGpuFrame();
       }
@@ -492,6 +522,8 @@ export const ColorScopesView = memo(function ColorScopesView({
     };
 
     const renderGpuFrame = async () => {
+      if (gpuRenderInFlightRef.current) return;
+      gpuRenderInFlightRef.current = true;
       const { kr, kb } = getMatrixCoefficients(colorMatrixRef.current);
       const [rangeMin, rangeMax] = rangeModeRef.current === 'legal'
         ? [16 / 255, 235 / 255]
@@ -518,14 +550,24 @@ export const ColorScopesView = memo(function ColorScopesView({
 
         // Render each visible scope
         const wfCtx = getGpuCtx(waveformCanvasRef.current);
-        if (wfCtx) renderer.renderWaveform(wfCtx, VIEW_MODE_NUM[waveformModeRef.current]);
+        const waveformRequests: Array<{ ctx: GPUCanvasContext; mode: number }> = [];
+        if (wfCtx) {
+          waveformRequests.push({ ctx: wfCtx, mode: VIEW_MODE_NUM[waveformModeRef.current] });
+        }
 
         if (embeddedRef.current) {
           const parCtx = getGpuCtx(paradeCanvasRef.current);
-          if (parCtx) renderer.renderWaveform(parCtx, 5); // parade mode
+          if (parCtx) {
+            waveformRequests.push({ ctx: parCtx, mode: 5 }); // parade mode
+          }
 
-          const histCtx = getGpuCtx(histogramCanvasRef.current);
-          if (histCtx) renderer.renderHistogram(histCtx, VIEW_MODE_NUM[histogramModeRef.current]);
+          if (showHistogramRef.current) {
+            const histCtx = getGpuCtx(histogramCanvasRef.current);
+            if (histCtx) renderer.renderHistogram(histCtx, VIEW_MODE_NUM[histogramModeRef.current]);
+          }
+        }
+        if (waveformRequests.length > 0) {
+          renderer.renderWaveforms(waveformRequests);
         }
 
         const vsCtx = getGpuCtx(vectorscopeCanvasRef.current);
@@ -534,6 +576,8 @@ export const ColorScopesView = memo(function ColorScopesView({
         setStatus('live');
       } catch {
         setStatus('error');
+      } finally {
+        gpuRenderInFlightRef.current = false;
       }
     };
 
@@ -630,14 +674,14 @@ export const ColorScopesView = memo(function ColorScopesView({
         cpuDrawParade(imageData, parCtx, rangeMode, parSize.width, parSize.height);
       }
       cpuDrawVectorscope(imageData, vsCtx, colorMatrix, vsSize);
-      if (embedded && histCtx && histSize && drawHeavy) {
+      if (showHistogram && histCtx && histSize && drawHeavy) {
         cpuDrawHistogram(imageData, histCtx, colorMatrix, rangeMode, histSize.width, histSize.height);
       }
       setStatus('live');
     } catch {
       setStatus('error');
     }
-  }, [captureFrameImageData, captureFrame, open, gpuReady, colorMatrix, rangeMode, embedded, isPlaying]);
+  }, [captureFrameImageData, captureFrame, open, gpuReady, colorMatrix, rangeMode, embedded, isPlaying, showHistogram]);
 
   // CPU: update on frame change when paused
   useEffect(() => {
@@ -707,6 +751,26 @@ export const ColorScopesView = memo(function ColorScopesView({
               Legal
             </Button>
           </div>
+          {isEmbeddedStackLayout && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant={stackLayout === 'three-up' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-5 px-1.5 text-[10px]"
+                onClick={() => setStackLayout('three-up')}
+              >
+                3-Up
+              </Button>
+              <Button
+                variant={stackLayout === 'all' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-5 px-1.5 text-[10px]"
+                onClick={() => setStackLayout('all')}
+              >
+                All
+              </Button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
           <Activity
@@ -722,7 +786,7 @@ export const ColorScopesView = memo(function ColorScopesView({
       {embedded ? (
         embeddedLayout === 'stack' ? (
           <div className="h-[calc(100%-22px)] min-h-0 flex flex-col gap-3">
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-[1.02] flex-col">
               <div className="mb-1 flex items-center justify-between">
                 <div className="text-[10px] text-muted-foreground">Waveform</div>
                 {gpuReady && (
@@ -737,40 +801,45 @@ export const ColorScopesView = memo(function ColorScopesView({
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-[1.08] flex-col">
               <div className="text-[10px] mb-1 text-muted-foreground">RGB Parade</div>
               <div
                 ref={paradeContainerRef}
-                className="flex-1 min-h-[96px] rounded border border-border/70 bg-black/80"
+                className="flex-1 min-h-[104px] rounded border border-border/70 bg-black/80"
               >
                 <canvas ref={paradeCanvasRef} className="w-full h-full" />
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="mb-1 flex items-center justify-between">
-                <div className="text-[10px] text-muted-foreground">Histogram</div>
-                {gpuReady && (
-                  <ScopeModeBar mode={histogramMode} onChange={setHistogramMode} />
-                )}
-              </div>
-              <div
-                ref={histogramContainerRef}
-                className="flex-1 min-h-[96px] rounded border border-border/70 bg-black/80"
-              >
-                <canvas ref={histogramCanvasRef} className="w-full h-full" />
-              </div>
-            </div>
-
-            <div className="flex min-h-0 flex-[1.1] flex-col">
+            <div className={cn('flex min-h-0 flex-col', showHistogram ? 'flex-[0.9]' : 'flex-[1.02]')}>
               <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
               <div
                 ref={vectorscopeContainerRef}
-                className="flex flex-1 min-h-[120px] items-center justify-center rounded border border-border/70 bg-black/80"
+                className={cn(
+                  'mx-auto flex w-full items-center justify-center rounded border border-border/70 bg-black/80',
+                  showHistogram ? 'min-h-[152px] max-w-[272px] flex-1' : 'min-h-[176px] max-w-[320px] flex-1',
+                )}
               >
                 <canvas ref={vectorscopeCanvasRef} className="max-w-full max-h-full aspect-square" />
               </div>
             </div>
+
+            {showHistogram && (
+              <div className="flex min-h-0 flex-[0.88] flex-col">
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="text-[10px] text-muted-foreground">Histogram</div>
+                  {gpuReady && (
+                    <ScopeModeBar mode={histogramMode} onChange={setHistogramMode} />
+                  )}
+                </div>
+                <div
+                  ref={histogramContainerRef}
+                  className="flex-1 min-h-[88px] rounded border border-border/70 bg-black/80"
+                >
+                  <canvas ref={histogramCanvasRef} className="w-full h-full" />
+                </div>
+              </div>
+            )}
           </div>
         ) : (
         <div className="h-[calc(100%-22px)] min-h-0 flex gap-3">

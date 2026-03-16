@@ -102,7 +102,19 @@ export class ScopeRenderer {
 
   renderWaveform(ctx: GPUCanvasContext, mode: number) {
     if (!this.srcTexture) return;
-    this.waveform.render(this.srcTexture, ctx, mode, this.kr, this.kb, this.rangeMin, this.rangeMax);
+    this.waveform.renderBatch(
+      this.srcTexture,
+      [{ ctx, mode }],
+      this.kr,
+      this.kb,
+      this.rangeMin,
+      this.rangeMax,
+    );
+  }
+
+  renderWaveforms(requests: Array<{ ctx: GPUCanvasContext; mode: number }>) {
+    if (!this.srcTexture || requests.length === 0) return;
+    this.waveform.renderBatch(this.srcTexture, requests, this.kr, this.kb, this.rangeMin, this.rangeMax);
   }
 
   renderHistogram(ctx: GPUCanvasContext, mode: number) {
