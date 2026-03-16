@@ -1,10 +1,12 @@
-import { useMemo, useCallback, memo } from 'react';
+import { useMemo, useCallback, useEffect, memo } from 'react';
 import { Move, Sparkles, Film } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
+import type { ClipInspectorTab } from '@/shared/state/editor';
 import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import type { TransformProperties } from '@/types/transform';
@@ -58,6 +60,8 @@ function computeItemTypeInfo(items: TimelineItem[]) {
  */
 export const ClipPanel = memo(function ClipPanel() {
   // Granular selectors with explicit types
+  const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab);
+  const setClipInspectorTab = useEditorStore((s) => s.setClipInspectorTab);
   const selectedItemIds = useSelectionStore((s: SelectionState & SelectionActions) => s.selectedItemIds);
   const fps = useTimelineStore((s: TimelineState & TimelineActions) => s.fps);
   const updateItemsTransform = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItemsTransform);
@@ -157,8 +161,27 @@ export const ClipPanel = memo(function ClipPanel() {
   const showEffectsTab = hasVisualItems;
   const showMediaTab = hasTextItems || hasShapeItems || hasVideoItems || hasGifItems || hasAudioItems;
 
-  // Determine default tab based on what's available
-  const defaultTab = showTransformTab ? 'transform' : showEffectsTab ? 'effects' : 'media';
+  const availableTabs = useMemo(() => {
+    const tabs: ClipInspectorTab[] = [];
+    if (showTransformTab) tabs.push('transform');
+    if (showEffectsTab) tabs.push('effects');
+    if (showMediaTab) tabs.push('media');
+    return tabs;
+  }, [showEffectsTab, showMediaTab, showTransformTab]);
+
+  const fallbackTab = availableTabs[0] ?? 'transform';
+  const activeTab = availableTabs.includes(clipInspectorTab) ? clipInspectorTab : fallbackTab;
+
+  useEffect(() => {
+    if (selectedItems.length === 0) return;
+    if (clipInspectorTab !== activeTab) {
+      setClipInspectorTab(activeTab);
+    }
+  }, [activeTab, clipInspectorTab, selectedItems.length, setClipInspectorTab]);
+
+  const handleTabChange = useCallback((value: string) => {
+    setClipInspectorTab(value as ClipInspectorTab);
+  }, [setClipInspectorTab]);
 
   if (selectedItems.length === 0) {
     return null;
@@ -172,7 +195,7 @@ export const ClipPanel = memo(function ClipPanel() {
       <Separator />
 
       {/* Tabbed sections */}
-      <Tabs defaultValue={defaultTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-8">
           <TabsTrigger
             value="transform"

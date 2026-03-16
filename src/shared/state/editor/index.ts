@@ -1,2 +1,2 @@
 export { useEditorStore } from './store';
-export type { EditorState, EditorActions } from './types';
+export type { ClipInspectorTab, EditorState, EditorActions } from './types';

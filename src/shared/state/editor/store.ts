@@ -40,6 +40,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   leftSidebarOpen: true,
   rightSidebarOpen: true,
   activeTab: 'media',
+  clipInspectorTab: 'transform',
   sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
   rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
   timelineHeight: 250,
@@ -53,6 +54,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   toggleLeftSidebar: () => set((state) => ({ leftSidebarOpen: !state.leftSidebarOpen })),
   toggleRightSidebar: () => set((state) => ({ rightSidebarOpen: !state.rightSidebarOpen })),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setClipInspectorTab: (tab) => set({ clipInspectorTab: tab }),
   setSidebarWidth: (width) => {
     try { localStorage.setItem('editor:sidebarWidth', String(width)); } catch { /* noop */ }
     set({ sidebarWidth: width });

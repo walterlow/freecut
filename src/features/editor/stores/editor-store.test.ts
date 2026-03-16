@@ -17,6 +17,7 @@ describe('editor-store', () => {
       leftSidebarOpen: true,
       rightSidebarOpen: true,
       activeTab: 'media',
+      clipInspectorTab: 'transform',
       sidebarWidth: editorLayout.sidebarDefaultWidth,
       rightSidebarWidth: editorLayout.sidebarDefaultWidth,
       timelineHeight: 250,
@@ -31,6 +32,7 @@ describe('editor-store', () => {
     expect(state.leftSidebarOpen).toBe(true);
     expect(state.rightSidebarOpen).toBe(true);
     expect(state.activeTab).toBe('media');
+    expect(state.clipInspectorTab).toBe('transform');
     expect(state.sourcePreviewMediaId).toBe(null);
     expect(state.colorScopesOpen).toBe(false);
   });
@@ -69,6 +71,14 @@ describe('editor-store', () => {
 
     useEditorStore.getState().setActiveTab('transitions');
     expect(useEditorStore.getState().activeTab).toBe('transitions');
+  });
+
+  it('sets clip inspector tab', () => {
+    useEditorStore.getState().setClipInspectorTab('effects');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('effects');
+
+    useEditorStore.getState().setClipInspectorTab('media');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('media');
   });
 
   it('sets sidebar widths', () => {
