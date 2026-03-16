@@ -441,7 +441,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
             </div>
             <div className="flex-1 min-w-0" />
-            <PlaybackControls totalFrames={totalFrames} />
+            <PlaybackControls totalFrames={totalFrames} fps={fps} />
             <div className="flex-1 min-w-0" />
             <div className="flex items-center gap-2 flex-shrink-0">
               <PreviewZoomControls />
