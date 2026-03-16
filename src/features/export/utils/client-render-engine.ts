@@ -420,6 +420,7 @@ export async function createCompositionRenderer(
     gifFramesMap,
     keyframesMap,
     adjustmentLayers,
+    getPreviewEffectsOverride,
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
@@ -1117,49 +1118,17 @@ export async function createCompositionRenderer(
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
-          frame
+          frame,
+          renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
 
-        // === DIRECT VIDEO→GPU PATH (importExternalTexture) ===
-        // When a video item has ONLY GPU effects, a DOM video element is available,
-        // and the transform is simple (no rotation/corner-radius/corner-pin that need canvas 2D),
-        // skip canvas 2D entirely and go: video → importExternalTexture → GPU effects → output.
-        if (
-          renderMode === 'preview'
-          && item.type === 'video'
-          && combinedEffects.length > 0
-          && combinedEffects.every((e) => !e.enabled || e.effect.type === 'gpu-effect')
-          && transform.rotation === 0
-          && transform.cornerRadius === 0
-          && transform.opacity === 1
-          && !hasCornerPin(effectiveItem.cornerPin)
-          && itemRenderContext.domVideoElementProvider
-        ) {
-          const domVideo = itemRenderContext.domVideoElementProvider(item.id);
-          if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
-            if (!itemRenderContext.gpuPipeline) {
-              itemRenderContext.gpuPipeline = await ensureGpuPipeline();
-            }
-            if (itemRenderContext.gpuPipeline) {
-              const gpuInstances = getGpuEffectInstances(combinedEffects);
-              const drawDims = calculateMediaDrawDimensions(
-                domVideo.videoWidth, domVideo.videoHeight, transform, canvasSettings,
-              );
-              const gpuCanvas = itemRenderContext.gpuPipeline.applyEffectsToVideo(
-                domVideo, gpuInstances, drawDims, canvasSettings.width, canvasSettings.height,
-              );
-              if (gpuCanvas) {
-                if (deferred) {
-                  return { source: gpuCanvas, poolCanvases: [] };
-                }
-                contentCtx.drawImage(gpuCanvas, 0, 0);
-                return null;
-              }
-            }
-            // Fall through to standard path if importExternalTexture failed
-          }
-        }
+        // NOTE: The importExternalTexture zero-copy path is disabled because
+        // textureSampleBaseClampToEdge produces subtly different edge pixel values
+        // compared to canvas 2D's drawImage (different YUV→RGB conversion at
+        // chroma subsampling boundaries). Spatial effects like halftone amplify
+        // this into a visible bright edge. The standard canvas 2D → GPU path
+        // below handles video correctly with negligible extra cost (~1-2ms).
 
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===
         const { canvas: itemCanvas, ctx: itemCtx } = canvasPool.acquire();
@@ -1275,7 +1244,12 @@ export async function createCompositionRenderer(
 
         // Check for effects that might add transparency
         const itemEffects = item.effects ?? [];
-        const adjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
+        const adjEffects = getAdjustmentLayerEffects(
+          trackOrder,
+          adjustmentLayers,
+          frame,
+          renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
+        );
         const allEffects = [...itemEffects, ...adjEffects];
 
         for (const effectWrapper of allEffects) {

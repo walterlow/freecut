@@ -108,7 +108,8 @@ function applyGpuEffects(
 export function getAdjustmentLayerEffects(
   itemTrackOrder: number,
   adjustmentLayers: AdjustmentLayerWithTrackOrder[],
-  frame: number
+  frame: number,
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
 ): ItemEffect[] {
   if (adjustmentLayers.length === 0) return [];
 
@@ -120,7 +121,10 @@ export function getAdjustmentLayerEffects(
       return frame >= layer.from && frame < layer.from + layer.durationInFrames;
     })
     .sort((a, b) => a.trackOrder - b.trackOrder) // Apply in track order
-    .flatMap(({ layer }) => layer.effects?.filter((e) => e.enabled) ?? []);
+    .flatMap(({ layer }) => {
+      const effectiveEffects = getPreviewEffectsOverride?.(layer.id) ?? layer.effects;
+      return effectiveEffects?.filter((e) => e.enabled) ?? [];
+    });
 }
 
 /**

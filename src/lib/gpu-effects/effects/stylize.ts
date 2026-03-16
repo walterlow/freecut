@@ -427,24 +427,17 @@ fn getSoftBall(uv: vec2f, r: f32, baseR: f32) -> f32 {
   return d;
 }
 
-fn getUvFrame(uv: vec2f, pad: vec2f) -> f32 {
-  let aa = 0.0001;
-  let left = smoothstep(-pad.x, -pad.x + aa, uv.x);
-  let right = smoothstep(1.0 + pad.x, 1.0 + pad.x - aa, uv.x);
-  let bottom = smoothstep(-pad.y, -pad.y + aa, uv.y);
-  let top = smoothstep(1.0 + pad.y, 1.0 + pad.y - aa, uv.y);
-  return left * right * bottom * top;
-}
-
 fn getLumAtPx(uv: vec2f, contrast: f32, inverted: bool) -> f32 {
   let tex = textureSampleLevel(inputTex, texSampler, uv, 0.0);
+  if (tex.a <= 1e-4) {
+    return select(0.0, 1.0, inverted);
+  }
   let color = vec3f(
     halftoneSigmoid(tex.r, contrast),
     halftoneSigmoid(tex.g, contrast),
     halftoneSigmoid(tex.b, contrast)
   );
   var lum = luminance(color);
-  lum = mix(1.0, lum, tex.a);
   if (inverted) {
     lum = 1.0 - lum;
   }
@@ -454,6 +447,7 @@ fn getLumAtPx(uv: vec2f, contrast: f32, inverted: bool) -> f32 {
 fn getLumBall(
   p: vec2f,
   pad: vec2f,
+  texelSize: vec2f,
   inCellOffset: vec2f,
   contrast: f32,
   baseR: f32,
@@ -468,12 +462,12 @@ fn getLumBall(
   let uv_i = floor(pp);
   let uv_f = fract(pp);
   let samplingUV = (uv_i + 0.5 - inCellOffset) * pad + 0.5;
-  let outOfFrame = getUvFrame(samplingUV, pad * stepSize);
-  var lum = getLumAtPx(samplingUV, contrast, inverted);
+  let safeSamplingUV = clamp(samplingUV, texelSize * 0.5, vec2f(1.0) - texelSize * 0.5);
+  var lum = getLumAtPx(safeSamplingUV, contrast, inverted);
   if (grainMixer > 0.001) {
     let grainSizeCurve = pow(grainSizeParam, 0.72);
     let grainDomainScale = mix(2600.0, 55.0, grainSizeCurve);
-    let grainDomain = samplingUV * grainDomainScale + inCellOffset * 37.0 + vec2f(21.0, -14.0);
+    let grainDomain = safeSamplingUV * grainDomainScale + inCellOffset * 37.0 + vec2f(21.0, -14.0);
     let grainPrimary = halftoneOverlayNoise(grainDomain * mix(1.15, 0.2, grainSizeCurve));
     let grainSecondary = halftoneNoise(
       grainDomain * mix(2.1, 0.38, grainSizeCurve) +
@@ -484,9 +478,12 @@ fn getLumBall(
     let lumCut = smoothstep(0.45, 0.85 - 0.2 * grainMixer, grainPrimary) * grainMixer * (0.1 + 0.8 * edgeWeight);
     lum = clamp(lum + lumJitter - lumCut, 0.0, 1.0);
   }
-  var ballColor = textureSampleLevel(inputTex, texSampler, samplingUV, 0.0);
-  ballColor = ballColor * outOfFrame;
-  ballColor = vec4f(ballColor.rgb * ballColor.a, ballColor.a);
+  let sampledColor = textureSampleLevel(inputTex, texSampler, safeSamplingUV, 0.0);
+  let sourceCoverage = sampledColor.a;
+  if (sourceCoverage <= 1e-4) {
+    return HalftoneSample(0.0, vec4f(0.0));
+  }
+  var ballColor = vec4f(sampledColor.rgb * sourceCoverage, sourceCoverage);
   var ball = 0.0;
   if (styleType == 0) {
     ball = getCircle(uv_f, lum, baseR);
@@ -497,7 +494,7 @@ fn getLumBall(
   } else {
     ball = getSoftBall(uv_f, lum, baseR);
   }
-  return HalftoneSample(ball * outOfFrame, ballColor);
+  return HalftoneSample(ball * sourceCoverage, ballColor);
 }
 
 fn halftoneNoise(p: vec2f) -> f32 {
@@ -541,6 +538,12 @@ fn getStepCount(styleType: i32) -> i32 {
 
 @fragment
 fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
+  let sourceSample = textureSampleLevel(inputTex, texSampler, input.uv, 0.0);
+  let sourceAlpha = sourceSample.a;
+  if (sourceAlpha <= 1e-4) {
+    return vec4f(0.0);
+  }
+
   let dims = vec2f(textureDimensions(inputTex));
   let aspect = max(dims.x / max(dims.y, 1.0), 0.0001);
   let size = clamp(params.primary.x, 0.0, 1.0);
@@ -564,6 +567,12 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
   if (styleType == 1 && gridType == 1) {
     pad *= 0.7;
   }
+  // Snap the grid to whole cells so tiny-dot settings do not leave a
+  // fractional border column that reads as a bright edge.
+  let cols = max(1.0, round(1.0 / max(pad.x, 1e-4)));
+  let rows = max(1.0, round(1.0 / max(pad.y, 1e-4)));
+  pad = vec2f(1.0 / cols, 1.0 / rows);
+  let texelSize = 1.0 / max(dims, vec2f(1.0));
 
   var uv = input.uv - 0.5;
   uv /= pad;
@@ -611,6 +620,7 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
       let sample = getLumBall(
         uv,
         pad,
+        texelSize,
         offset,
         contrast,
         baseRadius,
@@ -682,9 +692,10 @@ fn halftoneFragment(input: VertexOutput) -> @location(0) vec4f {
   grainOverlayStrength = pow(grainOverlayStrength, 0.8);
   color = mix(color, grainOverlayColor, 0.5 * grainOverlayStrength);
   opacity += 0.5 * grainOverlayStrength;
-  opacity = clamp(opacity, 0.0, 1.0);
 
-  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), opacity);
+  opacity = clamp(opacity, 0.0, 1.0) * sourceAlpha;
+
+  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)) * sourceAlpha, opacity);
 }`,
   params: {
     colorFront: { type: 'color', label: 'Front Color', default: '#2b2b2b' },

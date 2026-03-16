@@ -314,17 +314,36 @@ export class VideoFrameExtractor {
     }
 
     try {
-      if (typeof sample.draw === 'function') {
-        sample.draw(ctx, x, y, width, height);
-        return true;
-      }
-
+      // Prefer the VideoFrame path so we can respect visibleRect cropping.
+      // Direct sample.draw() can include padded decode columns that halftone
+      // turns into bright side fringes.
       const videoFrame = this.getOrCreateCurrentVideoFrame();
       if (!videoFrame) {
         return false;
       }
 
-      ctx.drawImage(videoFrame, x, y, width, height);
+      const visibleRect = videoFrame.visibleRect;
+      if (
+        visibleRect
+        && Number.isFinite(visibleRect.width)
+        && Number.isFinite(visibleRect.height)
+        && visibleRect.width > 0
+        && visibleRect.height > 0
+      ) {
+        ctx.drawImage(
+          videoFrame,
+          visibleRect.x,
+          visibleRect.y,
+          visibleRect.width,
+          visibleRect.height,
+          x,
+          y,
+          width,
+          height,
+        );
+      } else {
+        ctx.drawImage(videoFrame, x, y, width, height);
+      }
       return true;
     } catch (error) {
       // Draw failed â€” discard the cached frame so next attempt gets a fresh one

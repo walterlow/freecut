@@ -18,6 +18,7 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
+import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
 
 // Subsystem imports
@@ -120,6 +121,7 @@ export interface ItemRenderContext {
   // Keyframes & adjustment layers
   keyframesMap: Map<string, ItemKeyframes>;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
 
   // Pre-computed sub-composition render data (built once during preload)
   subCompRenderData: Map<string, SubCompRenderData>;
@@ -325,13 +327,37 @@ function drawTier2VideoFrame(
   drawDimensions: { x: number; y: number; width: number; height: number },
 ): boolean {
   try {
-    ctx.drawImage(
-      frame,
-      drawDimensions.x,
-      drawDimensions.y,
-      drawDimensions.width,
-      drawDimensions.height,
-    );
+    const maybeVideoFrame = frame as VideoFrame & {
+      visibleRect?: { x: number; y: number; width: number; height: number };
+    };
+    const visibleRect = maybeVideoFrame.visibleRect;
+    if (
+      visibleRect
+      && Number.isFinite(visibleRect.width)
+      && Number.isFinite(visibleRect.height)
+      && visibleRect.width > 0
+      && visibleRect.height > 0
+    ) {
+      ctx.drawImage(
+        frame,
+        visibleRect.x,
+        visibleRect.y,
+        visibleRect.width,
+        visibleRect.height,
+        drawDimensions.x,
+        drawDimensions.y,
+        drawDimensions.width,
+        drawDimensions.height,
+      );
+    } else {
+      ctx.drawImage(
+        frame,
+        drawDimensions.x,
+        drawDimensions.y,
+        drawDimensions.width,
+        drawDimensions.height,
+      );
+    }
     return true;
   } catch {
     return false;
@@ -1209,7 +1235,12 @@ export async function renderTransitionToCanvas(
   ]);
 
   // Apply effects to both clips (parallel when both have effects)
-  const adjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, frame);
+  const adjEffects = getAdjustmentLayerEffects(
+    trackOrder,
+    adjustmentLayers,
+    frame,
+    rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+  );
   const leftCombinedEffects = combineEffects(leftClip.effects, adjEffects);
   const rightCombinedEffects = combineEffects(rightClip.effects, adjEffects);
 
