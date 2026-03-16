@@ -57,7 +57,6 @@ import type { CanvasSettings } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { ColorScopesView } from '@/shared/components/color-scopes-view';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -77,10 +76,6 @@ const MAX_CONTENT_HEIGHT = 500;
 interface KeyframeGraphPanelProps {
   /** Whether the panel is open */
   isOpen: boolean;
-  /** Active tab in the panel */
-  activeTab: 'keyframes' | 'scopes';
-  /** Select active tab */
-  onSelectTab: (tab: 'keyframes' | 'scopes') => void;
   /** Callback to toggle panel visibility */
   onToggle: () => void;
   /** Callback to close the panel */
@@ -230,8 +225,6 @@ function loadKeyframeEditorSplitRatio(): number {
  */
 export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   isOpen,
-  activeTab,
-  onSelectTab,
   onToggle,
   onClose,
 }: KeyframeGraphPanelProps) {
@@ -975,24 +968,14 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     transitionBlockedRanges,
   ]);
 
-  const handleSelectTab = useCallback(
-    (tab: 'keyframes' | 'scopes') => {
-      onSelectTab(tab);
-      if (!isOpen) {
-        onToggle();
-      }
-    },
-    [isOpen, onSelectTab, onToggle]
-  );
-
   useHotkeys(
     HOTKEYS.KEYFRAME_EDITOR_GRAPH,
     (event) => {
       event.preventDefault();
       setEditorMode('graph');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
-    [isOpen, activeTab]
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
   );
 
   useHotkeys(
@@ -1001,8 +984,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       event.preventDefault();
       setEditorMode('dopesheet');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
-    [isOpen, activeTab]
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
   );
 
   useHotkeys(
@@ -1011,8 +994,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       event.preventDefault();
       setEditorMode('split');
     },
-    { ...HOTKEY_OPTIONS, enabled: isOpen && activeTab === 'keyframes' },
-    [isOpen, activeTab]
+    { ...HOTKEY_OPTIONS, enabled: isOpen },
+    [isOpen]
   );
 
   useHotkeys(
@@ -1023,9 +1006,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     },
     {
       ...HOTKEY_OPTIONS,
-      enabled: isOpen && activeTab === 'keyframes' && selectedEditorKeyframes.length > 0,
+      enabled: isOpen && selectedEditorKeyframes.length > 0,
     },
-    [activeTab, handleCopyKeyframes, isOpen, selectedEditorKeyframes.length]
+    [handleCopyKeyframes, isOpen, selectedEditorKeyframes.length]
   );
 
   useHotkeys(
@@ -1036,9 +1019,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     },
     {
       ...HOTKEY_OPTIONS,
-      enabled: isOpen && activeTab === 'keyframes' && selectedEditorKeyframes.length > 0,
+      enabled: isOpen && selectedEditorKeyframes.length > 0,
     },
-    [activeTab, handleCutKeyframes, isOpen, selectedEditorKeyframes.length]
+    [handleCutKeyframes, isOpen, selectedEditorKeyframes.length]
   );
 
   useHotkeys(
@@ -1049,9 +1032,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     },
     {
       ...HOTKEY_OPTIONS,
-      enabled: isOpen && activeTab === 'keyframes' && !!selectedItemForEditor && !!keyframeClipboard,
+      enabled: isOpen && !!selectedItemForEditor && !!keyframeClipboard,
     },
-    [activeTab, handlePasteKeyframes, isOpen, keyframeClipboard, selectedItemForEditor]
+    [handlePasteKeyframes, isOpen, keyframeClipboard, selectedItemForEditor]
   );
 
   // Handle scrubbing in graph editor - convert clip-relative frame to absolute frame
@@ -1118,8 +1101,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     : GRAPH_PANEL_HEADER_HEIGHT;
 
   const editorWidth = Math.max(0, containerWidth - 16);
-  const showBezierControls = activeTab === 'keyframes' && selectedEditorEasing === 'cubic-bezier';
-  const showSpringControls = activeTab === 'keyframes' && selectedEditorEasing === 'spring';
+  const showBezierControls = selectedEditorEasing === 'cubic-bezier';
+  const showSpringControls = selectedEditorEasing === 'spring';
   const showAdvancedControls = showBezierControls || showSpringControls;
   const editorHeight = Math.max(
     0,
@@ -1179,7 +1162,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   }, [isSplitResizing, editorWidth]);
 
   // Don't show panel if no item with keyframes is selected and panel is not explicitly open
-  const hasContent = activeTab === 'scopes' || !!selectedItemForEditor;
+  const hasContent = !!selectedItemForEditor;
 
   if (!hasContent && !isOpen) {
     return null;
@@ -1218,8 +1201,8 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </Button>
           <span className="text-xs font-medium text-muted-foreground">
-            {activeTab === 'keyframes' ? 'Keyframe Editor' : 'Color Scopes'}
-            {activeTab === 'keyframes' && selectedItemForEditor && (
+            Keyframe Editor
+            {selectedItemForEditor && (
               <span className="ml-2 text-foreground">
                 - {selectedItemForEditor.label || selectedItemForEditor.type}
                 <span className="ml-1 text-muted-foreground">
@@ -1232,134 +1215,107 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
         <div className="flex items-center gap-1">
           <Button
-            variant={activeTab === 'keyframes' ? 'secondary' : 'ghost'}
+            variant={editorMode === 'graph' ? 'secondary' : 'ghost'}
             size="sm"
             className="h-5 px-1.5 text-[10px]"
             onClick={(e) => {
               e.stopPropagation();
-              handleSelectTab('keyframes');
+              setEditorMode('graph');
             }}
           >
-            Keyframes
+            Graph
           </Button>
           <Button
-            variant={activeTab === 'scopes' ? 'secondary' : 'ghost'}
+            variant={editorMode === 'dopesheet' ? 'secondary' : 'ghost'}
             size="sm"
             className="h-5 px-1.5 text-[10px]"
             onClick={(e) => {
               e.stopPropagation();
-              handleSelectTab('scopes');
+              setEditorMode('dopesheet');
             }}
           >
-            Scopes
+            Sheet
           </Button>
-
-          {activeTab === 'keyframes' && (
-            <>
-              <Button
-                variant={editorMode === 'graph' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-5 px-1.5 text-[10px]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditorMode('graph');
-                }}
-              >
-                Graph
-              </Button>
-              <Button
-                variant={editorMode === 'dopesheet' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-5 px-1.5 text-[10px]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditorMode('dopesheet');
-                }}
-              >
-                Sheet
-              </Button>
-              <Button
-                variant={editorMode === 'split' ? 'secondary' : 'ghost'}
-                size="sm"
-                className="h-5 px-1.5 text-[10px]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditorMode('split');
-                }}
-              >
-                Split
-              </Button>
-              <div className="w-px h-4 bg-border/70 mx-1" />
-              <Select
-                value={selectedEditorEasing}
-                onValueChange={handleSelectedKeyframeEasingChange}
-                disabled={selectedEditorKeyframes.length === 0}
-              >
-                <SelectTrigger
-                  className="h-5 w-[110px] px-1.5 text-[10px] focus:ring-0 focus:ring-offset-0"
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  aria-label="Selected keyframe interpolation"
-                >
-                  <SelectValue
-                    placeholder={
-                      selectedEditorKeyframes.length === 0 ? 'Interpolation' : 'Mixed easing'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {EASING_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="text-xs">
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 p-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopyKeyframes();
-                }}
-                disabled={selectedEditorKeyframes.length === 0}
-                title="Copy selected keyframes"
-              >
-                <Copy className="w-3 h-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 p-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCutKeyframes();
-                }}
-                disabled={selectedEditorKeyframes.length === 0}
-                title="Cut selected keyframes"
-              >
-                <Scissors className="w-3 h-3" />
-              </Button>
-              <Button
-                variant={isKeyframeClipboardCut ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-5 w-5 p-0"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePasteKeyframes();
-                }}
-                disabled={!selectedItemForEditor || !keyframeClipboard}
-                title={isKeyframeClipboardCut ? 'Move keyframes from clipboard' : 'Paste keyframes'}
-              >
-                <ClipboardPaste className="w-3 h-3" />
-              </Button>
-              {isKeyframeClipboardCut && keyframeClipboard && (
-                <span className="text-[10px] font-medium text-amber-500">
-                  Cut
-                </span>
-              )}
-            </>
+          <Button
+            variant={editorMode === 'split' ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-5 px-1.5 text-[10px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditorMode('split');
+            }}
+          >
+            Split
+          </Button>
+          <div className="w-px h-4 bg-border/70 mx-1" />
+          <Select
+            value={selectedEditorEasing}
+            onValueChange={handleSelectedKeyframeEasingChange}
+            disabled={selectedEditorKeyframes.length === 0}
+          >
+            <SelectTrigger
+              className="h-5 w-[110px] px-1.5 text-[10px] focus:ring-0 focus:ring-offset-0"
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              aria-label="Selected keyframe interpolation"
+            >
+              <SelectValue
+                placeholder={
+                  selectedEditorKeyframes.length === 0 ? 'Interpolation' : 'Mixed easing'
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {EASING_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="text-xs">
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCopyKeyframes();
+            }}
+            disabled={selectedEditorKeyframes.length === 0}
+            title="Copy selected keyframes"
+          >
+            <Copy className="w-3 h-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCutKeyframes();
+            }}
+            disabled={selectedEditorKeyframes.length === 0}
+            title="Cut selected keyframes"
+          >
+            <Scissors className="w-3 h-3" />
+          </Button>
+          <Button
+            variant={isKeyframeClipboardCut ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-5 w-5 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePasteKeyframes();
+            }}
+            disabled={!selectedItemForEditor || !keyframeClipboard}
+            title={isKeyframeClipboardCut ? 'Move keyframes from clipboard' : 'Paste keyframes'}
+          >
+            <ClipboardPaste className="w-3 h-3" />
+          </Button>
+          {isKeyframeClipboardCut && keyframeClipboard && (
+            <span className="text-[10px] font-medium text-amber-500">
+              Cut
+            </span>
           )}
           <Button
             variant="ghost"
@@ -1474,9 +1430,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               )}
             </div>
           )}
-          {activeTab === 'scopes' ? (
-            <ColorScopesView open embedded />
-          ) : selectedItemForEditor && containerWidth > 0 ? (
+          {selectedItemForEditor && containerWidth > 0 ? (
             editorMode === 'split' ? (
               <div className="flex h-full min-w-0">
                 <div className="h-full flex-shrink-0 min-w-0" style={{ width: splitLeftWidth }}>

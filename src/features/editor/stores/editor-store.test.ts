@@ -21,6 +21,7 @@ describe('editor-store', () => {
       rightSidebarWidth: editorLayout.sidebarDefaultWidth,
       timelineHeight: 250,
       sourcePreviewMediaId: null,
+      colorScopesOpen: false,
     });
   });
 
@@ -31,6 +32,7 @@ describe('editor-store', () => {
     expect(state.rightSidebarOpen).toBe(true);
     expect(state.activeTab).toBe('media');
     expect(state.sourcePreviewMediaId).toBe(null);
+    expect(state.colorScopesOpen).toBe(false);
   });
 
   it('sets active panel', () => {
@@ -88,6 +90,16 @@ describe('editor-store', () => {
 
     useEditorStore.getState().setSourcePreviewMediaId(null);
     expect(useEditorStore.getState().sourcePreviewMediaId).toBe(null);
+  });
+
+  it('toggles the color scopes monitor', () => {
+    expect(useEditorStore.getState().colorScopesOpen).toBe(false);
+
+    useEditorStore.getState().toggleColorScopesOpen();
+    expect(useEditorStore.getState().colorScopesOpen).toBe(true);
+
+    useEditorStore.getState().setColorScopesOpen(false);
+    expect(useEditorStore.getState().colorScopesOpen).toBe(false);
   });
 
   it('directly sets left/right sidebar open state', () => {

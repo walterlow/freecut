@@ -44,6 +44,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
+  colorScopesOpen: false,
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -74,4 +75,6 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
+  setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
+  toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
 }));

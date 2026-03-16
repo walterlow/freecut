@@ -373,11 +373,13 @@ function useGpuCanvasResize(
 interface ColorScopesViewProps {
   open: boolean;
   embedded?: boolean;
+  embeddedLayout?: 'grid' | 'stack';
 }
 
 export const ColorScopesView = memo(function ColorScopesView({
   open,
   embedded = false,
+  embeddedLayout = 'grid',
 }: ColorScopesViewProps) {
   const [colorMatrix, setColorMatrix] = useState<ScopeColorMatrix>(() => loadColorMatrix());
   const [rangeMode, setRangeMode] = useState<ScopeRangeMode>(() => loadRangeMode());
@@ -718,6 +720,59 @@ export const ColorScopesView = memo(function ColorScopesView({
         </div>
       </div>
       {embedded ? (
+        embeddedLayout === 'stack' ? (
+          <div className="h-[calc(100%-22px)] min-h-0 flex flex-col gap-3">
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mb-1 flex items-center justify-between">
+                <div className="text-[10px] text-muted-foreground">Waveform</div>
+                {gpuReady && (
+                  <ScopeModeBar mode={waveformMode} onChange={setWaveformMode} />
+                )}
+              </div>
+              <div
+                ref={waveformContainerRef}
+                className="flex-1 min-h-[96px] rounded border border-border/70 bg-black/80"
+              >
+                <canvas ref={waveformCanvasRef} className="w-full h-full" />
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="text-[10px] mb-1 text-muted-foreground">RGB Parade</div>
+              <div
+                ref={paradeContainerRef}
+                className="flex-1 min-h-[96px] rounded border border-border/70 bg-black/80"
+              >
+                <canvas ref={paradeCanvasRef} className="w-full h-full" />
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mb-1 flex items-center justify-between">
+                <div className="text-[10px] text-muted-foreground">Histogram</div>
+                {gpuReady && (
+                  <ScopeModeBar mode={histogramMode} onChange={setHistogramMode} />
+                )}
+              </div>
+              <div
+                ref={histogramContainerRef}
+                className="flex-1 min-h-[96px] rounded border border-border/70 bg-black/80"
+              >
+                <canvas ref={histogramCanvasRef} className="w-full h-full" />
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-[1.1] flex-col">
+              <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
+              <div
+                ref={vectorscopeContainerRef}
+                className="flex flex-1 min-h-[120px] items-center justify-center rounded border border-border/70 bg-black/80"
+              >
+                <canvas ref={vectorscopeCanvasRef} className="max-w-full max-h-full aspect-square" />
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="h-[calc(100%-22px)] min-h-0 flex gap-3">
           <div className="min-w-0 flex-1 grid grid-cols-2 gap-3 auto-rows-fr">
             <div className="flex min-h-0 flex-col">
@@ -759,6 +814,7 @@ export const ColorScopesView = memo(function ColorScopesView({
             </div>
           </div>
         </div>
+        )
       ) : (
         <div className="grid grid-cols-2 gap-2">
           <div>

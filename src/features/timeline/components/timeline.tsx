@@ -8,6 +8,7 @@ import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { TrackRowFrame } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/shared/state/selection';
+import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
@@ -33,8 +34,6 @@ interface TimelineProps {
   /** Callback when graph panel open state changes - used by parent to resize panel */
   onGraphPanelOpenChange?: (isOpen: boolean) => void;
 }
-
-type TimelineEditorTab = 'keyframes' | 'scopes';
 
 /**
  * Complete Timeline Component
@@ -112,7 +111,8 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   // Bottom editor panel state (Keyframes / Scopes)
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
-  const [activeEditorTab, setActiveEditorTab] = useState<TimelineEditorTab>('keyframes');
+  const colorScopesOpen = useEditorStore((s) => s.colorScopesOpen);
+  const toggleColorScopesOpen = useEditorStore((s) => s.toggleColorScopesOpen);
 
   const setEditorPanelOpen = useCallback(
     (nextOpen: boolean) => {
@@ -126,16 +126,8 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   );
 
   const handleToggleKeyframeTab = useCallback(() => {
-    const shouldClose = isEditorPanelOpen && activeEditorTab === 'keyframes';
-    setActiveEditorTab('keyframes');
-    setEditorPanelOpen(!shouldClose);
-  }, [isEditorPanelOpen, activeEditorTab, setEditorPanelOpen]);
-
-  const handleToggleScopesTab = useCallback(() => {
-    const shouldClose = isEditorPanelOpen && activeEditorTab === 'scopes';
-    setActiveEditorTab('scopes');
-    setEditorPanelOpen(!shouldClose);
-  }, [isEditorPanelOpen, activeEditorTab, setEditorPanelOpen]);
+    setEditorPanelOpen(!isEditorPanelOpen);
+  }, [isEditorPanelOpen, setEditorPanelOpen]);
 
   const handleToggleEditorPanel = useCallback(() => {
     setEditorPanelOpen(!isEditorPanelOpen);
@@ -501,10 +493,10 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           onZoomIn={zoomHandlers?.handleZoomIn}
           onZoomOut={zoomHandlers?.handleZoomOut}
           onZoomToFit={zoomHandlers?.handleZoomToFit}
-          isKeyframePanelOpen={isEditorPanelOpen && activeEditorTab === 'keyframes'}
+          isKeyframePanelOpen={isEditorPanelOpen}
           onToggleKeyframePanel={handleToggleKeyframeTab}
-          isScopesPanelOpen={isEditorPanelOpen && activeEditorTab === 'scopes'}
-          onToggleScopesPanel={handleToggleScopesTab}
+          isScopesPanelOpen={colorScopesOpen}
+          onToggleScopesPanel={toggleColorScopesOpen}
         />
 
         {/* Composition Breadcrumbs - shown when inside a sub-composition */}
@@ -652,8 +644,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       {/* Keyframe Graph Panel */}
       <KeyframeGraphPanel
         isOpen={isEditorPanelOpen}
-        activeTab={activeEditorTab}
-        onSelectTab={setActiveEditorTab}
         onToggle={handleToggleEditorPanel}
         onClose={handleCloseEditorPanel}
       />

@@ -7,6 +7,7 @@ export interface EditorState {
   rightSidebarWidth: number;
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
+  colorScopesOpen: boolean;
 }
 
 export interface EditorActions {
@@ -25,4 +26,6 @@ export interface EditorActions {
   }) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
+  setColorScopesOpen: (open: boolean) => void;
+  toggleColorScopesOpen: () => void;
 }
