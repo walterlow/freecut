@@ -22,11 +22,16 @@ export function InteractionLockRegion({
 }: InteractionLockRegionProps) {
   return (
     <div
-      className={cn('relative', className)}
+      className={cn('relative min-h-0', className)}
       data-interaction-locked={locked ? 'true' : 'false'}
       style={style}
     >
-      <div className={cn(locked ? 'pointer-events-none select-none opacity-60' : undefined)}>
+      <div
+        className={cn(
+          'h-full min-h-0',
+          locked ? 'pointer-events-none select-none opacity-60' : undefined
+        )}
+      >
         {children}
       </div>
       {locked ? (

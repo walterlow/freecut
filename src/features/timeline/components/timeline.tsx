@@ -627,6 +627,13 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         />
       </div>
 
+      {/* Keyframe Graph Panel */}
+      <KeyframeGraphPanel
+        isOpen={isEditorPanelOpen}
+        onToggle={handleToggleEditorPanel}
+        onClose={handleCloseEditorPanel}
+      />
+
       <div className="flex flex-shrink-0 overflow-hidden">
         <div
           className="border-r border-border panel-bg flex-shrink-0"
@@ -640,13 +647,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           />
         </div>
       </div>
-
-      {/* Keyframe Graph Panel */}
-      <KeyframeGraphPanel
-        isOpen={isEditorPanelOpen}
-        onToggle={handleToggleEditorPanel}
-        onClose={handleCloseEditorPanel}
-      />
     </div>
 
   );
