@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OPFS Filmstrip Storage
  *
  * Simple storage for filmstrip frames. Worker handles saving,
@@ -13,6 +13,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import { getCacheMigration } from '@/infrastructure/storage/cache-version';
 import { safeWrite } from '../utils/opfs-safe-write';
+import { requestIdle } from '@/shared/browser/idle-callback';
 
 const logger = createLogger('FilmstripOPFS');
 
@@ -81,12 +82,7 @@ class FilmstripOPFSStorage {
       }
     };
 
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(revoke, { timeout: 10_000 });
-      return;
-    }
-
-    setTimeout(revoke, 0);
+    requestIdle(() => revoke(), { timeout: 10_000 });
   }
 
   private setFrameUrl(mediaId: string, index: number, url: string): void {

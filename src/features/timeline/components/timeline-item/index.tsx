@@ -1076,8 +1076,38 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
-    handleDragStart(e);
+    // Desktop mouse path only. Touch/pen uses pointer events via handlePointerDown.
+    // (useTimelineDrag expects PointerEvent.)
   }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type, edgeHoverZone]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Only handle touch/pen here to avoid double-handling on desktop (mouse also fires onMouseDown).
+    if (e.pointerType === 'mouse') return;
+
+    // Slip/Slide tool: initiate on clip body for media items
+    if ((activeTool === 'slip' || activeTool === 'slide') && !trackLocked) {
+      // Currently slip/slide is mouse-driven; don't attempt to run it on touch.
+      // (Future: upgrade slip/slide hooks to pointer events.)
+      return;
+    }
+
+    // Show blocked tooltip when trying to drag in rate-stretch mode
+    if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const isOnEdge = x <= edgeHoverZone || x >= rect.width - edgeHoverZone;
+      if (!isOnEdge) {
+        setDragBlockedTooltip({ x: e.clientX, y: e.clientY });
+        return;
+      }
+    }
+
+    // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
+    if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
+    if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
+
+    handleDragStart(e);
+  }, [activeTool, edgeHoverZone, handleDragStart, hoveredEdge, isSlipSlideActive, isStretching, isTrimming, item.type, trackLocked]);
 
   // Track which edge is closer when right-clicking for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -1124,7 +1154,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             "absolute inset-y-0 rounded overflow-hidden",
             itemColorClasses,
             cursorClass,
-            !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'
+            !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110',
+            // Prevent native pan/scroll from stealing touch drag gestures.
+            'touch-none'
           )}
           style={{
             left: `${visualLeft}px`,
@@ -1142,6 +1174,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
+          onPointerDown={handlePointerDown}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredEdge(null)}
           onContextMenu={handleContextMenu}

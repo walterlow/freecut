@@ -5,6 +5,7 @@ import { useCallback, useRef, useState, useEffect, memo } from 'react';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 
 // Components
 import { TimelineInOutMarkers } from './timeline-in-out-markers';
@@ -523,7 +524,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     );
 
     if (adjacentTiles.length > 0) {
-      const idleCallback = requestIdleCallback(
+      const idleCallback = requestIdle(
         (deadline) => {
           for (const tileIndex of adjacentTiles) {
             // Check if we still have time and cache hasn't changed
@@ -560,7 +561,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         { timeout: 500 }
       );
 
-      return () => cancelIdleCallback(idleCallback);
+      return () => cancelIdle(idleCallback);
     }
   }, [startTile, endTile, quantizedPPS, fps, displayWidth, canvasHeight, cacheKey]);
 

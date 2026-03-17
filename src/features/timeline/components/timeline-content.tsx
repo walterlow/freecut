@@ -41,6 +41,7 @@ import type { RazorSnapTarget } from '../utils/razor-snap';
 import { useMarkersStore } from '../stores/markers-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 
 
 interface TimelineContentProps {
@@ -263,13 +264,13 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     updateWidth();
 
     // Re-measure during idle in case DOM wasn't fully laid out on mount
-    const idleId = requestIdleCallback(updateWidth);
+    const idleId = requestIdle(() => updateWidth());
 
     // Measure on resize
     window.addEventListener('resize', updateWidth);
 
     return () => {
-      cancelIdleCallback(idleId);
+      cancelIdle(idleId);
       if (viewportSyncRafRef.current !== null) {
         cancelAnimationFrame(viewportSyncRafRef.current);
         viewportSyncRafRef.current = null;
