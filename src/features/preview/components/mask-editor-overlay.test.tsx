@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useItemsStore, useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { MaskEditorOverlay } from './mask-editor-overlay';
 import { useSelectionStore } from '@/shared/state/selection';
+import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 
 const PROJECT_SIZE = { width: 200, height: 120 } as const;
@@ -70,6 +71,7 @@ function resetStores() {
     isDirty: false,
     isTimelineLoading: false,
   });
+  usePlaybackStore.getState().setCurrentFrame(0);
   useSelectionStore.getState().clearSelection();
 }
 
@@ -109,6 +111,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
   it('creates a shape path, fits bounds, selects it, and exits editing when closed', async () => {
     useMaskEditorStore.getState().startShapePenMode();
+    usePlaybackStore.getState().setCurrentFrame(48);
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
@@ -151,6 +154,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     expect(shape?.type).toBe('shape');
     expect(shape?.shapeType).toBe('path');
     expect(shape?.isMask).toBe(true);
+    expect(shape?.from).toBe(48);
     expect(useSelectionStore.getState().selectedItemIds).toEqual([shape!.id]);
 
     expect(shape?.transform?.width).toBeCloseTo(100);
@@ -160,6 +164,87 @@ describe('MaskEditorOverlay shape pen flow', () => {
     expect(shape?.pathVertices?.[0]?.position).toEqual([0, 0]);
     expect(shape?.pathVertices?.[1]?.position).toEqual([1, 0]);
     expect(shape?.pathVertices?.[2]?.position).toEqual([1, 1]);
+  });
+
+  it('keeps the mask at the playhead by switching tracks before shifting time', async () => {
+    useMaskEditorStore.getState().startShapePenMode();
+    usePlaybackStore.getState().setCurrentFrame(120);
+    useSelectionStore.getState().setActiveTrack('track-1');
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-1',
+        name: 'Track 1',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-2',
+        name: 'Track 2',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'busy-mask-track',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 100,
+        durationInFrames: 120,
+        label: 'Busy',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+      },
+    ]);
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={FULL_CANVAS_TRANSFORM}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    const clickPoint = (x: number, y: number, pointerId: number) => {
+      fireEvent.pointerDown(canvas!, { clientX: x, clientY: y, pointerId });
+      fireEvent.pointerUp(canvas!, { clientX: x, clientY: y, pointerId });
+    };
+
+    clickPoint(20, 20, 1);
+    clickPoint(120, 20, 2);
+    clickPoint(120, 80, 3);
+    clickPoint(20, 20, 4);
+
+    await waitFor(() => {
+      expect(useMaskEditorStore.getState().isEditing).toBe(false);
+    });
+
+    const shape = useItemsStore.getState().items.find((item) => item.id !== 'busy-mask-track');
+    expect(shape?.trackId).toBe('track-2');
+    expect(shape?.from).toBe(120);
+    expect(useSelectionStore.getState().activeTrackId).toBe('track-2');
   });
 
   it('closes and commits the path when the closing anchor is dragged to shape the bezier', async () => {
@@ -209,6 +294,59 @@ describe('MaskEditorOverlay shape pen flow', () => {
     expect(shape?.pathVertices?.[0]?.inHandle[1]).not.toBeCloseTo(0);
     expect(shape?.pathVertices?.[0]?.outHandle[0]).not.toBeCloseTo(0);
     expect(shape?.pathVertices?.[0]?.outHandle[1]).not.toBeCloseTo(0);
+  });
+
+  it('shows the pen HUD and auto-closes the shape when finishing from the HUD', async () => {
+    useMaskEditorStore.getState().startShapePenMode();
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={FULL_CANVAS_TRANSFORM}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+    expect(screen.getByText('Drawing Mode')).toBeTruthy();
+    expect(screen.getByText('Exit pen mode before using other canvas actions.')).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    const clickPoint = (x: number, y: number, pointerId: number) => {
+      fireEvent.pointerDown(canvas!, { clientX: x, clientY: y, pointerId });
+      fireEvent.pointerUp(canvas!, { clientX: x, clientY: y, pointerId });
+    };
+
+    const finishButton = screen.getByRole('button', { name: 'Finish' });
+    expect(finishButton).toBeDisabled();
+
+    clickPoint(20, 20, 1);
+    clickPoint(120, 20, 2);
+    clickPoint(120, 80, 3);
+
+    await waitFor(() => {
+      expect(finishButton).not.toBeDisabled();
+    });
+
+    fireEvent.click(finishButton);
+
+    await waitFor(() => {
+      expect(useMaskEditorStore.getState().isEditing).toBe(false);
+    });
+
+    const shape = useItemsStore.getState().items[0];
+    expect(shape?.type).toBe('shape');
+    expect(shape?.shapeType).toBe('path');
+    expect(shape?.isMask).toBe(true);
   });
 
   it('renders the closing segment while dragging the final bezier', async () => {
@@ -308,5 +446,42 @@ describe('MaskEditorOverlay shape pen flow', () => {
     });
 
     expect(useItemsStore.getState().items).toHaveLength(1);
+  });
+
+  it('swallows unrelated shortcuts while pen mode is active', () => {
+    useMaskEditorStore.getState().startShapePenMode();
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={FULL_CANVAS_TRANSFORM}
+      />
+    );
+
+    const bubbleListener = vi.fn();
+    window.addEventListener('keydown', bubbleListener);
+
+    try {
+      const event = new KeyboardEvent('keydown', {
+        key: 'v',
+        bubbles: true,
+        cancelable: true,
+      });
+      const dispatchResult = window.dispatchEvent(event);
+
+      expect(dispatchResult).toBe(false);
+      expect(bubbleListener).not.toHaveBeenCalled();
+      expect(useMaskEditorStore.getState().penMode).toBe(true);
+    } finally {
+      window.removeEventListener('keydown', bubbleListener);
+    }
   });
 });

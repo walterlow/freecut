@@ -811,13 +811,13 @@ export const ColorScopesView = memo(function ColorScopesView({
               </div>
             </div>
 
-            <div className={cn('flex min-h-0 flex-col', showHistogram ? 'flex-[0.9]' : 'flex-[1.02]')}>
+            <div className={cn('flex min-h-0 min-w-0 flex-col', showHistogram ? 'flex-[0.9]' : 'flex-[1.02]')}>
               <div className="text-[10px] mb-1 text-muted-foreground">Vectorscope</div>
               <div
                 ref={vectorscopeContainerRef}
                 className={cn(
-                  'mx-auto flex w-full items-center justify-center rounded border border-border/70 bg-black/80',
-                  showHistogram ? 'min-h-[152px] max-w-[272px] flex-1' : 'min-h-[176px] max-w-[320px] flex-1',
+                  'mx-auto flex min-h-0 min-w-0 w-full flex-1 items-center justify-center overflow-hidden rounded border border-border/70 bg-black/80',
+                  showHistogram ? 'max-w-[272px]' : 'max-w-[320px]',
                 )}
               >
                 <canvas ref={vectorscopeCanvasRef} className="max-w-full max-h-full aspect-square" />

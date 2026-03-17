@@ -12,7 +12,8 @@
  * coordinate transform system as the transform gizmo.
  */
 
-import { useCallback, useRef, useEffect, memo } from 'react';
+import { useCallback, useEffect, memo, useRef } from 'react';
+import { Button } from '@/components/ui/button';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { useItemsStore, useTimelineStore } from '@/features/preview/deps/timeline-store';
 import {
@@ -26,9 +27,11 @@ import {
 } from '../utils/mask-path-utils';
 import { getPathBounds, fitShapePathToBounds } from '../utils/path-fit';
 import { useSelectionStore } from '@/shared/state/selection';
+import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 import type { MaskVertex } from '@/types/masks';
 import type { ShapeItem } from '@/types/timeline';
+import { findBestCanvasDropPlacement } from '../deps/drop-placement-contract';
 
 /** Radius of vertex control points in screen pixels */
 const VERTEX_RADIUS = 5;
@@ -91,6 +94,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
   // Pen mode state
   const penMode = useMaskEditorStore((s) => s.penMode);
+  const shapePenMode = useMaskEditorStore((s) => s.shapePenMode);
   const penVertices = useMaskEditorStore((s) => s.penVertices);
   const penDraggingHandle = useMaskEditorStore((s) => s.penDraggingHandle);
   const penCursorPos = useMaskEditorStore((s) => s.penCursorPos);
@@ -552,6 +556,12 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
   const penInteractionRef = useRef<PenInteraction | null>(null);
   const closePenPathRef = useRef<(() => void) | null>(null);
+  const resetPenInteraction = useCallback(() => {
+    penInteractionRef.current = null;
+    setPenDragging(false);
+    endDrag();
+    setHover(null);
+  }, [endDrag, setHover, setPenDragging]);
 
   const buildPenDragVertices = useCallback(
     (
@@ -871,22 +881,28 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     const centerY = ((bounds.minY + bounds.maxY) / 2 - 0.5) * canvasH;
 
     const { tracks, fps, addItem } = useTimelineStore.getState();
+    const items = useItemsStore.getState().items;
+    const { activeTrackId, selectItems, setActiveTrack } = useSelectionStore.getState();
+    const currentFrame = usePlaybackStore.getState().currentFrame;
+    const durationInFrames = fps * 60;
+    const placement = findBestCanvasDropPlacement({
+      tracks,
+      items,
+      activeTrackId,
+      proposedFrame: currentFrame,
+      durationInFrames,
+    });
 
-    // Find first available track
-    const targetTrack = tracks.find((t) => t.visible !== false && !t.locked && !t.isGroup);
-    if (!targetTrack) {
+    if (!placement) {
       cancelPenMode();
       return;
     }
 
-    const currentFrame = 0;
-    const durationInFrames = fps * 60;
-
     const shapeItem: ShapeItem = {
       id: crypto.randomUUID(),
       type: 'shape',
-      trackId: targetTrack.id,
-      from: currentFrame,
+      trackId: placement.trackId,
+      from: placement.from,
       durationInFrames,
       label: 'Path Mask',
       shapeType: 'path',
@@ -906,51 +922,73 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     };
 
     addItem(shapeItem);
-    useSelectionStore.getState().selectItems([shapeItem.id]);
+    setActiveTrack(shapeItem.trackId);
+    selectItems([shapeItem.id]);
     stopEditing();
   }, [coordParams, cancelPenMode, stopEditing]);
 
-  /** Close pen path and commit as a new shape mask item. */
-  const closePenPath = useCallback(() => {
+  /** Finish pen mode by auto-closing a valid path or canceling incomplete work. */
+  const finishPenMode = useCallback(() => {
     const state = useMaskEditorStore.getState();
     const verts = state.penVertices;
+
+    resetPenInteraction();
 
     if (!state.shapePenMode || verts.length < 3) {
       cancelPenMode();
       return;
     }
     commitShapePenPath(verts);
-  }, [cancelPenMode, commitShapePenPath]);
-  closePenPathRef.current = closePenPath;
+  }, [cancelPenMode, commitShapePenPath, resetPenInteraction]);
+  closePenPathRef.current = finishPenMode;
+
+  const cancelCurrentPenMode = useCallback(() => {
+    resetPenInteraction();
+    cancelPenMode();
+  }, [cancelPenMode, resetPenInteraction]);
+
+  const popLastPenVertex = useCallback(() => {
+    const state = useMaskEditorStore.getState();
+    if (state.penVertices.length === 0) return;
+
+    const nextVertices = state.penVertices.slice(0, -1);
+    penInteractionRef.current = null;
+    setPenDragging(false);
+    endDrag();
+    setPenVertices(nextVertices);
+    setHover(nextVertices.length > 0 ? nextVertices.length - 1 : null);
+  }, [endDrag, setHover, setPenDragging, setPenVertices]);
 
   // Keyboard shortcuts for the in-progress pen path.
   useEffect(() => {
     if (!penMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        cancelPenMode();
+      const isModifierOnly =
+        e.key === 'Shift' || e.key === 'Alt' || e.key === 'Control' || e.key === 'Meta';
+      if (isModifierOnly) {
         return;
       }
 
-      if (e.key === 'Backspace') {
-        const state = useMaskEditorStore.getState();
-        if (state.penVertices.length === 0) return;
+      e.stopPropagation();
+      e.stopImmediatePropagation();
 
+      if (e.key === 'Escape') {
         e.preventDefault();
-        e.stopPropagation();
-
-        const nextVertices = state.penVertices.slice(0, -1);
-        penInteractionRef.current = null;
-        setPenDragging(false);
-        endDrag();
-        setPenVertices(nextVertices);
-        setHover(nextVertices.length > 0 ? nextVertices.length - 1 : null);
+        cancelCurrentPenMode();
+        return;
       }
+
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        popLastPenVertex();
+        return;
+      }
+
+      e.preventDefault();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [penMode, cancelPenMode, endDrag, setHover, setPenDragging, setPenVertices]);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [penMode, cancelCurrentPenMode, popLastPenVertex]);
 
   // ============================================================
   // Edit mode: mouse handlers
@@ -1185,23 +1223,72 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   if (!isEditing) return null;
 
   const cursor = hoveredVertexIndex !== null ? 'move' : 'crosshair';
+  const canFinishPenPath = shapePenMode && penVertices.length >= 3;
+  const remainingPoints = Math.max(0, 3 - penVertices.length);
+  const penModeHint = canFinishPenPath
+    ? 'Close the path from here, or click the first node.'
+    : penVertices.length === 0
+      ? 'Click to place your first point.'
+      : `Add ${remainingPoints} more ${remainingPoints === 1 ? 'point' : 'points'} to finish.`;
 
   return (
-    <canvas
-      ref={canvasRef}
+    <div
       className="absolute z-20"
       style={{
         top: 0,
         left: 0,
         width: playerSize.width,
         height: playerSize.height,
-        pointerEvents: 'auto',
-        cursor,
+        pointerEvents: 'none',
       }}
-      onPointerDown={penMode ? handlePenPointerDown : handleEditPointerDown}
-      onPointerMove={penMode ? handlePenPointerMove : handleEditPointerMove}
-      onPointerUp={penMode ? handlePenPointerUp : handleEditPointerUp}
-      onContextMenu={penMode ? handlePenContextMenu : handleEditContextMenu}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0"
+        style={{
+          width: playerSize.width,
+          height: playerSize.height,
+          pointerEvents: 'auto',
+          cursor,
+        }}
+        onPointerDown={penMode ? handlePenPointerDown : handleEditPointerDown}
+        onPointerMove={penMode ? handlePenPointerMove : handleEditPointerMove}
+        onPointerUp={penMode ? handlePenPointerUp : handleEditPointerUp}
+        onContextMenu={penMode ? handlePenContextMenu : handleEditContextMenu}
+      />
+      {penMode ? (
+        <div className="pointer-events-auto absolute left-3 top-3 max-w-[280px] rounded-lg border border-border/70 bg-background/90 px-3 py-2 shadow-lg backdrop-blur-sm">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-500">
+            Drawing Mode
+          </div>
+          <div className="mt-1 text-xs font-medium text-foreground">
+            Exit pen mode before using other canvas actions.
+          </div>
+          <div className="mt-1 text-[11px] leading-tight text-muted-foreground">
+            {penModeHint}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 px-2.5 text-[11px]"
+              disabled={!canFinishPenPath}
+              onClick={finishPenMode}
+            >
+              Finish
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2.5 text-[11px]"
+              onClick={cancelCurrentPenMode}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 });

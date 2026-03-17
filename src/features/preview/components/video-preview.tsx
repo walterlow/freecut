@@ -31,6 +31,7 @@ import { SlipEditOverlay } from './slip-edit-overlay';
 import { SlideEditOverlay } from './slide-edit-overlay';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { useCornerPinStore } from '../stores/corner-pin-store';
+import { useMaskEditorStore } from '../stores/mask-editor-store';
 import type { CompositionInputProps } from '@/types/export';
 import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
@@ -718,6 +719,7 @@ export const VideoPreview = memo(function VideoPreview({
   const hasSlide4Up = useSlideEditPreviewStore((s) => Boolean(s.itemId));
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
+  const isPenModeActive = useMaskEditorStore((s) => s.penMode);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
   const zoom = usePlaybackStore((s) => s.zoom);
@@ -3398,13 +3400,17 @@ export const VideoPreview = memo(function VideoPreview({
   // Handle click on background area to deselect items
   const backgroundRef = useRef<HTMLDivElement>(null);
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    if (isPenModeActive) {
+      e.stopPropagation();
+      return;
+    }
     if (isMarqueeJustFinished()) return;
 
     const target = e.target as HTMLElement;
     if (target.closest('[data-gizmo]')) return;
 
     useSelectionStore.getState().clearItemSelection();
-  }, []);
+  }, [isPenModeActive]);
 
   // Handle frame change from player
   // Skip when in preview mode to keep primary playhead stationary

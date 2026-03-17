@@ -11,8 +11,10 @@ import {
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useSettingsStore } from '@/features/editor/deps/settings';
+import { useMaskEditorStore } from '@/features/editor/deps/preview';
 import { useEditorStore } from '@/shared/state/editor';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { InteractionLockRegion } from './interaction-lock-region';
 
 interface PreviewAreaProps {
   project: {
@@ -92,6 +94,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
+  const isPenModeActive = useMaskEditorStore((s) => s.penMode);
 
   // Read current project from store for live updates (e.g., dimension swaps)
   // Use granular selectors to avoid re-renders when unrelated properties change
@@ -394,20 +397,29 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
     <div ref={splitContainerRef} className="flex-1 flex min-h-0 min-w-0 relative">
       {sourcePreviewMediaId && (
         <>
-          <div className="flex flex-col min-w-0" style={{ width: `${displayedSourceSplitPercent}%` }}>
-            <SourceMonitor
-              key={sourcePreviewMediaId}
-              mediaId={sourcePreviewMediaId}
-              onClose={handleCloseSourceMonitor}
+          <InteractionLockRegion
+            locked={isPenModeActive}
+            className="h-full"
+            overlayClassName="rounded-none"
+            style={{ width: `${displayedSourceSplitPercent}%` }}
+          >
+            <div className="flex h-full flex-col min-w-0">
+              <SourceMonitor
+                key={sourcePreviewMediaId}
+                mediaId={sourcePreviewMediaId}
+                onClose={handleCloseSourceMonitor}
+              />
+            </div>
+          </InteractionLockRegion>
+          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+            <PreviewSplitHandle
+              onMouseDown={handleSourceSplitDragStart}
+              onReset={handleResetSourceSplit}
+              showReset={Math.abs(displayedSourceSplitPercent - sourceResetPercent) > 0.5}
+              resetLabel="Reset source monitor width"
+              resetTooltip="Reset Source Monitor Width"
             />
-          </div>
-          <PreviewSplitHandle
-            onMouseDown={handleSourceSplitDragStart}
-            onReset={handleResetSourceSplit}
-            showReset={Math.abs(displayedSourceSplitPercent - sourceResetPercent) > 0.5}
-            resetLabel="Reset source monitor width"
-            resetTooltip="Reset Source Monitor Width"
-          />
+          </InteractionLockRegion>
         </>
       )}
 
@@ -433,35 +445,46 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             />
           </div>
 
-          <div
-            className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
-            style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
-          >
-            <div className="flex-shrink-0">
-              <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
+          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+            <div
+              className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
+              style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+            >
+              <div className="flex-shrink-0">
+                <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
+              </div>
+              <div className="flex-1 min-w-0" />
+              <PlaybackControls totalFrames={totalFrames} fps={fps} />
+              <div className="flex-1 min-w-0" />
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <PreviewZoomControls />
+              </div>
             </div>
-            <div className="flex-1 min-w-0" />
-            <PlaybackControls totalFrames={totalFrames} fps={fps} />
-            <div className="flex-1 min-w-0" />
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <PreviewZoomControls />
-            </div>
-          </div>
+          </InteractionLockRegion>
         </div>
       </div>
 
       {colorScopesOpen && (
         <>
-          <PreviewSplitHandle
-            onMouseDown={handleScopesSplitDragStart}
-            onReset={handleResetScopesSplit}
-            showReset={Math.abs(displayedScopesSplitPercent - scopesResetPercent) > 0.5}
-            resetLabel="Reset color scopes width"
-            resetTooltip="Reset Color Scopes Width"
-          />
-          <div className="flex flex-col min-w-0" style={{ width: `${displayedScopesSplitPercent}%` }}>
-            <ColorScopesMonitor onClose={handleCloseColorScopes} />
-          </div>
+          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+            <PreviewSplitHandle
+              onMouseDown={handleScopesSplitDragStart}
+              onReset={handleResetScopesSplit}
+              showReset={Math.abs(displayedScopesSplitPercent - scopesResetPercent) > 0.5}
+              resetLabel="Reset color scopes width"
+              resetTooltip="Reset Color Scopes Width"
+            />
+          </InteractionLockRegion>
+          <InteractionLockRegion
+            locked={isPenModeActive}
+            className="h-full"
+            overlayClassName="rounded-none"
+            style={{ width: `${displayedScopesSplitPercent}%` }}
+          >
+            <div className="flex h-full flex-col min-w-0">
+              <ColorScopesMonitor onClose={handleCloseColorScopes} />
+            </div>
+          </InteractionLockRegion>
         </>
       )}
     </div>
