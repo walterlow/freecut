@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
 import { createLogger } from '@/shared/logging/logger';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -91,22 +92,22 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   // time so it doesn't compete with the initial editor render
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
-    const id = requestIdleCallback(() => {
+    const id = requestIdle(() => {
       unsubscribe = initTransitionChainSubscription();
     });
     return () => {
-      cancelIdleCallback(id);
+      cancelIdle(id);
       unsubscribe?.();
     };
   }, []);
 
   // Preload export dialogs during idle time so they open instantly
   useEffect(() => {
-    const id = requestIdleCallback(() => {
+    const id = requestIdle(() => {
       preloadExportDialog();
       preloadBundleExportDialog();
     });
-    return () => cancelIdleCallback(id);
+    return () => cancelIdle(id);
   }, []);
 
   // Mobile: default both sidebars closed so the video is visible on first load

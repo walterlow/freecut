@@ -2,6 +2,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, mem
 import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 import {
   useTimelineStore,
   useItemsStore,
@@ -2126,24 +2127,11 @@ export const VideoPreview = memo(function VideoPreview({
       void ensureFastScrubRenderer();
     };
 
-    let idleId: number | null = null;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as Window & { requestIdleCallback: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number })
-        .requestIdleCallback(() => warmup(), { timeout: 400 });
-    } else {
-      timeoutId = setTimeout(warmup, 120);
-    }
+    const idleId = requestIdle(() => warmup(), { timeout: 400 });
 
     return () => {
       cancelled = true;
-      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
-      }
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
+      cancelIdle(idleId);
     };
   }, [ensureFastScrubRenderer, isResolving]);
 

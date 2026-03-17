@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Client-side render hook
  *
  * Provides a React hook for video rendering using mediabunny.
@@ -23,6 +23,7 @@ import { useTimelineStore } from '@/features/export/deps/timeline';
 import { useProjectStore } from '@/features/export/deps/projects';
 import { resolveMediaUrls } from '@/features/export/deps/media-library';
 import { createLogger } from '@/shared/logging/logger';
+import { requestIdle } from '@/shared/browser/idle-callback';
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,
@@ -498,7 +499,7 @@ export function useClientRender(): UseClientRenderReturn {
     document.body.removeChild(a);
 
     // Revoke during idle â€” download has already started by then
-    requestIdleCallback(() => URL.revokeObjectURL(url));
+    requestIdle(() => URL.revokeObjectURL(url));
   }, [result]);
 
   /**
