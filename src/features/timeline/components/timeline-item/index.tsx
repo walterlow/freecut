@@ -172,6 +172,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const { isSlipSlideActive, handleSlipSlideStart } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
   const wasDraggingRef = useRef(false);
+  const touchLongPressTimeoutRef = useRef<number | null>(null);
+  const touchPointerIdRef = useRef<number | null>(null);
 
   // Track drag participation via ref subscription - NO RE-RENDERS on drag state changes
   const isAnyDragActiveRef = useRef(false);
@@ -1076,8 +1078,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
-    // Desktop mouse path only. Touch/pen uses pointer events via handlePointerDown.
-    // (useTimelineDrag expects PointerEvent.)
+    // Desktop mouse drag path (pointer events hook accepts PointerEvent-compatible data)
+    handleDragStart(e as unknown as React.PointerEvent);
   }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type, edgeHoverZone]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -1085,11 +1087,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (e.pointerType === 'mouse') return;
 
     // Slip/Slide tool: initiate on clip body for media items
-    if ((activeTool === 'slip' || activeTool === 'slide') && !trackLocked) {
-      // Currently slip/slide is mouse-driven; don't attempt to run it on touch.
-      // (Future: upgrade slip/slide hooks to pointer events.)
-      return;
-    }
+    if ((activeTool === 'slip' || activeTool === 'slide') && !trackLocked) return;
 
     // Show blocked tooltip when trying to drag in rate-stretch mode
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
@@ -1106,8 +1104,29 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
 
-    handleDragStart(e);
+    // Long-press to start drag on touch: delay actual drag start to avoid stealing simple taps.
+    if (touchLongPressTimeoutRef.current !== null) {
+      clearTimeout(touchLongPressTimeoutRef.current);
+      touchLongPressTimeoutRef.current = null;
+    }
+    touchPointerIdRef.current = e.pointerId;
+    // Keep the event alive for the timeout callback (in case of older React pooling)
+    (e as any).persist?.();
+    touchLongPressTimeoutRef.current = window.setTimeout(() => {
+      // If pointer was released before timeout, do nothing
+      if (touchPointerIdRef.current == null) return;
+      handleDragStart(e);
+    }, 250);
   }, [activeTool, edgeHoverZone, handleDragStart, hoveredEdge, isSlipSlideActive, isStretching, isTrimming, item.type, trackLocked]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    if (touchLongPressTimeoutRef.current !== null) {
+      clearTimeout(touchLongPressTimeoutRef.current);
+      touchLongPressTimeoutRef.current = null;
+    }
+    touchPointerIdRef.current = null;
+  }, []);
 
   // Track which edge is closer when right-clicking for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -1175,6 +1194,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
           onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredEdge(null)}
           onContextMenu={handleContextMenu}
