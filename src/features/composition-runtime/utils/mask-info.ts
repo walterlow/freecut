@@ -1,11 +1,13 @@
 import type { MaskInfo } from '../components/item';
 import type { ResolvedShapeMask } from './frame-scene';
+import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 export const EMPTY_MASK_INFOS: MaskInfo[] = [];
 
-function toMaskInfo({ shape, transform }: ResolvedShapeMask): MaskInfo {
+function toMaskInfo({ shape, transform, trackOrder }: ResolvedShapeMask): MaskInfo {
   return {
     shape,
+    trackOrder,
     transform: {
       x: transform.x,
       y: transform.y,
@@ -45,6 +47,7 @@ export function reuseStableMaskInfos(previous: MaskInfo[], next: MaskInfo[]): Ma
     if (
       previousMask
       && previousMask.shape.id === mask.shape.id
+      && previousMask.trackOrder === mask.trackOrder
       && sameMaskTransform(previousMask.transform, mask.transform)
     ) {
       return previousMask;
@@ -54,4 +57,12 @@ export function reuseStableMaskInfos(previous: MaskInfo[], next: MaskInfo[]): Ma
   });
 
   return changed ? merged : previous;
+}
+
+export function getMasksForTrackOrder(masks: MaskInfo[], itemTrackOrder: number): MaskInfo[] {
+  if (masks.length === 0) return EMPTY_MASK_INFOS;
+
+  const applicableMasks = masks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, itemTrackOrder));
+  if (applicableMasks.length === 0) return EMPTY_MASK_INFOS;
+  return applicableMasks.length === masks.length ? masks : applicableMasks;
 }

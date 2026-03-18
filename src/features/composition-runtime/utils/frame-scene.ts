@@ -2,6 +2,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import type { ShapeItem, TimelineItem } from '@/types/timeline';
 import type { CanvasSettings, ResolvedTransform } from '@/types/transform';
 import type { CompositionRenderPlan } from './scene-assembly';
+import type { ShapeMaskWithTrackOrder } from './scene-assembly';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -21,6 +22,7 @@ export type TransformOverride = Partial<ResolvedTransform> | undefined;
 export interface ResolvedShapeMask {
   shape: ShapeItem;
   transform: ResolvedTransform;
+  trackOrder: number;
 }
 
 export interface FrameCompositionScene<TItem extends TimelineItem = TimelineItem> {
@@ -92,7 +94,7 @@ export function resolveItemTransformAtFrame(
 }
 
 export function resolveActiveShapeMasksAtFrame(
-  masks: ShapeItem[],
+  masks: Array<ShapeItem | ShapeMaskWithTrackOrder>,
   {
     canvas,
     frame,
@@ -108,13 +110,19 @@ export function resolveActiveShapeMasksAtFrame(
   if (masks.length === 0) return [];
 
   return masks
-    .filter((mask) => {
+    .map((maskSource) => (
+      'mask' in maskSource
+        ? maskSource
+        : { mask: maskSource, trackOrder: 0 }
+    ))
+    .filter(({ mask }) => {
       const start = mask.from;
       const end = mask.from + mask.durationInFrames;
       return frame >= start && frame < end;
     })
-    .map((mask) => ({
+    .map(({ mask, trackOrder }) => ({
       shape: mask,
+      trackOrder,
       transform: resolveItemTransformAtFrame(mask, {
         canvas,
         frame,
@@ -139,15 +147,12 @@ export function resolveFrameCompositionScene({
 }): FrameCompositionScene {
   return {
     frame,
-    activeShapeMasks: resolveActiveShapeMasksAtFrame(
-      renderPlan.visibleShapeMasks.map(({ mask }) => mask),
-      {
-        canvas,
-        frame,
-        getKeyframes,
-        getPreviewTransform,
-      },
-    ),
+    activeShapeMasks: resolveActiveShapeMasksAtFrame(renderPlan.visibleShapeMasks, {
+      canvas,
+      frame,
+      getKeyframes,
+      getPreviewTransform,
+    }),
     transitionFrameState: resolveTransitionFrameState({
       transitionWindows: renderPlan.transitionWindows,
       frame,

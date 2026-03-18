@@ -18,6 +18,7 @@ import type { MaskInfo } from './item';
 import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
 import {
   EMPTY_MASK_INFOS,
+  getMasksForTrackOrder,
   materializeMaskInfos,
   reuseStableMaskInfos,
 } from '../utils/mask-info';
@@ -167,7 +168,6 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     () => subComp ? resolveTrackRenderState(subComp.tracks) : null,
     [subComp]
   );
-  const visibleTrackIds = trackRenderState?.visibleTrackIds ?? new Set<string>();
   const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
   const previousMaskInfosRef = React.useRef<MaskInfo[]>(EMPTY_MASK_INFOS);
 
@@ -181,10 +181,17 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     }
     const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
     const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
-    const activeMasks = resolvedItems.filter((subItem): subItem is ShapeItem => (
-      subItem.type === 'shape'
-      && subItem.isMask === true
-      && visibleTrackIds.has(subItem.trackId)
+    const activeMasks = (trackRenderState?.visibleTracks ?? []).flatMap((track) => (
+      resolvedItems
+        .filter((subItem): subItem is ShapeItem => (
+          subItem.trackId === track.id
+          && subItem.type === 'shape'
+          && subItem.isMask === true
+        ))
+        .map((mask) => ({
+          mask,
+          trackOrder: track.order ?? 0,
+        }))
     ));
 
     const nextMaskInfos = materializeMaskInfos(resolveActiveShapeMasksAtFrame(
@@ -198,7 +205,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     const stableMaskInfos = reuseStableMaskInfos(previousMaskInfosRef.current, nextMaskInfos);
     previousMaskInfosRef.current = stableMaskInfos;
     return stableMaskInfos;
-  }, [resolvedItems, visibleTrackIds, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
+  }, [resolvedItems, trackRenderState?.visibleTracks, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
 
   if (!subComp) {
     return (
@@ -250,6 +257,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                   // Mask shapes are control items and should not render visually.
                   && !(i.type === 'shape' && i.isMask)
                 ));
+                const trackOrder = track.order ?? 0;
 
                 return trackItems.map((subItem) => (
                   <Sequence
@@ -257,7 +265,12 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                     from={subItem.from}
                     durationInFrames={subItem.durationInFrames}
                   >
-                    <Item item={subItem} muted={parentMuted || track.muted} masks={activeMaskInfos} renderDepth={renderDepth} />
+                    <Item
+                      item={subItem}
+                      muted={parentMuted || track.muted}
+                      masks={getMasksForTrackOrder(activeMaskInfos, trackOrder)}
+                      renderDepth={renderDepth}
+                    />
                   </Sequence>
                 ));
               })}

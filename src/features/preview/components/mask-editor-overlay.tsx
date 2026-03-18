@@ -31,7 +31,10 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 import type { MaskVertex } from '@/types/masks';
 import type { ShapeItem, TimelineTrack } from '@/types/timeline';
-import { findBestCanvasDropPlacement } from '../deps/drop-placement-contract';
+import {
+  findBestCanvasDropPlacement,
+  resolveEffectiveTrackStates,
+} from '../deps/timeline-utils';
 
 /** Radius of vertex control points in screen pixels */
 const VERTEX_RADIUS = 5;
@@ -922,8 +925,25 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       return;
     }
 
-    if (!placement.preservedTime) {
-      const referenceTrack = tracks.find((track) => track.id === placement.trackId);
+    const placementTrackId = placement.trackId;
+    const eligibleTracks = resolveEffectiveTrackStates(tracks).filter(
+      (track) => track.visible !== false && !track.locked && !track.isGroup
+    );
+    const activeTrack = activeTrackId
+      ? eligibleTracks.find((track) => track.id === activeTrackId)
+      : undefined;
+    const placementTrack = eligibleTracks.find((track) => track.id === placementTrackId);
+    const shouldCreateTopTrack =
+      !placement.preservedTime
+      || (
+        placementTrackId !== activeTrackId
+        && !!activeTrack
+        && !!placementTrack
+        && placementTrack.order > activeTrack.order
+      );
+
+    if (shouldCreateTopTrack) {
+      const referenceTrack = tracks.find((track) => track.id === placementTrackId);
       const minOrder = tracks.length > 0
         ? Math.min(...tracks.map((track) => track.order ?? 0))
         : 0;

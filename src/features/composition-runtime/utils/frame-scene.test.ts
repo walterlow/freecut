@@ -77,6 +77,7 @@ describe('frame scene', () => {
     expect(frameScene.activeShapeMasks).toEqual([
       expect.objectContaining({
         shape: expect.objectContaining({ id: 'mask-1' }),
+        trackOrder: 1,
         transform: expect.objectContaining({ width: 200, height: 100 }),
       }),
     ]);

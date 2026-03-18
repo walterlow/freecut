@@ -6,21 +6,26 @@ const mocks = vi.hoisted(() => ({
   ),
   rotatePathMock: vi.fn((path: string) => path),
   resolveActiveShapeMasksAtFrameMock: vi.fn(
-    (masks: Array<{ id: string }>, options: {
+    (masks: Array<{ id?: string; mask?: { id: string }; trackOrder?: number }>, options: {
       frame: number;
       getPreviewTransform?: (itemId: string) => { x?: number } | undefined;
-    }) => masks.map((shape) => ({
-      shape,
-      transform: {
-        x: options.getPreviewTransform?.(shape.id)?.x ?? options.frame,
-        y: 0,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        cornerRadius: 0,
-      },
-    }))
+    }) => masks.map((maskSource) => {
+      const shape = maskSource.mask ?? maskSource;
+      const shapeId = shape.id ?? 'mask';
+      return {
+        shape,
+        trackOrder: maskSource.trackOrder ?? 0,
+        transform: {
+          x: options.getPreviewTransform?.(shapeId)?.x ?? options.frame,
+          y: 0,
+          width: 100,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          cornerRadius: 0,
+        },
+      };
+    })
   ),
 }));
 
@@ -92,16 +97,17 @@ describe('canvas mask animation', () => {
 
     expect(frame10Masks).toHaveLength(1);
     expect(frame12Masks).toHaveLength(1);
+    expect(frame10Masks[0]?.trackOrder).toBe(0);
     expect((frame10Masks[0]!.path as { value?: string }).value).toContain('10');
     expect((frame12Masks[0]!.path as { value?: string }).value).toContain('12');
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       1,
-      [track.items[0]],
+      [{ mask: track.items[0], trackOrder: 0 }],
       expect.objectContaining({ frame: 10 })
     );
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       2,
-      [track.items[0]],
+      [{ mask: track.items[0], trackOrder: 0 }],
       expect.objectContaining({ frame: 12 })
     );
   });

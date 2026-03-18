@@ -107,7 +107,7 @@ describe('CompositionContent masks', () => {
     });
   });
 
-  it('applies sub-comp masks when rendered as a single composition layer in parent timeline', () => {
+  it('applies sub-comp masks only to content on lower tracks', () => {
     const subTracks: TimelineTrack[] = [
       {
         id: 'sub-track-mask',
@@ -117,7 +117,7 @@ describe('CompositionContent masks', () => {
         visible: true,
         muted: false,
         solo: false,
-        order: 1,
+        order: 0,
         items: [],
       },
       {
@@ -128,7 +128,7 @@ describe('CompositionContent masks', () => {
         visible: true,
         muted: false,
         solo: false,
-        order: 0,
+        order: 1,
         items: [],
       },
     ];
@@ -217,5 +217,112 @@ describe('CompositionContent masks', () => {
 
     // Regression guard: sub-comp mask should still clip child content in parent view.
     expect(container.querySelector('[style*="clip-path"]')).not.toBeNull();
+  });
+
+  it('does not apply a sub-comp mask to content above the mask track', () => {
+    const subTracks: TimelineTrack[] = [
+      {
+        id: 'sub-track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+      {
+        id: 'sub-track-content',
+        name: 'Content',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ];
+
+    const maskItem: ShapeItem = {
+      id: 'sub-mask',
+      type: 'shape',
+      trackId: 'sub-track-mask',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Mask shape',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      isMask: true,
+      maskType: 'clip',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const contentItem: ShapeItem = {
+      id: 'sub-content',
+      type: 'shape',
+      trackId: 'sub-track-content',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Content shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 1280,
+        height: 720,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const subComp = {
+      id: 'sub-comp-1',
+      name: 'Unmasked precomp',
+      items: [maskItem, contentItem],
+      tracks: subTracks,
+      transitions: [],
+      keyframes: [],
+      fps: 30,
+      width: 1280,
+      height: 720,
+      durationInFrames: 60,
+    };
+
+    useCompositionsStore.setState({
+      compositions: [subComp],
+      compositionById: { [subComp.id]: subComp },
+      mediaDependencyIds: [],
+      mediaDependencyVersion: 0,
+    });
+
+    const compositionItem: CompositionItem = {
+      id: 'parent-comp-item',
+      type: 'composition',
+      compositionId: subComp.id,
+      trackId: 'parent-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Nested comp',
+      compositionWidth: 1280,
+      compositionHeight: 720,
+    };
+
+    const { container } = render(
+      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+        <Item item={compositionItem} muted={false} masks={[]} />
+      </VideoConfigProvider>
+    );
+
+    expect(container.querySelector('[style*="clip-path"]')).toBeNull();
   });
 });

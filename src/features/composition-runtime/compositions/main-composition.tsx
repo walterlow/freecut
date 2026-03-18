@@ -2,7 +2,7 @@
 import { AbsoluteFill, Sequence } from '@/features/composition-runtime/deps/player';
 import { useCurrentFrame, useVideoConfig } from '../hooks/use-player-compat';
 import type { CompositionInputProps } from '@/types/export';
-import type { ShapeItem, TimelineItem } from '@/types/timeline';
+import type { TimelineItem } from '@/types/timeline';
 import { Item, type MaskInfo } from '../components/item';
 import { PitchCorrectedAudio } from '../components/pitch-corrected-audio';
 import { CustomDecoderAudio } from '../components/custom-decoder-audio';
@@ -23,12 +23,14 @@ import {
 import {
   resolveCompositionRenderPlan,
   type AudioTrackItem,
+  type ShapeMaskWithTrackOrder,
   type VideoTrackItem,
 } from '../utils/scene-assembly';
 import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
 import { KeyframesContext } from '../contexts/keyframes-context-core';
 import {
   EMPTY_MASK_INFOS,
+  getMasksForTrackOrder,
   materializeMaskInfos,
   reuseStableMaskInfos,
 } from '../utils/mask-info';
@@ -38,7 +40,7 @@ type EnrichedVideoItem = VideoTrackItem;
 const ActiveMasksContext = React.createContext<MaskInfo[]>(EMPTY_MASK_INFOS);
 
 const FrameActiveMasksProvider: React.FC<{
-  masks: ShapeItem[];
+  masks: ShapeMaskWithTrackOrder[];
   canvasWidth: number;
   canvasHeight: number;
   children: React.ReactNode;
@@ -83,9 +85,10 @@ type EnrichedAudioItem = AudioTrackItem;
 const MaskedItem: React.FC<{
   item: TimelineItem;
   muted: boolean;
-}> = ({ item, muted }) => {
+  itemTrackOrder: number;
+}> = ({ item, muted, itemTrackOrder }) => {
   const masks = React.useContext(ActiveMasksContext);
-  return <Item item={item} muted={muted} masks={masks} />;
+  return <Item item={item} muted={muted} masks={getMasksForTrackOrder(masks, itemTrackOrder)} />;
 };
 
 
@@ -195,7 +198,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   // Use ALL tracks for stable DOM structure, with visibility flag for CSS-based hiding
   const nonMediaByTrack = renderPlan.stableDomTracks;
   const visibleShapeMasks = useMemo(
-    () => renderPlan.visibleShapeMasks.map(({ mask }) => mask),
+    () => renderPlan.visibleShapeMasks,
     [renderPlan.visibleShapeMasks]
   );
 
@@ -235,7 +238,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           adjustmentLayers={visibleAdjustmentLayers}
           sequenceFrom={sequenceFrom}
         >
-          <MaskedItem item={item} muted={true} />
+          <MaskedItem item={item} muted={true} itemTrackOrder={item.trackOrder} />
         </ItemEffectWrapper>
       </AbsoluteFill>
     );
@@ -387,7 +390,11 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                             adjustmentLayers={visibleAdjustmentLayers}
                             sequenceFrom={item.from}
                           >
-                            <MaskedItem item={item} muted={track.muted || !track.trackVisible} />
+                            <MaskedItem
+                              item={item}
+                              muted={track.muted || !track.trackVisible}
+                              itemTrackOrder={trackOrder}
+                            />
                           </ItemEffectWrapper>
                         </Sequence>
                       ))}

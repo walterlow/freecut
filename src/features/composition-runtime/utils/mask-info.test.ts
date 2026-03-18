@@ -8,10 +8,12 @@ import {
 
 function createMaskInfo(
   id: string,
+  trackOrder: number = 0,
   overrides: Partial<MaskInfo['transform']> = {},
 ): MaskInfo {
   return {
     shape: { id } as MaskInfo['shape'],
+    trackOrder,
     transform: {
       x: 10,
       y: 20,
@@ -39,7 +41,15 @@ describe('mask-info helpers', () => {
 
   it('returns a new array when any mask transform changes', () => {
     const previous = [createMaskInfo('mask-1')];
-    const next = [createMaskInfo('mask-1', { x: 42 })];
+    const next = [createMaskInfo('mask-1', 0, { x: 42 })];
+
+    expect(reuseStableMaskInfos(previous, next)).toEqual(next);
+    expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);
+  });
+
+  it('returns a new array when any mask track order changes', () => {
+    const previous = [createMaskInfo('mask-1', 0)];
+    const next = [createMaskInfo('mask-1', 1)];
 
     expect(reuseStableMaskInfos(previous, next)).toEqual(next);
     expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);

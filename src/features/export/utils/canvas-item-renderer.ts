@@ -20,6 +20,7 @@ import type {
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
+import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 // Subsystem imports
 import { getAnimatedTransform } from './canvas-keyframes';
@@ -147,6 +148,7 @@ export interface SubCompRenderData {
   durationInFrames: number;
   /** Tracks sorted bottom-to-top (highest order first), with items pre-assigned */
   sortedTracks: Array<{
+    order: number;
     visible: boolean;
     items: TimelineItem[];
   }>;
@@ -1094,61 +1096,79 @@ async function renderCompositionItem(
       canvasSettings: subCanvasSettings,
     };
 
-    // Render each visible item at the local frame using pre-computed data.
-    // Collect active mask shapes and apply them as a group, matching
-    // main-composition mask behavior.
+    // Resolve all active masks up front so each item can be masked only by
+    // shapes on higher tracks.
     const activeSubMasks: Array<{
       path: Path2D;
       inverted: boolean;
       feather: number;
       maskType: 'clip' | 'alpha';
+      trackOrder: number;
     }> = [];
+    for (const track of subData.sortedTracks) {
+      if (!track.visible) continue;
+
+      for (const subItem of track.items) {
+        if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+          continue;
+        }
+        if (subItem.type !== 'shape' || !subItem.isMask) {
+          continue;
+        }
+
+        const subItemKeyframes = subData.keyframesMap.get(subItem.id);
+        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
+        const maskType = subItem.maskType ?? 'clip';
+        const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
+        let svgPath = getShapePath(
+          subItem,
+          {
+            x: subItemTransform.x,
+            y: subItemTransform.y,
+            width: subItemTransform.width,
+            height: subItemTransform.height,
+            rotation: 0,
+            opacity: subItemTransform.opacity,
+          },
+          {
+            canvasWidth: subCanvasSettings.width,
+            canvasHeight: subCanvasSettings.height,
+          }
+        );
+
+        if (subItemTransform.rotation !== 0) {
+          const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
+          const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
+          svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
+        }
+
+        activeSubMasks.push({
+          path: svgPathToPath2D(svgPath),
+          inverted: subItem.maskInvert ?? false,
+          feather,
+          maskType,
+          trackOrder: track.order,
+        });
+      }
+    }
+
     let renderedSubItems = 0;
     for (const track of subData.sortedTracks) {
       if (!track.visible) continue;
+
+      const applicableMasks = activeSubMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, track.order));
 
       for (const subItem of track.items) {
         // Check if item is visible at this local frame
         if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
           continue;
         }
+        if (subItem.type === 'shape' && subItem.isMask) {
+          continue;
+        }
 
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
-
-        if (subItem.type === 'shape' && subItem.isMask) {
-          const maskType = subItem.maskType ?? 'clip';
-          const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
-          let svgPath = getShapePath(
-            subItem,
-            {
-              x: subItemTransform.x,
-              y: subItemTransform.y,
-              width: subItemTransform.width,
-              height: subItemTransform.height,
-              rotation: 0,
-              opacity: subItemTransform.opacity,
-            },
-            {
-              canvasWidth: subCanvasSettings.width,
-              canvasHeight: subCanvasSettings.height,
-            }
-          );
-
-          if (subItemTransform.rotation !== 0) {
-            const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
-            const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
-            svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
-          }
-
-          activeSubMasks.push({
-            path: svgPathToPath2D(svgPath),
-            inverted: subItem.maskInvert ?? false,
-            feather,
-            maskType,
-          });
-          continue;
-        }
 
         if (frame === 0) {
           log.info('Rendering sub-comp item', {
@@ -1163,7 +1183,17 @@ async function renderCompositionItem(
           });
         }
 
-        await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        if (applicableMasks.length === 0) {
+          await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        } else {
+          const { canvas: maskedItemCanvas, ctx: maskedItemCtx } = rctx.canvasPool.acquire();
+          try {
+            await renderItem(maskedItemCtx, subItem, subItemTransform, localFrame, subRctx);
+            applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+          } finally {
+            rctx.canvasPool.release(maskedItemCanvas);
+          }
+        }
         renderedSubItems++;
       }
     }
@@ -1177,7 +1207,7 @@ async function renderCompositionItem(
       });
     }
 
-    applyMasks(subCtx, subContentCanvas, activeSubMasks, subMaskSettings);
+    subCtx.drawImage(subContentCanvas, 0, 0);
 
     // Draw the sub-composition result onto the main canvas at the CompositionItem's position
     const drawDimensions = calculateMediaDrawDimensions(

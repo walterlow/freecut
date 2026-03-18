@@ -30,6 +30,7 @@ const logger = createLogger('CompositionItem');
 export interface MaskInfo {
   shape: ShapeItem;
   transform: TransformProperties;
+  trackOrder: number;
 }
 
 /** Max nesting depth for composition rendering to prevent infinite recursion */
