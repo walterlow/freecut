@@ -216,7 +216,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
       return resultingId;
     },
 
-    // Add multiple keyframes at once (for batch operations like K hotkey)
+    // Add multiple keyframes at once for batch edits.
     _addKeyframes: (payloads) => {
       if (payloads.length === 0) return [];
 

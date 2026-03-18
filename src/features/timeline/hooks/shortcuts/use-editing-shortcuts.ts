@@ -4,22 +4,12 @@
 
 import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { toast } from 'sonner';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useProjectStore } from '@/features/timeline/deps/projects';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
 import { insertFreezeFrame } from '../../stores/actions/item-actions';
-import {
-  resolveTransform,
-  getSourceDimensions,
-} from '@/features/timeline/deps/composition-runtime';
-import {
-  resolveAnimatedTransform,
-  isFrameInTransitionRegion,
-} from '@/features/timeline/deps/keyframes';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
@@ -294,88 +284,6 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, items]
-  );
-
-  // Keyframes: K - Add keyframe at playhead for selected items
-  useHotkeys(
-    HOTKEYS.ADD_KEYFRAME,
-    (event) => {
-      if (selectedItemIds.length === 0) return;
-
-      event.preventDefault();
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const addKeyframes = useTimelineStore.getState().addKeyframes;
-      const storeItems = useTimelineStore.getState().items;
-      const storeKeyframes = useTimelineStore.getState().keyframes;
-      const storeTransitions = useTimelineStore.getState().transitions;
-      const currentProject = useProjectStore.getState().currentProject;
-      const canvas = {
-        width: currentProject?.metadata.width ?? 1920,
-        height: currentProject?.metadata.height ?? 1080,
-        fps: currentProject?.metadata.fps ?? 30,
-      };
-
-      const keyframesToAdd: Array<{
-        itemId: string;
-        property: 'x' | 'y' | 'opacity' | 'rotation' | 'width' | 'height';
-        frame: number;
-        value: number;
-        easing: 'linear';
-      }> = [];
-
-      let blockedByTransition = false;
-
-      for (const itemId of selectedItemIds) {
-        const item = storeItems.find((i) => i.id === itemId);
-        if (!item) continue;
-
-        const relativeFrame = currentFrame - item.from;
-        if (relativeFrame < 0 || relativeFrame >= item.durationInFrames) continue;
-
-        const transitionBlock = isFrameInTransitionRegion(relativeFrame, itemId, item, storeTransitions);
-        if (transitionBlock) {
-          blockedByTransition = true;
-          continue;
-        }
-
-        const sourceDimensions = getSourceDimensions(item);
-        const baseResolved = resolveTransform(item, canvas, sourceDimensions);
-        const itemKeyframes = storeKeyframes.find((k) => k.itemId === itemId);
-        const animated = itemKeyframes
-          ? resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame)
-          : baseResolved;
-
-        keyframesToAdd.push(
-          { itemId, property: 'x', frame: relativeFrame, value: animated.x, easing: 'linear' },
-          { itemId, property: 'y', frame: relativeFrame, value: animated.y, easing: 'linear' },
-          { itemId, property: 'opacity', frame: relativeFrame, value: animated.opacity, easing: 'linear' },
-          { itemId, property: 'rotation', frame: relativeFrame, value: animated.rotation, easing: 'linear' },
-          { itemId, property: 'width', frame: relativeFrame, value: animated.width, easing: 'linear' },
-          { itemId, property: 'height', frame: relativeFrame, value: animated.height, easing: 'linear' }
-        );
-      }
-
-      if (blockedByTransition && keyframesToAdd.length === 0) {
-        toast.warning('Cannot add keyframes in transition region', {
-          description: 'Move the playhead outside the transition area to add keyframes.',
-          duration: 3000,
-        });
-        return;
-      }
-
-      if (keyframesToAdd.length > 0) {
-        addKeyframes(keyframesToAdd);
-
-        if (blockedByTransition) {
-          toast.info('Some keyframes skipped', {
-            description: 'Keyframes were not added to clips in transition regions.',
-            duration: 2000,
-          });
-        }
-      }
-    },
-    HOTKEY_OPTIONS,
-    [selectedItemIds]
   );
 
   // Keyframes: Shift+K - Clear all keyframes for selected items (with confirmation)

@@ -68,6 +68,29 @@ interface MarqueeState {
   started: boolean;
 }
 
+function arePreviewValuesEqual(
+  a: Record<string, { frame: number; value: number }> | null,
+  b: Record<string, { frame: number; value: number }> | null
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return a === b;
+
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+
+  for (const key of aKeys) {
+    const aValue = a[key];
+    const bValue = b[key];
+    if (!aValue || !bValue) return false;
+    if (aValue.frame !== bValue.frame || aValue.value !== bValue.value) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 interface UseGraphInteractionOptions {
   /** Current viewport */
   viewport: GraphViewport;
@@ -185,6 +208,10 @@ export function useGraphInteraction({
   useEffect(() => {
     pointsRef.current = points;
   }, [points]);
+  const previewValuesRef = useRef<Record<string, { frame: number; value: number }> | null>(null);
+  useEffect(() => {
+    previewValuesRef.current = previewValues;
+  }, [previewValues]);
 
   // Ref for latest callbacks to avoid stale closures
   const callbacksRef = useRef({ onKeyframeMove, onBezierHandleMove, onSelectionChange, onViewportChange, onDragStart, onDragEnd });
@@ -205,6 +232,123 @@ export function useGraphInteraction({
     const valueRange = viewport.maxValue - viewport.minValue;
     return { graphLeft, graphTop, graphWidth, graphHeight, frameRange, valueRange };
   }, [viewport, padding]);
+
+  const zoomFocusPoint = useMemo(() => {
+    const selectedPoints = points.filter((point) => selectedKeyframeIds.has(point.keyframe.id));
+    const visiblePoints = points.filter((point) =>
+      point.keyframe.frame >= viewport.startFrame &&
+      point.keyframe.frame <= viewport.endFrame &&
+      point.keyframe.value >= viewport.minValue &&
+      point.keyframe.value <= viewport.maxValue
+    );
+    const focusPoints = selectedPoints.length > 0
+      ? selectedPoints
+      : visiblePoints.length > 0
+        ? visiblePoints
+        : points;
+
+    if (focusPoints.length === 0) return null;
+
+    const totals = focusPoints.reduce(
+      (acc, point) => ({
+        frame: acc.frame + point.keyframe.frame,
+        value: acc.value + point.keyframe.value,
+      }),
+      { frame: 0, value: 0 }
+    );
+
+    return {
+      frame: totals.frame / focusPoints.length,
+      value: totals.value / focusPoints.length,
+    };
+  }, [
+    points,
+    selectedKeyframeIds,
+    viewport.startFrame,
+    viewport.endFrame,
+    viewport.minValue,
+    viewport.maxValue,
+  ]);
+
+  const clampViewportToBounds = useCallback(
+    (nextViewport: GraphViewport): GraphViewport => {
+      let startFrame = nextViewport.startFrame;
+      let endFrame = nextViewport.endFrame;
+      let minValue = nextViewport.minValue;
+      let maxValue = nextViewport.maxValue;
+
+      const frameRange = Math.max(1, endFrame - startFrame);
+      const maxFrameExtent = Math.max(maxFrame ?? 0, frameRange);
+
+      if (startFrame < 0) {
+        endFrame -= startFrame;
+        startFrame = 0;
+      }
+      if (endFrame > maxFrameExtent) {
+        const overflow = endFrame - maxFrameExtent;
+        startFrame = Math.max(0, startFrame - overflow);
+        endFrame = maxFrameExtent;
+      }
+
+      const valueRange = Math.max(0.0001, maxValue - minValue);
+      if (clampMinValue !== undefined && clampMaxValue !== undefined) {
+        const totalRange = Math.max(0.0001, clampMaxValue - clampMinValue);
+        const boundedRange = Math.min(valueRange, totalRange);
+        minValue = Math.max(clampMinValue, Math.min(clampMaxValue - boundedRange, minValue));
+        maxValue = minValue + boundedRange;
+      } else {
+        if (clampMinValue !== undefined && minValue < clampMinValue) {
+          maxValue += clampMinValue - minValue;
+          minValue = clampMinValue;
+        }
+        if (clampMaxValue !== undefined && maxValue > clampMaxValue) {
+          minValue -= maxValue - clampMaxValue;
+          maxValue = clampMaxValue;
+        }
+      }
+
+      return {
+        ...nextViewport,
+        startFrame,
+        endFrame,
+        minValue,
+        maxValue,
+      };
+    },
+    [maxFrame, clampMinValue, clampMaxValue]
+  );
+
+  const ensureKeyframesRemainVisible = useCallback(
+    (nextViewport: GraphViewport): GraphViewport => {
+      const clampedViewport = clampViewportToBounds(nextViewport);
+      if (points.length === 0 || !zoomFocusPoint) {
+        return clampedViewport;
+      }
+
+      const hasVisiblePoint = points.some((point) =>
+        point.keyframe.frame >= clampedViewport.startFrame &&
+        point.keyframe.frame <= clampedViewport.endFrame &&
+        point.keyframe.value >= clampedViewport.minValue &&
+        point.keyframe.value <= clampedViewport.maxValue
+      );
+
+      if (hasVisiblePoint) {
+        return clampedViewport;
+      }
+
+      const frameRange = Math.max(1, clampedViewport.endFrame - clampedViewport.startFrame);
+      const valueRange = Math.max(0.0001, clampedViewport.maxValue - clampedViewport.minValue);
+
+      return clampViewportToBounds({
+        ...clampedViewport,
+        startFrame: zoomFocusPoint.frame - frameRange / 2,
+        endFrame: zoomFocusPoint.frame + frameRange / 2,
+        minValue: zoomFocusPoint.value - valueRange / 2,
+        maxValue: zoomFocusPoint.value + valueRange / 2,
+      });
+    },
+    [clampViewportToBounds, points, zoomFocusPoint]
+  );
 
   // Convert screen coordinates to graph coordinates
   const screenToGraph = useCallback(
@@ -689,19 +833,9 @@ export function useGraphInteraction({
           }
 
           nextPreviewValues[keyframeId] = { frame: nextFrame, value: nextValue };
-
-          callbacksRef.current.onKeyframeMove?.(
-            {
-              itemId: initialState.itemId,
-              property: initialState.property,
-              keyframeId,
-            },
-            nextFrame,
-            nextValue
-          );
         }
 
-        setPreviewValues(nextPreviewValues);
+        setPreviewValues((prev) => arePreviewValuesEqual(prev, nextPreviewValues) ? prev : nextPreviewValues);
         return;
       }
 
@@ -756,6 +890,22 @@ export function useGraphInteraction({
 
       // If we never exceeded threshold, treat as click (selection only)
       // Selection was already handled in pointerDown, no additional action needed
+
+      if (dragState?.type === 'keyframe' && dragStartRef.current && previewValuesRef.current) {
+        for (const [keyframeId, initialState] of dragStartRef.current.initialKeyframeStates) {
+          const previewValue = previewValuesRef.current[keyframeId];
+          if (!previewValue) continue;
+          callbacksRef.current.onKeyframeMove?.(
+            {
+              itemId: initialState.itemId,
+              property: initialState.property,
+              keyframeId,
+            },
+            previewValue.frame,
+            previewValue.value
+          );
+        }
+      }
 
       // Call onDragEnd if we actually started a drag operation
       if (dragStartCalledRef.current) {
@@ -812,14 +962,16 @@ export function useGraphInteraction({
       const newMaxValue = newMinValue + newValueRange;
 
       callbacksRef.current.onViewportChange?.({
-        ...viewport,
-        startFrame: Math.max(0, newStartFrame),
-        endFrame: newEndFrame,
-        minValue: newMinValue,
-        maxValue: newMaxValue,
+        ...ensureKeyframesRemainVisible({
+          ...viewport,
+          startFrame: Math.max(0, newStartFrame),
+          endFrame: newEndFrame,
+          minValue: newMinValue,
+          maxValue: newMaxValue,
+        }),
       });
     },
-    [disabled, viewport, screenToGraph, graphDimensions]
+    [disabled, viewport, screenToGraph, graphDimensions, ensureKeyframesRemainVisible]
   );
 
   // Handle background click (deselect)
@@ -837,47 +989,47 @@ export function useGraphInteraction({
   // Zoom in
   const zoomIn = useCallback(() => {
     const { frameRange, valueRange } = graphDimensions;
-    const centerFrame = (viewport.startFrame + viewport.endFrame) / 2;
-    const centerValue = (viewport.minValue + viewport.maxValue) / 2;
+    const centerFrame = zoomFocusPoint?.frame ?? (viewport.startFrame + viewport.endFrame) / 2;
+    const centerValue = zoomFocusPoint?.value ?? (viewport.minValue + viewport.maxValue) / 2;
     const newFrameRange = frameRange * 0.8;
     const newValueRange = valueRange * 0.8;
 
-    callbacksRef.current.onViewportChange?.({
+    callbacksRef.current.onViewportChange?.(ensureKeyframesRemainVisible({
       ...viewport,
       startFrame: centerFrame - newFrameRange / 2,
       endFrame: centerFrame + newFrameRange / 2,
       minValue: centerValue - newValueRange / 2,
       maxValue: centerValue + newValueRange / 2,
-    });
-  }, [viewport, graphDimensions]);
+    }));
+  }, [viewport, graphDimensions, zoomFocusPoint, ensureKeyframesRemainVisible]);
 
   // Zoom out
   const zoomOut = useCallback(() => {
     const { frameRange, valueRange } = graphDimensions;
-    const centerFrame = (viewport.startFrame + viewport.endFrame) / 2;
-    const centerValue = (viewport.minValue + viewport.maxValue) / 2;
+    const centerFrame = zoomFocusPoint?.frame ?? (viewport.startFrame + viewport.endFrame) / 2;
+    const centerValue = zoomFocusPoint?.value ?? (viewport.minValue + viewport.maxValue) / 2;
     const newFrameRange = frameRange * 1.25;
     const newValueRange = valueRange * 1.25;
 
-    callbacksRef.current.onViewportChange?.({
+    callbacksRef.current.onViewportChange?.(ensureKeyframesRemainVisible({
       ...viewport,
-      startFrame: Math.max(0, centerFrame - newFrameRange / 2),
+      startFrame: centerFrame - newFrameRange / 2,
       endFrame: centerFrame + newFrameRange / 2,
       minValue: centerValue - newValueRange / 2,
       maxValue: centerValue + newValueRange / 2,
-    });
-  }, [viewport, graphDimensions]);
+    }));
+  }, [viewport, graphDimensions, zoomFocusPoint, ensureKeyframesRemainVisible]);
 
   // Fit view to fixed bounds (0 to maxFrame, minValue to maxValue)
   const fitToContent = useCallback(() => {
-    callbacksRef.current.onViewportChange?.({
+    callbacksRef.current.onViewportChange?.(clampViewportToBounds({
       ...viewport,
       startFrame: 0,
       endFrame: Math.max(maxFrame ?? 60, 60),
       minValue: clampMinValue ?? 0,
       maxValue: clampMaxValue ?? 1,
-    });
-  }, [viewport, maxFrame, clampMinValue, clampMaxValue]);
+    }));
+  }, [viewport, maxFrame, clampMinValue, clampMaxValue, clampViewportToBounds]);
 
   return {
     dragState,

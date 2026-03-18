@@ -31,7 +31,6 @@ export function addKeyframe(
 
 /**
  * Add multiple keyframes at once (batched as single undo operation).
- * Used by K hotkey to add keyframes for all properties at once.
  * Keyframes in transition regions are filtered out.
  */
 export function addKeyframes(payloads: KeyframeAddPayload[]): string[] {

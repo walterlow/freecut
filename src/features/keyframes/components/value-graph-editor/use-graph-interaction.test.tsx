@@ -117,6 +117,7 @@ function DragGraph({
     handleKeyframePointerDown,
     handlePointerMove,
     handlePointerUp,
+    previewValues,
   } = useGraphInteraction({
     viewport,
     padding: DEFAULT_GRAPH_PADDING,
@@ -144,7 +145,40 @@ function DragGraph({
           onPointerDown={(event) => handleKeyframePointerDown(point, event)}
         />
       ))}
+      <text data-testid="preview-values">
+        {previewValues ? JSON.stringify(previewValues) : ''}
+      </text>
     </svg>
+  );
+}
+
+function ZoomGraph() {
+  const [liveViewport, setLiveViewport] = useState<GraphViewport>({
+    ...viewport,
+    startFrame: 0,
+    endFrame: 100,
+  });
+
+  const {
+    zoomIn,
+  } = useGraphInteraction({
+    viewport: liveViewport,
+    padding: DEFAULT_GRAPH_PADDING,
+    points: basePoints,
+    selectedKeyframeIds: new Set(),
+    onViewportChange: setLiveViewport,
+    maxFrame: 100,
+    minValue: 0,
+    maxValue: 100,
+  });
+
+  return (
+    <div>
+      <button type="button" onClick={zoomIn}>zoom</button>
+      <output data-testid="zoom-viewport">
+        {`${liveViewport.startFrame},${liveViewport.endFrame}`}
+      </output>
+    </div>
   );
 }
 
@@ -207,7 +241,7 @@ describe('useGraphInteraction marquee selection', () => {
     expect(screen.queryByTestId('marquee')).not.toBeInTheDocument();
   });
 
-  it('moves selected graph points as a group when dragging one of them', () => {
+  it('previews selected graph points as a group and commits on pointer up', () => {
     const onKeyframeMove = vi.fn();
     render(<DragGraph onKeyframeMove={onKeyframeMove} />);
 
@@ -227,12 +261,29 @@ describe('useGraphInteraction marquee selection', () => {
       pointerId: 2,
     });
 
+    expect(onKeyframeMove).not.toHaveBeenCalled();
+    expect(screen.getByTestId('preview-values')).toHaveTextContent('"kf-1"');
+    expect(screen.getByTestId('preview-values')).toHaveTextContent('"kf-2"');
+
+    fireEvent.pointerUp(svg, { pointerId: 2 });
+
     const movedIds = new Set(
       onKeyframeMove.mock.calls.map(([ref]) => (ref as KeyframeRef).keyframeId)
     );
 
     expect(movedIds).toEqual(new Set(['kf-1', 'kf-2']));
+  });
 
-    fireEvent.pointerUp(svg, { pointerId: 2 });
+  it('keeps the keyframe cluster in view when zooming with graph controls', () => {
+    render(<ZoomGraph />);
+
+    const zoomButton = screen.getByRole('button', { name: 'zoom' });
+    fireEvent.click(zoomButton);
+    fireEvent.click(zoomButton);
+    fireEvent.click(zoomButton);
+
+    const [startFrame, endFrame] = screen.getByTestId('zoom-viewport').textContent!.split(',').map(Number);
+    expect(startFrame).toBe(0);
+    expect(endFrame).toBeCloseTo(51.2, 4);
   });
 });

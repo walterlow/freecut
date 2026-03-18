@@ -57,6 +57,7 @@ import type { CanvasSettings } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { resolveKeyframeEditorHotkeyProperty } from './keyframe-editor-hotkey';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -330,6 +331,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   // Track selected property for graph editor
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null);
+  const [activeDopesheetProperty, setActiveDopesheetProperty] = useState<AnimatableProperty | null>(null);
   const [editorMode, setEditorMode] = useState<KeyframeEditorMode>(() => loadKeyframeEditorMode());
   const [splitRatio, setSplitRatio] = useState<number>(() => loadKeyframeEditorSplitRatio());
   const [splitFrameViewport, setSplitFrameViewport] = useState<{ startFrame: number; endFrame: number } | null>(null);
@@ -400,6 +402,16 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       setSelectedProperty(null);
     }
   }, [availableProperties, selectedProperty]);
+
+  useEffect(() => {
+    setActiveDopesheetProperty((prev) =>
+      prev && availableProperties.includes(prev) ? prev : null
+    );
+  }, [availableProperties]);
+
+  useEffect(() => {
+    setActiveDopesheetProperty(null);
+  }, [selectedItemForEditor?.id]);
 
   // Build keyframes by property for the graph editor
   const keyframesByProperty = useMemo(() => {
@@ -666,6 +678,17 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const handlePropertyChange = useCallback((property: AnimatableProperty | null) => {
     setSelectedProperty(property);
   }, []);
+
+  const editorHotkeyProperty = useMemo(
+    () =>
+      resolveKeyframeEditorHotkeyProperty(
+        editorMode,
+        selectedProperty,
+        availableProperties,
+        activeDopesheetProperty
+      ),
+    [activeDopesheetProperty, availableProperties, editorMode, selectedProperty]
+  );
 
   const handleCopyKeyframes = useCallback(() => {
     if (selectedEditorKeyframes.length === 0) return;
@@ -1075,6 +1098,87 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     [canvas, keyframesByProperty, selectedItemForEditor]
   );
 
+  useHotkeys(
+    HOTKEYS.ADD_KEYFRAME,
+    (event) => {
+      if (!selectedItemForEditor || !editorHotkeyProperty) return;
+
+      event.preventDefault();
+      handleAddKeyframe(editorHotkeyProperty, relativeFrame);
+    },
+    {
+      ...HOTKEY_OPTIONS,
+      enabled:
+        isOpen &&
+        !!selectedItemForEditor &&
+        editorHotkeyProperty !== null &&
+        relativeFrame >= 0 &&
+        relativeFrame < selectedItemForEditor.durationInFrames,
+    },
+    [editorHotkeyProperty, handleAddKeyframe, isOpen, relativeFrame, selectedItemForEditor]
+  );
+
+  const propertyValues = useMemo(() => {
+    if (!selectedItemForEditor) return {};
+
+    const values: Partial<Record<AnimatableProperty, number>> = {};
+    for (const property of availableProperties) {
+      const propKeyframes = keyframesByProperty[property] ?? [];
+      const baseValue = getBaseKeyframeValue(selectedItemForEditor, property, canvas);
+      values[property] = interpolatePropertyValue(propKeyframes, relativeFrame, baseValue);
+    }
+    return values;
+  }, [availableProperties, canvas, keyframesByProperty, relativeFrame, selectedItemForEditor]);
+
+  const handlePropertyValueCommit = useCallback(
+    (
+      property: AnimatableProperty,
+      value: number,
+      options?: { allowCreate?: boolean }
+    ) => {
+      if (!selectedItemForEditor) return;
+
+      const existingKeyframe = keyframesByProperty[property]?.find(
+        (keyframe) => keyframe.frame === relativeFrame
+      );
+
+      if (existingKeyframe) {
+        timelineActions.updateKeyframe(
+          selectedItemForEditor.id,
+          property,
+          existingKeyframe.id,
+          { value }
+        );
+        selectKeyframe({
+          itemId: selectedItemForEditor.id,
+          property,
+          keyframeId: existingKeyframe.id,
+        });
+        return;
+      }
+
+      if (options?.allowCreate === false) {
+        return;
+      }
+
+      const keyframeId = timelineActions.addKeyframe(
+        selectedItemForEditor.id,
+        property,
+        relativeFrame,
+        value
+      );
+
+      if (keyframeId) {
+        selectKeyframe({
+          itemId: selectedItemForEditor.id,
+          property,
+          keyframeId,
+        });
+      }
+    },
+    [keyframesByProperty, relativeFrame, selectKeyframe, selectedItemForEditor]
+  );
+
   // Handle removing keyframes
   const handleRemoveKeyframes = useCallback(
     (refs: KeyframeRef[]) => {
@@ -1439,9 +1543,11 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                     onFrameViewportChange={setSplitFrameViewport}
                     itemId={selectedItemForEditor.id}
                     keyframesByProperty={keyframesByProperty}
+                    propertyValues={propertyValues}
                     selectedProperty={selectedProperty}
                     selectedKeyframeIds={selectedKeyframeIds}
                     currentFrame={relativeFrame}
+                    globalFrame={currentFrame}
                     totalFrames={selectedItemForEditor.durationInFrames}
                     width={splitLeftWidth}
                     height={editorHeight}
@@ -1449,11 +1555,13 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                     onKeyframeMove={handleKeyframeMove}
                     onSelectionChange={handleSelectionChange}
                     onPropertyChange={handlePropertyChange}
+                    onActivePropertyChange={setActiveDopesheetProperty}
                     onScrub={handleScrub}
                     onScrubEnd={handleScrubEnd}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     onAddKeyframe={handleAddKeyframe}
+                    onPropertyValueCommit={handlePropertyValueCommit}
                     onRemoveKeyframes={handleRemoveKeyframes}
                     onNavigateToKeyframe={handleNavigateToKeyframe}
                     transitionBlockedRanges={transitionBlockedRanges}
@@ -1513,20 +1621,24 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               <DopesheetEditor
                 itemId={selectedItemForEditor.id}
                 keyframesByProperty={keyframesByProperty}
+                propertyValues={propertyValues}
                 selectedProperty={selectedProperty}
                 selectedKeyframeIds={selectedKeyframeIds}
                 currentFrame={relativeFrame}
+                globalFrame={currentFrame}
                 totalFrames={selectedItemForEditor.durationInFrames}
                 width={editorWidth}
                 height={editorHeight}
                 onKeyframeMove={handleKeyframeMove}
                 onSelectionChange={handleSelectionChange}
                 onPropertyChange={handlePropertyChange}
+                onActivePropertyChange={setActiveDopesheetProperty}
                 onScrub={handleScrub}
                 onScrubEnd={handleScrubEnd}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onAddKeyframe={handleAddKeyframe}
+                onPropertyValueCommit={handlePropertyValueCommit}
                 onRemoveKeyframes={handleRemoveKeyframes}
                 onNavigateToKeyframe={handleNavigateToKeyframe}
                 transitionBlockedRanges={transitionBlockedRanges}

@@ -3,7 +3,7 @@
  * Interactive graph for editing keyframe values and timing.
  */
 
-import { memo, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { memo, useState, useCallback, useMemo, useEffect, useRef, useId } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, RotateCcw, ChevronLeft, ChevronRight, Plus, Trash2, Magnet } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
@@ -112,6 +112,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 }: ValueGraphEditorProps) {
   const padding = DEFAULT_GRAPH_PADDING;
   const svgRef = useRef<SVGSVGElement>(null);
+  const graphClipPathId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   
   // Track if playhead is being scrubbed (to prevent background click deselection)
   const isScrrubbingRef = useRef(false);
@@ -834,6 +835,18 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           cursor: isDragging && dragState?.type === 'keyframe' ? 'pointer' : undefined,
         }}
       >
+        <defs>
+          <clipPath id={graphClipPathId}>
+            <rect
+              x={padding.left}
+              y={padding.top}
+              width={graphAreaWidth}
+              height={graphAreaHeight}
+              rx={4}
+            />
+          </clipPath>
+        </defs>
+
         {/* Grid background */}
         <GraphGrid viewport={viewport} padding={padding} />
 
@@ -849,92 +862,94 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           onClick={handleGraphBackgroundClick}
         />
 
-        {/* Transition blocked regions (rendered before curves/keyframes) */}
-        {transitionBlockedRanges.length > 0 && (
-          <GraphTransitionRegions
-            viewport={viewport}
+        <g clipPath={`url(#${graphClipPathId})`}>
+          {/* Transition blocked regions (rendered before curves/keyframes) */}
+          {transitionBlockedRanges.length > 0 && (
+            <GraphTransitionRegions
+              viewport={viewport}
+              padding={padding}
+              blockedRanges={transitionBlockedRanges}
+            />
+          )}
+
+          {/* Extension lines (before/after keyframes) */}
+          <GraphExtensionLines points={pointsWithDragState} viewport={viewport} padding={padding} />
+
+          {/* Interpolation curves */}
+          <GraphCurves points={pointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} />
+
+          {/* Playhead (rendered before keyframes so keyframes get click priority) */}
+          <GraphPlayhead 
+            frame={currentFrame} 
+            viewport={viewport} 
             padding={padding}
-            blockedRanges={transitionBlockedRanges}
+            totalFrames={totalFrames}
+            onScrub={onScrub}
+            onScrubStart={handlePlayheadScrubStart}
+            onScrubEnd={handlePlayheadScrubEnd}
+            disabled={disabled}
           />
-        )}
 
-        {/* Extension lines (before/after keyframes) */}
-        <GraphExtensionLines points={pointsWithDragState} viewport={viewport} padding={padding} />
+          {/* Bezier handles (for selected keyframes with cubic-bezier easing) */}
+          <GraphHandles
+            points={pointsWithDragState}
+            selectedKeyframeIds={selectedKeyframeIds}
+            onHandlePointerDown={handleBezierPointerDown}
+            draggingHandle={draggingHandle}
+            disabled={disabled}
+          />
 
-        {/* Interpolation curves */}
-        <GraphCurves points={pointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} />
+          {/* Keyframe points (rendered last for highest click priority) */}
+          <GraphKeyframes
+            points={pointsWithDragState}
+            previewValuesById={previewValues}
+            onPointerDown={handleKeyframePointerDown}
+            onClick={handleKeyframeClick}
+            disabled={disabled}
+          />
 
-        {/* Playhead (rendered before keyframes so keyframes get click priority) */}
-        <GraphPlayhead 
-          frame={currentFrame} 
-          viewport={viewport} 
-          padding={padding}
-          totalFrames={totalFrames}
-          onScrub={onScrub}
-          onScrubStart={handlePlayheadScrubStart}
-          onScrubEnd={handlePlayheadScrubEnd}
-          disabled={disabled}
-        />
+          {/* Marquee selection overlay */}
+          <KeyframeSvgMarquee rect={marqueeRect} />
 
-        {/* Bezier handles (for selected keyframes with cubic-bezier easing) */}
-        <GraphHandles
-          points={pointsWithDragState}
-          selectedKeyframeIds={selectedKeyframeIds}
-          onHandlePointerDown={handleBezierPointerDown}
-          draggingHandle={draggingHandle}
-          disabled={disabled}
-        />
-
-        {/* Keyframe points (rendered last for highest click priority) */}
-        <GraphKeyframes
-          points={pointsWithDragState}
-          previewValuesById={previewValues}
-          onPointerDown={handleKeyframePointerDown}
-          onClick={handleKeyframeClick}
-          disabled={disabled}
-        />
-
-        {/* Marquee selection overlay */}
-        <KeyframeSvgMarquee rect={marqueeRect} />
-
-        {/* Constraint guide line when Shift is held during drag */}
-        {isDragging && constraintAxis && dragState?.type === 'keyframe' && (() => {
-          const draggingPoint = pointsWithDragState.find(p => p.keyframe.id === dragState.keyframeId);
-          if (!draggingPoint) return null;
-          
-          const graphLeft = padding.left;
-          const graphRight = viewport.width - padding.right;
-          const graphTop = padding.top;
-          const graphBottom = viewport.height - padding.bottom;
-          
-          return constraintAxis === 'x' ? (
-            // Horizontal constraint line (frame only movement)
-            <line
-              x1={graphLeft}
-              y1={draggingPoint.y}
-              x2={graphRight}
-              y2={draggingPoint.y}
-              stroke="#f97316"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
-              opacity={0.8}
-              pointerEvents="none"
-            />
-          ) : (
-            // Vertical constraint line (value only movement)
-            <line
-              x1={draggingPoint.x}
-              y1={graphTop}
-              x2={draggingPoint.x}
-              y2={graphBottom}
-              stroke="#f97316"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
-              opacity={0.8}
-              pointerEvents="none"
-            />
-          );
-        })()}
+          {/* Constraint guide line when Shift is held during drag */}
+          {isDragging && constraintAxis && dragState?.type === 'keyframe' && (() => {
+            const draggingPoint = pointsWithDragState.find(p => p.keyframe.id === dragState.keyframeId);
+            if (!draggingPoint) return null;
+            
+            const graphLeft = padding.left;
+            const graphRight = viewport.width - padding.right;
+            const graphTop = padding.top;
+            const graphBottom = viewport.height - padding.bottom;
+            
+            return constraintAxis === 'x' ? (
+              // Horizontal constraint line (frame only movement)
+              <line
+                x1={graphLeft}
+                y1={draggingPoint.y}
+                x2={graphRight}
+                y2={draggingPoint.y}
+                stroke="#f97316"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                opacity={0.8}
+                pointerEvents="none"
+              />
+            ) : (
+              // Vertical constraint line (value only movement)
+              <line
+                x1={draggingPoint.x}
+                y1={graphTop}
+                x2={draggingPoint.x}
+                y2={graphBottom}
+                stroke="#f97316"
+                strokeWidth={1.5}
+                strokeDasharray="6 3"
+                opacity={0.8}
+                pointerEvents="none"
+              />
+            );
+          })()}
+        </g>
       </svg>
 
       {/* Keyboard hints (shows when dragging) */}
