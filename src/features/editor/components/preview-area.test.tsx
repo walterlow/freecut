@@ -1,8 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { PreviewArea } from './preview-area';
-import { useMaskEditorStore } from '@/features/preview/stores/mask-editor-store';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
+import { useMaskEditorStore, useItemsStore } from '@/features/editor/deps/preview';
 import { useEditorStore } from '@/shared/state/editor';
 
 vi.mock('@/features/editor/deps/preview', async () => {

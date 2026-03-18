@@ -1109,6 +1109,41 @@ describe('MaskEditorOverlay edit mode', () => {
     expect(useMaskEditorStore.getState().selectedVertexIndex).toBe(1);
   });
 
+  it('deletes the selected point instead of deleting the whole path item', async () => {
+    seedEditablePath();
+    useSelectionStore.getState().selectItems(['path-1']);
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={PATH_ITEM_TRANSFORM}
+      />
+    );
+
+    act(() => {
+      useMaskEditorStore.getState().selectVertex(1);
+    });
+
+    fireEvent.keyDown(window, { key: 'Delete' });
+
+    await waitFor(() => {
+      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+      expect(updatedItem).toBeDefined();
+      expect(updatedItem?.pathVertices).toHaveLength(3);
+      expect(updatedItem?.pathVertices?.[0]?.position).toEqual([0, 0]);
+      expect(updatedItem?.pathVertices?.[1]?.position).toEqual([1, 1]);
+      expect(updatedItem?.pathVertices?.[2]?.position).toEqual([0, 1]);
+    });
+  });
+
   it('keeps the dragged vertex stable while the fitted transform catches up after release', async () => {
     const queuedRafCallbacks: FrameRequestCallback[] = [];
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {

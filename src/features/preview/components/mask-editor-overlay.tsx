@@ -1516,6 +1516,69 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [editingItemId, itemTransform, scheduleEditCommitCleanup]
   );
 
+  const removeSelectedVertices = useCallback(() => {
+    const vertices = getVertices();
+    if (!vertices) return;
+
+    const targetIndices = selectedVertexIndices.length > 0
+      ? selectedVertexIndices.filter((index) => Number.isInteger(index) && index >= 0 && index < vertices.length)
+      : selectedVertexIndex !== null && vertices[selectedVertexIndex]
+        ? [selectedVertexIndex]
+        : [];
+
+    if (targetIndices.length === 0) return;
+    if (vertices.length - targetIndices.length < 3) return;
+
+    const sortedIndices = [...targetIndices].sort((a, b) => b - a);
+    let nextVertices: MaskVertex[] | null = vertices;
+    for (const index of sortedIndices) {
+      nextVertices = nextVertices ? removeVertex(nextVertices, index) : null;
+    }
+    if (!nextVertices) return;
+
+    const removedSet = new Set(targetIndices);
+    const nextSelectedVertices = selectedVertexIndices
+      .filter((index) => !removedSet.has(index))
+      .map((index) => (
+        index - targetIndices.filter((removedIndex) => removedIndex < index).length
+      ));
+    const nextPrimaryCandidate =
+      selectedVertexIndex === null || removedSet.has(selectedVertexIndex)
+        ? null
+        : selectedVertexIndex - targetIndices.filter((removedIndex) => removedIndex < selectedVertexIndex).length;
+    const nextSelectedIndex =
+      nextPrimaryCandidate !== null && nextSelectedVertices.includes(nextPrimaryCandidate)
+        ? nextPrimaryCandidate
+        : nextSelectedVertices[nextSelectedVertices.length - 1] ?? null;
+
+    selectVertices(nextSelectedVertices, nextSelectedIndex);
+    commitVertices(nextVertices);
+  }, [commitVertices, getVertices, selectVertices, selectedVertexIndex, selectedVertexIndices]);
+
+  useEffect(() => {
+    if (!isEditing || penMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isModifierOnly =
+        e.key === 'Shift' || e.key === 'Alt' || e.key === 'Control' || e.key === 'Meta';
+      if (isModifierOnly) {
+        return;
+      }
+
+      if (e.key !== 'Backspace' && e.key !== 'Delete') {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      removeSelectedVertices();
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isEditing, penMode, removeSelectedVertices]);
+
   useEffect(() => {
     if (!isEditing || penMode) return;
     if (convertSelectedVertexRequestVersion === 0) return;

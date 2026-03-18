@@ -16,3 +16,4 @@ export type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-stor
 export { useMaskEditorStore } from '@/features/preview/stores/mask-editor-store';
 export { useCornerPinStore } from '@/features/preview/stores/corner-pin-store';
 export { useThrottledFrame } from '@/features/preview/hooks/use-throttled-frame';
+export { useItemsStore } from '@/features/preview/deps/timeline-store';

@@ -11,8 +11,7 @@ import {
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useSettingsStore } from '@/features/editor/deps/settings';
-import { useMaskEditorStore } from '@/features/editor/deps/preview';
-import { useItemsStore } from '@/features/preview/deps/timeline-store';
+import { useMaskEditorStore, useItemsStore } from '@/features/editor/deps/preview';
 import { useEditorStore } from '@/shared/state/editor';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { InteractionLockRegion } from './interaction-lock-region';
