@@ -2,6 +2,7 @@ import { useMemo, useCallback } from 'react';
 import { useVideoConfig } from '../../hooks/use-player-compat';
 import { interpolate, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useGizmoStore, type ItemPropertiesPreview } from '@/features/composition-runtime/deps/stores';
+import { useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
@@ -17,6 +18,7 @@ import {
   applyTransformOverride,
   resolveItemTransformAtRelativeFrame,
 } from '../../utils/frame-scene';
+import { applyPreviewPathVerticesToShape } from '../../utils/preview-path-override';
 import { expandTextTransformToFitContent } from '../../utils/text-layout';
 
 /**
@@ -114,6 +116,23 @@ export function useItemVisualState(
   );
   // Prefer context keyframes (render mode) over store keyframes (preview mode)
   const itemKeyframes = contextKeyframes ?? storeKeyframes;
+  const maskIds = useMemo(() => new Set(masks.map((mask) => mask.shape.id)), [masks]);
+  const previewMaskEditingItemId = useMaskEditorStore(
+    useCallback((state) => {
+      if (!state.editingItemId || !state.previewVertices || !maskIds.has(state.editingItemId)) {
+        return null;
+      }
+      return state.editingItemId;
+    }, [maskIds])
+  );
+  const previewMaskVertices = useMaskEditorStore(
+    useCallback((state) => {
+      if (!state.editingItemId || !state.previewVertices || !maskIds.has(state.editingItemId)) {
+        return null;
+      }
+      return state.previewVertices;
+    }, [maskIds])
+  );
 
   // === TRANSFORM COMPUTATION ===
   const { transform, transformStyle, fadeOpacity, finalOpacity } = useMemo(() => {
@@ -261,6 +280,11 @@ export function useItemVisualState(
     const maskType = firstMask.shape.maskType ?? 'clip';
     const maskFeather = (firstMask.shape.maskFeather ?? 0) * uniformScale;
     const maskInvert = firstMask.shape.maskInvert ?? false;
+    const getPreviewPathVertices = (shapeId: string) => (
+      previewMaskEditingItemId === shapeId
+        ? (previewMaskVertices ?? undefined)
+        : undefined
+    );
 
     // Generate paths for all masks with rotation baked in
     const maskPathsWithStroke = masks.map(({ shape, transform: maskTransform }) => {
@@ -293,8 +317,9 @@ export function useItemVisualState(
         width: resolvedMaskTransform.width * scaleX,
         height: resolvedMaskTransform.height * scaleY,
       };
+      const effectiveShape = applyPreviewPathVerticesToShape(shape, getPreviewPathVertices);
 
-      let path = getShapePath(shape, scaledMaskTransform, {
+      let path = getShapePath(effectiveShape, scaledMaskTransform, {
         canvasWidth: renderWidth,
         canvasHeight: renderHeight,
       });
@@ -307,7 +332,7 @@ export function useItemVisualState(
       }
 
       // Include stroke width for SVG mask rendering
-      const strokeWidth = (shape.strokeWidth ?? 0) * uniformScale;
+      const strokeWidth = (effectiveShape.strokeWidth ?? 0) * uniformScale;
 
       return { path, strokeWidth };
     });
@@ -368,6 +393,8 @@ export function useItemVisualState(
     scaleX,
     scaleY,
     uniformScale,
+    previewMaskEditingItemId,
+    previewMaskVertices,
   ]);
 
   // Properties preview for content components

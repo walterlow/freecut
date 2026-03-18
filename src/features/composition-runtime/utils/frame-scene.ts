@@ -7,6 +7,10 @@ import {
   resolveTransform,
   getSourceDimensions,
 } from './transform-resolver';
+import {
+  applyPreviewPathVerticesToShape,
+  type PreviewPathVerticesOverride,
+} from './preview-path-override';
 import { expandTextTransformToFitContent } from './text-layout';
 import {
   resolveAnimatedTransform,
@@ -100,11 +104,13 @@ export function resolveActiveShapeMasksAtFrame(
     frame,
     getKeyframes,
     getPreviewTransform,
+    getPreviewPathVertices,
   }: {
     canvas: CanvasSettings;
     frame: number;
     getKeyframes?: (itemId: string) => ItemKeyframes | undefined;
     getPreviewTransform?: (itemId: string) => TransformOverride;
+    getPreviewPathVertices?: PreviewPathVerticesOverride;
   }
 ): ResolvedShapeMask[] {
   if (masks.length === 0) return [];
@@ -120,16 +126,20 @@ export function resolveActiveShapeMasksAtFrame(
       const end = mask.from + mask.durationInFrames;
       return frame >= start && frame < end;
     })
-    .map(({ mask, trackOrder }) => ({
-      shape: mask,
-      trackOrder,
-      transform: resolveItemTransformAtFrame(mask, {
+    .map(({ mask, trackOrder }) => {
+      const shape = applyPreviewPathVerticesToShape(mask, getPreviewPathVertices);
+
+      return {
+        shape,
+        trackOrder,
+        transform: resolveItemTransformAtFrame(shape, {
         canvas,
         frame,
-        keyframes: getKeyframes?.(mask.id),
-        previewTransform: getPreviewTransform?.(mask.id),
-      }),
-    }));
+          keyframes: getKeyframes?.(mask.id),
+          previewTransform: getPreviewTransform?.(mask.id),
+        }),
+      };
+    });
 }
 
 export function resolveFrameCompositionScene({
@@ -138,12 +148,14 @@ export function resolveFrameCompositionScene({
   canvas,
   getKeyframes,
   getPreviewTransform,
+  getPreviewPathVertices,
 }: {
   renderPlan: CompositionRenderPlan;
   frame: number;
   canvas: CanvasSettings;
   getKeyframes?: (itemId: string) => ItemKeyframes | undefined;
   getPreviewTransform?: (itemId: string) => TransformOverride;
+  getPreviewPathVertices?: PreviewPathVerticesOverride;
 }): FrameCompositionScene {
   return {
     frame,
@@ -152,6 +164,7 @@ export function resolveFrameCompositionScene({
       frame,
       getKeyframes,
       getPreviewTransform,
+      getPreviewPathVertices,
     }),
     transitionFrameState: resolveTransitionFrameState({
       transitionWindows: renderPlan.transitionWindows,

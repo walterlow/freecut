@@ -62,6 +62,7 @@ import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 // Item renderer
 import {
+  type PreviewPathVerticesOverride,
   resolveFrameCompositionScene,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
@@ -125,6 +126,7 @@ export async function createCompositionRenderer(
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
     getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
     getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
+    getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
@@ -139,6 +141,7 @@ export async function createCompositionRenderer(
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
+  const getPreviewPathVerticesOverride = options.getPreviewPathVerticesOverride;
   const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
@@ -419,6 +422,7 @@ export async function createCompositionRenderer(
     keyframesMap,
     adjustmentLayers,
     getPreviewEffectsOverride,
+    getPreviewPathVerticesOverride,
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
@@ -1011,7 +1015,8 @@ export async function createCompositionRenderer(
         frame,
         maskSettings,
         keyframesMap,
-        renderMode === 'preview' ? getPreviewTransformOverride : undefined
+        renderMode === 'preview' ? getPreviewTransformOverride : undefined,
+        renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       );
 
       const frameScene = resolveFrameCompositionScene({
@@ -1020,6 +1025,7 @@ export async function createCompositionRenderer(
         canvas: canvasSettings,
         getKeyframes: (itemId) => keyframesMap.get(itemId),
         getPreviewTransform: renderMode === 'preview' ? getPreviewTransformOverride : undefined,
+        getPreviewPathVertices: renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       });
       const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
 

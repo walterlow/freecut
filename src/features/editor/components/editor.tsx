@@ -77,7 +77,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   const editorLayout = getEditorLayout(editorDensity);
   const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
   const syncSidebarLayout = useEditorStore((s) => s.syncSidebarLayout);
-  const isPenModeActive = useMaskEditorStore((s) => s.penMode);
+  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -164,12 +164,12 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   }, [editorLayout, syncSidebarLayout]);
 
   useEffect(() => {
-    if (!isPenModeActive) return;
+    if (!isMaskEditingActive) return;
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
       activeElement.blur();
     }
-  }, [isPenModeActive]);
+  }, [isMaskEditingActive]);
 
   // Save timeline to project (with guard against concurrent saves)
   const handleSave = useCallback(async () => {
@@ -283,7 +283,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       style={editorLayoutCssVars as import('react').CSSProperties}
     >
         {/* Top Toolbar */}
-        <InteractionLockRegion locked={isPenModeActive}>
+        <InteractionLockRegion locked={isMaskEditingActive}>
           <Toolbar
             projectId={projectId}
             project={project}
@@ -304,7 +304,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           >
             <div className="h-full flex overflow-hidden relative">
               {/* Left Sidebar - Media Library */}
-              <InteractionLockRegion locked={isPenModeActive}>
+              <InteractionLockRegion locked={isMaskEditingActive}>
                 <ErrorBoundary level="feature">
                   <MediaSidebar />
                 </ErrorBoundary>
@@ -316,7 +316,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
               </ErrorBoundary>
 
               {/* Right Sidebar - Properties */}
-              <InteractionLockRegion locked={isPenModeActive}>
+              <InteractionLockRegion locked={isMaskEditingActive}>
                 <ErrorBoundary level="feature">
                   <PropertiesSidebar />
                 </ErrorBoundary>
@@ -324,7 +324,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             </div>
           </ResizablePanel>
 
-          <ResizableHandle withHandle className={isPenModeActive ? 'pointer-events-none opacity-60' : undefined} />
+          <ResizableHandle withHandle className={isMaskEditingActive ? 'pointer-events-none opacity-60' : undefined} />
 
           {/* Bottom - Timeline */}
           <ResizablePanel
@@ -333,7 +333,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             minSize={editorLayout.timelineMinSize}
             maxSize={editorLayout.timelineMaxSize}
           >
-            <InteractionLockRegion locked={isPenModeActive} className="h-full">
+            <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
               <ErrorBoundary level="feature">
                 <Timeline
                   duration={timelineDuration}
@@ -372,7 +372,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       <BentoLayoutDialog />
 
       {/* Debug Panel (dev mode only) */}
-      {!isPenModeActive ? <ProjectDebugPanel projectId={projectId} /> : null}
+      {!isMaskEditingActive ? <ProjectDebugPanel projectId={projectId} /> : null}
     </div>
   );
 });

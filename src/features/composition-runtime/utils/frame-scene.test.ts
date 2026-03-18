@@ -1,8 +1,53 @@
 import { describe, expect, it } from 'vitest';
-import { resolveFrameCompositionScene } from './frame-scene';
+import { resolveActiveShapeMasksAtFrame, resolveFrameCompositionScene } from './frame-scene';
 import { resolveCompositionRenderPlan } from './scene-assembly';
 
 describe('frame scene', () => {
+  it('applies preview path vertices to active path masks', () => {
+    const previewVertices = [
+      {
+        position: [0.9, 0.1] as [number, number],
+        inHandle: [0.9, 0.1] as [number, number],
+        outHandle: [0.9, 0.1] as [number, number],
+      },
+    ];
+    const activeMasks = resolveActiveShapeMasksAtFrame([
+      {
+        id: 'mask-path',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Mask path',
+        shapeType: 'path',
+        fillColor: '#fff',
+        isMask: true,
+        pathVertices: [
+          {
+            position: [0.1, 0.1],
+            inHandle: [0.1, 0.1],
+            outHandle: [0.1, 0.1],
+          },
+        ],
+        transform: {
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+        },
+      },
+    ], {
+      canvas: { width: 1280, height: 720, fps: 30 },
+      frame: 5,
+      getPreviewPathVertices: () => previewVertices,
+    });
+
+    expect(activeMasks).toHaveLength(1);
+    expect(activeMasks[0]?.shape.pathVertices).toBe(previewVertices);
+  });
+
   it('combines active masks and transition frame state from the render plan', () => {
     const renderPlan = resolveCompositionRenderPlan({
       tracks: [

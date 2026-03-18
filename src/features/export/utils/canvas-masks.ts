@@ -9,6 +9,7 @@ import type { ShapeItem, TimelineTrack } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ResolvedTransform } from '@/types/transform';
 import {
+  type PreviewPathVerticesOverride,
   getShapePath,
   rotatePath,
   resolveActiveShapeMasksAtFrame,
@@ -323,7 +324,8 @@ export function getActiveMasksForFrame(
   frame: number,
   canvas: MaskCanvasSettings,
   keyframesMap: Map<string, ItemKeyframes>,
-  getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined
+  getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined,
+  getPreviewPathVerticesOverride?: PreviewPathVerticesOverride,
 ): Array<{
   path: Path2D;
   inverted: boolean;
@@ -345,6 +347,7 @@ export function getActiveMasksForFrame(
       frame,
       getKeyframes: (itemId) => keyframesMap.get(itemId),
       getPreviewTransform: getPreviewTransformOverride,
+      getPreviewPathVertices: getPreviewPathVerticesOverride,
     }
   );
 
@@ -371,7 +374,8 @@ export function prepareMasks(
   frame: number,
   canvas: MaskCanvasSettings,
   keyframesMap: Map<string, ItemKeyframes> = new Map(),
-  getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined
+  getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined,
+  getPreviewPathVerticesOverride?: PreviewPathVerticesOverride,
 ): Array<{
   path: Path2D;
   inverted: boolean;
@@ -385,7 +389,8 @@ export function prepareMasks(
     frame,
     canvas,
     keyframesMap,
-    getPreviewTransformOverride
+    getPreviewTransformOverride,
+    getPreviewPathVerticesOverride,
   );
 
   return preparedMasks;

@@ -11,7 +11,7 @@ interface InteractionLockRegionProps {
 
 /**
  * Blocks pointer interaction for a region while leaving the DOM mounted.
- * Used to keep pen mode modal without tearing down editor panels.
+ * Used to keep mask editing modal without tearing down editor panels.
  */
 export function InteractionLockRegion({
   locked,
@@ -41,7 +41,7 @@ export function InteractionLockRegion({
             'absolute inset-0 z-10 cursor-not-allowed rounded-[inherit] bg-background/10',
             overlayClassName
           )}
-          title="Finish or cancel drawing to continue"
+          title="Finish or exit mask editing to continue"
         />
       ) : null}
     </div>

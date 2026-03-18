@@ -719,7 +719,7 @@ export const VideoPreview = memo(function VideoPreview({
   const hasSlide4Up = useSlideEditPreviewStore((s) => Boolean(s.itemId));
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
-  const isPenModeActive = useMaskEditorStore((s) => s.penMode);
+  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
   const zoom = usePlaybackStore((s) => s.zoom);
@@ -1961,6 +1961,14 @@ export const VideoPreview = memo(function VideoPreview({
     return undefined;
   }, []);
 
+  const getPreviewPathVerticesOverride = useCallback((itemId: string) => {
+    const maskState = useMaskEditorStore.getState();
+    if (maskState.editingItemId === itemId && maskState.previewVertices) {
+      return maskState.previewVertices;
+    }
+    return undefined;
+  }, []);
+
   const fastScrubScaledTracks = useMemo(() => {
     return fastScrubTracks as CompositionInputProps['tracks'];
   }, [
@@ -2065,6 +2073,7 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewTransformOverride,
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
+          getPreviewPathVerticesOverride,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -2115,7 +2124,7 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, isResolving, renderSize.height, renderSize.width]);
+  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, getPreviewPathVerticesOverride, isResolving, renderSize.height, renderSize.width]);
 
   const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<OffscreenCanvas | null> => {
     const offscreen = scrubOffscreenCanvasRef.current;
@@ -2819,6 +2828,22 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
+    const unsubscribeMaskEditor = useMaskEditorStore.subscribe((state, prev) => {
+      const previewVerticesChanged = state.previewVertices !== prev.previewVertices;
+      const editingItemChanged = state.editingItemId !== prev.editingItemId;
+      if (!previewVerticesChanged && !editingItemChanged) return;
+
+      const playbackState = usePlaybackStore.getState();
+      const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+      if (!forceFastScrubOverlay && playbackState.previewFrame === null) return;
+
+      if (scrubRendererRef.current) {
+        scrubRendererRef.current.invalidateFrameCache([targetFrame]);
+      }
+      scrubRequestedFrameRef.current = targetFrame;
+      void pumpRenderLoop();
+    });
+
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
@@ -2840,6 +2865,7 @@ export const VideoPreview = memo(function VideoPreview({
       unsubscribe();
       unsubscribeGizmo();
       unsubscribeCornerPin();
+      unsubscribeMaskEditor();
     };
   }, [
     disposeFastScrubRenderer,
@@ -3400,7 +3426,7 @@ export const VideoPreview = memo(function VideoPreview({
   // Handle click on background area to deselect items
   const backgroundRef = useRef<HTMLDivElement>(null);
   const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
-    if (isPenModeActive) {
+    if (isMaskEditingActive) {
       e.stopPropagation();
       return;
     }
@@ -3410,7 +3436,7 @@ export const VideoPreview = memo(function VideoPreview({
     if (target.closest('[data-gizmo]')) return;
 
     useSelectionStore.getState().clearItemSelection();
-  }, [isPenModeActive]);
+  }, [isMaskEditingActive]);
 
   // Handle frame change from player
   // Skip when in preview mode to keep primary playhead stationary

@@ -41,8 +41,15 @@ import type { ScrubbingCache } from '@/features/export/deps/preview';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
-import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
-import { hasCornerPin, drawCornerPinImage } from '@/features/export/deps/composition-runtime';
+import {
+  applyPreviewPathVerticesToItem,
+  applyPreviewPathVerticesToShape,
+  hasCornerPin,
+  drawCornerPinImage,
+  getShapePath,
+  rotatePath,
+  type PreviewPathVerticesOverride,
+} from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -123,6 +130,7 @@ export interface ItemRenderContext {
   keyframesMap: Map<string, ItemKeyframes>;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
   getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
+  getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
 
   // Pre-computed sub-composition render data (built once during preload)
   subCompRenderData: Map<string, SubCompRenderData>;
@@ -222,24 +230,30 @@ async function renderItemContent(
   rctx: ItemRenderContext,
   sourceFrameOffset: number,
 ): Promise<void> {
-  switch (item.type) {
+  const effectiveItem = (
+    rctx.renderMode === 'preview'
+      ? applyPreviewPathVerticesToItem(item, rctx.getPreviewPathVerticesOverride)
+      : item
+  );
+
+  switch (effectiveItem.type) {
     case 'video':
-      await renderVideoItem(ctx, item as VideoItem, transform, frame, rctx, sourceFrameOffset);
+      await renderVideoItem(ctx, effectiveItem as VideoItem, transform, frame, rctx, sourceFrameOffset);
       break;
     case 'image':
-      renderImageItem(ctx, item as ImageItem, transform, rctx, frame);
+      renderImageItem(ctx, effectiveItem as ImageItem, transform, rctx, frame);
       break;
     case 'text':
-      renderTextItem(ctx, item as TextItem, transform, rctx);
+      renderTextItem(ctx, effectiveItem as TextItem, transform, rctx);
       break;
     case 'shape':
-      renderShape(ctx, item as ShapeItem, transform, {
+      renderShape(ctx, effectiveItem as ShapeItem, transform, {
         width: rctx.canvasSettings.width,
         height: rctx.canvasSettings.height,
       });
       break;
     case 'composition':
-      await renderCompositionItem(ctx, item as CompositionItem, transform, frame, rctx);
+      await renderCompositionItem(ctx, effectiveItem as CompositionItem, transform, frame, rctx);
       break;
   }
 }
@@ -1120,8 +1134,13 @@ async function renderCompositionItem(
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
         const maskType = subItem.maskType ?? 'clip';
         const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
+        const effectiveMaskItem = (
+          rctx.renderMode === 'preview'
+            ? applyPreviewPathVerticesToShape(subItem, rctx.getPreviewPathVerticesOverride)
+            : subItem
+        );
         let svgPath = getShapePath(
-          subItem,
+          effectiveMaskItem,
           {
             x: subItemTransform.x,
             y: subItemTransform.y,
@@ -1144,7 +1163,7 @@ async function renderCompositionItem(
 
         activeSubMasks.push({
           path: svgPathToPath2D(svgPath),
-          inverted: subItem.maskInvert ?? false,
+          inverted: effectiveMaskItem.maskInvert ?? false,
           feather,
           maskType,
           trackOrder: track.order,

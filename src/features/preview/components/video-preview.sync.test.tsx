@@ -10,6 +10,7 @@ import {
 } from '@/features/preview/deps/timeline-store';
 import { useMediaLibraryStore } from '@/features/preview/deps/media-library';
 import { useGizmoStore } from '../stores/gizmo-store';
+import { useMaskEditorStore } from '../stores/mask-editor-store';
 
 const seekToMock = vi.fn<(frame: number) => void>();
 const playMock = vi.fn();
@@ -376,6 +377,7 @@ function resetStores() {
     snapLines: [],
     canvasBackgroundPreview: null,
   });
+  useMaskEditorStore.getState().stopEditing();
 
   useMediaLibraryStore.setState({
     mediaItems: [],
@@ -603,6 +605,76 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.invalidateFrameCache).toHaveBeenCalledWith([0]);
+    });
+  });
+
+  it('invalidates the current fast-scrub frame when mask point preview vertices change', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalled();
+    });
+    renderer.invalidateFrameCache.mockClear();
+
+    act(() => {
+      useMaskEditorStore.setState({
+        isEditing: true,
+        editingItemId: 'mask-1',
+        previewVertices: [
+          {
+            position: [0.3, 0.2],
+            inHandle: [0.3, 0.2],
+            outHandle: [0.3, 0.2],
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith([24]);
     });
   });
 

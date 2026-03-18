@@ -12,9 +12,11 @@ import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { useMaskEditorStore } from '@/features/editor/deps/preview';
+import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useEditorStore } from '@/shared/state/editor';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { InteractionLockRegion } from './interaction-lock-region';
+import { Button } from '@/components/ui/button';
 
 interface PreviewAreaProps {
   project: {
@@ -94,7 +96,27 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
+  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
   const isPenModeActive = useMaskEditorStore((s) => s.penMode);
+  const isShapePenModeActive = useMaskEditorStore((s) => s.shapePenMode);
+  const editingItemId = useMaskEditorStore((s) => s.editingItemId);
+  const selectedVertexIndices = useMaskEditorStore((s) => s.selectedVertexIndices);
+  const selectedVertexIndex = useMaskEditorStore((s) => s.selectedVertexIndex);
+  const penVertexCount = useMaskEditorStore((s) => s.penVertices.length);
+  const previewVertexCount = useMaskEditorStore((s) => s.previewVertices?.length ?? 0);
+  const requestFinishPenMode = useMaskEditorStore((s) => s.requestFinishPenMode);
+  const requestCancelPenMode = useMaskEditorStore((s) => s.requestCancelPenMode);
+  const requestConvertSelectedVertex = useMaskEditorStore((s) => s.requestConvertSelectedVertex);
+  const stopMaskEditing = useMaskEditorStore((s) => s.stopEditing);
+  const editVertexCount = useItemsStore(
+    useCallback((s) => {
+      if (!editingItemId) return 0;
+      const item = s.items.find((candidate) => candidate.id === editingItemId);
+      return item?.type === 'shape' && item.shapeType === 'path'
+        ? item.pathVertices?.length ?? 0
+        : 0;
+    }, [editingItemId])
+  );
 
   // Read current project from store for live updates (e.g., dimension swaps)
   // Use granular selectors to avoid re-renders when unrelated properties change
@@ -122,6 +144,25 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   });
 
   const totalFrames = timelineEndFrame ?? fps * DEFAULT_EMPTY_TIMELINE_SECONDS;
+  const isPathEditModeActive = isMaskEditingActive && !isPenModeActive;
+  const canFinishPenPath = isShapePenModeActive && penVertexCount >= 3;
+  const selectedVertexCount = selectedVertexIndices.length;
+  const hasSelectedVertex = selectedVertexCount > 0;
+  const remainingPenPoints = Math.max(0, 3 - penVertexCount);
+  const displayedEditVertexCount = previewVertexCount || editVertexCount;
+  const penModeHint = canFinishPenPath
+    ? 'Close the path from here, or click the first node.'
+    : penVertexCount === 0
+      ? 'Click in the preview to place your first point.'
+      : `Add ${remainingPenPoints} more ${remainingPenPoints === 1 ? 'point' : 'points'} to finish.`;
+  const editModeHint = displayedEditVertexCount > 0
+    ? 'Drag points, handles, or the mask body to adjust the shape.'
+    : 'Drag inside the mask to move it.';
+  const selectedVertexHint = selectedVertexCount === 0
+    ? 'Select a point to enable corner and bezier conversion.'
+    : selectedVertexCount === 1 && selectedVertexIndex !== null
+      ? `Point ${selectedVertexIndex + 1} selected for knot conversion.`
+      : `${selectedVertexCount} points selected for knot conversion.`;
 
   // Measure preview container size for zoom calculations
   useEffect(() => {
@@ -398,7 +439,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
       {sourcePreviewMediaId && (
         <>
           <InteractionLockRegion
-            locked={isPenModeActive}
+            locked={isMaskEditingActive}
             className="h-full"
             overlayClassName="rounded-none"
             style={{ width: `${displayedSourceSplitPercent}%` }}
@@ -411,7 +452,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               />
             </div>
           </InteractionLockRegion>
-          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+          <InteractionLockRegion locked={isMaskEditingActive} overlayClassName="rounded-none">
             <PreviewSplitHandle
               onMouseDown={handleSourceSplitDragStart}
               onReset={handleResetSourceSplit}
@@ -445,28 +486,127 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             />
           </div>
 
-          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+          {isPenModeActive ? (
             <div
-              className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
+              className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
             >
-              <div className="flex-shrink-0">
-                <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-500">
+                    Pen Tool
+                  </span>
+                  <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-600">
+                    {penVertexCount} {penVertexCount === 1 ? 'point' : 'points'}
+                  </span>
+                </div>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {penModeHint}
+                </span>
               </div>
-              <div className="flex-1 min-w-0" />
-              <PlaybackControls totalFrames={totalFrames} fps={fps} />
-              <div className="flex-1 min-w-0" />
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <PreviewZoomControls />
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <span className="hidden text-[11px] text-muted-foreground lg:inline">
+                  Backspace removes the last point.
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 px-3 text-[11px]"
+                  disabled={!canFinishPenPath}
+                  onClick={requestFinishPenMode}
+                >
+                  Finish Shape
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-3 text-[11px]"
+                  onClick={requestCancelPenMode}
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
-          </InteractionLockRegion>
+          ) : isPathEditModeActive ? (
+            <div
+              className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
+              style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-500">
+                    Path Edit
+                  </span>
+                  <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-600">
+                    {displayedEditVertexCount} {displayedEditVertexCount === 1 ? 'point' : 'points'}
+                  </span>
+                </div>
+                <span className="min-w-0 truncate text-xs text-muted-foreground">
+                  {editModeHint}
+                </span>
+              </div>
+              <div className="flex flex-shrink-0 items-center gap-2">
+                <span className="hidden text-[11px] text-muted-foreground xl:inline">
+                  Double-click an edge to add a point. Drag empty space to box-select points.
+                </span>
+                <span className="hidden text-[11px] text-muted-foreground 2xl:inline">
+                  {selectedVertexHint}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={hasSelectedVertex ? 'secondary' : 'outline'}
+                  className="h-8 px-3 text-[11px]"
+                  disabled={!hasSelectedVertex}
+                  onClick={() => requestConvertSelectedVertex('corner')}
+                >
+                  Corner
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={hasSelectedVertex ? 'secondary' : 'outline'}
+                  className="h-8 px-3 text-[11px]"
+                  disabled={!hasSelectedVertex}
+                  onClick={() => requestConvertSelectedVertex('bezier')}
+                >
+                  Bezier
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 px-3 text-[11px]"
+                  onClick={stopMaskEditing}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <InteractionLockRegion locked={false} overlayClassName="rounded-none">
+              <div
+                className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
+                style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+              >
+                <div className="flex-shrink-0">
+                  <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
+                </div>
+                <div className="flex-1 min-w-0" />
+                <PlaybackControls totalFrames={totalFrames} fps={fps} />
+                <div className="flex-1 min-w-0" />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <PreviewZoomControls />
+                </div>
+              </div>
+            </InteractionLockRegion>
+          )}
         </div>
       </div>
 
       {colorScopesOpen && (
         <>
-          <InteractionLockRegion locked={isPenModeActive} overlayClassName="rounded-none">
+          <InteractionLockRegion locked={isMaskEditingActive} overlayClassName="rounded-none">
             <PreviewSplitHandle
               onMouseDown={handleScopesSplitDragStart}
               onReset={handleResetScopesSplit}
@@ -476,7 +616,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             />
           </InteractionLockRegion>
           <InteractionLockRegion
-            locked={isPenModeActive}
+            locked={isMaskEditingActive}
             className="h-full"
             overlayClassName="rounded-none"
             style={{ width: `${displayedScopesSplitPercent}%` }}
