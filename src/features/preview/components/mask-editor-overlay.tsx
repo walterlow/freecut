@@ -30,7 +30,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 import type { MaskVertex } from '@/types/masks';
-import type { ShapeItem } from '@/types/timeline';
+import type { ShapeItem, TimelineTrack } from '@/types/timeline';
 import { findBestCanvasDropPlacement } from '../deps/drop-placement-contract';
 
 /** Radius of vertex control points in screen pixels */
@@ -43,6 +43,7 @@ const HIT_RADIUS = 8;
 const CLOSE_RADIUS = 12;
 /** Distance threshold before click turns into a drag */
 const DRAG_THRESHOLD = 3;
+const TRACK_NUMBER_REGEX = /^Track\s+(\d+)$/i;
 
 type MaskHit = { type: 'vertex' | 'inHandle' | 'outHandle' | 'segment'; index: number };
 type PenHit = { type: 'vertex' | 'inHandle' | 'outHandle'; index: number };
@@ -68,6 +69,29 @@ function cloneVertices(vertices: MaskVertex[]): MaskVertex[] {
     inHandle: [...vertex.inHandle] as [number, number],
     outHandle: [...vertex.outHandle] as [number, number],
   }));
+}
+
+function getNextTrackName(tracks: ReadonlyArray<TimelineTrack>): string {
+  const existingNumbers = new Set<number>();
+
+  for (const track of tracks) {
+    const match = track.name.match(TRACK_NUMBER_REGEX);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const trackNumber = Number.parseInt(match[1], 10);
+    if (Number.isFinite(trackNumber) && trackNumber > 0) {
+      existingNumbers.add(trackNumber);
+    }
+  }
+
+  let nextTrackNumber = 1;
+  while (existingNumbers.has(nextTrackNumber)) {
+    nextTrackNumber++;
+  }
+
+  return `Track ${nextTrackNumber}`;
 }
 
 interface MaskEditorOverlayProps {
@@ -880,12 +904,12 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     const centerX = ((bounds.minX + bounds.maxX) / 2 - 0.5) * canvasW;
     const centerY = ((bounds.minY + bounds.maxY) / 2 - 0.5) * canvasH;
 
-    const { tracks, fps, addItem } = useTimelineStore.getState();
+    const { tracks, fps, addItem, setTracks } = useTimelineStore.getState();
     const items = useItemsStore.getState().items;
     const { activeTrackId, selectItems, setActiveTrack } = useSelectionStore.getState();
     const currentFrame = usePlaybackStore.getState().currentFrame;
     const durationInFrames = fps * 60;
-    const placement = findBestCanvasDropPlacement({
+    let placement = findBestCanvasDropPlacement({
       tracks,
       items,
       activeTrackId,
@@ -896,6 +920,31 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     if (!placement) {
       cancelPenMode();
       return;
+    }
+
+    if (!placement.preservedTime) {
+      const referenceTrack = tracks.find((track) => track.id === placement.trackId);
+      const minOrder = tracks.length > 0
+        ? Math.min(...tracks.map((track) => track.order ?? 0))
+        : 0;
+      const newTrack: TimelineTrack = {
+        id: `track-${Date.now()}`,
+        name: getNextTrackName(tracks),
+        height: referenceTrack?.height ?? 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: minOrder - 1,
+        items: [],
+      };
+
+      setTracks([newTrack, ...tracks]);
+      placement = {
+        trackId: newTrack.id,
+        from: currentFrame,
+        preservedTime: true,
+      };
     }
 
     const shapeItem: ShapeItem = {

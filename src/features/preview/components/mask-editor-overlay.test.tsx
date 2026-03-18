@@ -247,6 +247,106 @@ describe('MaskEditorOverlay shape pen flow', () => {
     expect(useSelectionStore.getState().activeTrackId).toBe('track-2');
   });
 
+  it('creates a new track to keep the mask at the playhead when all tracks are occupied', async () => {
+    useMaskEditorStore.getState().startShapePenMode();
+    usePlaybackStore.getState().setCurrentFrame(120);
+    useSelectionStore.getState().setActiveTrack('track-1');
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-1',
+        name: 'Track 1',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-2',
+        name: 'Track 2',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'busy-track-1',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 100,
+        durationInFrames: 120,
+        label: 'Busy 1',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+      },
+      {
+        id: 'busy-track-2',
+        type: 'shape',
+        trackId: 'track-2',
+        from: 110,
+        durationInFrames: 120,
+        label: 'Busy 2',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+      },
+    ]);
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={FULL_CANVAS_TRANSFORM}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    const clickPoint = (x: number, y: number, pointerId: number) => {
+      fireEvent.pointerDown(canvas!, { clientX: x, clientY: y, pointerId });
+      fireEvent.pointerUp(canvas!, { clientX: x, clientY: y, pointerId });
+    };
+
+    clickPoint(20, 20, 1);
+    clickPoint(120, 20, 2);
+    clickPoint(120, 80, 3);
+    clickPoint(20, 20, 4);
+
+    await waitFor(() => {
+      expect(useMaskEditorStore.getState().isEditing).toBe(false);
+    });
+
+    const tracks = useItemsStore.getState().tracks;
+    expect(tracks).toHaveLength(3);
+
+    const newTrack = tracks.find((track) => track.id !== 'track-1' && track.id !== 'track-2');
+    const shape = useItemsStore.getState().items.find(
+      (item) => item.id !== 'busy-track-1' && item.id !== 'busy-track-2'
+    );
+
+    expect(newTrack).toBeDefined();
+    expect(newTrack?.name).toBe('Track 3');
+    expect(shape?.trackId).toBe(newTrack?.id);
+    expect(shape?.from).toBe(120);
+    expect(useSelectionStore.getState().activeTrackId).toBe(newTrack?.id ?? null);
+  });
+
   it('closes and commits the path when the closing anchor is dragged to shape the bezier', async () => {
     useMaskEditorStore.getState().startShapePenMode();
 
