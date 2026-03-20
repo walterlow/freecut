@@ -19,6 +19,36 @@ const logger = createLogger('CompositorPipeline');
 
 // ─── Shader ───
 
+const BLIT_SHADER = /* wgsl */ `
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+};
+@vertex
+fn vertexMain(@builtin(vertex_index) vi: u32) -> VertexOutput {
+  var pos = array<vec2f, 6>(
+    vec2f(-1,-1), vec2f(1,-1), vec2f(-1,1),
+    vec2f(-1,1), vec2f(1,-1), vec2f(1,1)
+  );
+  var uv = array<vec2f, 6>(
+    vec2f(0,1), vec2f(1,1), vec2f(0,0),
+    vec2f(0,0), vec2f(1,1), vec2f(1,0)
+  );
+  var o: VertexOutput;
+  o.position = vec4f(pos[vi], 0, 1);
+  o.uv = uv[vi];
+  return o;
+}
+
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+
+@fragment
+fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
+  return textureSample(inputTex, texSampler, input.uv);
+}
+`;
+
 const VERTEX_SHADER = /* wgsl */ `
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -276,6 +306,7 @@ function packUniforms(p: CompositeLayerParams): Float32Array {
 
 export class CompositorPipeline {
   private device: GPUDevice;
+  private canvasFormat: GPUTextureFormat;
   private sampler: GPUSampler;
   private uniformBuffer: GPUBuffer;
 
@@ -284,6 +315,8 @@ export class CompositorPipeline {
 
   private externalPipeline: GPURenderPipeline | null = null;
   private externalLayout: GPUBindGroupLayout | null = null;
+  private blitPipeline: GPURenderPipeline | null = null;
+  private blitLayout: GPUBindGroupLayout | null = null;
 
   private pingTexture: GPUTexture | null = null;
   private pongTexture: GPUTexture | null = null;
@@ -291,12 +324,15 @@ export class CompositorPipeline {
   private pongView: GPUTextureView | null = null;
   private texW = 0;
   private texH = 0;
+  private blitBindGroupPing: GPUBindGroup | null = null;
+  private blitBindGroupPong: GPUBindGroup | null = null;
 
   // Last packed uniforms for change detection
   private lastUniforms: Float32Array | null = null;
 
   constructor(device: GPUDevice) {
     this.device = device;
+    this.canvasFormat = navigator.gpu.getPreferredCanvasFormat();
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.uniformBuffer = device.createBuffer({
       size: UNIFORM_SIZE,
@@ -361,6 +397,29 @@ export class CompositorPipeline {
       this.externalPipeline = null;
       this.externalLayout = null;
     }
+
+    try {
+      const module = this.device.createShaderModule({
+        label: 'compositor-blit',
+        code: BLIT_SHADER,
+      });
+      this.blitLayout = this.device.createBindGroupLayout({
+        label: 'compositor-blit-layout',
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        ],
+      });
+      this.blitPipeline = this.device.createRenderPipeline({
+        label: 'compositor-blit-pipeline',
+        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.blitLayout] }),
+        vertex: { module, entryPoint: 'vertexMain' },
+        fragment: { module, entryPoint: 'blitFragment', targets: [{ format: this.canvasFormat }] },
+        primitive: { topology: 'triangle-list' },
+      });
+    } catch (e) {
+      logger.warn('Failed to create compositor blit pipeline', e);
+    }
   }
 
   private ensurePingPong(w: number, h: number): void {
@@ -379,6 +438,8 @@ export class CompositorPipeline {
     this.pongView = this.pongTexture.createView();
     this.texW = w;
     this.texH = h;
+    this.blitBindGroupPing = null;
+    this.blitBindGroupPong = null;
   }
 
   private writeUniforms(params: CompositeLayerParams): void {
@@ -484,6 +545,52 @@ export class CompositorPipeline {
     }
 
     return { texture: inputTex, view: inputView };
+  }
+
+  compositeToCanvas(
+    layers: CompositeLayer[],
+    width: number,
+    height: number,
+    outputCtx: GPUCanvasContext,
+  ): boolean {
+    if (!this.blitPipeline || !this.blitLayout) return false;
+
+    const commandEncoder = this.device.createCommandEncoder();
+    const composited = this.compositeToTexture(layers, width, height, commandEncoder);
+    if (!composited) {
+      return false;
+    }
+
+    const blitBindGroup = composited.texture === this.pingTexture
+      ? (this.blitBindGroupPing ??= this.device.createBindGroup({
+          layout: this.blitLayout,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pingView! },
+          ],
+        }))
+      : (this.blitBindGroupPong ??= this.device.createBindGroup({
+          layout: this.blitLayout,
+          entries: [
+            { binding: 0, resource: this.sampler },
+            { binding: 1, resource: this.pongView! },
+          ],
+        }));
+
+    const outputPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: outputCtx.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    outputPass.setPipeline(this.blitPipeline);
+    outputPass.setBindGroup(0, blitBindGroup);
+    outputPass.draw(6);
+    outputPass.end();
+
+    this.device.queue.submit([commandEncoder.finish()]);
+    return true;
   }
 
   getDevice(): GPUDevice {

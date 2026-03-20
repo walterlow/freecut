@@ -210,6 +210,10 @@ export async function createCompositionRenderer(
   // Lazily created from the effects pipeline's GPU device
   let gpuCompositor: CompositorPipeline | null = null;
   let gpuMaskManager: MaskTextureManager | null = null;
+  let gpuCompositeCanvas: OffscreenCanvas | null = null;
+  let gpuCompositeCtx: GPUCanvasContext | null = null;
+  let gpuCompositeW = 0;
+  let gpuCompositeH = 0;
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -218,6 +222,35 @@ export async function createCompositionRenderer(
     gpuCompositor = new CompositorPipeline(device);
     gpuMaskManager = new MaskTextureManager(device);
     return true;
+  }
+
+  function ensureGpuCompositeOutput(
+    width: number,
+    height: number,
+  ): { canvas: OffscreenCanvas; ctx: GPUCanvasContext } | null {
+    if (!gpuPipeline) return null;
+
+    if (!gpuCompositeCanvas) {
+      gpuCompositeCanvas = new OffscreenCanvas(width, height);
+    }
+
+    if (!gpuCompositeCtx || gpuCompositeW !== width || gpuCompositeH !== height) {
+      if (gpuCompositeCanvas.width !== width || gpuCompositeCanvas.height !== height) {
+        gpuCompositeCanvas.width = width;
+        gpuCompositeCanvas.height = height;
+      }
+      gpuCompositeCtx = gpuPipeline.configureCanvas(gpuCompositeCanvas);
+      if (!gpuCompositeCtx) {
+        gpuCompositeCanvas = null;
+        gpuCompositeW = 0;
+        gpuCompositeH = 0;
+        return null;
+      }
+      gpuCompositeW = width;
+      gpuCompositeH = height;
+    }
+
+    return { canvas: gpuCompositeCanvas, ctx: gpuCompositeCtx };
   }
 
   // Build lookup maps
@@ -1300,6 +1333,7 @@ export async function createCompositionRenderer(
       // Render tracks in order (bottom to top), with transitions at their track position
       // Track order: higher values render first (behind), lower values render last (on top)
       let skippedTracks = 0;
+      let finalCompositeSource: OffscreenCanvas = contentCanvas;
 
       // Parallelize item rendering (video decode is the bottleneck).
       // Collect all renderable items in z-order, fire all renders concurrently,
@@ -1354,19 +1388,27 @@ export async function createCompositionRenderer(
           (t) => t.type === 'item' && t.item.blendMode && t.item.blendMode !== 'normal',
         );
         const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor();
+        const gpuCompositeOutput = useGpuCompositor
+          ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
+          : null;
 
-        if (useGpuCompositor && gpuCompositor && gpuMaskManager) {
+        if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
           const device = gpuPipeline!.getDevice();
           const w = canvasSettings.width;
           const h = canvasSettings.height;
           const layers: CompositeLayer[] = [];
           const layerTextures: GPUTexture[] = [];
+          const compositedResults: Array<{
+            task: typeof renderTasks[number];
+            result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
+          }> = [];
 
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!;
             const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
             if (!result) continue;
+            compositedResults.push({ task, result });
 
             const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
 
@@ -1388,44 +1430,33 @@ export async function createCompositionRenderer(
               textureView: tex.createView(),
               maskView: gpuMaskManager.getFallbackView(),
             });
-
-            for (const c of result.poolCanvases) canvasPool.release(c);
           }
 
-          if (layers.length > 0) {
-            const commandEncoder = device.createCommandEncoder();
-            const composited = gpuCompositor.compositeToTexture(layers, w, h, commandEncoder);
+          const compositedToGpuCanvas = layers.length > 0
+            && gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx);
 
-            if (composited) {
-              // Readback composited result to Canvas2D
-              const bytesPerRow = Math.ceil(w * 4 / 256) * 256;
-              const readBuffer = device.createBuffer({
-                size: bytesPerRow * h,
-                usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
-              });
-              commandEncoder.copyTextureToBuffer(
-                { texture: composited.texture },
-                { buffer: readBuffer, bytesPerRow },
-                { width: w, height: h },
-              );
-              device.queue.submit([commandEncoder.finish()]);
-
-              await readBuffer.mapAsync(GPUMapMode.READ);
-              const mapped = new Uint8Array(readBuffer.getMappedRange());
-              const pixels = new Uint8ClampedArray(w * h * 4);
-              for (let row = 0; row < h; row++) {
-                pixels.set(
-                  mapped.subarray(row * bytesPerRow, row * bytesPerRow + w * 4),
-                  row * w * 4,
-                );
+          if (compositedToGpuCanvas) {
+            finalCompositeSource = gpuCompositeOutput.canvas;
+          } else {
+            // Fall back to the established Canvas2D compositor if the GPU target
+            // isn't available for this frame. This preserves feature parity and
+            // avoids dropping content when WebGPU canvas presentation fails.
+            for (const { task, result } of compositedResults) {
+              const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+              if (blendMode && blendMode !== 'normal') {
+                contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
               }
-              readBuffer.unmap();
-              readBuffer.destroy();
 
-              contentCtx.putImageData(new ImageData(pixels, w, h), 0, 0);
-            } else {
-              device.queue.submit([commandEncoder.finish()]);
+              contentCtx.drawImage(result.source, 0, 0);
+
+              if (blendMode && blendMode !== 'normal') {
+                contentCtx.globalCompositeOperation = 'source-over';
+              }
             }
+          }
+
+          for (const { result } of compositedResults) {
+            for (const c of result.poolCanvases) canvasPool.release(c);
           }
 
           // Destroy per-frame textures
@@ -1458,7 +1489,7 @@ export async function createCompositionRenderer(
         log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
-      ctx.drawImage(contentCanvas, 0, 0);
+      ctx.drawImage(finalCompositeSource, 0, 0);
 
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);
@@ -1616,6 +1647,10 @@ export async function createCompositionRenderer(
       gpuCompositor = null;
       gpuMaskManager?.destroy();
       gpuMaskManager = null;
+      gpuCompositeCtx = null;
+      gpuCompositeCanvas = null;
+      gpuCompositeW = 0;
+      gpuCompositeH = 0;
       gpuTransitionPipeline?.destroy();
       gpuTransitionPipeline = null;
       gpuPipeline?.destroy();
