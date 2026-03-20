@@ -25,7 +25,7 @@ import type { AnimatableProperty, Keyframe, KeyframeRef } from '@/types/keyframe
 import { PROPERTY_LABELS } from '@/types/keyframe';
 import type { BlockedFrameRange } from '../../utils/transition-region';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { getVisibleKeyframeX } from './layout';
+import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout';
 import { getDopesheetRowControlState } from './row-controls';
 import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store';
@@ -432,11 +432,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame);
   const timelineFrameMax = Math.max(totalFrames, DEFAULT_VISIBLE_FRAMES) * 4;
-  const effectiveTimelineWidth = Math.max(bodyTimelineWidth || timelineWidth, 1);
+  const fallbackTimelineWidth = Math.max(width - PROPERTY_COLUMN_WIDTH, 1);
+  const effectiveTimelineWidth = Math.max(
+    bodyTimelineWidth || timelineWidth || fallbackTimelineWidth,
+    1
+  );
 
   const frameToX = useCallback(
-    (frame: number) => ((frame - viewport.startFrame) / frameRange) * effectiveTimelineWidth,
-    [viewport.startFrame, frameRange, effectiveTimelineWidth]
+    (frame: number) => getFrameAxisX(frame, viewport, effectiveTimelineWidth),
+    [viewport, effectiveTimelineWidth]
   );
   const getRenderedKeyframeX = useCallback(
     (frame: number) => getVisibleKeyframeX(frame, viewport, effectiveTimelineWidth),
@@ -521,11 +525,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   keyframePointsRef.current = keyframePoints;
 
   const xToFrame = useCallback(
-    (x: number) => {
-      const relative = x / effectiveTimelineWidth;
-      return Math.round(viewport.startFrame + relative * frameRange);
-    },
-    [viewport.startFrame, frameRange, effectiveTimelineWidth]
+    (x: number) => getFrameFromAxisX(x, viewport, effectiveTimelineWidth),
+    [viewport, effectiveTimelineWidth]
   );
 
   const getFrameFromClientX = useCallback(
@@ -1379,7 +1380,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       const deltaFrames = Math.round((event.deltaY / effectiveTimelineWidth) * frameRange);
       panFrames(deltaFrames);
     },
-    [disabled, getFrameFromClientX, zoomAroundFrame, panFrames, effectiveTimelineWidth, frameRange]
+    [
+      disabled,
+      getFrameFromClientX,
+      zoomAroundFrame,
+      panFrames,
+      effectiveTimelineWidth,
+      viewport.endFrame,
+      viewport.startFrame,
+    ]
   );
 
   const playheadLeft = frameToX(currentFrame);

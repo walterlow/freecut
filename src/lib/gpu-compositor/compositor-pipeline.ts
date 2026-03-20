@@ -45,7 +45,8 @@ fn vertexMain(@builtin(vertex_index) vi: u32) -> VertexOutput {
 
 @fragment
 fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
-  return textureSample(inputTex, texSampler, input.uv);
+  let c = textureSample(inputTex, texSampler, input.uv);
+  return vec4f(c.rgb * c.a, c.a);
 }
 `;
 
@@ -605,6 +606,10 @@ export class CompositorPipeline {
     this.pongTexture = null;
     this.pingView = null;
     this.pongView = null;
+    this.blitPipeline = null;
+    this.blitLayout = null;
+    this.blitBindGroupPing = null;
+    this.blitBindGroupPong = null;
   }
 }
 

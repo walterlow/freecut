@@ -214,6 +214,7 @@ export async function createCompositionRenderer(
   let gpuCompositeCtx: GPUCanvasContext | null = null;
   let gpuCompositeW = 0;
   let gpuCompositeH = 0;
+  let gpuCompositeConfigureFailed = false;
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -230,24 +231,32 @@ export async function createCompositionRenderer(
   ): { canvas: OffscreenCanvas; ctx: GPUCanvasContext } | null {
     if (!gpuPipeline) return null;
 
+    const dimensionsChanged = gpuCompositeW !== width || gpuCompositeH !== height;
+    if (dimensionsChanged) {
+      gpuCompositeConfigureFailed = false;
+    }
+
+    if (gpuCompositeConfigureFailed && gpuCompositeW === width && gpuCompositeH === height) {
+      return null;
+    }
+
     if (!gpuCompositeCanvas) {
       gpuCompositeCanvas = new OffscreenCanvas(width, height);
     }
 
-    if (!gpuCompositeCtx || gpuCompositeW !== width || gpuCompositeH !== height) {
+    if (!gpuCompositeCtx || dimensionsChanged) {
       if (gpuCompositeCanvas.width !== width || gpuCompositeCanvas.height !== height) {
         gpuCompositeCanvas.width = width;
         gpuCompositeCanvas.height = height;
       }
       gpuCompositeCtx = gpuPipeline.configureCanvas(gpuCompositeCanvas);
-      if (!gpuCompositeCtx) {
-        gpuCompositeCanvas = null;
-        gpuCompositeW = 0;
-        gpuCompositeH = 0;
-        return null;
-      }
       gpuCompositeW = width;
       gpuCompositeH = height;
+      if (!gpuCompositeCtx) {
+        gpuCompositeConfigureFailed = true;
+        return null;
+      }
+      gpuCompositeConfigureFailed = false;
     }
 
     return { canvas: gpuCompositeCanvas, ctx: gpuCompositeCtx };
@@ -1651,6 +1660,7 @@ export async function createCompositionRenderer(
       gpuCompositeCanvas = null;
       gpuCompositeW = 0;
       gpuCompositeH = 0;
+      gpuCompositeConfigureFailed = false;
       gpuTransitionPipeline?.destroy();
       gpuTransitionPipeline = null;
       gpuPipeline?.destroy();
