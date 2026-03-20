@@ -15,7 +15,7 @@
 import { useCallback, useEffect, memo, useRef, useState } from 'react';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { useGizmoStore } from '../stores/gizmo-store';
-import { useItemsStore, useTimelineStore } from '@/features/preview/deps/timeline-store';
+import { useItemsStore, useTimelineStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
 import {
   screenToCanvas,
   getEffectiveScale,
@@ -40,6 +40,7 @@ import {
 } from '../deps/timeline-utils';
 import {
   getAutoKeyframeOperation,
+  isFrameInTransitionRegion,
   type AutoKeyframeOperation,
 } from '../deps/keyframes';
 
@@ -1540,15 +1541,21 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         // to the base transform would make the mask snap back to the interpolated
         // value on the next render.
         if (isWithinItemBounds && propertyKeyframes && propertyKeyframes.keyframes.length > 0) {
-          autoKeyframeOperations.push({
-            type: 'add',
-            itemId: item.id,
-            property,
-            frame: relativeFrame,
-            value,
-            easing: 'linear',
-          });
-          continue;
+          const transitions = useTransitionsStore.getState().transitions;
+          const blocked = isFrameInTransitionRegion(relativeFrame, item.id, item, transitions);
+          if (!blocked) {
+            autoKeyframeOperations.push({
+              type: 'add',
+              itemId: item.id,
+              property,
+              frame: relativeFrame,
+              value,
+              easing: 'linear',
+            });
+            continue;
+          }
+          // Frame is in a transition region — can't add a keyframe, fall through
+          // to baseTransform so the edit isn't silently dropped.
         }
 
         baseTransform[property] = value;
