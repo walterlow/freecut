@@ -571,6 +571,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       resetItemTransform: timelineActions.resetItemTransform,
       updateItemsTransform: timelineActions.updateItemsTransform,
       updateItemsTransformMap: timelineActions.updateItemsTransformMap,
+      commitMaskEdit: timelineActions.commitMaskEdit,
       addEffect: timelineActions.addEffect,
       addEffects: timelineActions.addEffects,
       updateEffect: timelineActions.updateEffect,

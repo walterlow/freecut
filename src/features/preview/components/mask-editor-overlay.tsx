@@ -33,10 +33,15 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 import type { MaskVertex } from '@/types/masks';
 import type { ShapeItem, TimelineTrack } from '@/types/timeline';
+import type { TransformProperties } from '@/types/transform';
 import {
   findBestCanvasDropPlacement,
   resolveEffectiveTrackStates,
 } from '../deps/timeline-utils';
+import {
+  getAutoKeyframeOperation,
+  type AutoKeyframeOperation,
+} from '../deps/keyframes';
 
 /** Radius of vertex control points in screen pixels */
 const VERTEX_RADIUS = 5;
@@ -55,6 +60,7 @@ const PEN_BEZIER_DRAG_THRESHOLD = 10;
 /** Segment sampling density for interior hit testing on curved paths */
 const CURVE_HIT_TEST_STEPS = 16;
 const TRACK_NUMBER_REGEX = /^Track\s+(\d+)$/i;
+const MASK_GEOMETRY_TRANSFORM_PROPS = ['x', 'y', 'width', 'height'] as const;
 
 type MaskHit =
   | { type: 'vertex' | 'inHandle' | 'outHandle' | 'segment'; index: number }
@@ -291,8 +297,10 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   const convertSelectedVertexRequestMode = useMaskEditorStore(
     (s) => s.convertSelectedVertexRequestMode
   );
+  const keyframes = useTimelineStore((s) => s.keyframes);
 
   // Actions
+  const commitMaskEdit = useTimelineStore((s) => s.commitMaskEdit);
   const selectVertices = useMaskEditorStore((s) => s.selectVertices);
   const selectVertex = useMaskEditorStore((s) => s.selectVertex);
   const startVertexDrag = useMaskEditorStore((s) => s.startVertexDrag);
@@ -1491,6 +1499,66 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     pendingCleanupRafIdsRef.current = [firstFrameId];
   }, [clearInteraction, endDrag]);
 
+  const buildMaskTransformPersistence = useCallback(
+    (
+      item: ShapeItem,
+      nextTransform: Partial<Pick<TransformProperties, typeof MASK_GEOMETRY_TRANSFORM_PROPS[number]>>,
+      currentFrame: number
+    ): {
+      baseTransform: Partial<TransformProperties>;
+      autoKeyframeOperations: AutoKeyframeOperation[];
+    } => {
+      const itemKeyframes = keyframes.find((entry) => entry.itemId === item.id);
+      const baseTransform: Partial<TransformProperties> = {};
+      const autoKeyframeOperations: AutoKeyframeOperation[] = [];
+      const relativeFrame = currentFrame - item.from;
+      const isWithinItemBounds = relativeFrame >= 0 && relativeFrame < item.durationInFrames;
+
+      for (const property of MASK_GEOMETRY_TRANSFORM_PROPS) {
+        const value = nextTransform[property];
+        if (typeof value !== 'number') {
+          continue;
+        }
+
+        const propertyKeyframes = itemKeyframes?.properties.find((entry) => entry.property === property);
+
+        const autoOperation = getAutoKeyframeOperation(
+          item,
+          itemKeyframes,
+          property,
+          value,
+          currentFrame
+        );
+
+        if (autoOperation) {
+          autoKeyframeOperations.push(autoOperation);
+          continue;
+        }
+
+        // Path editing needs the fitted transform to exist at the edited frame.
+        // If this property is already animated but lacks a key here, falling back
+        // to the base transform would make the mask snap back to the interpolated
+        // value on the next render.
+        if (isWithinItemBounds && propertyKeyframes && propertyKeyframes.keyframes.length > 0) {
+          autoKeyframeOperations.push({
+            type: 'add',
+            itemId: item.id,
+            property,
+            frame: relativeFrame,
+            value,
+            easing: 'linear',
+          });
+          continue;
+        }
+
+        baseTransform[property] = value;
+      }
+
+      return { baseTransform, autoKeyframeOperations };
+    },
+    [keyframes]
+  );
+
   // ============================================================
   // Commit vertices to timeline store
   // ============================================================
@@ -1501,19 +1569,31 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const items = useItemsStore.getState().items;
       const item = items.find((i) => i.id === editingItemId);
       if (item?.type === 'shape' && item.shapeType === 'path') {
+        const currentFrame = usePlaybackStore.getState().currentFrame;
         const fitted = fitShapePathToBounds(vertices, itemTransform, item.transform);
+        const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
+          item,
+          {
+            x: fitted.transform.x,
+            y: fitted.transform.y,
+            width: fitted.transform.width,
+            height: fitted.transform.height,
+          },
+          currentFrame
+        );
         setCommittedEditSnapshot({
           vertices: cloneVertices(fitted.pathVertices),
           transform: toOverlayTransform(fitted.transform, itemTransform),
         });
-        useItemsStore.getState()._updateItem(
-          editingItemId,
-          fitted
-        );
+        commitMaskEdit(editingItemId, {
+          pathVertices: cloneVertices(fitted.pathVertices),
+          transform: baseTransform,
+          autoKeyframeOperations,
+        });
         scheduleEditCommitCleanup();
       }
     },
-    [editingItemId, itemTransform, scheduleEditCommitCleanup]
+    [buildMaskTransformPersistence, commitMaskEdit, editingItemId, itemTransform, scheduleEditCommitCleanup]
   );
 
   const removeSelectedVertices = useCallback(() => {
@@ -1880,24 +1960,48 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       } else if (state?.type === 'shape') {
         const finalTransform = endInteraction();
         if (finalTransform && itemId && transformChanged(state.startTransform, finalTransform)) {
-          useItemsStore.getState()._updateItemTransform(itemId, {
-            x: finalTransform.x,
-            y: finalTransform.y,
-          });
+          const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId);
+          if (item?.type === 'shape' && item.shapeType === 'path') {
+            const currentFrame = usePlaybackStore.getState().currentFrame;
+            const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
+              item,
+              {
+                x: finalTransform.x,
+                y: finalTransform.y,
+              },
+              currentFrame
+            );
+            commitMaskEdit(itemId, {
+              transform: baseTransform,
+              autoKeyframeOperations,
+            }, { operation: 'move' });
+          }
         }
         scheduleEditCommitCleanup();
       } else if (finalVertices && itemId) {
         const item = useItemsStore.getState().items.find((candidate) => candidate.id === itemId);
         if (item?.type === 'shape' && item.shapeType === 'path') {
+          const currentFrame = usePlaybackStore.getState().currentFrame;
           const fitted = fitShapePathToBounds(finalVertices, itemTransform, item.transform);
+          const { baseTransform, autoKeyframeOperations } = buildMaskTransformPersistence(
+            item,
+            {
+              x: fitted.transform.x,
+              y: fitted.transform.y,
+              width: fitted.transform.width,
+              height: fitted.transform.height,
+            },
+            currentFrame
+          );
           setCommittedEditSnapshot({
             vertices: cloneVertices(fitted.pathVertices),
             transform: toOverlayTransform(fitted.transform, itemTransform),
           });
-          useItemsStore.getState()._updateItem(
-            itemId,
-            fitted
-          );
+          commitMaskEdit(itemId, {
+            pathVertices: cloneVertices(fitted.pathVertices),
+            transform: baseTransform,
+            autoKeyframeOperations,
+          });
         }
         scheduleEditCommitCleanup();
       } else {
@@ -1906,7 +2010,17 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
       dragStateRef.current = null;
     },
-    [endInteraction, getMarqueeBounds, getVerticesInMarquee, itemTransform, scheduleEditCommitCleanup, selectVertex, selectVertices]
+    [
+      buildMaskTransformPersistence,
+      commitMaskEdit,
+      endInteraction,
+      getMarqueeBounds,
+      getVerticesInMarquee,
+      itemTransform,
+      scheduleEditCommitCleanup,
+      selectVertex,
+      selectVertices,
+    ]
   );
 
   const handleEditContextMenu = useCallback(

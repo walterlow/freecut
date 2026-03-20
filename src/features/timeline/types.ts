@@ -3,6 +3,7 @@ import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect } from '@/types/effects';
 import type { Transition, TransitionType, TransitionPresentation, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { ItemKeyframes, AnimatableProperty, Keyframe, EasingType, EasingConfig } from '@/types/keyframe';
+import type { MaskVertex } from '@/types/masks';
 import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 
 export type TransformHistoryOperation =
@@ -80,6 +81,15 @@ export interface TimelineActions {
   ) => void;
   updateItemsTransformMap: (
     transformsMap: Map<string, Partial<TransformProperties>>,
+    options?: TransformCommandOptions
+  ) => void;
+  commitMaskEdit: (
+    id: string,
+    commit: {
+      pathVertices?: MaskVertex[];
+      transform?: Partial<TransformProperties>;
+      autoKeyframeOperations?: AutoKeyframeOperation[];
+    },
     options?: TransformCommandOptions
   ) => void;
   // Effect actions
