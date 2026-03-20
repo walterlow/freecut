@@ -5,9 +5,10 @@
  * Uses ping-pong textures — each layer reads from input and writes to output,
  * then they swap. Final result is the last input texture.
  *
- * Two render pipelines:
+ * Three render pipelines:
  * 1. Regular — for GPUTexture inputs (images, pre-rendered canvases)
  * 2. External — for GPUExternalTexture inputs (zero-copy video)
+ * 3. Blit — copies the final composite to a canvas, converting straight → premultiplied alpha
  */
 
 import type { BlendMode } from '@/types/blend-modes';
@@ -45,6 +46,7 @@ fn vertexMain(@builtin(vertex_index) vi: u32) -> VertexOutput {
 
 @fragment
 fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
+  // Composite textures store straight alpha; canvas expects premultiplied
   let c = textureSample(inputTex, texSampler, input.uv);
   return vec4f(c.rgb * c.a, c.a);
 }
@@ -175,7 +177,7 @@ fn compositeFragment(input: VertexOutput) -> @location(0) vec4f {
   // Apply blend mode
   let blended = applyBlendMode(baseColor.rgb, layerColor.rgb, u.blendMode);
 
-  // Mix by layer alpha (premultiplied-aware)
+  // Standard over blend (straight alpha)
   let outRgb = mix(baseColor.rgb, blended, layerAlpha);
   let outAlpha = baseColor.a + layerAlpha * (1.0 - baseColor.a);
 
