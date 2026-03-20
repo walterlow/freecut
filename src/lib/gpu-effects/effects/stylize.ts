@@ -790,6 +790,14 @@ const DITHER_PALETTE_MAP: Record<string, number> = {
   sepia: 3,
 };
 
+const ASCII_CHARSET_MAP: Record<string, number> = {
+  standard: 0,
+  simple: 1,
+  blocks: 2,
+  dots: 3,
+  minimal: 4,
+};
+
 export const dither: GpuEffectDefinition = {
   id: 'gpu-dither',
   name: 'Dither',
@@ -1171,6 +1179,346 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
     DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square,
     DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy,
   ]),
+};
+
+// Inspired by Studio's cell-based ASCII renderer. This keeps the shader-friendly
+// subset: per-cell sampling, preset character sets, and source/mono coloring.
+export const ascii: GpuEffectDefinition = {
+  id: 'gpu-ascii',
+  name: 'ASCII',
+  category: 'stylize',
+  entryPoint: 'asciiFragment',
+  uniformSize: 96,
+  shader: /* wgsl */ `
+struct AsciiParams {
+  fontSize: f32, letterSpacing: f32, lineHeight: f32, charsetKind: f32,
+  matchSourceColor: f32, invert: f32, asciiOpacity: f32, originalOpacity: f32,
+  contrast: f32, brightness: f32, saturation: f32, width: f32,
+  height: f32, _pad0: f32, _pad1: f32, _pad2: f32,
+  textColor: vec4f,
+  bgColor: vec4f,
+};
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var inputTex: texture_2d<f32>;
+@group(0) @binding(2) var<uniform> params: AsciiParams;
+
+fn asciiClampTexelCoord(coord: vec2i, texSize: vec2i) -> vec2i {
+  return vec2i(
+    clamp(coord.x, 0, max(texSize.x - 1, 0)),
+    clamp(coord.y, 0, max(texSize.y - 1, 0))
+  );
+}
+
+fn asciiLoadTexel(coord: vec2i, texSize: vec2i) -> vec4f {
+  return textureLoad(inputTex, asciiClampTexelCoord(coord, texSize), 0);
+}
+
+fn asciiAdjustColor(color: vec3f, contrast: f32, brightness: f32) -> vec3f {
+  return clamp((color - 0.5) * contrast + 0.5 + vec3f(brightness), vec3f(0.0), vec3f(1.0));
+}
+
+fn asciiApplySaturation(color: vec3f, saturation: f32) -> vec3f {
+  let gray = vec3f(luminance601(color));
+  return clamp(gray + (color - gray) * saturation, vec3f(0.0), vec3f(1.0));
+}
+
+fn asciiSegmentDistance(p: vec2f, a: vec2f, b: vec2f) -> f32 {
+  let pa = p - a;
+  let ba = b - a;
+  let denom = max(dot(ba, ba), 0.0001);
+  let h = clamp(dot(pa, ba) / denom, 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+fn asciiLineMask(p: vec2f, a: vec2f, b: vec2f, thickness: f32, blur: f32) -> f32 {
+  let d = asciiSegmentDistance(p, a, b);
+  return 1.0 - smoothstep(thickness, thickness + blur, d);
+}
+
+fn asciiBoxMask(p: vec2f, center: vec2f, halfSize: vec2f, blur: f32) -> f32 {
+  let d = abs(p - center) - halfSize;
+  return 1.0 - smoothstep(0.0, blur, max(d.x, d.y));
+}
+
+fn asciiCircleMask(p: vec2f, center: vec2f, radius: f32, blur: f32) -> f32 {
+  let d = distance(p, center);
+  return 1.0 - smoothstep(radius, radius + blur, d);
+}
+
+fn asciiRingMask(p: vec2f, center: vec2f, outerRadius: f32, innerRadius: f32, blur: f32) -> f32 {
+  let outer = asciiCircleMask(p, center, outerRadius, blur);
+  let inner = asciiCircleMask(p, center, innerRadius, blur);
+  return clamp(outer - inner, 0.0, 1.0);
+}
+
+fn asciiBayer4Index(cell: vec2i) -> i32 {
+  let x = cell.x % 4;
+  let y = cell.y % 4;
+  if (y == 0) {
+    if (x == 0) { return 0; }
+    if (x == 1) { return 8; }
+    if (x == 2) { return 2; }
+    return 10;
+  }
+  if (y == 1) {
+    if (x == 0) { return 12; }
+    if (x == 1) { return 4; }
+    if (x == 2) { return 14; }
+    return 6;
+  }
+  if (y == 2) {
+    if (x == 0) { return 3; }
+    if (x == 1) { return 11; }
+    if (x == 2) { return 1; }
+    return 9;
+  }
+  if (x == 0) { return 15; }
+  if (x == 1) { return 7; }
+  if (x == 2) { return 13; }
+  return 5;
+}
+
+fn asciiBayer4Threshold(cell: vec2i) -> f32 {
+  return (f32(asciiBayer4Index(cell)) + 0.5) / 16.0;
+}
+
+fn asciiBlocksMask(glyphIndex: i32, localUv: vec2f) -> f32 {
+  if (glyphIndex <= 0) {
+    return 0.0;
+  }
+  if (glyphIndex >= 4) {
+    return 1.0;
+  }
+
+  var density = 0.25;
+  if (glyphIndex == 2) {
+    density = 0.5;
+  } else if (glyphIndex == 3) {
+    density = 0.75;
+  }
+  let patternCell = vec2i(floor(localUv * 4.0));
+  return select(0.0, 1.0, density > asciiBayer4Threshold(patternCell));
+}
+
+fn asciiStandardMask(glyphIndex: i32, localUv: vec2f, blur: f32) -> f32 {
+  if (glyphIndex <= 0) {
+    return 0.0;
+  }
+  if (glyphIndex == 1) {
+    return asciiCircleMask(localUv, vec2f(0.5, 0.76), 0.06, blur);
+  }
+  if (glyphIndex == 2) {
+    let topDot = asciiCircleMask(localUv, vec2f(0.5, 0.34), 0.05, blur);
+    let bottomDot = asciiCircleMask(localUv, vec2f(0.5, 0.72), 0.05, blur);
+    return clamp(topDot + bottomDot, 0.0, 1.0);
+  }
+  if (glyphIndex == 3) {
+    return asciiBoxMask(localUv, vec2f(0.5, 0.56), vec2f(0.23, 0.05), blur);
+  }
+  if (glyphIndex == 4) {
+    let topLine = asciiBoxMask(localUv, vec2f(0.5, 0.38), vec2f(0.23, 0.04), blur);
+    let bottomLine = asciiBoxMask(localUv, vec2f(0.5, 0.66), vec2f(0.23, 0.04), blur);
+    return clamp(topLine + bottomLine, 0.0, 1.0);
+  }
+  if (glyphIndex == 5) {
+    let horizontal = asciiBoxMask(localUv, vec2f(0.5, 0.52), vec2f(0.23, 0.04), blur);
+    let vertical = asciiBoxMask(localUv, vec2f(0.5, 0.52), vec2f(0.04, 0.23), blur);
+    return clamp(horizontal + vertical, 0.0, 1.0);
+  }
+  if (glyphIndex == 6) {
+    let horizontal = asciiBoxMask(localUv, vec2f(0.5, 0.52), vec2f(0.22, 0.035), blur);
+    let vertical = asciiBoxMask(localUv, vec2f(0.5, 0.52), vec2f(0.035, 0.22), blur);
+    let diagA = asciiLineMask(localUv, vec2f(0.22, 0.22), vec2f(0.78, 0.78), 0.03, blur);
+    let diagB = asciiLineMask(localUv, vec2f(0.78, 0.22), vec2f(0.22, 0.78), 0.03, blur);
+    return clamp(horizontal + vertical + diagA + diagB, 0.0, 1.0);
+  }
+  if (glyphIndex == 7) {
+    let left = asciiBoxMask(localUv, vec2f(0.34, 0.52), vec2f(0.03, 0.26), blur);
+    let right = asciiBoxMask(localUv, vec2f(0.66, 0.52), vec2f(0.03, 0.26), blur);
+    let top = asciiBoxMask(localUv, vec2f(0.5, 0.36), vec2f(0.24, 0.03), blur);
+    let bottom = asciiBoxMask(localUv, vec2f(0.5, 0.68), vec2f(0.24, 0.03), blur);
+    return clamp(left + right + top + bottom, 0.0, 1.0);
+  }
+  if (glyphIndex == 8) {
+    let diag = asciiLineMask(localUv, vec2f(0.18, 0.82), vec2f(0.82, 0.18), 0.03, blur);
+    let topCircle = asciiRingMask(localUv, vec2f(0.3, 0.3), 0.12, 0.065, blur);
+    let bottomCircle = asciiRingMask(localUv, vec2f(0.7, 0.7), 0.12, 0.065, blur);
+    return clamp(diag + topCircle + bottomCircle, 0.0, 1.0);
+  }
+
+  let ring = asciiRingMask(localUv, vec2f(0.5, 0.5), 0.34, 0.19, blur);
+  let inner = asciiCircleMask(localUv, vec2f(0.55, 0.49), 0.1, blur);
+  let tail = asciiLineMask(localUv, vec2f(0.53, 0.52), vec2f(0.74, 0.58), 0.035, blur);
+  return clamp(ring + inner + tail, 0.0, 1.0);
+}
+
+fn asciiGlyphCount(charsetKind: i32) -> i32 {
+  if (charsetKind == 1) { return 6; }
+  if (charsetKind == 2) { return 5; }
+  if (charsetKind == 3) { return 4; }
+  if (charsetKind == 4) { return 3; }
+  return 10;
+}
+
+fn asciiGlyphMask(charsetKind: i32, glyphIndex: i32, localUv: vec2f, blur: f32) -> f32 {
+  if (charsetKind == 0) {
+    return asciiStandardMask(glyphIndex, localUv, blur);
+  }
+  if (charsetKind == 1) {
+    let mapped = array<i32, 6>(0, 1, 3, 5, 6, 7);
+    return asciiStandardMask(mapped[clamp(glyphIndex, 0, 5)], localUv, blur);
+  }
+  if (charsetKind == 2) {
+    return asciiBlocksMask(glyphIndex, localUv);
+  }
+  if (charsetKind == 3) {
+    if (glyphIndex <= 0) { return 0.0; }
+    if (glyphIndex == 1) { return asciiCircleMask(localUv, vec2f(0.5, 0.56), 0.05, blur); }
+    if (glyphIndex == 2) { return asciiCircleMask(localUv, vec2f(0.5, 0.54), 0.1, blur); }
+    return asciiCircleMask(localUv, vec2f(0.5, 0.52), 0.16, blur);
+  }
+  if (glyphIndex <= 0) {
+    return 0.0;
+  }
+  if (glyphIndex == 1) {
+    return asciiCircleMask(localUv, vec2f(0.5, 0.58), 0.055, blur);
+  }
+  let diagA = asciiLineMask(localUv, vec2f(0.24, 0.24), vec2f(0.76, 0.76), 0.035, blur);
+  let diagB = asciiLineMask(localUv, vec2f(0.76, 0.24), vec2f(0.24, 0.76), 0.035, blur);
+  return clamp(diagA + diagB, 0.0, 1.0);
+}
+
+fn asciiGlyphIndex(brightness: f32, charsetKind: i32) -> i32 {
+  let maxIndex = max(asciiGlyphCount(charsetKind) - 1, 0);
+  let scaled = floor(clamp(brightness, 0.0, 1.0) * f32(maxIndex));
+  return i32(clamp(scaled, 0.0, f32(maxIndex)));
+}
+
+@fragment
+fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
+  let texSize = vec2f(params.width, params.height);
+  let texSizeI = vec2i(max(i32(params.width), 1), max(i32(params.height), 1));
+  let pixelPos = input.uv * texSize;
+  let base = asciiLoadTexel(vec2i(pixelPos), texSizeI);
+  if (base.a <= 0.0001) {
+    return vec4f(0.0);
+  }
+
+  let adjustedBase = asciiAdjustColor(base.rgb, params.contrast, params.brightness);
+  let background = mix(params.bgColor.rgb, adjustedBase, params.originalOpacity);
+
+  let charAspect = max(0.25, 0.6 + params.letterSpacing * 0.05);
+  let cellWidth = max(params.fontSize * charAspect, 1.0);
+  let cellHeight = max(params.fontSize * max(params.lineHeight, 0.25), 1.0);
+  let cols = max(1.0, floor(params.width / cellWidth));
+  let rows = max(1.0, floor(params.height / cellHeight));
+  let gridSize = vec2f(cols * cellWidth, rows * cellHeight);
+  let origin = (texSize - gridSize) * 0.5;
+
+  if (
+    pixelPos.x < origin.x ||
+    pixelPos.y < origin.y ||
+    pixelPos.x >= origin.x + gridSize.x ||
+    pixelPos.y >= origin.y + gridSize.y
+  ) {
+    return vec4f(background, base.a);
+  }
+
+  let gridPos = (pixelPos - origin) / vec2f(cellWidth, cellHeight);
+  let cell = floor(gridPos);
+  let localUv = fract(gridPos);
+  let samplePos = origin + (cell + vec2f(0.5)) * vec2f(cellWidth, cellHeight);
+  let sampleColor = asciiLoadTexel(vec2i(samplePos), texSizeI);
+  let adjustedSample = asciiAdjustColor(sampleColor.rgb, params.contrast, params.brightness);
+
+  var brightness = luminance601(adjustedSample);
+  if (params.invert >= 0.5) {
+    brightness = 1.0 - brightness;
+  }
+
+  let charsetKind = i32(params.charsetKind + 0.5);
+  let glyphIndex = asciiGlyphIndex(brightness, charsetKind);
+  let blur = max(0.5 / min(cellWidth, cellHeight), 0.002);
+  let mask = asciiGlyphMask(charsetKind, glyphIndex, localUv, blur);
+
+  var glyphColor = params.textColor.rgb;
+  if (params.matchSourceColor >= 0.5) {
+    glyphColor = asciiApplySaturation(adjustedSample, params.saturation);
+  }
+
+  let color = mix(background, glyphColor, clamp(mask * params.asciiOpacity, 0.0, 1.0));
+  return vec4f(color, base.a);
+}`,
+  params: {
+    charSet: {
+      type: 'select',
+      label: 'Character Set',
+      default: 'standard',
+      options: [
+        { value: 'standard', label: 'Standard' },
+        { value: 'simple', label: 'Simple' },
+        { value: 'blocks', label: 'Blocks' },
+        { value: 'dots', label: 'Dots' },
+        { value: 'minimal', label: 'Minimal' },
+      ],
+    },
+    fontSize: { type: 'number', label: 'Font Size', default: 8, min: 4, max: 24, step: 1, animatable: true },
+    letterSpacing: { type: 'number', label: 'Letter Spacing', default: 0, min: -2, max: 5, step: 0.1, animatable: true },
+    lineHeight: { type: 'number', label: 'Line Height', default: 1, min: 0.5, max: 2, step: 0.1, animatable: true },
+    matchSourceColor: { type: 'boolean', label: 'Match Source Color', default: true },
+    textColor: {
+      type: 'color',
+      label: 'Text Color',
+      default: '#ffffff',
+      visibleWhen: (params) => params.matchSourceColor !== true,
+    },
+    bgColor: { type: 'color', label: 'Background', default: '#0a0a0f' },
+    colorSaturation: {
+      type: 'number',
+      label: 'Saturation',
+      default: 100,
+      min: 0,
+      max: 200,
+      step: 1,
+      animatable: true,
+      visibleWhen: (params) => params.matchSourceColor === true,
+    },
+    asciiOpacity: { type: 'number', label: 'ASCII Opacity', default: 100, min: 0, max: 100, step: 1, animatable: true },
+    originalOpacity: { type: 'number', label: 'Original Opacity', default: 0, min: 0, max: 100, step: 1, animatable: true },
+    contrast: { type: 'number', label: 'Contrast', default: 100, min: 50, max: 200, step: 1, animatable: true },
+    brightness: { type: 'number', label: 'Brightness', default: 0, min: -100, max: 100, step: 1, animatable: true },
+    invert: { type: 'boolean', label: 'Invert', default: false },
+  },
+  packUniforms: (p, w, h) => {
+    const textColor = parseHexColor((p.textColor as string) ?? '#ffffff', [1, 1, 1, 1]);
+    const bgColor = parseHexColor((p.bgColor as string) ?? '#0a0a0f', [10 / 255, 10 / 255, 15 / 255, 1]);
+    return new Float32Array([
+      p.fontSize as number ?? 8,
+      p.letterSpacing as number ?? 0,
+      p.lineHeight as number ?? 1,
+      ASCII_CHARSET_MAP[p.charSet as string] ?? ASCII_CHARSET_MAP.standard,
+      p.matchSourceColor === false ? 0 : 1,
+      p.invert === true ? 1 : 0,
+      ((p.asciiOpacity as number) ?? 100) / 100,
+      ((p.originalOpacity as number) ?? 0) / 100,
+      ((p.contrast as number) ?? 100) / 100,
+      ((p.brightness as number) ?? 0) / 255,
+      ((p.colorSaturation as number) ?? 100) / 100,
+      w,
+      h,
+      0,
+      0,
+      0,
+      textColor[0],
+      textColor[1],
+      textColor[2],
+      textColor[3],
+      bgColor[0],
+      bgColor[1],
+      bgColor[2],
+      bgColor[3],
+    ]);
+  },
 };
 
 export const threshold: GpuEffectDefinition = {
