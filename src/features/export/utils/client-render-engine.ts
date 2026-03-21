@@ -1076,6 +1076,7 @@ export async function createCompositionRenderer(
         log.info(`TRANSITION STATE: frame=${frame} activeTransitions=${activeTransitions.length} skippedClipIds=${Array.from(transitionClipIds).map(id => id.substring(0,8)).join(',')}`);
       }
 
+
       // Log periodically (only in development)
       if (import.meta.env.DEV && frame % 30 === 0) {
         log.debug('Rendering frame', {
@@ -1373,6 +1374,7 @@ export async function createCompositionRenderer(
           };
         };
 
+
         // Fire all item renders in parallel (video decodes run concurrently)
         const results = await Promise.all(
           renderTasks.map(async (task) => {
@@ -1385,6 +1387,7 @@ export async function createCompositionRenderer(
             return { source: trCanvas, poolCanvases: [trCanvas] } as { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
           }),
         );
+
 
         // End GPU pool mode before compositing
         if (useBatch && itemRenderContext.gpuPipeline) {
@@ -1498,6 +1501,7 @@ export async function createCompositionRenderer(
         log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
+
       ctx.drawImage(finalCompositeSource, 0, 0);
 
       // Release content canvas back to pool
@@ -1596,6 +1600,44 @@ export async function createCompositionRenderer(
 
     setDomVideoElementProvider(provider: ((itemId: string) => HTMLVideoElement | null) | undefined) {
       itemRenderContext.domVideoElementProvider = provider;
+    },
+
+    /**
+     * Pre-initialize mediabunny decoders for specific item IDs and optionally
+     * seek them to a target frame. This warms up the WASM decoder and positions
+     * the decode cursor so the first real render is fast (~1ms instead of 300-500ms).
+     */
+    async prewarmItems(itemIds: string[], targetFrame?: number) {
+      const unready = itemIds.filter(
+        (id) => videoExtractors.has(id) && !useMediabunny.has(id) && !mediabunnyDisabledItems.has(id),
+      );
+      if (unready.length > 0) {
+        await initializeMediabunnyForItems(unready);
+      }
+      // Seek decoders to the target frame position using a 1x1 draw
+      // (negligible cost) so the decode cursor is at the right spot.
+      if (targetFrame !== undefined) {
+        const ctx2d = getPrewarmContext();
+        if (!ctx2d) return;
+        for (const itemId of itemIds) {
+          if (isDisposed) return;
+          const extractor = videoExtractors.get(itemId);
+          if (!extractor || !useMediabunny.has(itemId)) continue;
+          const item = sortedTracks.flatMap((t) => t.items ?? []).find((i) => i.id === itemId);
+          if (!item || item.type !== 'video') continue;
+          const localFrame = targetFrame - item.from;
+          if (localFrame < 0 || localFrame >= item.durationInFrames) continue;
+          const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+          const sourceFps = item.sourceFps ?? fps;
+          const speed = item.speed ?? 1;
+          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          try {
+            await extractor.drawFrame(ctx2d, Math.max(0, sourceTime), 0, 0, 1, 1);
+          } catch {
+            // Best-effort prewarm — ignore failures.
+          }
+        }
+      }
     },
 
     /** Evict specific frames from the render cache (e.g. after effect param changes). */

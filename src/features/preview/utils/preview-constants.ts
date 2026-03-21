@@ -115,6 +115,18 @@ export type PreviewPerfSnapshot = {
   frameTimeEmaMs: number;
   adaptiveQualityDowngrades: number;
   adaptiveQualityRecovers: number;
+  transitionSessionActive: boolean;
+  transitionSessionMode: 'none' | 'dom' | 'render';
+  transitionSessionComplex: boolean;
+  transitionSessionStartFrame: number;
+  transitionSessionEndFrame: number;
+  transitionBufferedFrames: number;
+  transitionPreparedFrame: number;
+  transitionLastPrepareMs: number;
+  transitionLastReadyLeadMs: number;
+  transitionLastEntryMisses: number;
+  transitionLastSessionDurationMs: number;
+  transitionSessionCount: number;
 };
 
 declare global {
@@ -122,6 +134,7 @@ declare global {
     __PREVIEW_PERF__?: PreviewPerfSnapshot;
     __PREVIEW_PERF_LOG__?: boolean;
     __PREVIEW_PERF_PANEL__?: boolean;
+    __PREVIEW_TRANSITIONS__?: Array<Record<string, unknown>>;
   }
 }
 

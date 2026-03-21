@@ -37,7 +37,10 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 import { createCompositionRenderer } from '@/features/preview/deps/export';
-import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import {
+  resolveTransitionWindows,
+  type ResolvedTransitionWindow,
+} from '@/domain/timeline/transitions/transition-planner';
 import { shouldShowFastScrubOverlay } from '../utils/fast-scrub-overlay-guard';
 import { getDirectionalPrewarmOffsets } from '../utils/fast-scrub-prewarm';
 import { resolvePlaybackTransitionOverlayState } from '../utils/playback-transition-overlay';
@@ -68,7 +71,7 @@ import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledText
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
   PRELOAD_AHEAD_SECONDS,
@@ -139,6 +142,39 @@ const logger = createLogger('VideoPreview');
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
 
+type TransitionPreviewSessionTrace = {
+  opId: string;
+  event: WideEvent;
+  startedAtMs: number;
+  startFrame: number;
+  endFrame: number;
+  mode: 'dom' | 'render';
+  complex: boolean;
+  leftClipId: string;
+  rightClipId: string;
+  leftSpeed: number;
+  rightSpeed: number;
+  leftHasEffects: boolean;
+  rightHasEffects: boolean;
+  prepareStartedAtMs: number | null;
+  firstPreparedAtMs: number | null;
+  enteredAtMs: number | null;
+  exitedAtMs: number | null;
+  lastPrepareMs: number;
+  lastPreparedFrame: number;
+  bufferedFramesPeak: number;
+  entryMisses: number;
+  lastEntryMissFrame: number | null;
+};
+
+type TransitionPreviewTelemetry = {
+  sessionCount: number;
+  lastPrepareMs: number;
+  lastReadyLeadMs: number;
+  lastEntryMisses: number;
+  lastSessionDurationMs: number;
+};
+
 interface VideoPreviewProps {
   project: {
     width: number;
@@ -193,6 +229,10 @@ export const VideoPreview = memo(function VideoPreview({
   const playbackTransitionPreparePromiseRef = useRef<Promise<boolean> | null>(null);
   const playbackTransitionPreparingFrameRef = useRef<number | null>(null);
   const deferredPlaybackTransitionPrepareFrameRef = useRef<number | null>(null);
+  const transitionPrepareTimeoutRef = useRef<number | null>(null);
+  const transitionSessionWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
+  const transitionSessionPinnedElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
+  const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
@@ -225,6 +265,30 @@ export const VideoPreview = memo(function VideoPreview({
   });
   const [showPerfPanel, setShowPerfPanel] = useState(false);
   const [perfPanelSnapshot, setPerfPanelSnapshot] = useState<PreviewPerfSnapshot | null>(null);
+  const transitionSessionTraceRef = useRef<TransitionPreviewSessionTrace | null>(null);
+  const transitionTelemetryRef = useRef<TransitionPreviewTelemetry>({
+    sessionCount: 0,
+    lastPrepareMs: 0,
+    lastReadyLeadMs: 0,
+    lastEntryMisses: 0,
+    lastSessionDurationMs: 0,
+  });
+  const lastPausedPrearmTargetRef = useRef<number | null>(null);
+  const lastPlayingPrearmTargetRef = useRef<number | null>(null);
+
+  const pushTransitionTrace = useCallback((phase: string, data: Record<string, unknown> = {}) => {
+    if (!import.meta.env.DEV) return;
+
+    const nextEntry: Record<string, unknown> = {
+      ts: Date.now(),
+      phase,
+      renderSource: renderSourceRef.current,
+      currentFrame: usePlaybackStore.getState().currentFrame,
+      ...data,
+    };
+    const history = window.__PREVIEW_TRANSITIONS__ ?? [];
+    window.__PREVIEW_TRANSITIONS__ = [...history.slice(-99), nextEntry];
+  }, []);
 
   // State for gizmo overlay positioning
   const [playerContainerRect, setPlayerContainerRect] = useState<DOMRect | null>(null);
@@ -1170,6 +1234,8 @@ export const VideoPreview = memo(function VideoPreview({
         pendingSeekLatencyRef.current = null;
       }
       const seekStats = seekLatencyStatsRef.current;
+      const activeTransitionTrace = transitionSessionTraceRef.current;
+      const transitionTelemetry = transitionTelemetryRef.current;
       const pendingSeekAgeMs = pendingSeekLatencyRef.current
         ? Math.max(0, seekNow - pendingSeekLatencyRef.current.startedAtMs)
         : 0;
@@ -1219,6 +1285,22 @@ export const VideoPreview = memo(function VideoPreview({
         frameTimeEmaMs: adaptiveQualityState.frameTimeEmaMs,
         adaptiveQualityDowngrades: stats.adaptiveQualityDowngrades,
         adaptiveQualityRecovers: stats.adaptiveQualityRecovers,
+        transitionSessionActive: activeTransitionTrace !== null,
+        transitionSessionMode: activeTransitionTrace?.mode ?? 'none',
+        transitionSessionComplex: activeTransitionTrace?.complex ?? false,
+        transitionSessionStartFrame: activeTransitionTrace?.startFrame ?? -1,
+        transitionSessionEndFrame: activeTransitionTrace?.endFrame ?? -1,
+        transitionBufferedFrames: transitionSessionBufferedFramesRef.current.size,
+        transitionPreparedFrame: activeTransitionTrace?.lastPreparedFrame ?? -1,
+        transitionLastPrepareMs: activeTransitionTrace?.lastPrepareMs ?? transitionTelemetry.lastPrepareMs,
+        transitionLastReadyLeadMs: activeTransitionTrace && activeTransitionTrace.enteredAtMs !== null && activeTransitionTrace.firstPreparedAtMs !== null
+          ? Math.max(0, activeTransitionTrace.enteredAtMs - activeTransitionTrace.firstPreparedAtMs)
+          : transitionTelemetry.lastReadyLeadMs,
+        transitionLastEntryMisses: activeTransitionTrace?.entryMisses ?? transitionTelemetry.lastEntryMisses,
+        transitionLastSessionDurationMs: activeTransitionTrace
+          ? Math.max(0, seekNow - activeTransitionTrace.startedAtMs)
+          : transitionTelemetry.lastSessionDurationMs,
+        transitionSessionCount: transitionTelemetry.sessionCount,
       };
 
       window.__PREVIEW_PERF__ = snapshot;
@@ -1576,6 +1658,14 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(2, Math.round(fps * 0.1)),
     [fps],
   );
+  const pausedTransitionPrearmFrames = useMemo(
+    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 0.75)),
+    [fps, playbackTransitionLookaheadFrames],
+  );
+  const playingComplexTransitionPrearmFrames = useMemo(
+    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
+    [fps, playbackTransitionLookaheadFrames],
+  );
   const playbackTransitionPrerenderRunwayFrames = 3;
   const playbackTransitionEffectfulStartFrames = useMemo(() => {
     const hasExpensiveVisuals = (item: TimelineItem) => (
@@ -1592,6 +1682,224 @@ export const VideoPreview = memo(function VideoPreview({
 
     return effectfulStartFrames;
   }, [playbackTransitionWindows]);
+
+  const playbackTransitionVariableSpeedStartFrames = useMemo(() => {
+    const variableSpeedStartFrames = new Set<number>();
+    for (const window of playbackTransitionWindows) {
+      const leftSpeed = window.leftClip.speed ?? 1;
+      const rightSpeed = window.rightClip.speed ?? 1;
+      if (Math.abs(leftSpeed - 1) > 0.001 || Math.abs(rightSpeed - 1) > 0.001) {
+        variableSpeedStartFrames.add(window.startFrame);
+      }
+    }
+    return variableSpeedStartFrames;
+  }, [playbackTransitionWindows]);
+
+  const playbackTransitionComplexStartFrames = useMemo(() => {
+    const complexStartFrames = new Set<number>();
+    for (const frame of playbackTransitionEffectfulStartFrames) {
+      complexStartFrames.add(frame);
+    }
+    for (const frame of playbackTransitionVariableSpeedStartFrames) {
+      complexStartFrames.add(frame);
+    }
+    return complexStartFrames;
+  }, [playbackTransitionEffectfulStartFrames, playbackTransitionVariableSpeedStartFrames]);
+
+  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
+    if (!window) return true;
+    return !playbackTransitionComplexStartFrames.has(window.startFrame);
+  }, [playbackTransitionComplexStartFrames]);
+
+  const getTransitionWindowByStartFrame = useCallback((startFrame: number | null) => {
+    if (startFrame === null) return null;
+    return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
+  }, [playbackTransitionWindows]);
+
+  const getTransitionWindowForFrame = useCallback((frame: number) => {
+    return playbackTransitionWindows.find((window) => (
+      frame >= window.startFrame && frame < window.endFrame + playbackTransitionCooldownFrames
+    )) ?? null;
+  }, [playbackTransitionCooldownFrames, playbackTransitionWindows]);
+
+  const clearTransitionPlaybackSession = useCallback(() => {
+    const activeTrace = transitionSessionTraceRef.current;
+    if (activeTrace) {
+      const finishedAtMs = performance.now();
+      activeTrace.exitedAtMs = finishedAtMs;
+      transitionTelemetryRef.current.lastPrepareMs = activeTrace.lastPrepareMs;
+      transitionTelemetryRef.current.lastEntryMisses = activeTrace.entryMisses;
+      transitionTelemetryRef.current.lastSessionDurationMs = Math.max(0, finishedAtMs - activeTrace.startedAtMs);
+      transitionTelemetryRef.current.lastReadyLeadMs = (
+        activeTrace.enteredAtMs !== null && activeTrace.firstPreparedAtMs !== null
+      )
+        ? Math.max(0, activeTrace.enteredAtMs - activeTrace.firstPreparedAtMs)
+        : 0;
+      activeTrace.event.success({
+        startFrame: activeTrace.startFrame,
+        endFrame: activeTrace.endFrame,
+        mode: activeTrace.mode,
+        complex: activeTrace.complex,
+        leftClipId: activeTrace.leftClipId,
+        rightClipId: activeTrace.rightClipId,
+        leftSpeed: activeTrace.leftSpeed,
+        rightSpeed: activeTrace.rightSpeed,
+        leftHasEffects: activeTrace.leftHasEffects,
+        rightHasEffects: activeTrace.rightHasEffects,
+        prepareMs: activeTrace.lastPrepareMs,
+        preparedFrame: activeTrace.lastPreparedFrame,
+        bufferedFramesPeak: activeTrace.bufferedFramesPeak,
+        entryMisses: activeTrace.entryMisses,
+        readyLeadMs: transitionTelemetryRef.current.lastReadyLeadMs,
+        sessionDurationMs: transitionTelemetryRef.current.lastSessionDurationMs,
+      });
+      pushTransitionTrace('session_end', {
+        opId: activeTrace.opId,
+        mode: activeTrace.mode,
+        complex: activeTrace.complex,
+        startFrame: activeTrace.startFrame,
+        endFrame: activeTrace.endFrame,
+        prepareMs: activeTrace.lastPrepareMs,
+        preparedFrame: activeTrace.lastPreparedFrame,
+        bufferedFramesPeak: activeTrace.bufferedFramesPeak,
+        entryMisses: activeTrace.entryMisses,
+        readyLeadMs: transitionTelemetryRef.current.lastReadyLeadMs,
+        sessionDurationMs: transitionTelemetryRef.current.lastSessionDurationMs,
+      });
+      transitionSessionTraceRef.current = null;
+    }
+
+    transitionSessionWindowRef.current = null;
+    transitionSessionPinnedElementsRef.current.clear();
+    transitionSessionBufferedFramesRef.current.clear();
+  }, [pushTransitionTrace]);
+
+  const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
+    if (!window) {
+      clearTransitionPlaybackSession();
+      return null;
+    }
+
+    const activeWindow = transitionSessionWindowRef.current;
+    if (activeWindow?.transition.id === window.transition.id && activeWindow.startFrame === window.startFrame) {
+      return activeWindow;
+    }
+
+    clearTransitionPlaybackSession();
+
+    transitionSessionWindowRef.current = window;
+    const opId = createOperationId();
+    const event = logger.startEvent('preview_transition_session', opId);
+    const leftSpeed = window.leftClip.speed ?? 1;
+    const rightSpeed = window.rightClip.speed ?? 1;
+    const leftHasEffects = Boolean(window.leftClip.effects?.some((effect) => effect.enabled));
+    const rightHasEffects = Boolean(window.rightClip.effects?.some((effect) => effect.enabled));
+    const mode = transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
+    const complex = mode === 'render';
+    transitionTelemetryRef.current.sessionCount += 1;
+    transitionSessionTraceRef.current = {
+      opId,
+      event,
+      startedAtMs: performance.now(),
+      startFrame: window.startFrame,
+      endFrame: window.endFrame,
+      mode,
+      complex,
+      leftClipId: window.leftClip.id,
+      rightClipId: window.rightClip.id,
+      leftSpeed,
+      rightSpeed,
+      leftHasEffects,
+      rightHasEffects,
+      prepareStartedAtMs: null,
+      firstPreparedAtMs: null,
+      enteredAtMs: null,
+      exitedAtMs: null,
+      lastPrepareMs: 0,
+      lastPreparedFrame: -1,
+      bufferedFramesPeak: 0,
+      entryMisses: 0,
+      lastEntryMissFrame: null,
+    };
+    pushTransitionTrace('session_start', {
+      opId,
+      mode,
+      complex,
+      startFrame: window.startFrame,
+      endFrame: window.endFrame,
+      leftClipId: window.leftClip.id,
+      rightClipId: window.rightClip.id,
+      leftSpeed,
+      rightSpeed,
+      leftHasEffects,
+      rightHasEffects,
+    });
+    transitionSessionPinnedElementsRef.current = new Map([
+      [window.leftClip.id, getBestDomVideoElementForItem(window.leftClip.id)],
+      [window.rightClip.id, getBestDomVideoElementForItem(window.rightClip.id)],
+    ]);
+    transitionSessionBufferedFramesRef.current.clear();
+    return window;
+  }, [clearTransitionPlaybackSession, pushTransitionTrace, transitionWindowUsesDomProvider]);
+
+  const getPinnedTransitionElementForItem = useCallback((itemId: string) => {
+    const sessionWindow = transitionSessionWindowRef.current;
+    const isSessionParticipant = sessionWindow?.leftClip.id === itemId || sessionWindow?.rightClip.id === itemId;
+    if (!isSessionParticipant) {
+      return getBestDomVideoElementForItem(itemId);
+    }
+
+    // During playback, always provide DOM video elements for transition
+    // participants — even for complex transitions (effects/variable speed).
+    // The Remotion Player's <video> elements are already at the correct frame
+    // during playback, so the renderer can read pixels from them (zero-copy
+    // ~1ms) instead of falling back to mediabunny WASM decode (40-80ms).
+    // The GPU pipeline applies effects on top of the DOM video source.
+    // When paused/scrubbing, complex transitions still return null so the
+    // renderer uses mediabunny for frame-accurate decode.
+    const isPlaying = usePlaybackStore.getState().isPlaying;
+    if (!isPlaying && !transitionWindowUsesDomProvider(sessionWindow)) {
+      return null;
+    }
+
+    const pinned = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
+    if (pinned && pinned.isConnected && pinned.readyState >= 2 && pinned.videoWidth > 0) {
+      return pinned;
+    }
+
+    const next = getBestDomVideoElementForItem(itemId);
+    transitionSessionPinnedElementsRef.current.set(itemId, next);
+    return next;
+  }, [transitionWindowUsesDomProvider]);
+
+  const getUpcomingTransitionStartFrame = useCallback((
+    frame: number,
+    maxLookaheadFrames: number,
+    options?: { complexOnly?: boolean },
+  ) => {
+    const nextWindow = playbackTransitionWindows.find((window) => {
+      if (frame > window.startFrame) {
+        return false;
+      }
+      if (options?.complexOnly && !playbackTransitionComplexStartFrames.has(window.startFrame)) {
+        return false;
+      }
+      return true;
+    });
+    if (!nextWindow) return null;
+    if ((nextWindow.startFrame - frame) > maxLookaheadFrames) {
+      return null;
+    }
+    return nextWindow.startFrame;
+  }, [playbackTransitionComplexStartFrames, playbackTransitionWindows]);
+
+  const getPausedTransitionPrewarmStartFrame = useCallback((frame: number) => {
+    return getUpcomingTransitionStartFrame(frame, pausedTransitionPrearmFrames);
+  }, [getUpcomingTransitionStartFrame, pausedTransitionPrearmFrames]);
+
+  const getPlayingComplexTransitionPrewarmStartFrame = useCallback((frame: number) => {
+    return getUpcomingTransitionStartFrame(frame, playingComplexTransitionPrearmFrames, { complexOnly: true });
+  }, [getUpcomingTransitionStartFrame, playingComplexTransitionPrearmFrames]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
   // Styled, animated text can visibly flip between the DOM Player renderer
@@ -1634,6 +1942,11 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionPreparePromiseRef.current = null;
     playbackTransitionPreparingFrameRef.current = null;
     deferredPlaybackTransitionPrepareFrameRef.current = null;
+    if (transitionPrepareTimeoutRef.current !== null) {
+      clearTimeout(transitionPrepareTimeoutRef.current);
+      transitionPrepareTimeoutRef.current = null;
+    }
+    clearTransitionPlaybackSession();
     captureCanvasSourceInFlightRef.current = null;
     previewPerfRef.current.fastScrubPrewarmedSources = 0;
     bypassPreviewSeekRef.current = false;
@@ -1649,7 +1962,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     scrubOffscreenCanvasRef.current = null;
     scrubOffscreenCtxRef.current = null;
-  }, [clearPendingFastScrubHandoff]);
+  }, [clearPendingFastScrubHandoff, clearTransitionPlaybackSession]);
 
   const ensureFastScrubRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!FAST_SCRUB_RENDERER_ENABLED) return null;
@@ -1740,6 +2053,41 @@ export const VideoPreview = memo(function VideoPreview({
     return nextOffscreen;
   }, [ensureFastScrubRenderer]);
 
+  const cacheTransitionSessionFrame = useCallback((frame: number) => {
+    const offscreen = scrubOffscreenCanvasRef.current;
+    if (!offscreen || !transitionSessionWindowRef.current) return;
+
+    const snapshot = new OffscreenCanvas(offscreen.width, offscreen.height);
+    const snapshotCtx = snapshot.getContext('2d');
+    if (!snapshotCtx) return;
+
+    snapshotCtx.drawImage(offscreen, 0, 0);
+    transitionSessionBufferedFramesRef.current.set(frame, snapshot);
+    const trace = transitionSessionTraceRef.current;
+    if (trace) {
+      trace.lastPreparedFrame = frame;
+      trace.bufferedFramesPeak = Math.max(
+        trace.bufferedFramesPeak,
+        transitionSessionBufferedFramesRef.current.size,
+      );
+      if (trace.firstPreparedAtMs === null) {
+        trace.firstPreparedAtMs = performance.now();
+        pushTransitionTrace('prepare_ready', {
+          opId: trace.opId,
+          preparedFrame: frame,
+          bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+        });
+      }
+    }
+
+    const maxBufferedFrames = playbackTransitionPrerenderRunwayFrames + playbackTransitionCooldownFrames + 2;
+    while (transitionSessionBufferedFramesRef.current.size > maxBufferedFrames) {
+      const oldestFrame = transitionSessionBufferedFramesRef.current.keys().next().value;
+      if (oldestFrame === undefined) break;
+      transitionSessionBufferedFramesRef.current.delete(oldestFrame);
+    }
+  }, [playbackTransitionCooldownFrames, playbackTransitionPrerenderRunwayFrames, pushTransitionTrace]);
+
   const preparePlaybackTransitionFrame = useCallback(async (targetFrame: number): Promise<boolean> => {
     if (targetFrame < 0) return false;
     if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
@@ -1759,28 +2107,57 @@ export const VideoPreview = memo(function VideoPreview({
     const task = (async () => {
       scrubRenderInFlightRef.current = true;
       try {
+        pinTransitionPlaybackSession(getTransitionWindowByStartFrame(targetFrame));
+        const prepareStartedAtMs = performance.now();
+        const trace = transitionSessionTraceRef.current;
+        if (trace) {
+          trace.prepareStartedAtMs = prepareStartedAtMs;
+          pushTransitionTrace('prepare_start', {
+            opId: trace.opId,
+            targetFrame,
+            mode: trace.mode,
+            complex: trace.complex,
+          });
+        }
         const renderer = await ensureFastScrubRenderer();
         if (!renderer || !scrubMountedRef.current) return false;
 
         if ('setDomVideoElementProvider' in renderer) {
-          renderer.setDomVideoElementProvider(undefined);
+          renderer.setDomVideoElementProvider(getPinnedTransitionElementForItem);
         }
 
-        const shouldRenderFullRunway = (
-          forceFastScrubOverlay
-          || playbackTransitionEffectfulStartFrames.has(targetFrame)
-        );
+        const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame);
+        const shouldRenderFullTargetFrame = forceFastScrubOverlay || isComplexTransitionStart;
+        if (shouldRenderFullTargetFrame) {
+          await renderer.renderFrame(targetFrame);
+          cacheTransitionSessionFrame(targetFrame);
+        }
         for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
           const runwayFrame = targetFrame + offset;
-          if (shouldRenderFullRunway) {
+          if (forceFastScrubOverlay && !isComplexTransitionStart) {
             await renderer.renderFrame(runwayFrame);
+            cacheTransitionSessionFrame(runwayFrame);
           } else {
             await renderer.prewarmFrame(runwayFrame);
           }
         }
-        await renderer.renderFrame(targetFrame);
+        if (!shouldRenderFullTargetFrame) {
+          await renderer.renderFrame(targetFrame);
+          cacheTransitionSessionFrame(targetFrame);
+        }
         if (!scrubMountedRef.current) return false;
         scrubOffscreenRenderedFrameRef.current = targetFrame;
+        const finishedAtMs = performance.now();
+        if (trace) {
+          trace.lastPrepareMs = Math.max(0, finishedAtMs - prepareStartedAtMs);
+          pushTransitionTrace('prepare_done', {
+            opId: trace.opId,
+            targetFrame,
+            prepareMs: trace.lastPrepareMs,
+            preparedFrame: trace.lastPreparedFrame,
+            bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+          });
+        }
         return true;
       } catch (error) {
         logger.debug('Hidden transition prerender failed:', targetFrame, error);
@@ -1801,9 +2178,14 @@ export const VideoPreview = memo(function VideoPreview({
     return task;
   }, [
     ensureFastScrubRenderer,
+    getPinnedTransitionElementForItem,
+    getTransitionWindowByStartFrame,
+    pinTransitionPlaybackSession,
+    cacheTransitionSessionFrame,
     forceFastScrubOverlay,
-    playbackTransitionEffectfulStartFrames,
+    playbackTransitionComplexStartFrames,
     playbackTransitionPrerenderRunwayFrames,
+    pushTransitionTrace,
   ]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
@@ -1989,17 +2371,20 @@ export const VideoPreview = memo(function VideoPreview({
   useEffect(() => {
     scrubMountedRef.current = true;
 
-    const drawToDisplay = (renderedFrame: number) => {
-      const offscreen = scrubOffscreenCanvasRef.current;
-      if (!offscreen) return;
-
+    const drawSourceToDisplay = (source: OffscreenCanvas | HTMLCanvasElement, renderedFrame: number) => {
       const displayCanvas = scrubCanvasRef.current;
       if (!displayCanvas) return;
       const displayCtx = displayCanvas.getContext('2d');
       if (!displayCtx) return;
       displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
-      displayCtx.drawImage(offscreen, 0, 0, displayCanvas.width, displayCanvas.height);
+      displayCtx.drawImage(source, 0, 0, displayCanvas.width, displayCanvas.height);
       setDisplayedFrame(renderedFrame);
+    };
+
+    const drawToDisplay = (renderedFrame: number) => {
+      const offscreen = scrubOffscreenCanvasRef.current;
+      if (!offscreen) return;
+      drawSourceToDisplay(offscreen, renderedFrame);
     };
 
     const getPlaybackTransitionStateForFrame = (frame: number) => (
@@ -2012,8 +2397,34 @@ export const VideoPreview = memo(function VideoPreview({
     );
 
     const tryShowPreparedPlaybackTransitionOverlay = (frame: number) => {
+      const bufferedFrame = transitionSessionBufferedFramesRef.current.get(frame);
+      if (bufferedFrame) {
+        const trace = transitionSessionTraceRef.current;
+        if (trace && trace.enteredAtMs === null) {
+          trace.enteredAtMs = performance.now();
+          pushTransitionTrace('entry_show', {
+            opId: trace.opId,
+            frame,
+            via: 'buffer',
+            bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+          });
+        }
+        drawSourceToDisplay(bufferedFrame, frame);
+        showPlaybackTransitionOverlayForFrame();
+        return true;
+      }
       if (scrubOffscreenRenderedFrameRef.current !== frame) {
         return false;
+      }
+      const trace = transitionSessionTraceRef.current;
+      if (trace && trace.enteredAtMs === null) {
+        trace.enteredAtMs = performance.now();
+        pushTransitionTrace('entry_show', {
+          opId: trace.opId,
+          frame,
+          via: 'offscreen',
+          bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+        });
       }
       drawToDisplay(frame);
       showPlaybackTransitionOverlayForFrame();
@@ -2023,12 +2434,63 @@ export const VideoPreview = memo(function VideoPreview({
     const schedulePlaybackTransitionPrepare = (frame: number | null) => {
       if (frame === null) {
         deferredPlaybackTransitionPrepareFrameRef.current = null;
+        if (transitionPrepareTimeoutRef.current !== null) {
+          clearTimeout(transitionPrepareTimeoutRef.current);
+          transitionPrepareTimeoutRef.current = null;
+        }
         return;
       }
       deferredPlaybackTransitionPrepareFrameRef.current = frame;
       if (!scrubRenderInFlightRef.current) {
         void preparePlaybackTransitionFrame(frame);
       }
+    };
+
+    const clearScheduledTransitionPrepare = () => {
+      if (transitionPrepareTimeoutRef.current !== null) {
+        clearTimeout(transitionPrepareTimeoutRef.current);
+        transitionPrepareTimeoutRef.current = null;
+      }
+    };
+
+    const scheduleOpportunisticTransitionPrepare = () => {
+      const deferredFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+      if (deferredFrame === null) {
+        clearScheduledTransitionPrepare();
+        return;
+      }
+      if (transitionPrepareTimeoutRef.current !== null) {
+        return;
+      }
+
+      transitionPrepareTimeoutRef.current = window.setTimeout(() => {
+        transitionPrepareTimeoutRef.current = null;
+        if (!scrubMountedRef.current) return;
+
+        const playbackState = usePlaybackStore.getState();
+        if (!playbackState.isPlaying) return;
+
+        const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
+        if (!playbackTransitionState.shouldPrewarm || playbackTransitionState.nextTransitionStartFrame !== deferredFrame) {
+          return;
+        }
+
+        if (scrubRenderInFlightRef.current) {
+          scheduleOpportunisticTransitionPrepare();
+          return;
+        }
+
+        const trace = transitionSessionTraceRef.current;
+        if (trace) {
+          pushTransitionTrace('prepare_opportunistic', {
+            opId: trace.opId,
+            targetFrame: deferredFrame,
+          });
+        }
+
+        deferredPlaybackTransitionPrepareFrameRef.current = null;
+        void preparePlaybackTransitionFrame(deferredFrame);
+      }, 0);
     };
 
     const pumpRenderLoop = async () => {
@@ -2254,7 +2716,16 @@ export const VideoPreview = memo(function VideoPreview({
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             if (playbackNow.isPlaying) {
-              renderer.setDomVideoElementProvider(getBestDomVideoElementForItem);
+              // Only pin/clear the transition session when the rendered frame is
+              // actually inside a transition window. Passing null for pre-transition
+              // frames would destroy sessions that the prearm subscription just
+              // pinned, causing churn and losing the DOM video element provider
+              // needed for smooth transition entry.
+              const windowForFrame = getTransitionWindowForFrame(frameToRender);
+              if (windowForFrame) {
+                pinTransitionPlaybackSession(windowForFrame);
+              }
+              renderer.setDomVideoElementProvider(getPinnedTransitionElementForItem);
             } else {
               renderer.setDomVideoElementProvider(undefined);
             }
@@ -2262,8 +2733,21 @@ export const VideoPreview = memo(function VideoPreview({
 
           if (isPriorityFrame) {
             // Visible scrub targets still use full composition rendering.
+            const renderStartMs = performance.now();
             await renderer.renderFrame(frameToRender);
+            const renderMs = performance.now() - renderStartMs;
             scrubOffscreenRenderedFrameRef.current = frameToRender;
+            // Log slow transition-area frames for diagnostics.
+            if (import.meta.env.DEV && renderMs > 16 && transitionSessionWindowRef.current) {
+              const tw = transitionSessionWindowRef.current;
+              if (frameToRender >= tw.startFrame - 5 && frameToRender <= tw.endFrame + 5) {
+                pushTransitionTrace('render_frame_slow', {
+                  frame: frameToRender,
+                  renderMs: Math.round(renderMs * 100) / 100,
+                  inTransition: frameToRender >= tw.startFrame && frameToRender < tw.endFrame,
+                });
+              }
+            }
           } else {
             // Background scrub prewarm only needs to advance decode state for
             // nearby sources. Avoid full composition work for non-visible frames.
@@ -2317,6 +2801,9 @@ export const VideoPreview = memo(function VideoPreview({
               enqueueBoundaryPrewarm(frameToRender);
               enqueueBoundarySourcePrewarm(frameToRender);
             }
+            if (deferredPlaybackTransitionPrepareFrameRef.current !== null) {
+              scheduleOpportunisticTransitionPrepare();
+            }
             prewarmBudgetStart = performance.now();
           } else {
             markPrewarmed(frameToRender);
@@ -2330,9 +2817,8 @@ export const VideoPreview = memo(function VideoPreview({
       } finally {
         scrubRenderInFlightRef.current = false;
         const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
-        if (deferredPrepareFrame !== null && scrubRequestedFrameRef.current === null) {
-          deferredPlaybackTransitionPrepareFrameRef.current = null;
-          void preparePlaybackTransitionFrame(deferredPrepareFrame);
+        if (deferredPrepareFrame !== null) {
+          scheduleOpportunisticTransitionPrepare();
         }
       }
     };
@@ -2342,6 +2828,68 @@ export const VideoPreview = memo(function VideoPreview({
     };
 
     const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
+      if (state.isPlaying && forceFastScrubOverlay) {
+        const complexPrewarmStartFrame = getPlayingComplexTransitionPrewarmStartFrame(state.currentFrame);
+        if (complexPrewarmStartFrame !== null) {
+          // Pin the session so the render loop knows a transition is active.
+          // Also schedule a deferred (opportunistic) prep — this warms up
+          // mediabunny decoders for the transition clips without blocking
+          // pumpRenderLoop. The prep runs between frames via setTimeout(0).
+          const transitionWindow = getTransitionWindowByStartFrame(complexPrewarmStartFrame);
+          if (transitionWindow) {
+            pinTransitionPlaybackSession(transitionWindow);
+          }
+          // Pre-initialize mediabunny decoders for transition clips without
+          // blocking the render loop. This fire-and-forget warmup runs in the
+          // background so the first transition frame doesn't pay the 300-500ms
+          // WASM decoder init cost.
+          if (lastPlayingPrearmTargetRef.current !== complexPrewarmStartFrame) {
+            lastPlayingPrearmTargetRef.current = complexPrewarmStartFrame;
+            if (transitionWindow) {
+              const renderer = scrubRendererRef.current;
+              if (renderer && 'prewarmItems' in renderer) {
+                void renderer.prewarmItems(
+                  [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
+                  transitionWindow.startFrame,
+                );
+              }
+            }
+            pushTransitionTrace('playing_complex_prearm', {
+              targetFrame: complexPrewarmStartFrame,
+            });
+          }
+        } else {
+          // No upcoming complex transition — clean up if we've moved past
+          // the active transition window (not just entered it).
+          lastPlayingPrearmTargetRef.current = null;
+          const activeWindow = transitionSessionWindowRef.current;
+          if (activeWindow && state.currentFrame >= activeWindow.endFrame) {
+            clearTransitionPlaybackSession();
+          }
+        }
+      }
+
+      if (!state.isPlaying && state.previewFrame === null) {
+        const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(state.currentFrame);
+        if (pausedPrewarmStartFrame !== null) {
+          schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+          if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
+            lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
+            pushTransitionTrace('paused_prearm', {
+              targetFrame: pausedPrewarmStartFrame,
+            });
+          }
+        } else {
+          // No nearby transition while paused — clean up.
+          // Check on any frame change OR play-state transition (isPlaying toggled).
+          if (prev.currentFrame !== state.currentFrame || prev.isPlaying !== state.isPlaying) {
+            lastPausedPrearmTargetRef.current = null;
+            schedulePlaybackTransitionPrepare(null);
+            clearTransitionPlaybackSession();
+          }
+        }
+      }
+
       if (shouldPreferPlayerForPreview(state.previewFrame)) {
         scrubRequestedFrameRef.current = null;
         scrubDirectionRef.current = 0;
@@ -2375,6 +2923,9 @@ export const VideoPreview = memo(function VideoPreview({
           }
         }
         if (!(playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)) {
+          if (!playbackTransitionState.shouldPrewarm) {
+            clearTransitionPlaybackSession();
+          }
           hideFastScrubOverlay();
           hidePlaybackTransitionOverlay();
           return;
@@ -2385,6 +2936,18 @@ export const VideoPreview = memo(function VideoPreview({
         }
         if (tryShowPreparedPlaybackTransitionOverlay(state.currentFrame)) {
           return;
+        }
+        if (playbackTransitionState.hasActiveTransition) {
+          const trace = transitionSessionTraceRef.current;
+          if (trace && trace.lastEntryMissFrame !== state.currentFrame) {
+            trace.entryMisses += 1;
+            trace.lastEntryMissFrame = state.currentFrame;
+            pushTransitionTrace('entry_miss', {
+              opId: trace.opId,
+              frame: state.currentFrame,
+              bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+            });
+          }
         }
         scrubRequestedFrameRef.current = state.currentFrame;
         void pumpRenderLoop();
@@ -2590,6 +3153,32 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     });
 
+    const initialPlaybackState = usePlaybackStore.getState();
+    if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
+      const complexPrewarmStartFrame = getPlayingComplexTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
+      if (complexPrewarmStartFrame !== null) {
+        lastPlayingPrearmTargetRef.current = complexPrewarmStartFrame;
+        // Pin session only — render loop handles per-frame rendering.
+        const transitionWindow = getTransitionWindowByStartFrame(complexPrewarmStartFrame);
+        if (transitionWindow) {
+          pinTransitionPlaybackSession(transitionWindow);
+        }
+        pushTransitionTrace('playing_complex_prearm', {
+          targetFrame: complexPrewarmStartFrame,
+        });
+      }
+    }
+    if (!initialPlaybackState.isPlaying && initialPlaybackState.previewFrame === null) {
+      const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
+      if (pausedPrewarmStartFrame !== null) {
+        lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
+        schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+        pushTransitionTrace('paused_prearm', {
+          targetFrame: pausedPrewarmStartFrame,
+        });
+      }
+    }
+
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
@@ -2612,16 +3201,33 @@ export const VideoPreview = memo(function VideoPreview({
         if (tryShowPreparedPlaybackTransitionOverlay(playbackState.currentFrame)) {
           return;
         }
+        if (playbackTransitionState.hasActiveTransition) {
+          const trace = transitionSessionTraceRef.current;
+          if (trace && trace.lastEntryMissFrame !== playbackState.currentFrame) {
+            trace.entryMisses += 1;
+            trace.lastEntryMissFrame = playbackState.currentFrame;
+            pushTransitionTrace('entry_miss', {
+              opId: trace.opId,
+              frame: playbackState.currentFrame,
+              bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+            });
+          }
+        }
         scrubRequestedFrameRef.current = playbackState.currentFrame;
         void pumpRenderLoop();
       } else {
+        if (!playbackTransitionState.shouldPrewarm) {
+          clearTransitionPlaybackSession();
+        }
         hideFastScrubOverlay();
         hidePlaybackTransitionOverlay();
       }
     } else if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) {
+      clearTransitionPlaybackSession();
       hideFastScrubOverlay();
       hidePlaybackTransitionOverlay();
     } else if (usePlaybackStore.getState().previewFrame === null) {
+      clearTransitionPlaybackSession();
       hideFastScrubOverlay();
       hidePlaybackTransitionOverlay();
     }
@@ -2633,6 +3239,8 @@ export const VideoPreview = memo(function VideoPreview({
       lastBackwardScrubRenderAtRef.current = 0;
       lastBackwardRequestedFrameRef.current = null;
       clearPendingFastScrubHandoff();
+      clearScheduledTransitionPrepare();
+      clearTransitionPlaybackSession();
       hidePlaybackTransitionOverlay();
       resumeScrubLoopRef.current = () => {};
       unsubscribe();
@@ -2653,17 +3261,23 @@ export const VideoPreview = memo(function VideoPreview({
     preferPlayerForStyledTextScrub,
     preferPlayerForTextGizmo,
     clearPendingFastScrubHandoff,
+    clearTransitionPlaybackSession,
+    getPausedTransitionPrewarmStartFrame,
+    getPinnedTransitionElementForItem,
+    getTransitionWindowForFrame,
     hideFastScrubOverlay,
     hidePlaybackTransitionOverlay,
+    pinTransitionPlaybackSession,
     preparePlaybackTransitionFrame,
     showPlaybackTransitionOverlayForFrame,
     beginFastScrubHandoff,
     maybeCompleteFastScrubHandoff,
     scheduleFastScrubHandoffCheck,
+    playbackTransitionComplexStartFrames,
     playbackTransitionCooldownFrames,
-    playbackTransitionEffectfulStartFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
+    pushTransitionTrace,
     setDisplayedFrame,
     shouldPreferPlayerForPreview,
     trackPlayerSeek,
@@ -3465,12 +4079,41 @@ export const VideoPreview = memo(function VideoPreview({
                     <>
                       {' '}
                       last:
-                      {latestRenderSourceSwitch.from === 'fast_scrub_overlay' ? 'overlay' : 'player'}
+                      {latestRenderSourceSwitch.from === 'fast_scrub_overlay'
+                        ? 'overlay'
+                        : latestRenderSourceSwitch.from === 'playback_transition_overlay'
+                          ? 'transition'
+                          : 'player'}
                       {'>'}
-                      {latestRenderSourceSwitch.to === 'fast_scrub_overlay' ? 'overlay' : 'player'}
+                      {latestRenderSourceSwitch.to === 'fast_scrub_overlay'
+                        ? 'overlay'
+                        : latestRenderSourceSwitch.to === 'playback_transition_overlay'
+                          ? 'transition'
+                          : 'player'}
                       @{latestRenderSourceSwitch.atFrame}
                     </>
                   ) : null}
+                </div>
+                <div>
+                  tr:{perfPanelSnapshot.transitionSessionMode}
+                  {perfPanelSnapshot.transitionSessionComplex ? '/c' : '/s'}
+                  {' '}
+                  f:{perfPanelSnapshot.transitionSessionStartFrame}
+                  {'>'}
+                  {perfPanelSnapshot.transitionSessionEndFrame}
+                  {' '}
+                  buf:{perfPanelSnapshot.transitionBufferedFrames}
+                  {' '}
+                  prep:{perfPanelSnapshot.transitionPreparedFrame}@{perfPanelSnapshot.transitionLastPrepareMs.toFixed(1)}ms
+                </div>
+                <div>
+                  trm:{perfPanelSnapshot.transitionLastEntryMisses}
+                  {' '}
+                  lead:{perfPanelSnapshot.transitionLastReadyLeadMs.toFixed(1)}ms
+                  {' '}
+                  dur:{perfPanelSnapshot.transitionLastSessionDurationMs.toFixed(1)}ms
+                  {' '}
+                  cnt:{perfPanelSnapshot.transitionSessionCount}
                 </div>
               </div>
             )}

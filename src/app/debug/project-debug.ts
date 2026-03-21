@@ -71,6 +71,11 @@ interface ProjectDebugAPI {
   createFixtureProject: (type: FixtureType, options?: FixtureOptions) => Promise<Project>;
   listFixtures: () => Promise<Array<{ type: FixtureType; name: string; description: string }>>;
 
+  // Playback control (for debugging)
+  seekTo: (frame: number) => void;
+  play: () => void;
+  pause: () => void;
+
   // Version info
   version: string;
 }
@@ -190,6 +195,20 @@ function createDebugAPI(): ProjectDebugAPI {
         '@/features/project-bundle/services/test-fixtures'
       );
       return getAvailableFixtures();
+    },
+
+    // Playback control (for debugging)
+    seekTo: async (frame) => {
+      const { usePlaybackStore } = await import('@/shared/state/playback');
+      usePlaybackStore.getState().setCurrentFrame(frame);
+    },
+    play: async () => {
+      const { usePlaybackStore } = await import('@/shared/state/playback');
+      usePlaybackStore.getState().play();
+    },
+    pause: async () => {
+      const { usePlaybackStore } = await import('@/shared/state/playback');
+      usePlaybackStore.getState().pause();
     },
 
     // Version info

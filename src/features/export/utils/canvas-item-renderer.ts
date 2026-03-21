@@ -433,7 +433,12 @@ async function renderVideoItem(
       // the render engine rejects frames that RVFC hasn't corrected yet,
       // causing intermittent mediabunny fallback and visible jitter.
       const drift = Math.abs(domVideo.currentTime - sourceTime);
-      const driftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
+      // Variable-speed clips naturally drift from their DOM video element
+      // because the browser plays at 1x while sourceTime advances at speed.
+      // Use a wider threshold proportional to speed to avoid falling back
+      // to mediabunny decode (which causes 50-500ms freezes).
+      const baseDriftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
+      const driftThreshold = speed > 1.01 ? baseDriftThreshold * speed : baseDriftThreshold;
       if (drift <= driftThreshold) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
