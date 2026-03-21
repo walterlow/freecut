@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { createLogger } from '@/shared/logging/logger';
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +45,8 @@ import {
   type FixtureType,
 } from '@/features/editor/deps/project-bundle';
 import { createProject, getDBStats } from '@/infrastructure/storage/indexeddb';
+
+const logger = createLogger('DebugPanel');
 
 interface DebugAction {
   label: string;
@@ -131,12 +134,12 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     const { exportProjectJson, getSnapshotStats } = await importJsonExportService();
     const snapshot = await exportProjectJson(projectId);
     const stats = getSnapshotStats(snapshot);
-    console.warn('Project snapshot stats:', stats);
+    logger.debug('Project snapshot stats:', stats);
   }, [projectId]);
 
   const handleLogDBStats = useCallback(async () => {
     const stats = await getDBStats();
-    console.warn('IndexedDB stats:', stats);
+    logger.debug('IndexedDB stats:', stats);
   }, []);
 
   const handleValidateProject = useCallback(async () => {
@@ -145,10 +148,10 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     const snapshot = await exportProjectJson(projectId);
     const result = await validateSnapshotData(snapshot);
     if (!result.valid) {
-      console.warn('Project validation errors:', result.errors);
+      logger.debug('Project validation errors:', result.errors);
     }
     if (result.warnings.length > 0) {
-      console.warn('Project validation warnings:', result.warnings);
+      logger.debug('Project validation warnings:', result.warnings);
     }
   }, [projectId]);
 
@@ -176,7 +179,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
     const { project } = generateFixture(selectedFixture);
     const fixtureInfo = getAvailableFixtures().find((f) => f.type === selectedFixture);
 
-    console.warn('Fixture summary:', {
+    logger.debug('Fixture summary:', {
       fixture: selectedFixture,
       name: fixtureInfo?.name,
       tracks: project.timeline?.tracks.length ?? 0,

@@ -486,7 +486,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   return (
 
-      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden">
+      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden" role="region" aria-label="Timeline">
         {/* Timeline Header */}
         <TimelineHeader
           onZoomChange={zoomHandlers?.handleZoomChange}

@@ -281,6 +281,8 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     <div
       className="h-screen bg-background flex flex-col overflow-hidden"
       style={editorLayoutCssVars as import('react').CSSProperties}
+      role="application"
+      aria-label="FreeCut Video Editor"
     >
         {/* Top Toolbar */}
         <InteractionLockRegion locked={isMaskEditingActive}>

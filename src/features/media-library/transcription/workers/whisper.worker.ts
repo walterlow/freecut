@@ -4,6 +4,9 @@ import type {
   QuantizationType,
   WhisperWorkerMessage,
 } from '../types';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('TranscriptionWorker');
 
 const TRANSFORMERS_CDN_URL = 'https://esm.sh/@huggingface/transformers@3.8.1?bundle';
 const WASM_CDN_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/';
@@ -145,7 +148,7 @@ async function initPipeline(modelId: string, quantization: QuantizationType): Pr
         asrPipeline = await loadPipeline('webgpu');
         postMain({ type: 'runtime', info: { backend: 'webgpu' } });
       } catch (error) {
-        console.warn(
+        logger.warn(
           `[FreeCut transcription] WebGPU initialization failed: ${
             error instanceof Error ? error.message : String(error)
           }. Falling back to WASM.`

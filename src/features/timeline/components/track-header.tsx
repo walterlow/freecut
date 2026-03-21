@@ -106,7 +106,7 @@ export const TrackHeader = memo(function TrackHeader({
         >
           {/* Left column: Drag handle + collapse toggle */}
           <div className="flex items-center shrink-0 mr-0.5">
-            <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
+            <GripVertical className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
             {isGroup && (
               <Button
                 variant="ghost"
@@ -117,6 +117,7 @@ export const TrackHeader = memo(function TrackHeader({
                   onToggleCollapse?.();
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
+                aria-label={track.isCollapsed ? 'Expand group' : 'Collapse group'}
               >
                 {track.isCollapsed ? (
                   <ChevronRight className="w-3 h-3 text-muted-foreground" />
@@ -147,6 +148,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleVisibility();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              aria-label={track.visible ? 'Hide track' : 'Show track'}
               data-tooltip={track.visible ? 'Hide track' : 'Show track'}
             >
               {track.visible ? (
@@ -166,6 +168,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleMute();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              aria-label={track.muted ? 'Unmute track' : 'Mute track'}
               data-tooltip={track.muted ? 'Unmute track' : 'Mute track'}
             >
               {track.muted ? (
@@ -185,6 +188,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleSolo();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              aria-label={track.solo ? 'Unsolo track' : 'Solo track'}
               data-tooltip={track.solo ? 'Unsolo track' : 'Solo track'}
             >
               <Radio
@@ -202,6 +206,7 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleLock();
               }}
               onMouseDown={(e) => e.stopPropagation()}
+              aria-label={track.locked ? 'Unlock track' : 'Lock track'}
               data-tooltip={track.locked ? 'Unlock track' : 'Lock track'}
             >
               <Lock
@@ -220,6 +225,7 @@ export const TrackHeader = memo(function TrackHeader({
                   onCloseGaps?.();
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
+                aria-label="Close all gaps"
                 data-tooltip="Close all gaps"
               >
                 <FoldHorizontal className="w-3 h-3" />

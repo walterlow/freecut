@@ -435,7 +435,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   );
 
   return (
-    <div ref={splitContainerRef} className="flex-1 flex min-h-0 min-w-0 relative">
+    <div ref={splitContainerRef} className="flex-1 flex min-h-0 min-w-0 relative" role="region" aria-label="Preview area">
       {sourcePreviewMediaId && (
         <>
           <InteractionLockRegion
@@ -464,10 +464,12 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         </>
       )}
 
-      <div
-        className={`flex flex-col min-w-0 min-h-0 ${hasSidePanels ? '' : 'flex-1'}`}
-        style={hasSidePanels ? { width: `${programPanelPercent}%` } : undefined}
-      >
+        <div
+          className={`flex flex-col min-w-0 min-h-0 ${hasSidePanels ? '' : 'flex-1'}`}
+          style={hasSidePanels ? { width: `${programPanelPercent}%` } : undefined}
+          role="region"
+          aria-label="Program monitor"
+        >
         {hasSidePanels && (
           <div
             className="border-b border-border flex items-center px-3 flex-shrink-0"
@@ -478,7 +480,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden">
+          <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden" aria-label="Preview canvas region">
             <ErrorBoundary level="component">
               <VideoPreview
                 project={liveProject}
@@ -492,6 +494,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             <div
               className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+              role="toolbar"
+              aria-label="Mask pen controls"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -534,6 +538,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
             <div
               className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+              role="toolbar"
+              aria-label="Mask path edit controls"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex items-center gap-2 flex-shrink-0">

@@ -97,12 +97,12 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
 
   await Promise.all(
     mediaIds.flatMap((id) => [
-      deleteWaveform(id).catch(() => {}),
-      deleteGifFrames(id).catch(() => {}),
-      deleteDecodedPreviewAudio(id).catch(() => {}),
-      gifFrameCache.clearMedia(id).catch(() => {}),
-      filmstripCache.clearMedia(id).catch(() => {}),
-      waveformCache.clearMedia(id).catch(() => {}),
+      deleteWaveform(id).catch((e) => { log.debug('Failed to delete waveform:', id, e); }),
+      deleteGifFrames(id).catch((e) => { log.debug('Failed to delete GIF frames:', id, e); }),
+      deleteDecodedPreviewAudio(id).catch((e) => { log.debug('Failed to delete decoded audio:', id, e); }),
+      gifFrameCache.clearMedia(id).catch((e) => { log.debug('Failed to clear GIF cache:', id, e); }),
+      filmstripCache.clearMedia(id).catch((e) => { log.debug('Failed to clear filmstrip cache:', id, e); }),
+      waveformCache.clearMedia(id).catch((e) => { log.debug('Failed to clear waveform cache:', id, e); }),
     ])
   );
 

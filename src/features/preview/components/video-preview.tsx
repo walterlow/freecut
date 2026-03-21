@@ -3053,6 +3053,8 @@ export const VideoPreview = memo(function VideoPreview({
       className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
       onClick={handleBackgroundClick}
+      role="img"
+      aria-label="Video preview"
     >
       <div
         className="min-w-full min-h-full grid place-items-center"

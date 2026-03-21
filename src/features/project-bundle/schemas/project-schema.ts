@@ -398,7 +398,6 @@ const projectSchema = z.object({
   updatedAt: z.number().int().min(0),
   duration: z.number().min(0),
   thumbnail: z.string().optional(),
-  thumbnailUrl: z.string().optional(), // deprecated
   metadata: projectResolutionSchema,
   timeline: timelineSchema.optional(),
 });

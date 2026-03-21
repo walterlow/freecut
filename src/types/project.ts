@@ -14,7 +14,6 @@ export interface Project {
   schemaVersion?: number;
   thumbnailId?: string; // Reference to ThumbnailData in IndexedDB
   thumbnail?: string; // @deprecated Base64 data URL (for backward compatibility)
-  thumbnailUrl?: string; // @deprecated External URL
   metadata: ProjectResolution;
   timeline?: ProjectTimeline;
   /**

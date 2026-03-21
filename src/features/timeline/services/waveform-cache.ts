@@ -320,7 +320,9 @@ class WaveformCacheService {
     duration: number,
     channels: number
   ): Promise<void> {
-    await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+    await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+      logger.debug('Failed to clear waveform before persist:', mediaId, e);
+    });
 
     const binCount = Math.ceil(peaks.length / WAVEFORM_BIN_SAMPLES);
     const now = Date.now();
@@ -408,7 +410,9 @@ class WaveformCacheService {
         }
 
         logger.warn(`Invalid waveform bins for ${mediaId}; clearing and regenerating`);
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear invalid waveform bins:', mediaId, e);
+        });
         return null;
       }
 
@@ -417,7 +421,9 @@ class WaveformCacheService {
       const firstBin = await getWaveformRecordFromIndexedDB(`${mediaId}:bin:0`);
       if (firstBin && 'kind' in firstBin && firstBin.kind === 'bin') {
         logger.warn(`Partial waveform bins detected without meta for ${mediaId}; regenerating`);
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear partial waveform:', mediaId, e);
+        });
         return null;
       }
     } catch (error) {
@@ -444,7 +450,9 @@ class WaveformCacheService {
       }
     } catch (err) {
       logger.warn('Failed to load waveform from OPFS, deleting corrupted data:', err);
-      await waveformOPFSStorage.delete(mediaId).catch(() => {});
+      await waveformOPFSStorage.delete(mediaId).catch((e) => {
+        logger.debug('Failed to delete corrupted OPFS waveform:', mediaId, e);
+      });
     }
 
     // Fallback: Try legacy IndexedDB and migrate.
@@ -466,7 +474,9 @@ class WaveformCacheService {
 
         this.addToMemoryCache(mediaId, cached);
         this.notifyUpdate(mediaId, cached);
-        this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch(() => {});
+        this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch((e) => {
+          logger.debug('Waveform OPFS migration failed:', mediaId, e);
+        });
 
         return cached;
       }
@@ -658,7 +668,9 @@ class WaveformCacheService {
 
       this.workerRejectors.set(requestId, rejectOnce);
       const startWorker = async () => {
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear waveform before worker gen:', mediaId, e);
+        });
         if (settled) return;
 
         worker.addEventListener('message', handleMessage);
@@ -711,7 +723,9 @@ class WaveformCacheService {
       // Decode with AudioContext
       const audioContext = new AudioContext();
       const closeContext = () => {
-        void audioContext.close().catch(() => {});
+        void audioContext.close().catch((e) => {
+          logger.debug('Failed to close AudioContext during abort:', e);
+        });
       };
       signal?.addEventListener('abort', closeContext, { once: true });
 
@@ -785,7 +799,9 @@ class WaveformCacheService {
         return cached;
       } finally {
         signal?.removeEventListener('abort', closeContext);
-        await audioContext.close().catch(() => {});
+        await audioContext.close().catch((e) => {
+          logger.debug('Failed to close AudioContext:', e);
+        });
       }
     } catch (error) {
       if (error instanceof AbortError) {
@@ -948,7 +964,9 @@ class WaveformCacheService {
     // Clear from OPFS
     await waveformOPFSStorage.delete(mediaId);
     // Also clear IndexedDB waveform bins/meta (and legacy single record).
-    await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+    await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+      logger.debug('Failed to clear waveform from IndexedDB during cache clear:', mediaId, e);
+    });
   }
 
   /**

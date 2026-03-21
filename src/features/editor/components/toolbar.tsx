@@ -70,6 +70,8 @@ export const Toolbar = memo(function Toolbar({
     <div
       className="panel-header flex flex-shrink-0 items-center gap-2.5 border-b border-border px-3"
       style={{ height: EDITOR_LAYOUT_CSS_VALUES.toolbarHeight }}
+      role="toolbar"
+      aria-label="Editor toolbar"
     >
       <div className="flex items-center gap-2.5">
         <Button
