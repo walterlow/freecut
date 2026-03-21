@@ -8,6 +8,7 @@ import type {
   WhisperModel,
 } from '../types';
 import { MODEL_IDS } from '../types';
+import { createManagedWorkerSession } from '@/shared/utils/managed-worker-session';
 import { Chunker } from './chunker';
 import { downmixToMono, resampleTo16kHz } from './resampler';
 
@@ -20,37 +21,54 @@ export interface BridgeCallbacks {
 }
 
 export class Bridge {
-  private readonly decoderWorker = new Worker(
-    new URL('../workers/decoder.worker.ts', import.meta.url),
-    { type: 'module' }
-  );
-  private readonly whisperWorker = new Worker(
-    new URL('../workers/whisper.worker.ts', import.meta.url),
-    { type: 'module' }
-  );
   private readonly callbacks: BridgeCallbacks;
-  private terminated = false;
+  private readonly session = createManagedWorkerSession({
+    decoder: {
+      createWorker: () => new Worker(
+        new URL('../workers/decoder.worker.ts', import.meta.url),
+        { type: 'module' }
+      ),
+      setupWorker: (worker) => {
+        worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
+          this.handleDecoderMessage(event.data);
+        };
+
+        worker.onerror = (event) => {
+          this.callbacks.onError(`Decoder worker: ${event.message ?? 'unknown error'}`);
+          this.terminate();
+        };
+
+        return () => {
+          worker.onmessage = null;
+          worker.onerror = null;
+        };
+      },
+    },
+    whisper: {
+      createWorker: () => new Worker(
+        new URL('../workers/whisper.worker.ts', import.meta.url),
+        { type: 'module' }
+      ),
+      setupWorker: (worker) => {
+        worker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
+          this.handleWhisperMessage(event.data);
+        };
+
+        worker.onerror = (event) => {
+          this.callbacks.onError(`Whisper worker: ${event.message ?? 'unknown error'}`);
+          this.terminate();
+        };
+
+        return () => {
+          worker.onmessage = null;
+          worker.onerror = null;
+        };
+      },
+    },
+  });
 
   constructor(callbacks: BridgeCallbacks) {
     this.callbacks = callbacks;
-
-    this.whisperWorker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
-      this.handleWhisperMessage(event.data);
-    };
-
-    this.decoderWorker.onmessage = (event: MessageEvent<MainThreadMessage>) => {
-      this.handleDecoderMessage(event.data);
-    };
-
-    this.whisperWorker.onerror = (event) => {
-      callbacks.onError(`Whisper worker: ${event.message ?? 'unknown error'}`);
-      this.terminate();
-    };
-
-    this.decoderWorker.onerror = (event) => {
-      callbacks.onError(`Decoder worker: ${event.message ?? 'unknown error'}`);
-      this.terminate();
-    };
   }
 
   async start(
@@ -62,16 +80,24 @@ export class Bridge {
     const { port1, port2 } = new MessageChannel();
     const modelId = MODEL_IDS[model];
     const hasWebCodecs = typeof window !== 'undefined' && 'AudioDecoder' in window;
+    const whisperWorker = this.session.getWorker('whisper');
 
     if (hasWebCodecs) {
-      this.decoderWorker.postMessage({ type: 'port', port: port1 }, [port1]);
+      this.session.getWorker('decoder').postMessage({ type: 'port', port: port1 }, [port1]);
     }
 
-    this.whisperWorker.postMessage({ type: 'port', port: port2 }, [port2]);
-    this.whisperWorker.postMessage({ type: 'init', modelId, language, quantization });
+    this.session.registerCleanup(() => {
+      port1.onmessage = null;
+      port2.onmessage = null;
+      port1.close();
+      port2.close();
+    });
+
+    whisperWorker.postMessage({ type: 'port', port: port2 }, [port2]);
+    whisperWorker.postMessage({ type: 'init', modelId, language, quantization });
 
     if (hasWebCodecs) {
-      this.decoderWorker.postMessage({ type: 'init', file });
+      this.session.getWorker('decoder').postMessage({ type: 'init', file });
       return;
     }
 
@@ -79,13 +105,11 @@ export class Bridge {
   }
 
   terminate(): void {
-    if (this.terminated) {
+    if (this.session.isTerminated()) {
       return;
     }
 
-    this.terminated = true;
-    this.decoderWorker.terminate();
-    this.whisperWorker.terminate();
+    this.session.terminate();
   }
 
   private async decodeWithAudioContext(file: File, port: MessagePort): Promise<void> {
@@ -93,7 +117,9 @@ export class Bridge {
       this.callbacks.onProgress({ stage: 'decoding', progress: 0 });
 
       const arrayBuffer = await file.arrayBuffer();
-      const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
+      const AudioContextClass = window.AudioContext ?? (
+        window as Window & { webkitAudioContext?: typeof AudioContext }
+      ).webkitAudioContext;
       if (!AudioContextClass) {
         throw new Error('AudioContext is not available in this browser');
       }
@@ -110,10 +136,10 @@ export class Bridge {
       const mono = downmixToMono(channels);
       const resampled = resampleTo16kHz(mono, audioBuffer.sampleRate);
 
-      let whisperQueueSize = 0;
-      let whisperQueueWaiter: (() => void) | null = null;
+        let whisperQueueSize = 0;
+        let whisperQueueWaiter: (() => void) | null = null;
 
-      port.onmessage = (event: MessageEvent<number>) => {
+        port.onmessage = (event: MessageEvent<number>) => {
         whisperQueueSize = event.data;
         if (whisperQueueSize < 3 && whisperQueueWaiter) {
           whisperQueueWaiter();
@@ -122,7 +148,7 @@ export class Bridge {
       };
 
       const chunker = new Chunker((chunk: PCMChunk) => {
-        if (this.terminated) {
+        if (this.session.isTerminated()) {
           return;
         }
         port.postMessage(chunk, [chunk.samples.buffer]);
@@ -130,7 +156,7 @@ export class Bridge {
 
       const samplesPerChunk = 16_000 * 30;
       for (let i = 0; i < resampled.length; i += samplesPerChunk) {
-        if (this.terminated) {
+        if (this.session.isTerminated()) {
           break;
         }
 
@@ -140,7 +166,7 @@ export class Bridge {
           });
         }
 
-        if (this.terminated) {
+        if (this.session.isTerminated()) {
           break;
         }
 
@@ -148,7 +174,7 @@ export class Bridge {
         chunker.push(chunk);
       }
 
-      if (!this.terminated) {
+      if (!this.session.isTerminated()) {
         chunker.flush();
         this.callbacks.onProgress({ stage: 'decoding', progress: 1 });
       }
@@ -163,7 +189,7 @@ export class Bridge {
   }
 
   private handleWhisperMessage(message: MainThreadMessage): void {
-    if (this.terminated) {
+    if (this.session.isTerminated()) {
       return;
     }
 
@@ -191,7 +217,7 @@ export class Bridge {
   }
 
   private handleDecoderMessage(message: MainThreadMessage): void {
-    if (this.terminated) {
+    if (this.session.isTerminated()) {
       return;
     }
 
