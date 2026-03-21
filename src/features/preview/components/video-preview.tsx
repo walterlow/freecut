@@ -2723,7 +2723,17 @@ export const VideoPreview = memo(function VideoPreview({
               // needed for smooth transition entry.
               const windowForFrame = getTransitionWindowForFrame(frameToRender);
               if (windowForFrame) {
+                const prevSession = transitionSessionWindowRef.current;
+                const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
                 pinTransitionPlaybackSession(windowForFrame);
+                // Pre-warm mediabunny decoders when entering a transition mid-playback
+                // (e.g. starting playback inside a transition zone).
+                if (isNewSession && 'prewarmItems' in renderer) {
+                  void renderer.prewarmItems(
+                    [windowForFrame.leftClip.id, windowForFrame.rightClip.id],
+                    windowForFrame.startFrame,
+                  );
+                }
               }
               renderer.setDomVideoElementProvider(getPinnedTransitionElementForItem);
             } else {
@@ -2737,11 +2747,11 @@ export const VideoPreview = memo(function VideoPreview({
             await renderer.renderFrame(frameToRender);
             const renderMs = performance.now() - renderStartMs;
             scrubOffscreenRenderedFrameRef.current = frameToRender;
-            // Log slow transition-area frames for diagnostics.
-            if (import.meta.env.DEV && renderMs > 16 && transitionSessionWindowRef.current) {
+            // Log transition-area frame timing for diagnostics.
+            if (import.meta.env.DEV && transitionSessionWindowRef.current) {
               const tw = transitionSessionWindowRef.current;
-              if (frameToRender >= tw.startFrame - 5 && frameToRender <= tw.endFrame + 5) {
-                pushTransitionTrace('render_frame_slow', {
+              if (frameToRender >= tw.startFrame - 10 && frameToRender <= tw.endFrame + 5) {
+                pushTransitionTrace(renderMs > 16 ? 'render_frame_slow' : 'render_frame', {
                   frame: frameToRender,
                   renderMs: Math.round(renderMs * 100) / 100,
                   inTransition: frameToRender >= tw.startFrame && frameToRender < tw.endFrame,

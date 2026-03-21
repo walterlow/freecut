@@ -423,7 +423,11 @@ async function renderVideoItem(
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Remotion Player's <video> elements are already playing
   // at the correct frame. Drawing from them avoids mediabunny decode entirely.
-  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
+  // Skip for variable-speed clips — the browser plays at 1x while the
+  // composition expects speed-adjusted timing, causing visible jitter from
+  // irregular currentTime progression. Mediabunny provides frame-accurate
+  // decode for these clips (pre-warmed, ~2-3ms/frame).
+  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0 && Math.abs(speed - 1) < 0.01) {
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
       // Reject videos that are too far from the expected time. This catches
