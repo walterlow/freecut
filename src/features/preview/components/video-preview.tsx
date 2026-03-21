@@ -73,6 +73,8 @@ import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+
 // DEV-only: cached reference loaded via dynamic import so the module
 // is excluded from production bundles entirely.
 let _devJitterMonitor: import('@/shared/logging/frame-jitter-monitor').FrameJitterMonitor | null = null;
@@ -81,7 +83,6 @@ if (import.meta.env.DEV) {
     _devJitterMonitor = m.getFrameJitterMonitor();
   });
 }
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
   PRELOAD_AHEAD_SECONDS,
   PRELOAD_SCAN_TIME_BUDGET_MS,
@@ -2788,7 +2789,7 @@ export const VideoPreview = memo(function VideoPreview({
                 renderMs,
                 inTrans,
                 tw?.transition.id ?? null,
-                null,
+                inTrans && tw ? (frameToRender - tw.startFrame) / (tw.endFrame - tw.startFrame) : null,
               );
             }
             // Log transition-area frame timing for diagnostics.
@@ -3463,6 +3464,7 @@ export const VideoPreview = memo(function VideoPreview({
       const previewTransitionState = getPlaybackTransitionStateForFrame(initialPlaybackState.previewFrame);
       if (
         previewTransitionState.shouldPrewarm
+        && !previewTransitionState.hasActiveTransition
         && previewTransitionState.nextTransitionStartFrame !== null
       ) {
         schedulePlaybackTransitionPrepare(previewTransitionState.nextTransitionStartFrame);
