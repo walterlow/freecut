@@ -23,6 +23,7 @@ import { useTimelineStore } from '@/features/export/deps/timeline';
 import { useProjectStore } from '@/features/export/deps/projects';
 import { resolveMediaUrls } from '@/features/export/deps/media-library';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import type {
   ExportRenderWorkerRequest,
   ExportRenderWorkerResponse,
@@ -72,16 +73,28 @@ export function useClientRender(): UseClientRenderReturn {
 
   // AbortController for cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
-  const exportWorkerRef = useRef<Worker | null>(null);
+  const exportWorkerManagerRef = useRef<ReturnType<typeof createManagedWorker<Worker>> | null>(null);
   const exportWorkerRequestIdRef = useRef<string | null>(null);
 
+  if (!exportWorkerManagerRef.current) {
+    exportWorkerManagerRef.current = createManagedWorker({
+      createWorker: () => new Worker(
+        new URL('../workers/export-render.worker.ts', import.meta.url),
+        { type: 'module' }
+      ),
+      setupWorker: (worker) => () => {
+        worker.onmessage = null;
+        worker.onerror = null;
+      },
+    });
+  }
+
+  const exportWorkerManager = exportWorkerManagerRef.current;
+
   const terminateExportWorker = useCallback(() => {
-    if (exportWorkerRef.current) {
-      exportWorkerRef.current.terminate();
-      exportWorkerRef.current = null;
-    }
+    exportWorkerManager.terminate();
     exportWorkerRequestIdRef.current = null;
-  }, []);
+  }, [exportWorkerManager]);
 
   /**
    * Handle progress updates from the render engine
@@ -154,12 +167,7 @@ export function useClientRender(): UseClientRenderReturn {
       }
 
       const requestId = `export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const worker = new Worker(
-        new URL('../workers/export-render.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-
-      exportWorkerRef.current = worker;
+      const worker = exportWorkerManager.getWorker();
       exportWorkerRequestIdRef.current = requestId;
 
       const cleanup = () => {
@@ -218,7 +226,7 @@ export function useClientRender(): UseClientRenderReturn {
       };
       worker.postMessage(startMessage);
     });
-  }, [handleProgress, terminateExportWorker]);
+  }, [exportWorkerManager, handleProgress, terminateExportWorker]);
 
   /**
    * Start client-side export
@@ -451,12 +459,13 @@ export function useClientRender(): UseClientRenderReturn {
    * Cancel the current export
    */
   const cancelExport = useCallback(() => {
-    if (exportWorkerRef.current && exportWorkerRequestIdRef.current) {
+    const worker = exportWorkerManager.peekWorker();
+    if (worker && exportWorkerRequestIdRef.current) {
       const cancelMessage: ExportRenderWorkerRequest = {
         type: 'cancel',
         requestId: exportWorkerRequestIdRef.current,
       };
-      exportWorkerRef.current.postMessage(cancelMessage);
+      worker.postMessage(cancelMessage);
     }
 
     if (abortControllerRef.current) {
@@ -465,7 +474,7 @@ export function useClientRender(): UseClientRenderReturn {
       setIsExporting(false);
     }
     terminateExportWorker();
-  }, [terminateExportWorker]);
+  }, [exportWorkerManager, terminateExportWorker]);
 
   /**
    * Download the rendered video/audio

@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
@@ -80,24 +81,23 @@ class WaveformCacheService {
   private currentCacheSize = 0;
   private pendingRequests = new Map<string, PendingRequest>();
   private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>();
-  private worker: Worker | null = null;
   private workerRequestId = 0;
   private generationQueue: QueuedGeneration[] = [];
   private activeGenerations = new Set<string>();
   private workerRejectors = new Map<string, (error: Error) => void>();
   private fallbackAbortControllers = new Map<string, AbortController>();
+  private readonly workerManager = createManagedWorker({
+    createWorker: () => new Worker(
+      new URL('./waveform-worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+  });
 
   /**
    * Get or create the waveform worker (lazy initialization)
    */
   private getWorker(): Worker {
-    if (!this.worker) {
-      this.worker = new Worker(
-        new URL('./waveform-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-    }
-    return this.worker;
+    return this.workerManager.getWorker();
   }
 
   private enqueueGeneration(
@@ -566,9 +566,8 @@ class WaveformCacheService {
         } catch {
           // Ignore timeout abort post errors
         }
-        if (this.worker === worker) {
-          worker.terminate();
-          this.worker = null;
+        if (this.workerManager.peekWorker() === worker) {
+          this.workerManager.terminate();
         }
         rejectOnce(new Error('Worker timeout'));
       }, 90000);
@@ -935,8 +934,9 @@ class WaveformCacheService {
     }
 
     // Running request
-    if (this.worker) {
-      this.worker.postMessage({
+    const activeWorker = this.workerManager.peekWorker();
+    if (activeWorker) {
+      activeWorker.postMessage({
         type: 'abort',
         requestId: pending.requestId,
       });
@@ -998,10 +998,7 @@ class WaveformCacheService {
     this.pendingRequests.clear();
     this.updateCallbacks.clear();
     // Terminate worker
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+    this.workerManager.terminate();
   }
 
   /**
@@ -1040,4 +1037,3 @@ class WaveformCacheService {
 
 // Singleton instance
 export const waveformCache = new WaveformCacheService();
-
