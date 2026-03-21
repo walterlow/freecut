@@ -591,7 +591,7 @@ export async function createCompositionRenderer(
   // Wire up pre-decoded bitmap cache from the decoder prewarm worker.
   // Import eagerly so it's available before the first render.
   if (renderMode === 'preview') {
-    void import('@/features/preview/utils/decoder-prewarm').then(({ getCachedPredecodedBitmap }) => {
+    void import('@/features/export/deps/preview-contract').then(({ getCachedPredecodedBitmap }) => {
       itemRenderContext.getCachedPredecodedBitmap = getCachedPredecodedBitmap;
     }).catch(() => {});
   }
