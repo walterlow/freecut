@@ -10,8 +10,9 @@
  * of item.id, split clips reuse the same Sequence/video element.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
+import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
@@ -21,6 +22,10 @@ import {
   type StableVideoGroup,
 } from '../utils/video-scene';
 import { collectTransitionParticipantClipIds } from '../utils/transition-scene';
+import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
+import { createLogger } from '@/shared/logging/logger';
+
+const warmupLog = createLogger('StableVideoWarmup');
 
 /** Video item with additional properties added by MainComposition */
 export type StableVideoSequenceItem = VideoItem & {
@@ -150,6 +155,7 @@ const GroupRenderer: React.FC<{
   const activeItem = activeItemIndex >= 0 ? group.items[activeItemIndex] : null;
 
   const { fps } = useVideoConfig();
+  const pool = useVideoSourcePool();
 
   // Compute stable overlap key — only changes at transition boundaries.
   // During overlap, non-primary items need hidden DOM video elements so
@@ -232,6 +238,33 @@ const GroupRenderer: React.FC<{
       </div>
     ));
   }, [adjustedShadows, renderItem]);
+
+  const transitionWarmupRequests = useMemo(
+    () => buildTransitionShadowWarmupRequests(adjustedItem, adjustedShadows),
+    [adjustedItem, adjustedShadows],
+  );
+
+  useEffect(() => {
+    if (transitionWarmupRequests.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    for (const request of transitionWarmupRequests) {
+      void pool.ensureReadyLanes(request.sourceUrl, request.minTotalLanes, {
+        targetTimeSeconds: request.targetTimeSeconds,
+        warmDecode: true,
+      }).catch((error) => {
+        if (cancelled) return;
+        warmupLog.debug('Transition shadow warmup failed:', request.sourceUrl, error);
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pool, transitionWarmupRequests]);
 
   return (
     <>

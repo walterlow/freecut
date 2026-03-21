@@ -24,6 +24,7 @@ import {
 const videoLog = createLogger('NativePreviewVideo');
 const contentLog = createLogger('VideoContent');
 videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
+const POOL_RELEASE_STICKY_MS = 400;
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
 const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
@@ -110,6 +111,8 @@ const NativePreviewVideo: React.FC<{
     fps,
     sequenceFrameOffset
   );
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
 
   const shortId = poolClipId?.slice(0, 8) ?? 'no-id';
 
@@ -253,6 +256,27 @@ const NativePreviewVideo: React.FC<{
     // Set up event listeners
     const handleCanPlay = () => {
       videoLog.debug(`[${shortId}] canplay:`, element.readyState);
+      if (usePlaybackStore.getState().isPlaying && element.paused && element.readyState >= 2) {
+        const liveTargetTime = getVideoTargetTimeSeconds(
+          safeTrimBeforeRef.current,
+          sourceFpsRef.current,
+          frameRef.current,
+          playbackRateRef.current,
+          fpsRef.current,
+          sequenceFrameOffsetRef.current,
+        );
+        const clampedLiveTargetTime = Math.min(Math.max(0, liveTargetTime), (element.duration || Infinity) - 0.05);
+        if (Math.abs(element.currentTime - clampedLiveTargetTime) > 0.016) {
+          try {
+            element.currentTime = clampedLiveTargetTime;
+          } catch {
+            // Seek failed - element may still be stabilizing.
+          }
+        }
+        element.playbackRate = playbackRateRef.current;
+        element.play().catch(() => {});
+        needsInitialSyncRef.current = false;
+      }
     };
     const handleSeeked = () => {
       videoLog.debug(`[${shortId}] seeked:`, element.currentTime);
@@ -374,7 +398,7 @@ const NativePreviewVideo: React.FC<{
 
       // Release back to pool
       clearRegisteredVideoElement();
-      pool.releaseClip(poolClipId);
+      pool.releaseClip(poolClipId, { delayMs: POOL_RELEASE_STICKY_MS });
       elementRef.current = null;
 
       videoLog.debug(`[${shortId}] released`);
