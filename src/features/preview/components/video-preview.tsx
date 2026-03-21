@@ -2852,6 +2852,7 @@ export const VideoPreview = memo(function VideoPreview({
     // frame drop rate during playback to near zero.
     let playbackRafId: number | null = null;
     let lastRafRenderedFrame = -1;
+    let playbackPrewarmInFlight = false;
     const playbackRafPump = () => {
       playbackRafId = null;
       if (!scrubMountedRef.current) return;
@@ -2875,7 +2876,41 @@ export const VideoPreview = memo(function VideoPreview({
       if (state.isPlaying && forceFastScrubOverlay && !prev.isPlaying) {
         if (playbackRafId === null) {
           lastRafRenderedFrame = -1;
-          playbackRafId = requestAnimationFrame(playbackRafPump);
+          // Pre-warm mediabunny decoders for variable-speed video clips at the
+          // current frame BEFORE starting the rAF render pump. These clips can't
+          // use DOM video zero-copy (browser plays at 1x) so they need mediabunny,
+          // which takes 150-500ms on first decode without prewarm.
+          // Check if any variable-speed clips need mediabunny prewarm
+          const frame = state.currentFrame;
+          const prewarmItemIds: string[] = [];
+          for (const track of combinedTracks) {
+            for (const item of track.items) {
+              if (item.type !== 'video') continue;
+              if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
+              const speed = item.speed ?? 1;
+              if (Math.abs(speed - 1) >= 0.01) {
+                prewarmItemIds.push(item.id);
+              }
+            }
+          }
+          if (prewarmItemIds.length > 0) {
+            // Prewarm first, then start rAF pump — avoids 150ms+ first-frame stall.
+            // Set flag to prevent subscription from pumping render loop during prewarm.
+            playbackPrewarmInFlight = true;
+            void (async () => {
+              const renderer = await ensureFastScrubRenderer();
+              if (renderer && 'prewarmItems' in renderer) {
+                await renderer.prewarmItems(prewarmItemIds, frame);
+              }
+              playbackPrewarmInFlight = false;
+              if (playbackRafId === null && usePlaybackStore.getState().isPlaying) {
+                playbackRafId = requestAnimationFrame(playbackRafPump);
+              }
+            })();
+          } else {
+            // No prewarm needed — start immediately
+            playbackRafId = requestAnimationFrame(playbackRafPump);
+          }
         }
       } else if (!state.isPlaying && playbackRafId !== null) {
         cancelAnimationFrame(playbackRafId);
@@ -3170,9 +3205,9 @@ export const VideoPreview = memo(function VideoPreview({
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
       scrubRequestedFrameRef.current = nextRequestedFrame;
-      // During playback with rAF pump active, let rAF drive the render loop
-      // to avoid contention between subscription and rAF both calling pumpRenderLoop.
-      if (playbackRafId === null) {
+      // During playback with rAF pump active or prewarm in flight, let
+      // rAF drive the render loop to avoid contention and first-frame stalls.
+      if (playbackRafId === null && !playbackPrewarmInFlight) {
         void pumpRenderLoop();
       }
     });
