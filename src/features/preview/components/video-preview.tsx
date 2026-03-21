@@ -3468,16 +3468,10 @@ export const VideoPreview = memo(function VideoPreview({
         lastBackwardRequestedFrameRef.current = null;
       }
 
-      // Bump generation so in-flight prewarm iterations bail out quickly,
-      // freeing the pipeline for the new scrub target. Also force-clear the
-      // lock — stale pumps with mismatched generations won't release it,
-      // which would deadlock subsequent scrub renders.
-      // Only during scrub (not playback) — during playback the rAF pump
-      // manages the lock and the subscription must not interfere.
-      if (!state.isPlaying) {
-        scrubRenderGenerationRef.current += 1;
-        scrubRenderInFlightRef.current = false;
-      }
+      // Clear stale prewarm queue so the pump processes the new target
+      // instead of old prewarm frames. Don't bump generation or clear the
+      // lock here — the pump's single-mutex design handles scrub correctly:
+      // the in-flight pump picks up the new target on its next iteration.
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
       scrubRequestedFrameRef.current = nextRequestedFrame;
