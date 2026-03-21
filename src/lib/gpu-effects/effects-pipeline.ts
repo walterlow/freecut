@@ -125,7 +125,11 @@ export class EffectsPipeline {
         if (!adapter) return null;
         const device = await adapter.requestDevice();
         EffectsPipeline._cachedDevice = device;
-        device.lost.then(() => { EffectsPipeline._cachedDevice = null; });
+        device.lost.then(() => {
+          if (EffectsPipeline._cachedDevice === device) {
+            EffectsPipeline._cachedDevice = null;
+          }
+        });
         return device;
       } catch {
         return null;

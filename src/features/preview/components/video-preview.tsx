@@ -227,6 +227,7 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
   const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
   const scrubRenderInFlightRef = useRef(false);
+  const scrubRenderGenerationRef = useRef(0);
   const scrubRequestedFrameRef = useRef<number | null>(null);
   const scrubPrewarmQueueRef = useRef<number[]>([]);
   const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
@@ -2550,6 +2551,7 @@ export const VideoPreview = memo(function VideoPreview({
     const pumpRenderLoop = async () => {
       if (scrubRenderInFlightRef.current) return;
       scrubRenderInFlightRef.current = true;
+      const generation = scrubRenderGenerationRef.current;
 
       try {
         const enqueuePrewarmFrame = (frame: number) => {
@@ -2900,10 +2902,15 @@ export const VideoPreview = memo(function VideoPreview({
         hidePlaybackTransitionOverlay();
         disposeFastScrubRenderer();
       } finally {
-        scrubRenderInFlightRef.current = false;
-        const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
-        if (deferredPrepareFrame !== null) {
-          scheduleOpportunisticTransitionPrepare();
+        // Only release the lock if this pump owns the current generation.
+        // A playback-start force-clear bumps the generation, so stale pumps
+        // don't accidentally release a newer pump's lock.
+        if (scrubRenderGenerationRef.current === generation) {
+          scrubRenderInFlightRef.current = false;
+          const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+          if (deferredPrepareFrame !== null) {
+            scheduleOpportunisticTransitionPrepare();
+          }
         }
       }
     };
@@ -2945,9 +2952,9 @@ export const VideoPreview = memo(function VideoPreview({
         if (playbackRafId === null) {
           lastRafRenderedFrame = -1;
           // Force-clear any in-flight scrub render from the paused seek so
-          // the rAF pump can take over immediately. Without this, background
-          // prewarm from the paused scrub holds the lock for 300-500ms and
-          // the first playback frames are dropped.
+          // the rAF pump can take over immediately. Bump the generation so
+          // the stale pump's finally block won't release the new pump's lock.
+          scrubRenderGenerationRef.current += 1;
           scrubRenderInFlightRef.current = false;
           scrubPrewarmQueueRef.current = [];
           scrubPrewarmQueuedSetRef.current.clear();
