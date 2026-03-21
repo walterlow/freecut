@@ -73,6 +73,14 @@ import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
 import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
+// DEV-only: cached reference loaded via dynamic import so the module
+// is excluded from production bundles entirely.
+let _devJitterMonitor: import('@/shared/logging/frame-jitter-monitor').FrameJitterMonitor | null = null;
+if (import.meta.env.DEV) {
+  void import('@/shared/logging/frame-jitter-monitor').then((m) => {
+    _devJitterMonitor = m.getFrameJitterMonitor();
+  });
+}
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
   PRELOAD_AHEAD_SECONDS,
@@ -2020,6 +2028,11 @@ export const VideoPreview = memo(function VideoPreview({
         scrubOffscreenCtxRef.current = offscreenCtx;
         scrubOffscreenRenderedFrameRef.current = null;
         scrubRendererRef.current = renderer;
+        // Eagerly warm the GPU pipeline in the background so the first
+        // transition frame doesn't pay the ~100-150ms WebGPU init cost.
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline();
+        }
         return renderer;
       } catch (error) {
         logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
@@ -2105,8 +2118,15 @@ export const VideoPreview = memo(function VideoPreview({
     }
 
     playbackTransitionPreparingFrameRef.current = targetFrame;
+    // During playback with rAF pump active, don't hold scrubRenderInFlightRef
+    // while pre-rendering transition frames. Holding the lock blocks the rAF
+    // pump from calling pumpRenderLoop, causing 500-1200ms presentation gaps.
+    // Instead, use a separate flag so prepares and the pump can run concurrently.
+    const isPlaybackPrepare = usePlaybackStore.getState().isPlaying && forceFastScrubOverlay;
     const task = (async () => {
-      scrubRenderInFlightRef.current = true;
+      if (!isPlaybackPrepare) {
+        scrubRenderInFlightRef.current = true;
+      }
       try {
         pinTransitionPlaybackSession(getTransitionWindowByStartFrame(targetFrame));
         const prepareStartedAtMs = performance.now();
@@ -2164,7 +2184,9 @@ export const VideoPreview = memo(function VideoPreview({
         logger.debug('Hidden transition prerender failed:', targetFrame, error);
         return false;
       } finally {
-        scrubRenderInFlightRef.current = false;
+        if (!isPlaybackPrepare) {
+          scrubRenderInFlightRef.current = false;
+        }
         if (playbackTransitionPreparingFrameRef.current === targetFrame) {
           playbackTransitionPreparingFrameRef.current = null;
           playbackTransitionPreparePromiseRef.current = null;
@@ -2756,6 +2778,18 @@ export const VideoPreview = memo(function VideoPreview({
               if (log && log.length < 300) {
                 log.push({ f: frameToRender, ms: Math.round(renderMs * 100) / 100 });
               }
+              // Feed the frame jitter monitor with transition context
+              const tw = transitionSessionWindowRef.current;
+              const inTrans = tw !== null
+                && frameToRender >= tw.startFrame
+                && frameToRender < tw.endFrame;
+              _devJitterMonitor?.recordRenderFrame(
+                frameToRender,
+                renderMs,
+                inTrans,
+                tw?.transition.id ?? null,
+                null,
+              );
             }
             // Log transition-area frame timing for diagnostics.
             if (import.meta.env.DEV && transitionSessionWindowRef.current) {
@@ -3420,7 +3454,22 @@ export const VideoPreview = memo(function VideoPreview({
       }
     }
 
-    if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
+    if (
+      !initialPlaybackState.isPlaying
+      && initialPlaybackState.previewFrame !== null
+      && !forceFastScrubOverlay
+      && !shouldPreferPlayerForPreview(initialPlaybackState.previewFrame)
+    ) {
+      const previewTransitionState = getPlaybackTransitionStateForFrame(initialPlaybackState.previewFrame);
+      if (
+        previewTransitionState.shouldPrewarm
+        && previewTransitionState.nextTransitionStartFrame !== null
+      ) {
+        schedulePlaybackTransitionPrepare(previewTransitionState.nextTransitionStartFrame);
+      }
+      scrubRequestedFrameRef.current = initialPlaybackState.previewFrame;
+      void pumpRenderLoop();
+    } else if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
       if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm && playbackTransitionState.nextTransitionStartFrame !== null) {
@@ -4259,128 +4308,117 @@ export const VideoPreview = memo(function VideoPreview({
               }}
             />
 
-            {import.meta.env.DEV && showPerfPanel && perfPanelSnapshot && (
-              <div
-                className="absolute right-2 bottom-2 z-30 bg-black/75 text-white px-2 py-1 rounded text-[11px] leading-tight font-mono pointer-events-none select-none"
-                data-testid="preview-perf-panel"
-                title={`Toggle panel: Alt+Shift+P (persisted). URL override: ?${PREVIEW_PERF_PANEL_QUERY_KEY}=1`}
-              >
-                <div>
-                  src:{' '}
-                  {perfPanelSnapshot.renderSource === 'fast_scrub_overlay'
-                    ? 'overlay'
-                    : perfPanelSnapshot.renderSource === 'playback_transition_overlay'
-                      ? 'transition'
-                      : 'player'}
-                  {' '}
-                  stale:{perfPanelSnapshot.staleScrubOverlayDrops}
+            {import.meta.env.DEV && showPerfPanel && perfPanelSnapshot && (() => {
+              const p = perfPanelSnapshot;
+              const srcLabel = p.renderSource === 'fast_scrub_overlay' ? 'Overlay'
+                : p.renderSource === 'playback_transition_overlay' ? 'Transition' : 'Player';
+              const srcColor = p.renderSource === 'player' ? '#4ade80' : '#60a5fa';
+              const seekOk = p.seekLatencyAvgMs < 50;
+              const qualOk = p.effectivePreviewQuality >= p.userPreviewQuality;
+              const frameOk = p.frameTimeEmaMs <= p.frameTimeBudgetMs * 1.2;
+              const trActive = p.transitionSessionActive;
+              const trMode = p.transitionSessionMode === 'none' ? null
+                : p.transitionSessionMode === 'dom' ? 'DOM' : 'Canvas';
+              const lastSw = latestRenderSourceSwitch;
+              const fmtSrc = (s: string) => s === 'fast_scrub_overlay' ? 'Overlay'
+                : s === 'playback_transition_overlay' ? 'Transition' : 'Player';
+              return (
+                <div
+                  className="absolute right-2 bottom-2 z-30 bg-black/80 text-white/90 rounded-md text-[10px] leading-[14px] font-mono pointer-events-none select-none backdrop-blur-sm"
+                  style={{ padding: '6px 8px', minWidth: 180 }}
+                  data-testid="preview-perf-panel"
+                  title={`Toggle: Alt+Shift+P | URL: ?${PREVIEW_PERF_PANEL_QUERY_KEY}=1`}
+                >
+                  {/* Render source */}
+                  <div style={{ marginBottom: 3 }}>
+                    <span style={{ color: srcColor }}>{srcLabel}</span>
+                    {p.staleScrubOverlayDrops > 0 && (
+                      <span style={{ color: '#f87171' }}> {p.staleScrubOverlayDrops} stale</span>
+                    )}
+                    {lastSw && (
+                      <span style={{ color: '#a1a1aa' }}>
+                        {' '}{fmtSrc(lastSw.from)}{'\u2192'}{fmtSrc(lastSw.to)} @{lastSw.atFrame}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Seek & scrub */}
+                  <div>
+                    <span style={{ color: seekOk ? '#a1a1aa' : '#fbbf24' }}>
+                      Seek {p.seekLatencyAvgMs.toFixed(0)}ms
+                    </span>
+                    {p.seekLatencyTimeouts > 0 && (
+                      <span style={{ color: '#f87171' }}> {p.seekLatencyTimeouts} timeout</span>
+                    )}
+                    {p.scrubDroppedFrames > 0 && (
+                      <span style={{ color: '#fbbf24' }}>
+                        {' '}Scrub {p.scrubDroppedFrames}/{p.scrubUpdates} dropped
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Quality & frame time */}
+                  <div>
+                    <span style={{ color: qualOk ? '#a1a1aa' : '#fbbf24' }}>
+                      Quality {p.effectivePreviewQuality}x
+                      {p.effectivePreviewQuality < p.userPreviewQuality && ` (cap ${p.adaptiveQualityCap}x)`}
+                    </span>
+                    {' '}
+                    <span style={{ color: frameOk ? '#a1a1aa' : '#f87171' }}>
+                      {p.frameTimeEmaMs.toFixed(0)}/{p.frameTimeBudgetMs.toFixed(0)}ms
+                    </span>
+                    {(p.adaptiveQualityDowngrades > 0 || p.adaptiveQualityRecovers > 0) && (
+                      <span style={{ color: '#a1a1aa' }}>
+                        {' '}{'\u2193'}{p.adaptiveQualityDowngrades} {'\u2191'}{p.adaptiveQualityRecovers}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Source pool */}
+                  <div style={{ color: '#a1a1aa' }}>
+                    Pool {p.sourceWarmKeep}/{p.sourceWarmTarget}
+                    {' '}({p.sourcePoolSources}src {p.sourcePoolElements}el)
+                    {p.sourceWarmEvictions > 0 && (
+                      <span style={{ color: '#fbbf24' }}> {p.sourceWarmEvictions} evict</span>
+                    )}
+                  </div>
+
+                  {/* Media resolution */}
+                  {(p.unresolvedQueue > 0 || p.pendingResolves > 0) && (
+                    <div style={{ color: '#fbbf24' }}>
+                      Resolving {p.pendingResolves} pending, {p.unresolvedQueue} queued
+                      {' '}({p.resolveAvgMs.toFixed(0)}ms avg)
+                    </div>
+                  )}
+
+                  {/* Transition session — only show when active or recent */}
+                  {(trActive || p.transitionSessionCount > 0) && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3 }}>
+                      <div>
+                        <span style={{ color: trActive ? '#60a5fa' : '#a1a1aa' }}>
+                          {trActive ? `Transition ${trMode}` : 'Last transition'}
+                          {p.transitionSessionComplex ? ' (complex)' : ''}
+                        </span>
+                        {trActive && (
+                          <span style={{ color: '#a1a1aa' }}>
+                            {' '}{p.transitionSessionStartFrame}{'\u2192'}{p.transitionSessionEndFrame}
+                            {' '}buf:{p.transitionBufferedFrames}
+                          </span>
+                        )}
+                      </div>
+                      {p.transitionLastPrepareMs > 0 && (
+                        <div style={{ color: p.transitionLastEntryMisses > 0 ? '#f87171' : '#a1a1aa' }}>
+                          Prep {p.transitionLastPrepareMs.toFixed(0)}ms
+                          {p.transitionLastReadyLeadMs > 0 && ` lead ${p.transitionLastReadyLeadMs.toFixed(0)}ms`}
+                          {p.transitionLastEntryMisses > 0 && ` ${p.transitionLastEntryMisses} miss`}
+                          <span style={{ color: '#a1a1aa' }}> #{p.transitionSessionCount}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div>
-                  q:{perfPanelSnapshot.unresolvedQueue}
-                  {' '}
-                  pend:{perfPanelSnapshot.pendingResolves}
-                  {' '}
-                  scrub:{perfPanelSnapshot.scrubUpdates}/{perfPanelSnapshot.scrubDroppedFrames}
-                </div>
-                <div>
-                  r:{perfPanelSnapshot.resolveAvgMs.toFixed(1)}ms
-                  {' '}
-                  ps:{perfPanelSnapshot.preloadScanAvgMs.toFixed(1)}ms
-                  {' '}
-                  pb:{perfPanelSnapshot.preloadBatchAvgMs.toFixed(1)}ms
-                </div>
-                <div>
-                  pre:{perfPanelSnapshot.preloadCandidateIds}
-                  {'>'}
-                  {perfPanelSnapshot.preloadBudgetAdjusted}
-                  {' '}
-                  base:{perfPanelSnapshot.preloadBudgetBase}
-                  {' '}
-                  cost:{perfPanelSnapshot.preloadWindowMaxCost}
-                  {' '}
-                  y:{perfPanelSnapshot.preloadScanBudgetYields}
-                  {' '}
-                  c:{perfPanelSnapshot.preloadContinuations}
-                  {' '}
-                  dir:{perfPanelSnapshot.preloadScrubDirection}
-                  {' '}
-                  p:{perfPanelSnapshot.preloadDirectionPenaltyCount}
-                </div>
-                <div>
-                  warm:{perfPanelSnapshot.sourceWarmKeep}/{perfPanelSnapshot.sourceWarmTarget}
-                  {' '}
-                  ev:{perfPanelSnapshot.sourceWarmEvictions}
-                  {' '}
-                  pool:{perfPanelSnapshot.sourcePoolSources}/{perfPanelSnapshot.sourcePoolElements}/{perfPanelSnapshot.sourcePoolActiveClips}
-                  {' '}
-                  fs:{perfPanelSnapshot.fastScrubPrewarmedSources}
-                  {' '}
-                  fe:{perfPanelSnapshot.fastScrubPrewarmSourceEvictions}
-                </div>
-                <div>
-                  seek:{perfPanelSnapshot.seekLatencyAvgMs.toFixed(1)}ms
-                  {' '}
-                  last:{perfPanelSnapshot.seekLatencyLastMs.toFixed(1)}ms
-                  {' '}
-                  pend:{perfPanelSnapshot.seekLatencyPendingMs.toFixed(0)}ms
-                  {' '}
-                  to:{perfPanelSnapshot.seekLatencyTimeouts}
-                </div>
-                <div>
-                  qual:{perfPanelSnapshot.effectivePreviewQuality}x
-                  {' '}
-                  usr:{perfPanelSnapshot.userPreviewQuality}x
-                  {' '}
-                  cap:{perfPanelSnapshot.adaptiveQualityCap}x
-                  {' '}
-                  ft:{perfPanelSnapshot.frameTimeEmaMs.toFixed(1)}/{perfPanelSnapshot.frameTimeBudgetMs.toFixed(1)}ms
-                  {' '}
-                  a:{perfPanelSnapshot.adaptiveQualityDowngrades}/{perfPanelSnapshot.adaptiveQualityRecovers}
-                </div>
-                <div>
-                  sw:{perfPanelSnapshot.renderSourceSwitches}
-                  {latestRenderSourceSwitch ? (
-                    <>
-                      {' '}
-                      last:
-                      {latestRenderSourceSwitch.from === 'fast_scrub_overlay'
-                        ? 'overlay'
-                        : latestRenderSourceSwitch.from === 'playback_transition_overlay'
-                          ? 'transition'
-                          : 'player'}
-                      {'>'}
-                      {latestRenderSourceSwitch.to === 'fast_scrub_overlay'
-                        ? 'overlay'
-                        : latestRenderSourceSwitch.to === 'playback_transition_overlay'
-                          ? 'transition'
-                          : 'player'}
-                      @{latestRenderSourceSwitch.atFrame}
-                    </>
-                  ) : null}
-                </div>
-                <div>
-                  tr:{perfPanelSnapshot.transitionSessionMode}
-                  {perfPanelSnapshot.transitionSessionComplex ? '/c' : '/s'}
-                  {' '}
-                  f:{perfPanelSnapshot.transitionSessionStartFrame}
-                  {'>'}
-                  {perfPanelSnapshot.transitionSessionEndFrame}
-                  {' '}
-                  buf:{perfPanelSnapshot.transitionBufferedFrames}
-                  {' '}
-                  prep:{perfPanelSnapshot.transitionPreparedFrame}@{perfPanelSnapshot.transitionLastPrepareMs.toFixed(1)}ms
-                </div>
-                <div>
-                  trm:{perfPanelSnapshot.transitionLastEntryMisses}
-                  {' '}
-                  lead:{perfPanelSnapshot.transitionLastReadyLeadMs.toFixed(1)}ms
-                  {' '}
-                  dur:{perfPanelSnapshot.transitionLastSessionDurationMs.toFixed(1)}ms
-                  {' '}
-                  cnt:{perfPanelSnapshot.transitionSessionCount}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Edit frame comparison overlays */}
             {hasRolling2Up ? (

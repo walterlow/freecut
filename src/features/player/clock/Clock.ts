@@ -2,6 +2,10 @@ import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('Clock');
 
+// DEV-only: cached jitter monitor reference loaded via dynamic import.
+// Typed inline to avoid cross-feature import boundary violation.
+let _devJitterMonitor: { recordClockFrame: (frame: number, inTransition: boolean) => void; setFps: (fps: number) => void; onPlaybackStart: () => void } | null = null;
+
 /**
  * Clock.ts - Central timing system for the video player
  *
@@ -257,6 +261,14 @@ export class Clock {
     this._playbackStartTime = performance.now();
     this._playbackStartFrame = this._currentFrame;
 
+    if (import.meta.env.DEV) {
+      void import('@/shared/logging/frame-jitter-monitor').then((m) => {
+        _devJitterMonitor = m.getFrameJitterMonitor();
+        _devJitterMonitor.setFps(this._fps);
+        _devJitterMonitor.onPlaybackStart();
+      });
+    }
+
     this._emit('play');
     this._startAnimationLoop();
   }
@@ -507,6 +519,9 @@ export class Clock {
       }
     } else if (newFrame !== this._currentFrame) {
       this._currentFrame = newFrame;
+      if (import.meta.env.DEV) {
+        _devJitterMonitor?.recordClockFrame(newFrame, false);
+      }
       this._emit('framechange');
     }
 

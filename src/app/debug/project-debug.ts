@@ -82,6 +82,38 @@ interface ProjectDebugAPI {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getUpcomingItems: (frame: number, lookahead: number) => Promise<any[]>;
 
+  // Live store inspection — always available, reads current state on demand
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  stores: () => Promise<Record<string, any>>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getTransitions: () => Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getTransitionWindows: () => Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getPlaybackState: () => Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getTracks: () => Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getMediaLibrary: () => Promise<any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  jitter: () => any;
+
+  // Render pipeline diagnostics — delegates to existing ad-hoc window globals
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  previewPerf: () => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transitionTrace: () => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prewarmCache: () => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  gifCache: () => any;
+  clearGifCache: () => Promise<void>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filmstripCache: () => any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filmstripMetrics: () => any;
+  clearFilmstripCache: () => void;
+
   // Version info
   version: string;
 }
@@ -265,6 +297,201 @@ function createDebugAPI(): ProjectDebugAPI {
         }
       }
       return results;
+    },
+
+    // Live store inspection
+    stores: async () => {
+      const [
+        { usePlaybackStore },
+        { useItemsStore },
+        { useTransitionsStore },
+        { useTimelineStore },
+        { useMediaLibraryStore },
+      ] = await Promise.all([
+        import('@/shared/state/playback'),
+        import('@/features/timeline/stores/items-store'),
+        import('@/features/timeline/stores/transitions-store'),
+        import('@/features/timeline/stores/timeline-store'),
+        import('@/features/media-library/stores/media-library-store'),
+      ]);
+      return {
+        playback: usePlaybackStore.getState(),
+        items: useItemsStore.getState(),
+        transitions: useTransitionsStore.getState(),
+        timeline: useTimelineStore.getState(),
+        mediaLibrary: useMediaLibraryStore.getState(),
+      };
+    },
+
+    getTransitions: async () => {
+      const { useTransitionsStore } = await import('@/features/timeline/stores/transitions-store');
+      const state = useTransitionsStore.getState();
+      return {
+        count: state.transitions.length,
+        transitions: state.transitions.map((t) => ({
+          id: t.id.substring(0, 8),
+          type: t.type,
+          presentation: t.presentation,
+          durationInFrames: t.durationInFrames,
+          leftClipId: t.leftClipId.substring(0, 8),
+          rightClipId: t.rightClipId.substring(0, 8),
+          trackId: t.trackId.substring(0, 8),
+        })),
+        byTrackId: state.transitionsByTrackId,
+      };
+    },
+
+    getTransitionWindows: async () => {
+      const [
+        { useTransitionsStore },
+        { useItemsStore },
+        { useTimelineStore },
+      ] = await Promise.all([
+        import('@/features/timeline/stores/transitions-store'),
+        import('@/features/timeline/stores/items-store'),
+        import('@/features/timeline/stores/timeline-store'),
+      ]);
+      const { resolveTransitionWindows } = await import(
+        '@/domain/timeline/transitions/transition-planner'
+      );
+      const transitions = useTransitionsStore.getState().transitions;
+      const itemsByTrackId = useItemsStore.getState().itemsByTrackId;
+      const tracks = useTimelineStore.getState().tracks;
+      const clipMap = new Map<string, unknown>();
+      for (const track of tracks) {
+        const items = itemsByTrackId[track.id];
+        if (!items) continue;
+        for (const item of items) {
+          clipMap.set(item.id, item);
+        }
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const windows = resolveTransitionWindows(transitions, clipMap as any);
+      return windows.map((w) => ({
+        startFrame: w.startFrame,
+        endFrame: w.endFrame,
+        durationFrames: w.endFrame - w.startFrame,
+        presentation: w.transition.presentation,
+        leftClipId: w.leftClip.id.substring(0, 8),
+        rightClipId: w.rightClip.id.substring(0, 8),
+      }));
+    },
+
+    getPlaybackState: async () => {
+      const { usePlaybackStore } = await import('@/shared/state/playback');
+      const s = usePlaybackStore.getState();
+      return {
+        currentFrame: s.currentFrame,
+        isPlaying: s.isPlaying,
+        playbackRate: s.playbackRate,
+        loop: s.loop,
+        previewFrame: s.previewFrame,
+        displayedFrame: s.displayedFrame,
+        zoom: s.zoom,
+        useProxy: s.useProxy,
+      };
+    },
+
+    getTracks: async () => {
+      const [
+        { useTimelineStore },
+        { useItemsStore },
+      ] = await Promise.all([
+        import('@/features/timeline/stores/timeline-store'),
+        import('@/features/timeline/stores/items-store'),
+      ]);
+      const tracks = useTimelineStore.getState().tracks;
+      const itemsByTrackId = useItemsStore.getState().itemsByTrackId;
+      return tracks.map((t) => ({
+        id: t.id.substring(0, 8),
+        name: t.name,
+        order: t.order,
+        isGroup: t.isGroup,
+        itemCount: (itemsByTrackId[t.id] ?? []).length,
+        items: (itemsByTrackId[t.id] ?? []).map((item) => ({
+          id: item.id.substring(0, 8),
+          type: item.type,
+          from: item.from,
+          dur: item.durationInFrames,
+          end: item.from + item.durationInFrames,
+          speed: item.speed ?? 1,
+          label: 'label' in item ? item.label : undefined,
+        })),
+      }));
+    },
+
+    getMediaLibrary: async () => {
+      const { useMediaLibraryStore } = await import(
+        '@/features/media-library/stores/media-library-store'
+      );
+      const s = useMediaLibraryStore.getState();
+      const entries = Object.entries(s.mediaById).map(([id, m]) => {
+        const media = m as unknown as Record<string, unknown>;
+        return {
+          id: id.substring(0, 8),
+          fileName: media.fileName,
+          mimeType: media.mimeType,
+          width: media.width,
+          height: media.height,
+          fps: media.fps,
+          duration: media.duration,
+        };
+      });
+      return { count: entries.length, media: entries };
+    },
+
+    jitter: () => {
+      return (window as unknown as Record<string, unknown>).__FRAME_JITTER__ ?? null;
+    },
+
+    // Render pipeline diagnostics — thin delegates to existing window globals
+    // so we never need to add/remove ad-hoc globals in components again.
+    previewPerf: () => {
+      return (window as unknown as Record<string, unknown>).__PREVIEW_PERF__ ?? null;
+    },
+
+    transitionTrace: () => {
+      return (window as unknown as Record<string, unknown>).__PREVIEW_TRANSITIONS__ ?? [];
+    },
+
+    prewarmCache: () => {
+      const cache = (window as unknown as Record<string, unknown>).__PREWARM_CACHE__;
+      if (!cache || !(cache instanceof Map)) return null;
+      const entries: Array<{ src: string; bitmaps: number }> = [];
+      for (const [src, arr] of (cache as Map<string, unknown[]>).entries()) {
+        entries.push({ src: src.substring(0, 40), bitmaps: arr.length });
+      }
+      return { sourceCount: entries.length, entries };
+    },
+
+    gifCache: () => {
+      return (window as unknown as Record<string, unknown>).__gifFrameCache__ ?? null;
+    },
+
+    clearGifCache: async () => {
+      const clearFn = (window as unknown as Record<string, unknown>).__clearAllGifCache;
+      if (typeof clearFn === 'function') {
+        await (clearFn as () => Promise<void>)();
+      }
+    },
+
+    filmstripCache: () => {
+      return (window as unknown as Record<string, unknown>).__filmstripCache__ ?? null;
+    },
+
+    filmstripMetrics: () => {
+      const cache = (window as unknown as Record<string, unknown>).__filmstripMetrics__;
+      if (cache && typeof (cache as { getMetricsSnapshot?: () => unknown }).getMetricsSnapshot === 'function') {
+        return (cache as { getMetricsSnapshot: () => unknown }).getMetricsSnapshot();
+      }
+      return cache ?? null;
+    },
+
+    clearFilmstripCache: () => {
+      const cache = (window as unknown as Record<string, unknown>).__filmstripCache__;
+      if (cache && typeof (cache as { clear?: () => void }).clear === 'function') {
+        (cache as { clear: () => void }).clear();
+      }
     },
 
     // Version info

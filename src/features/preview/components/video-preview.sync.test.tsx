@@ -1115,6 +1115,93 @@ describe('VideoPreview sync behavior', () => {
     ).toBe(prerenderedStartFrameCalls);
   });
 
+  it('starts transition prewarm when a transition is added during scrub preview', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(35);
+    });
+
+    const firstRenderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(firstRenderer.renderFrame).toHaveBeenCalledWith(35);
+    });
+
+    act(() => {
+      useTransitionsStore.getState().setTransitions([
+        {
+          id: 'transition-1',
+          type: 'crossfade',
+          presentation: 'fade',
+          timing: 'linear',
+          leftClipId: 'clip-left',
+          rightClipId: 'clip-right',
+          trackId: 'track-video',
+          durationInFrames: 20,
+        },
+      ]);
+    });
+
+    const updatedRenderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(1);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(updatedRenderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(updatedRenderer.prewarmFrame).toHaveBeenCalledWith(41);
+      expect(updatedRenderer.prewarmFrame).toHaveBeenCalledWith(42);
+    });
+  });
+
   it('keeps the transition overlay active for a short cooldown after the overlap ends', async () => {
     useItemsStore.getState().setTracks([
       {
