@@ -1781,6 +1781,10 @@ export const VideoPreview = memo(function VideoPreview({
     }
 
     transitionSessionWindowRef.current = null;
+    // Remove transition-hold marks so video-content resumes normal premount behavior.
+    for (const el of transitionSessionPinnedElementsRef.current.values()) {
+      if (el) delete el.dataset.transitionHold;
+    }
     transitionSessionPinnedElementsRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
   }, [pushTransitionTrace]);
@@ -1875,10 +1879,10 @@ export const VideoPreview = memo(function VideoPreview({
 
     const pinned = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
     if (pinned && pinned.isConnected && pinned.readyState >= 2 && pinned.videoWidth > 0) {
-      // Ensure the video element is playing during transitions.
-      // The incoming clip's Sequence treats it as premounted (relativeFrame < 0)
-      // and pauses it, but the canvas renderer needs advancing frames.
       if (isPlaying && pinned.paused) {
+        // Mark the element so video-content's premount logic doesn't
+        // pause it — avoids a play/pause fight every frame.
+        pinned.dataset.transitionHold = '1';
         pinned.play().catch(() => {});
       }
       return pinned;
@@ -1886,6 +1890,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     const next = getBestDomVideoElementForItem(itemId);
     if (next && isPlaying && next.paused && next.readyState >= 2) {
+      next.dataset.transitionHold = '1';
       next.play().catch(() => {});
     }
     transitionSessionPinnedElementsRef.current.set(itemId, next);
@@ -2944,21 +2949,33 @@ export const VideoPreview = memo(function VideoPreview({
     let playbackPrewarmInFlight = false;
     const pausePrewarmedItemIds = new Set<string>();
 
+    let lastRafPresentedFrame = -1;
+
     const playbackRafPump = () => {
       playbackRafId = null;
       if (!scrubMountedRef.current) return;
       const playbackState = usePlaybackStore.getState();
       if (!playbackState.isPlaying || !forceFastScrubOverlay) return;
       const currentFrame = playbackState.currentFrame;
-      // Only pump when the frame has actually advanced — avoids redundant
-      // renders at 60Hz rAF when the Player runs at 30fps.
+
       if (currentFrame !== lastRafRenderedFrame) {
+        // Frame advanced — kick off async render for the new content.
         lastRafRenderedFrame = currentFrame;
         scrubRequestedFrameRef.current = currentFrame;
         if (!scrubRenderInFlightRef.current) {
           void pumpRenderLoop();
         }
+      } else if (
+        lastRafPresentedFrame !== currentFrame
+        && scrubOffscreenRenderedFrameRef.current === currentFrame
+      ) {
+        // Frame hasn't advanced but the async render completed since the
+        // last vsync. Present it now synchronously to eliminate 3:2 pulldown
+        // judder (50ms/16ms alternating intervals on 30fps@60Hz displays).
+        drawToDisplay(currentFrame);
+        lastRafPresentedFrame = currentFrame;
       }
+
       playbackRafId = requestAnimationFrame(playbackRafPump);
     };
 
@@ -3057,6 +3074,14 @@ export const VideoPreview = memo(function VideoPreview({
         // complex transitions (effects/variable speed) were prearmed here,
         // leaving simple transitions (fade, wipe, slide, etc.) without a
         // pinned session — causing frozen incoming clips and dropped frames.
+        // First check if we're already inside a transition — pin that session
+        // so the DOM video provider is available immediately.
+        const activeTransitionWindow = getTransitionWindowForFrame(state.currentFrame);
+        if (activeTransitionWindow && !transitionSessionWindowRef.current) {
+          pinTransitionPlaybackSession(activeTransitionWindow);
+          lastPlayingPrearmTargetRef.current = activeTransitionWindow.startFrame;
+        }
+
         const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(state.currentFrame);
         if (prearmStartFrame !== null) {
           const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
@@ -3078,10 +3103,10 @@ export const VideoPreview = memo(function VideoPreview({
               targetFrame: prearmStartFrame,
             });
           }
-        } else {
+        } else if (!activeTransitionWindow) {
           lastPlayingPrearmTargetRef.current = null;
-          const activeWindow = transitionSessionWindowRef.current;
-          if (activeWindow && state.currentFrame >= activeWindow.endFrame) {
+          const prevActiveWindow = transitionSessionWindowRef.current;
+          if (prevActiveWindow && state.currentFrame >= prevActiveWindow.endFrame) {
             clearTransitionPlaybackSession();
           }
         }
@@ -3468,16 +3493,21 @@ export const VideoPreview = memo(function VideoPreview({
 
     const initialPlaybackState = usePlaybackStore.getState();
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
-      const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
-      if (prearmStartFrame !== null) {
-        lastPlayingPrearmTargetRef.current = prearmStartFrame;
-        const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
-        if (transitionWindow) {
-          pinTransitionPlaybackSession(transitionWindow);
+      // Check if playback starts inside an active transition — pin that
+      // session immediately so the render pump has the DOM video provider.
+      const activeWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
+      if (activeWindow) {
+        pinTransitionPlaybackSession(activeWindow);
+        lastPlayingPrearmTargetRef.current = activeWindow.startFrame;
+      } else {
+        const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
+        if (prearmStartFrame !== null) {
+          lastPlayingPrearmTargetRef.current = prearmStartFrame;
+          const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
+          if (transitionWindow) {
+            pinTransitionPlaybackSession(transitionWindow);
+          }
         }
-        pushTransitionTrace('playing_prearm', {
-          targetFrame: prearmStartFrame,
-        });
       }
     }
     if (!initialPlaybackState.isPlaying && initialPlaybackState.previewFrame === null) {

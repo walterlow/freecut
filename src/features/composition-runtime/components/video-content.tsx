@@ -527,14 +527,20 @@ const NativePreviewVideo: React.FC<{
       });
     }
 
-    // During premount, always pause - don't play until clip is actually visible
+    // During premount, always pause - don't play until clip is actually visible.
+    // Exception: if the element is held by a transition session (marked via
+    // data-transition-hold), the canvas overlay needs it playing for zero-copy
+    // frame reads. Pausing it would cause a play/pause fight every frame that
+    // disrupts Chrome's video decode pipeline and produces visible judder.
     if (isPremounted) {
-      if (!video.paused) {
-        video.pause();
-      }
-      // Seek to start position so video is ready when playback reaches this clip
-      if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
-        video.currentTime = clampedTargetTime;
+      const heldByTransition = video.dataset.transitionHold === '1';
+      if (!heldByTransition) {
+        if (!video.paused) {
+          video.pause();
+        }
+        if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
+          video.currentTime = clampedTargetTime;
+        }
       }
       return;
     }
