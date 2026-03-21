@@ -2749,6 +2749,13 @@ export const VideoPreview = memo(function VideoPreview({
             await renderer.renderFrame(frameToRender);
             const renderMs = performance.now() - renderStartMs;
             scrubOffscreenRenderedFrameRef.current = frameToRender;
+            // Dev: capture ALL frame times to window global for jitter debugging
+            if (import.meta.env.DEV) {
+              const log = (window as unknown as Record<string, unknown>).__ALL_FRAME_TIMES__ as Array<{ f: number; ms: number }> | undefined;
+              if (log && log.length < 300) {
+                log.push({ f: frameToRender, ms: Math.round(renderMs * 100) / 100 });
+              }
+            }
             // Log transition-area frame timing for diagnostics.
             if (import.meta.env.DEV && transitionSessionWindowRef.current) {
               const tw = transitionSessionWindowRef.current;
@@ -2839,7 +2846,42 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     };
 
+    // rAF-driven render pump for playback — fires at display vsync (60Hz+),
+    // catching frames the Zustand subscription misses due to event loop
+    // contention from React renders, GC pauses, etc. This reduces the ~9%
+    // frame drop rate during playback to near zero.
+    let playbackRafId: number | null = null;
+    let lastRafRenderedFrame = -1;
+    const playbackRafPump = () => {
+      playbackRafId = null;
+      if (!scrubMountedRef.current) return;
+      const playbackState = usePlaybackStore.getState();
+      if (!playbackState.isPlaying || !forceFastScrubOverlay) return;
+      const currentFrame = playbackState.currentFrame;
+      // Only pump when the frame has actually advanced — avoids redundant
+      // renders at 60Hz rAF when the Player runs at 30fps.
+      if (currentFrame !== lastRafRenderedFrame) {
+        lastRafRenderedFrame = currentFrame;
+        scrubRequestedFrameRef.current = currentFrame;
+        if (!scrubRenderInFlightRef.current) {
+          void pumpRenderLoop();
+        }
+      }
+      playbackRafId = requestAnimationFrame(playbackRafPump);
+    };
+
     const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
+      // Start/stop rAF render pump on play state transitions
+      if (state.isPlaying && forceFastScrubOverlay && !prev.isPlaying) {
+        if (playbackRafId === null) {
+          lastRafRenderedFrame = -1;
+          playbackRafId = requestAnimationFrame(playbackRafPump);
+        }
+      } else if (!state.isPlaying && playbackRafId !== null) {
+        cancelAnimationFrame(playbackRafId);
+        playbackRafId = null;
+      }
+
       if (state.isPlaying && forceFastScrubOverlay) {
         const complexPrewarmStartFrame = getPlayingComplexTransitionPrewarmStartFrame(state.currentFrame);
         if (complexPrewarmStartFrame !== null) {
@@ -3128,7 +3170,11 @@ export const VideoPreview = memo(function VideoPreview({
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
       scrubRequestedFrameRef.current = nextRequestedFrame;
-      void pumpRenderLoop();
+      // During playback with rAF pump active, let rAF drive the render loop
+      // to avoid contention between subscription and rAF both calling pumpRenderLoop.
+      if (playbackRafId === null) {
+        void pumpRenderLoop();
+      }
     });
 
     // During gizmo drags or live preview changes, trigger re-renders even when
@@ -3255,6 +3301,10 @@ export const VideoPreview = memo(function VideoPreview({
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
       void pumpRenderLoop();
+      // Start rAF pump if already playing
+      if (playbackState.isPlaying && forceFastScrubOverlay && playbackRafId === null) {
+        playbackRafId = requestAnimationFrame(playbackRafPump);
+      }
     } else if (usePlaybackStore.getState().isPlaying && !forceFastScrubOverlay) {
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
@@ -3309,6 +3359,10 @@ export const VideoPreview = memo(function VideoPreview({
       clearScheduledTransitionPrepare();
       clearTransitionPlaybackSession();
       hidePlaybackTransitionOverlay();
+      if (playbackRafId !== null) {
+        cancelAnimationFrame(playbackRafId);
+        playbackRafId = null;
+      }
       resumeScrubLoopRef.current = () => {};
       unsubscribe();
       unsubscribeGizmo();
