@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ErrorBoundary } from '@/components/error-boundary';
 import {
   Select,
   SelectContent,
@@ -1538,34 +1539,36 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             editorMode === 'split' ? (
               <div className="flex h-full min-w-0">
                 <div className="h-full flex-shrink-0 min-w-0" style={{ width: splitLeftWidth }}>
-                  <DopesheetEditor
-                    frameViewport={splitFrameViewport ?? undefined}
-                    onFrameViewportChange={setSplitFrameViewport}
-                    itemId={selectedItemForEditor.id}
-                    keyframesByProperty={keyframesByProperty}
-                    propertyValues={propertyValues}
-                    selectedProperty={selectedProperty}
-                    selectedKeyframeIds={selectedKeyframeIds}
-                    currentFrame={relativeFrame}
-                    globalFrame={currentFrame}
-                    totalFrames={selectedItemForEditor.durationInFrames}
-                    width={splitLeftWidth}
-                    height={editorHeight}
-                    className="min-w-0"
-                    onKeyframeMove={handleKeyframeMove}
-                    onSelectionChange={handleSelectionChange}
-                    onPropertyChange={handlePropertyChange}
-                    onActivePropertyChange={setActiveDopesheetProperty}
-                    onScrub={handleScrub}
-                    onScrubEnd={handleScrubEnd}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onAddKeyframe={handleAddKeyframe}
-                    onPropertyValueCommit={handlePropertyValueCommit}
-                    onRemoveKeyframes={handleRemoveKeyframes}
-                    onNavigateToKeyframe={handleNavigateToKeyframe}
-                    transitionBlockedRanges={transitionBlockedRanges}
-                  />
+                  <ErrorBoundary level="component">
+                    <DopesheetEditor
+                      frameViewport={splitFrameViewport ?? undefined}
+                      onFrameViewportChange={setSplitFrameViewport}
+                      itemId={selectedItemForEditor.id}
+                      keyframesByProperty={keyframesByProperty}
+                      propertyValues={propertyValues}
+                      selectedProperty={selectedProperty}
+                      selectedKeyframeIds={selectedKeyframeIds}
+                      currentFrame={relativeFrame}
+                      globalFrame={currentFrame}
+                      totalFrames={selectedItemForEditor.durationInFrames}
+                      width={splitLeftWidth}
+                      height={editorHeight}
+                      className="min-w-0"
+                      onKeyframeMove={handleKeyframeMove}
+                      onSelectionChange={handleSelectionChange}
+                      onPropertyChange={handlePropertyChange}
+                      onActivePropertyChange={setActiveDopesheetProperty}
+                      onScrub={handleScrub}
+                      onScrubEnd={handleScrubEnd}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onAddKeyframe={handleAddKeyframe}
+                      onPropertyValueCommit={handlePropertyValueCommit}
+                      onRemoveKeyframes={handleRemoveKeyframes}
+                      onNavigateToKeyframe={handleNavigateToKeyframe}
+                      transitionBlockedRanges={transitionBlockedRanges}
+                    />
+                  </ErrorBoundary>
                 </div>
                 <div
                   className={cn(
@@ -1618,31 +1621,33 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 </div>
               </div>
             ) : editorMode === 'dopesheet' ? (
-              <DopesheetEditor
-                itemId={selectedItemForEditor.id}
-                keyframesByProperty={keyframesByProperty}
-                propertyValues={propertyValues}
-                selectedProperty={selectedProperty}
-                selectedKeyframeIds={selectedKeyframeIds}
-                currentFrame={relativeFrame}
-                globalFrame={currentFrame}
-                totalFrames={selectedItemForEditor.durationInFrames}
-                width={editorWidth}
-                height={editorHeight}
-                onKeyframeMove={handleKeyframeMove}
-                onSelectionChange={handleSelectionChange}
-                onPropertyChange={handlePropertyChange}
-                onActivePropertyChange={setActiveDopesheetProperty}
-                onScrub={handleScrub}
-                onScrubEnd={handleScrubEnd}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onAddKeyframe={handleAddKeyframe}
-                onPropertyValueCommit={handlePropertyValueCommit}
-                onRemoveKeyframes={handleRemoveKeyframes}
-                onNavigateToKeyframe={handleNavigateToKeyframe}
-                transitionBlockedRanges={transitionBlockedRanges}
-              />
+              <ErrorBoundary level="component">
+                <DopesheetEditor
+                  itemId={selectedItemForEditor.id}
+                  keyframesByProperty={keyframesByProperty}
+                  propertyValues={propertyValues}
+                  selectedProperty={selectedProperty}
+                  selectedKeyframeIds={selectedKeyframeIds}
+                  currentFrame={relativeFrame}
+                  globalFrame={currentFrame}
+                  totalFrames={selectedItemForEditor.durationInFrames}
+                  width={editorWidth}
+                  height={editorHeight}
+                  onKeyframeMove={handleKeyframeMove}
+                  onSelectionChange={handleSelectionChange}
+                  onPropertyChange={handlePropertyChange}
+                  onActivePropertyChange={setActiveDopesheetProperty}
+                  onScrub={handleScrub}
+                  onScrubEnd={handleScrubEnd}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onAddKeyframe={handleAddKeyframe}
+                  onPropertyValueCommit={handlePropertyValueCommit}
+                  onRemoveKeyframes={handleRemoveKeyframes}
+                  onNavigateToKeyframe={handleNavigateToKeyframe}
+                  transitionBlockedRanges={transitionBlockedRanges}
+                />
+              </ErrorBoundary>
             ) : (
               <ValueGraphEditor
                 itemId={selectedItemForEditor.id}

@@ -12,6 +12,7 @@ import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { MaskEditorOverlay } from './mask-editor-overlay';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 interface MaskEditorContainerProps {
   containerRect: DOMRect | null;
@@ -69,10 +70,12 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
   if (!isEditing || !coordParams || !itemTransform) return null;
 
   return (
-    <MaskEditorOverlay
-      coordParams={coordParams}
-      playerSize={playerSize}
-      itemTransform={itemTransform}
-    />
+    <ErrorBoundary level="component">
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={playerSize}
+        itemTransform={itemTransform}
+      />
+    </ErrorBoundary>
   );
 });

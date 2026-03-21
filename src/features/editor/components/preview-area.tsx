@@ -16,6 +16,7 @@ import { useEditorStore } from '@/shared/state/editor';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { InteractionLockRegion } from './interaction-lock-region';
 import { Button } from '@/components/ui/button';
+import { ErrorBoundary } from '@/components/error-boundary';
 
 interface PreviewAreaProps {
   project: {
@@ -478,11 +479,13 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden">
-            <VideoPreview
-              project={liveProject}
-              containerSize={containerSize}
-              suspendOverlay={isPanelDragging}
-            />
+            <ErrorBoundary level="component">
+              <VideoPreview
+                project={liveProject}
+                containerSize={containerSize}
+                suspendOverlay={isPanelDragging}
+              />
+            </ErrorBoundary>
           </div>
 
           {isPenModeActive ? (
