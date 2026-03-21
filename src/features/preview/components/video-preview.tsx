@@ -2409,7 +2409,8 @@ export const VideoPreview = memo(function VideoPreview({
         // GPU not available — renderer will fall back to CPU path.
       }
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one-time mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time mount
+  }, []);
 
   // Background warm-up of full renderer once media URLs are resolved.
   useEffect(() => {
