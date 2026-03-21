@@ -2573,6 +2573,10 @@ export const VideoPreview = memo(function VideoPreview({
       if (scrubRenderInFlightRef.current) return;
       scrubRenderInFlightRef.current = true;
       const generation = scrubRenderGenerationRef.current;
+      // Fast bail-out: check if this pump has been superseded by a newer
+      // seek/play cycle. Checked after every await to abandon stale work
+      // as early as possible, freeing GPU/decoder resources for the new frame.
+      const isStale = () => scrubRenderGenerationRef.current !== generation;
 
       try {
         const enqueuePrewarmFrame = (frame: number) => {
@@ -2782,8 +2786,8 @@ export const VideoPreview = memo(function VideoPreview({
           }
 
           const renderer = await ensureFastScrubRenderer();
-          if (!renderer || !scrubMountedRef.current) {
-            hideFastScrubOverlay();
+          if (!renderer || !scrubMountedRef.current || isStale()) {
+            if (!isStale()) hideFastScrubOverlay();
             break;
           }
 
@@ -2824,6 +2828,7 @@ export const VideoPreview = memo(function VideoPreview({
             // Visible scrub targets still use full composition rendering.
             const renderStartMs = performance.now();
             await renderer.renderFrame(frameToRender);
+            if (isStale()) break;
             const renderMs = performance.now() - renderStartMs;
             scrubOffscreenRenderedFrameRef.current = frameToRender;
             // Dev: capture ALL frame times to window global for jitter debugging
@@ -2861,7 +2866,7 @@ export const VideoPreview = memo(function VideoPreview({
             // nearby sources. Avoid full composition work for non-visible frames.
             await renderer.prewarmFrame(frameToRender);
           }
-          if (!scrubMountedRef.current) break;
+          if (!scrubMountedRef.current || isStale()) break;
 
           if (isPriorityFrame) {
 
@@ -2923,15 +2928,19 @@ export const VideoPreview = memo(function VideoPreview({
         hidePlaybackTransitionOverlay();
         disposeFastScrubRenderer();
       } finally {
-        // Only release the lock if this pump owns the current generation.
-        // A playback-start force-clear bumps the generation, so stale pumps
-        // don't accidentally release a newer pump's lock.
+        // Always release the lock so new pumps can start.
+        scrubRenderInFlightRef.current = false;
+        // Only trigger follow-up work if this pump still owns the generation.
+        // Stale pumps (superseded by a seek/play) just release and exit.
         if (scrubRenderGenerationRef.current === generation) {
-          scrubRenderInFlightRef.current = false;
           const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
           if (deferredPrepareFrame !== null) {
             scheduleOpportunisticTransitionPrepare();
           }
+        }
+        // If a new scrub target arrived while we were in-flight, pump again.
+        if (scrubRequestedFrameRef.current !== null && !scrubRenderInFlightRef.current) {
+          void pumpRenderLoop();
         }
       }
     };
@@ -3425,6 +3434,11 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       // New scrub target should preempt stale background prewarm work.
+      // Bump generation so in-flight pumpRenderLoop iterations bail out
+      // after their next await — freeing GPU/decoder for the new frame.
+      // Don't clear scrubRenderInFlightRef here (unlike playback-start) —
+      // the stale loop's finally block handles it via generation check.
+      scrubRenderGenerationRef.current += 1;
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
       scrubRequestedFrameRef.current = nextRequestedFrame;
