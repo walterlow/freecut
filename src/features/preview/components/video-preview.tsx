@@ -2359,7 +2359,37 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [captureCurrentFrame, captureCurrentFrameImageData, captureCanvasSource, setCaptureFrame, setCaptureFrameImageData, setCaptureCanvasSource, setDisplayedFrame]);
 
-  // Background warm-up so first scrub has lower startup latency.
+  // Eager GPU warm-up on mount — request the WebGPU device BEFORE media
+  // finishes resolving. This is the most expensive single cold-start cost
+  // (~50-100ms for device request, plus ~100-400ms for shader compilation).
+  // The device is cached globally so the renderer reuses it instead of
+  // requesting a second one.
+  useEffect(() => {
+    if (!FAST_SCRUB_RENDERER_ENABLED) return;
+    void (async () => {
+      try {
+        const { EffectsPipeline } = await import('@/infrastructure/gpu/effects');
+        // requestCachedDevice warms the adapter + device. The subsequent
+        // EffectsPipeline.create() inside the renderer reuses it.
+        const device = await EffectsPipeline.requestCachedDevice();
+        if (device) {
+          // Pre-create a throwaway pipeline to compile all effect shaders.
+          // Shader binaries are cached by the GPU driver, so the renderer's
+          // own pipeline creation will be near-instant.
+          const warmPipeline = await EffectsPipeline.create();
+          if (warmPipeline) {
+            const { TransitionPipeline } = await import('@/infrastructure/gpu/transitions');
+            TransitionPipeline.create(device);
+            warmPipeline.destroy();
+          }
+        }
+      } catch {
+        // GPU not available — renderer will fall back to CPU path.
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- one-time mount
+
+  // Background warm-up of full renderer once media URLs are resolved.
   useEffect(() => {
     if (!FAST_SCRUB_RENDERER_ENABLED || isResolving) return;
     if (scrubRendererRef.current || scrubInitPromiseRef.current) return;
@@ -2914,6 +2944,13 @@ export const VideoPreview = memo(function VideoPreview({
       if (state.isPlaying && forceFastScrubOverlay && !prev.isPlaying) {
         if (playbackRafId === null) {
           lastRafRenderedFrame = -1;
+          // Force-clear any in-flight scrub render from the paused seek so
+          // the rAF pump can take over immediately. Without this, background
+          // prewarm from the paused scrub holds the lock for 300-500ms and
+          // the first playback frames are dropped.
+          scrubRenderInFlightRef.current = false;
+          scrubPrewarmQueueRef.current = [];
+          scrubPrewarmQueuedSetRef.current.clear();
           // Pre-warm mediabunny decoders for variable-speed video clips at the
           // current frame BEFORE starting the rAF render pump. These clips can't
           // use DOM video zero-copy (browser plays at 1x) so they need mediabunny,

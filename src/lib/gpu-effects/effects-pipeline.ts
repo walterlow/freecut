@@ -109,12 +109,37 @@ export class EffectsPipeline {
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
   }
 
+  // Cached GPU device — requesting a WebGPU adapter + device is the most
+  // expensive single operation (~50-100ms). Cache it so subsequent
+  // EffectsPipeline instances skip the device request entirely.
+  private static _cachedDevice: GPUDevice | null = null;
+  private static _devicePromise: Promise<GPUDevice | null> | null = null;
+
+  static async requestCachedDevice(): Promise<GPUDevice | null> {
+    if (EffectsPipeline._cachedDevice) return EffectsPipeline._cachedDevice;
+    if (EffectsPipeline._devicePromise) return EffectsPipeline._devicePromise;
+    EffectsPipeline._devicePromise = (async () => {
+      if (typeof navigator === 'undefined' || !navigator.gpu) return null;
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) return null;
+        const device = await adapter.requestDevice();
+        EffectsPipeline._cachedDevice = device;
+        device.lost.then(() => { EffectsPipeline._cachedDevice = null; });
+        return device;
+      } catch {
+        return null;
+      } finally {
+        EffectsPipeline._devicePromise = null;
+      }
+    })();
+    return EffectsPipeline._devicePromise;
+  }
+
   static async create(): Promise<EffectsPipeline | null> {
-    if (typeof navigator === 'undefined' || !navigator.gpu) return null;
+    const device = await EffectsPipeline.requestCachedDevice();
+    if (!device) return null;
     try {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) return null;
-      const device = await adapter.requestDevice();
       const pipeline = new EffectsPipeline(device);
       await pipeline.createPipelines();
       return pipeline;
