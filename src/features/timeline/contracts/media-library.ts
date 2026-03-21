@@ -20,3 +20,10 @@ export {
 
 export { autoMatchOrphanedClips } from '../utils/media-validation';
 export { gifFrameCache } from '../services/gif-frame-cache';
+
+export { addItem } from '../stores/actions/item-actions';
+export {
+  buildDroppedMediaTimelineItem,
+  type DroppableMediaType,
+  getDroppedMediaDurationInFrames,
+} from '../utils/dropped-media';
