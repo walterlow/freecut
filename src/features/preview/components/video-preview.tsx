@@ -192,6 +192,7 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubOffscreenRenderedFrameRef = useRef<number | null>(null);
   const playbackTransitionPreparePromiseRef = useRef<Promise<boolean> | null>(null);
   const playbackTransitionPreparingFrameRef = useRef<number | null>(null);
+  const deferredPlaybackTransitionPrepareFrameRef = useRef<number | null>(null);
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
@@ -1576,6 +1577,21 @@ export const VideoPreview = memo(function VideoPreview({
     [fps],
   );
   const playbackTransitionPrerenderRunwayFrames = 3;
+  const playbackTransitionEffectfulStartFrames = useMemo(() => {
+    const hasExpensiveVisuals = (item: TimelineItem) => (
+      item.effects?.some((effect) => effect.enabled)
+      || (item.blendMode !== undefined && item.blendMode !== 'normal')
+    );
+
+    const effectfulStartFrames = new Set<number>();
+    for (const window of playbackTransitionWindows) {
+      if (hasExpensiveVisuals(window.leftClip) || hasExpensiveVisuals(window.rightClip)) {
+        effectfulStartFrames.add(window.startFrame);
+      }
+    }
+
+    return effectfulStartFrames;
+  }, [playbackTransitionWindows]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
   // Styled, animated text can visibly flip between the DOM Player renderer
@@ -1617,6 +1633,7 @@ export const VideoPreview = memo(function VideoPreview({
     scrubOffscreenRenderedFrameRef.current = null;
     playbackTransitionPreparePromiseRef.current = null;
     playbackTransitionPreparingFrameRef.current = null;
+    deferredPlaybackTransitionPrepareFrameRef.current = null;
     captureCanvasSourceInFlightRef.current = null;
     previewPerfRef.current.fastScrubPrewarmedSources = 0;
     bypassPreviewSeekRef.current = false;
@@ -1749,8 +1766,17 @@ export const VideoPreview = memo(function VideoPreview({
           renderer.setDomVideoElementProvider(undefined);
         }
 
+        const shouldRenderFullRunway = (
+          forceFastScrubOverlay
+          || playbackTransitionEffectfulStartFrames.has(targetFrame)
+        );
         for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
-          await renderer.prewarmFrame(targetFrame + offset);
+          const runwayFrame = targetFrame + offset;
+          if (shouldRenderFullRunway) {
+            await renderer.renderFrame(runwayFrame);
+          } else {
+            await renderer.prewarmFrame(runwayFrame);
+          }
         }
         await renderer.renderFrame(targetFrame);
         if (!scrubMountedRef.current) return false;
@@ -1773,7 +1799,12 @@ export const VideoPreview = memo(function VideoPreview({
 
     playbackTransitionPreparePromiseRef.current = task;
     return task;
-  }, [ensureFastScrubRenderer, playbackTransitionPrerenderRunwayFrames]);
+  }, [
+    ensureFastScrubRenderer,
+    forceFastScrubOverlay,
+    playbackTransitionEffectfulStartFrames,
+    playbackTransitionPrerenderRunwayFrames,
+  ]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -1987,6 +2018,17 @@ export const VideoPreview = memo(function VideoPreview({
       drawToDisplay(frame);
       showPlaybackTransitionOverlayForFrame();
       return true;
+    };
+
+    const schedulePlaybackTransitionPrepare = (frame: number | null) => {
+      if (frame === null) {
+        deferredPlaybackTransitionPrepareFrameRef.current = null;
+        return;
+      }
+      deferredPlaybackTransitionPrepareFrameRef.current = frame;
+      if (!scrubRenderInFlightRef.current) {
+        void preparePlaybackTransitionFrame(frame);
+      }
     };
 
     const pumpRenderLoop = async () => {
@@ -2287,6 +2329,11 @@ export const VideoPreview = memo(function VideoPreview({
         disposeFastScrubRenderer();
       } finally {
         scrubRenderInFlightRef.current = false;
+        const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+        if (deferredPrepareFrame !== null && scrubRequestedFrameRef.current === null) {
+          deferredPlaybackTransitionPrepareFrameRef.current = null;
+          void preparePlaybackTransitionFrame(deferredPrepareFrame);
+        }
       }
     };
 
@@ -2324,7 +2371,7 @@ export const VideoPreview = memo(function VideoPreview({
         if (playbackTransitionState.shouldPrewarm) {
           void ensureFastScrubRenderer();
           if (!playbackTransitionState.hasActiveTransition && playbackTransitionState.nextTransitionStartFrame !== null) {
-            void preparePlaybackTransitionFrame(playbackTransitionState.nextTransitionStartFrame);
+            schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
           }
         }
         if (!(playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)) {
@@ -2545,6 +2592,10 @@ export const VideoPreview = memo(function VideoPreview({
 
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
+      const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
+      if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm) {
+        schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
+      }
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
       void pumpRenderLoop();
@@ -2554,7 +2605,7 @@ export const VideoPreview = memo(function VideoPreview({
       if (playbackTransitionState.shouldPrewarm) {
         void ensureFastScrubRenderer();
         if (!playbackTransitionState.hasActiveTransition && playbackTransitionState.nextTransitionStartFrame !== null) {
-          void preparePlaybackTransitionFrame(playbackTransitionState.nextTransitionStartFrame);
+          schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
         }
       }
       if (playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay) {
@@ -2610,6 +2661,7 @@ export const VideoPreview = memo(function VideoPreview({
     maybeCompleteFastScrubHandoff,
     scheduleFastScrubHandoffCheck,
     playbackTransitionCooldownFrames,
+    playbackTransitionEffectfulStartFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
     setDisplayedFrame,

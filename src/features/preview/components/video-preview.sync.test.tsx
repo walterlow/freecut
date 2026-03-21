@@ -946,6 +946,7 @@ describe('VideoPreview sync behavior', () => {
     useItemsStore.getState().setItems([
       {
         id: 'clip-left',
+        label: 'Left',
         type: 'video',
         trackId: 'track-video',
         from: 0,
@@ -954,6 +955,7 @@ describe('VideoPreview sync behavior', () => {
       } as TimelineItem,
       {
         id: 'clip-right',
+        label: 'Right',
         type: 'video',
         trackId: 'track-video',
         from: 40,
@@ -1032,6 +1034,7 @@ describe('VideoPreview sync behavior', () => {
     useItemsStore.getState().setItems([
       {
         id: 'clip-left',
+        label: 'Left',
         type: 'video',
         trackId: 'track-video',
         from: 0,
@@ -1040,6 +1043,7 @@ describe('VideoPreview sync behavior', () => {
       } as TimelineItem,
       {
         id: 'clip-right',
+        label: 'Right',
         type: 'video',
         trackId: 'track-video',
         from: 40,
@@ -1128,6 +1132,7 @@ describe('VideoPreview sync behavior', () => {
     useItemsStore.getState().setItems([
       {
         id: 'clip-left',
+        label: 'Left',
         type: 'video',
         trackId: 'track-video',
         from: 0,
@@ -1136,6 +1141,7 @@ describe('VideoPreview sync behavior', () => {
       } as TimelineItem,
       {
         id: 'clip-right',
+        label: 'Right',
         type: 'video',
         trackId: 'track-video',
         from: 40,
