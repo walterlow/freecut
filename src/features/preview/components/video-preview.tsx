@@ -2988,7 +2988,36 @@ export const VideoPreview = memo(function VideoPreview({
       playbackRafId = requestAnimationFrame(playbackRafPump);
     };
 
+    // Threshold for triggering background worker preseek on large jumps.
+    // Below this threshold, mediabunny sequential advance is fast (~1ms).
+    // Above it, a keyframe seek is needed (300-600ms) — the worker does it off-thread.
+    const JUMP_PRESEEK_THRESHOLD_FRAMES = Math.round(fps * 3);
+
     const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
+      // Background preseek on large timeline jumps — fire off-thread decoder
+      // seek for all visible video clips at the new position so the first
+      // renderFrame after the jump uses the cached bitmap (~0ms) instead of
+      // blocking on mediabunny keyframe seek (~300-600ms).
+      if (
+        state.currentFrame !== prev.currentFrame
+        && Math.abs(state.currentFrame - prev.currentFrame) >= JUMP_PRESEEK_THRESHOLD_FRAMES
+        && !state.isPlaying
+      ) {
+        const frame = state.currentFrame;
+        for (const track of combinedTracks) {
+          for (const item of track.items) {
+            if (item.type !== 'video' || !('src' in item) || !item.src) continue;
+            if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
+            const localFrame = frame - item.from;
+            const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+            const sourceFps = item.sourceFps ?? fps;
+            const speed = item.speed ?? 1;
+            const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+            void workerBackgroundPreseek(item.src, sourceTime);
+          }
+        }
+      }
+
       // Start/stop rAF render pump on play state transitions
       if (state.isPlaying && forceFastScrubOverlay && !prev.isPlaying) {
         if (playbackRafId === null) {

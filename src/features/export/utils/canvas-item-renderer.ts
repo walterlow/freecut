@@ -515,9 +515,10 @@ async function renderVideoItem(
 
   // === TRY PRE-DECODED BITMAP (from background Web Worker) ===
   // Check for a pre-decoded bitmap from the decoder prewarm worker.
-  // This covers occluded variable-speed clips that become visible mid-playback —
-  // the worker decoded the frame off the main thread, so drawing it is ~0ms.
-  if (isPreviewMode && isVariableSpeed && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
+  // Covers: (1) variable-speed clips that become visible mid-playback,
+  // (2) any clip after a large timeline jump where the worker pre-seeked
+  // the decoder off-thread so the first frame is instant (~0ms vs 300-600ms).
+  if (isPreviewMode && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
     const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime);
     if (bitmap) {
       const drawDimensions = calculateMediaDrawDimensions(
@@ -527,7 +528,6 @@ async function renderVideoItem(
         canvasSettings,
       );
       ctx.drawImage(bitmap, drawDimensions.x, drawDimensions.y, drawDimensions.width, drawDimensions.height);
-      // Kick off mediabunny init in the background for subsequent frames
       if (rctx.ensureVideoItemReady) {
         void rctx.ensureVideoItemReady(item.id);
       }

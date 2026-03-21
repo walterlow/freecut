@@ -22,6 +22,10 @@ const pendingRequests = new Map<string, {
 /** Cache of pre-decoded bitmaps keyed by video source URL. Multiple entries per source. */
 const bitmapCache = new Map<string, Array<{ bitmap: ImageBitmap; timestamp: number }>>();
 
+/** In-flight preseek promises keyed by source URL — lets the render engine await
+ *  a pending worker decode instead of falling through to a blocking main-thread decode. */
+const inflightPreseekBySrc = new Map<string, Promise<ImageBitmap | null>>();
+
 // Dev: expose cache for debugging
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__PREWARM_CACHE__ = bitmapCache;
@@ -73,7 +77,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
   if (!w) return Promise.resolve(null);
 
   const id = `preseek-${++requestId}`;
-  return new Promise<ImageBitmap | null>((resolve) => {
+  const promise = new Promise<ImageBitmap | null>((resolve) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(id);
       resolve(null);
@@ -115,6 +119,13 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       w.postMessage({ type: 'preseek', id, src, timestamp });
     }
   });
+  inflightPreseekBySrc.set(src, promise);
+  void promise.finally(() => {
+    if (inflightPreseekBySrc.get(src) === promise) {
+      inflightPreseekBySrc.delete(src);
+    }
+  });
+  return promise;
 }
 
 /**
@@ -135,6 +146,15 @@ export function getCachedPredecodedBitmap(src: string, timestamp: number, tolera
     }
   }
   return best?.bitmap ?? null;
+}
+
+/**
+ * Get the in-flight preseek promise for a source, if one is pending.
+ * The render engine can await this instead of starting a blocking
+ * main-thread mediabunny decode — the worker is already doing the work.
+ */
+export function getInflightPreseek(src: string): Promise<ImageBitmap | null> | null {
+  return inflightPreseekBySrc.get(src) ?? null;
 }
 
 /**
