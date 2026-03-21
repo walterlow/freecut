@@ -2895,10 +2895,9 @@ export const VideoPreview = memo(function VideoPreview({
               }
             }
           }
-          // Fire background worker preseeks for variable-speed clips at
-          // multiple future positions. The worker runs mediabunny off the
-          // main thread, decoding frames that the render loop can use via
-          // the pre-decoded bitmap cache — zero main-thread decode cost.
+          // Fire ONE background worker preseek per variable-speed clip at the
+          // furthest lookahead position. The worker runs mediabunny off the main
+          // thread and caches the decoded ImageBitmap for the render loop.
           for (const track of combinedTracks) {
             for (const item of track.items) {
               if (item.type !== 'video' || !('src' in item) || !item.src) continue;
@@ -2907,15 +2906,12 @@ export const VideoPreview = memo(function VideoPreview({
               const itemEnd = item.from + item.durationInFrames;
               const lookahead = Math.round(fps * 3);
               if (item.from <= frame + lookahead && itemEnd > frame) {
+                const targetFrame = Math.min(frame + lookahead, itemEnd - 1);
+                const localFrame = Math.max(0, targetFrame - item.from);
                 const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
                 const sourceFps = item.sourceFps ?? fps;
-                for (let offsetSec = 0; offsetSec <= 3; offsetSec += 1) {
-                  const futureFrame = Math.max(frame + Math.round(offsetSec * fps), item.from);
-                  if (futureFrame >= itemEnd) break;
-                  const localFrame = futureFrame - item.from;
-                  const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
-                  void workerBackgroundPreseek(item.src, sourceTime);
-                }
+                const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+                void workerBackgroundPreseek(item.src, sourceTime);
               }
             }
           }
@@ -2981,6 +2977,28 @@ export const VideoPreview = memo(function VideoPreview({
           const activeWindow = transitionSessionWindowRef.current;
           if (activeWindow && state.currentFrame >= activeWindow.endFrame) {
             clearTransitionPlaybackSession();
+          }
+        }
+      }
+
+      // Fire ONE worker preseek per variable-speed clip when paused at a new frame.
+      // This gives the worker maximum time to parse the video container and pre-decode.
+      if (!state.isPlaying && state.previewFrame === null && prev.currentFrame !== state.currentFrame) {
+        for (const track of combinedTracks) {
+          for (const item of track.items) {
+            if (item.type !== 'video' || !('src' in item) || !item.src) continue;
+            const speed = item.speed ?? 1;
+            if (Math.abs(speed - 1) < 0.01) continue;
+            const itemEnd = item.from + item.durationInFrames;
+            const lookahead = Math.round(fps * 3);
+            if (item.from <= state.currentFrame + lookahead && itemEnd > state.currentFrame) {
+              const targetFrame = Math.min(state.currentFrame + lookahead, itemEnd - 1);
+              const localFrame = Math.max(0, targetFrame - item.from);
+              const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+              const sourceFps = item.sourceFps ?? fps;
+              const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+              void workerBackgroundPreseek(item.src, sourceTime);
+            }
           }
         }
       }

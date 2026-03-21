@@ -37,7 +37,8 @@ function ensureWorker(): Worker | null {
     );
     worker.onmessage = (event: MessageEvent) => {
       const msg = event.data;
-      log.info('Worker response', { type: msg.type, id: msg.id, success: msg.success, hasBitmap: !!msg.bitmap, error: msg.error });
+      // eslint-disable-next-line no-console
+      console.log('[DecoderPrewarm]', msg.type, msg.step || '', msg.success, msg.error || '', msg.src || '', !!msg.bitmap);
       if (msg.type === 'preseek_done') {
         const pending = pendingRequests.get(msg.id);
         if (pending) {
@@ -64,13 +65,12 @@ function ensureWorker(): Worker | null {
  * Returns the decoded ImageBitmap or null on failure.
  * The bitmap is also cached by source URL for the render loop to use.
  */
+/** Cache of fetched blobs to avoid re-fetching for the same source. */
+const blobByUrl = new Map<string, Blob>();
+
 export function backgroundPreseek(src: string, timestamp: number): Promise<ImageBitmap | null> {
-  log.info('backgroundPreseek called', { src: src.substring(src.length - 20), timestamp: Math.round(timestamp * 100) / 100 });
   const w = ensureWorker();
-  if (!w) {
-    log.warn('Worker not available');
-    return Promise.resolve(null);
-  }
+  if (!w) return Promise.resolve(null);
 
   const id = `preseek-${++requestId}`;
   return new Promise<ImageBitmap | null>((resolve) => {
@@ -97,7 +97,23 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       },
     });
 
-    w.postMessage({ type: 'preseek', id, src, timestamp });
+    // Send the blob directly to avoid slow UrlSource fetch in the worker.
+    // Blobs are transferred via structured clone — fast and avoids re-fetch.
+    const cachedBlob = blobByUrl.get(src);
+    if (cachedBlob) {
+      w.postMessage({ type: 'preseek', id, src, timestamp, blob: cachedBlob });
+    } else if (src.startsWith('blob:')) {
+      // Fetch the blob URL to get the actual Blob, then send it
+      void fetch(src).then((r) => r.blob()).then((blob) => {
+        blobByUrl.set(src, blob);
+        w.postMessage({ type: 'preseek', id, src, timestamp, blob });
+      }).catch(() => {
+        // Fallback to UrlSource
+        w.postMessage({ type: 'preseek', id, src, timestamp });
+      });
+    } else {
+      w.postMessage({ type: 'preseek', id, src, timestamp });
+    }
   });
 }
 
