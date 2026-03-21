@@ -9,17 +9,14 @@ import type { TimelineItem } from '@/types/timeline';
  * Returns true when any of these conditions exist:
  * - GPU effects enabled on any item
  * - Non-normal blend modes
- * - Active transitions (transitions use separate video elements in the
- *   Remotion Player, which drift from the base-layer clips and cause
- *   visible ghosting during semi-transparent phases like fade)
  */
 export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],
   transitionCount: number,
 ): boolean {
+  void transitionCount;
   return (
-    transitionCount > 0
-    || items.some((item) =>
+    items.some((item) =>
       item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')
       || (item.blendMode && item.blendMode !== 'normal')
     )

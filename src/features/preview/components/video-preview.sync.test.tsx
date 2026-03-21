@@ -314,6 +314,7 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
+  getBestDomVideoElementForItem: vi.fn(() => null),
 }));
 
 vi.mock('./gizmo-overlay', () => ({
@@ -533,7 +534,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         src: 'blob:mock-video',
-      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      } as ReturnType<typeof useItemsStore.getState>['items'][number],
     ]);
 
     render(
@@ -630,7 +631,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         src: 'blob:mock-video',
-      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      } as ReturnType<typeof useItemsStore.getState>['items'][number],
     ]);
 
     render(
@@ -919,6 +920,92 @@ describe('VideoPreview sync behavior', () => {
 
     act(() => {
       completeDeferredPlayerSeek?.(48);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
+  it('shows the playback transition overlay only while a transition is active during playback', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      {
+        id: 'clip-right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(70);
     });
 
     await waitFor(() => {

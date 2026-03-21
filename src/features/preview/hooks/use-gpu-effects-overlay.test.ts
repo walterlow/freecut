@@ -16,8 +16,8 @@ function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
 }
 
 describe('shouldForceContinuousPreviewOverlay', () => {
-  it('forces continuous overlay for active transitions', () => {
-    expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1)).toBe(true);
+  it('does not force continuous overlay for transitions alone', () => {
+    expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1)).toBe(false);
   });
 
   it('forces continuous overlay for enabled gpu effects', () => {
