@@ -2933,20 +2933,21 @@ export const VideoPreview = memo(function VideoPreview({
         hidePlaybackTransitionOverlay();
         disposeFastScrubRenderer();
       } finally {
-        // Always release the lock so new pumps can start.
-        scrubRenderInFlightRef.current = false;
-        // Only trigger follow-up work if this pump still owns the generation.
-        // Stale pumps (superseded by a seek/play) just release and exit.
         if (scrubRenderGenerationRef.current === generation) {
+          // Current generation — this pump owns the lock. Release normally.
+          scrubRenderInFlightRef.current = false;
           const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
           if (deferredPrepareFrame !== null) {
             scheduleOpportunisticTransitionPrepare();
           }
+          if (scrubRequestedFrameRef.current !== null) {
+            void pumpRenderLoop();
+          }
         }
-        // If a new scrub target arrived while we were in-flight, pump again.
-        if (scrubRequestedFrameRef.current !== null && !scrubRenderInFlightRef.current) {
-          void pumpRenderLoop();
-        }
+        // Stale generation — a newer seek/play bumped the generation while
+        // we were in-flight. DON'T release the lock here; the playback-start
+        // force-clear or the new pump's finally handles it. Releasing would
+        // allow a concurrent pump to start and share mutable canvas state.
       }
     };
 
