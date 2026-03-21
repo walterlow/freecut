@@ -8,6 +8,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
     ], 48, 8)).toEqual({
       hasActiveTransition: true,
       shouldPrewarm: true,
+      nextTransitionStartFrame: 40,
     });
   });
 
@@ -17,6 +18,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
     ], 35, 8)).toEqual({
       hasActiveTransition: false,
       shouldPrewarm: true,
+      nextTransitionStartFrame: 40,
     });
   });
 
@@ -26,6 +28,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
     ], 20, 8)).toEqual({
       hasActiveTransition: false,
       shouldPrewarm: false,
+      nextTransitionStartFrame: 40,
     });
   });
 
@@ -35,6 +38,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
     ], 60, 8)).toEqual({
       hasActiveTransition: false,
       shouldPrewarm: false,
+      nextTransitionStartFrame: null,
     });
   });
 });

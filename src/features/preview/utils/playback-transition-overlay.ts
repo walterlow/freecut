@@ -6,6 +6,7 @@ export interface PlaybackTransitionOverlayWindow {
 export interface PlaybackTransitionOverlayState {
   hasActiveTransition: boolean;
   shouldPrewarm: boolean;
+  nextTransitionStartFrame: number | null;
 }
 
 export function resolvePlaybackTransitionOverlayState(
@@ -20,6 +21,7 @@ export function resolvePlaybackTransitionOverlayState(
       return {
         hasActiveTransition: true,
         shouldPrewarm: true,
+        nextTransitionStartFrame: window.startFrame,
       };
     }
 
@@ -27,6 +29,7 @@ export function resolvePlaybackTransitionOverlayState(
       return {
         hasActiveTransition: false,
         shouldPrewarm: (window.startFrame - frame) <= safeLookaheadFrames,
+        nextTransitionStartFrame: window.startFrame,
       };
     }
   }
@@ -34,5 +37,6 @@ export function resolvePlaybackTransitionOverlayState(
   return {
     hasActiveTransition: false,
     shouldPrewarm: false,
+    nextTransitionStartFrame: null,
   };
 }
