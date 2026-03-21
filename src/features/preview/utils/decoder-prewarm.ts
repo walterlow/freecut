@@ -37,7 +37,7 @@ function ensureWorker(): Worker | null {
     );
     worker.onmessage = (event: MessageEvent) => {
       const msg = event.data;
-      log.info('Worker response', { type: msg.type, id: msg.id, success: msg.success, hasBitmap: !!msg.bitmap });
+      log.info('Worker response', { type: msg.type, id: msg.id, success: msg.success, hasBitmap: !!msg.bitmap, error: msg.error });
       if (msg.type === 'preseek_done') {
         const pending = pendingRequests.get(msg.id);
         if (pending) {
@@ -47,8 +47,11 @@ function ensureWorker(): Worker | null {
       }
     };
     worker.onerror = (error) => {
-      log.warn('Decoder prewarm worker error', { error: error.message });
+      log.warn('Decoder prewarm worker error', { message: error.message, filename: error.filename, lineno: error.lineno });
     };
+    worker.addEventListener('messageerror', (e) => {
+      log.warn('Decoder prewarm worker message error', { data: e.data });
+    });
     return worker;
   } catch (error) {
     log.warn('Failed to create decoder prewarm worker', { error });

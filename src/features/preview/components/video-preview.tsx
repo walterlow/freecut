@@ -1,4 +1,5 @@
 ﻿import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
+import { backgroundPreseek as workerBackgroundPreseek } from '../utils/decoder-prewarm';
 import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -2894,6 +2895,31 @@ export const VideoPreview = memo(function VideoPreview({
               }
             }
           }
+          // Fire background worker preseeks for variable-speed clips at
+          // multiple future positions. The worker runs mediabunny off the
+          // main thread, decoding frames that the render loop can use via
+          // the pre-decoded bitmap cache — zero main-thread decode cost.
+          for (const track of combinedTracks) {
+            for (const item of track.items) {
+              if (item.type !== 'video' || !('src' in item) || !item.src) continue;
+              const speed = item.speed ?? 1;
+              if (Math.abs(speed - 1) < 0.01) continue;
+              const itemEnd = item.from + item.durationInFrames;
+              const lookahead = Math.round(fps * 3);
+              if (item.from <= frame + lookahead && itemEnd > frame) {
+                const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+                const sourceFps = item.sourceFps ?? fps;
+                for (let offsetSec = 0; offsetSec <= 3; offsetSec += 1) {
+                  const futureFrame = Math.max(frame + Math.round(offsetSec * fps), item.from);
+                  if (futureFrame >= itemEnd) break;
+                  const localFrame = futureFrame - item.from;
+                  const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+                  void workerBackgroundPreseek(item.src, sourceTime);
+                }
+              }
+            }
+          }
+
           if (prewarmItemIds.length > 0) {
             // Prewarm first, then start rAF pump — avoids 150ms+ first-frame stall.
             // Set flag to prevent subscription from pumping render loop during prewarm.

@@ -1,181 +1,110 @@
 /**
  * Web Worker for background mediabunny decoder pre-seeking.
  *
- * Runs mediabunny WASM decode off the main thread so pre-seeking occluded
+ * Runs mediabunny decode off the main thread so pre-seeking occluded
  * variable-speed clips doesn't block the render loop's rAF callbacks.
- *
- * Protocol:
- * - Main → Worker: { type: 'preseek', id, src, timestamp }
- * - Worker → Main: { type: 'preseek_done', id, success, timestamp }
  */
 
-interface PreseekRequest {
-  type: 'preseek';
-  id: string;
-  src: string;
-  timestamp: number;
+// Polyfill: mediabunny checks `typeof window !== 'undefined'` for CORS detection.
+type WorkerGlobalWithWindow = typeof globalThis & { window?: typeof globalThis };
+const workerGlobal = globalThis as WorkerGlobalWithWindow;
+if (typeof workerGlobal.window === 'undefined') {
+  workerGlobal.window = workerGlobal;
 }
 
-interface PreseekResponse {
-  type: 'preseek_done';
-  id: string;
-  success: boolean;
-  timestamp: number;
-  bitmap?: ImageBitmap;
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mb: any = null;
 
-type WorkerMessage = PreseekRequest;
-type WorkerResponse = PreseekResponse;
-
-// Lazy-loaded mediabunny types
-type MbModule = {
-  Input: new (opts: unknown) => unknown;
-  ALL_FORMATS: unknown;
-  UrlSource: new (src: string) => unknown;
-};
-
-interface ExtractorState {
-  src: string;
-  ready: boolean;
-  initPromise: Promise<boolean> | null;
-  // mediabunny objects
-  input: unknown;
-  videoTrack: unknown;
-  sink: unknown;
-  sampleIterator: AsyncIterableIterator<unknown> | null;
-  lastTimestamp: number;
-  canvas: OffscreenCanvas;
-  ctx: OffscreenCanvasRenderingContext2D;
-}
-
-const extractors = new Map<string, ExtractorState>();
-let mb: MbModule | null = null;
-
-async function ensureMediabunny(): Promise<MbModule> {
+async function ensureMb() {
   if (mb) return mb;
-  mb = await import('mediabunny') as unknown as MbModule;
+  mb = await import('mediabunny');
   return mb;
 }
 
-async function getOrCreateExtractor(src: string): Promise<ExtractorState | null> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const extractors = new Map<string, { sink: any; canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D }>();
+
+async function getExtractor(src: string) {
   const existing = extractors.get(src);
-  if (existing?.ready) return existing;
-  if (existing?.initPromise) {
-    await existing.initPromise;
-    return existing.ready ? existing : null;
+  if (existing) return existing;
+
+  const mediabunny = await ensureMb();
+  const input = new mediabunny.Input({
+    formats: mediabunny.ALL_FORMATS,
+    source: new mediabunny.UrlSource(src),
+  });
+
+  const videoTrack = await input.getPrimaryVideoTrack();
+  if (!videoTrack) return null;
+
+  if (typeof videoTrack.canDecode === 'function') {
+    if (!(await videoTrack.canDecode())) return null;
   }
 
+  const sink = await videoTrack.createVideoSampleSink();
   const canvas = new OffscreenCanvas(1, 1);
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
+  const ctx = canvas.getContext('2d')!;
 
-  const state: ExtractorState = {
-    src,
-    ready: false,
-    initPromise: null,
-    input: null,
-    videoTrack: null,
-    sink: null,
-    sampleIterator: null,
-    lastTimestamp: -1,
-    canvas,
-    ctx,
-  };
+  const state = { sink, canvas, ctx };
   extractors.set(src, state);
-
-  state.initPromise = (async () => {
-    try {
-      const mbModule = await ensureMediabunny();
-      state.input = new mbModule.Input({
-        formats: mbModule.ALL_FORMATS,
-        source: new mbModule.UrlSource(src),
-      });
-
-      state.videoTrack = await (state.input as { getPrimaryVideoTrack(): Promise<unknown> }).getPrimaryVideoTrack();
-      if (!state.videoTrack) return false;
-
-      const canDecode = (state.videoTrack as { canDecode?: () => Promise<boolean> }).canDecode;
-      if (canDecode) {
-        const ok = await canDecode.call(state.videoTrack);
-        if (!ok) return false;
-      }
-
-      state.sink = await (state.videoTrack as { createVideoSampleSink(): Promise<unknown> }).createVideoSampleSink();
-      state.ready = true;
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-
-  await state.initPromise;
-  state.initPromise = null;
-  return state.ready ? state : null;
+  return state;
 }
 
 async function preseek(src: string, timestamp: number): Promise<ImageBitmap | null> {
-  const state = await getOrCreateExtractor(src);
-  if (!state) return null;
+  const ext = await getExtractor(src);
+  if (!ext) return null;
 
-  try {
-    const sink = state.sink as {
-      samples(start: number, end: number): AsyncIterableIterator<{
-        timestamp: number;
-        frame?: { close(): void };
-      }>;
-    };
+  const streamStart = Math.max(0, timestamp - 1.0);
+  const iterator = ext.sink.samples(streamStart, Infinity);
 
-    // Start a new iterator at the target timestamp (with 1s backtrack)
-    const streamStart = Math.max(0, timestamp - 1.0);
-    state.sampleIterator = sink.samples(streamStart, Infinity);
-
-    // Iterate until we reach or pass the target timestamp, keeping the last frame
-    let lastFrame: { close(): void } | null = null;
-    let found = false;
-    for await (const rawSample of state.sampleIterator) {
-      const sample = rawSample as { timestamp: number; frame?: { close(): void } };
-      if (lastFrame) lastFrame.close();
-      lastFrame = sample.frame ?? null;
-      if (sample.timestamp >= timestamp - 0.001) {
-        found = true;
-        state.lastTimestamp = sample.timestamp;
-        break;
-      }
-    }
-    // Draw the decoded frame to the canvas and create an ImageBitmap
-    if (found && lastFrame) {
-      const videoFrame = lastFrame as unknown as VideoFrame;
-      const w = videoFrame.displayWidth;
-      const h = videoFrame.displayHeight;
-      state.canvas.width = w;
-      state.canvas.height = h;
-      state.ctx.drawImage(videoFrame, 0, 0, w, h);
-      videoFrame.close();
-      return state.canvas.transferToImageBitmap();
-    }
+  let lastFrame: VideoFrame | null = null;
+  for await (const sample of iterator) {
     if (lastFrame) lastFrame.close();
-    return null;
-  } catch {
-    return null;
+    lastFrame = (sample as { frame?: VideoFrame }).frame ?? null;
+    if ((sample as { timestamp: number }).timestamp >= timestamp - 0.001) {
+      break;
+    }
   }
+
+  if (lastFrame) {
+    const w = lastFrame.displayWidth;
+    const h = lastFrame.displayHeight;
+    ext.canvas.width = w;
+    ext.canvas.height = h;
+    ext.ctx.drawImage(lastFrame, 0, 0, w, h);
+    lastFrame.close();
+    return ext.canvas.transferToImageBitmap();
+  }
+  return null;
 }
 
-self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
+self.postMessage({ type: 'ready' });
+
+self.onmessage = async (event: MessageEvent) => {
   const msg = event.data;
   if (msg.type === 'preseek') {
-    const bitmap = await preseek(msg.src, msg.timestamp);
-    const response: PreseekResponse = {
-      type: 'preseek_done',
-      id: msg.id,
-      success: bitmap !== null,
-      timestamp: msg.timestamp,
-      bitmap: bitmap ?? undefined,
-    };
-    // Transfer the bitmap to avoid copying
-    if (bitmap) {
-      self.postMessage(response, { transfer: [bitmap] });
-    } else {
-      self.postMessage(response);
+    try {
+      const bitmap = await preseek(msg.src, msg.timestamp);
+      const response = {
+        type: 'preseek_done',
+        id: msg.id,
+        success: bitmap !== null,
+        timestamp: msg.timestamp,
+        bitmap: bitmap ?? undefined,
+      };
+      if (bitmap) {
+        self.postMessage(response, { transfer: [bitmap] });
+      } else {
+        self.postMessage(response);
+      }
+    } catch (error) {
+      self.postMessage({
+        type: 'preseek_done',
+        id: msg.id,
+        success: false,
+        timestamp: msg.timestamp,
+        error: String(error),
+      });
     }
   }
 };
