@@ -1571,6 +1571,11 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(2, Math.round(fps * 0.25)),
     [fps],
   );
+  const playbackTransitionCooldownFrames = useMemo(
+    () => Math.max(2, Math.round(fps * 0.1)),
+    [fps],
+  );
+  const playbackTransitionPrerenderRunwayFrames = 3;
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
   // Styled, animated text can visibly flip between the DOM Player renderer
@@ -1744,6 +1749,9 @@ export const VideoPreview = memo(function VideoPreview({
           renderer.setDomVideoElementProvider(undefined);
         }
 
+        for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
+          await renderer.prewarmFrame(targetFrame + offset);
+        }
         await renderer.renderFrame(targetFrame);
         if (!scrubMountedRef.current) return false;
         scrubOffscreenRenderedFrameRef.current = targetFrame;
@@ -1765,7 +1773,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     playbackTransitionPreparePromiseRef.current = task;
     return task;
-  }, [ensureFastScrubRenderer]);
+  }, [ensureFastScrubRenderer, playbackTransitionPrerenderRunwayFrames]);
 
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
@@ -1968,6 +1976,7 @@ export const VideoPreview = memo(function VideoPreview({
         playbackTransitionWindows,
         frame,
         playbackTransitionLookaheadFrames,
+        playbackTransitionCooldownFrames,
       )
     );
 
@@ -2223,10 +2232,11 @@ export const VideoPreview = memo(function VideoPreview({
           if (isPriorityFrame) {
 
             const playbackState = usePlaybackStore.getState();
+            const playbackTransitionState = getPlaybackTransitionStateForFrame(frameToRender);
             const shouldShowPlaybackTransitionOverlay = (
               playbackState.isPlaying
               && playbackState.previewFrame === null
-              && getPlaybackTransitionStateForFrame(frameToRender).hasActiveTransition
+              && (playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)
               && !forceFastScrubOverlay
             );
             if (fallbackToPlayerScrubRef.current) {
@@ -2317,7 +2327,7 @@ export const VideoPreview = memo(function VideoPreview({
             void preparePlaybackTransitionFrame(playbackTransitionState.nextTransitionStartFrame);
           }
         }
-        if (!playbackTransitionState.hasActiveTransition) {
+        if (!(playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)) {
           hideFastScrubOverlay();
           hidePlaybackTransitionOverlay();
           return;
@@ -2547,7 +2557,7 @@ export const VideoPreview = memo(function VideoPreview({
           void preparePlaybackTransitionFrame(playbackTransitionState.nextTransitionStartFrame);
         }
       }
-      if (playbackTransitionState.hasActiveTransition) {
+      if (playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay) {
         if (tryShowPreparedPlaybackTransitionOverlay(playbackState.currentFrame)) {
           return;
         }
@@ -2599,6 +2609,7 @@ export const VideoPreview = memo(function VideoPreview({
     beginFastScrubHandoff,
     maybeCompleteFastScrubHandoff,
     scheduleFastScrubHandoffCheck,
+    playbackTransitionCooldownFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
     setDisplayedFrame,

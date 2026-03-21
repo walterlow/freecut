@@ -7,6 +7,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
       { startFrame: 40, endFrame: 60 },
     ], 48, 8)).toEqual({
       hasActiveTransition: true,
+      shouldHoldOverlay: true,
       shouldPrewarm: true,
       nextTransitionStartFrame: 40,
     });
@@ -17,6 +18,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
       { startFrame: 40, endFrame: 60 },
     ], 35, 8)).toEqual({
       hasActiveTransition: false,
+      shouldHoldOverlay: false,
       shouldPrewarm: true,
       nextTransitionStartFrame: 40,
     });
@@ -27,6 +29,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
       { startFrame: 40, endFrame: 60 },
     ], 20, 8)).toEqual({
       hasActiveTransition: false,
+      shouldHoldOverlay: false,
       shouldPrewarm: false,
       nextTransitionStartFrame: 40,
     });
@@ -37,6 +40,18 @@ describe('resolvePlaybackTransitionOverlayState', () => {
       { startFrame: 40, endFrame: 60 },
     ], 60, 8)).toEqual({
       hasActiveTransition: false,
+      shouldHoldOverlay: false,
+      shouldPrewarm: false,
+      nextTransitionStartFrame: null,
+    });
+  });
+
+  it('keeps holding the overlay for a short cooldown after the transition', () => {
+    expect(resolvePlaybackTransitionOverlayState([
+      { startFrame: 40, endFrame: 60 },
+    ], 61, 8, 3)).toEqual({
+      hasActiveTransition: false,
+      shouldHoldOverlay: true,
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
     });

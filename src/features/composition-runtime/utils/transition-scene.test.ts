@@ -11,15 +11,17 @@ describe('transition scene', () => {
         {
           transition: {
             id: 'transition-1',
+            type: 'crossfade' as const,
+            trackId: 'track-1',
             leftClipId: 'left',
             rightClipId: 'right',
             durationInFrames: 10,
-            timing: 'linear',
-            presentation: 'fade',
+            timing: 'linear' as const,
+            presentation: 'fade' as const,
           },
           leftClip: {
             id: 'left',
-            type: 'video',
+            type: 'video' as const,
             trackId: 'track-1',
             from: 0,
             durationInFrames: 30,
@@ -28,7 +30,7 @@ describe('transition scene', () => {
           },
           rightClip: {
             id: 'right',
-            type: 'video',
+            type: 'video' as const,
             trackId: 'track-1',
             from: 20,
             durationInFrames: 30,
@@ -64,15 +66,17 @@ describe('transition scene', () => {
       {
         transition: {
           id: 'transition-1',
+          type: 'crossfade' as const,
+          trackId: 'track-1',
           leftClipId: 'left',
           rightClipId: 'right',
           durationInFrames: 10,
-          timing: 'linear',
-          presentation: 'fade',
+          timing: 'linear' as const,
+          presentation: 'fade' as const,
         },
         leftClip: {
           id: 'left',
-          type: 'video',
+          type: 'video' as const,
           trackId: 'track-1',
           from: 0,
           durationInFrames: 30,
@@ -81,7 +85,7 @@ describe('transition scene', () => {
         },
         rightClip: {
           id: 'right',
-          type: 'video',
+          type: 'video' as const,
           trackId: 'track-1',
           from: 20,
           durationInFrames: 30,
@@ -108,5 +112,12 @@ describe('transition scene', () => {
       frame: 31,
       lookaheadFrames: 20,
     })).toEqual(new Set());
+
+    expect(collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: 31,
+      lookaheadFrames: 0,
+      lookbehindFrames: 3,
+    })).toEqual(new Set(['left', 'right']));
   });
 });

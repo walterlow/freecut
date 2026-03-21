@@ -21,6 +21,7 @@ import { useVideoConfig } from '../hooks/use-player-compat';
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import { VideoContent } from './video-content';
 import {
   findActiveVideoItemIndex,
   groupStableVideoItems,
@@ -28,7 +29,6 @@ import {
 } from '../utils/video-scene';
 import {
   collectTransitionParticipantClipIds,
-  resolveTransitionFrameState,
 } from '../utils/transition-scene';
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
@@ -36,6 +36,8 @@ import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SHADOW_MOUNT_LOOKAHEAD_FRAMES = 3;
+const SHADOW_UNMOUNT_COOLDOWN_FRAMES = 3;
+const TRANSITION_SYNC_COOLDOWN_FRAMES = 3;
 const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 0.5;
 
 /** Video item with additional properties added by MainComposition */
@@ -142,6 +144,43 @@ const SHADOW_STYLE: React.CSSProperties = {
   pointerEvents: 'none',
 };
 
+const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenceItem }) => {
+  const { fps } = useVideoConfig();
+  const mediaSourceFps = useMediaLibraryStore((s) => (
+    item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId)?.fps : undefined
+  ));
+
+  if (!item.src) {
+    return null;
+  }
+
+  const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+  const sourceFps = item.sourceFps ?? mediaSourceFps ?? fps;
+  const playbackRate = item.speed ?? DEFAULT_SPEED;
+  const safeTrimBefore = getSafeTrimBefore(
+    trimBefore,
+    item.durationInFrames,
+    playbackRate,
+    item.sourceDuration || undefined,
+    fps,
+    sourceFps,
+  );
+
+  return (
+    <div style={SHADOW_STYLE} data-shadow-bridge={item.id}>
+      <VideoContent
+        item={item}
+        muted={true}
+        safeTrimBefore={safeTrimBefore}
+        playbackRate={playbackRate}
+        sourceFps={sourceFps}
+      />
+    </div>
+  );
+});
+
+HiddenShadowVideoBridge.displayName = 'HiddenShadowVideoBridge';
+
 const GroupRenderer: React.FC<{
   group: StableVideoGroup<StableVideoSequenceItem>;
   transitionWindows?: ResolvedTransitionWindow<TimelineItem>[];
@@ -192,6 +231,7 @@ const GroupRenderer: React.FC<{
       transitionWindows,
       frame: globalFrame,
       lookaheadFrames: SHADOW_MOUNT_LOOKAHEAD_FRAMES,
+      lookbehindFrames: SHADOW_UNMOUNT_COOLDOWN_FRAMES,
     });
     return group.items
       .map((item, index) => ({ item, index }))
@@ -202,10 +242,14 @@ const GroupRenderer: React.FC<{
 
   // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
-  const activeTransitionClipIds = useMemo(
-    () => resolveTransitionFrameState({ transitionWindows, frame: globalFrame }).transitionClipIds,
-    [globalFrame, transitionWindows],
-  );
+  const activeTransitionClipIds = useMemo(() => (
+    collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: globalFrame,
+      lookaheadFrames: 0,
+      lookbehindFrames: TRANSITION_SYNC_COOLDOWN_FRAMES,
+    })
+  ), [globalFrame, transitionWindows]);
 
   const warmupShadows = useMemo(() => {
     if (!transitionWarmupClipIds) return [];
@@ -264,12 +308,10 @@ const GroupRenderer: React.FC<{
   // Memoize shadow content — only changes at transition boundaries
   const shadowContent = useMemo(() => {
     if (adjustedShadows.length === 0) return null;
-    return adjustedShadows.map(shadow => (
-      <div key={shadow.id} style={SHADOW_STYLE}>
-        {renderItem(shadow)}
-      </div>
+    return adjustedShadows.map((shadow) => (
+      <HiddenShadowVideoBridge key={shadow.id} item={shadow} />
     ));
-  }, [adjustedShadows, renderItem]);
+  }, [adjustedShadows]);
 
   const transitionWarmupRequests = useMemo(
     () => buildTransitionShadowWarmupRequests(adjustedItem, warmupShadows),

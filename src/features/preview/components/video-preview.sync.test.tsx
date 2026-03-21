@@ -1087,6 +1087,8 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(renderer.prewarmFrame).toHaveBeenCalledWith(41);
+      expect(renderer.prewarmFrame).toHaveBeenCalledWith(42);
       expect(scrubCanvas.style.visibility).toBe('hidden');
       expect(usePlaybackStore.getState().displayedFrame).toBeNull();
     });
@@ -1107,6 +1109,100 @@ describe('VideoPreview sync behavior', () => {
     expect(
       renderer.renderFrame.mock.calls.filter(([frame]) => frame === 40).length,
     ).toBe(prerenderedStartFrameCalls);
+  });
+
+  it('keeps the transition overlay active for a short cooldown after the overlap ends', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(58);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(58);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(61);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(61);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(61);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(64);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
   });
 
   it('on play start, clears previewFrame and seeks to current playhead frame', async () => {
