@@ -307,15 +307,17 @@ function getSlideOffset(
 ): { x: number; y: number } {
   const slideProgress = isOutgoing ? progress : progress - 1;
 
+  // Round to whole pixels — sub-pixel drawImage offsets cause interpolation
+  // artifacts (shimmering on edges, blurred text).
   switch (direction) {
     case 'from-left':
-      return { x: slideProgress * canvas.width, y: 0 };
+      return { x: Math.round(slideProgress * canvas.width), y: 0 };
     case 'from-right':
-      return { x: -slideProgress * canvas.width, y: 0 };
+      return { x: Math.round(-slideProgress * canvas.width), y: 0 };
     case 'from-top':
-      return { x: 0, y: slideProgress * canvas.height };
+      return { x: 0, y: Math.round(slideProgress * canvas.height) };
     case 'from-bottom':
-      return { x: 0, y: -slideProgress * canvas.height };
+      return { x: 0, y: Math.round(-slideProgress * canvas.height) };
     default:
       return { x: 0, y: 0 };
   }

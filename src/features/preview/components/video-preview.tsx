@@ -1875,10 +1875,19 @@ export const VideoPreview = memo(function VideoPreview({
 
     const pinned = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
     if (pinned && pinned.isConnected && pinned.readyState >= 2 && pinned.videoWidth > 0) {
+      // Ensure the video element is playing during transitions.
+      // The incoming clip's Sequence treats it as premounted (relativeFrame < 0)
+      // and pauses it, but the canvas renderer needs advancing frames.
+      if (isPlaying && pinned.paused) {
+        pinned.play().catch(() => {});
+      }
       return pinned;
     }
 
     const next = getBestDomVideoElementForItem(itemId);
+    if (next && isPlaying && next.paused && next.readyState >= 2) {
+      next.play().catch(() => {});
+    }
     transitionSessionPinnedElementsRef.current.set(itemId, next);
     return next;
   }, [transitionWindowUsesDomProvider]);
