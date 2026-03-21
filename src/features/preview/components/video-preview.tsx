@@ -2379,9 +2379,12 @@ export const VideoPreview = memo(function VideoPreview({
           // own pipeline creation will be near-instant.
           const warmPipeline = await EffectsPipeline.create();
           if (warmPipeline) {
-            const { TransitionPipeline } = await import('@/infrastructure/gpu/transitions');
-            TransitionPipeline.create(device);
-            warmPipeline.destroy();
+            try {
+              const { TransitionPipeline } = await import('@/infrastructure/gpu/transitions');
+              TransitionPipeline.create(device)?.destroy();
+            } finally {
+              warmPipeline.destroy();
+            }
           }
         }
       } catch {
