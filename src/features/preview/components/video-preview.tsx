@@ -2853,6 +2853,7 @@ export const VideoPreview = memo(function VideoPreview({
     let playbackRafId: number | null = null;
     let lastRafRenderedFrame = -1;
     let playbackPrewarmInFlight = false;
+
     const playbackRafPump = () => {
       playbackRafId = null;
       if (!scrubMountedRef.current) return;
