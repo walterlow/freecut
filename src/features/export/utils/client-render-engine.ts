@@ -1616,17 +1616,19 @@ export async function createCompositionRenderer(
       }
       // Seek decoders to the target frame position using a 1x1 draw
       // (negligible cost) so the decode cursor is at the right spot.
+      // Run all clips in parallel — each decoder is independent and the
+      // concurrent seeks roughly halve the total prewarm time.
       if (targetFrame !== undefined) {
         const ctx2d = getPrewarmContext();
         if (!ctx2d) return;
-        for (const itemId of itemIds) {
+        await Promise.all(itemIds.map(async (itemId) => {
           if (isDisposed) return;
           const extractor = videoExtractors.get(itemId);
-          if (!extractor || !useMediabunny.has(itemId)) continue;
+          if (!extractor || !useMediabunny.has(itemId)) return;
           const item = sortedTracks.flatMap((t) => t.items ?? []).find((i) => i.id === itemId);
-          if (!item || item.type !== 'video') continue;
+          if (!item || item.type !== 'video') return;
           const localFrame = targetFrame - item.from;
-          if (localFrame < 0 || localFrame >= item.durationInFrames) continue;
+          if (localFrame < 0 || localFrame >= item.durationInFrames) return;
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
@@ -1636,7 +1638,7 @@ export async function createCompositionRenderer(
           } catch {
             // Best-effort prewarm — ignore failures.
           }
-        }
+        }));
       }
     },
 

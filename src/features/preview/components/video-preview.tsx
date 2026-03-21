@@ -2727,11 +2727,13 @@ export const VideoPreview = memo(function VideoPreview({
                 const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
                 pinTransitionPlaybackSession(windowForFrame);
                 // Pre-warm mediabunny decoders when entering a transition mid-playback
-                // (e.g. starting playback inside a transition zone).
+                // (e.g. starting playback inside a transition zone). Pre-seek to
+                // the current frame (not startFrame) so the decoder cursor lands
+                // close to where the first real render will need it.
                 if (isNewSession && 'prewarmItems' in renderer) {
                   void renderer.prewarmItems(
                     [windowForFrame.leftClip.id, windowForFrame.rightClip.id],
-                    windowForFrame.startFrame,
+                    frameToRender,
                   );
                 }
               }
@@ -2882,7 +2884,29 @@ export const VideoPreview = memo(function VideoPreview({
       if (!state.isPlaying && state.previewFrame === null) {
         const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(state.currentFrame);
         if (pausedPrewarmStartFrame !== null) {
-          schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+          if (forceFastScrubOverlay) {
+            // When GPU effects overlay is active, use non-blocking prewarmItems
+            // instead of preparePlaybackTransitionFrame. The prep would set
+            // scrubRenderInFlightRef=true and block pumpRenderLoop for 300ms+
+            // when playback resumes.
+            const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
+            if (tw) {
+              pinTransitionPlaybackSession(tw);
+              if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
+                void (async () => {
+                  const renderer = await ensureFastScrubRenderer();
+                  if (renderer && 'prewarmItems' in renderer) {
+                    await renderer.prewarmItems(
+                      [tw.leftClip.id, tw.rightClip.id],
+                      state.currentFrame,
+                    );
+                  }
+                })();
+              }
+            }
+          } else {
+            schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+          }
           if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
             lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
             pushTransitionTrace('paused_prearm', {
@@ -3182,7 +3206,25 @@ export const VideoPreview = memo(function VideoPreview({
       const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
-        schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+        if (forceFastScrubOverlay) {
+          // Non-blocking prewarm — avoid schedulePlaybackTransitionPrepare which
+          // blocks the render loop via scrubRenderInFlightRef on playback resume.
+          const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
+          if (tw) {
+            pinTransitionPlaybackSession(tw);
+            void (async () => {
+              const renderer = await ensureFastScrubRenderer();
+              if (renderer && 'prewarmItems' in renderer) {
+                await renderer.prewarmItems(
+                  [tw.leftClip.id, tw.rightClip.id],
+                  initialPlaybackState.currentFrame,
+                );
+              }
+            })();
+          }
+        } else {
+          schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
+        }
         pushTransitionTrace('paused_prearm', {
           targetFrame: pausedPrewarmStartFrame,
         });
@@ -3192,8 +3234,23 @@ export const VideoPreview = memo(function VideoPreview({
     if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
-      if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm) {
-        schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
+      if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm && playbackTransitionState.nextTransitionStartFrame !== null) {
+        if (forceFastScrubOverlay) {
+          // Non-blocking prewarm path
+          const tw = getTransitionWindowByStartFrame(playbackTransitionState.nextTransitionStartFrame);
+          if (tw) {
+            pinTransitionPlaybackSession(tw);
+            const renderer = scrubRendererRef.current;
+            if (renderer && 'prewarmItems' in renderer) {
+              void renderer.prewarmItems(
+                [tw.leftClip.id, tw.rightClip.id],
+                tw.startFrame,
+              );
+            }
+          }
+        } else {
+          schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
+        }
       }
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
