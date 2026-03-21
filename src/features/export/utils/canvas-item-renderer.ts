@@ -458,11 +458,11 @@ async function renderVideoItem(
           drawDimensions.width,
           drawDimensions.height,
         );
-        // For variable-speed clips using DOM fallback, kick off mediabunny
-        // init in the background so subsequent frames use frame-accurate decode.
-        if (isVariableSpeed && !mediabunnyReady && rctx.ensureVideoItemReady) {
-          void rctx.ensureVideoItemReady(item.id);
-        }
+        // For variable-speed clips using DOM fallback during playback,
+        // DON'T kick off mediabunny init — keep using DOM video for the
+        // entire playback session. Mediabunny init + keyframe seek takes
+        // 400-500ms on the main thread, causing visible frame drops.
+        // DOM video has slight timing drift at speed != 1, but no freezes.
         return;
       }
     }

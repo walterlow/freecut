@@ -2891,7 +2891,13 @@ export const VideoPreview = memo(function VideoPreview({
               if (item.type !== 'video') continue;
               if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
               const speed = item.speed ?? 1;
-              if (Math.abs(speed - 1) >= 0.01) {
+              if (Math.abs(speed - 1) < 0.01) continue;
+              // Only prewarm clips where playback starts AT or very near the
+              // clip start (within 2 frames). Clips that started much earlier
+              // will use DOM video during playback — pre-seeking their decoder
+              // to the current frame wastes time and positions it wrong.
+              const framesIntoClip = frame - item.from;
+              if (framesIntoClip <= 2) {
                 prewarmItemIds.push(item.id);
               }
             }
@@ -3006,7 +3012,10 @@ export const VideoPreview = memo(function VideoPreview({
             const speed = item.speed ?? 1;
             if (Math.abs(speed - 1) < 0.01) continue;
             const itemEnd = item.from + item.durationInFrames;
-            if (item.from <= state.currentFrame + lookahead && itemEnd > state.currentFrame) {
+            // Only prewarm clips that START ahead (upcoming clip boundaries).
+            // Clips already active use DOM video during playback — pre-seeking
+            // their decoder wastes main-thread time and mispositions the cursor.
+            if (item.from > state.currentFrame && item.from <= state.currentFrame + lookahead) {
               varSpeedItemIds.push(item.id);
               furthestFrame = Math.max(furthestFrame, Math.min(state.currentFrame + lookahead, itemEnd - 1));
             }
