@@ -37,6 +37,9 @@ import {
 
 type EnrichedVideoItem = VideoTrackItem;
 
+const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
+const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
+
 const ActiveMasksContext = React.createContext<MaskInfo[]>(EMPTY_MASK_INFOS);
 
 const FrameActiveMasksProvider: React.FC<{
@@ -270,7 +273,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                 key={segment.key}
                 from={segment.from}
                 durationInFrames={segment.durationInFrames}
-                premountFor={Math.round(fps * 2)}
+                premountFor={Math.round(fps * TRANSITION_AUDIO_PREMOUNT_SECONDS)}
               >
                 {useCustomDecoder ? (
                   <CustomDecoderAudio
@@ -317,7 +320,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                 key={segment.key}
                 from={segment.from}
                 durationInFrames={segment.durationInFrames}
-                premountFor={Math.round(fps * 2)}
+                premountFor={Math.round(fps * STANDALONE_AUDIO_PREMOUNT_SECONDS)}
               >
                 {useCustomDecoder ? (
                   <CustomDecoderAudio

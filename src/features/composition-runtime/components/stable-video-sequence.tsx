@@ -26,12 +26,17 @@ import {
   groupStableVideoItems,
   type StableVideoGroup,
 } from '../utils/video-scene';
-import { collectTransitionParticipantClipIds } from '../utils/transition-scene';
+import {
+  collectTransitionParticipantClipIds,
+  resolveTransitionFrameState,
+} from '../utils/transition-scene';
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 
 const warmupLog = createLogger('StableVideoWarmup');
+const SHADOW_MOUNT_LOOKAHEAD_FRAMES = 3;
+const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 0.5;
 
 /** Video item with additional properties added by MainComposition */
 export type StableVideoSequenceItem = VideoItem & {
@@ -164,22 +169,29 @@ const GroupRenderer: React.FC<{
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
 
-  // Compute stable overlap key — only changes at transition boundaries.
-  // During overlap, non-primary items need hidden DOM video elements so
-  // domVideoElementProvider can find them for zero-copy decode.
-  //
-  // LOOKAHEAD: Shadows are mounted ~0.5s BEFORE the overlap actually starts.
-  // This gives the shadow's pool element time to load (src set, readyState → 2)
-  // before the transition begins. Without this, at transition start the left
-  // clip loses its primary pool element to the right clip and the new shadow
-  // element needs 100-300ms to load, causing mediabunny fallback (40-80ms/frame)
-  // for the first few transition frames.
+  const transitionWarmupClipIds = useMemo(() => {
+    if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
+    const transitionClipIds = collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: globalFrame,
+      lookaheadFrames: Math.round(fps * TRANSITION_WARMUP_LOOKAHEAD_SECONDS),
+    });
+    return group.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
+      .map(({ index }) => index)
+      .join(',');
+  }, [activeItemIndex, fps, globalFrame, group.items, isPremounted, transitionWindows]);
+
+  // Mount hidden transition shadows only a few frames before the overlap.
+  // Pool lane warmup happens earlier; hidden DOM activation should stay late so
+  // normal playback keeps using the simple single-clip path until near the cut.
   const overlapKey = useMemo(() => {
     if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
     const transitionClipIds = collectTransitionParticipantClipIds({
       transitionWindows,
       frame: globalFrame,
-      lookaheadFrames: Math.round(fps * 0.5),
+      lookaheadFrames: SHADOW_MOUNT_LOOKAHEAD_FRAMES,
     });
     return group.items
       .map((item, index) => ({ item, index }))
@@ -190,6 +202,17 @@ const GroupRenderer: React.FC<{
 
   // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
+  const activeTransitionClipIds = useMemo(
+    () => resolveTransitionFrameState({ transitionWindows, frame: globalFrame }).transitionClipIds,
+    [globalFrame, transitionWindows],
+  );
+
+  const warmupShadows = useMemo(() => {
+    if (!transitionWarmupClipIds) return [];
+    const indices = transitionWarmupClipIds.split(',').map(Number);
+    return indices.map(idx => group.items[idx]!);
+  }, [group.items, transitionWarmupClipIds]);
+
   const adjustedShadows = useMemo(() => {
     if (!overlapKey) return [];
     const indices = overlapKey.split(',').map(Number);
@@ -200,12 +223,12 @@ const GroupRenderer: React.FC<{
         _sequenceFrameOffset: item.from - group.minFrom,
         // Separate pool ID so shadow gets its own video element (not shared with primary)
         _poolClipId: `shadow-${item.id}`,
-        _sharedTransitionSync: true,
+        _sharedTransitionSync: activeTransitionClipIds.has(item.id),
       };
     });
     // overlapKey is a string — React compares by value, so this only re-runs
     // when the set of overlapping items actually changes (transition boundaries)
-  }, [overlapKey, group.items, group.minFrom]);
+  }, [activeTransitionClipIds, group.items, group.minFrom, overlapKey]);
 
   // Memoize the adjusted item based on active item identity.
   // Only recalculates when crossing split boundaries or when item/group properties change.
@@ -226,9 +249,9 @@ const GroupRenderer: React.FC<{
       // Keep a stable pool identity across split boundaries so preview video
       // playback does not release/reacquire the element on item.id changes.
       _poolClipId: `group-${group.originKey}`,
-      _sharedTransitionSync: adjustedShadows.length > 0,
+      _sharedTransitionSync: activeTransitionClipIds.has(activeItem.id),
     };
-  }, [activeItem, adjustedShadows.length, group.minFrom]);
+  }, [activeItem, activeTransitionClipIds, group.minFrom]);
 
   // CRITICAL: Also memoize the RENDERED OUTPUT.
   // This prevents calling renderItem (which creates new React elements) every frame.
@@ -249,12 +272,17 @@ const GroupRenderer: React.FC<{
   }, [adjustedShadows, renderItem]);
 
   const transitionWarmupRequests = useMemo(
-    () => buildTransitionShadowWarmupRequests(adjustedItem, adjustedShadows),
-    [adjustedItem, adjustedShadows],
+    () => buildTransitionShadowWarmupRequests(adjustedItem, warmupShadows),
+    [adjustedItem, warmupShadows],
+  );
+
+  const syncShadows = useMemo(
+    () => adjustedShadows.filter((item) => activeTransitionClipIds.has(item.id)),
+    [activeTransitionClipIds, adjustedShadows],
   );
 
   const transitionSyncParticipants = useMemo(() => {
-    if (!adjustedItem || adjustedShadows.length === 0) {
+    if (!adjustedItem || syncShadows.length === 0 || !activeTransitionClipIds.has(adjustedItem.id)) {
       return [];
     }
 
@@ -290,9 +318,9 @@ const GroupRenderer: React.FC<{
 
     return [
       toParticipant(adjustedItem, 'leader'),
-      ...adjustedShadows.map((item) => toParticipant(item, 'follower')),
+      ...syncShadows.map((item) => toParticipant(item, 'follower')),
     ];
-  }, [adjustedItem, adjustedShadows, fps]);
+  }, [activeTransitionClipIds, adjustedItem, fps, syncShadows]);
 
   useTransitionParticipantSync(transitionSyncParticipants, group.minFrom, fps);
 
