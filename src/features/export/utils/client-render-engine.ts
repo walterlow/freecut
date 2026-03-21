@@ -588,6 +588,14 @@ export async function createCompositionRenderer(
   };
   itemRenderContext.ensureVideoItemReady = ensureVideoItemReady;
 
+  // Wire up pre-decoded bitmap cache from the decoder prewarm worker.
+  // Import eagerly so it's available before the first render.
+  if (renderMode === 'preview') {
+    void import('@/features/preview/utils/decoder-prewarm').then(({ getCachedPredecodedBitmap }) => {
+      itemRenderContext.getCachedPredecodedBitmap = getCachedPredecodedBitmap;
+    }).catch(() => {});
+  }
+
   const assertPreviewStrictDecode = () => {
     if (previewStrictDecode && useMediabunny.size !== videoExtractors.size) {
       const failedItemIds = [...videoExtractors.keys()].filter((id) => !useMediabunny.has(id));
@@ -1607,9 +1615,11 @@ export async function createCompositionRenderer(
      * seek them to a target frame. This warms up the WASM decoder and positions
      * the decode cursor so the first real render is fast (~1ms instead of 300-500ms).
      *
-     * Pre-seeks run on each item's own decoder lane (assigned by the shared pool).
-     * For occluded clips that aren't being actively rendered, this means the
-     * pre-seek runs without contending with the render loop's decoder.
+     * For variable-speed clips, also advances the decoder up to ~2.5s ahead of
+     * the target frame in sequential 0.5s steps. This ensures the decoder cursor
+     * is within the 3s forward-jump threshold of any frame that might be rendered
+     * in the near future — preventing 400-500ms keyframe seeks when occluded clips
+     * become visible mid-playback.
      */
     async prewarmItems(itemIds: string[], targetFrame?: number) {
       const unready = itemIds.filter(
@@ -1634,9 +1644,9 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const baseSourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
           try {
-            await extractor.drawFrame(ctx2d, Math.max(0, sourceTime), 0, 0, 1, 1);
+            await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1);
           } catch {
             // Best-effort prewarm — ignore failures.
           }

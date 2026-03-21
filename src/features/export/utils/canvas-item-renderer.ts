@@ -121,6 +121,7 @@ export interface ItemRenderContext {
   mediabunnyDisabledItems: Set<string>;
   mediabunnyFailureCountByItem: Map<string, number>;
   ensureVideoItemReady?: (itemId: string) => Promise<boolean>;
+  getCachedPredecodedBitmap?: (src: string, timestamp: number) => ImageBitmap | null;
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>;
@@ -499,6 +500,28 @@ async function renderVideoItem(
       }
     }
     return;
+  }
+
+  // === TRY PRE-DECODED BITMAP (from background Web Worker) ===
+  // Check for a pre-decoded bitmap from the decoder prewarm worker.
+  // This covers occluded variable-speed clips that become visible mid-playback —
+  // the worker decoded the frame off the main thread, so drawing it is ~0ms.
+  if (isPreviewMode && isVariableSpeed && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
+    const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime);
+    if (bitmap) {
+      const drawDimensions = calculateMediaDrawDimensions(
+        bitmap.width,
+        bitmap.height,
+        transform,
+        canvasSettings,
+      );
+      ctx.drawImage(bitmap, drawDimensions.x, drawDimensions.y, drawDimensions.width, drawDimensions.height);
+      // Kick off mediabunny init in the background for subsequent frames
+      if (rctx.ensureVideoItemReady) {
+        void rctx.ensureVideoItemReady(item.id);
+      }
+      return;
+    }
   }
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
