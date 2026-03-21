@@ -136,10 +136,10 @@ export class Bridge {
       const mono = downmixToMono(channels);
       const resampled = resampleTo16kHz(mono, audioBuffer.sampleRate);
 
-        let whisperQueueSize = 0;
-        let whisperQueueWaiter: (() => void) | null = null;
+      let whisperQueueSize = 0;
+      let whisperQueueWaiter: (() => void) | null = null;
 
-        port.onmessage = (event: MessageEvent<number>) => {
+      port.onmessage = (event: MessageEvent<number>) => {
         whisperQueueSize = event.data;
         if (whisperQueueSize < 3 && whisperQueueWaiter) {
           whisperQueueWaiter();

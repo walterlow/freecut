@@ -147,11 +147,13 @@ export function clearPredecodedCache(src?: string): void {
       for (const entry of entries) entry.bitmap.close();
     }
     bitmapCache.delete(src);
+    blobByUrl.delete(src);
   } else {
     for (const entries of bitmapCache.values()) {
       for (const entry of entries) entry.bitmap.close();
     }
     bitmapCache.clear();
+    blobByUrl.clear();
   }
 }
 

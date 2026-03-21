@@ -1509,7 +1509,6 @@ export async function createCompositionRenderer(
         log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
-
       ctx.drawImage(finalCompositeSource, 0, 0);
 
       // Release content canvas back to pool
