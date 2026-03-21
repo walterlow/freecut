@@ -78,7 +78,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
     <>
       {/* Right Sidebar */}
       <div
-        className={`panel-bg border-l border-border flex-shrink-0 relative ${
+        className={`panel-bg border-l border-border shrink-0 relative h-full ${
           rightSidebarOpen ? '' : 'w-0'
         }`}
         style={rightSidebarOpen ? { width: rightSidebarWidth, transition: isResizingRef.current ? 'none' : 'width 200ms' } : { transition: 'width 200ms' }}
