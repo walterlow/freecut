@@ -2786,10 +2786,13 @@ export const VideoPreview = memo(function VideoPreview({
           }
 
           const renderer = await ensureFastScrubRenderer();
-          if (!renderer || !scrubMountedRef.current || isStale()) {
-            if (!isStale()) hideFastScrubOverlay();
+          if (!renderer || !scrubMountedRef.current) {
+            hideFastScrubOverlay();
             break;
           }
+          // For background prewarm frames, bail if a newer scrub target arrived.
+          // Priority frames proceed regardless — their rendered content is always useful.
+          if (!isPriorityFrame && isStale()) break;
 
           // Enable DOM video element provider during playback for zero-copy rendering.
           // During playback, the Player's <video> elements are already at
@@ -2828,7 +2831,9 @@ export const VideoPreview = memo(function VideoPreview({
             // Visible scrub targets still use full composition rendering.
             const renderStartMs = performance.now();
             await renderer.renderFrame(frameToRender);
-            if (isStale()) break;
+            // Don't check isStale() here — the priority frame is fully rendered
+            // and should always be displayed. Discarding it wastes the decode work
+            // and reduces scrub hit rate.
             const renderMs = performance.now() - renderStartMs;
             scrubOffscreenRenderedFrameRef.current = frameToRender;
             // Dev: capture ALL frame times to window global for jitter debugging
@@ -3462,11 +3467,8 @@ export const VideoPreview = memo(function VideoPreview({
         lastBackwardRequestedFrameRef.current = null;
       }
 
-      // New scrub target should preempt stale background prewarm work.
-      // Bump generation so in-flight pumpRenderLoop iterations bail out
-      // after their next await — freeing GPU/decoder for the new frame.
-      // Don't clear scrubRenderInFlightRef here (unlike playback-start) —
-      // the stale loop's finally block handles it via generation check.
+      // Bump generation so in-flight prewarm iterations bail out quickly,
+      // freeing the pipeline for the new scrub target.
       scrubRenderGenerationRef.current += 1;
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
