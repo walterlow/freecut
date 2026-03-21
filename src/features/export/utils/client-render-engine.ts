@@ -1606,6 +1606,10 @@ export async function createCompositionRenderer(
      * Pre-initialize mediabunny decoders for specific item IDs and optionally
      * seek them to a target frame. This warms up the WASM decoder and positions
      * the decode cursor so the first real render is fast (~1ms instead of 300-500ms).
+     *
+     * Pre-seeks run on each item's own decoder lane (assigned by the shared pool).
+     * For occluded clips that aren't being actively rendered, this means the
+     * pre-seek runs without contending with the render loop's decoder.
      */
     async prewarmItems(itemIds: string[], targetFrame?: number) {
       const unready = itemIds.filter(
@@ -1614,10 +1618,8 @@ export async function createCompositionRenderer(
       if (unready.length > 0) {
         await initializeMediabunnyForItems(unready);
       }
-      // Seek decoders to the target frame position using a 1x1 draw
-      // (negligible cost) so the decode cursor is at the right spot.
-      // Run all clips in parallel — each decoder is independent and the
-      // concurrent seeks roughly halve the total prewarm time.
+      // Seek decoders to the target frame position using a 1x1 draw.
+      // Run all clips in parallel — each has its own decoder lane.
       if (targetFrame !== undefined) {
         const ctx2d = getPrewarmContext();
         if (!ctx2d) return;
@@ -1641,6 +1643,7 @@ export async function createCompositionRenderer(
         }));
       }
     },
+
 
     /** Evict specific frames from the render cache (e.g. after effect param changes). */
     invalidateFrameCache(frames?: number[]) {

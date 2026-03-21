@@ -423,26 +423,26 @@ async function renderVideoItem(
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Remotion Player's <video> elements are already playing
   // at the correct frame. Drawing from them avoids mediabunny decode entirely.
-  // Skip for variable-speed clips — the browser plays at 1x while the
-  // composition expects speed-adjusted timing, causing visible jitter from
-  // irregular currentTime progression. Mediabunny provides frame-accurate
-  // decode for these clips (pre-warmed, ~2-3ms/frame).
-  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0 && Math.abs(speed - 1) < 0.01) {
+  //
+  // For variable-speed clips (speed != 1), mediabunny provides frame-accurate
+  // decode. Skip DOM video when mediabunny is warmed. When mediabunny ISN'T
+  // warmed, use DOM video as a one-shot fallback to avoid a 300-500ms keyframe
+  // seek stall — mediabunny init runs async in the background so subsequent
+  // frames switch to frame-accurate decode.
+  const isVariableSpeed = Math.abs(speed - 1) >= 0.01;
+  const mediabunnyReady = useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id);
+  const skipDomVideoForSpeed = isVariableSpeed && mediabunnyReady;
+
+  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0 && !skipDomVideoForSpeed) {
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
-      // Reject videos that are too far from the expected time. This catches
-      // videos that haven't finished seeking yet (e.g. newly mounted shadow
-      // elements during transitions). The threshold must align with the RVFC
-      // drift correction in video-content.tsx (corrects at ±150ms), otherwise
-      // the render engine rejects frames that RVFC hasn't corrected yet,
-      // causing intermittent mediabunny fallback and visible jitter.
       const drift = Math.abs(domVideo.currentTime - sourceTime);
       // Variable-speed clips naturally drift from their DOM video element
       // because the browser plays at 1x while sourceTime advances at speed.
       // Use a wider threshold proportional to speed to avoid falling back
-      // to mediabunny decode (which causes 50-500ms freezes).
+      // to mediabunny decode (which causes 50-500ms freezes on first decode).
       const baseDriftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
-      const driftThreshold = speed > 1.01 ? baseDriftThreshold * speed : baseDriftThreshold;
+      const driftThreshold = Math.abs(speed) > 1.01 ? baseDriftThreshold * Math.abs(speed) : baseDriftThreshold;
       if (drift <= driftThreshold) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
@@ -457,6 +457,11 @@ async function renderVideoItem(
           drawDimensions.width,
           drawDimensions.height,
         );
+        // For variable-speed clips using DOM fallback, kick off mediabunny
+        // init in the background so subsequent frames use frame-accurate decode.
+        if (isVariableSpeed && !mediabunnyReady && rctx.ensureVideoItemReady) {
+          void rctx.ensureVideoItemReady(item.id);
+        }
         return;
       }
     }
