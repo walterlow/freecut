@@ -1852,7 +1852,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     // During playback, always provide DOM video elements for transition
     // participants — even for complex transitions (effects/variable speed).
-    // The Remotion Player's <video> elements are already at the correct frame
+    // The Player's <video> elements are already at the correct frame
     // during playback, so the renderer can read pixels from them (zero-copy
     // ~1ms) instead of falling back to mediabunny WASM decode (40-80ms).
     // The GPU pipeline applies effects on top of the DOM video source.
@@ -2712,7 +2712,7 @@ export const VideoPreview = memo(function VideoPreview({
           }
 
           // Enable DOM video element provider during playback for zero-copy rendering.
-          // During playback, the Remotion Player's <video> elements are already at
+          // During playback, the Player's <video> elements are already at
           // the correct frame — reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();

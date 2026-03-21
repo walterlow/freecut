@@ -143,7 +143,7 @@ export interface ItemRenderContext {
   gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
 
   // DOM video element provider for zero-copy playback rendering.
-  // During playback, the Remotion Player's <video> elements are already at
+  // During playback, the Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
   domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
 }
@@ -422,7 +422,7 @@ async function renderVideoItem(
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
 
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
-  // During playback, the Remotion Player's <video> elements are already playing
+  // During playback, the Player's <video> elements are already playing
   // at the correct frame. Drawing from them avoids mediabunny decode entirely.
   //
   // For variable-speed clips (speed != 1), mediabunny provides frame-accurate
