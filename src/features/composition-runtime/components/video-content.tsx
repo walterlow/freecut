@@ -48,6 +48,7 @@ const NativePreviewVideo: React.FC<{
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   forceCssComposite?: boolean;
+  sharedTransitionSync?: boolean;
 }> = ({
   poolClipId,
   itemId,
@@ -60,6 +61,7 @@ const NativePreviewVideo: React.FC<{
   onError,
   containerRef,
   forceCssComposite = false,
+  sharedTransitionSync = false,
 }) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
@@ -432,7 +434,7 @@ const NativePreviewVideo: React.FC<{
     // During playback with RVFC, the callback owns video.playbackRate and applies
     // small rate adjustments for smooth drift correction. Overwriting here would
     // undo those adjustments every frame.
-    if (!isPlaying || !supportsRVFC) {
+    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
       video.playbackRate = playbackRate;
     }
 
@@ -474,7 +476,7 @@ const NativePreviewVideo: React.FC<{
         // Seek failed - element may still be initializing
       }
     }
-  }, [frame, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
 
   // Runtime playback control + drift correction
   useEffect(() => {
@@ -483,7 +485,7 @@ const NativePreviewVideo: React.FC<{
 
     // Only set playbackRate from React when RVFC isn't active.
     // RVFC owns the rate during playback for smooth drift correction.
-    if (!isPlaying || !supportsRVFC) {
+    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
       video.playbackRate = playbackRate;
     }
 
@@ -565,7 +567,7 @@ const NativePreviewVideo: React.FC<{
       // When rVFC is supported, the callback below handles drift correction
       // directly from the video's presentation callback, avoiding per-frame
       // React scheduling overhead.
-      if (!supportsRVFC) {
+      if (!supportsRVFC && !sharedTransitionSync) {
         const currentTime = video.currentTime;
         const now = Date.now();
         const drift = currentTime - clampedTargetTime;
@@ -646,7 +648,7 @@ const NativePreviewVideo: React.FC<{
         }
       }
     }
-  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
 
   // requestVideoFrameCallback-based drift correction.
   // Runs outside React's render cycle — the browser calls us exactly when a
@@ -656,7 +658,7 @@ const NativePreviewVideo: React.FC<{
   // jitter pattern that hard-seek-only correction causes.
   useEffect(() => {
     const video = elementRef.current;
-    if (!video || !isPlaying || !supportsRVFC) return;
+    if (!video || !isPlaying || !supportsRVFC || sharedTransitionSync) return;
 
     // Pre-resume AudioContext so audio starts immediately with video.
     // Without this, suspended AudioContext adds 50-100ms audio delay on cold resume.
@@ -734,7 +736,7 @@ const NativePreviewVideo: React.FC<{
         elementRef.current.playbackRate = playbackRateRef.current;
       }
     };
-  }, [isPlaying, poolClipId, clock]);
+  }, [clock, isPlaying, poolClipId, sharedTransitionSync]);
 
   // Keep volume/gain in sync for pooled element.
   useEffect(() => {
@@ -786,7 +788,7 @@ const NativePreviewVideo: React.FC<{
  * Uses native HTML5 video for both preview and export (via Canvas + WebCodecs).
  */
 export const VideoContent: React.FC<{
-  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
+  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string; _sharedTransitionSync?: boolean };
   muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
@@ -838,6 +840,7 @@ export const VideoContent: React.FC<{
       onError={handleError}
       containerRef={containerRef}
       forceCssComposite={forceCssComposite}
+      sharedTransitionSync={item._sharedTransitionSync === true}
     />
   );
 };

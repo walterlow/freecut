@@ -13,7 +13,12 @@
 import React, { useEffect, useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
+import {
+  DEFAULT_SPEED,
+  getSafeTrimBefore,
+} from '@/features/composition-runtime/deps/timeline';
 import { useVideoConfig } from '../hooks/use-player-compat';
+import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import {
@@ -24,6 +29,7 @@ import {
 import { collectTransitionParticipantClipIds } from '../utils/transition-scene';
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
+import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 
 const warmupLog = createLogger('StableVideoWarmup');
 
@@ -35,6 +41,7 @@ export type StableVideoSequenceItem = VideoItem & {
   trackVisible: boolean;
   _sequenceFrameOffset?: number;
   _poolClipId?: string;
+  _sharedTransitionSync?: boolean;
 };
 
 interface StableVideoSequenceProps {
@@ -193,6 +200,7 @@ const GroupRenderer: React.FC<{
         _sequenceFrameOffset: item.from - group.minFrom,
         // Separate pool ID so shadow gets its own video element (not shared with primary)
         _poolClipId: `shadow-${item.id}`,
+        _sharedTransitionSync: true,
       };
     });
     // overlapKey is a string — React compares by value, so this only re-runs
@@ -218,8 +226,9 @@ const GroupRenderer: React.FC<{
       // Keep a stable pool identity across split boundaries so preview video
       // playback does not release/reacquire the element on item.id changes.
       _poolClipId: `group-${group.originKey}`,
+      _sharedTransitionSync: adjustedShadows.length > 0,
     };
-  }, [activeItem, group.minFrom]);
+  }, [activeItem, adjustedShadows.length, group.minFrom]);
 
   // CRITICAL: Also memoize the RENDERED OUTPUT.
   // This prevents calling renderItem (which creates new React elements) every frame.
@@ -243,6 +252,49 @@ const GroupRenderer: React.FC<{
     () => buildTransitionShadowWarmupRequests(adjustedItem, adjustedShadows),
     [adjustedItem, adjustedShadows],
   );
+
+  const transitionSyncParticipants = useMemo(() => {
+    if (!adjustedItem || adjustedShadows.length === 0) {
+      return [];
+    }
+
+    const mediaItems = useMediaLibraryStore.getState().mediaItems;
+    const toParticipant = (
+      item: StableVideoSequenceItem,
+      role: 'leader' | 'follower',
+    ) => {
+      const trimBefore = item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+      const mediaSourceFps = item.mediaId
+        ? mediaItems.find((media) => media.id === item.mediaId)?.fps
+        : undefined;
+      const sourceFps = item.sourceFps ?? mediaSourceFps ?? fps;
+      const playbackRate = item.speed ?? DEFAULT_SPEED;
+      const safeTrimBefore = getSafeTrimBefore(
+        trimBefore,
+        item.durationInFrames,
+        playbackRate,
+        item.sourceDuration || undefined,
+        fps,
+        sourceFps,
+      );
+
+      return {
+        poolClipId: item._poolClipId ?? item.id,
+        safeTrimBefore,
+        sourceFps,
+        playbackRate,
+        sequenceFrameOffset: item._sequenceFrameOffset ?? 0,
+        role,
+      };
+    };
+
+    return [
+      toParticipant(adjustedItem, 'leader'),
+      ...adjustedShadows.map((item) => toParticipant(item, 'follower')),
+    ];
+  }, [adjustedItem, adjustedShadows, fps]);
+
+  useTransitionParticipantSync(transitionSyncParticipants, group.minFrom, fps);
 
   useEffect(() => {
     if (transitionWarmupRequests.length === 0) {
