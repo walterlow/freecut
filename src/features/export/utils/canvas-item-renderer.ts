@@ -431,10 +431,11 @@ async function renderVideoItem(
   // seek stall — mediabunny init runs async in the background so subsequent
   // frames switch to frame-accurate decode.
   const isVariableSpeed = Math.abs(speed - 1) >= 0.01;
-  const mediabunnyReady = useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id);
-  const skipDomVideoForSpeed = isVariableSpeed && mediabunnyReady;
 
-  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0 && !skipDomVideoForSpeed) {
+  // Always try DOM video for variable-speed clips during playback. Mediabunny's
+  // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
+  // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
+  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
     const domVideo = rctx.domVideoElementProvider(item.id);
     if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
       const drift = Math.abs(domVideo.currentTime - sourceTime);
@@ -442,8 +443,11 @@ async function renderVideoItem(
       // because the browser plays at 1x while sourceTime advances at speed.
       // Use a wider threshold proportional to speed to avoid falling back
       // to mediabunny decode (which causes 50-500ms freezes on first decode).
-      const baseDriftThreshold = 0.2; // 200ms — slightly above RVFC correction threshold (150ms)
-      const driftThreshold = Math.abs(speed) > 1.01 ? baseDriftThreshold * Math.abs(speed) : baseDriftThreshold;
+      // For variable-speed clips, use a very wide threshold to avoid EVER
+      // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
+      // is visually acceptable; mediabunny stalls are not.
+      const baseDriftThreshold = 0.2; // 200ms for 1x speed clips
+      const driftThreshold = Math.abs(speed) > 1.01 ? 0.5 * Math.abs(speed) : baseDriftThreshold;
       if (drift <= driftThreshold) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
@@ -474,6 +478,13 @@ async function renderVideoItem(
     && !mediabunnyDisabledItems.has(item.id)
     && rctx.ensureVideoItemReady
   ) {
+    // For variable-speed clips during playback, don't block on mediabunny init.
+    // The init triggers a keyframe seek that blocks the main thread for 400ms+.
+    // Instead, skip this frame (DOM video already drew it or it's invisible).
+    if (isVariableSpeed) {
+      void rctx.ensureVideoItemReady(item.id);
+      return;
+    }
     try {
       await rctx.ensureVideoItemReady(item.id);
     } catch {
