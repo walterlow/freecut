@@ -2854,6 +2854,7 @@ export const VideoPreview = memo(function VideoPreview({
     let playbackRafId: number | null = null;
     let lastRafRenderedFrame = -1;
     let playbackPrewarmInFlight = false;
+    const pausePrewarmedItemIds = new Set<string>();
 
     const playbackRafPump = () => {
       playbackRafId = null;
@@ -2919,12 +2920,21 @@ export const VideoPreview = memo(function VideoPreview({
           if (prewarmItemIds.length > 0) {
             // Prewarm first, then start rAF pump — avoids 150ms+ first-frame stall.
             // Set flag to prevent subscription from pumping render loop during prewarm.
+            // SKIP items already pre-seeked by the paused occlusion prewarm — re-seeking
+            // to the current frame would undo the precise visibility-frame positioning.
             playbackPrewarmInFlight = true;
             void (async () => {
               const renderer = await ensureFastScrubRenderer();
               if (renderer && 'prewarmItems' in renderer) {
-                await renderer.prewarmItems(prewarmItemIds, frame);
+                // Only prewarm items that weren't already positioned by pause prewarm
+                const needsPrewarm = prewarmItemIds.filter(
+                  (id) => !pausePrewarmedItemIds.has(id),
+                );
+                if (needsPrewarm.length > 0) {
+                  await renderer.prewarmItems(needsPrewarm, frame);
+                }
               }
+              pausePrewarmedItemIds.clear();
               playbackPrewarmInFlight = false;
               if (playbackRafId === null && usePlaybackStore.getState().isPlaying) {
                 playbackRafId = requestAnimationFrame(playbackRafPump);
@@ -2981,24 +2991,68 @@ export const VideoPreview = memo(function VideoPreview({
         }
       }
 
-      // Fire ONE worker preseek per variable-speed clip when paused at a new frame.
-      // This gives the worker maximum time to parse the video container and pre-decode.
+      // Pre-seek mediabunny decoders for variable-speed clips while paused.
+      // Blocking the main thread during pause is acceptable (~400ms for keyframe
+      // seek). This positions the decoder cursor at ~3s ahead, so when the clip
+      // becomes visible during playback, the seek gap is within the 3s sequential
+      // advance threshold (fast) instead of triggering a keyframe restart (slow).
       if (!state.isPlaying && state.previewFrame === null && prev.currentFrame !== state.currentFrame) {
+        const varSpeedItemIds: string[] = [];
+        let furthestFrame = state.currentFrame;
+        const lookahead = Math.round(fps * 3);
         for (const track of combinedTracks) {
           for (const item of track.items) {
-            if (item.type !== 'video' || !('src' in item) || !item.src) continue;
+            if (item.type !== 'video') continue;
             const speed = item.speed ?? 1;
             if (Math.abs(speed - 1) < 0.01) continue;
             const itemEnd = item.from + item.durationInFrames;
-            const lookahead = Math.round(fps * 3);
             if (item.from <= state.currentFrame + lookahead && itemEnd > state.currentFrame) {
-              const targetFrame = Math.min(state.currentFrame + lookahead, itemEnd - 1);
-              const localFrame = Math.max(0, targetFrame - item.from);
-              const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-              const sourceFps = item.sourceFps ?? fps;
-              const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
-              void workerBackgroundPreseek(item.src, sourceTime);
+              varSpeedItemIds.push(item.id);
+              furthestFrame = Math.max(furthestFrame, Math.min(state.currentFrame + lookahead, itemEnd - 1));
             }
+          }
+        }
+        if (varSpeedItemIds.length > 0) {
+          // Find where occluding clips end — that's where the variable-speed
+          // clip becomes visible and needs its decoder positioned.
+          const visibilityFrame = (() => {
+            // Find the track order of the variable-speed clip
+            for (const track of combinedTracks) {
+              const varItem = track.items.find(i => varSpeedItemIds.includes(i.id));
+              if (!varItem) continue;
+              const varTrackOrder = track.order ?? 0;
+              // Scan tracks above (lower order = visually higher = occluding)
+              let latestOccluderEnd = state.currentFrame;
+              for (const otherTrack of combinedTracks) {
+                const otherOrder = otherTrack.order ?? 0;
+                if (otherOrder >= varTrackOrder) continue; // Not above
+                for (const otherItem of otherTrack.items) {
+                  if (otherItem.type === 'audio' || otherItem.type === 'adjustment') continue;
+                  const otherEnd = otherItem.from + otherItem.durationInFrames;
+                  // Occluder overlaps with our range
+                  if (otherItem.from <= state.currentFrame + lookahead && otherEnd > state.currentFrame) {
+                    latestOccluderEnd = Math.max(latestOccluderEnd, otherEnd);
+                  }
+                }
+              }
+              return latestOccluderEnd;
+            }
+            return state.currentFrame;
+          })();
+          for (const id of varSpeedItemIds) pausePrewarmedItemIds.add(id);
+          // Seek to 1 frame BEFORE the visibility point. drawFrame advances
+          // the iterator past the target — seeking exactly to the visibility
+          // frame would cause a backward restart when the render loop requests
+          // the same timestamp. Seeking 1 frame early leaves the decoder
+          // positioned for an instant sequential advance.
+          // Seek to 1 frame before visibility point (drawFrame advances past
+          // the target — seeking exactly to it would cause a backward restart).
+          // This runs async — if it completes before playback reaches the clip,
+          // the keyframe seek is absorbed during pause (0ms at playback time).
+          const preseekFrame = Math.max(state.currentFrame, visibilityFrame - 1);
+          const renderer = scrubRendererRef.current;
+          if (renderer && 'prewarmItems' in renderer) {
+            void renderer.prewarmItems(varSpeedItemIds, preseekFrame);
           }
         }
       }
