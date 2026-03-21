@@ -1917,8 +1917,12 @@ export const VideoPreview = memo(function VideoPreview({
     return getUpcomingTransitionStartFrame(frame, pausedTransitionPrearmFrames);
   }, [getUpcomingTransitionStartFrame, pausedTransitionPrearmFrames]);
 
-  const getPlayingComplexTransitionPrewarmStartFrame = useCallback((frame: number) => {
-    return getUpcomingTransitionStartFrame(frame, playingComplexTransitionPrearmFrames, { complexOnly: true });
+  // Prearm covering ALL transitions, not just complex ones. When
+  // forceFastScrubOverlay is active — the canvas overlay renders every
+  // transition type, so all need their session pinned and DOM video
+  // elements playing before entry.
+  const getPlayingAnyTransitionPrewarmStartFrame = useCallback((frame: number) => {
+    return getUpcomingTransitionStartFrame(frame, playingComplexTransitionPrearmFrames);
   }, [getUpcomingTransitionStartFrame, playingComplexTransitionPrearmFrames]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
@@ -3048,22 +3052,19 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       if (state.isPlaying && forceFastScrubOverlay) {
-        const complexPrewarmStartFrame = getPlayingComplexTransitionPrewarmStartFrame(state.currentFrame);
-        if (complexPrewarmStartFrame !== null) {
-          // Pin the session so the render loop knows a transition is active.
-          // Also schedule a deferred (opportunistic) prep — this warms up
-          // mediabunny decoders for the transition clips without blocking
-          // pumpRenderLoop. The prep runs between frames via setTimeout(0).
-          const transitionWindow = getTransitionWindowByStartFrame(complexPrewarmStartFrame);
+        // When the canvas overlay is active, ALL transition types need their
+        // session pinned and DOM video elements playing. Previously only
+        // complex transitions (effects/variable speed) were prearmed here,
+        // leaving simple transitions (fade, wipe, slide, etc.) without a
+        // pinned session — causing frozen incoming clips and dropped frames.
+        const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(state.currentFrame);
+        if (prearmStartFrame !== null) {
+          const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
           if (transitionWindow) {
             pinTransitionPlaybackSession(transitionWindow);
           }
-          // Pre-initialize mediabunny decoders for transition clips without
-          // blocking the render loop. This fire-and-forget warmup runs in the
-          // background so the first transition frame doesn't pay the 300-500ms
-          // WASM decoder init cost.
-          if (lastPlayingPrearmTargetRef.current !== complexPrewarmStartFrame) {
-            lastPlayingPrearmTargetRef.current = complexPrewarmStartFrame;
+          if (lastPlayingPrearmTargetRef.current !== prearmStartFrame) {
+            lastPlayingPrearmTargetRef.current = prearmStartFrame;
             if (transitionWindow) {
               const renderer = scrubRendererRef.current;
               if (renderer && 'prewarmItems' in renderer) {
@@ -3073,13 +3074,11 @@ export const VideoPreview = memo(function VideoPreview({
                 );
               }
             }
-            pushTransitionTrace('playing_complex_prearm', {
-              targetFrame: complexPrewarmStartFrame,
+            pushTransitionTrace('playing_prearm', {
+              targetFrame: prearmStartFrame,
             });
           }
         } else {
-          // No upcoming complex transition — clean up if we've moved past
-          // the active transition window (not just entered it).
           lastPlayingPrearmTargetRef.current = null;
           const activeWindow = transitionSessionWindowRef.current;
           if (activeWindow && state.currentFrame >= activeWindow.endFrame) {
@@ -3469,16 +3468,15 @@ export const VideoPreview = memo(function VideoPreview({
 
     const initialPlaybackState = usePlaybackStore.getState();
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
-      const complexPrewarmStartFrame = getPlayingComplexTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
-      if (complexPrewarmStartFrame !== null) {
-        lastPlayingPrearmTargetRef.current = complexPrewarmStartFrame;
-        // Pin session only — render loop handles per-frame rendering.
-        const transitionWindow = getTransitionWindowByStartFrame(complexPrewarmStartFrame);
+      const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
+      if (prearmStartFrame !== null) {
+        lastPlayingPrearmTargetRef.current = prearmStartFrame;
+        const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
         if (transitionWindow) {
           pinTransitionPlaybackSession(transitionWindow);
         }
-        pushTransitionTrace('playing_complex_prearm', {
-          targetFrame: complexPrewarmStartFrame,
+        pushTransitionTrace('playing_prearm', {
+          targetFrame: prearmStartFrame,
         });
       }
     }
