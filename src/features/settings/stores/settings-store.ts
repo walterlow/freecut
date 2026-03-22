@@ -8,6 +8,7 @@ import {
 } from '@/shared/utils/whisper-settings';
 import type { EditorDensityPresetName } from '@/shared/ui/editor-layout';
 import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/shared/ui/editor-layout';
+import { HOTKEYS, type HotkeyKey, type HotkeyOverrideMap } from '@/config/hotkeys';
 
 /**
  * App-wide settings stored in localStorage
@@ -35,10 +36,16 @@ interface AppSettings {
   defaultWhisperModel: MediaTranscriptModel;
   defaultWhisperQuantization: MediaTranscriptQuantization;
   defaultWhisperLanguage: string;
+
+  // Keyboard shortcuts
+  hotkeyOverrides: HotkeyOverrideMap;
 }
 
 interface SettingsActions {
   setSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
+  setHotkeyBinding: (key: HotkeyKey, binding: string) => void;
+  resetHotkeyBinding: (key: HotkeyKey) => void;
+  resetHotkeys: () => void;
   resetToDefaults: () => void;
 }
 
@@ -67,6 +74,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultWhisperModel: DEFAULT_WHISPER_MODEL,
   defaultWhisperQuantization: DEFAULT_WHISPER_QUANTIZATION,
   defaultWhisperLanguage: DEFAULT_WHISPER_LANGUAGE,
+
+  // Keyboard shortcuts
+  hotkeyOverrides: {},
 };
 
 /**
@@ -83,6 +93,48 @@ export const useSettingsStore = create<SettingsStore>()(
       ...DEFAULT_SETTINGS,
 
       setSetting: (key, value) => set({ [key]: value }),
+
+      setHotkeyBinding: (key, binding) => set((state) => {
+        const normalizedBinding = binding.trim().toLowerCase();
+        if (!normalizedBinding || normalizedBinding === HOTKEYS[key]) {
+          if (!(key in state.hotkeyOverrides)) {
+            return state;
+          }
+
+          const remainingOverrides = { ...state.hotkeyOverrides };
+          delete remainingOverrides[key];
+          return { hotkeyOverrides: remainingOverrides };
+        }
+
+        if (state.hotkeyOverrides[key] === normalizedBinding) {
+          return state;
+        }
+
+        return {
+          hotkeyOverrides: {
+            ...state.hotkeyOverrides,
+            [key]: normalizedBinding,
+          },
+        };
+      }),
+
+      resetHotkeyBinding: (key) => set((state) => {
+        if (!(key in state.hotkeyOverrides)) {
+          return state;
+        }
+
+        const remainingOverrides = { ...state.hotkeyOverrides };
+        delete remainingOverrides[key];
+        return { hotkeyOverrides: remainingOverrides };
+      }),
+
+      resetHotkeys: () => set((state) => {
+        if (Object.keys(state.hotkeyOverrides).length === 0) {
+          return state;
+        }
+
+        return { hotkeyOverrides: {} };
+      }),
 
       resetToDefaults: () => set(DEFAULT_SETTINGS),
     }),

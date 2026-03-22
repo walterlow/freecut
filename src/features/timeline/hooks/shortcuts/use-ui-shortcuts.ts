@@ -6,15 +6,17 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useZoomStore, getZoomTo100Handler } from '../../stores/zoom-store';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
+  const hotkeys = useResolvedHotkeys();
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
 
   // History: Cmd/Ctrl+Z - Undo
   useHotkeys(
-    HOTKEYS.UNDO,
+    hotkeys.UNDO,
     (event) => {
       event.preventDefault();
       useTimelineStore.temporal.getState().undo();
@@ -31,7 +33,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // History: Cmd/Ctrl+Shift+Z - Redo
   useHotkeys(
-    HOTKEYS.REDO,
+    hotkeys.REDO,
     (event) => {
       event.preventDefault();
       useTimelineStore.temporal.getState().redo();
@@ -48,7 +50,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // UI: S - Toggle Snap
   useHotkeys(
-    HOTKEYS.TOGGLE_SNAP,
+    hotkeys.TOGGLE_SNAP,
     (event) => {
       event.preventDefault();
       toggleSnap();
@@ -59,7 +61,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Zoom: Z - Zoom to Fit
   useHotkeys(
-    HOTKEYS.ZOOM_TO_FIT,
+    hotkeys.ZOOM_TO_FIT,
     (event) => {
       event.preventDefault();
       if (callbacks.onZoomToFit) {
@@ -88,7 +90,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Zoom: Shift+Z - Zoom to 100% centered on cursor (or playhead if cursor not on timeline)
   useHotkeys(
-    HOTKEYS.ZOOM_TO_100,
+    hotkeys.ZOOM_TO_100,
     (event) => {
       event.preventDefault();
       const { currentFrame, previewFrame } = usePlaybackStore.getState();

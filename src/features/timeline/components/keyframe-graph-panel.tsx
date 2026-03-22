@@ -57,8 +57,9 @@ import type {
 import type { CanvasSettings } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { resolveKeyframeEditorHotkeyProperty } from './keyframe-editor-hotkey';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -230,6 +231,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   onToggle,
   onClose,
 }: KeyframeGraphPanelProps) {
+  const hotkeys = useResolvedHotkeys();
   // Ref to measure container width
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
@@ -993,7 +995,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   ]);
 
   useHotkeys(
-    HOTKEYS.KEYFRAME_EDITOR_GRAPH,
+    hotkeys.KEYFRAME_EDITOR_GRAPH,
     (event) => {
       event.preventDefault();
       setEditorMode('graph');
@@ -1003,7 +1005,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.KEYFRAME_EDITOR_DOPESHEET,
+    hotkeys.KEYFRAME_EDITOR_DOPESHEET,
     (event) => {
       event.preventDefault();
       setEditorMode('dopesheet');
@@ -1013,7 +1015,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.KEYFRAME_EDITOR_SPLIT,
+    hotkeys.KEYFRAME_EDITOR_SPLIT,
     (event) => {
       event.preventDefault();
       setEditorMode('split');
@@ -1023,7 +1025,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.COPY,
+    hotkeys.COPY,
     (event) => {
       event.preventDefault();
       handleCopyKeyframes();
@@ -1036,7 +1038,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.CUT,
+    hotkeys.CUT,
     (event) => {
       event.preventDefault();
       handleCutKeyframes();
@@ -1049,7 +1051,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.PASTE,
+    hotkeys.PASTE,
     (event) => {
       event.preventDefault();
       handlePasteKeyframes();
@@ -1100,7 +1102,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   useHotkeys(
-    HOTKEYS.ADD_KEYFRAME,
+    hotkeys.ADD_KEYFRAME,
     (event) => {
       if (!selectedItemForEditor || !editorHotkeyProperty) return;
 

@@ -9,10 +9,12 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useClipboardStore } from '@/shared/state/clipboard';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useKeyframeSelectionStore } from '../../stores/keyframe-selection-store';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { Transition } from '@/types/transition';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 export function useClipboardShortcuts() {
+  const hotkeys = useResolvedHotkeys();
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
   const selectedKeyframes = useKeyframeSelectionStore((s) => s.selectedKeyframes);
@@ -31,7 +33,7 @@ export function useClipboardShortcuts() {
 
   // Clipboard: Ctrl+C - Copy selected transition properties or timeline items
   useHotkeys(
-    HOTKEYS.COPY,
+    hotkeys.COPY,
     (event) => {
       if (selectedTransitionId) {
         event.preventDefault();
@@ -63,7 +65,7 @@ export function useClipboardShortcuts() {
 
   // Clipboard: Ctrl+X - Cut selected items
   useHotkeys(
-    HOTKEYS.CUT,
+    hotkeys.CUT,
     (event) => {
       if (selectedItemIds.length > 0) {
         event.preventDefault();
@@ -80,7 +82,7 @@ export function useClipboardShortcuts() {
 
   // Clipboard: Ctrl+V - Paste transition properties or timeline items
   useHotkeys(
-    HOTKEYS.PASTE,
+    hotkeys.PASTE,
     (event) => {
       if (selectedTransitionId && transitionClipboard) {
         event.preventDefault();

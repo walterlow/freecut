@@ -1,5 +1,6 @@
 import { useHotkeys } from 'react-hotkeys-hook';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { useResolvedHotkeys } from '@/features/editor/deps/settings';
 
 interface EditorHotkeyCallbacks {
   onSave?: () => void;
@@ -18,9 +19,11 @@ interface EditorHotkeyCallbacks {
  * Uses react-hotkeys-hook with granular Zustand selectors
  */
 export function useEditorHotkeys(callbacks: EditorHotkeyCallbacks = {}) {
+  const hotkeys = useResolvedHotkeys();
+
   // Save: Cmd/Ctrl+S
   useHotkeys(
-    HOTKEYS.SAVE,
+    hotkeys.SAVE,
     (event) => {
       event.preventDefault();
       if (callbacks.onSave) {
@@ -33,7 +36,7 @@ export function useEditorHotkeys(callbacks: EditorHotkeyCallbacks = {}) {
 
   // Export: Cmd/Ctrl+E — use capture phase to beat Chrome's Ctrl+E (address bar)
   useHotkeys(
-    HOTKEYS.EXPORT,
+    hotkeys.EXPORT,
     (event) => {
       event.preventDefault();
       if (callbacks.onExport) {

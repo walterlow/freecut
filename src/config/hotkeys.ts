@@ -1,8 +1,8 @@
 /**
  * Centralized keyboard shortcut configuration
  *
- * Uses 'mod' for cross-platform Cmd (Mac) / Ctrl (Windows/Linux) handling
- * react-hotkeys-hook automatically handles this translation
+ * Uses `mod` for cross-platform Cmd (Mac) / Ctrl (Windows/Linux) handling.
+ * react-hotkeys-hook automatically handles this translation.
  */
 
 export const HOTKEYS = {
@@ -89,10 +89,93 @@ export const HOTKEYS = {
 } as const;
 
 export type HotkeyKey = keyof typeof HOTKEYS;
+export type HotkeyBindingMap = Record<HotkeyKey, string>;
+export type HotkeyOverrideMap = Partial<Record<HotkeyKey, string>>;
+export type HotkeyPlatform = 'mac' | 'windows';
+
+const HOTKEY_MODIFIERS = ['mod', 'alt', 'shift'] as const;
+const HOTKEY_MODIFIER_SET = new Set<string>(HOTKEY_MODIFIERS);
+const HOTKEY_MODIFIER_ORDER = new Map<string, number>(HOTKEY_MODIFIERS.map((token, index) => [token, index]));
+
+const HOTKEY_TOKEN_ALIASES: Record<string, string> = {
+  cmd: 'mod',
+  command: 'mod',
+  ctrl: 'mod',
+  control: 'mod',
+  option: 'alt',
+  return: 'enter',
+  esc: 'escape',
+  del: 'delete',
+  arrowleft: 'left',
+  arrowright: 'right',
+  arrowup: 'up',
+  arrowdown: 'down',
+};
+
+const HOTKEY_KEY_LABELS: Record<string, string> = {
+  space: 'Space',
+  comma: ',',
+  period: '.',
+  bracketleft: '[',
+  bracketright: ']',
+  minus: '-',
+  equals: '=',
+  slash: '/',
+  backslash: '\\',
+  semicolon: ';',
+  quote: "'",
+  backquote: '`',
+  left: 'Left',
+  right: 'Right',
+  up: 'Up',
+  down: 'Down',
+  home: 'Home',
+  end: 'End',
+  delete: 'Delete',
+  backspace: 'Backspace',
+  escape: 'Esc',
+  tab: 'Tab',
+  enter: 'Enter',
+};
+
+const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
+  Space: 'space',
+  Comma: 'comma',
+  Period: 'period',
+  BracketLeft: 'bracketleft',
+  BracketRight: 'bracketright',
+  Minus: 'minus',
+  Equal: 'equals',
+  Slash: 'slash',
+  Backslash: 'backslash',
+  Semicolon: 'semicolon',
+  Quote: 'quote',
+  Backquote: 'backquote',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  Home: 'home',
+  End: 'end',
+  Delete: 'delete',
+  Backspace: 'backspace',
+  Escape: 'escape',
+  Tab: 'tab',
+  Enter: 'enter',
+};
+
+export interface HotkeyEventData {
+  key?: string;
+  code?: string;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+}
 
 /**
- * Human-readable descriptions for keyboard shortcuts
- * Used for tooltips, help dialogs, and documentation
+ * Human-readable descriptions for keyboard shortcuts.
+ * Used for tooltips, help dialogs, and documentation.
  */
 export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   // Playback
@@ -177,11 +260,193 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   OVERWRITE_EDIT: 'Overwrite edit',
 };
 
+function getNavigatorPlatform(): string {
+  if (typeof navigator === 'undefined') return 'Windows';
+
+  if ('userAgentData' in navigator && typeof navigator.userAgentData?.platform === 'string') {
+    return navigator.userAgentData.platform;
+  }
+
+  return navigator.platform || navigator.userAgent || 'Windows';
+}
+
+export function getHotkeyPlatform(platformValue?: string): HotkeyPlatform {
+  const platform = (platformValue ?? getNavigatorPlatform()).toLowerCase();
+  return platform.includes('mac') || platform.includes('iphone') || platform.includes('ipad') ? 'mac' : 'windows';
+}
+
+export function resolveHotkeys(overrides: HotkeyOverrideMap = {}): HotkeyBindingMap {
+  return {
+    ...HOTKEYS,
+    ...overrides,
+  };
+}
+
+export function normalizeHotkeyToken(token: string): string {
+  const normalized = token.trim().toLowerCase();
+  if (!normalized) return '';
+  return HOTKEY_TOKEN_ALIASES[normalized] ?? normalized;
+}
+
+export function splitHotkeyBinding(binding: string): string[] {
+  return binding
+    .split('+')
+    .map((token) => normalizeHotkeyToken(token))
+    .filter(Boolean);
+}
+
+export function normalizeHotkeyBinding(binding: string): string {
+  const modifiers = new Set<string>();
+  const keys: string[] = [];
+
+  for (const token of splitHotkeyBinding(binding)) {
+    if (HOTKEY_MODIFIER_SET.has(token)) {
+      modifiers.add(token);
+      continue;
+    }
+
+    if (!keys.includes(token)) {
+      keys.push(token);
+    }
+  }
+
+  const orderedModifiers = Array.from(modifiers).sort((left, right) => {
+    return (HOTKEY_MODIFIER_ORDER.get(left) ?? 99) - (HOTKEY_MODIFIER_ORDER.get(right) ?? 99);
+  });
+
+  return [...orderedModifiers, ...keys].join('+');
+}
+
+export function hasHotkeyPrimaryToken(binding: string): boolean {
+  return splitHotkeyBinding(binding).some((token) => !HOTKEY_MODIFIER_SET.has(token));
+}
+
+function formatHotkeyToken(token: string, platform: HotkeyPlatform): string {
+  if (token === 'mod') {
+    return platform === 'mac' ? 'Cmd' : 'Ctrl';
+  }
+
+  if (token === 'alt') {
+    return platform === 'mac' ? 'Option' : 'Alt';
+  }
+
+  if (token === 'shift') {
+    return 'Shift';
+  }
+
+  if (HOTKEY_KEY_LABELS[token]) {
+    return HOTKEY_KEY_LABELS[token];
+  }
+
+  if (/^[a-z]$/.test(token)) {
+    return token.toUpperCase();
+  }
+
+  return token;
+}
+
+export function formatHotkeyBinding(binding: string, platformValue?: string): string {
+  const normalizedBinding = normalizeHotkeyBinding(binding);
+  if (!normalizedBinding) return '';
+
+  const platform = getHotkeyPlatform(platformValue);
+  return normalizedBinding
+    .split('+')
+    .map((token) => formatHotkeyToken(token, platform))
+    .join(' + ');
+}
+
+export function getHotkeyPrimaryTokenFromEventData(eventData: HotkeyEventData): string | null {
+  const code = eventData.code ?? '';
+  if (HOTKEY_CODE_TOKEN_MAP[code]) {
+    return HOTKEY_CODE_TOKEN_MAP[code];
+  }
+
+  if (code.startsWith('Key') && code.length === 4) {
+    return code.slice(3).toLowerCase();
+  }
+
+  if (code.startsWith('Digit') && code.length === 6) {
+    return code.slice(5);
+  }
+
+  if (code.startsWith('Numpad') && code.length === 7) {
+    return code.slice(6);
+  }
+
+  const key = normalizeHotkeyToken(eventData.key ?? '');
+  if (!key || HOTKEY_MODIFIER_SET.has(key)) {
+    return null;
+  }
+
+  if (key.length === 1 && /^[a-z0-9]$/.test(key)) {
+    return key;
+  }
+
+  return HOTKEY_KEY_LABELS[key] ? key : null;
+}
+
+export function getHotkeyBindingFromEventData(eventData: HotkeyEventData): string | null {
+  const tokens: string[] = [];
+
+  if (eventData.ctrlKey || eventData.metaKey) {
+    tokens.push('mod');
+  }
+
+  if (eventData.altKey) {
+    tokens.push('alt');
+  }
+
+  if (eventData.shiftKey) {
+    tokens.push('shift');
+  }
+
+  const primaryToken = getHotkeyPrimaryTokenFromEventData(eventData);
+  if (primaryToken) {
+    tokens.push(primaryToken);
+  }
+
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  return normalizeHotkeyBinding(tokens.join('+'));
+}
+
+export function getHotkeyConflictMap(bindings: HotkeyBindingMap): Record<string, HotkeyKey[]> {
+  const conflicts: Record<string, HotkeyKey[]> = {};
+
+  for (const [key, binding] of Object.entries(bindings) as [HotkeyKey, string][]) {
+    const normalizedBinding = normalizeHotkeyBinding(binding);
+    if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
+      continue;
+    }
+
+    conflicts[normalizedBinding] ??= [];
+    conflicts[normalizedBinding].push(key);
+  }
+
+  return conflicts;
+}
+
+export function findHotkeyConflicts(
+  bindings: HotkeyBindingMap,
+  binding: string,
+  currentKey?: HotkeyKey
+): HotkeyKey[] {
+  const normalizedBinding = normalizeHotkeyBinding(binding);
+  if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
+    return [];
+  }
+
+  return (getHotkeyConflictMap(bindings)[normalizedBinding] ?? []).filter((key) => key !== currentKey);
+}
+
 /**
- * Options for react-hotkeys-hook
- * Prevents shortcuts from firing in input fields
+ * Options for react-hotkeys-hook.
+ * Prevents shortcuts from firing in input fields.
  */
 export const HOTKEY_OPTIONS = {
-  enableOnFormTags: false, // Disable shortcuts when typing in inputs
-  preventDefault: true, // Prevent default browser behavior
+  enableOnFormTags: false,
+  preventDefault: true,
 } as const;

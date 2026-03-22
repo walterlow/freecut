@@ -7,14 +7,16 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
 import { insertFreezeFrame } from '../../stores/actions/item-actions';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
+  const hotkeys = useResolvedHotkeys();
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
@@ -53,7 +55,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Delete - Delete selected items, marker, or transition
   useHotkeys(
-    HOTKEYS.DELETE_SELECTED,
+    hotkeys.DELETE_SELECTED,
     (event) => {
       if (selectedTransitionId) {
         event.preventDefault();
@@ -81,7 +83,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Backspace - Delete selected items, marker, or transition (alternative)
   useHotkeys(
-    HOTKEYS.DELETE_SELECTED_ALT,
+    hotkeys.DELETE_SELECTED_ALT,
     (event) => {
       if (selectedTransitionId) {
         event.preventDefault();
@@ -109,7 +111,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Ctrl+Delete - Ripple delete selected items (delete + close gap)
   useHotkeys(
-    HOTKEYS.RIPPLE_DELETE,
+    hotkeys.RIPPLE_DELETE,
     (event) => {
       if (selectedItemIds.length > 0) {
         event.preventDefault();
@@ -126,7 +128,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Ctrl+Backspace - Ripple delete selected items (alternative)
   useHotkeys(
-    HOTKEYS.RIPPLE_DELETE_ALT,
+    hotkeys.RIPPLE_DELETE_ALT,
     (event) => {
       if (selectedItemIds.length > 0) {
         event.preventDefault();
@@ -143,7 +145,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Alt+Arrow keys - nudge selected visual items by 1px
   useHotkeys(
-    HOTKEYS.NUDGE_LEFT,
+    hotkeys.NUDGE_LEFT,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(-1, 0);
@@ -153,7 +155,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_RIGHT,
+    hotkeys.NUDGE_RIGHT,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(1, 0);
@@ -163,7 +165,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_UP,
+    hotkeys.NUDGE_UP,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(0, -1);
@@ -173,7 +175,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_DOWN,
+    hotkeys.NUDGE_DOWN,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(0, 1);
@@ -184,7 +186,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Alt+Shift+Arrow keys - nudge selected visual items by 10px
   useHotkeys(
-    HOTKEYS.NUDGE_LEFT_LARGE,
+    hotkeys.NUDGE_LEFT_LARGE,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(-10, 0);
@@ -194,7 +196,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_RIGHT_LARGE,
+    hotkeys.NUDGE_RIGHT_LARGE,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(10, 0);
@@ -204,7 +206,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_UP_LARGE,
+    hotkeys.NUDGE_UP_LARGE,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(0, -10);
@@ -214,7 +216,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   );
 
   useHotkeys(
-    HOTKEYS.NUDGE_DOWN_LARGE,
+    hotkeys.NUDGE_DOWN_LARGE,
     (event) => {
       event.preventDefault();
       nudgeSelectedVisualItems(0, 10);
@@ -225,7 +227,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: J - Join selected clips
   useHotkeys(
-    HOTKEYS.JOIN_ITEMS,
+    hotkeys.JOIN_ITEMS,
     (event) => {
       if (selectedItemIds.length < 2) return;
 
@@ -246,7 +248,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Alt+C - Split all items at gray playhead (or main playhead)
   useHotkeys(
-    HOTKEYS.SPLIT_AT_PLAYHEAD,
+    hotkeys.SPLIT_AT_PLAYHEAD,
     (event) => {
       event.preventDefault();
       const { previewFrame, currentFrame } = usePlaybackStore.getState();
@@ -269,7 +271,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Editing: Shift+F - Insert freeze frame at playhead
   useHotkeys(
-    HOTKEYS.FREEZE_FRAME,
+    hotkeys.FREEZE_FRAME,
     (event) => {
       if (selectedItemIds.length !== 1) return;
       const currentFrame = usePlaybackStore.getState().currentFrame;
@@ -288,7 +290,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
 
   // Keyframes: Shift+K - Clear all keyframes for selected items (with confirmation)
   useHotkeys(
-    HOTKEYS.CLEAR_KEYFRAMES,
+    hotkeys.CLEAR_KEYFRAMES,
     (event) => {
       if (selectedItemIds.length === 0) return;
 
