@@ -1685,7 +1685,7 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
     [fps, playbackTransitionLookaheadFrames],
   );
-  const playbackTransitionPrerenderRunwayFrames = 5;
+  const playbackTransitionPrerenderRunwayFrames = 8;
   const playbackTransitionEffectfulStartFrames = useMemo(() => {
     const hasExpensiveVisuals = (item: TimelineItem) => (
       item.effects?.some((effect) => effect.enabled)
