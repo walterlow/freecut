@@ -93,6 +93,47 @@ export type HotkeyBindingMap = Record<HotkeyKey, string>;
 export type HotkeyOverrideMap = Partial<Record<HotkeyKey, string>>;
 export type HotkeyPlatform = 'mac' | 'windows';
 
+export const HOTKEY_EXPORT_SCHEMA = 'freecut-hotkeys';
+export const HOTKEY_EXPORT_VERSION = 1;
+
+export interface HotkeyExportCommand {
+  id: HotkeyKey;
+  label: string;
+  binding: string;
+  defaultBinding: string;
+  isCustom: boolean;
+}
+
+export interface HotkeyExportDocument {
+  schema: typeof HOTKEY_EXPORT_SCHEMA;
+  version: typeof HOTKEY_EXPORT_VERSION;
+  exportedAt: string;
+  commands: HotkeyExportCommand[];
+  overrides: HotkeyOverrideMap;
+}
+
+export interface HotkeyImportCommand {
+  id?: string;
+  key?: string;
+  label?: string;
+  binding?: string;
+  shortcut?: string;
+  defaultBinding?: string;
+}
+
+export interface HotkeyImportResult {
+  overrides: HotkeyOverrideMap;
+  importedCommandCount: number;
+  ignoredCommandCount: number;
+  remappedCommandCount: number;
+  sourceVersion: number | null;
+}
+
+interface HotkeyCommandLookup {
+  byLabel: Map<string, HotkeyKey>;
+  byDefaultBinding: Map<string, HotkeyKey>;
+}
+
 const HOTKEY_MODIFIERS = ['mod', 'alt', 'shift'] as const;
 const HOTKEY_MODIFIER_SET = new Set<string>(HOTKEY_MODIFIERS);
 const HOTKEY_MODIFIER_ORDER = new Map<string, number>(HOTKEY_MODIFIERS.map((token, index) => [token, index]));
@@ -163,6 +204,8 @@ const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
   Tab: 'tab',
   Enter: 'enter',
 };
+
+const HOTKEY_COMMAND_ALIASES: Partial<Record<string, HotkeyKey>> = {};
 
 export interface HotkeyEventData {
   key?: string;
@@ -260,11 +303,17 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   OVERWRITE_EDIT: 'Overwrite edit',
 };
 
+const HOTKEY_COMMAND_LOOKUP = createHotkeyCommandLookup();
+
 function getNavigatorPlatform(): string {
   if (typeof navigator === 'undefined') return 'Windows';
 
-  if ('userAgentData' in navigator && typeof navigator.userAgentData?.platform === 'string') {
-    return navigator.userAgentData.platform;
+  const userAgentData = (navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  }).userAgentData;
+
+  if (typeof userAgentData?.platform === 'string') {
+    return userAgentData.platform;
   }
 
   return navigator.platform || navigator.userAgent || 'Windows';
@@ -278,7 +327,85 @@ export function getHotkeyPlatform(platformValue?: string): HotkeyPlatform {
 export function resolveHotkeys(overrides: HotkeyOverrideMap = {}): HotkeyBindingMap {
   return {
     ...HOTKEYS,
-    ...overrides,
+    ...sanitizeHotkeyOverrides(overrides),
+  };
+}
+
+export function isHotkeyKey(value: string): value is HotkeyKey {
+  return value in HOTKEYS;
+}
+
+export function resolveHotkeyKey(value: string): HotkeyKey | null {
+  if (isHotkeyKey(value)) {
+    return value;
+  }
+
+  return HOTKEY_COMMAND_ALIASES[value] ?? null;
+}
+
+function normalizeHotkeyCommandLabel(label: string): string {
+  return label.trim().toLowerCase();
+}
+
+function createHotkeyCommandLookup(): HotkeyCommandLookup {
+  const byLabel = new Map<string, HotkeyKey>();
+  const byDefaultBinding = new Map<string, HotkeyKey>();
+
+  for (const key of Object.keys(HOTKEYS) as HotkeyKey[]) {
+    byLabel.set(normalizeHotkeyCommandLabel(HOTKEY_DESCRIPTIONS[key]), key);
+    byDefaultBinding.set(normalizeHotkeyBinding(HOTKEYS[key]), key);
+  }
+
+  return {
+    byLabel,
+    byDefaultBinding,
+  };
+}
+
+function resolveHotkeyImportCommand(command: HotkeyImportCommand): {
+  key: HotkeyKey | null;
+  wasRemapped: boolean;
+} {
+  const rawKey = typeof command.id === 'string'
+    ? command.id
+    : typeof command.key === 'string'
+      ? command.key
+      : null;
+
+  if (rawKey) {
+    const directKey = resolveHotkeyKey(rawKey);
+    if (directKey) {
+      return {
+        key: directKey,
+        wasRemapped: directKey !== rawKey,
+      };
+    }
+  }
+
+  if (typeof command.label === 'string') {
+    const labelMatch = HOTKEY_COMMAND_LOOKUP.byLabel.get(normalizeHotkeyCommandLabel(command.label));
+    if (labelMatch) {
+      return {
+        key: labelMatch,
+        wasRemapped: true,
+      };
+    }
+  }
+
+  if (typeof command.defaultBinding === 'string') {
+    const normalizedDefaultBinding = normalizeHotkeyBinding(command.defaultBinding);
+    const bindingMatch = HOTKEY_COMMAND_LOOKUP.byDefaultBinding.get(normalizedDefaultBinding);
+    if (bindingMatch) {
+      return {
+        key: bindingMatch,
+        wasRemapped: true,
+      };
+    }
+  }
+
+  return {
+    key: null,
+    wasRemapped: false,
   };
 }
 
@@ -315,6 +442,33 @@ export function normalizeHotkeyBinding(binding: string): string {
   });
 
   return [...orderedModifiers, ...keys].join('+');
+}
+
+export function sanitizeHotkeyOverrides(overrides: unknown): HotkeyOverrideMap {
+  if (!overrides || typeof overrides !== 'object') {
+    return {};
+  }
+
+  const normalizedOverrides: HotkeyOverrideMap = {};
+
+  for (const [rawKey, rawBinding] of Object.entries(overrides)) {
+    if (!isHotkeyKey(rawKey) || typeof rawBinding !== 'string') {
+      continue;
+    }
+
+    const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+    if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
+      continue;
+    }
+
+    if (normalizedBinding === HOTKEYS[rawKey]) {
+      continue;
+    }
+
+    normalizedOverrides[rawKey] = normalizedBinding;
+  }
+
+  return normalizedOverrides;
 }
 
 export function hasHotkeyPrimaryToken(binding: string): boolean {
@@ -440,6 +594,157 @@ export function findHotkeyConflicts(
   }
 
   return (getHotkeyConflictMap(bindings)[normalizedBinding] ?? []).filter((key) => key !== currentKey);
+}
+
+export function createHotkeyExportDocument(overrides: HotkeyOverrideMap = {}): HotkeyExportDocument {
+  const normalizedOverrides = sanitizeHotkeyOverrides(overrides);
+  const bindings = resolveHotkeys(normalizedOverrides);
+  const commandKeys = Object.keys(HOTKEYS) as HotkeyKey[];
+
+  return {
+    schema: HOTKEY_EXPORT_SCHEMA,
+    version: HOTKEY_EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    commands: commandKeys.map((key) => ({
+      id: key,
+      label: HOTKEY_DESCRIPTIONS[key],
+      binding: bindings[key],
+      defaultBinding: HOTKEYS[key],
+      isCustom: key in normalizedOverrides,
+    })),
+    overrides: normalizedOverrides,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function getImportBinding(command: HotkeyImportCommand): string | null {
+  if (typeof command.binding === 'string') {
+    return command.binding;
+  }
+
+  if (typeof command.shortcut === 'string') {
+    return command.shortcut;
+  }
+
+  return null;
+}
+
+function collectImportedOverrides(source: unknown): HotkeyImportResult {
+  if (!isRecord(source)) {
+    return {
+      overrides: {},
+      importedCommandCount: 0,
+      ignoredCommandCount: 0,
+      remappedCommandCount: 0,
+      sourceVersion: null,
+    };
+  }
+
+  const normalizedOverrides: HotkeyOverrideMap = {};
+  let importedCommandCount = 0;
+  let ignoredCommandCount = 0;
+  let remappedCommandCount = 0;
+
+  for (const [rawKey, rawBinding] of Object.entries(source)) {
+    const resolvedKey = resolveHotkeyKey(rawKey);
+    if (!resolvedKey || typeof rawBinding !== 'string') {
+      ignoredCommandCount += 1;
+      continue;
+    }
+
+    const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+    if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
+      ignoredCommandCount += 1;
+      continue;
+    }
+
+    importedCommandCount += 1;
+    if (resolvedKey !== rawKey) {
+      remappedCommandCount += 1;
+    }
+
+    if (normalizedBinding !== HOTKEYS[resolvedKey]) {
+      normalizedOverrides[resolvedKey] = normalizedBinding;
+    }
+  }
+
+  return {
+    overrides: normalizedOverrides,
+    importedCommandCount,
+    ignoredCommandCount,
+    remappedCommandCount,
+    sourceVersion: null,
+  };
+}
+
+export function parseHotkeyImportDocument(source: unknown): HotkeyImportResult {
+  if (!isRecord(source)) {
+    throw new Error('Invalid hotkey preset format');
+  }
+
+  if (source.schema !== HOTKEY_EXPORT_SCHEMA) {
+    return collectImportedOverrides(source);
+  }
+
+  const sourceVersion = typeof source.version === 'number' ? source.version : null;
+
+  const overridesSource = isRecord(source.overrides) ? source.overrides : null;
+  const commandsSource = Array.isArray(source.commands) ? source.commands : [];
+
+  let importedCommandCount = 0;
+  let ignoredCommandCount = 0;
+  let remappedCommandCount = 0;
+  const importedOverrides: HotkeyOverrideMap = {};
+
+  if (overridesSource) {
+    const overrideImport = collectImportedOverrides(overridesSource);
+    importedCommandCount += overrideImport.importedCommandCount;
+    ignoredCommandCount += overrideImport.ignoredCommandCount;
+    remappedCommandCount += overrideImport.remappedCommandCount;
+    Object.assign(importedOverrides, overrideImport.overrides);
+  } else {
+    for (const command of commandsSource) {
+      if (!isRecord(command)) {
+        ignoredCommandCount += 1;
+        continue;
+      }
+
+      const importCommand = command as HotkeyImportCommand;
+      const rawBinding = getImportBinding(importCommand);
+      const resolvedCommand = resolveHotkeyImportCommand(importCommand);
+
+      if (!resolvedCommand.key || !rawBinding) {
+        ignoredCommandCount += 1;
+        continue;
+      }
+
+      const normalizedBinding = normalizeHotkeyBinding(rawBinding);
+      if (!normalizedBinding || !hasHotkeyPrimaryToken(normalizedBinding)) {
+        ignoredCommandCount += 1;
+        continue;
+      }
+
+      importedCommandCount += 1;
+      if (resolvedCommand.wasRemapped) {
+        remappedCommandCount += 1;
+      }
+
+      if (normalizedBinding !== HOTKEYS[resolvedCommand.key]) {
+        importedOverrides[resolvedCommand.key] = normalizedBinding;
+      }
+    }
+  }
+
+  return {
+    overrides: sanitizeHotkeyOverrides(importedOverrides),
+    importedCommandCount,
+    ignoredCommandCount,
+    remappedCommandCount,
+    sourceVersion,
+  };
 }
 
 /**

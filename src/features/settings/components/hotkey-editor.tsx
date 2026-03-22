@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { AlertTriangle, Keyboard, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, Download, Keyboard, RotateCcw, Upload, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/ui/cn';
 import {
   HOTKEYS,
   HOTKEY_DESCRIPTIONS,
+  createHotkeyExportDocument,
   findHotkeyConflicts,
   formatHotkeyBinding,
   getHotkeyBindingFromEventData,
   getHotkeyPrimaryTokenFromEventData,
   hasHotkeyPrimaryToken,
   normalizeHotkeyBinding,
+  parseHotkeyImportDocument,
   splitHotkeyBinding,
   type HotkeyKey,
 } from '@/config/hotkeys';
@@ -273,6 +276,23 @@ function getBindingTokens(binding: string): string[] {
   return splitHotkeyBinding(binding);
 }
 
+function downloadJsonFile(contents: string, fileName: string): void {
+  const blob = new Blob([contents], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
+async function readTextFile(file: File): Promise<string> {
+  return file.text();
+}
+
 function HotkeyBindingPill({
   binding,
   isActive = false,
@@ -456,8 +476,10 @@ export function HotkeyEditor() {
   const hotkeys = useResolvedHotkeys();
   const hotkeyOverrides = useSettingsStore((state) => state.hotkeyOverrides);
   const setHotkeyBinding = useSettingsStore((state) => state.setHotkeyBinding);
+  const replaceHotkeyOverrides = useSettingsStore((state) => state.replaceHotkeyOverrides);
   const resetHotkeyBinding = useSettingsStore((state) => state.resetHotkeyBinding);
   const resetHotkeys = useSettingsStore((state) => state.resetHotkeys);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedKey, setSelectedKey] = useState<HotkeyKey>('PLAY_PAUSE');
   const [activeLayer, setActiveLayer] = useState<HotkeyEditorSection | null>(null);
@@ -641,8 +663,66 @@ export function HotkeyEditor() {
     }
   };
 
+  const exportHotkeys = () => {
+    try {
+      const exportDocument = createHotkeyExportDocument(hotkeyOverrides);
+      const fileName = `freecut-hotkeys-${exportDocument.exportedAt.slice(0, 10)}.json`;
+      downloadJsonFile(`${JSON.stringify(exportDocument, null, 2)}\n`, fileName);
+      toast.success(`Downloaded ${fileName}`);
+    } catch {
+      toast.error('Failed to export keyboard shortcuts');
+    }
+  };
+
+  const importHotkeys = async (file: File) => {
+    try {
+      const contents = await readTextFile(file);
+      const importResult = parseHotkeyImportDocument(JSON.parse(contents));
+
+      replaceHotkeyOverrides(importResult.overrides);
+      stopCapture();
+
+      const messages = [`Imported ${importResult.importedCommandCount} commands`];
+      if (importResult.remappedCommandCount > 0) {
+        messages.push(`remapped ${importResult.remappedCommandCount}`);
+      }
+      if (importResult.ignoredCommandCount > 0) {
+        messages.push(`ignored ${importResult.ignoredCommandCount}`);
+      }
+      if (importResult.sourceVersion !== null) {
+        messages.push(`preset v${importResult.sourceVersion}`);
+      }
+
+      toast.success(messages.join(' - '));
+    } catch {
+      toast.error('Failed to import keyboard shortcut preset');
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    await importHotkeys(file);
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[radial-gradient(circle_at_top,rgba(255,140,58,0.14),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0))]">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="sr-only"
+        onChange={handleImportFileChange}
+      />
+
       {/* ── Header ── */}
       <div className="flex items-center gap-4 border-b border-white/6 px-5 py-2.5">
         <div className="flex flex-1 items-center gap-2.5">
@@ -753,9 +833,9 @@ export function HotkeyEditor() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
-              {isCapturingSelectedKey ? (
-                <>
+             <div className="grid grid-cols-2 gap-1.5">
+               {isCapturingSelectedKey ? (
+                 <>
                   <Button size="sm" className="w-full" onClick={saveCapture} disabled={!canSaveCapture}>
                     Save
                   </Button>
@@ -781,6 +861,27 @@ export function HotkeyEditor() {
               )}
             </div>
 
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-1.5"
+                onClick={handleImportButtonClick}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Import
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-1.5"
+                onClick={exportHotkeys}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </Button>
+            </div>
+
             {isCapturingSelectedKey ? (
               <div className="rounded-lg border border-primary/20 bg-primary/8 p-3">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-primary">Listening</div>
@@ -795,6 +896,10 @@ export function HotkeyEditor() {
                 ) : null}
               </div>
             ) : null}
+
+            <p className="text-[11px] leading-4 text-muted-foreground">
+              Import or export a keybind preset.
+            </p>
 
             <div className="border-t border-white/6 pt-3">
               <Button

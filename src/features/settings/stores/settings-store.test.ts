@@ -107,4 +107,22 @@ describe('settings-store', () => {
       expect(state.defaultWhisperLanguage).toBe(DEFAULT_SETTINGS.defaultWhisperLanguage);
     });
   });
+
+  describe('replaceHotkeyOverrides', () => {
+    it('replaces hotkey overrides with a sanitized imported preset', () => {
+      useSettingsStore.getState().setHotkeyBinding('PLAY_PAUSE', 'shift+space');
+
+      useSettingsStore.getState().replaceHotkeyOverrides(
+        {
+          EXPORT: 'Ctrl+Shift+E',
+          PLAY_PAUSE: 'space',
+          UNKNOWN_COMMAND: 'q',
+        } as never
+      );
+
+      expect(useSettingsStore.getState().hotkeyOverrides).toEqual({
+        EXPORT: 'mod+shift+e',
+      });
+    });
+  });
 });

@@ -19,7 +19,7 @@ export function ShortcutsDialog({ open, onOpenChange }: ShortcutsDialogProps) {
         hideCloseButton
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
-        className="max-h-[98vh] max-w-[min(1600px,98vw)] gap-0 overflow-hidden border-white/10 bg-[#09090b]/96 p-0 shadow-[0_40px_120px_rgba(0,0,0,0.55)] sm:rounded-lg"
+        className="h-[98vh] max-h-[98vh] max-w-[min(1600px,98vw)] gap-0 overflow-hidden border-white/10 bg-[#09090b]/96 p-0 shadow-[0_40px_120px_rgba(0,0,0,0.55)] sm:rounded-lg"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Keyboard Shortcuts</DialogTitle>

@@ -8,7 +8,13 @@ import {
 } from '@/shared/utils/whisper-settings';
 import type { EditorDensityPresetName } from '@/shared/ui/editor-layout';
 import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/shared/ui/editor-layout';
-import { HOTKEYS, type HotkeyKey, type HotkeyOverrideMap } from '@/config/hotkeys';
+import {
+  HOTKEYS,
+  normalizeHotkeyBinding,
+  sanitizeHotkeyOverrides,
+  type HotkeyKey,
+  type HotkeyOverrideMap,
+} from '@/config/hotkeys';
 
 /**
  * App-wide settings stored in localStorage
@@ -44,6 +50,7 @@ interface AppSettings {
 interface SettingsActions {
   setSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
   setHotkeyBinding: (key: HotkeyKey, binding: string) => void;
+  replaceHotkeyOverrides: (overrides: HotkeyOverrideMap) => void;
   resetHotkeyBinding: (key: HotkeyKey) => void;
   resetHotkeys: () => void;
   resetToDefaults: () => void;
@@ -95,7 +102,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setSetting: (key, value) => set({ [key]: value }),
 
       setHotkeyBinding: (key, binding) => set((state) => {
-        const normalizedBinding = binding.trim().toLowerCase();
+        const normalizedBinding = normalizeHotkeyBinding(binding);
         if (!normalizedBinding || normalizedBinding === HOTKEYS[key]) {
           if (!(key in state.hotkeyOverrides)) {
             return state;
@@ -116,6 +123,16 @@ export const useSettingsStore = create<SettingsStore>()(
             [key]: normalizedBinding,
           },
         };
+      }),
+
+      replaceHotkeyOverrides: (overrides) => set((state) => {
+        const normalizedOverrides = sanitizeHotkeyOverrides(overrides);
+
+        if (JSON.stringify(state.hotkeyOverrides) === JSON.stringify(normalizedOverrides)) {
+          return state;
+        }
+
+        return { hotkeyOverrides: normalizedOverrides };
       }),
 
       resetHotkeyBinding: (key) => set((state) => {
@@ -140,6 +157,15 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'freecut-settings',
+      merge: (persistedState, currentState) => {
+        const typedState = (persistedState as Partial<AppSettings> | undefined) ?? {};
+
+        return {
+          ...currentState,
+          ...typedState,
+          hotkeyOverrides: sanitizeHotkeyOverrides(typedState.hotkeyOverrides),
+        };
+      },
     }
   )
 );

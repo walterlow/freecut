@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HOTKEY_EXPORT_SCHEMA,
+  HOTKEY_EXPORT_VERSION,
+  createHotkeyExportDocument,
   findHotkeyConflicts,
   formatHotkeyBinding,
   getHotkeyBindingFromEventData,
   getHotkeyPrimaryTokenFromEventData,
   normalizeHotkeyBinding,
+  parseHotkeyImportDocument,
   resolveHotkeys,
+  sanitizeHotkeyOverrides,
 } from './hotkeys';
 
 describe('normalizeHotkeyBinding', () => {
@@ -63,5 +68,140 @@ describe('findHotkeyConflicts', () => {
     });
 
     expect(findHotkeyConflicts(bindings, 'c', 'SELECTION_TOOL')).toEqual(['RAZOR_TOOL']);
+  });
+});
+
+describe('sanitizeHotkeyOverrides', () => {
+  it('keeps only supported commands with normalized non-default bindings', () => {
+    expect(
+      sanitizeHotkeyOverrides({
+        PLAY_PAUSE: ' Shift+Space ',
+        EXPORT: 'Ctrl+E',
+        UNKNOWN_COMMAND: 'q',
+        DELETE_SELECTED: '',
+      })
+    ).toEqual({
+      PLAY_PAUSE: 'shift+space',
+    });
+  });
+});
+
+describe('createHotkeyExportDocument', () => {
+  it('creates a versioned export with command metadata and sanitized overrides', () => {
+    const exportDocument = createHotkeyExportDocument({
+      PLAY_PAUSE: 'Shift+Space',
+      EXPORT: 'Ctrl+E',
+    });
+
+    expect(exportDocument.schema).toBe(HOTKEY_EXPORT_SCHEMA);
+    expect(exportDocument.version).toBe(HOTKEY_EXPORT_VERSION);
+    expect(exportDocument.overrides).toEqual({
+      PLAY_PAUSE: 'shift+space',
+    });
+    expect(exportDocument.commands).toContainEqual(
+      expect.objectContaining({
+        id: 'PLAY_PAUSE',
+        label: 'Play/Pause',
+        binding: 'shift+space',
+        defaultBinding: 'space',
+        isCustom: true,
+      })
+    );
+    expect(exportDocument.commands).toContainEqual(
+      expect.objectContaining({
+        id: 'EXPORT',
+        binding: 'mod+e',
+        defaultBinding: 'mod+e',
+        isCustom: false,
+      })
+    );
+  });
+});
+
+describe('parseHotkeyImportDocument', () => {
+  it('imports versioned override payloads and ignores unknown commands', () => {
+    expect(
+      parseHotkeyImportDocument({
+        schema: HOTKEY_EXPORT_SCHEMA,
+        version: 1,
+        overrides: {
+          PLAY_PAUSE: 'Shift+Space',
+          UNKNOWN_COMMAND: 'q',
+        },
+      })
+    ).toEqual({
+      overrides: {
+        PLAY_PAUSE: 'shift+space',
+      },
+      importedCommandCount: 1,
+      ignoredCommandCount: 1,
+      remappedCommandCount: 0,
+      sourceVersion: 1,
+    });
+  });
+
+  it('falls back to command entries when overrides are missing', () => {
+    expect(
+      parseHotkeyImportDocument({
+        schema: HOTKEY_EXPORT_SCHEMA,
+        version: 1,
+        commands: [
+          { id: 'PLAY_PAUSE', binding: 'Shift+Space' },
+          { id: 'EXPORT', binding: 'Ctrl+E' },
+          { id: 'UNKNOWN_COMMAND', binding: 'q' },
+        ],
+      })
+    ).toEqual({
+      overrides: {
+        PLAY_PAUSE: 'shift+space',
+      },
+      importedCommandCount: 2,
+      ignoredCommandCount: 1,
+      remappedCommandCount: 0,
+      sourceVersion: 1,
+    });
+  });
+
+  it('remaps renamed commands from exported metadata when ids no longer match', () => {
+    expect(
+      parseHotkeyImportDocument({
+        schema: HOTKEY_EXPORT_SCHEMA,
+        version: 1,
+        commands: [
+          {
+            id: 'PLAYBACK_TOGGLE_OLD',
+            label: 'Play/Pause',
+            defaultBinding: 'space',
+            binding: 'Shift+Space',
+          },
+        ],
+      })
+    ).toEqual({
+      overrides: {
+        PLAY_PAUSE: 'shift+space',
+      },
+      importedCommandCount: 1,
+      ignoredCommandCount: 0,
+      remappedCommandCount: 1,
+      sourceVersion: 1,
+    });
+  });
+
+  it('supports plain legacy key-binding maps', () => {
+    expect(
+      parseHotkeyImportDocument({
+        PLAY_PAUSE: 'Shift+Space',
+        EXPORT: 'Ctrl+E',
+        UNKNOWN_COMMAND: 'q',
+      })
+    ).toEqual({
+      overrides: {
+        PLAY_PAUSE: 'shift+space',
+      },
+      importedCommandCount: 2,
+      ignoredCommandCount: 1,
+      remappedCommandCount: 0,
+      sourceVersion: null,
+    });
   });
 });
