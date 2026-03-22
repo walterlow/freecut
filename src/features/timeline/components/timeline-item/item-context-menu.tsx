@@ -155,7 +155,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
                   Clear All
-                  <ContextMenuShortcut>Shift+K</ContextMenuShortcut>
+                  <ContextMenuShortcut>Shift+A</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 {propertiesWithKeyframes.map(({ property }) => (

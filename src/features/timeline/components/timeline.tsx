@@ -138,7 +138,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     setEditorPanelOpen(false);
   }, [setEditorPanelOpen]);
 
-  // Keyboard shortcut: Ctrl/Cmd+K to toggle keyframe editor
+  // Keyboard shortcut: Ctrl/Cmd+Shift+A to toggle keyframe editor
   useHotkeys(
     hotkeys.TOGGLE_KEYFRAME_EDITOR,
     (event) => {

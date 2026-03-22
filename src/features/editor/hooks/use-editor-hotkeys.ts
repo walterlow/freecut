@@ -12,7 +12,7 @@ interface EditorHotkeyCallbacks {
  *
  * Handles editor-level shortcuts that work across all components:
  * - Save (Ctrl+S) - Saves timeline to project
- * - Export (Ctrl+E) - Exports video
+ * - Export (Ctrl+Shift+E) - Exports video
  *
  * Note: Undo/Redo are handled in useTimelineShortcuts since they're timeline-specific
  *
@@ -34,7 +34,7 @@ export function useEditorHotkeys(callbacks: EditorHotkeyCallbacks = {}) {
     [callbacks.onSave]
   );
 
-  // Export: Cmd/Ctrl+E — use capture phase to beat Chrome's Ctrl+E (address bar)
+  // Export: Cmd/Ctrl+Shift+E
   useHotkeys(
     hotkeys.EXPORT,
     (event) => {

@@ -5,6 +5,7 @@ import {
   createHotkeyExportDocument,
   findHotkeyConflicts,
   formatHotkeyBinding,
+  getBrowserHostileHotkey,
   getHotkeyBindingFromEventData,
   getHotkeyPrimaryTokenFromEventData,
   normalizeHotkeyBinding,
@@ -29,15 +30,44 @@ describe('formatHotkeyBinding', () => {
   });
 });
 
+describe('getBrowserHostileHotkey', () => {
+  it('detects browser-reserved shortcuts after normalization', () => {
+    expect(getBrowserHostileHotkey('Ctrl+E')).toEqual({
+      binding: 'mod+e',
+      browserAction: 'Focus search or address bar in some browsers',
+    });
+  });
+
+  it('returns null for browser-safe shortcuts', () => {
+    expect(getBrowserHostileHotkey('shift+j')).toBeNull();
+  });
+
+  it('flags browser zoom shortcuts as hostile', () => {
+    expect(getBrowserHostileHotkey('Ctrl+=')).toEqual({
+      binding: 'mod+equal',
+      browserAction: 'Browser zoom in',
+    });
+    expect(getBrowserHostileHotkey('Ctrl+-')).toEqual({
+      binding: 'mod+minus',
+      browserAction: 'Browser zoom out',
+    });
+    expect(getBrowserHostileHotkey('Ctrl+0')).toEqual({
+      binding: 'mod+0',
+      browserAction: 'Reset browser zoom',
+    });
+  });
+});
+
 describe('getHotkeyBindingFromEventData', () => {
   it('captures letter bindings with modifiers', () => {
     expect(
       getHotkeyBindingFromEventData({
-        code: 'KeyK',
-        key: 'k',
+        code: 'KeyA',
+        key: 'a',
         ctrlKey: true,
+        shiftKey: true,
       })
-    ).toBe('mod+k');
+    ).toBe('mod+shift+a');
   });
 
   it('captures modifier-only previews before a final key lands', () => {
@@ -82,6 +112,7 @@ describe('sanitizeHotkeyOverrides', () => {
       })
     ).toEqual({
       PLAY_PAUSE: 'shift+space',
+      EXPORT: 'mod+e',
     });
   });
 });
@@ -97,6 +128,7 @@ describe('createHotkeyExportDocument', () => {
     expect(exportDocument.version).toBe(HOTKEY_EXPORT_VERSION);
     expect(exportDocument.overrides).toEqual({
       PLAY_PAUSE: 'shift+space',
+      EXPORT: 'mod+e',
     });
     expect(exportDocument.commands).toContainEqual(
       expect.objectContaining({
@@ -111,8 +143,8 @@ describe('createHotkeyExportDocument', () => {
       expect.objectContaining({
         id: 'EXPORT',
         binding: 'mod+e',
-        defaultBinding: 'mod+e',
-        isCustom: false,
+        defaultBinding: 'mod+shift+e',
+        isCustom: true,
       })
     );
   });
@@ -154,6 +186,7 @@ describe('parseHotkeyImportDocument', () => {
     ).toEqual({
       overrides: {
         PLAY_PAUSE: 'shift+space',
+        EXPORT: 'mod+e',
       },
       importedCommandCount: 2,
       ignoredCommandCount: 1,
@@ -197,6 +230,7 @@ describe('parseHotkeyImportDocument', () => {
     ).toEqual({
       overrides: {
         PLAY_PAUSE: 'shift+space',
+        EXPORT: 'mod+e',
       },
       importedCommandCount: 2,
       ignoredCommandCount: 1,

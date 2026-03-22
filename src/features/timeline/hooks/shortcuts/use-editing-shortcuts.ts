@@ -143,7 +143,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [selectedItemIds, rippleDeleteItems, clearSelection, callbacks]
   );
 
-  // Editing: Alt+Arrow keys - nudge selected visual items by 1px
+  // Editing: Shift+Arrow keys - nudge selected visual items by 1px
   useHotkeys(
     hotkeys.NUDGE_LEFT,
     (event) => {
@@ -184,7 +184,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [nudgeSelectedVisualItems]
   );
 
-  // Editing: Alt+Shift+Arrow keys - nudge selected visual items by 10px
+  // Editing: Cmd/Ctrl+Shift+Arrow keys - nudge selected visual items by 10px
   useHotkeys(
     hotkeys.NUDGE_LEFT_LARGE,
     (event) => {
@@ -225,7 +225,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [nudgeSelectedVisualItems]
   );
 
-  // Editing: J - Join selected clips
+  // Editing: Shift+J - Join selected clips
   useHotkeys(
     hotkeys.JOIN_ITEMS,
     (event) => {
@@ -246,7 +246,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [selectedItemIds, items, joinItems]
   );
 
-  // Editing: Alt+C - Split all items at gray playhead (or main playhead)
+  // Editing: Cmd/Ctrl+K - Split all items at gray playhead (or main playhead)
   useHotkeys(
     hotkeys.SPLIT_AT_PLAYHEAD,
     (event) => {
@@ -261,11 +261,11 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
         return splitFrame > itemStart && splitFrame < itemEnd;
       });
 
-      for (const item of itemsToSplit) {
-        splitItem(item.id, splitFrame);
-      }
-    },
-    HOTKEY_OPTIONS,
+        for (const item of itemsToSplit) {
+          splitItem(item.id, splitFrame);
+        }
+      },
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [items, splitItem]
   );
 
@@ -288,7 +288,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     [selectedItemIds, items]
   );
 
-  // Keyframes: Shift+K - Clear all keyframes for selected items (with confirmation)
+  // Keyframes: Shift+A - Clear all keyframes for selected items (with confirmation)
   useHotkeys(
     hotkeys.CLEAR_KEYFRAMES,
     (event) => {

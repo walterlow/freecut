@@ -3,6 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { AlertTriangle, Download, Keyboard, RotateCcw, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/shared/ui/cn';
 import {
   HOTKEYS,
@@ -10,6 +11,7 @@ import {
   createHotkeyExportDocument,
   findHotkeyConflicts,
   formatHotkeyBinding,
+  getBrowserHostileHotkey,
   getHotkeyBindingFromEventData,
   getHotkeyPrimaryTokenFromEventData,
   hasHotkeyPrimaryToken,
@@ -18,19 +20,13 @@ import {
   splitHotkeyBinding,
   type HotkeyKey,
 } from '@/config/hotkeys';
+import {
+  HOTKEY_EDITOR_SECTIONS,
+  type HotkeyEditorItem,
+  type HotkeyEditorSection,
+} from './hotkey-editor-sections';
 import { useResolvedHotkeys } from '../hooks/use-resolved-hotkeys';
 import { useSettingsStore } from '../stores/settings-store';
-
-interface HotkeyEditorItem {
-  label: string;
-  keys: readonly HotkeyKey[];
-}
-
-interface HotkeyEditorSection {
-  title: string;
-  blurb: string;
-  items: readonly HotkeyEditorItem[];
-}
 
 interface KeyboardKeySpec {
   id: string;
@@ -45,111 +41,6 @@ interface KeyboardRowPair {
   nav: readonly KeyboardKeySpec[];
 }
 
-const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
-  {
-    title: 'Playback',
-    blurb: 'Transport, frame stepping, and timeline jumps.',
-    items: [
-      { label: 'Play/Pause', keys: ['PLAY_PAUSE'] },
-      { label: 'Previous frame', keys: ['PREVIOUS_FRAME'] },
-      { label: 'Next frame', keys: ['NEXT_FRAME'] },
-      { label: 'Go to start', keys: ['GO_TO_START'] },
-      { label: 'Go to end', keys: ['GO_TO_END'] },
-      { label: 'Previous snap point', keys: ['PREVIOUS_SNAP_POINT'] },
-      { label: 'Next snap point', keys: ['NEXT_SNAP_POINT'] },
-    ],
-  },
-  {
-    title: 'Editing',
-    blurb: 'Clip edits, delete flows, and precise canvas nudging.',
-    items: [
-      { label: 'Split at playhead', keys: ['SPLIT_AT_PLAYHEAD'] },
-      { label: 'Join selected clips', keys: ['JOIN_ITEMS'] },
-      { label: 'Delete selected items', keys: ['DELETE_SELECTED', 'DELETE_SELECTED_ALT'] },
-      { label: 'Ripple delete selected items', keys: ['RIPPLE_DELETE', 'RIPPLE_DELETE_ALT'] },
-      { label: 'Insert freeze frame at playhead', keys: ['FREEZE_FRAME'] },
-      { label: 'Nudge (1px)', keys: ['NUDGE_LEFT', 'NUDGE_RIGHT', 'NUDGE_UP', 'NUDGE_DOWN'] },
-      { label: 'Nudge (10px)', keys: ['NUDGE_LEFT_LARGE', 'NUDGE_RIGHT_LARGE', 'NUDGE_UP_LARGE', 'NUDGE_DOWN_LARGE'] },
-    ],
-  },
-  {
-    title: 'Tools',
-    blurb: 'Tool switching for timeline editing modes.',
-    items: [
-      { label: 'Selection tool', keys: ['SELECTION_TOOL'] },
-      { label: 'Razor tool', keys: ['RAZOR_TOOL'] },
-      { label: 'Split at cursor', keys: ['SPLIT_AT_CURSOR'] },
-      { label: 'Rate stretch tool', keys: ['RATE_STRETCH_TOOL'] },
-      { label: 'Rolling edit tool', keys: ['ROLLING_EDIT_TOOL'] },
-      { label: 'Ripple edit tool', keys: ['RIPPLE_EDIT_TOOL'] },
-      { label: 'Slip tool', keys: ['SLIP_TOOL'] },
-      { label: 'Slide tool', keys: ['SLIDE_TOOL'] },
-    ],
-  },
-  {
-    title: 'History and UI',
-    blurb: 'Timeline history, zoom, and UI toggles.',
-    items: [
-      { label: 'Undo', keys: ['UNDO'] },
-      { label: 'Redo', keys: ['REDO'] },
-      { label: 'Zoom to fit all content', keys: ['ZOOM_TO_FIT'] },
-      { label: 'Zoom to 100%', keys: ['ZOOM_TO_100'] },
-      { label: 'Toggle snap', keys: ['TOGGLE_SNAP'] },
-      { label: 'Toggle keyframe editor panel', keys: ['TOGGLE_KEYFRAME_EDITOR'] },
-      { label: 'Group selected tracks', keys: ['GROUP_TRACKS'] },
-      { label: 'Ungroup selected tracks', keys: ['UNGROUP_TRACKS'] },
-    ],
-  },
-  {
-    title: 'Clipboard',
-    blurb: 'Copy, cut, and paste commands shared across editor surfaces.',
-    items: [
-      { label: 'Copy selected items or keyframes', keys: ['COPY'] },
-      { label: 'Cut selected items or keyframes', keys: ['CUT'] },
-      { label: 'Paste items or keyframes', keys: ['PASTE'] },
-    ],
-  },
-  {
-    title: 'Markers',
-    blurb: 'Marker creation, removal, and navigation.',
-    items: [
-      { label: 'Add marker at playhead', keys: ['ADD_MARKER'] },
-      { label: 'Remove selected marker', keys: ['REMOVE_MARKER'] },
-      { label: 'Jump to previous marker', keys: ['PREVIOUS_MARKER'] },
-      { label: 'Jump to next marker', keys: ['NEXT_MARKER'] },
-    ],
-  },
-  {
-    title: 'Keyframes',
-    blurb: 'Keyframe creation and editor mode switching.',
-    items: [
-      { label: 'Add keyframe at playhead', keys: ['ADD_KEYFRAME'] },
-      { label: 'Clear all keyframes from selected items', keys: ['CLEAR_KEYFRAMES'] },
-      { label: 'Switch keyframe editor to graph view', keys: ['KEYFRAME_EDITOR_GRAPH'] },
-      { label: 'Switch keyframe editor to dopesheet view', keys: ['KEYFRAME_EDITOR_DOPESHEET'] },
-      { label: 'Switch keyframe editor to split view', keys: ['KEYFRAME_EDITOR_SPLIT'] },
-    ],
-  },
-  {
-    title: 'Source Monitor',
-    blurb: 'In and out points plus insert and overwrite edits.',
-    items: [
-      { label: 'Mark In point', keys: ['MARK_IN'] },
-      { label: 'Mark Out point', keys: ['MARK_OUT'] },
-      { label: 'Clear In/Out points', keys: ['CLEAR_IN_OUT'] },
-      { label: 'Insert edit', keys: ['INSERT_EDIT'] },
-      { label: 'Overwrite edit', keys: ['OVERWRITE_EDIT'] },
-    ],
-  },
-  {
-    title: 'Project',
-    blurb: 'Save and export flows.',
-    items: [
-      { label: 'Save project', keys: ['SAVE'] },
-      { label: 'Export video', keys: ['EXPORT'] },
-    ],
-  },
-] as const;
 
 // ---------------------------------------------------------------------------
 // Full ANSI keyboard layout — main section + navigation/arrow cluster
@@ -171,7 +62,7 @@ const KEYBOARD_ROWS: readonly KeyboardRowPair[] = [
       { id: '9', token: '9' },
       { id: '0', token: '0' },
       { id: 'minus', token: 'minus' },
-      { id: 'equals', token: 'equals' },
+      { id: 'equals', token: 'equal' },
       { id: 'backspace', token: 'backspace', width: 2 },
     ],
     nav: [
@@ -390,7 +281,7 @@ function KeyCap({
   const label =
     keySpec.label ?? (keySpec.token ? formatHotkeyBinding(keySpec.token) : '');
 
-  return (
+  const keyCap = (
     <div
       className={cn(
         KEY_BASE_CLASSES,
@@ -402,13 +293,23 @@ function KeyCap({
         keySpec.token && 'cursor-pointer hover:border-white/12 hover:text-foreground/92'
       )}
       style={{ flex: keySpec.width ?? 1 }}
-      title={tooltip}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       {label}
     </div>
+  );
+
+  if (!tooltip) {
+    return keyCap;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{keyCap}</TooltipTrigger>
+      <TooltipContent side="top">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -512,6 +413,10 @@ export function HotkeyEditor() {
     captureConflicts.length === 0 &&
     isDraftChanged
   );
+  const selectedBrowserHotkey = getBrowserHostileHotkey(hotkeys[selectedKey]);
+  const pendingBrowserHotkey = captureKey && draftBinding
+    ? getBrowserHostileHotkey(draftBinding)
+    : null;
 
   useEffect(() => {
     if (!captureKey) {
@@ -833,6 +738,18 @@ export function HotkeyEditor() {
               />
             </div>
 
+            {selectedBrowserHotkey ? (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 p-3 text-xs">
+                <div className="flex items-center gap-1.5 text-amber-300">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Browser override
+                </div>
+                <p className="mt-1 leading-4 text-foreground/84">
+                  {formatHotkeyBinding(selectedBrowserHotkey.binding)} may override {selectedBrowserHotkey.browserAction.toLowerCase()}.
+                </p>
+              </div>
+            ) : null}
+
              <div className="grid grid-cols-2 gap-1.5">
                {isCapturingSelectedKey ? (
                  <>
@@ -892,6 +809,14 @@ export function HotkeyEditor() {
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     {captureConflicts.map((key) => HOTKEY_DESCRIPTIONS[key]).join(', ')}
+                  </div>
+                ) : null}
+                {pendingBrowserHotkey ? (
+                  <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-300">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      This overrides {pendingBrowserHotkey.browserAction.toLowerCase()}.
+                    </span>
                   </div>
                 ) : null}
               </div>

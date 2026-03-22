@@ -16,29 +16,32 @@ export const HOTKEYS = {
   PREVIOUS_SNAP_POINT: 'up',
 
   // Timeline editing
-  SPLIT_AT_PLAYHEAD: 'alt+c',
-  JOIN_ITEMS: 'j',
+  SPLIT_AT_PLAYHEAD: 'mod+k',
+  JOIN_ITEMS: 'shift+j',
   DELETE_SELECTED: 'delete',
   DELETE_SELECTED_ALT: 'backspace',
   RIPPLE_DELETE: 'mod+delete',
   RIPPLE_DELETE_ALT: 'mod+backspace',
   FREEZE_FRAME: 'shift+f',
-  NUDGE_LEFT: 'alt+left',
-  NUDGE_RIGHT: 'alt+right',
-  NUDGE_UP: 'alt+up',
-  NUDGE_DOWN: 'alt+down',
-  NUDGE_LEFT_LARGE: 'alt+shift+left',
-  NUDGE_RIGHT_LARGE: 'alt+shift+right',
-  NUDGE_UP_LARGE: 'alt+shift+up',
-  NUDGE_DOWN_LARGE: 'alt+shift+down',
+  NUDGE_LEFT: 'shift+left',
+  NUDGE_RIGHT: 'shift+right',
+  NUDGE_UP: 'shift+up',
+  NUDGE_DOWN: 'shift+down',
+  NUDGE_LEFT_LARGE: 'mod+shift+left',
+  NUDGE_RIGHT_LARGE: 'mod+shift+right',
+  NUDGE_UP_LARGE: 'mod+shift+up',
+  NUDGE_DOWN_LARGE: 'mod+shift+down',
 
   // History
   UNDO: 'mod+z',
-  REDO: 'mod+y',
+  REDO: 'mod+shift+z',
 
   // Zoom
-  ZOOM_TO_FIT: 'z',
-  ZOOM_TO_100: 'shift+z',
+  ZOOM_IN: 'mod+equal',
+  ZOOM_OUT: 'mod+minus',
+  ZOOM_TO_FIT: 'backslash',
+  ZOOM_TO_100: 'shift+backslash',
+  ZOOM_TO_100_ALT: 'mod+0',
 
   // Clipboard
   COPY: 'mod+c',
@@ -57,7 +60,7 @@ export const HOTKEYS = {
 
   // Project
   SAVE: 'mod+s',
-  EXPORT: 'mod+e',
+  EXPORT: 'mod+shift+e',
 
   // UI
   TOGGLE_SNAP: 's',
@@ -69,9 +72,9 @@ export const HOTKEYS = {
   NEXT_MARKER: 'bracketright',
 
   // Keyframes
-  ADD_KEYFRAME: 'k',
-  CLEAR_KEYFRAMES: 'shift+k',
-  TOGGLE_KEYFRAME_EDITOR: 'mod+k',
+  ADD_KEYFRAME: 'a',
+  CLEAR_KEYFRAMES: 'shift+a',
+  TOGGLE_KEYFRAME_EDITOR: 'mod+shift+a',
   KEYFRAME_EDITOR_GRAPH: '1',
   KEYFRAME_EDITOR_DOPESHEET: '2',
   KEYFRAME_EDITOR_SPLIT: '3',
@@ -129,6 +132,11 @@ export interface HotkeyImportResult {
   sourceVersion: number | null;
 }
 
+export interface BrowserHostileHotkey {
+  binding: string;
+  browserAction: string;
+}
+
 interface HotkeyCommandLookup {
   byLabel: Map<string, HotkeyKey>;
   byDefaultBinding: Map<string, HotkeyKey>;
@@ -147,6 +155,9 @@ const HOTKEY_TOKEN_ALIASES: Record<string, string> = {
   return: 'enter',
   esc: 'escape',
   del: 'delete',
+  '=': 'equal',
+  equals: 'equal',
+  '-': 'minus',
   arrowleft: 'left',
   arrowright: 'right',
   arrowup: 'up',
@@ -160,7 +171,7 @@ const HOTKEY_KEY_LABELS: Record<string, string> = {
   bracketleft: '[',
   bracketright: ']',
   minus: '-',
-  equals: '=',
+  equal: '=',
   slash: '/',
   backslash: '\\',
   semicolon: ';',
@@ -186,7 +197,7 @@ const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
   BracketLeft: 'bracketleft',
   BracketRight: 'bracketright',
   Minus: 'minus',
-  Equal: 'equals',
+  Equal: 'equal',
   Slash: 'slash',
   Backslash: 'backslash',
   Semicolon: 'semicolon',
@@ -206,6 +217,40 @@ const HOTKEY_CODE_TOKEN_MAP: Record<string, string> = {
 };
 
 const HOTKEY_COMMAND_ALIASES: Partial<Record<string, HotkeyKey>> = {};
+
+const BROWSER_HOSTILE_HOTKEYS: readonly BrowserHostileHotkey[] = [
+  { binding: 'alt+left', browserAction: 'Back navigation' },
+  { binding: 'alt+right', browserAction: 'Forward navigation' },
+  { binding: 'f5', browserAction: 'Reload page' },
+  { binding: 'mod+r', browserAction: 'Reload page' },
+  { binding: 'mod+shift+r', browserAction: 'Hard reload page' },
+  { binding: 'mod+t', browserAction: 'New tab' },
+  { binding: 'mod+shift+t', browserAction: 'Reopen closed tab' },
+  { binding: 'mod+w', browserAction: 'Close tab' },
+  { binding: 'mod+n', browserAction: 'New window' },
+  { binding: 'mod+shift+n', browserAction: 'New private window' },
+  { binding: 'mod+l', browserAction: 'Focus address bar' },
+  { binding: 'mod+d', browserAction: 'Bookmark page or focus address bar' },
+  { binding: 'mod+e', browserAction: 'Focus search or address bar in some browsers' },
+  { binding: 'mod+p', browserAction: 'Print page' },
+  { binding: 'mod+f', browserAction: 'Find in page' },
+  { binding: 'mod+equal', browserAction: 'Browser zoom in' },
+  { binding: 'mod+minus', browserAction: 'Browser zoom out' },
+  { binding: 'mod+0', browserAction: 'Reset browser zoom' },
+  { binding: 'mod+1', browserAction: 'Switch to tab 1' },
+  { binding: 'mod+2', browserAction: 'Switch to tab 2' },
+  { binding: 'mod+3', browserAction: 'Switch to tab 3' },
+  { binding: 'mod+4', browserAction: 'Switch to tab 4' },
+  { binding: 'mod+5', browserAction: 'Switch to tab 5' },
+  { binding: 'mod+6', browserAction: 'Switch to tab 6' },
+  { binding: 'mod+7', browserAction: 'Switch to tab 7' },
+  { binding: 'mod+8', browserAction: 'Switch to tab 8' },
+  { binding: 'mod+9', browserAction: 'Switch to last tab' },
+] as const;
+
+const BROWSER_HOSTILE_HOTKEY_MAP = new Map(
+  BROWSER_HOSTILE_HOTKEYS.map((entry) => [entry.binding, entry])
+);
 
 export interface HotkeyEventData {
   key?: string;
@@ -252,8 +297,11 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   REDO: 'Redo',
 
   // Zoom
+  ZOOM_IN: 'Zoom in timeline',
+  ZOOM_OUT: 'Zoom out timeline',
   ZOOM_TO_FIT: 'Zoom to fit all content',
   ZOOM_TO_100: 'Zoom to 100% at cursor or playhead',
+  ZOOM_TO_100_ALT: 'Zoom to 100% at cursor or playhead (alternative)',
 
   // Clipboard
   COPY: 'Copy selected items or keyframes',
@@ -508,6 +556,15 @@ export function formatHotkeyBinding(binding: string, platformValue?: string): st
     .split('+')
     .map((token) => formatHotkeyToken(token, platform))
     .join(' + ');
+}
+
+export function getBrowserHostileHotkey(binding: string): BrowserHostileHotkey | null {
+  const normalizedBinding = normalizeHotkeyBinding(binding);
+  if (!normalizedBinding) {
+    return null;
+  }
+
+  return BROWSER_HOSTILE_HOTKEY_MAP.get(normalizedBinding) ?? null;
 }
 
 export function getHotkeyPrimaryTokenFromEventData(eventData: HotkeyEventData): string | null {

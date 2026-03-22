@@ -114,14 +114,14 @@ describe('settings-store', () => {
 
       useSettingsStore.getState().replaceHotkeyOverrides(
         {
-          EXPORT: 'Ctrl+Shift+E',
+          EXPORT: 'Ctrl+E',
           PLAY_PAUSE: 'space',
           UNKNOWN_COMMAND: 'q',
         } as never
       );
 
       expect(useSettingsStore.getState().hotkeyOverrides).toEqual({
-        EXPORT: 'mod+shift+e',
+        EXPORT: 'mod+e',
       });
     });
   });
