@@ -1877,14 +1877,30 @@ export const VideoPreview = memo(function VideoPreview({
       return null;
     }
 
+    // Look up the clip's speed so the DOM video element advances at the
+    // correct rate. Without this, variable-speed clips (e.g. 1.23x) play
+    // at the browser's native 1x rate and fall behind the expected sourceTime.
+    const clipSpeed = (
+      sessionWindow?.leftClip.id === itemId ? (sessionWindow.leftClip.speed ?? 1)
+        : sessionWindow?.rightClip.id === itemId ? (sessionWindow.rightClip.speed ?? 1)
+          : 1
+    );
+
+    const ensurePlaying = (el: HTMLVideoElement) => {
+      if (isPlaying) {
+        el.dataset.transitionHold = '1';
+        if (Math.abs(el.playbackRate - clipSpeed) > 0.01) {
+          el.playbackRate = clipSpeed;
+        }
+        if (el.paused) {
+          el.play().catch(() => {});
+        }
+      }
+    };
+
     const pinned = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
     if (pinned && pinned.isConnected && pinned.readyState >= 2 && pinned.videoWidth > 0) {
-      if (isPlaying && pinned.paused) {
-        // Mark the element so video-content's premount logic doesn't
-        // pause it — avoids a play/pause fight every frame.
-        pinned.dataset.transitionHold = '1';
-        pinned.play().catch(() => {});
-      }
+      ensurePlaying(pinned);
       return pinned;
     }
 
@@ -1894,9 +1910,8 @@ export const VideoPreview = memo(function VideoPreview({
       delete prev.dataset.transitionHold;
     }
     const next = getBestDomVideoElementForItem(itemId);
-    if (next && isPlaying && next.paused && next.readyState >= 2) {
-      next.dataset.transitionHold = '1';
-      next.play().catch(() => {});
+    if (next && next.readyState >= 2) {
+      ensurePlaying(next);
     }
     transitionSessionPinnedElementsRef.current.set(itemId, next);
     return next;
