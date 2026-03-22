@@ -121,7 +121,7 @@ export interface ItemRenderContext {
   mediabunnyDisabledItems: Set<string>;
   mediabunnyFailureCountByItem: Map<string, number>;
   ensureVideoItemReady?: (itemId: string) => Promise<boolean>;
-  getCachedPredecodedBitmap?: (src: string, timestamp: number) => ImageBitmap | null;
+  getCachedPredecodedBitmap?: (src: string, timestamp: number, toleranceSeconds?: number) => ImageBitmap | null;
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>;
@@ -525,7 +525,7 @@ async function renderVideoItem(
     : false;
   const hasMediabunny = useMediabunny.has(item.id);
   if (isPreviewMode && !hasDomVideo && !hasMediabunny && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
-    const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime);
+    const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime, tier2ToleranceSeconds);
     if (bitmap) {
       const drawDimensions = calculateMediaDrawDimensions(
         bitmap.width,

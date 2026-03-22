@@ -1888,6 +1888,11 @@ export const VideoPreview = memo(function VideoPreview({
       return pinned;
     }
 
+    // Clear hold on previously pinned element before replacing
+    const prev = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
+    if (prev && prev !== pinned) {
+      delete prev.dataset.transitionHold;
+    }
     const next = getBestDomVideoElementForItem(itemId);
     if (next && isPlaying && next.paused && next.readyState >= 2) {
       next.dataset.transitionHold = '1';
@@ -3129,7 +3134,12 @@ export const VideoPreview = memo(function VideoPreview({
           lastPlayingPrearmTargetRef.current = activeTransitionWindow.startFrame;
         }
 
-        const prearmStartFrame = getPlayingAnyTransitionPrewarmStartFrame(state.currentFrame);
+        // Only prearm an upcoming transition if no active session is pinned.
+        // Prearming while inside a transition would evict the active session
+        // and break the DOM video provider for the current transition clips.
+        const prearmStartFrame = (!activeTransitionWindow && !transitionSessionWindowRef.current)
+          ? getPlayingAnyTransitionPrewarmStartFrame(state.currentFrame)
+          : null;
         if (prearmStartFrame !== null) {
           const transitionWindow = getTransitionWindowByStartFrame(prearmStartFrame);
           if (transitionWindow) {

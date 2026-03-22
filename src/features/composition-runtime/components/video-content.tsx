@@ -451,14 +451,17 @@ const NativePreviewVideo: React.FC<{
     if (!canSeek) return;
 
     if (isPremounted) {
-      if (!video.paused) {
-        video.pause();
-      }
-      if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
-        try {
-          video.currentTime = clampedTargetTime;
-        } catch {
-          // Seek failed - element may still be initializing
+      const heldByTransition = video.dataset.transitionHold === '1';
+      if (!heldByTransition) {
+        if (!video.paused) {
+          video.pause();
+        }
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed - element may still be initializing
+          }
         }
       }
       return;

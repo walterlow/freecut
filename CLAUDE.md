@@ -15,7 +15,7 @@ npm run routes       # Regenerate TanStack Router tree (tsr generate)
 
 Browser-based multi-track video editor. React 19 + TypeScript + Vite.
 
-```
+```text
 src/
 ├── features/              # Self-contained feature modules
 │   ├── editor/            # Editor shell, toolbar, panels, stores
@@ -114,7 +114,7 @@ src/
 - After clip edits that change position/duration, call `applyTransitionRepairs(changedClipIds)` from `shared.ts` — transitions auto-heal or report breakages
 - `lib/logger.ts` uses only `function` declarations (no `class`/`const` at module scope) to avoid temporal dead zone errors in production chunk ordering — maintain this pattern
 - Fast scrub render loop: prewarm frames use WASM decode (40-80ms) and block the loop from processing priority frames. During playback, skip prewarm entirely (`isPlaying` check) — priority frames render fast via DOM video zero-copy (~1ms) and the loop must stay responsive. Background worker preseek (`backgroundPreseek` in `decoder-prewarm.ts`) also fires on large timeline jumps (>3s) for all visible clips — the worker decodes off-thread and the render engine picks up the cached bitmap
-- **Render loop generation guard** — `scrubRenderGenerationRef` prevents stale `pumpRenderLoop` iterations from releasing a newer pump's lock. Bump the generation on playback start and new scrub targets. The `finally` block always releases the lock but only triggers follow-up work for the current generation
+- **Render loop concurrency** — `pumpRenderLoop` uses a single-mutex (`scrubRenderInFlightRef`) to prevent concurrent pump iterations during scrubbing. A `scrubRenderGenerationRef` counter is bumped ONLY on playback-start force-clear (not during scrub). The `finally` block releases the lock and triggers follow-up work only when the generation matches; stale pumps (from a superseded playback-start) leave the lock for the new owner. Never bump generation or force-clear the lock on sequential scrub frames — this causes unbounded concurrent pumps. The `data-transition-hold` attribute on DOM video elements coordinates with `video-content.tsx` premount logic and `clearTransitionPlaybackSession` cleanup
 - **Transition participant video hold** — during transitions, the incoming clip's DOM video element is paused by `video-content.tsx` premount logic. The transition provider marks it with `data-transition-hold="1"` and calls `.play()` so the canvas renderer gets advancing frames. The mark is removed in `clearTransitionPlaybackSession`. Without this, the incoming clip shows a frozen frame during the transition
 - When updating multiple GPU effect params atomically (e.g. color wheel hue + amount), use `onParamsBatchChange`/`onParamsBatchLiveChange` — calling `onParamChange` twice reads stale state on the second call and overwrites the first
 - **Reuse rendered frames** — the preview scrub renderer already has fully composited frames with effects/masks/blend modes. Features needing the current frame (thumbnails, scopes, snapshots) should use `usePlaybackStore.getState().captureCanvasSource()` first, falling back to `renderSingleFrame()` only when the preview is unavailable. Never spin up a new render pipeline when an existing one already has the frame
