@@ -1677,7 +1677,7 @@ export const VideoPreview = memo(function VideoPreview({
     [fps],
   );
   const pausedTransitionPrearmFrames = useMemo(
-    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 2)),
+    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 3)),
     [fps, playbackTransitionLookaheadFrames],
   );
   const playingComplexTransitionPrearmFrames = useMemo(
@@ -3482,10 +3482,16 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       if (!state.isPlaying && state.previewFrame === null) {
-        const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(state.currentFrame);
+        // Check both: upcoming transitions AND the transition we're currently
+        // inside.  getPausedTransitionPrewarmStartFrame only looks forward,
+        // so pausing/seeking inside a transition left no session pinned —
+        // causing the render loop to fall back to mediabunny for both clips.
+        const pausedActiveWindow = getTransitionWindowForFrame(state.currentFrame);
+        const pausedPrewarmStartFrame = pausedActiveWindow?.startFrame
+          ?? getPausedTransitionPrewarmStartFrame(state.currentFrame);
         if (pausedPrewarmStartFrame !== null) {
           if (forceFastScrubOverlay) {
-            const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
+            const tw = pausedActiveWindow ?? getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
             if (tw) {
               pinTransitionPlaybackSession(tw);
               if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
