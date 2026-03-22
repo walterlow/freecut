@@ -61,6 +61,8 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
     [toggleSnap]
   );
 
+  const zoomHotkeyOptions = { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } };
+
   // Zoom: Cmd/Ctrl+Equals - Zoom in
   useHotkeys(
     hotkeys.ZOOM_IN,
@@ -68,7 +70,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
       event.preventDefault();
       zoomIn();
     },
-    HOTKEY_OPTIONS,
+    zoomHotkeyOptions,
     [zoomIn]
   );
 
@@ -79,7 +81,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
       event.preventDefault();
       zoomOut();
     },
-    HOTKEY_OPTIONS,
+    zoomHotkeyOptions,
     [zoomOut]
   );
 
@@ -142,7 +144,7 @@ export function useUIShortcuts(callbacks: TimelineShortcutCallbacks) {
         handler(targetFrame);
       }
     },
-    HOTKEY_OPTIONS,
+    zoomHotkeyOptions,
     []
   );
 }

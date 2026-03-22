@@ -18,6 +18,8 @@ import {
   WHISPER_MODEL_LABELS,
   WHISPER_MODEL_OPTIONS,
 } from '@/shared/utils/whisper-settings';
+import { formatHotkeyBinding } from '@/config/hotkeys';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 interface ItemContextMenuProps {
   children: ReactNode;
@@ -94,6 +96,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   canCreatePreComp,
   onCreatePreComp,
 }: ItemContextMenuProps) {
+  const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
   // Filter to only properties that actually have keyframes
   const propertiesWithKeyframes = useMemo(() => {
@@ -155,7 +158,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
                   Clear All
-                  <ContextMenuShortcut>Shift+A</ContextMenuShortcut>
+                  <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.CLEAR_KEYFRAMES)}</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 {propertiesWithKeyframes.map(({ property }) => (

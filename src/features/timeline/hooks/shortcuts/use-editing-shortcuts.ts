@@ -261,10 +261,10 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
         return splitFrame > itemStart && splitFrame < itemEnd;
       });
 
-        for (const item of itemsToSplit) {
-          splitItem(item.id, splitFrame);
-        }
-      },
+      for (const item of itemsToSplit) {
+        splitItem(item.id, splitFrame);
+      }
+    },
     { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [items, splitItem]
   );

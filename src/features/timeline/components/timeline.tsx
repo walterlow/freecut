@@ -150,6 +150,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   );
 
   // Keyboard shortcut: Ctrl/Cmd+G to group selected tracks
+  // Needs capture: true to override browser's "Find next" shortcut
   useHotkeys(
     hotkeys.GROUP_TRACKS,
     (event) => {
@@ -158,7 +159,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         createGroup(selectedTrackIds);
       }
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [canGroupSelection, selectedTrackIds, createGroup]
   );
 
@@ -173,7 +174,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         ungroup(activeTrack.id);
       }
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [activeTrackId, tracks, ungroup]
   );
 

@@ -58,7 +58,6 @@ import type { CanvasSettings } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
-import { resolveKeyframeEditorHotkeyProperty } from './keyframe-editor-hotkey';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 /** Height of the panel header bar in pixels */
@@ -334,7 +333,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   // Track selected property for graph editor
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null);
-  const [activeDopesheetProperty, setActiveDopesheetProperty] = useState<AnimatableProperty | null>(null);
+  const [, setActiveDopesheetProperty] = useState<AnimatableProperty | null>(null);
   const [editorMode, setEditorMode] = useState<KeyframeEditorMode>(() => loadKeyframeEditorMode());
   const [splitRatio, setSplitRatio] = useState<number>(() => loadKeyframeEditorSplitRatio());
   const [splitFrameViewport, setSplitFrameViewport] = useState<{ startFrame: number; endFrame: number } | null>(null);
@@ -681,17 +680,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   const handlePropertyChange = useCallback((property: AnimatableProperty | null) => {
     setSelectedProperty(property);
   }, []);
-
-  const editorHotkeyProperty = useMemo(
-    () =>
-      resolveKeyframeEditorHotkeyProperty(
-        editorMode,
-        selectedProperty,
-        availableProperties,
-        activeDopesheetProperty
-      ),
-    [activeDopesheetProperty, availableProperties, editorMode, selectedProperty]
-  );
 
   const handleCopyKeyframes = useCallback(() => {
     if (selectedEditorKeyframes.length === 0) return;
@@ -1099,26 +1087,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       );
     },
     [canvas, keyframesByProperty, selectedItemForEditor]
-  );
-
-  useHotkeys(
-    hotkeys.ADD_KEYFRAME,
-    (event) => {
-      if (!selectedItemForEditor || !editorHotkeyProperty) return;
-
-      event.preventDefault();
-      handleAddKeyframe(editorHotkeyProperty, relativeFrame);
-    },
-    {
-      ...HOTKEY_OPTIONS,
-      enabled:
-        isOpen &&
-        !!selectedItemForEditor &&
-        editorHotkeyProperty !== null &&
-        relativeFrame >= 0 &&
-        relativeFrame < selectedItemForEditor.durationInFrames,
-    },
-    [editorHotkeyProperty, handleAddKeyframe, isOpen, relativeFrame, selectedItemForEditor]
   );
 
   const propertyValues = useMemo(() => {

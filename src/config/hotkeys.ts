@@ -72,7 +72,6 @@ export const HOTKEYS = {
   NEXT_MARKER: 'bracketright',
 
   // Keyframes
-  ADD_KEYFRAME: 'a',
   CLEAR_KEYFRAMES: 'shift+a',
   TOGGLE_KEYFRAME_EDITOR: 'mod+shift+a',
   KEYFRAME_EDITOR_GRAPH: '1',
@@ -332,7 +331,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   NEXT_MARKER: 'Jump to next marker',
 
   // Keyframes
-  ADD_KEYFRAME: 'Add keyframe at playhead',
   CLEAR_KEYFRAMES: 'Clear all keyframes from selected items',
   TOGGLE_KEYFRAME_EDITOR: 'Toggle keyframe editor panel',
   KEYFRAME_EDITOR_GRAPH: 'Switch keyframe editor to graph view',
