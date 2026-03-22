@@ -47,7 +47,7 @@ fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   // Edge softness in pixels
   let edge = params.edgeSoftness;
   // Inside circle with soft edge: incoming; outside: outgoing
-  let inside = 1.0 - smoothstep(radius - edge, radius + edge, dist);
+  let inside = 1.0 - smoothstep(max(radius - edge, 0.0), radius + edge, dist);
   let inColor = vec4f(right.rgb * inAlpha, 1.0);
   let outColor = vec4f(left.rgb * outAlpha, 1.0);
   return mix(outColor, inColor, inside);

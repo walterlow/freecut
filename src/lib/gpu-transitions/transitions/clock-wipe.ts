@@ -48,7 +48,7 @@ fn clockWipeFragment(input: VertexOutput) -> @location(0) vec4f {
   // Edge softness in radians (convert degrees to radians)
   let edge = params.edgeSoftness * TAU / 360.0;
   // Swept region with soft edge: incoming; un-swept: outgoing
-  let swept = 1.0 - smoothstep(sweepAngle - edge, sweepAngle + edge, normalizedAngle);
+  let swept = 1.0 - smoothstep(max(sweepAngle - edge, 0.0), sweepAngle + edge, normalizedAngle);
   let inColor = vec4f(right.rgb * inAlpha, 1.0);
   let outColor = vec4f(left.rgb * outAlpha, 1.0);
   return mix(outColor, inColor, swept);
