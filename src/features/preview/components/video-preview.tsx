@@ -249,6 +249,7 @@ export const VideoPreview = memo(function VideoPreview({
   const transitionPrepareTimeoutRef = useRef<number | null>(null);
   const transitionSessionWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
   const transitionSessionPinnedElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
+  const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
@@ -1787,10 +1788,12 @@ export const VideoPreview = memo(function VideoPreview({
     }
 
     // Before releasing the hold, re-position each video element to the
-    // correct source time for the current frame.  During the transition the
-    // element plays freely and drifts away from the expected position.
-    // Without this pre-seek the sync logic in video-content detects a
-    // multi-second drift and triggers a hard backward seek → visible freeze.
+    // correct source time for the current frame.  The per-frame drift
+    // correction during the transition keeps elements within ~60ms of
+    // target.  Only hard-seek here for drifts > 150ms (safety net for
+    // edge cases).  Smaller drifts are left for RVFC to correct smoothly
+    // — a hard seek pauses the browser decode pipeline for 100ms+ and
+    // causes a visible freeze.
     const tw = transitionSessionWindowRef.current;
     if (tw) {
       const currentFrame = usePlaybackStore.getState().currentFrame;
@@ -1806,12 +1809,18 @@ export const VideoPreview = memo(function VideoPreview({
         const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
         const videoDuration = el.duration || Infinity;
         const clamped = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
-        if (Math.abs(el.currentTime - clamped) > 0.016) {
+        const drift = Math.abs(el.currentTime - clamped);
+        if (drift > 0.15) {
+          // Large drift — hard seek (RVFC can't absorb this smoothly).
           try {
             el.currentTime = clamped;
           } catch {
             // Element may be settling — ignore transient seek failures.
           }
+        } else if (drift > 0.016) {
+          // Small drift — nudge playbackRate so RVFC absorbs it smoothly
+          // over the next few frames without a decode pipeline stall.
+          el.playbackRate = clipSpeed;
         }
       }
     }
@@ -1822,6 +1831,7 @@ export const VideoPreview = memo(function VideoPreview({
       if (el) delete el.dataset.transitionHold;
     }
     transitionSessionPinnedElementsRef.current.clear();
+    transitionSessionStallCountRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
   }, [fps, pushTransitionTrace]);
 
@@ -3257,6 +3267,63 @@ export const VideoPreview = memo(function VideoPreview({
               void workerBackgroundPreseek(clip.src, sourceTime);
             }
           }
+        }
+
+        // Per-frame drift correction for held video elements during an active
+        // transition session.  Without this, elements play freely and drift
+        // seconds away from their expected position, causing a hard backward
+        // seek (and visible freeze) when the hold is released at exit.
+        // Uses gentle playbackRate adjustment (same pattern as RVFC) so the
+        // element never drifts far — making the exit-time pre-seek a no-op.
+        const sessionWindow = transitionSessionWindowRef.current;
+        if (sessionWindow && transitionSessionPinnedElementsRef.current.size > 0) {
+          for (const clip of [sessionWindow.leftClip, sessionWindow.rightClip]) {
+            if (clip.type !== 'video') continue;
+            const el = transitionSessionPinnedElementsRef.current.get(clip.id);
+            if (!el || el.dataset.transitionHold !== '1') continue;
+            const localFrame = state.currentFrame - clip.from;
+            if (localFrame < 0) continue;
+            const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+            const sourceFps = clip.sourceFps ?? fps;
+            const clipSpeed = clip.speed ?? 1;
+            const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
+
+            // Detect stalled decode: if currentTime hasn't changed for 3+
+            // frames, the browser's decode pipeline is stuck. Re-trigger
+            // play() and seek to unstick it.
+            const stallEntry = transitionSessionStallCountRef.current.get(clip.id);
+            if (stallEntry && Math.abs(el.currentTime - stallEntry.ct) < 0.001) {
+              const newCount = stallEntry.count + 1;
+              transitionSessionStallCountRef.current.set(clip.id, { ct: stallEntry.ct, count: newCount });
+              if (newCount >= 3) {
+                // Unstick: seek to target and re-trigger play.
+                try { el.currentTime = targetTime; } catch { /* settling */ }
+                el.playbackRate = clipSpeed;
+                el.play().catch(() => { /* best effort */ });
+                transitionSessionStallCountRef.current.set(clip.id, { ct: targetTime, count: 0 });
+                continue;
+              }
+            } else {
+              transitionSessionStallCountRef.current.set(clip.id, { ct: el.currentTime, count: 0 });
+            }
+
+            const drift = el.currentTime - targetTime;
+            if (Math.abs(drift) > 0.2) {
+              // Large drift — hard seek to prevent runaway divergence.
+              try { el.currentTime = targetTime; } catch { /* settling */ }
+              el.playbackRate = clipSpeed;
+            } else if (Math.abs(drift) > 0.016) {
+              // Small drift — gentle rate correction (±6% of nominal speed).
+              const correction = -drift * 0.25;
+              const maxAdj = Math.max(0.03, clipSpeed * 0.06);
+              el.playbackRate = Math.max(
+                clipSpeed - maxAdj,
+                Math.min(clipSpeed + maxAdj, clipSpeed + correction),
+              );
+            }
+          }
+        } else if (transitionSessionStallCountRef.current.size > 0) {
+          transitionSessionStallCountRef.current.clear();
         }
 
         // Only prearm an upcoming transition if no active session is pinned.
