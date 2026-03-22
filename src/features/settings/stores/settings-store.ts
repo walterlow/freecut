@@ -58,6 +58,20 @@ interface SettingsActions {
 
 type SettingsStore = AppSettings & SettingsActions;
 
+function areHotkeyOverridesEqual(
+  left: HotkeyOverrideMap,
+  right: HotkeyOverrideMap
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  return leftKeys.every((key) => left[key as HotkeyKey] === right[key as HotkeyKey]);
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   // Timeline defaults
   defaultFps: 30,
@@ -128,7 +142,7 @@ export const useSettingsStore = create<SettingsStore>()(
       replaceHotkeyOverrides: (overrides) => set((state) => {
         const normalizedOverrides = sanitizeHotkeyOverrides(overrides);
 
-        if (JSON.stringify(state.hotkeyOverrides) === JSON.stringify(normalizedOverrides)) {
+        if (areHotkeyOverridesEqual(state.hotkeyOverrides, normalizedOverrides)) {
           return state;
         }
 

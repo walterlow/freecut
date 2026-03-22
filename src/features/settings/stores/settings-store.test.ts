@@ -124,5 +124,21 @@ describe('settings-store', () => {
         EXPORT: 'mod+e',
       });
     });
+
+    it('does not update state for equivalent overrides with different key order', () => {
+      useSettingsStore.getState().replaceHotkeyOverrides({
+        PLAY_PAUSE: 'shift+space',
+        EXPORT: 'ctrl+e',
+      });
+
+      const previousState = useSettingsStore.getState();
+
+      useSettingsStore.getState().replaceHotkeyOverrides({
+        EXPORT: 'ctrl+e',
+        PLAY_PAUSE: 'shift+space',
+      });
+
+      expect(useSettingsStore.getState()).toBe(previousState);
+    });
   });
 });

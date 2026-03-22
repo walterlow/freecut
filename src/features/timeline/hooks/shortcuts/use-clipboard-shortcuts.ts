@@ -251,6 +251,10 @@ export function useClipboardShortcuts() {
           } else {
             toast.success(pasteTitle);
           }
+
+          if (itemsClipboard.copyType === 'cut') {
+            useClipboardStore.getState().clearItemsClipboard();
+          }
         }
 
       }
