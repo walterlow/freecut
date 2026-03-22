@@ -249,6 +249,7 @@ export const VideoPreview = memo(function VideoPreview({
   const transitionPrepareTimeoutRef = useRef<number | null>(null);
   const transitionSessionWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
   const transitionSessionPinnedElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
+  const transitionExitElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
   const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
@@ -1830,6 +1831,11 @@ export const VideoPreview = memo(function VideoPreview({
     for (const el of transitionSessionPinnedElementsRef.current.values()) {
       if (el) delete el.dataset.transitionHold;
     }
+    // Keep exit elements as a fallback for the DOM provider for a few frames.
+    // After the session clears, shadow elements may unmount before the normal
+    // rendering path registers new elements — causing a mediabunny fallback
+    // gap with 50-300ms stalls.  The exit elements bridge this gap.
+    transitionExitElementsRef.current = new Map(transitionSessionPinnedElementsRef.current);
     transitionSessionPinnedElementsRef.current.clear();
     transitionSessionStallCountRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
@@ -1937,7 +1943,20 @@ export const VideoPreview = memo(function VideoPreview({
     const sessionWindow = transitionSessionWindowRef.current;
     const isSessionParticipant = sessionWindow?.leftClip.id === itemId || sessionWindow?.rightClip.id === itemId;
     if (!isSessionParticipant) {
-      return getBestDomVideoElementForItem(itemId);
+      // Check registry first; if no element found, try exit elements as
+      // a bridge while the normal rendering path re-mounts the element.
+      const registryEl = getBestDomVideoElementForItem(itemId);
+      if (registryEl) {
+        // Registry has an element — clear exit fallback for this item
+        transitionExitElementsRef.current.delete(itemId);
+        return registryEl;
+      }
+      const exitEl = transitionExitElementsRef.current.get(itemId);
+      if (exitEl?.isConnected && exitEl.readyState >= 2) {
+        return exitEl;
+      }
+      transitionExitElementsRef.current.delete(itemId);
+      return null;
     }
 
     // During playback, always provide DOM video elements for transition
