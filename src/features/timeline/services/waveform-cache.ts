@@ -933,7 +933,12 @@ class WaveformCacheService {
       return;
     }
 
-    // Running request
+    // Running request — clean up tracking state synchronously so that a
+    // subsequent getWaveform() call (e.g. React StrictMode remount) doesn't
+    // receive the stale, already-rejected promise.
+    this.pendingRequests.delete(mediaId);
+    this.activeGenerations.delete(mediaId);
+
     const activeWorker = this.workerManager.peekWorker();
     if (activeWorker) {
       activeWorker.postMessage({
@@ -948,6 +953,8 @@ class WaveformCacheService {
     if (rejector) {
       rejector(new AbortError());
     }
+
+    this.processGenerationQueue();
   }
 
   /**
