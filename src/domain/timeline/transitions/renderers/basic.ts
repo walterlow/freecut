@@ -24,6 +24,7 @@ function calculateFadeOpacity(progress: number, isOutgoing: boolean): number {
 }
 
 const fadeRenderer: TransitionRenderer = {
+  gpuTransitionId: 'fade',
   calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
     const p = clamp01(progress);
     return {

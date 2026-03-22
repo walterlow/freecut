@@ -36,6 +36,7 @@ function getSlideOffset(
 // ============================================================================
 
 const slideRenderer: TransitionRenderer = {
+  gpuTransitionId: 'slide',
   calculateStyles(progress, isOutgoing, canvasWidth, canvasHeight, direction): TransitionStyleCalculation {
     const dir = (direction as SlideDirection) || 'from-left';
     const slideProgress = isOutgoing ? progress : progress - 1;
