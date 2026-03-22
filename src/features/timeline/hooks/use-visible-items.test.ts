@@ -7,7 +7,7 @@ import type { VideoItem } from '@/types/timeline';
 import { useVisibleItems } from './use-visible-items';
 import { useItemsStore } from '../stores/items-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
-import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
+import { useTimelineViewportStore, _resetViewportThrottle } from '../stores/timeline-viewport-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useZoomStore } from '../stores/zoom-store';
 
@@ -113,6 +113,21 @@ describe('useVisibleItems filtering logic', () => {
   });
 
   it('does not re-render when scroll stays within the same visible item window', () => {
+    // Use fake timers so the viewport store's scroll throttle fires
+    // synchronously when we advance time within act(). Reset throttle
+    // state so fake-timer performance.now() is consistent.
+    vi.useFakeTimers();
+    _resetViewportThrottle();
+
+    // Re-set viewport with fake timers active so lastScrollUpdate
+    // is in fake-timer space.
+    useTimelineViewportStore.getState().setViewport({
+      scrollLeft: 0,
+      scrollTop: 0,
+      viewportWidth: 1000,
+      viewportHeight: 120,
+    });
+
     useItemsStore.getState().setItems([
       makeItem('a', 0, 30),
       makeItem('b', 300, 30),
@@ -125,28 +140,36 @@ describe('useVisibleItems filtering logic', () => {
     expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b');
     expect(onRender).toHaveBeenCalledTimes(1);
 
+    // Small scroll — stays within same visible item window
     act(() => {
+      vi.advanceTimersByTime(100);
       useTimelineViewportStore.getState().setViewport({
         scrollLeft: 100,
         scrollTop: 0,
         viewportWidth: 1000,
         viewportHeight: 120,
       });
+      vi.advanceTimersByTime(100);
     });
 
     expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b');
     expect(onRender).toHaveBeenCalledTimes(1);
 
+    // Large scroll — different visible items
     act(() => {
+      vi.advanceTimersByTime(100);
       useTimelineViewportStore.getState().setViewport({
         scrollLeft: 2000,
         scrollTop: 0,
         viewportWidth: 1000,
         viewportHeight: 120,
       });
+      vi.advanceTimersByTime(100);
     });
 
     expect(screen.getByTestId('visible-items')).toHaveTextContent('c');
     expect(onRender).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 });

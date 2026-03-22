@@ -22,6 +22,7 @@ interface TimelineZoomValue {
 
 /**
  * Hook to get timeline zoom values and helper functions.
+ *
  * Reads directly from Zustand stores.
  */
 export function useTimelineZoomContext(): TimelineZoomValue {

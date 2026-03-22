@@ -13,9 +13,9 @@ interface ZoomActions {
   zoomToFit: (containerWidth: number, contentDurationSeconds: number) => void;
 }
 
-// Throttle zoom updates to reduce re-render frequency during rapid zoom
-// Set to 50ms to match typical render time - prevents queueing renders faster than they complete
-const ZOOM_THROTTLE_MS = 50;
+// Throttle zoom updates to reduce re-render frequency during rapid zoom.
+// 120ms keeps zoom visually smooth while cutting re-renders in half vs 50ms.
+const ZOOM_THROTTLE_MS = 120;
 let lastZoomUpdate = 0;
 let pendingZoomLevel: number | null = null;
 let zoomThrottleTimeout: ReturnType<typeof setTimeout> | null = null;

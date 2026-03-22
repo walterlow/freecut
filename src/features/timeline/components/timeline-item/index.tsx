@@ -1299,6 +1299,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             pointerEvents: isBeingDragged ? 'none' : 'auto',
             zIndex: isBeingDragged ? 50 : undefined,
             transition: isBeingDragged ? 'none' : undefined,
+            contain: 'layout style paint',
             contentVisibility: 'auto',
             containIntrinsicSize: `0 ${DEFAULT_TRACK_HEIGHT}px`,
           }}

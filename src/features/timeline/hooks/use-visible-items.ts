@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
@@ -8,10 +8,21 @@ import { useItemsStore } from '../stores/items-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 
 /**
- * Pixels of buffer beyond viewport edges.
- * 500px covers ~5 seconds at default zoom — enough for fast scroll and drag previews.
+ * Pixels of buffer beyond viewport edges for mounting items.
+ * 2000px mounts clips well before they enter the viewport, so the mount
+ * jank (~100-170ms per clip) happens while the user is looking at content
+ * further from the edge. Original 500px caused visible stutter when
+ * scrolling into dense clip clusters.
  */
-const BUFFER_PX = 500;
+const BUFFER_PX = 2000;
+
+/**
+ * Inner buffer (pixels) — recomputation is skipped when the visible frame
+ * range shifts by less than this amount. Avoids filtering items/transitions
+ * on small scroll deltas that can't change the result. Must be smaller
+ * than BUFFER_PX to guarantee items mount before they enter the viewport.
+ */
+const HYSTERESIS_PX = 800;
 
 /** Sentinel arrays to avoid re-renders when track has no items */
 const EMPTY_ITEMS: TimelineItem[] = [];
@@ -27,17 +38,82 @@ interface VisibleItemsSnapshot {
   visibleTransitions: Transition[];
 }
 
+function computeVisibleItemsSnapshot(trackId: string): VisibleItemsSnapshot {
+  const { scrollLeft, viewportWidth } = useTimelineViewportStore.getState();
+  const { pixelsPerSecond } = useZoomStore.getState();
+  const { fps } = useTimelineSettingsStore.getState();
+  const items = useItemsStore.getState().itemsByTrackId[trackId];
+  const transitions = useTransitionsStore.getState().transitionsByTrackId[trackId];
+  const visibleFrameRange = getVisibleFrameRange(scrollLeft, viewportWidth, pixelsPerSecond, fps);
+  const visibleItems = getVisibleItemsForRange(items, visibleFrameRange);
+  const visibleTransitions = getVisibleTransitionsForRange(
+    transitions,
+    items,
+    visibleItems,
+    visibleFrameRange
+  );
+  return { visibleItems, visibleTransitions };
+}
+
 /**
  * Returns only the items and transitions that overlap the visible viewport + buffer
  * for a given track. Items fully outside the range are not rendered as React components.
  */
 export function useVisibleItems(trackId: string) {
   const [snapshot, setSnapshot] = useState<VisibleItemsSnapshot>(() => computeVisibleItemsSnapshot(trackId));
+  // Track the frame range used for the last committed result so we can skip
+  // recomputation when scroll hasn't moved enough to change the item set.
+  const lastRangeRef = useRef<VisibleFrameRange | null>(null);
+  // Track last zoom/settings/data versions to detect non-scroll changes
+  const lastVersionRef = useRef({ pps: 0, fps: 0, itemsVer: 0, transVer: 0 });
 
   useEffect(() => {
     const apply = () => {
-      const next = computeVisibleItemsSnapshot(trackId);
-      setSnapshot((prev) => (areVisibleSnapshotsEqual(prev, next) ? prev : next));
+      const { pixelsPerSecond } = useZoomStore.getState();
+      const { fps } = useTimelineSettingsStore.getState();
+      const items = useItemsStore.getState().itemsByTrackId[trackId];
+      const transitions = useTransitionsStore.getState().transitionsByTrackId[trackId];
+      const itemsVer = items?.length ?? 0;
+      const transVer = transitions?.length ?? 0;
+
+      const { scrollLeft, viewportWidth } = useTimelineViewportStore.getState();
+      const newRange = getVisibleFrameRange(scrollLeft, viewportWidth, pixelsPerSecond, fps);
+
+      // Fast path: if only scroll changed and the range shift is within
+      // hysteresis, the visible item set is guaranteed unchanged.
+      const prev = lastVersionRef.current;
+      const lastRange = lastRangeRef.current;
+      if (
+        lastRange
+        && prev.pps === pixelsPerSecond
+        && prev.fps === fps
+        && prev.itemsVer === itemsVer
+        && prev.transVer === transVer
+      ) {
+        const hysteresisFrames = fps > 0 && pixelsPerSecond > 0
+          ? (HYSTERESIS_PX / pixelsPerSecond) * fps
+          : 0;
+        if (
+          Math.abs(newRange.start - lastRange.start) < hysteresisFrames
+          && Math.abs(newRange.end - lastRange.end) < hysteresisFrames
+        ) {
+          return; // Skip — too small a shift to affect results
+        }
+      }
+
+      const visibleItems = getVisibleItemsForRange(items, newRange);
+      const visibleTransitions = getVisibleTransitionsForRange(
+        transitions,
+        items,
+        visibleItems,
+        newRange
+      );
+      const next: VisibleItemsSnapshot = { visibleItems, visibleTransitions };
+
+      lastRangeRef.current = newRange;
+      lastVersionRef.current = { pps: pixelsPerSecond, fps, itemsVer, transVer };
+
+      setSnapshot((prevSnap) => (areVisibleSnapshotsEqual(prevSnap, next) ? prevSnap : next));
     };
 
     apply();
@@ -58,24 +134,6 @@ export function useVisibleItems(trackId: string) {
   }, [trackId]);
 
   return snapshot;
-}
-
-function computeVisibleItemsSnapshot(trackId: string): VisibleItemsSnapshot {
-  const { scrollLeft, viewportWidth } = useTimelineViewportStore.getState();
-  const { pixelsPerSecond } = useZoomStore.getState();
-  const { fps } = useTimelineSettingsStore.getState();
-  const items = useItemsStore.getState().itemsByTrackId[trackId];
-  const transitions = useTransitionsStore.getState().transitionsByTrackId[trackId];
-  const visibleFrameRange = getVisibleFrameRange(scrollLeft, viewportWidth, pixelsPerSecond, fps);
-  const visibleItems = getVisibleItemsForRange(items, visibleFrameRange);
-  const visibleTransitions = getVisibleTransitionsForRange(
-    transitions,
-    items,
-    visibleItems,
-    visibleFrameRange
-  );
-
-  return { visibleItems, visibleTransitions };
 }
 
 function getVisibleFrameRange(
