@@ -1684,7 +1684,7 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
     [fps, playbackTransitionLookaheadFrames],
   );
-  const playbackTransitionPrerenderRunwayFrames = 3;
+  const playbackTransitionPrerenderRunwayFrames = 5;
   const playbackTransitionEffectfulStartFrames = useMemo(() => {
     const hasExpensiveVisuals = (item: TimelineItem) => (
       item.effects?.some((effect) => effect.enabled)
@@ -3121,6 +3121,15 @@ export const VideoPreview = memo(function VideoPreview({
           drawSourceToDisplay(buffered, currentFrame);
           scrubOffscreenRenderedFrameRef.current = currentFrame;
           lastRafPresentedFrame = currentFrame;
+          // Pre-start the render loop for the next uncached frame so the
+          // GPU + decode pipeline is already warm when the buffer runs out.
+          // Without this, the first post-cache frame stalls 100-200ms.
+          const nextFrame = currentFrame + 1;
+          if (!transitionSessionBufferedFramesRef.current.has(nextFrame)
+            && !scrubRenderInFlightRef.current) {
+            scrubRequestedFrameRef.current = nextFrame;
+            void pumpRenderLoop();
+          }
         } else {
           scrubRequestedFrameRef.current = currentFrame;
           if (!scrubRenderInFlightRef.current) {
@@ -3501,27 +3510,33 @@ export const VideoPreview = memo(function VideoPreview({
                       void workerBackgroundPreseek(clip.src, sourceTime);
                     }
                   }
-                  // Background pre-render (separate renderer, no lock conflict)
-                  if (bgTransitionRenderInFlightRef.current) return;
-                  bgTransitionRenderInFlightRef.current = true;
-                  try {
-                    const bgRenderer = await ensureBgTransitionRenderer();
-                    if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
-                      await bgRenderer.renderFrame(tw.startFrame);
-                      // Cache directly from the bg renderer's canvas (not the
-                      // main renderer's scrubOffscreenCanvasRef which is stale).
-                      if ('getCanvas' in bgRenderer) {
-                        const bgCanvas = (bgRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
-                        const snapshot = new OffscreenCanvas(bgCanvas.width, bgCanvas.height);
-                        const snapshotCtx = snapshot.getContext('2d');
-                        if (snapshotCtx) {
-                          snapshotCtx.drawImage(bgCanvas, 0, 0);
-                          transitionSessionBufferedFramesRef.current.set(tw.startFrame, snapshot);
+                  // Pre-render the first few transition frames using the MAIN
+                  // renderer (whose decoders are already at tw.startFrame from
+                  // the prewarmItems call above).  The previous approach created
+                  // a separate bg renderer which required its own GPU pipeline
+                  // init + cold mediabunny decode — taking 1-2s and rarely
+                  // completing before playback started.  Using the main renderer
+                  // is fast because everything is already warm.  Pre-rendering
+                  // multiple frames gives the render loop a head start so the
+                  // first cold-rendered transition frame isn't frame 1.
+                  if (!usePlaybackStore.getState().isPlaying && mainRenderer) {
+                    const preRenderCount = Math.min(playbackTransitionPrerenderRunwayFrames, tw.endFrame - tw.startFrame);
+                    for (let fi = 0; fi < preRenderCount; fi++) {
+                      if (usePlaybackStore.getState().isPlaying) break;
+                      const frame = tw.startFrame + fi;
+                      try {
+                        await mainRenderer.renderFrame(frame);
+                        if ('getCanvas' in mainRenderer) {
+                          const srcCanvas = (mainRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
+                          const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
+                          const snapshotCtx = snapshot.getContext('2d');
+                          if (snapshotCtx) {
+                            snapshotCtx.drawImage(srcCanvas, 0, 0);
+                            transitionSessionBufferedFramesRef.current.set(frame, snapshot);
+                          }
                         }
-                      }
+                      } catch { break; }
                     }
-                  } catch { /* */ } finally {
-                    bgTransitionRenderInFlightRef.current = false;
                   }
                 })();
               }
