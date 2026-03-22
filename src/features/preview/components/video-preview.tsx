@@ -2995,11 +2995,21 @@ export const VideoPreview = memo(function VideoPreview({
       const currentFrame = playbackState.currentFrame;
 
       if (currentFrame !== lastRafRenderedFrame) {
-        // Frame advanced — kick off async render for the new content.
         lastRafRenderedFrame = currentFrame;
-        scrubRequestedFrameRef.current = currentFrame;
-        if (!scrubRenderInFlightRef.current) {
-          void pumpRenderLoop();
+        // Check if this frame was pre-rendered by the transition prepare.
+        // If so, present it immediately (0ms) instead of going through the
+        // async pumpRenderLoop (which would take 180-240ms for the first
+        // transition frame due to mediabunny decode).
+        const buffered = transitionSessionBufferedFramesRef.current.get(currentFrame);
+        if (buffered) {
+          drawSourceToDisplay(buffered, currentFrame);
+          scrubOffscreenRenderedFrameRef.current = currentFrame;
+          lastRafPresentedFrame = currentFrame;
+        } else {
+          scrubRequestedFrameRef.current = currentFrame;
+          if (!scrubRenderInFlightRef.current) {
+            void pumpRenderLoop();
+          }
         }
       } else if (
         lastRafPresentedFrame !== currentFrame
@@ -3275,10 +3285,6 @@ export const VideoPreview = memo(function VideoPreview({
         const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(state.currentFrame);
         if (pausedPrewarmStartFrame !== null) {
           if (forceFastScrubOverlay) {
-            // When GPU effects overlay is active, use non-blocking prewarmItems
-            // instead of preparePlaybackTransitionFrame. The prep would set
-            // scrubRenderInFlightRef=true and block pumpRenderLoop for 300ms+
-            // when playback resumes.
             const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
             if (tw) {
               pinTransitionPlaybackSession(tw);
@@ -3288,7 +3294,7 @@ export const VideoPreview = memo(function VideoPreview({
                   if (renderer && 'prewarmItems' in renderer) {
                     await renderer.prewarmItems(
                       [tw.leftClip.id, tw.rightClip.id],
-                      state.currentFrame,
+                      tw.startFrame,
                     );
                   }
                 })();
@@ -3608,8 +3614,11 @@ export const VideoPreview = memo(function VideoPreview({
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
         if (forceFastScrubOverlay) {
-          // Non-blocking prewarm — avoid schedulePlaybackTransitionPrepare which
-          // blocks the render loop via scrubRenderInFlightRef on playback resume.
+          // Non-blocking prewarm only — DON'T call schedulePlaybackTransitionPrepare
+          // because the prepare holds scrubRenderInFlightRef while paused. When play
+          // starts, the prepare and rAF pump fight over the shared renderer, causing
+          // worse stalls (685ms) than just letting the rAF pump render the first
+          // transition frame on-demand (180-240ms).
           const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
           if (tw) {
             pinTransitionPlaybackSession(tw);
@@ -3618,7 +3627,7 @@ export const VideoPreview = memo(function VideoPreview({
               if (renderer && 'prewarmItems' in renderer) {
                 await renderer.prewarmItems(
                   [tw.leftClip.id, tw.rightClip.id],
-                  initialPlaybackState.currentFrame,
+                  tw.startFrame,
                 );
               }
             })();
