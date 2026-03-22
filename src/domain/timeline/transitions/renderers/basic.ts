@@ -34,15 +34,18 @@ const fadeRenderer: TransitionRenderer = {
   renderCanvas(ctx, leftCanvas, rightCanvas, progress) {
     const p = clamp01(progress);
 
-    // Draw incoming clip (right) first.
+    // Equal-power crossfade matching GPU mix(right, left, t):
+    // Draw incoming (right) at full alpha, then outgoing (left) at cos weight.
+    // This avoids the brightness dip from independent alpha over-compositing.
+    const t = Math.cos((p * Math.PI) / 2);
+
     ctx.save();
-    ctx.globalAlpha = calculateFadeOpacity(p, false);
+    ctx.globalAlpha = 1.0;
     ctx.drawImage(rightCanvas, 0, 0);
     ctx.restore();
 
-    // Draw outgoing clip (left) on top.
     ctx.save();
-    ctx.globalAlpha = calculateFadeOpacity(p, true);
+    ctx.globalAlpha = t;
     ctx.drawImage(leftCanvas, 0, 0);
     ctx.restore();
   },

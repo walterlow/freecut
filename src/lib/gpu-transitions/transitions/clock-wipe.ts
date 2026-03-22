@@ -12,7 +12,7 @@ struct ClockWipeParams {
   progress: f32,
   width: f32,
   height: f32,
-  _pad: f32,
+  edgeSoftness: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -45,13 +45,16 @@ fn clockWipeFragment(input: VertexOutput) -> @location(0) vec4f {
   let left = textureSample(leftTex, texSampler, uv);
   let right = textureSample(rightTex, texSampler, uv);
 
-  // Swept region: show incoming; un-swept: show outgoing
-  let swept = step(normalizedAngle, sweepAngle);
+  // Edge softness in radians (convert degrees to radians)
+  let edge = params.edgeSoftness * TAU / 360.0;
+  // Swept region with soft edge: incoming; un-swept: outgoing
+  let swept = 1.0 - smoothstep(sweepAngle - edge, sweepAngle + edge, normalizedAngle);
   let inColor = vec4f(right.rgb * inAlpha, 1.0);
   let outColor = vec4f(left.rgb * outAlpha, 1.0);
   return mix(outColor, inColor, swept);
 }`,
-  packUniforms: (progress, width, height) => {
-    return new Float32Array([progress, width, height, 0]);
+  packUniforms: (progress, width, height, _direction, properties) => {
+    const edgeSoftness = (properties?.edgeSoftness as number) ?? 8.0;
+    return new Float32Array([progress, width, height, edgeSoftness]);
   },
 };

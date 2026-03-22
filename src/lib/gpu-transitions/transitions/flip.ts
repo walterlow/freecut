@@ -32,9 +32,6 @@ fn flipFragment(input: VertexOutput) -> @location(0) vec4f {
   let midpoint = 0.5;
   let centered = uv - vec2f(0.5, 0.5);
 
-  // Compute distorted UV and phase for both cases
-  let isPhase1 = step(p, midpoint);  // 1.0 when p <= 0.5
-
   // Phase 1: outgoing scales 1→0; Phase 2: incoming scales 0→1
   let flipProgress1 = p / midpoint;
   let flipProgress2 = (p - midpoint) / midpoint;

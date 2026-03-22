@@ -12,7 +12,7 @@ struct IrisParams {
   progress: f32,
   width: f32,
   height: f32,
-  _pad: f32,
+  edgeSoftness: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -44,13 +44,16 @@ fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   let left = textureSample(leftTex, texSampler, uv);
   let right = textureSample(rightTex, texSampler, uv);
 
-  // Inside circle: incoming; outside: outgoing
-  let inside = step(dist, radius);
+  // Edge softness in pixels
+  let edge = params.edgeSoftness;
+  // Inside circle with soft edge: incoming; outside: outgoing
+  let inside = 1.0 - smoothstep(radius - edge, radius + edge, dist);
   let inColor = vec4f(right.rgb * inAlpha, 1.0);
   let outColor = vec4f(left.rgb * outAlpha, 1.0);
   return mix(outColor, inColor, inside);
 }`,
-  packUniforms: (progress, width, height) => {
-    return new Float32Array([progress, width, height, 0]);
+  packUniforms: (progress, width, height, _direction, properties) => {
+    const edgeSoftness = (properties?.edgeSoftness as number) ?? 6.0;
+    return new Float32Array([progress, width, height, edgeSoftness]);
   },
 };
