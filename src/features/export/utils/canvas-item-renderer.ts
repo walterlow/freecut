@@ -515,10 +515,16 @@ async function renderVideoItem(
 
   // === TRY PRE-DECODED BITMAP (from background Web Worker) ===
   // Check for a pre-decoded bitmap from the decoder prewarm worker.
-  // Covers: (1) variable-speed clips that become visible mid-playback,
-  // (2) any clip after a large timeline jump where the worker pre-seeked
-  // the decoder off-thread so the first frame is instant (~0ms vs 300-600ms).
-  if (isPreviewMode && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
+  // Only used as a fallback when the DOM video element and mediabunny are
+  // both unavailable (e.g. first frame after a large timeline jump where
+  // the worker pre-seeked off-thread). Don't check this for clips that
+  // have a live DOM video element — the 0.5s cache tolerance would show
+  // stale frames during normal playback/scrub.
+  const hasDomVideo = isPreviewMode && rctx.domVideoElementProvider
+    ? (() => { const v = rctx.domVideoElementProvider!(item.id); return v && v.readyState >= 2 && v.videoWidth > 0; })()
+    : false;
+  const hasMediabunny = useMediabunny.has(item.id);
+  if (isPreviewMode && !hasDomVideo && !hasMediabunny && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
     const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime);
     if (bitmap) {
       const drawDimensions = calculateMediaDrawDimensions(

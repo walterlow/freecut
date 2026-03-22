@@ -3015,11 +3015,13 @@ export const VideoPreview = memo(function VideoPreview({
           for (const item of track.items) {
             if (item.type !== 'video' || !('src' in item) || !item.src) continue;
             if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
+            // Skip if sourceFps isn't populated yet (metadata still loading) —
+            // sourceStart is in source-native FPS, so wrong fps produces wrong timestamps.
+            if (!item.sourceFps) continue;
             const localFrame = frame - item.from;
             const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-            const sourceFps = item.sourceFps ?? fps;
             const speed = item.speed ?? 1;
-            const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+            const sourceTime = (sourceStart / item.sourceFps) + (localFrame / fps) * speed;
             void workerBackgroundPreseek(item.src, sourceTime);
           }
         }
