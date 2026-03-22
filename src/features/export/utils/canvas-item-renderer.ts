@@ -146,6 +146,11 @@ export interface ItemRenderContext {
   // During playback, the Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
   domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
+
+  // Set to true when rendering transition participant clips. Widens the
+  // DOM video drift threshold to prefer stale zero-copy frames over
+  // 170ms mediabunny stalls during transition ramp-up / exit.
+  isRenderingTransition?: boolean;
 }
 
 /**
@@ -446,8 +451,15 @@ async function renderVideoItem(
       // For variable-speed clips, use a very wide threshold to avoid EVER
       // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
       // is visually acceptable; mediabunny stalls are not.
-      const baseDriftThreshold = 0.2; // 200ms for 1x speed clips
-      const driftThreshold = Math.abs(speed) > 1.01 ? 0.5 * Math.abs(speed) : baseDriftThreshold;
+      //
+      // During transitions (entry ramp-up and exit handoff), the DOM video
+      // element may be settling — play() was just called, Chrome's decoder
+      // is ramping up.  Accept very high drift (1s) to prefer a stale
+      // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
+      // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
+      const inTransition = rctx.isRenderingTransition || domVideo.dataset.transitionHold === '1';
+      const baseDriftThreshold = inTransition ? 1.0 : 0.2;
+      const driftThreshold = Math.abs(speed) > 1.01 ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed)) : baseDriftThreshold;
       if (drift <= driftThreshold) {
         const drawDimensions = calculateMediaDrawDimensions(
           domVideo.videoWidth,
@@ -1332,10 +1344,15 @@ export async function renderTransitionToCanvas(
   const rightKeyframes = keyframesMap.get(rightClip.id);
   const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, frame, canvasSettings);
 
+  // Flag the render context so renderVideoItem uses a wider DOM video
+  // drift threshold — prefer stale zero-copy frames over mediabunny stalls.
+  const prevTransitionFlag = rctx.isRenderingTransition;
+  rctx.isRenderingTransition = true;
   await Promise.all([
     renderItem(leftCtx, leftClip, leftTransform, frame, rctx, 0),
     renderItem(rightCtx, rightClip, rightTransform, frame, rctx, 0),
   ]);
+  rctx.isRenderingTransition = prevTransitionFlag;
 
   // Apply effects to both clips (parallel when both have effects)
   const adjEffects = getAdjustmentLayerEffects(
