@@ -1895,10 +1895,40 @@ export const VideoPreview = memo(function VideoPreview({
       leftHasEffects,
       rightHasEffects,
     });
-    transitionSessionPinnedElementsRef.current = new Map([
-      [window.leftClip.id, getBestDomVideoElementForItem(window.leftClip.id)],
-      [window.rightClip.id, getBestDomVideoElementForItem(window.rightClip.id)],
-    ]);
+    const isPlaying = usePlaybackStore.getState().isPlaying;
+    const pinnedElements = new Map<string, HTMLVideoElement | null>();
+    for (const clip of [window.leftClip, window.rightClip]) {
+      const el = getBestDomVideoElementForItem(clip.id);
+      pinnedElements.set(clip.id, el);
+      // Set the hold IMMEDIATELY so video-content's premount guard
+      // (which checks data-transition-hold) doesn't pause the element
+      // before the render loop calls getPinnedTransitionElementForItem.
+      // Without this, shadows mount → premount effect pauses element →
+      // hold set too late → decoder stalled → frozen currentTime.
+      if (el && isPlaying) {
+        el.dataset.transitionHold = '1';
+        const clipSpeed = clip.speed ?? 1;
+        if (Math.abs(el.playbackRate - clipSpeed) > 0.01) {
+          el.playbackRate = clipSpeed;
+        }
+        if (el.paused) {
+          if (el.readyState >= 2) {
+            el.play().catch(() => {});
+          } else {
+            // Element not ready yet — listen for enough data to play.
+            const onCanPlay = () => {
+              el.removeEventListener('canplay', onCanPlay);
+              if (el.dataset.transitionHold === '1' && el.paused) {
+                el.playbackRate = clipSpeed;
+                el.play().catch(() => {});
+              }
+            };
+            el.addEventListener('canplay', onCanPlay, { once: true });
+          }
+        }
+      }
+    }
+    transitionSessionPinnedElementsRef.current = pinnedElements;
     transitionSessionBufferedFramesRef.current.clear();
     return window;
   }, [clearTransitionPlaybackSession, pushTransitionTrace, transitionWindowUsesDomProvider]);
