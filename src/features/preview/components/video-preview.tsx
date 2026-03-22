@@ -3350,7 +3350,17 @@ export const VideoPreview = memo(function VideoPreview({
                     const bgRenderer = await ensureBgTransitionRenderer();
                     if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
                       await bgRenderer.renderFrame(tw.startFrame);
-                      cacheTransitionSessionFrame(tw.startFrame);
+                      // Cache directly from the bg renderer's canvas (not the
+                      // main renderer's scrubOffscreenCanvasRef which is stale).
+                      if ('getCanvas' in bgRenderer) {
+                        const bgCanvas = (bgRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
+                        const snapshot = new OffscreenCanvas(bgCanvas.width, bgCanvas.height);
+                        const snapshotCtx = snapshot.getContext('2d');
+                        if (snapshotCtx) {
+                          snapshotCtx.drawImage(bgCanvas, 0, 0);
+                          transitionSessionBufferedFramesRef.current.set(tw.startFrame, snapshot);
+                        }
+                      }
                     }
                   } catch { /* */ } finally {
                     bgTransitionRenderInFlightRef.current = false;
