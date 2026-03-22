@@ -229,6 +229,12 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubRenderInFlightRef = useRef(false);
   const scrubRenderGenerationRef = useRef(0);
   const scrubRequestedFrameRef = useRef<number | null>(null);
+  // Dedicated background renderer for transition pre-rendering.
+  // Separate from the main scrub renderer so pre-renders don't conflict
+  // with the rAF pump's render loop (different canvas, different decoders).
+  const bgTransitionRendererRef = useRef<CompositionRenderer | null>(null);
+  const bgTransitionInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
+  const bgTransitionRenderInFlightRef = useRef(false);
   const scrubPrewarmQueueRef = useRef<number[]>([]);
   const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
   const scrubPrewarmedFramesRef = useRef<number[]>([]);
@@ -2011,7 +2017,47 @@ export const VideoPreview = memo(function VideoPreview({
 
     scrubOffscreenCanvasRef.current = null;
     scrubOffscreenCtxRef.current = null;
+
+    if (bgTransitionRendererRef.current) {
+      try { bgTransitionRendererRef.current.dispose(); } catch { /* */ }
+      bgTransitionRendererRef.current = null;
+    }
+    bgTransitionInitPromiseRef.current = null;
+    bgTransitionRenderInFlightRef.current = false;
   }, [clearPendingFastScrubHandoff, clearTransitionPlaybackSession]);
+
+  // Background transition renderer — independent instance for pre-rendering
+  // transition frames without conflicting with the main rAF pump renderer.
+  const ensureBgTransitionRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
+    if (!FAST_SCRUB_RENDERER_ENABLED || typeof OffscreenCanvas === 'undefined' || isResolving) return null;
+    if (bgTransitionRendererRef.current) return bgTransitionRendererRef.current;
+    if (bgTransitionInitPromiseRef.current) return bgTransitionInitPromiseRef.current;
+
+    bgTransitionInitPromiseRef.current = (async () => {
+      try {
+        const canvas = new OffscreenCanvas(renderSize.width, renderSize.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        const renderer = await createCompositionRenderer(fastScrubInputProps, canvas, ctx, {
+          mode: 'preview',
+          getPreviewTransformOverride,
+          getPreviewEffectsOverride,
+          getPreviewCornerPinOverride,
+          getPreviewPathVerticesOverride,
+        });
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline();
+        }
+        bgTransitionRendererRef.current = renderer;
+        return renderer;
+      } catch {
+        return null;
+      } finally {
+        bgTransitionInitPromiseRef.current = null;
+      }
+    })();
+    return bgTransitionInitPromiseRef.current;
+  }, [fastScrubInputProps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, getPreviewPathVerticesOverride, isResolving, renderSize.width, renderSize.height]);
 
   const ensureFastScrubRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!FAST_SCRUB_RENDERER_ENABLED) return null;
@@ -3290,12 +3336,24 @@ export const VideoPreview = memo(function VideoPreview({
               pinTransitionPlaybackSession(tw);
               if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
                 void (async () => {
-                  const renderer = await ensureFastScrubRenderer();
-                  if (renderer && 'prewarmItems' in renderer) {
-                    await renderer.prewarmItems(
+                  const mainRenderer = await ensureFastScrubRenderer();
+                  if (mainRenderer && 'prewarmItems' in mainRenderer) {
+                    await mainRenderer.prewarmItems(
                       [tw.leftClip.id, tw.rightClip.id],
                       tw.startFrame,
                     );
+                  }
+                  // Background pre-render (separate renderer, no lock conflict)
+                  if (bgTransitionRenderInFlightRef.current) return;
+                  bgTransitionRenderInFlightRef.current = true;
+                  try {
+                    const bgRenderer = await ensureBgTransitionRenderer();
+                    if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
+                      await bgRenderer.renderFrame(tw.startFrame);
+                      cacheTransitionSessionFrame(tw.startFrame);
+                    }
+                  } catch { /* */ } finally {
+                    bgTransitionRenderInFlightRef.current = false;
                   }
                 })();
               }
@@ -3614,21 +3672,37 @@ export const VideoPreview = memo(function VideoPreview({
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
         if (forceFastScrubOverlay) {
-          // Non-blocking prewarm only — DON'T call schedulePlaybackTransitionPrepare
-          // because the prepare holds scrubRenderInFlightRef while paused. When play
-          // starts, the prepare and rAF pump fight over the shared renderer, causing
-          // worse stalls (685ms) than just letting the rAF pump render the first
-          // transition frame on-demand (180-240ms).
+          // Pre-render the transition start frame using a DEDICATED background
+          // renderer (separate canvas + decoders). This doesn't hold
+          // scrubRenderInFlightRef and doesn't conflict with the rAF pump.
+          // The rAF pump checks transitionSessionBufferedFramesRef and presents
+          // the pre-rendered frame instantly (0ms vs 180-240ms first-frame stall).
           const tw = getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
           if (tw) {
             pinTransitionPlaybackSession(tw);
             void (async () => {
-              const renderer = await ensureFastScrubRenderer();
-              if (renderer && 'prewarmItems' in renderer) {
-                await renderer.prewarmItems(
+              // Warm main renderer's decoders
+              const mainRenderer = await ensureFastScrubRenderer();
+              if (mainRenderer && 'prewarmItems' in mainRenderer) {
+                await mainRenderer.prewarmItems(
                   [tw.leftClip.id, tw.rightClip.id],
                   tw.startFrame,
                 );
+              }
+              // Pre-render via background renderer (separate instance)
+              if (bgTransitionRenderInFlightRef.current) return;
+              bgTransitionRenderInFlightRef.current = true;
+              try {
+                const bgRenderer = await ensureBgTransitionRenderer();
+                if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
+                  await bgRenderer.renderFrame(tw.startFrame);
+                  cacheTransitionSessionFrame(tw.startFrame);
+                  pushTransitionTrace('bg_prerender', { frame: tw.startFrame });
+                }
+              } catch (error) {
+                logger.debug('Background transition pre-render failed:', error);
+              } finally {
+                bgTransitionRenderInFlightRef.current = false;
               }
             })();
           }
