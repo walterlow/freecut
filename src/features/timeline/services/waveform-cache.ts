@@ -166,9 +166,12 @@ class WaveformCacheService {
     } catch (error) {
       queued.reject(error instanceof Error ? error : new Error(String(error)));
     } finally {
-      this.activeGenerations.delete(queued.mediaId);
+      // Guard both deletes with requestId so a stale finally from an aborted
+      // run doesn't stomp a newer generation's tracking entries.
       const pending = this.pendingRequests.get(queued.mediaId);
-      if (pending && pending.requestId === queued.requestId) {
+      const isStale = pending && pending.requestId !== queued.requestId;
+      if (!isStale) {
+        this.activeGenerations.delete(queued.mediaId);
         this.pendingRequests.delete(queued.mediaId);
       }
       this.processGenerationQueue();
