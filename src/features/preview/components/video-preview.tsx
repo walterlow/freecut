@@ -3133,6 +3133,12 @@ export const VideoPreview = memo(function VideoPreview({
       } else if (!state.isPlaying && playbackRafId !== null) {
         cancelAnimationFrame(playbackRafId);
         playbackRafId = null;
+        // Clear transition session on stop so the prearm guard doesn't
+        // block prearming on the next play. Without this, a session pinned
+        // during the previous playback stays alive and prevents the
+        // prearm from firing for the next transition.
+        lastPlayingPrearmTargetRef.current = null;
+        clearTransitionPlaybackSession();
       }
 
       if (state.isPlaying && forceFastScrubOverlay) {
@@ -3169,6 +3175,18 @@ export const VideoPreview = memo(function VideoPreview({
                   [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
                   transitionWindow.startFrame,
                 );
+              }
+              // Fire background worker preseek for transition clips so the
+              // cached bitmap is ready as a fallback if mediabunny/DOM video
+              // can't deliver the first frame fast enough.
+              for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
+                if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
+                  const localFrame = transitionWindow.startFrame - clip.from;
+                  const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+                  const clipSpeed = clip.speed ?? 1;
+                  const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
+                  void workerBackgroundPreseek(clip.src, sourceTime);
+                }
               }
             }
             pushTransitionTrace('playing_prearm', {
