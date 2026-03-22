@@ -600,7 +600,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Labels update in-place (position + text) — no clear needed.
   useEffect(() => {
     syncRulerScroll();
-  }, [quantizedPPS, fps, displayWidth, canvasHeight, syncRulerScroll]);
+  }, [quantizedPPS, fps, displayWidth, canvasHeight, viewportWidth, syncRulerScroll]);
 
   // Cleanup on unmount
   useEffect(() => {

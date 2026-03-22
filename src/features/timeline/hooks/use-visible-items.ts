@@ -64,8 +64,16 @@ export function useVisibleItems(trackId: string) {
   // Track the frame range used for the last committed result so we can skip
   // recomputation when scroll hasn't moved enough to change the item set.
   const lastRangeRef = useRef<VisibleFrameRange | null>(null);
-  // Track last zoom/settings/data versions to detect non-scroll changes
-  const lastVersionRef = useRef({ pps: 0, fps: 0, itemsVer: 0, transVer: 0 });
+  // Track last zoom/settings/data versions to detect non-scroll changes.
+  // itemsRef/transRef use array references (not lengths) because the items
+  // store preserves references for unchanged tracks — a new reference means
+  // at least one item was mutated (move, trim, property change, etc.).
+  const lastVersionRef = useRef<{
+    pps: number;
+    fps: number;
+    itemsRef: TimelineItem[] | undefined;
+    transRef: Transition[] | undefined;
+  }>({ pps: 0, fps: 0, itemsRef: undefined, transRef: undefined });
 
   useEffect(() => {
     const apply = () => {
@@ -73,22 +81,22 @@ export function useVisibleItems(trackId: string) {
       const { fps } = useTimelineSettingsStore.getState();
       const items = useItemsStore.getState().itemsByTrackId[trackId];
       const transitions = useTransitionsStore.getState().transitionsByTrackId[trackId];
-      const itemsVer = items?.length ?? 0;
-      const transVer = transitions?.length ?? 0;
-
       const { scrollLeft, viewportWidth } = useTimelineViewportStore.getState();
       const newRange = getVisibleFrameRange(scrollLeft, viewportWidth, pixelsPerSecond, fps);
 
       // Fast path: if only scroll changed and the range shift is within
       // hysteresis, the visible item set is guaranteed unchanged.
+      // Array references are compared (not lengths) so in-place mutations
+      // (move, trim, property edits) that produce a new array always
+      // bypass the fast path and recompute.
       const prev = lastVersionRef.current;
       const lastRange = lastRangeRef.current;
       if (
         lastRange
         && prev.pps === pixelsPerSecond
         && prev.fps === fps
-        && prev.itemsVer === itemsVer
-        && prev.transVer === transVer
+        && prev.itemsRef === items
+        && prev.transRef === transitions
       ) {
         const hysteresisFrames = fps > 0 && pixelsPerSecond > 0
           ? (HYSTERESIS_PX / pixelsPerSecond) * fps
@@ -111,7 +119,7 @@ export function useVisibleItems(trackId: string) {
       const next: VisibleItemsSnapshot = { visibleItems, visibleTransitions };
 
       lastRangeRef.current = newRange;
-      lastVersionRef.current = { pps: pixelsPerSecond, fps, itemsVer, transVer };
+      lastVersionRef.current = { pps: pixelsPerSecond, fps, itemsRef: items, transRef: transitions };
 
       setSnapshot((prevSnap) => (areVisibleSnapshotsEqual(prevSnap, next) ? prevSnap : next));
     };
