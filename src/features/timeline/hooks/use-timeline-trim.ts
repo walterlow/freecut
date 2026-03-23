@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -38,6 +39,7 @@ interface TrimState {
   forcedMode: 'rolling' | 'ripple' | null;
   isConstrained: boolean;
   constraintLabel: string | null;
+  destroyTransitionAtHandle: boolean;
 }
 
 /**
@@ -82,6 +84,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
     forcedMode: null,
     isConstrained: false,
     constraintLabel: null,
+    destroyTransitionAtHandle: false,
   });
 
   const trimStateRef = useRef(trimState);
@@ -245,9 +248,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // During ripple edit, skip adjacency clamping — downstream clips shift with the trim.
       if (!isRippleEdit) {
         const transitionLinkedIds = new Set<string>();
-        for (const t of transitions) {
-          if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
-          if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
+        if (!trimStateRef.current.destroyTransitionAtHandle) {
+          for (const t of transitions) {
+            if (t.leftClipId === currentItem.id) transitionLinkedIds.add(t.rightClipId);
+            if (t.rightClipId === currentItem.id) transitionLinkedIds.add(t.leftClipId);
+          }
         }
         // During rolling edit, exclude the neighbor from adjacency constraints —
         // it moves with the edit point, so the rolling edit clamp below handles it.
@@ -490,6 +495,20 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       // Only update store if there was actual change
       if (deltaFrames !== 0) {
+        if (state.destroyTransitionAtHandle && state.handle) {
+          const transitionIdsToRemove = useTransitionsStore.getState().transitions
+            .filter((transition) => (
+              state.handle === 'start'
+                ? transition.rightClipId === item.id
+                : transition.leftClipId === item.id
+            ))
+            .map((transition) => transition.id);
+
+          if (transitionIdsToRemove.length > 0) {
+            useTransitionsStore.getState()._removeTransitions(transitionIdsToRemove);
+          }
+        }
+
         if (state.isRippleEdit) {
           // Ripple edit: trim + shift downstream items
           rippleTrimItem(item.id, state.handle!, deltaFrames);
@@ -541,6 +560,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         forcedMode: null,
         isConstrained: false,
         constraintLabel: null,
+        destroyTransitionAtHandle: false,
       });
     }
   }, [item.id, trimItemStart, trimItemEnd, setDragState]);
@@ -579,7 +599,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
   // Start trim drag
   const handleTrimStart = useCallback(
-    (e: React.MouseEvent, handle: TrimHandle, options?: { forcedMode?: 'rolling' | 'ripple' | null }) => {
+    (e: React.MouseEvent, handle: TrimHandle, options?: {
+      forcedMode?: 'rolling' | 'ripple' | null;
+      destroyTransitionAtHandle?: boolean;
+    }) => {
       // Only respond to left mouse button
       if (e.button !== 0) return;
       if (trackLocked) return;
@@ -588,8 +611,10 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // including guardrail early returns.
       e.stopPropagation();
       e.preventDefault();
+      usePlaybackStore.getState().setPreviewFrame(null);
 
       const forcedMode = options?.forcedMode ?? null;
+      const destroyTransitionAtHandle = options?.destroyTransitionAtHandle ?? false;
       const activeTool = useSelectionStore.getState().activeTool;
       const explicitRolling = activeTool === 'rolling-edit';
       const explicitRipple = activeTool === 'ripple-edit';
@@ -626,6 +651,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         forcedMode,
         isConstrained: false,
         constraintLabel: null,
+        destroyTransitionAtHandle,
       });
     },
     [item.from, item.durationInFrames, trackLocked, getItemFromStore]

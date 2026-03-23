@@ -45,6 +45,15 @@ import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
 import { expandSelectionWithLinkedItems } from '../utils/linked-items';
 
+const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
+  'timeline-cursor-trim-left',
+  'timeline-cursor-trim-right',
+  'timeline-cursor-trim-center',
+  'timeline-cursor-slip-smart',
+  'timeline-cursor-slide-smart',
+  'timeline-cursor-gauge',
+] as const;
+
 
 interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
@@ -147,6 +156,12 @@ export const TimelineContent = memo(function TimelineContent({
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (isDragging && usePlaybackStore.getState().previewFrame !== null) {
+      usePlaybackStore.getState().setPreviewFrame(null);
+    }
+  }, [isDragging]);
 
   // Cleanup preview RAF on unmount
   useEffect(() => {
@@ -520,6 +535,13 @@ export const TimelineContent = memo(function TimelineContent({
   }, []);
 
   // Preview scrubber: show ghost playhead on hover
+  const handleTimelineMouseDownCapture = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if (usePlaybackStore.getState().previewFrame !== null) {
+      setPreviewFrameRef.current(null);
+    }
+  }, []);
+
   const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
     // Skip during playback
     if (usePlaybackStore.getState().isPlaying) {
@@ -528,6 +550,17 @@ export const TimelineContent = memo(function TimelineContent({
       }
       return;
     }
+
+    const body = document.body;
+    const gestureCursorActive = ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES.some((className) => body.classList.contains(className));
+    const interactionLockActive = gestureCursorActive || body.style.userSelect === 'none';
+    if (interactionLockActive) {
+      if (usePlaybackStore.getState().previewFrame !== null) {
+        setPreviewFrameRef.current(null);
+      }
+      return;
+    }
+
     // Skip during any drag (playhead drag, item drag, marquee)
     if (marqueeWasActiveRef.current || dragWasActiveRef.current || scrubWasActiveRef.current) return;
 
@@ -914,6 +947,7 @@ export const TimelineContent = memo(function TimelineContent({
         scrollBehavior: 'auto', // Disable smooth scrolling for instant zoom response
         willChange: 'scroll-position', // Hint to browser for optimization
       }}
+      onMouseDownCapture={handleTimelineMouseDownCapture}
       onClick={handleContainerClick}
       onMouseMove={handleTimelineMouseMove}
       onMouseLeave={handleTimelineMouseLeave}

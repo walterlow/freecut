@@ -120,6 +120,7 @@ export function TimelinePlayhead({ inRuler = false, maxFrame }: TimelinePlayhead
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    usePlaybackStore.getState().setPreviewFrame(null);
     const container = inRuler
       ? playheadRef.current?.closest('.timeline-ruler')
       : playheadRef.current?.closest('.timeline-tracks');

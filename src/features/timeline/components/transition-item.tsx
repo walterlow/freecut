@@ -445,7 +445,7 @@ export const TransitionItem = memo(function TransitionItem({
           className={cn(
             'absolute inset-y-0 overflow-visible rounded-sm pointer-events-none',
             isSelected &&
-              'ring-2 ring-inset ring-primary',
+              'ring-2 ring-inset ring-orange-400',
             dragPreviewMatches && 'ring-2 ring-inset ring-amber-300',
             isResizing && 'ring-2 ring-inset ring-purple-400'
           )}
@@ -463,9 +463,13 @@ export const TransitionItem = memo(function TransitionItem({
           <div
             className={cn(
               'pointer-events-none relative h-full w-full rounded-sm border',
-              'border-slate-100/80 bg-slate-100/10',
-              'shadow-[inset_0_0_0_1px_rgba(15,23,42,0.18),0_0_0_1px_rgba(15,23,42,0.04)]',
-              'hover:bg-slate-100/14 hover:border-slate-50/90'
+              isSelected
+                ? 'border-orange-400/90 bg-orange-300/10'
+                : 'border-slate-100/80 bg-slate-100/10',
+              'shadow-[0_0_0_1px_rgba(15,23,42,0.04)]',
+              isSelected
+                ? 'hover:bg-orange-300/14 hover:border-orange-300'
+                : 'hover:bg-slate-100/14 hover:border-slate-50/90'
             )}
           >
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(248,250,252,0.1),rgba(255,255,255,0.03)_48%,rgba(255,255,255,0.03)_52%,rgba(248,250,252,0.1))]" />

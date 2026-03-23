@@ -34,6 +34,7 @@ import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/cl
 import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
 import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
+import { hasTransitionBridgeAtHandle } from '../../utils/transition-edit-guards';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
@@ -1973,11 +1974,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, []);
 
   const handleSmartTrimStart = useCallback((e: React.MouseEvent, handle: 'start' | 'end') => {
-    const forcedMode = activeToolRef.current === 'trim-edit' || activeToolRef.current === 'select'
-      ? smartTrimIntentToMode(smartTrimIntentRef.current)
+    const currentIntent = smartTrimIntentRef.current;
+    const derivedMode = activeToolRef.current === 'trim-edit' || activeToolRef.current === 'select'
+      ? smartTrimIntentToMode(currentIntent)
       : null;
+    const shouldDestroyTransitionAtHandle = activeToolRef.current === 'select'
+      && derivedMode === 'ripple'
+      && hasTransitionBridgeAtHandle(useTransitionsStore.getState().transitions, item.id, handle);
 
-    handleTrimStart(e, handle, forcedMode ? { forcedMode } : undefined);
+    const forcedMode = shouldDestroyTransitionAtHandle ? null : derivedMode;
+
+    handleTrimStart(e, handle, forcedMode || shouldDestroyTransitionAtHandle
+      ? {
+          forcedMode,
+          destroyTransitionAtHandle: shouldDestroyTransitionAtHandle,
+        }
+      : undefined);
   }, [handleTrimStart]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {

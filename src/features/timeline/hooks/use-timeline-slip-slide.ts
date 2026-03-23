@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -367,6 +368,7 @@ export function useTimelineSlipSlide(
 
       e.stopPropagation();
       e.preventDefault();
+      usePlaybackStore.getState().setPreviewFrame(null);
 
       const { leftNeighbor, rightNeighbor } = findNeighbors();
 
