@@ -1,5 +1,6 @@
 import type { TextItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
+import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 
 export interface TextLayoutPreviewProperties {
   fontSize?: number;
@@ -8,13 +9,6 @@ export interface TextLayoutPreviewProperties {
   textShadow?: TextItem['textShadow'];
   stroke?: TextItem['stroke'];
 }
-
-const FONT_WEIGHT_MAP: Record<string, number> = {
-  normal: 400,
-  medium: 500,
-  semibold: 600,
-  bold: 700,
-};
 
 const TEXT_PADDING = 16;
 

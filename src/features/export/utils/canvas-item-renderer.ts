@@ -20,6 +20,7 @@ import type {
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
+import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 // Subsystem imports
@@ -86,14 +87,6 @@ export interface WorkerLoadedImage {
   width: number;
   height: number;
 }
-
-// Font weight mapping to match preview (same as FONT_WEIGHT_MAP in fonts.ts)
-const FONT_WEIGHT_MAP: Record<string, number> = {
-  normal: 400,
-  medium: 500,
-  semibold: 600,
-  bold: 700,
-};
 
 const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9;
 
