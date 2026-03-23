@@ -10,6 +10,8 @@ const SUPPORTED_VIDEO_TYPES = [
   'video/webm',
   'video/quicktime', // .mov files
   'video/x-matroska', // .mkv files
+  'video/matroska', // .mkv files (alternate browser MIME)
+  'video/x-msvideo', // .avi files
 ];
 
 const SUPPORTED_AUDIO_TYPES = [
@@ -17,6 +19,8 @@ const SUPPORTED_AUDIO_TYPES = [
   'audio/mpeg', // MP3 also uses audio/mpeg
   'audio/wav',
   'audio/aac',
+  'audio/x-m4a', // .m4a files
+  'audio/mp4', // .m4a also reported as audio/mp4
   'audio/ogg', // Opus codec in Ogg container
 ];
 
@@ -26,6 +30,7 @@ const SUPPORTED_IMAGE_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
+  'image/svg+xml', // .svg files
 ];
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
@@ -37,10 +42,12 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.webm': 'video/webm',
   '.mov': 'video/quicktime',
   '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
   // Audio
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
   '.aac': 'audio/aac',
+  '.m4a': 'audio/x-m4a',
   '.ogg': 'audio/ogg',
   '.opus': 'audio/ogg',
   // Image
@@ -49,18 +56,21 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   '.png': 'image/png',
   '.gif': 'image/gif',
   '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
 };
 
 /**
  * Get MIME type from file, falling back to extension-based detection
  */
 export function getMimeType(file: File): string {
-  if (file.type) {
-    return file.type;
-  }
-  // Fallback to extension-based detection
+  // Prefer extension-based detection for known extensions —
+  // browsers sometimes report non-standard MIME types (e.g. "video/matroska"
+  // instead of "video/x-matroska" for .mkv files).
   const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-  return ext ? EXTENSION_TO_MIME[ext] || '' : '';
+  if (ext && EXTENSION_TO_MIME[ext]) {
+    return EXTENSION_TO_MIME[ext];
+  }
+  return file.type || '';
 }
 
 interface ValidationResult {
@@ -98,7 +108,7 @@ export function validateMediaFile(file: File): ValidationResult {
   if (!allSupportedTypes.includes(mimeType)) {
     return {
       valid: false,
-      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv), audio (mp3, wav, aac, ogg/opus), image (jpg, png, gif, webp)`,
+      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv, avi), audio (mp3, wav, aac, m4a, ogg/opus), image (jpg, png, gif, webp, svg)`,
     };
   }
 

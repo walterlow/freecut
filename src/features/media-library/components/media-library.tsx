@@ -35,6 +35,7 @@ import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
 import { useMediaLibraryStore } from '../stores/media-library-store';
+import { useAutoImportStore } from '../stores/auto-import-store';
 import {
   useTimelineStore,
   useCompositionNavigationStore,
@@ -110,6 +111,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+
+  // Auto-import state
+  const autoImportActive = useAutoImportStore((s) => s.active);
+  const autoImportFolderName = useAutoImportStore((s) => s.folderName);
+  const enableAutoImport = useAutoImportStore((s) => s.enable);
+  const disableAutoImport = useAutoImportStore((s) => s.disable);
 
   // Composition navigation â€” show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
@@ -394,6 +401,25 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Header toolbar */}
       <div className="px-3 py-2 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2 text-xs">
+          {/* Auto-import toggle */}
+          <button
+            onClick={autoImportActive ? disableAutoImport : enableAutoImport}
+            disabled={!currentProjectId}
+            className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md
+              transition-colors duration-150
+              disabled:opacity-40 disabled:cursor-not-allowed
+              ${autoImportActive
+                ? 'bg-green-600 text-white hover:bg-red-600'
+                : 'bg-secondary text-foreground hover:bg-secondary/80 border border-border'
+              }`}
+            title={autoImportActive
+              ? `Watching "${autoImportFolderName}" — click to disable`
+              : 'Watch a folder for new files and auto-add to timeline'}
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>{autoImportActive ? 'Disable Auto' : 'Auto Import'}</span>
+          </button>
+
           {/* Import action */}
           <button
             onClick={handleImport}
