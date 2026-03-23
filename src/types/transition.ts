@@ -1,10 +1,9 @@
 /**
  * Transition Types
  *
- * Transitions use an FCP-style overlap model: when a transition is added,
- * the right clip slides left to physically overlap the left clip. Both clips
- * have real source content during the overlap — no virtual extensions.
- * Timeline total duration shrinks by the transition duration.
+ * Transitions use a cut-centered, handle-based model: clips stay adjacent on
+ * the timeline and the transition consumes hidden source handles around the
+ * cut. Legacy overlap-based transitions may still exist in old projects.
  */
 
 export type TransitionType = 'crossfade';
@@ -80,9 +79,9 @@ export interface BezierPoints {
 }
 
 /**
- * A transition between two overlapping clips.
- * When added, the right clip slides left to create physical overlap.
- * The overlap region is the transition — both clips have valid source content.
+ * A transition between two clips that meet at a cut.
+ * The transition is centered around the cut according to `alignment` and
+ * consumes hidden source handles from each side without moving clip positions.
  */
 export interface Transition {
   /** Unique identifier */

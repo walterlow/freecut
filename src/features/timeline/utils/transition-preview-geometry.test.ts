@@ -21,7 +21,7 @@ const noSlide = {
 describe('transition-preview-geometry', () => {
   it('moves bridge in rolling edit on incoming edge (trim right start)', () => {
     const leftBase = { id: 'left', from: 0, duration: 100 };
-    const rightBase = { id: 'right', from: 80, duration: 100 };
+    const rightBase = { id: 'right', from: 100, duration: 100 };
 
     const rolling = {
       trimmedItemId: 'right',
@@ -42,16 +42,17 @@ describe('transition-preview-geometry', () => {
     });
 
     expect(left.durationInFrames).toBe(112);
-    expect(right.from).toBe(92);
+    expect(right.from).toBe(112);
     expect(right.durationInFrames).toBe(88);
 
-    const bridge = getTransitionBridgeBounds(left.from, left.durationInFrames, 20);
-    expect(bridge.rightFrame).toBe(112);
+    const bridge = getTransitionBridgeBounds(left.from, left.durationInFrames, right.from, 20);
+    expect(bridge.leftFrame).toBe(102);
+    expect(bridge.rightFrame).toBe(122);
   });
 
   it('moves bridge in rolling edit on outgoing edge (trim left end)', () => {
     const leftBase = { id: 'left', from: 0, duration: 100 };
-    const rightBase = { id: 'right', from: 80, duration: 100 };
+    const rightBase = { id: 'right', from: 100, duration: 100 };
 
     const rolling = {
       trimmedItemId: 'left',
@@ -72,17 +73,18 @@ describe('transition-preview-geometry', () => {
     });
 
     expect(left.durationInFrames).toBe(110);
-    expect(right.from).toBe(90);
+    expect(right.from).toBe(110);
     expect(right.durationInFrames).toBe(90);
 
-    const bridge = getTransitionBridgeBounds(left.from, left.durationInFrames, 20);
-    expect(bridge.rightFrame).toBe(110);
+    const bridge = getTransitionBridgeBounds(left.from, left.durationInFrames, right.from, 20);
+    expect(bridge.leftFrame).toBe(100);
+    expect(bridge.rightFrame).toBe(120);
   });
 
   it('moves both incoming and outgoing bridges when sliding a middle clip', () => {
     const leftBase = { id: 'left', from: 0, duration: 100 };
-    const midBase = { id: 'mid', from: 80, duration: 100 };
-    const rightBase = { id: 'right', from: 160, duration: 100 };
+    const midBase = { id: 'mid', from: 100, duration: 100 };
+    const rightBase = { id: 'right', from: 200, duration: 100 };
 
     const slide = {
       itemId: 'mid',
@@ -108,16 +110,17 @@ describe('transition-preview-geometry', () => {
     });
 
     expect(left.durationInFrames).toBe(108);
-    expect(mid.from).toBe(88);
+    expect(mid.from).toBe(108);
     expect(mid.durationInFrames).toBe(100);
-    expect(right.from).toBe(168);
+    expect(right.from).toBe(208);
     expect(right.durationInFrames).toBe(92);
 
-    const incomingBridge = getTransitionBridgeBounds(left.from, left.durationInFrames, 20);
-    const outgoingBridge = getTransitionBridgeBounds(mid.from, mid.durationInFrames, 20);
+    const incomingBridge = getTransitionBridgeBounds(left.from, left.durationInFrames, mid.from, 20);
+    const outgoingBridge = getTransitionBridgeBounds(mid.from, mid.durationInFrames, right.from, 20);
 
-    expect(incomingBridge.rightFrame).toBe(108);
-    expect(outgoingBridge.rightFrame).toBe(188);
+    expect(incomingBridge.leftFrame).toBe(98);
+    expect(incomingBridge.rightFrame).toBe(118);
+    expect(outgoingBridge.leftFrame).toBe(198);
+    expect(outgoingBridge.rightFrame).toBe(218);
   });
 });
-

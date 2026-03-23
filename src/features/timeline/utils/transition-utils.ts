@@ -2,23 +2,23 @@
  * Transition Utilities
  *
  * Functions for validating and calculating transition parameters
- * between clips using the FCP-style overlap model.
+ * between clips using a cut-centered, handle-based model.
  *
- * OVERLAP MODEL:
- * Transitions work by physically overlapping clips on the timeline.
- * When a transition of D frames is added, the right clip slides left by D frames
- * and its sourceStart is adjusted back by the equivalent source frames.
- * Both clips have real source content during the transition — no virtual extensions.
+ * CUT-CENTERED MODEL:
+ * Transitions stay attached to the cut between adjacent clips.
+ * Clip timeline positions do not move. Instead, the transition consumes hidden
+ * source handles from the outgoing clip tail and incoming clip head.
  *
  * COMPOSITION RULES:
  * 1. Transition duration must be < min(leftClipDuration, rightClipDuration)
- * 2. Right clip must have sufficient handle (pre-roll footage) for the overlap
+ * 2. Left/right clips must have sufficient source handles for their consumed portions
  * 3. Each transition requires both leftClipId and rightClipId
  */
 
 import type { TimelineItem } from '@/types/timeline';
 import type { CanAddTransitionResult } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
+import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 
 const FRAME_EPSILON = 1;
 
@@ -33,30 +33,52 @@ export function areFramesOverlapping(leftEnd: number, rightStart: number): boole
   return rightStart < leftEnd - FRAME_EPSILON;
 }
 
+export function getMaxTransitionDurationForHandles(
+  leftClip: TimelineItem,
+  rightClip: TimelineItem,
+  alignment: number | undefined,
+): number {
+  const maxByClipDuration = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
+  if (maxByClipDuration < 1) return 0;
+
+  const leftHandle = getAvailableHandle(leftClip, 'end');
+  const rightHandle = getAvailableHandle(rightClip, 'start');
+
+  for (let duration = maxByClipDuration; duration >= 1; duration -= 1) {
+    const portions = calculateTransitionPortions(duration, alignment);
+    if (portions.leftPortion <= leftHandle && portions.rightPortion <= rightHandle) {
+      return duration;
+    }
+  }
+
+  return 0;
+}
+
 /**
  * Check if a transition can be added between two clips.
  * Validates: same track, adjacency, clip types, duration limits, and handle availability.
  *
- * The right clip must have sufficient handle (pre-roll footage before its current
- * sourceStart) to accommodate the overlap. Without handle footage, the transition
- * would need source content that doesn't exist.
+ * Adjacent clips must have enough hidden handle footage to support the requested
+ * transition portions around the cut. Existing legacy overlap transitions remain
+ * valid as long as their clips still overlap.
  */
 export function canAddTransition(
   leftClip: TimelineItem,
   rightClip: TimelineItem,
-  durationInFrames: number
+  durationInFrames: number,
+  alignment?: number,
 ): CanAddTransitionResult {
   // Check same track
   if (leftClip.trackId !== rightClip.trackId) {
     return { canAdd: false, reason: 'Clips must be on the same track' };
   }
 
-  // Check adjacency (for new transitions) or overlap (for existing transitions)
+  // Check adjacency (current model) or overlap (legacy compatibility)
   const leftEnd = leftClip.from + leftClip.durationInFrames;
   const isAdjacent = areFramesAligned(leftEnd, rightClip.from);
   const isOverlapping = areFramesOverlapping(leftEnd, rightClip.from);
   if (!isAdjacent && !isOverlapping) {
-    return { canAdd: false, reason: 'Clips must be adjacent or overlapping' };
+    return { canAdd: false, reason: 'Clips must meet at the cut' };
   }
 
   // Check clip types - only video and image clips can have transitions
@@ -77,6 +99,26 @@ export function canAddTransition(
 
   const leftHandle = getAvailableHandle(leftClip, 'end');
   const rightHandle = getAvailableHandle(rightClip, 'start');
+
+  if (isAdjacent) {
+    const portions = calculateTransitionPortions(durationInFrames, alignment);
+    if (portions.leftPortion > leftHandle || portions.rightPortion > rightHandle) {
+      const handleReason = [
+        portions.leftPortion > leftHandle
+          ? `left clip needs ${portions.leftPortion} tail-handle frames but only has ${leftHandle}`
+          : null,
+        portions.rightPortion > rightHandle
+          ? `right clip needs ${portions.rightPortion} head-handle frames but only has ${rightHandle}`
+          : null,
+      ].filter(Boolean).join('; ');
+      return {
+        canAdd: false,
+        reason: `Insufficient handle for transition: ${handleReason}`,
+        leftHandle,
+        rightHandle,
+      };
+    }
+  }
 
   return { canAdd: true, leftHandle, rightHandle };
 }
@@ -122,4 +164,3 @@ export function getAvailableHandle(
     return sourceToTimelineFrames(availableAfter, speed);
   }
 }
-

@@ -1,4 +1,16 @@
+import type { Transition } from '@/types/transition';
 import type { AudioItem, TimelineItem, VideoItem } from '@/types/timeline';
+
+export interface ManagedLinkedAudioTransitionPair {
+  leftAudio: AudioItem;
+  rightAudio: AudioItem;
+}
+
+export interface ManagedLinkedAudioTransition {
+  transition: Transition;
+  leftAudio: AudioItem;
+  rightAudio: AudioItem;
+}
 
 function isMediaPair(left: TimelineItem, right: TimelineItem): boolean {
   return (left.type === 'video' && right.type === 'audio')
@@ -30,6 +42,62 @@ export function getLinkedAudioCompanion(items: TimelineItem[], anchor: TimelineI
 export function getLinkedVideoCompanion(items: TimelineItem[], anchor: TimelineItem): VideoItem | null {
   if (anchor.type !== 'audio') return null;
   return (items.find((candidate) => isLinkedCompanion(anchor, candidate, 'video')) as VideoItem | undefined) ?? null;
+}
+
+export function isSynchronizedLinkedAudio(videoClip: VideoItem, audioClip: AudioItem): boolean {
+  return audioClip.from === videoClip.from
+    && audioClip.durationInFrames === videoClip.durationInFrames;
+}
+
+export function getManagedLinkedAudioTransitionPair(
+  items: TimelineItem[],
+  leftClip: TimelineItem,
+  rightClip: TimelineItem,
+): ManagedLinkedAudioTransitionPair | null {
+  if (leftClip.type !== 'video' || rightClip.type !== 'video') {
+    return null;
+  }
+
+  const leftAudio = getLinkedAudioCompanion(items, leftClip);
+  const rightAudio = getLinkedAudioCompanion(items, rightClip);
+  if (!leftAudio || !rightAudio) {
+    return null;
+  }
+
+  if (leftAudio.trackId !== rightAudio.trackId) {
+    return null;
+  }
+
+  if (!isSynchronizedLinkedAudio(leftClip, leftAudio) || !isSynchronizedLinkedAudio(rightClip, rightAudio)) {
+    return null;
+  }
+
+  return { leftAudio, rightAudio };
+}
+
+export function getManagedLinkedAudioTransitions(
+  items: TimelineItem[],
+  transitions: Transition[],
+): ManagedLinkedAudioTransition[] {
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const managed: ManagedLinkedAudioTransition[] = [];
+
+  for (const transition of transitions) {
+    const leftClip = itemById.get(transition.leftClipId);
+    const rightClip = itemById.get(transition.rightClipId);
+    if (!leftClip || !rightClip) continue;
+
+    const pair = getManagedLinkedAudioTransitionPair(items, leftClip, rightClip);
+    if (!pair) continue;
+
+    managed.push({
+      transition,
+      leftAudio: pair.leftAudio,
+      rightAudio: pair.rightAudio,
+    });
+  }
+
+  return managed;
 }
 
 export function hasLinkedAudioCompanion(items: TimelineItem[], anchor: TimelineItem): boolean {

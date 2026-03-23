@@ -3,6 +3,8 @@ import type { Transition } from '@/types/transition';
 
 const FRAME_EPSILON = 1;
 
+type TransitionWindowMode = 'cut-centered' | 'legacy-overlap';
+
 interface TransitionPortions {
   leftPortion: number;
   rightPortion: number;
@@ -27,6 +29,15 @@ interface MutableResolvedTransition<T extends TimelineItem> {
   cutPoint: number;
   leftPortion: number;
   rightPortion: number;
+  mode: TransitionWindowMode;
+}
+
+function areFramesAligned(leftEnd: number, rightStart: number): boolean {
+  return Math.abs(leftEnd - rightStart) <= FRAME_EPSILON;
+}
+
+function areFramesOverlapping(leftEnd: number, rightStart: number): boolean {
+  return rightStart < leftEnd - FRAME_EPSILON;
 }
 
 function clampTransitionAlignment(alignment: number | undefined): number {
@@ -109,26 +120,40 @@ export function resolveTransitionWindows<T extends TimelineItem>(
     const rightClip = clipsById.get(transition.rightClipId);
     if (!leftClip || !rightClip) continue;
 
-    // Overlap model: right clip starts BEFORE left clip ends
     const leftEnd = leftClip.from + leftClip.durationInFrames;
-    const overlapStart = rightClip.from;
-    const overlapEnd = leftEnd;
+    if (areFramesAligned(leftEnd, rightClip.from)) {
+      const cutPoint = rightClip.from;
+      const portions = calculateTransitionPortions(
+        transition.durationInFrames,
+        transition.alignment,
+      );
 
-    // No overlap means no active transition
-    if (overlapEnd <= overlapStart + FRAME_EPSILON) continue;
+      resolvedByTransitionId.set(transition.id, {
+        transition,
+        leftClip,
+        rightClip,
+        cutPoint,
+        leftPortion: portions.leftPortion,
+        rightPortion: portions.rightPortion,
+        mode: 'cut-centered',
+      });
 
-    const durationInFrames = overlapEnd - overlapStart;
-    // cutPoint is where the left clip ends (the original cut position before overlap)
-    const cutPoint = overlapEnd;
+      outgoingTransitionByClipId.set(leftClip.id, transition.id);
+      incomingTransitionByClipId.set(rightClip.id, transition.id);
+      continue;
+    }
 
+    if (!areFramesOverlapping(leftEnd, rightClip.from)) continue;
+
+    const overlapDuration = leftEnd - rightClip.from;
     resolvedByTransitionId.set(transition.id, {
       transition,
       leftClip,
       rightClip,
-      cutPoint,
-      // Entire overlap is within both clips
-      leftPortion: durationInFrames,
-      rightPortion: durationInFrames,
+      cutPoint: leftEnd,
+      leftPortion: overlapDuration,
+      rightPortion: overlapDuration,
+      mode: 'legacy-overlap',
     });
 
     outgoingTransitionByClipId.set(leftClip.id, transition.id);
@@ -161,9 +186,12 @@ export function resolveTransitionWindows<T extends TimelineItem>(
     const rightClip = resolved.rightClip;
     const leftEnd = leftClip.from + leftClip.durationInFrames;
 
-    // In overlap model, the window is the overlap region
-    const startFrame = rightClip.from;
-    const endFrame = leftEnd;
+    const startFrame = resolved.mode === 'cut-centered'
+      ? resolved.cutPoint - Math.max(0, resolved.leftPortion)
+      : rightClip.from;
+    const endFrame = resolved.mode === 'cut-centered'
+      ? resolved.cutPoint + Math.max(0, resolved.rightPortion)
+      : leftEnd;
     const durationInFrames = Math.max(1, endFrame - startFrame);
 
     windows.push({
@@ -185,4 +213,3 @@ export function resolveTransitionWindows<T extends TimelineItem>(
     return a.transition.id.localeCompare(b.transition.id);
   });
 }
-

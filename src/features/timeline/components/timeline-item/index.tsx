@@ -14,6 +14,11 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
+import {
+  TRANSITION_DRAG_MIME,
+  useTransitionDragStore,
+  type DraggedTransitionDescriptor,
+} from '@/shared/state/transition-drag';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
@@ -22,8 +27,10 @@ import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
+import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
+import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
 import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { ClipContent } from './clip-content';
@@ -56,6 +63,7 @@ import {
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry';
 import type { MediaTranscriptModel } from '@/types/storage';
 import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
@@ -72,6 +80,25 @@ const EDGE_HOVER_ZONE = 8;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
+
+function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
+  const cached = useTransitionDragStore.getState().draggedTransition;
+  if (cached) return cached;
+
+  const raw = event.dataTransfer.getData(TRANSITION_DRAG_MIME);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<DraggedTransitionDescriptor>;
+    if (typeof parsed.presentation !== 'string') return null;
+    return {
+      presentation: parsed.presentation,
+      direction: parsed.direction,
+    };
+  } catch {
+    return null;
+  }
+}
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -423,7 +450,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const previewOverlapRight = useTransitionResizePreviewStore(
     useCallback((s) => {
       if (s.leftClipId !== item.id) return 0;
-      return Math.ceil(s.previewDuration / 2);
+      return calculateTransitionPortions(s.previewDuration, s.alignment).leftPortion;
     }, [item.id])
   );
 
@@ -431,19 +458,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const previewOverlapLeft = useTransitionResizePreviewStore(
     useCallback((s) => {
       if (s.rightClipId !== item.id) return 0;
-      return Math.floor(s.previewDuration / 2);
+      return calculateTransitionPortions(s.previewDuration, s.alignment).rightPortion;
     }, [item.id])
   );
 
-  // Only changes for right clip + items after it on same track
-  const rippleOffsetFrames = useTransitionResizePreviewStore(
+  const draggedTransition = useTransitionDragStore((s) => s.draggedTransition);
+  const transitionDragPreview = useTransitionDragStore(
     useCallback((s) => {
-      if (!s.transitionId || s.trackId !== item.trackId) return 0;
-      const delta = s.committedDuration - s.previewDuration;
-      if (delta === 0) return 0;
-      if (item.id === s.rightClipId || item.from > s.rightClipFrom) return delta;
-      return 0;
-    }, [item.id, item.trackId, item.from])
+      if (!s.preview || s.preview.existingTransitionId) return null;
+      return s.preview.leftClipId === item.id ? s.preview : null;
+    }, [item.id])
+  );
+  const transitionDragPreviewRightClip = useItemsStore(
+    useCallback((s) => {
+      if (!transitionDragPreview) return null;
+      return s.itemById[transitionDragPreview.rightClipId] ?? null;
+    }, [transitionDragPreview])
   );
 
   // Rolling edit preview: this item is the neighbor being inversely adjusted
@@ -548,6 +578,33 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Merge preview + committed overlap for the left edge (this clip is RIGHT in a transition)
   const overlapLeft = previewOverlapLeft > 0 ? previewOverlapLeft : committedOverlapLeft;
 
+  const transitionDropGhost = useMemo(() => {
+    if (!transitionDragPreview || !transitionDragPreviewRightClip) return null;
+
+    const bridge = getTransitionBridgeBounds(
+      item.from,
+      item.durationInFrames,
+      transitionDragPreviewRightClip.from,
+      transitionDragPreview.durationInFrames,
+      transitionDragPreview.alignment,
+    );
+    const leftPx = Math.round(frameToPixels(bridge.leftFrame));
+    const rightPx = Math.round(frameToPixels(bridge.rightFrame));
+    const naturalWidth = rightPx - leftPx;
+    const minWidth = 32;
+
+    return {
+      left: naturalWidth >= minWidth ? leftPx : leftPx - (minWidth - naturalWidth) / 2,
+      width: Math.max(naturalWidth, minWidth),
+    };
+  }, [
+    frameToPixels,
+    item.durationInFrames,
+    item.from,
+    transitionDragPreview,
+    transitionDragPreviewRightClip,
+  ]);
+
   // Calculate position and width (convert frames to seconds, then to pixels)
   // Display width hides overlap from both edges so the visual junction is centered.
   // Fold overlap + ripple + slide into the frame value BEFORE rounding so both clip edges
@@ -563,8 +620,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     (slideNeighborSide === 'left' ? slideNeighborDelta : 0)
     + (slideNeighborSide === 'right' ? -slideNeighborDelta : 0);
 
-  const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleOffsetFrames + rippleEditOffset) / fps));
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleOffsetFrames + rippleEditOffset) / fps));
+  const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleEditOffset) / fps));
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleEditOffset) / fps));
   const width = right - left;
   // Pixel offset for inner content shift (filmstrip alignment) â€” independent rounding is fine
   // here since it only affects content within this clip, not cross-clip alignment.
@@ -1787,6 +1844,71 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [item.id]);
 
+  const handleTransitionCutDragOver = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
+    const dragDescriptor = readDraggedTransitionDescriptor(e);
+    if (!dragDescriptor || trackLocked || !draggedTransition) return;
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: item.id,
+      edge,
+      items: useItemsStore.getState().items,
+      transitions: useTransitionsStore.getState().transitions,
+    });
+
+    if (!target || target.hasExisting || !target.canApply) {
+      useTransitionDragStore.getState().clearPreview();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    useTransitionDragStore.getState().setPreview({
+      leftClipId: target.leftClipId,
+      rightClipId: target.rightClipId,
+      durationInFrames: target.suggestedDurationInFrames,
+      alignment: target.alignment,
+    });
+  }, [draggedTransition, item.id, trackLocked]);
+
+  const handleTransitionCutDragLeave = useCallback(() => {
+    const preview = useTransitionDragStore.getState().preview;
+    if (!preview || preview.existingTransitionId) return;
+    if (preview.leftClipId === item.id || preview.rightClipId === item.id) {
+      useTransitionDragStore.getState().clearPreview();
+    }
+  }, [item.id]);
+
+  const handleTransitionCutDrop = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
+    const dragDescriptor = readDraggedTransitionDescriptor(e);
+    if (!dragDescriptor || trackLocked) return;
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: item.id,
+      edge,
+      items: useItemsStore.getState().items,
+      transitions: useTransitionsStore.getState().transitions,
+    });
+
+    if (!target || target.hasExisting || !target.canApply) {
+      useTransitionDragStore.getState().clearDrag();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    useTimelineStore.getState().addTransition(
+      target.leftClipId,
+      target.rightClipId,
+      'crossfade',
+      target.suggestedDurationInFrames,
+      dragDescriptor.presentation,
+      dragDescriptor.direction,
+    );
+    useTransitionDragStore.getState().clearDrag();
+  }, [item.id, trackLocked]);
+
   return (
     <>
       <ItemContextMenu
@@ -2021,8 +2143,38 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             isStretching={isStretching}
             isBeingDragged={isBeingDragged}
           />
+
+          {draggedTransition && !trackLocked && (item.type === 'video' || item.type === 'image') && (
+            <>
+              <div
+                className="absolute inset-y-0 -left-2 z-40 w-4"
+                onDragOver={handleTransitionCutDragOver('left')}
+                onDragLeave={handleTransitionCutDragLeave}
+                onDrop={handleTransitionCutDrop('left')}
+              />
+              <div
+                className="absolute inset-y-0 -right-2 z-40 w-4"
+                onDragOver={handleTransitionCutDragOver('right')}
+                onDragLeave={handleTransitionCutDragLeave}
+                onDrop={handleTransitionCutDrop('right')}
+              />
+            </>
+          )}
         </div>
       </ItemContextMenu>
+
+      {transitionDropGhost && (
+        <div
+          className="absolute inset-y-0 pointer-events-none rounded-sm border border-amber-300/70"
+          style={{
+            left: `${transitionDropGhost.left}px`,
+            width: `${transitionDropGhost.width}px`,
+            zIndex: 35,
+            background: 'linear-gradient(90deg, rgba(251,191,36,0.18), rgba(251,191,36,0.34), rgba(251,191,36,0.18))',
+            boxShadow: '0 0 0 1px rgba(251,191,36,0.12) inset',
+          }}
+        />
+      )}
 
       {/* Transition resize ghost overlays â€” show overlap zones during resize */}
       {previewOverlapRight > 0 && (

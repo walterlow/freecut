@@ -18,7 +18,11 @@ import type {
   TransitionBreakageReason,
   TransitionRepairResult,
 } from '@/types/transition';
-import { areFramesOverlapping } from './transition-utils';
+import {
+  areFramesAligned,
+  areFramesOverlapping,
+  getMaxTransitionDurationForHandles,
+} from './transition-utils';
 
 /** Clip types that can have transitions */
 const VALID_TRANSITION_TYPES = new Set(['video', 'image']);
@@ -133,15 +137,17 @@ function tryRepairTransition(
     };
   }
 
-  // Check overlap (overlap model: right clip starts before left clip ends)
+  // Check cut relationship (adjacent in current model, overlapping for legacy compatibility)
   const leftEnd = leftClip.from + leftClip.durationInFrames;
-  if (!areFramesOverlapping(leftEnd, rightClip.from)) {
+  const isAdjacent = areFramesAligned(leftEnd, rightClip.from);
+  const isOverlapping = areFramesOverlapping(leftEnd, rightClip.from);
+  if (!isAdjacent && !isOverlapping) {
     return {
       status: 'broken',
       breakage: createBreakage(
         transition,
-        'not_overlapping',
-        'Transition removed: clips are no longer overlapping',
+        'not_adjacent',
+        'Transition removed: clips no longer meet at the cut',
         [transition.leftClipId, transition.rightClipId]
       ),
     };
@@ -160,8 +166,32 @@ function tryRepairTransition(
     };
   }
 
-  // Strategy 1: Adjust duration if overlap shrunk due to trim
-  // In overlap model, the actual overlap is the transition duration
+  if (isAdjacent) {
+    const maxDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, transition.alignment);
+    if (maxDuration <= 0) {
+      return {
+        status: 'broken',
+        breakage: createBreakage(
+          transition,
+          'insufficient_handle',
+          'Transition removed: clips do not have enough handle for any duration',
+          [transition.leftClipId, transition.rightClipId],
+        ),
+      };
+    }
+
+    if (transition.durationInFrames > maxDuration) {
+      return {
+        status: 'repaired',
+        repaired: { ...transition, durationInFrames: maxDuration },
+        action: `Duration adjusted from ${transition.durationInFrames} to ${maxDuration} frames (handle limited)`,
+      };
+    }
+
+    return { status: 'valid' };
+  }
+
+  // Legacy overlap model compatibility
   const actualOverlap = leftEnd - rightClip.from;
   if (actualOverlap < transition.durationInFrames) {
     const newDuration = Math.max(2, Math.floor(actualOverlap));
@@ -169,7 +199,7 @@ function tryRepairTransition(
       return {
         status: 'repaired',
         repaired: { ...transition, durationInFrames: newDuration },
-        action: `Duration adjusted from ${transition.durationInFrames} to ${newDuration} frames (overlap shrunk)`,
+        action: `Duration adjusted from ${transition.durationInFrames} to ${newDuration} frames (legacy overlap shrunk)`,
       };
     }
 
@@ -178,7 +208,7 @@ function tryRepairTransition(
       breakage: createBreakage(
         transition,
         'invalid_duration',
-        'Transition removed: overlap too small for any transition duration',
+        'Transition removed: legacy overlap too small for any transition duration',
         [transition.leftClipId, transition.rightClipId]
       ),
     };
@@ -238,17 +268,21 @@ function tryReassignClip(
     // Need a clip that overlaps with the existing right clip (its end > right clip's start)
     candidate = trackClips[existingIndex - 1];
     if (candidate) {
-      const candidateEnd = candidate.from + candidate.durationInFrames;
-      if (!areFramesOverlapping(candidateEnd, existingClip.from)) candidate = undefined;
+        const candidateEnd = candidate.from + candidate.durationInFrames;
+        if (!areFramesAligned(candidateEnd, existingClip.from) && !areFramesOverlapping(candidateEnd, existingClip.from)) {
+          candidate = undefined;
+        }
+      }
+    } else {
+      // Need a clip that overlaps with the existing left clip (starts before left clip's end)
+      candidate = trackClips[existingIndex + 1];
+      if (candidate) {
+        const existingEnd = existingClip.from + existingClip.durationInFrames;
+        if (!areFramesAligned(existingEnd, candidate.from) && !areFramesOverlapping(existingEnd, candidate.from)) {
+          candidate = undefined;
+        }
+      }
     }
-  } else {
-    // Need a clip that overlaps with the existing left clip (starts before left clip's end)
-    candidate = trackClips[existingIndex + 1];
-    if (candidate) {
-      const existingEnd = existingClip.from + existingClip.durationInFrames;
-      if (!areFramesOverlapping(existingEnd, candidate.from)) candidate = undefined;
-    }
-  }
 
   if (!candidate || !VALID_TRANSITION_TYPES.has(candidate.type)) return null;
 

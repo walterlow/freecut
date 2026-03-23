@@ -33,7 +33,10 @@ import {
   materializeMaskInfos,
   reuseStableMaskInfos,
 } from '../utils/mask-info';
-import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
+import {
+  getManagedLinkedAudioTransitions,
+  hasLinkedAudioCompanion,
+} from '@/shared/utils/linked-media';
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
@@ -145,12 +148,52 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   // Use ALL tracks for stable DOM structure, with trackVisible for conditional playback
   const audioItems: EnrichedAudioItem[] = renderPlan.audioItems;
 
+  const managedLinkedAudioTransitions = useMemo(
+    () => getManagedLinkedAudioTransitions(tracks.flatMap((track) => track.items), transitions),
+    [tracks, transitions],
+  );
+  const managedLinkedAudioIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const managed of managedLinkedAudioTransitions) {
+      ids.add(managed.leftAudio.id);
+      ids.add(managed.rightAudio.id);
+    }
+    return ids;
+  }, [managedLinkedAudioTransitions]);
+  const managedLinkedAudioItems = useMemo(
+    () => audioItems.filter((item) => managedLinkedAudioIds.has(item.id)),
+    [audioItems, managedLinkedAudioIds],
+  );
+  const standaloneAudioItems = useMemo(
+    () => audioItems.filter((item) => !managedLinkedAudioIds.has(item.id)),
+    [audioItems, managedLinkedAudioIds],
+  );
+  const managedLinkedAudioItemsById = useMemo(
+    () => new Map(managedLinkedAudioItems.map((item) => [item.id, item])),
+    [managedLinkedAudioItems],
+  );
+  const managedLinkedAudioTransitionDefs = useMemo(
+    () => managedLinkedAudioTransitions.flatMap(({ transition, leftAudio, rightAudio }) => {
+      const left = managedLinkedAudioItemsById.get(leftAudio.id);
+      const right = managedLinkedAudioItemsById.get(rightAudio.id);
+      if (!left || !right) return [];
+
+      return [{
+        ...transition,
+        leftClipId: left.id,
+        rightClipId: right.id,
+        trackId: left.trackId,
+      }];
+    }),
+    [managedLinkedAudioItemsById, managedLinkedAudioTransitions],
+  );
+
   // Merge continuous split audio clips into single segments to prevent
   // audio element remount (click/gap) at split boundaries.
   // Mirrors the videoAudioSegments merging pattern.
   const audioSegments = useMemo(
-    () => buildStandaloneAudioSegments(audioItems, fps),
-    [audioItems, fps]
+    () => buildStandaloneAudioSegments(standaloneAudioItems, fps),
+    [standaloneAudioItems, fps]
   );
 
   // Video audio is rendered in a dedicated audio layer to decouple audio
@@ -166,6 +209,14 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   const videoAudioSegments = useMemo(
     () => buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
     [videoAudioItems, transitions, fps]
+  );
+  const linkedAudioTransitionSegments = useMemo(
+    () => buildTransitionVideoAudioSegments(managedLinkedAudioItems, managedLinkedAudioTransitionDefs, fps),
+    [managedLinkedAudioItems, managedLinkedAudioTransitionDefs, fps],
+  );
+  const transitionAudioSegments = useMemo(
+    () => [...videoAudioSegments, ...linkedAudioTransitionSegments],
+    [videoAudioSegments, linkedAudioTransitionSegments],
   );
 
   // Look up which video audio segments need custom decoding (AC-3/E-AC-3)
@@ -266,7 +317,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
           {/* Video audio is decoupled from visual video elements for transition stability */}
           {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
-          {videoAudioSegments.map((segment) => {
+          {transitionAudioSegments.map((segment) => {
             const useCustomDecoder = shouldUseCustomDecoder(segment);
             const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
             return (

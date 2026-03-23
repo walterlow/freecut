@@ -6,6 +6,7 @@
 export {
   findNearestAvailableSpace,
   areFramesAligned,
+  resolveTransitionTargetFromSelection,
   timelineToSourceFrames,
   sourceToTimelineFrames,
 } from './timeline-contract';

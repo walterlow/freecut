@@ -8,6 +8,7 @@
 import type { CompositionInputProps } from '@/types/export';
 import type { VideoItem, AudioItem, CompositionItem } from '@/types/timeline';
 import type { Keyframe as VolumeKeyframe } from '@/types/keyframe';
+import type { Transition } from '@/types/transition';
 import { createLogger } from '@/shared/logging/logger';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import {
@@ -22,7 +23,7 @@ import {
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
-import { getLinkedVideoIdsWithAudio } from '@/shared/utils/linked-media';
+import { getLinkedVideoIdsWithAudio, getManagedLinkedAudioTransitions } from '@/shared/utils/linked-media';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 
 const log = createLogger('CanvasAudio');
@@ -72,6 +73,280 @@ interface AudioSegment {
   itemFrom: number;                     // Item's timeline start frame (for keyframe offset)
 }
 
+type TransitionAudioItem = VideoItem | AudioItem;
+
+interface TransitionAudioEntry<TItem extends TransitionAudioItem> {
+  item: TItem;
+  trackId: string;
+  muted: boolean;
+  trackVolume: number;
+  type: 'video' | 'audio';
+  audioCodec?: string;
+  volumeKeyframes?: VolumeKeyframe[];
+  itemFrom: number;
+}
+
+function getTransitionAudioTrimBefore(item: TransitionAudioItem): number {
+  return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
+}
+
+function hasExplicitTransitionAudioTrimStart(item: TransitionAudioItem): boolean {
+  return item.sourceStart !== undefined || item.trimStart !== undefined || item.offset !== undefined;
+}
+
+function isContinuousAudioTransition(
+  left: TransitionAudioItem,
+  right: TransitionAudioItem,
+  fps: number,
+): boolean {
+  const leftSpeed = left.speed ?? 1;
+  const rightSpeed = right.speed ?? 1;
+  const leftSourceFps = left.sourceFps ?? fps;
+  if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
+
+  const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
+    || (!!left.src && !!right.src && left.src === right.src);
+  if (!sameMedia) return false;
+
+  if (left.originId && right.originId && left.originId !== right.originId) return false;
+
+  const expectedRightFrom = left.from + left.durationInFrames;
+  if (Math.abs(right.from - expectedRightFrom) > 2) return false;
+
+  const leftTrim = getTransitionAudioTrimBefore(left);
+  const rightTrim = getTransitionAudioTrimBefore(right);
+  const computedLeftSourceEnd = leftTrim + timelineToSourceFrames(
+    left.durationInFrames,
+    leftSpeed,
+    fps,
+    leftSourceFps,
+  );
+  const storedLeftSourceEnd = left.sourceEnd;
+  const computedContinuous = Math.abs(rightTrim - computedLeftSourceEnd) <= 2;
+  const storedContinuous = storedLeftSourceEnd !== undefined
+    ? Math.abs(rightTrim - storedLeftSourceEnd) <= 2
+    : false;
+
+  if (computedContinuous || storedContinuous) return true;
+
+  return !hasExplicitTransitionAudioTrimStart(right);
+}
+
+function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
+  entriesById: Map<string, TransitionAudioEntry<TItem>>,
+  transitions: Transition[],
+  fps: number,
+): AudioSegment[] {
+  if (entriesById.size === 0 || transitions.length === 0) return [];
+
+  const extensionByClipId = new Map<string, { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number }>();
+  const ensureExtension = (clipId: string): { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number } => {
+    const existing = extensionByClipId.get(clipId);
+    if (existing) return existing;
+    const created = { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
+    extensionByClipId.set(clipId, created);
+    return created;
+  };
+
+  const clipsById = new Map<string, TItem>();
+  for (const [id, entry] of entriesById) {
+    clipsById.set(id, entry.item);
+  }
+
+  const resolvedWindows = resolveTransitionWindows(transitions, clipsById);
+  for (const window of resolvedWindows) {
+    const leftEntry = entriesById.get(window.transition.leftClipId);
+    const rightEntry = entriesById.get(window.transition.rightClipId);
+    if (!leftEntry || !rightEntry) continue;
+
+    const left = leftEntry.item;
+    const right = rightEntry.item;
+    if (isContinuousAudioTransition(left, right, fps)) continue;
+
+    const rightPreRoll = Math.max(0, right.from - window.startFrame);
+    const leftPostRoll = Math.max(0, window.endFrame - (left.from + left.durationInFrames));
+
+    if (rightPreRoll > 0) {
+      const rightExt = ensureExtension(right.id);
+      rightExt.before = Math.max(rightExt.before, rightPreRoll);
+    }
+
+    if (leftPostRoll > 0) {
+      const leftExt = ensureExtension(left.id);
+      leftExt.after = Math.max(leftExt.after, leftPostRoll);
+    }
+
+    if (window.durationInFrames > 0) {
+      const leftExt = ensureExtension(left.id);
+      leftExt.overlapFadeOut = Math.max(leftExt.overlapFadeOut, window.durationInFrames);
+      const rightExt = ensureExtension(right.id);
+      rightExt.overlapFadeIn = Math.max(rightExt.overlapFadeIn, window.durationInFrames);
+    }
+  }
+
+  const resolvedTrimBeforeById = new Map<string, number>();
+  const sortedByTrackAndTime = Array.from(entriesById.entries()).map(([id, entry]) => ({
+    id,
+    trackId: entry.trackId,
+    item: entry.item,
+  })).toSorted((a, b) => {
+    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
+    if (a.item.from !== b.item.from) return a.item.from - b.item.from;
+    return a.id.localeCompare(b.id);
+  });
+
+  const previousByTrack = new Map<string, TItem>();
+  for (const entry of sortedByTrackAndTime) {
+    const clip = entry.item;
+    const explicitTrimBefore = getTransitionAudioTrimBefore(clip);
+    let resolvedTrimBefore = explicitTrimBefore;
+
+    if (!hasExplicitTransitionAudioTrimStart(clip)) {
+      const previous = previousByTrack.get(entry.trackId);
+      if (previous && isContinuousAudioTransition(previous, clip, fps)) {
+        const previousTrimBefore = resolvedTrimBeforeById.get(previous.id) ?? getTransitionAudioTrimBefore(previous);
+        resolvedTrimBefore = previousTrimBefore + timelineToSourceFrames(
+          previous.durationInFrames,
+          previous.speed ?? 1,
+          fps,
+          previous.sourceFps ?? fps,
+        );
+      }
+    }
+
+    resolvedTrimBeforeById.set(clip.id, resolvedTrimBefore);
+    previousByTrack.set(entry.trackId, clip);
+  }
+
+  type ExpandedTransitionAudioSegment = AudioSegment & {
+    clip: TransitionAudioItem;
+    beforeFrames: number;
+    afterFrames: number;
+  };
+
+  const expandedSegments: ExpandedTransitionAudioSegment[] = [];
+  for (const [, entry] of entriesById) {
+    const item = entry.item;
+    const speed = item.speed ?? 1;
+    const sourceFps = item.sourceFps ?? fps;
+    const baseTrimBefore = resolvedTrimBeforeById.get(item.id) ?? getTransitionAudioTrimBefore(item);
+    const extension = extensionByClipId.get(item.id) ?? { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
+    const maxBeforeBySource = speed > 0
+      ? sourceToTimelineFrames(baseTrimBefore, speed, sourceFps, fps)
+      : 0;
+    const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
+    const after = Math.max(0, extension.after);
+    const hasOverlapFade = extension.overlapFadeOut > 0 || extension.overlapFadeIn > 0;
+    const fadeIn = extension.overlapFadeIn > 0
+      ? extension.overlapFadeIn
+      : (before > 0 ? before : ((item.audioFadeIn ?? 0) * fps));
+    const fadeOut = extension.overlapFadeOut > 0
+      ? extension.overlapFadeOut
+      : (after > 0 ? after : ((item.audioFadeOut ?? 0) * fps));
+
+    expandedSegments.push({
+      itemId: item.id,
+      trackId: entry.trackId,
+      clip: item,
+      src: item.src,
+      startFrame: item.from - before,
+      durationFrames: item.durationInFrames + before + after,
+      sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
+      sourceFps,
+      volume: (item.volume ?? 0) + entry.trackVolume,
+      fadeInFrames: fadeIn,
+      fadeOutFrames: fadeOut,
+      fadeInCurve: item.audioFadeInCurve ?? 0,
+      fadeOutCurve: item.audioFadeOutCurve ?? 0,
+      fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
+      fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+      useEqualPowerFades: before > 0 || after > 0 || hasOverlapFade,
+      speed,
+      muted: entry.muted,
+      type: entry.type,
+      audioCodec: entry.audioCodec,
+      beforeFrames: before,
+      afterFrames: after,
+      volumeKeyframes: entry.volumeKeyframes,
+      itemFrom: entry.itemFrom,
+    });
+  }
+
+  const sortedSegments = expandedSegments.toSorted((a, b) => {
+    if (a.startFrame !== b.startFrame) return a.startFrame - b.startFrame;
+    return a.itemId.localeCompare(b.itemId);
+  });
+
+  const mergedSegments: AudioSegment[] = [];
+  let active: ExpandedTransitionAudioSegment | null = null;
+
+  const canMergeContinuousBoundary = (
+    left: ExpandedTransitionAudioSegment,
+    right: ExpandedTransitionAudioSegment,
+  ): boolean => {
+    if (!isContinuousAudioTransition(left.clip, right.clip, fps)) return false;
+    if (left.src !== right.src) return false;
+    if (Math.abs(left.speed - right.speed) > 0.0001) return false;
+    if (Math.abs(left.volume - right.volume) > 0.0001) return false;
+    if (left.muted !== right.muted) return false;
+    if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false;
+    if (left.volumeKeyframes || right.volumeKeyframes) return false;
+    return true;
+  };
+
+  const toAudioSegment = (segment: ExpandedTransitionAudioSegment): AudioSegment => ({
+    itemId: segment.itemId,
+    trackId: segment.trackId,
+    src: segment.src,
+    startFrame: segment.startFrame,
+    durationFrames: segment.durationFrames,
+    sourceStartFrame: segment.sourceStartFrame,
+    sourceFps: segment.sourceFps,
+    volume: segment.volume,
+    fadeInFrames: segment.fadeInFrames,
+    fadeOutFrames: segment.fadeOutFrames,
+    fadeInCurve: segment.fadeInCurve,
+    fadeOutCurve: segment.fadeOutCurve,
+    fadeInCurveX: segment.fadeInCurveX,
+    fadeOutCurveX: segment.fadeOutCurveX,
+    useEqualPowerFades: segment.useEqualPowerFades,
+    speed: segment.speed,
+    muted: segment.muted,
+    type: segment.type,
+    audioCodec: segment.audioCodec,
+    volumeKeyframes: segment.volumeKeyframes,
+    itemFrom: segment.itemFrom,
+  });
+
+  for (const segment of sortedSegments) {
+    if (!active) {
+      active = { ...segment };
+      continue;
+    }
+
+    if (canMergeContinuousBoundary(active, segment)) {
+      const mergedEnd = segment.startFrame + segment.durationFrames;
+      active.durationFrames = mergedEnd - active.startFrame;
+      active.fadeOutFrames = segment.fadeOutFrames;
+      active.fadeOutCurve = segment.fadeOutCurve;
+      active.fadeOutCurveX = segment.fadeOutCurveX;
+      active.useEqualPowerFades = segment.useEqualPowerFades;
+      active.clip = segment.clip;
+      active.afterFrames = segment.afterFrames;
+      continue;
+    }
+
+    mergedSegments.push(toAudioSegment(active));
+    active = { ...segment };
+  }
+
+  if (active) {
+    mergedSegments.push(toAudioSegment(active));
+  }
+
+  return mergedSegments;
+}
+
 /**
  * Decoded audio data
  */
@@ -103,60 +378,24 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
   const { tracks = [], transitions = [] } = composition;
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
-  const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean; trackVolume: number }>();
-  const extensionByClipId = new Map<string, { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number }>();
-  const linkedRootVideoIds = getLinkedVideoIdsWithAudio(tracks.flatMap((track) => track.items));
-
-  const ensureExtension = (clipId: string): { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number } => {
-    const existing = extensionByClipId.get(clipId);
-    if (existing) return existing;
-    const created = { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
-    extensionByClipId.set(clipId, created);
-    return created;
-  };
-
-  const getVideoTrimBefore = (item: VideoItem): number => {
-    return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
-  };
-
-  const hasExplicitTrimStart = (item: VideoItem): boolean => {
-    return item.sourceStart !== undefined || item.trimStart !== undefined || item.offset !== undefined;
-  };
-
-  const isContinuousAudioTransition = (left: VideoItem, right: VideoItem): boolean => {
-    const leftSpeed = left.speed ?? 1;
-    const rightSpeed = right.speed ?? 1;
-    const leftSourceFps = left.sourceFps ?? fps;
-    if (Math.abs(leftSpeed - rightSpeed) > 0.0001) return false;
-
-    const sameMedia = (left.mediaId && right.mediaId && left.mediaId === right.mediaId)
-      || (!!left.src && !!right.src && left.src === right.src);
-    if (!sameMedia) return false;
-
-    if (left.originId && right.originId && left.originId !== right.originId) return false;
-
-    const expectedRightFrom = left.from + left.durationInFrames;
-    if (Math.abs(right.from - expectedRightFrom) > 2) return false;
-
-    const leftTrim = getVideoTrimBefore(left);
-    const rightTrim = getVideoTrimBefore(right);
-    const computedLeftSourceEnd = leftTrim + timelineToSourceFrames(
-      left.durationInFrames,
-      leftSpeed,
-      fps,
-      leftSourceFps,
-    );
-    const storedLeftSourceEnd = left.sourceEnd;
-    const computedContinuous = Math.abs(rightTrim - computedLeftSourceEnd) <= 2;
-    const storedContinuous = storedLeftSourceEnd !== undefined
-      ? Math.abs(rightTrim - storedLeftSourceEnd) <= 2
-      : false;
-
-    if (computedContinuous || storedContinuous) return true;
-
-    const rightMissingTrimStart = !hasExplicitTrimStart(right);
-    return rightMissingTrimStart;
-  };
+  const videoById = new Map<string, TransitionAudioEntry<VideoItem>>();
+  const managedLinkedAudioById = new Map<string, TransitionAudioEntry<AudioItem>>();
+  const timelineItems = tracks.flatMap((track) => track.items);
+  const linkedRootVideoIds = getLinkedVideoIdsWithAudio(timelineItems);
+  const managedLinkedAudioTransitions = getManagedLinkedAudioTransitions(timelineItems, transitions);
+  const managedLinkedAudioIds = new Set<string>();
+  for (const managed of managedLinkedAudioTransitions) {
+    managedLinkedAudioIds.add(managed.leftAudio.id);
+    managedLinkedAudioIds.add(managed.rightAudio.id);
+  }
+  const managedLinkedAudioTransitionDefs: Transition[] = managedLinkedAudioTransitions.map(
+    ({ transition, leftAudio, rightAudio }) => ({
+      ...transition,
+      leftClipId: leftAudio.id,
+      rightClipId: rightAudio.id,
+      trackId: leftAudio.trackId,
+    }),
+  );
 
   for (const track of tracks) {
     if (track.visible === false) continue;
@@ -171,6 +410,14 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           trackId: track.id,
           muted: track.muted ?? false,
           trackVolume: track.volume ?? 0,
+          type: 'video',
+          audioCodec: getMediaAudioCodecById(videoItem.mediaId),
+          volumeKeyframes: (() => {
+            const videoItemKeyframes = composition.keyframes?.find((k) => k.itemId === item.id);
+            const videoVolumeKfs = getPropertyKeyframes(videoItemKeyframes, 'volume');
+            return videoVolumeKfs.length > 0 ? videoVolumeKfs : undefined;
+          })(),
+          itemFrom: videoItem.from,
         });
       } else if (item.type === 'audio') {
         const audioItem = item as AudioItem;
@@ -180,6 +427,22 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
         // This ensures split audio clips and IO markers work correctly
         const audioItemKeyframes = composition.keyframes?.find((k) => k.itemId === item.id);
         const audioVolumeKfs = getPropertyKeyframes(audioItemKeyframes, 'volume');
+        const audioEntry: TransitionAudioEntry<AudioItem> = {
+          item: audioItem,
+          trackId: track.id,
+          muted: track.muted ?? false,
+          trackVolume: track.volume ?? 0,
+          type: 'audio',
+          audioCodec: getMediaAudioCodecById(item.mediaId),
+          volumeKeyframes: audioVolumeKfs.length > 0 ? audioVolumeKfs : undefined,
+          itemFrom: item.from,
+        };
+
+        if (managedLinkedAudioIds.has(item.id)) {
+          managedLinkedAudioById.set(item.id, audioEntry);
+          continue;
+        }
+
         audioOnlySegments.push({
           itemId: item.id,
           trackId: track.id,
@@ -188,7 +451,7 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           durationFrames: item.durationInFrames,
           sourceStartFrame: audioItem.sourceStart ?? item.trimStart ?? 0,
           sourceFps: audioItem.sourceFps ?? fps,
-          volume: (item.volume ?? 0) + (track.volume ?? 0), // dB
+          volume: (item.volume ?? 0) + (track.volume ?? 0),
           fadeInFrames: (item.audioFadeIn ?? 0) * fps,
           fadeOutFrames: (item.audioFadeOut ?? 0) * fps,
           fadeInCurve: item.audioFadeInCurve ?? 0,
@@ -196,234 +459,25 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
           fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
           useEqualPowerFades: false,
-          speed: audioItem.speed ?? 1, // Playback speed from BaseTimelineItem
+          speed: audioItem.speed ?? 1,
           muted: track.muted ?? false,
           type: 'audio',
-          audioCodec: getMediaAudioCodecById(item.mediaId),
-          volumeKeyframes: audioVolumeKfs.length > 0 ? audioVolumeKfs : undefined,
+          audioCodec: audioEntry.audioCodec,
+          volumeKeyframes: audioEntry.volumeKeyframes,
           itemFrom: item.from,
         });
       }
     }
   }
 
-  const videoItemsById = new Map<string, VideoItem>();
-  for (const [id, entry] of videoById) {
-    videoItemsById.set(id, entry.item);
-  }
-  const resolvedWindows = resolveTransitionWindows(transitions, videoItemsById);
+  const managedVideoSegments = buildManagedTransitionAudioSegments(videoById, transitions, fps);
+  const managedLinkedAudioSegments = buildManagedTransitionAudioSegments(
+    managedLinkedAudioById,
+    managedLinkedAudioTransitionDefs,
+    fps,
+  );
 
-  for (const window of resolvedWindows) {
-    const leftEntry = videoById.get(window.transition.leftClipId);
-    const rightEntry = videoById.get(window.transition.rightClipId);
-    if (!leftEntry || !rightEntry) continue;
-
-    const left = leftEntry.item;
-    const right = rightEntry.item;
-    if (isContinuousAudioTransition(left, right)) continue;
-
-    const rightPreRoll = Math.max(0, right.from - window.startFrame);
-    const leftPostRoll = Math.max(0, window.endFrame - (left.from + left.durationInFrames));
-
-    if (rightPreRoll > 0) {
-      const rightExt = ensureExtension(right.id);
-      rightExt.before = Math.max(rightExt.before, rightPreRoll);
-    }
-
-    if (leftPostRoll > 0) {
-      const leftExt = ensureExtension(left.id);
-      leftExt.after = Math.max(leftExt.after, leftPostRoll);
-    }
-
-    // Overlap model: crossfade audio during the overlap region
-    const overlapDuration = window.durationInFrames;
-    if (overlapDuration > 0) {
-      const leftExt = ensureExtension(left.id);
-      leftExt.overlapFadeOut = Math.max(leftExt.overlapFadeOut, overlapDuration);
-      const rightExt = ensureExtension(right.id);
-      rightExt.overlapFadeIn = Math.max(rightExt.overlapFadeIn, overlapDuration);
-    }
-  }
-
-  const resolvedTrimBeforeById = new Map<string, number>();
-  const sortableVideoEntries = Array.from(videoById.entries()).map(([id, entry]) => ({
-    id,
-    trackId: entry.trackId,
-    item: entry.item,
-  }));
-  const sortedByTrackAndTime = sortableVideoEntries.toSorted((a, b) => {
-    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
-    if (a.item.from !== b.item.from) return a.item.from - b.item.from;
-    return a.id.localeCompare(b.id);
-  });
-
-  const previousByTrack = new Map<string, VideoItem>();
-  for (const entry of sortedByTrackAndTime) {
-    const clip = entry.item;
-    const explicitTrimBefore = getVideoTrimBefore(clip);
-    let resolvedTrimBefore = explicitTrimBefore;
-
-    if (!hasExplicitTrimStart(clip)) {
-      const previous = previousByTrack.get(entry.trackId);
-      if (previous) {
-        const previousSpeed = previous.speed ?? 1;
-        const clipSpeed = clip.speed ?? 1;
-        const sameSpeed = Math.abs(previousSpeed - clipSpeed) <= 0.0001;
-        const sameMedia = (previous.mediaId && clip.mediaId && previous.mediaId === clip.mediaId)
-          || (!!previous.src && !!clip.src && previous.src === clip.src);
-        const adjacent = Math.abs(clip.from - (previous.from + previous.durationInFrames)) <= 2;
-        const sameOrigin = previous.originId && clip.originId
-          ? previous.originId === clip.originId
-          : true;
-
-        if (sameSpeed && sameMedia && adjacent && sameOrigin) {
-          const previousTrimBefore = resolvedTrimBeforeById.get(previous.id) ?? getVideoTrimBefore(previous);
-          resolvedTrimBefore = previousTrimBefore + timelineToSourceFrames(
-            previous.durationInFrames,
-            previousSpeed,
-            fps,
-            previous.sourceFps ?? fps,
-          );
-        }
-      }
-    }
-
-    resolvedTrimBeforeById.set(clip.id, resolvedTrimBefore);
-    previousByTrack.set(entry.trackId, clip);
-  }
-
-  type ExpandedVideoAudioSegment = AudioSegment & {
-    clip: VideoItem;
-    beforeFrames: number;
-    afterFrames: number;
-  };
-
-  const expandedVideoSegments: ExpandedVideoAudioSegment[] = [];
-  for (const [, entry] of videoById) {
-    const videoItem = entry.item;
-    const speed = videoItem.speed ?? 1;
-    const sourceFps = videoItem.sourceFps ?? fps;
-    const baseTrimBefore = resolvedTrimBeforeById.get(videoItem.id) ?? getVideoTrimBefore(videoItem);
-    const extension = extensionByClipId.get(videoItem.id) ?? { before: 0, after: 0, overlapFadeOut: 0, overlapFadeIn: 0 };
-    const maxBeforeBySource = speed > 0
-      ? sourceToTimelineFrames(baseTrimBefore, speed, sourceFps, fps)
-      : 0;
-    const before = Math.max(0, Math.min(extension.before, maxBeforeBySource));
-    const after = Math.max(0, extension.after);
-
-    // Overlap model crossfade takes priority over old extension model and user fades
-    const hasOverlapFade = extension.overlapFadeOut > 0 || extension.overlapFadeIn > 0;
-    const fadeIn = extension.overlapFadeIn > 0
-      ? extension.overlapFadeIn
-      : (before > 0 ? before : ((videoItem.audioFadeIn ?? 0) * fps));
-    const fadeOut = extension.overlapFadeOut > 0
-      ? extension.overlapFadeOut
-      : (after > 0 ? after : ((videoItem.audioFadeOut ?? 0) * fps));
-
-    const videoItemKeyframes = composition.keyframes?.find((k) => k.itemId === videoItem.id);
-    const videoVolumeKfs = getPropertyKeyframes(videoItemKeyframes, 'volume');
-
-    expandedVideoSegments.push({
-      itemId: videoItem.id,
-      trackId: entry.trackId,
-      clip: videoItem,
-      src: videoItem.src,
-      startFrame: videoItem.from - before,
-      durationFrames: videoItem.durationInFrames + before + after,
-      sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
-      sourceFps,
-      volume: (videoItem.volume ?? 0) + entry.trackVolume,
-      fadeInFrames: fadeIn,
-      fadeOutFrames: fadeOut,
-      fadeInCurve: videoItem.audioFadeInCurve ?? 0,
-      fadeOutCurve: videoItem.audioFadeOutCurve ?? 0,
-      fadeInCurveX: videoItem.audioFadeInCurveX ?? 0.52,
-      fadeOutCurveX: videoItem.audioFadeOutCurveX ?? 0.52,
-      useEqualPowerFades: before > 0 || after > 0 || hasOverlapFade,
-      speed,
-      muted: entry.muted,
-      type: 'video',
-      audioCodec: getMediaAudioCodecById(videoItem.mediaId),
-      beforeFrames: before,
-      afterFrames: after,
-      volumeKeyframes: videoVolumeKfs.length > 0 ? videoVolumeKfs : undefined,
-      itemFrom: videoItem.from,
-    });
-  }
-
-  const sortedVideoSegments = expandedVideoSegments.toSorted((a, b) => {
-    if (a.startFrame !== b.startFrame) return a.startFrame - b.startFrame;
-    return a.itemId.localeCompare(b.itemId);
-  });
-
-  const canMergeContinuousBoundary = (
-    left: ExpandedVideoAudioSegment,
-    right: ExpandedVideoAudioSegment
-  ): boolean => {
-    if (!isContinuousAudioTransition(left.clip, right.clip)) return false;
-    if (left.src !== right.src) return false;
-    if (Math.abs(left.speed - right.speed) > 0.0001) return false;
-    if (Math.abs(left.volume - right.volume) > 0.0001) return false;
-    if (left.muted !== right.muted) return false;
-    if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false;
-    if (left.volumeKeyframes || right.volumeKeyframes) return false;
-    return true;
-  };
-
-  const mergedVideoSegments: AudioSegment[] = [];
-  let active: ExpandedVideoAudioSegment | null = null;
-
-  const toAudioSegment = (segment: ExpandedVideoAudioSegment): AudioSegment => ({
-    itemId: segment.itemId,
-    trackId: segment.trackId,
-    src: segment.src,
-    startFrame: segment.startFrame,
-    durationFrames: segment.durationFrames,
-    sourceStartFrame: segment.sourceStartFrame,
-    sourceFps: segment.sourceFps,
-    volume: segment.volume,
-    fadeInFrames: segment.fadeInFrames,
-    fadeOutFrames: segment.fadeOutFrames,
-    fadeInCurve: segment.fadeInCurve,
-    fadeOutCurve: segment.fadeOutCurve,
-    fadeInCurveX: segment.fadeInCurveX,
-    fadeOutCurveX: segment.fadeOutCurveX,
-    useEqualPowerFades: segment.useEqualPowerFades,
-    speed: segment.speed,
-    muted: segment.muted,
-    type: segment.type,
-    audioCodec: segment.audioCodec,
-    volumeKeyframes: segment.volumeKeyframes,
-    itemFrom: segment.itemFrom,
-  });
-
-  for (const segment of sortedVideoSegments) {
-    if (!active) {
-      active = { ...segment };
-      continue;
-    }
-
-    if (canMergeContinuousBoundary(active, segment)) {
-      const mergedEnd = segment.startFrame + segment.durationFrames;
-      active.durationFrames = mergedEnd - active.startFrame;
-      active.fadeOutFrames = segment.fadeOutFrames;
-      active.fadeOutCurve = segment.fadeOutCurve;
-      active.fadeOutCurveX = segment.fadeOutCurveX;
-      active.useEqualPowerFades = segment.useEqualPowerFades;
-      active.clip = segment.clip;
-      active.afterFrames = segment.afterFrames;
-      continue;
-    }
-
-    mergedVideoSegments.push(toAudioSegment(active));
-    active = { ...segment };
-  }
-
-  if (active) {
-    mergedVideoSegments.push(toAudioSegment(active));
-  }
-
-  segments.push(...mergedVideoSegments, ...audioOnlySegments);
+  segments.push(...managedVideoSegments, ...managedLinkedAudioSegments, ...audioOnlySegments);
 
   // === Extract audio from sub-compositions (pre-comps) ===
   // Composition items reference sub-comps that may contain video/audio items with audio.

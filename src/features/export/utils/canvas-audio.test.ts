@@ -138,4 +138,52 @@ describe('extractAudioSegments', () => {
     expect(segments).toHaveLength(1);
     expect(segments[0]).toMatchObject({ itemId: 'sub-audio', type: 'audio' });
   });
+
+  it('expands linked audio companions around a cut-centered transition', () => {
+    const leftVideo = makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1', trackId: 'track-v1', from: 0, durationInFrames: 30, sourceStart: 0, sourceEnd: 35, sourceDuration: 120 });
+    const leftAudio = makeAudioItem({ id: 'audio-1', linkedGroupId: 'group-1', trackId: 'track-a1', from: 0, durationInFrames: 30, sourceStart: 0, sourceEnd: 35, sourceDuration: 120 });
+    const rightVideo = makeVideoItem({ id: 'video-2', linkedGroupId: 'group-2', trackId: 'track-v1', from: 30, durationInFrames: 30, mediaId: 'media-2', src: 'blob:video-2', sourceStart: 5, sourceEnd: 35, sourceDuration: 120 });
+    const rightAudio = makeAudioItem({ id: 'audio-2', linkedGroupId: 'group-2', trackId: 'track-a1', from: 30, durationInFrames: 30, mediaId: 'media-2', src: 'blob:audio-2', sourceStart: 5, sourceEnd: 35, sourceDuration: 120 });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [{
+        id: 'transition-1',
+        type: 'crossfade',
+        leftClipId: 'video-1',
+        rightClipId: 'video-2',
+        trackId: 'track-v1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      }],
+      keyframes: [],
+    };
+
+    const segments = extractAudioSegments(composition, composition.fps);
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toMatchObject({
+      itemId: 'audio-1',
+      type: 'audio',
+      startFrame: 0,
+      durationFrames: 35,
+      fadeOutFrames: 10,
+      useEqualPowerFades: true,
+    });
+    expect(segments[1]).toMatchObject({
+      itemId: 'audio-2',
+      type: 'audio',
+      startFrame: 25,
+      durationFrames: 35,
+      fadeInFrames: 10,
+      useEqualPowerFades: true,
+    });
+  });
 });

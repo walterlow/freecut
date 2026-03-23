@@ -1,3 +1,5 @@
+import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
+
 export interface RollingPreviewLike {
   trimmedItemId: string | null;
   neighborItemId: string | null;
@@ -89,11 +91,22 @@ export function applyPreviewGeometryToClip(
 export function getTransitionBridgeBounds(
   leftClipFrom: number,
   leftClipDurationInFrames: number,
+  rightClipFrom: number,
   transitionDurationInFrames: number,
+  alignment: number | undefined = 0.5,
 ): { leftFrame: number; rightFrame: number } {
-  const rightFrame = leftClipFrom + leftClipDurationInFrames;
+  const leftEnd = leftClipFrom + leftClipDurationInFrames;
+
+  if (Math.abs(leftEnd - rightClipFrom) <= 1) {
+    const portions = calculateTransitionPortions(transitionDurationInFrames, alignment);
+    return {
+      leftFrame: leftEnd - portions.leftPortion,
+      rightFrame: rightClipFrom + portions.rightPortion,
+    };
+  }
+
   return {
-    leftFrame: rightFrame - transitionDurationInFrames,
-    rightFrame,
+    leftFrame: leftEnd - transitionDurationInFrames,
+    rightFrame: leftEnd,
   };
 }

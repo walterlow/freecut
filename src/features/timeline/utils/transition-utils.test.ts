@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { VideoItem, ImageItem } from '@/types/timeline';
 import { areFramesAligned, areFramesOverlapping, canAddTransition } from './transition-utils';
 
-function createVideoClip(id: string, from: number, durationInFrames: number, sourceStart = 0): VideoItem {
+function createVideoClip(
+  id: string,
+  from: number,
+  durationInFrames: number,
+  sourceStart = 0,
+  sourceEnd = sourceStart + durationInFrames,
+  sourceDuration = Math.max(1000, sourceEnd + 300),
+): VideoItem {
   return {
     id,
     type: 'video',
@@ -12,7 +19,8 @@ function createVideoClip(id: string, from: number, durationInFrames: number, sou
     label: id,
     src: `${id}.mp4`,
     sourceStart,
-    sourceDuration: 1000, // plenty of source
+    sourceEnd,
+    sourceDuration,
   };
 }
 
@@ -51,14 +59,13 @@ describe('transition-utils', () => {
     expect(result.canAdd).toBe(true);
   });
 
-  it('allows transition when right clip has no handle', () => {
-    // Right clip has sourceStart=0 — no handle, but transition still allowed
-    // (the first D source frames become the transition-in region)
-    const left = createVideoClip('A', 0, 100, 0);
-    const right = createVideoClip('B', 100, 100, 0);
+  it('rejects transition when adjacent clips have no spare handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 100);
+    const right = createVideoClip('B', 100, 100, 0, 100, 100);
 
     const result = canAddTransition(left, right, 30);
-    expect(result.canAdd).toBe(true);
+    expect(result.canAdd).toBe(false);
+    expect(result.reason).toContain('Insufficient handle');
   });
 
   it('allows transition for image clips (infinite handle)', () => {
@@ -70,11 +77,19 @@ describe('transition-utils', () => {
   });
 
   it('allows transition when clips already overlap', () => {
-    // Right clip already overlapping (e.g., transition already applied)
+    // Legacy overlap transitions remain valid while projects are migrated.
     const left = createVideoClip('A', 0, 100, 0);
     const right = createVideoClip('B', 70, 100, 60);
 
     const result = canAddTransition(left, right, 30);
+    expect(result.canAdd).toBe(true);
+  });
+
+  it('allows left-only transitions when alignment keeps the incoming side at the cut', () => {
+    const left = createVideoClip('A', 0, 100, 0, 140, 200);
+    const right = createVideoClip('B', 100, 100, 0, 100, 100);
+
+    const result = canAddTransition(left, right, 30, 1);
     expect(result.canAdd).toBe(true);
   });
 

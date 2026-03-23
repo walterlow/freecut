@@ -7,6 +7,11 @@ import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/shared/state/selection';
+import {
+  TRANSITION_DRAG_MIME,
+  useTransitionDragStore,
+  type DraggedTransitionDescriptor,
+} from '@/shared/state/transition-drag';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTransitionResize } from '../hooks/use-transition-resize';
 import { dragOffsetRef } from '../hooks/use-timeline-drag';
@@ -40,6 +45,25 @@ interface TransitionItemProps {
 // Width in pixels for edge hover detection (resize handles)
 const EDGE_HOVER_ZONE = 6;
 
+function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
+  const cached = useTransitionDragStore.getState().draggedTransition;
+  if (cached) return cached;
+
+  const raw = event.dataTransfer.getData(TRANSITION_DRAG_MIME);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<DraggedTransitionDescriptor>;
+    if (typeof parsed.presentation !== 'string') return null;
+    return {
+      presentation: parsed.presentation,
+      direction: parsed.direction,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const TransitionItem = memo(function TransitionItem({
   transition,
   trackHidden = false,
@@ -48,6 +72,9 @@ export const TransitionItem = memo(function TransitionItem({
   const fps = useTimelineStore((s: TimelineState) => s.fps);
   const removeTransition = useTimelineStore(
     (s: TimelineActions) => s.removeTransition
+  );
+  const updateTransition = useTimelineStore(
+    (s: TimelineActions) => s.updateTransition
   );
 
   // Get the clips involved in this transition
@@ -269,7 +296,9 @@ export const TransitionItem = memo(function TransitionItem({
     const bridge = getTransitionBridgeBounds(
       effectiveLeftClip.from,
       effectiveLeftClip.durationInFrames,
+      effectiveRightClip.from,
       previewDuration,
+      transition.alignment,
     );
     // Round each edge independently - same pixel grid as timeline items
     const bridgeRight = Math.round(frameToPixels(bridge.rightFrame));
@@ -285,12 +314,16 @@ export const TransitionItem = memo(function TransitionItem({
       : bridgeLeft - (minWidth - naturalWidth) / 2;
 
     return { left, width: effectiveWidth };
-  }, [effectiveLeftClip, effectiveRightClip, frameToPixels, previewDuration]);
+  }, [effectiveLeftClip, effectiveRightClip, frameToPixels, previewDuration, transition.alignment]);
 
   // Duration in seconds for display (use previewDuration for visual feedback)
   const durationSec = useMemo(() => {
     return (previewDuration / fps).toFixed(1);
   }, [previewDuration, fps]);
+  const draggedTransition = useTransitionDragStore((s) => s.draggedTransition);
+  const dragPreviewMatches = useTransitionDragStore(
+    useCallback((s) => s.preview?.existingTransitionId === transition.id, [transition.id])
+  );
 
   // Handle mouse move to detect edge hover
   const handleMouseMove = useCallback(
@@ -350,6 +383,41 @@ export const TransitionItem = memo(function TransitionItem({
     removeTransition(transition.id);
   }, [transition.id, removeTransition]);
 
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const dragDescriptor = readDraggedTransitionDescriptor(e);
+    if (!dragDescriptor || !draggedTransition) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    useTransitionDragStore.getState().setPreview({
+      leftClipId: transition.leftClipId,
+      rightClipId: transition.rightClipId,
+      durationInFrames: transition.durationInFrames,
+      alignment: transition.alignment ?? 0.5,
+      existingTransitionId: transition.id,
+    });
+  }, [draggedTransition, transition]);
+
+  const handleDragLeave = useCallback(() => {
+    if (useTransitionDragStore.getState().preview?.existingTransitionId === transition.id) {
+      useTransitionDragStore.getState().clearPreview();
+    }
+  }, [transition.id]);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const dragDescriptor = readDraggedTransitionDescriptor(e);
+    if (!dragDescriptor) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    updateTransition(transition.id, {
+      presentation: dragDescriptor.presentation,
+      direction: dragDescriptor.direction,
+    });
+    useTransitionDragStore.getState().clearDrag();
+  }, [transition.id, updateTransition]);
+
   if (!position || !effectiveLeftClip || !effectiveRightClip) {
     return null;
   }
@@ -369,6 +437,7 @@ export const TransitionItem = memo(function TransitionItem({
             'absolute inset-y-0 overflow-hidden rounded-sm',
             isSelected &&
               'ring-2 ring-inset ring-primary',
+            dragPreviewMatches && 'ring-2 ring-inset ring-amber-300',
             isResizing && 'ring-2 ring-inset ring-purple-400'
           )}
           style={{
@@ -382,6 +451,9 @@ export const TransitionItem = memo(function TransitionItem({
           onClick={handleClick}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           title={`${presentationLabel} (${durationSec}s)`}
         >
           {/* CapCut-style transition region overlay - more transparent */}

@@ -25,7 +25,7 @@ type StandaloneAudioItem = AudioItem & {
   trackVisible: boolean;
 };
 
-type TransitionAudioItem = VideoItem & {
+type TransitionAudioItem = (VideoItem | AudioItem) & {
   muted: boolean;
   trackVolumeDb: number;
   trackVisible: boolean;

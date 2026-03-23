@@ -3,6 +3,7 @@ import { create } from 'zustand';
 interface TransitionResizePreviewState {
   transitionId: string | null;
   previewDuration: number;
+  alignment: number;
   // Ripple context — set at resize start, stable during drag
   leftClipId: string | null;
   rightClipId: string | null;
@@ -16,6 +17,7 @@ interface TransitionResizePreviewActions {
   setPreview: (params: {
     transitionId: string;
     previewDuration: number;
+    alignment: number;
     leftClipId: string;
     rightClipId: string;
     trackId: string;
@@ -33,6 +35,7 @@ export const useTransitionResizePreviewStore = create<
 >()((set) => ({
   transitionId: null,
   previewDuration: 0,
+  alignment: 0.5,
   leftClipId: null,
   rightClipId: null,
   trackId: null,
@@ -42,9 +45,10 @@ export const useTransitionResizePreviewStore = create<
   setPreviewDuration: (previewDuration) => set({ previewDuration }),
   clearPreview: () =>
     set({
-      transitionId: null,
-      previewDuration: 0,
-      leftClipId: null,
+        transitionId: null,
+        previewDuration: 0,
+        alignment: 0.5,
+        leftClipId: null,
       rightClipId: null,
       trackId: null,
       rightClipFrom: 0,

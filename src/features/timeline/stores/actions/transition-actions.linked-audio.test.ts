@@ -72,7 +72,7 @@ describe('transition actions with linked audio companions', () => {
     useKeyframesStore.getState().setKeyframes([]);
   });
 
-  it('adds a matching audio crossfade and keeps linked audio aligned', () => {
+  it('keeps synchronized linked audio geometry centered on the cut when adding a transition', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),
       makeAudioItem({ id: 'audio-1', linkedGroupId: 'group-1' }),
@@ -84,13 +84,28 @@ describe('transition actions with linked audio companions', () => {
     const added = addTransition('video-1', 'video-2', 'crossfade', 30);
 
     expect(added).toBe(true);
-    expect(useItemsStore.getState().itemById['video-2']).toMatchObject({ from: 30 });
-    expect(useItemsStore.getState().itemById['audio-2']).toMatchObject({ from: 30, audioFadeIn: 1 });
-    expect(useItemsStore.getState().itemById['audio-1']).toMatchObject({ audioFadeOut: 1 });
-    expect(useItemsStore.getState().itemById['audio-3']).toMatchObject({ from: 120 });
+    expect(useItemsStore.getState().itemById['video-2']).toMatchObject({ from: 60 });
+    expect(useItemsStore.getState().itemById['audio-2']?.from).toBe(60);
+    expect(useItemsStore.getState().itemById['audio-2']?.audioFadeIn ?? 0).toBe(0);
+    expect(useItemsStore.getState().itemById['audio-1']?.audioFadeOut ?? 0).toBe(0);
+    expect(useItemsStore.getState().itemById['audio-3']).toMatchObject({ from: 150 });
   });
 
-  it('updates matching linked audio fades and timing when transition duration changes', () => {
+  it('clamps the default applied duration to the valid handle at the cut', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({ id: 'video-1', sourceEnd: 68, sourceDuration: 180 }),
+      makeVideoItem({ id: 'video-2', from: 60, sourceStart: 6, sourceEnd: 66, sourceDuration: 180, linkedGroupId: 'group-2', mediaId: 'media-2' }),
+    ]);
+
+    const added = addTransition('video-1', 'video-2');
+
+    expect(added).toBe(true);
+    expect(useTransitionsStore.getState().transitions).toEqual([
+      expect.objectContaining({ durationInFrames: 12 }),
+    ]);
+  });
+
+  it('does not move synchronized linked audio when transition duration changes', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),
       makeAudioItem({ id: 'audio-1', linkedGroupId: 'group-1' }),
@@ -103,12 +118,13 @@ describe('transition actions with linked audio companions', () => {
     expect(transitionId).toBeDefined();
     updateTransition(transitionId!, { durationInFrames: 45 });
 
-    expect(useItemsStore.getState().itemById['video-2']).toMatchObject({ from: 15 });
-    expect(useItemsStore.getState().itemById['audio-2']).toMatchObject({ from: 15, audioFadeIn: 1.5 });
-    expect(useItemsStore.getState().itemById['audio-1']).toMatchObject({ audioFadeOut: 1.5 });
+    expect(useItemsStore.getState().itemById['video-2']).toMatchObject({ from: 60 });
+    expect(useItemsStore.getState().itemById['audio-2']?.from).toBe(60);
+    expect(useItemsStore.getState().itemById['audio-2']?.audioFadeIn ?? 0).toBe(0);
+    expect(useItemsStore.getState().itemById['audio-1']?.audioFadeOut ?? 0).toBe(0);
   });
 
-  it('removes matching linked audio fades when removing the transition', () => {
+  it('leaves synchronized linked audio in place when removing the transition', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),
       makeAudioItem({ id: 'audio-1', linkedGroupId: 'group-1' }),
@@ -121,12 +137,13 @@ describe('transition actions with linked audio companions', () => {
     removeTransition(transitionId!);
 
     expect(useItemsStore.getState().itemById['video-2']).toMatchObject({ from: 60 });
-    expect(useItemsStore.getState().itemById['audio-2']).toMatchObject({ from: 60, audioFadeIn: 0 });
-    expect(useItemsStore.getState().itemById['audio-1']).toMatchObject({ audioFadeOut: 0 });
+    expect(useItemsStore.getState().itemById['audio-2']?.from).toBe(60);
+    expect(useItemsStore.getState().itemById['audio-2']?.audioFadeIn ?? 0).toBe(0);
+    expect(useItemsStore.getState().itemById['audio-1']?.audioFadeOut ?? 0).toBe(0);
     expect(useTransitionsStore.getState().transitions).toEqual([]);
   });
 
-  it('stops auto-overwriting a fade once the user edits it manually', () => {
+  it('preserves manual linked-audio fades across transition edits', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),
       makeAudioItem({ id: 'audio-1', linkedGroupId: 'group-1' }),
@@ -140,11 +157,13 @@ describe('transition actions with linked audio companions', () => {
     updateTransition(transitionId!, { durationInFrames: 45 });
 
     expect(useItemsStore.getState().itemById['audio-1']).toMatchObject({ audioFadeOut: 0.25 });
-    expect(useItemsStore.getState().itemById['audio-2']).toMatchObject({ audioFadeIn: 1.5, from: 15 });
+    expect(useItemsStore.getState().itemById['audio-2']?.from).toBe(60);
+    expect(useItemsStore.getState().itemById['audio-2']?.audioFadeIn ?? 0).toBe(0);
 
     removeTransition(transitionId!);
 
     expect(useItemsStore.getState().itemById['audio-1']).toMatchObject({ audioFadeOut: 0.25 });
-    expect(useItemsStore.getState().itemById['audio-2']).toMatchObject({ audioFadeIn: 0, from: 60 });
+    expect(useItemsStore.getState().itemById['audio-2']?.from).toBe(60);
+    expect(useItemsStore.getState().itemById['audio-2']?.audioFadeIn ?? 0).toBe(0);
   });
 });

@@ -8,13 +8,209 @@
  */
 
 import type { Migration } from './types';
-import type { Project } from '@/types/project';
+import type { Project, ProjectTimeline } from '@/types/project';
 
 // Historical constants used by specific migrations.
 // Keep these as literals so old migration behavior doesn't drift when
 // current UI defaults change.
 const TRACK_HEIGHT_V2_TARGET = 64;
 const TRACK_HEIGHT_V4_TARGET = 80;
+
+type ProjectItem = ProjectTimeline['items'][number];
+type ProjectTransition = NonNullable<ProjectTimeline['transitions']>[number];
+
+function isLegacyLinkedPair(anchor: ProjectItem, candidate: ProjectItem): boolean {
+  if (candidate.id === anchor.id) return false;
+  const isMediaPair = (anchor.type === 'video' && candidate.type === 'audio')
+    || (anchor.type === 'audio' && candidate.type === 'video');
+  if (!isMediaPair) return false;
+  if (!anchor.originId || anchor.originId !== candidate.originId) return false;
+  if (!anchor.mediaId || anchor.mediaId !== candidate.mediaId) return false;
+  return anchor.from === candidate.from && anchor.durationInFrames === candidate.durationInFrames;
+}
+
+function isLinkedCompanion(anchor: ProjectItem, candidate: ProjectItem, targetType: ProjectItem['type']): boolean {
+  if (candidate.id === anchor.id || candidate.type !== targetType) return false;
+
+  if (anchor.linkedGroupId && candidate.linkedGroupId) {
+    return anchor.linkedGroupId === candidate.linkedGroupId;
+  }
+
+  return isLegacyLinkedPair(anchor, candidate);
+}
+
+function getLinkedAudioCompanion(items: ProjectItem[], anchor: ProjectItem): ProjectItem | null {
+  if (anchor.type !== 'video') return null;
+  return items.find((candidate) => isLinkedCompanion(anchor, candidate, 'audio')) ?? null;
+}
+
+function isSynchronizedLinkedAudio(videoClip: ProjectItem, audioClip: ProjectItem): boolean {
+  return videoClip.type === 'video'
+    && audioClip.type === 'audio'
+    && audioClip.from === videoClip.from
+    && audioClip.durationInFrames === videoClip.durationInFrames;
+}
+
+function getManagedLinkedAudioPair(
+  items: ProjectItem[],
+  leftClip: ProjectItem,
+  rightClip: ProjectItem,
+): { leftAudio: ProjectItem; rightAudio: ProjectItem } | null {
+  if (leftClip.type !== 'video' || rightClip.type !== 'video') return null;
+
+  const leftAudio = getLinkedAudioCompanion(items, leftClip);
+  const rightAudio = getLinkedAudioCompanion(items, rightClip);
+  if (!leftAudio || !rightAudio) return null;
+  if (leftAudio.trackId !== rightAudio.trackId) return null;
+  if (!isSynchronizedLinkedAudio(leftClip, leftAudio) || !isSynchronizedLinkedAudio(rightClip, rightAudio)) {
+    return null;
+  }
+
+  return { leftAudio, rightAudio };
+}
+
+function sourceFramesToTimelineFrames(sourceFrames: number, speed: number | undefined): number {
+  const playbackRate = speed ?? 1;
+  return Math.floor(sourceFrames / playbackRate);
+}
+
+function getAvailableHandle(item: ProjectItem, side: 'start' | 'end'): number {
+  if (item.type === 'image' || item.type === 'text' || item.type === 'shape' || item.type === 'adjustment') {
+    return Infinity;
+  }
+
+  if (item.type !== 'video') {
+    return 0;
+  }
+
+  const sourceStart = item.sourceStart ?? 0;
+  const sourceDuration = item.sourceDuration ?? 0;
+  const sourceEnd = item.sourceEnd ?? sourceDuration;
+
+  if (side === 'start') {
+    return sourceFramesToTimelineFrames(sourceStart, item.speed);
+  }
+
+  return sourceFramesToTimelineFrames(Math.max(0, sourceDuration - sourceEnd), item.speed);
+}
+
+function getTransitionPortions(durationInFrames: number, alignment: number | undefined): {
+  leftPortion: number;
+  rightPortion: number;
+} {
+  const safeDuration = Math.max(1, Math.floor(durationInFrames));
+  const clampedAlignment = Math.max(0, Math.min(1, alignment ?? 0.5));
+  const leftPortion = Math.floor(safeDuration * clampedAlignment);
+  const rightPortion = safeDuration - leftPortion;
+  return { leftPortion, rightPortion };
+}
+
+function getMaxTransitionDurationForHandles(
+  leftClip: ProjectItem,
+  rightClip: ProjectItem,
+  alignment: number | undefined,
+): number {
+  const maxByClipDuration = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
+  if (maxByClipDuration < 1) return 0;
+
+  const leftHandle = getAvailableHandle(leftClip, 'end');
+  const rightHandle = getAvailableHandle(rightClip, 'start');
+
+  for (let duration = maxByClipDuration; duration >= 1; duration -= 1) {
+    const portions = getTransitionPortions(duration, alignment);
+    if (portions.leftPortion <= leftHandle && portions.rightPortion <= rightHandle) {
+      return duration;
+    }
+  }
+
+  return 0;
+}
+
+function rippleTrackItems(items: ProjectItem[], anchorId: string, trackId: string, originalFrom: number, delta: number): void {
+  for (const item of items) {
+    if (item.id === anchorId) continue;
+    if (item.trackId !== trackId) continue;
+    if (item.from > originalFrom) {
+      item.from += delta;
+    }
+  }
+}
+
+function migrateTimelineTransitionsToCutCentered(
+  timeline: Pick<ProjectTimeline, 'items' | 'transitions'>,
+): Pick<ProjectTimeline, 'items' | 'transitions'> {
+  const originalTransitions = timeline.transitions ?? [];
+  if (originalTransitions.length === 0) {
+    return { items: timeline.items, transitions: timeline.transitions };
+  }
+
+  const items = timeline.items.map((item) => ({ ...item }));
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const sortedTransitions = [...originalTransitions].sort((a, b) => {
+    if (a.trackId !== b.trackId) return a.trackId.localeCompare(b.trackId);
+    const aRight = itemById.get(a.rightClipId)?.from ?? 0;
+    const bRight = itemById.get(b.rightClipId)?.from ?? 0;
+    if (aRight !== bRight) return aRight - bRight;
+    return a.id.localeCompare(b.id);
+  });
+
+  const migratedTransitions: ProjectTransition[] = [];
+
+  for (const transition of sortedTransitions) {
+    const leftClip = itemById.get(transition.leftClipId);
+    const rightClip = itemById.get(transition.rightClipId);
+    if (!leftClip || !rightClip) {
+      migratedTransitions.push(transition);
+      continue;
+    }
+
+    const originalRightFrom = rightClip.from;
+    const leftEnd = leftClip.from + leftClip.durationInFrames;
+    const overlap = Math.max(0, leftEnd - rightClip.from);
+    const managedLinkedAudioPair = overlap > 1
+      ? getManagedLinkedAudioPair(items, leftClip, rightClip)
+      : null;
+
+    if (overlap > 1) {
+      rightClip.from += overlap;
+      rippleTrackItems(items, rightClip.id, rightClip.trackId, originalRightFrom, overlap);
+
+      if (managedLinkedAudioPair) {
+        const originalRightAudioFrom = managedLinkedAudioPair.rightAudio.from;
+        managedLinkedAudioPair.rightAudio.from += overlap;
+        rippleTrackItems(
+          items,
+          managedLinkedAudioPair.rightAudio.id,
+          managedLinkedAudioPair.rightAudio.trackId,
+          originalRightAudioFrom,
+          overlap,
+        );
+      }
+    }
+
+    const cutAligned = Math.abs((leftClip.from + leftClip.durationInFrames) - rightClip.from) <= 1;
+    if (!cutAligned) {
+      migratedTransitions.push(transition);
+      continue;
+    }
+
+    const maxDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, transition.alignment);
+    if (maxDuration < 1) {
+      continue;
+    }
+
+    migratedTransitions.push(
+      transition.durationInFrames > maxDuration
+        ? { ...transition, durationInFrames: maxDuration }
+        : transition,
+    );
+  }
+
+  return {
+    items,
+    transitions: migratedTransitions,
+  };
+}
 
 /**
  * Migration registry.
@@ -463,6 +659,54 @@ const migrations: Record<number, Migration> = {
     version: 7,
     description: 'Add blend mode, masks, and corner pin fields to timeline items',
     migrate: (project: Project): Project => project,
+  },
+
+  /**
+   * Version 8: Normalize legacy overlap transitions back to cut-centered transitions
+   *
+   * Reverses the old overlap storage model so transitions live on adjacent cuts again.
+   * For each overlapping transition:
+   * - Move the incoming clip back to the cut
+   * - Ripple later clips on the same track right to restore adjacency
+   * - Move synchronized linked audio companions with the same ripple behavior
+   * - Clamp or drop transitions that no longer have enough source handle
+   */
+  8: {
+    version: 8,
+    description: 'Convert legacy overlap transitions back to cut-centered handle-based transitions',
+    migrate: (project: Project): Project => {
+      if (!project.timeline) {
+        return project;
+      }
+
+      const rootTimeline = migrateTimelineTransitionsToCutCentered({
+        items: project.timeline.items ?? [],
+        transitions: project.timeline.transitions,
+      });
+
+      const compositions = project.timeline.compositions?.map((composition) => {
+        const migrated = migrateTimelineTransitionsToCutCentered({
+          items: composition.items ?? [],
+          transitions: composition.transitions,
+        });
+
+        return {
+          ...composition,
+          items: migrated.items,
+          transitions: migrated.transitions,
+        };
+      });
+
+      return {
+        ...project,
+        timeline: {
+          ...project.timeline,
+          items: rootTimeline.items,
+          transitions: rootTimeline.transitions,
+          compositions,
+        },
+      };
+    },
   },
 };
 

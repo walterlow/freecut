@@ -29,6 +29,7 @@ import {
   TRANSITION_CATEGORY_ORDER,
   TRANSITION_CONFIGS_BY_CATEGORY,
 } from '@/features/editor/utils/transition-ui-config';
+import { getMaxTransitionDurationForHandles } from '@/features/timeline/utils/transition-utils';
 
 /**
  * Single presentation option button
@@ -143,6 +144,7 @@ export function TransitionPanel() {
     (s: TimelineActions) => s.removeTransition
   );
   const fps = useTimelineStore((s: TimelineState) => s.fps);
+  const items = useTimelineStore((s: TimelineState) => s.items);
 
   // Derive selected transition
   const selectedTransition = useMemo<Transition | undefined>(
@@ -155,6 +157,14 @@ export function TransitionPanel() {
     selectedTransition && selectedTransition.type in TRANSITION_CONFIGS
       ? TRANSITION_CONFIGS[selectedTransition.type]
       : null;
+  const leftClip = useMemo(
+    () => selectedTransition ? items.find((item) => item.id === selectedTransition.leftClipId) : null,
+    [items, selectedTransition],
+  );
+  const rightClip = useMemo(
+    () => selectedTransition ? items.find((item) => item.id === selectedTransition.rightClipId) : null,
+    [items, selectedTransition],
+  );
 
   // Presentations that support spring timing (transforms that can overshoot)
   const supportsSpringTiming = useCallback(
@@ -164,8 +174,22 @@ export function TransitionPanel() {
     []
   );
 
-  const minDuration = fps;
-  const maxDuration = fps * 3;
+  const minDuration = 1;
+  const maxDuration = useMemo(() => {
+    if (!transitionConfig || !selectedTransition || !leftClip || !rightClip) {
+      return fps * 3;
+    }
+
+    const leftEnd = leftClip.from + leftClip.durationInFrames;
+    const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1;
+    if (!isAdjacent) {
+      const legacyMax = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
+      return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, legacyMax)));
+    }
+
+    const handleMax = getMaxTransitionDurationForHandles(leftClip, rightClip, selectedTransition.alignment);
+    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, handleMax)));
+  }, [transitionConfig, selectedTransition, leftClip, rightClip, fps]);
 
   // Handle presentation change
   const handlePresentationChange = useCallback(
@@ -200,7 +224,7 @@ export function TransitionPanel() {
   );
 
   // Default duration is 1 second (fps frames)
-  const defaultDuration = fps;
+  const defaultDuration = Math.min(fps, maxDuration);
 
   // Handle reset duration to default (1 second)
   const handleResetDuration = useCallback(() => {

@@ -126,4 +126,69 @@ describe('audio scene', () => {
       }),
     ]);
   });
+
+  it('expands synchronized linked audio companions around a cut-centered transition', () => {
+    const segments = buildTransitionVideoAudioSegments([
+      {
+        id: 'audio-1',
+        type: 'audio',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        src: 'audio-1.wav',
+        label: 'Audio 1',
+        mediaId: 'media-1',
+        sourceStart: 0,
+        sourceEnd: 35,
+        sourceDuration: 120,
+        sourceFps: 30,
+        muted: false,
+        trackVolumeDb: 0,
+        trackVisible: true,
+      },
+      {
+        id: 'audio-2',
+        type: 'audio',
+        trackId: 'track-1',
+        from: 30,
+        durationInFrames: 30,
+        src: 'audio-2.wav',
+        label: 'Audio 2',
+        mediaId: 'media-2',
+        sourceStart: 5,
+        sourceEnd: 35,
+        sourceDuration: 120,
+        sourceFps: 30,
+        muted: false,
+        trackVolumeDb: 0,
+        trackVisible: true,
+      },
+    ], [
+      {
+        id: 'transition-audio-1',
+        type: 'crossfade',
+        leftClipId: 'audio-1',
+        rightClipId: 'audio-2',
+        trackId: 'track-1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      },
+    ], 30);
+
+    expect(segments).toEqual([
+      expect.objectContaining({
+        itemId: 'audio-1',
+        from: 0,
+        durationInFrames: 35,
+        crossfadeFadeOut: 10,
+      }),
+      expect.objectContaining({
+        itemId: 'audio-2',
+        from: 25,
+        durationInFrames: 35,
+        crossfadeFadeIn: 10,
+      }),
+    ]);
+  });
 });
