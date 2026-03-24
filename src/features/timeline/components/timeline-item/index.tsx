@@ -89,7 +89,7 @@ import { isLocalInferenceCancellationError } from '@/shared/state/local-inferenc
 import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
 import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset } from '../../utils/audio-fade-curve';
-import { getAudioVolumeDbFromOffset, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
+import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
@@ -110,6 +110,8 @@ const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
+const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120;
+const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4;
 
 function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
   const cached = useTransitionDragStore.getState().draggedTransition;
@@ -1569,6 +1571,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     () => (audioVolumeLineY / AUDIO_ENVELOPE_VIEWBOX_HEIGHT) * 100,
     [audioVolumeLineY]
   );
+  const isAudioVolumeControlActive = item.type === 'audio' && (isSelected || audioVolumeEdit !== null);
+  const audioVolumeLineStroke = isAudioVolumeControlActive
+    ? 'rgba(255,255,255,0.72)'
+    : 'rgba(255,255,255,0.42)';
   const audioFadeInCurvePoint = useMemo(
     () => getAudioFadeCurveControlPoint({
       handle: 'in',
@@ -1615,6 +1621,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       setAudioVolumeEdit(null);
     }
   }, [audioVolumeEdit, item]);
+
   useEffect(() => {
     if (!audioFadeCurveEdit?.isCommitting || item.type !== 'audio') {
       return;
@@ -1839,16 +1846,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     e.stopPropagation();
 
     const originalVolume = item.volume ?? 0;
-    const computeVolumeDb = (clientY: number) => {
-      const rect = audioControlsRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return originalVolume;
-      }
-
-      return getAudioVolumeDbFromOffset(clientY - rect.top, rect.height);
-    };
+    const startClientY = e.clientY;
+    let latestClientY = startClientY;
+    let latestPreviewVolume = originalVolume;
+    let isDragActive = false;
+    let activationTimeoutId: number | null = null;
+    const dragAnchorY = startClientY;
+    const dragAnchorVolume = originalVolume;
 
     const applyPreview = (nextVolume: number) => {
+      latestPreviewVolume = nextVolume;
       setAudioVolumeEdit({
         previewVolume: nextVolume,
         originalVolume,
@@ -1856,8 +1863,37 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       });
     };
 
+    const clearActivationTimeout = () => {
+      if (activationTimeoutId !== null) {
+        window.clearTimeout(activationTimeoutId);
+        activationTimeoutId = null;
+      }
+    };
+
+    const computeVolumeDb = (clientY: number) => {
+      const rect = audioControlsRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return originalVolume;
+      }
+
+      return getAudioVolumeDbFromDragDelta({
+        startVolumeDb: dragAnchorVolume,
+        pointerDeltaY: clientY - dragAnchorY,
+        height: rect.height,
+      });
+    };
+
+    const activateDrag = () => {
+      if (isDragActive) {
+        return;
+      }
+
+      isDragActive = true;
+      applyPreview(computeVolumeDb(latestClientY));
+    };
+
     const finishEdit = () => {
-      const committedVolume = audioVolumeEditRef.current?.previewVolume ?? originalVolume;
+      const committedVolume = audioVolumeEditRef.current?.previewVolume ?? latestPreviewVolume;
       audioVolumeCleanupRef.current?.();
       audioVolumeCleanupRef.current = null;
 
@@ -1869,18 +1905,39 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
     };
 
-    applyPreview(computeVolumeDb(e.clientY));
-
     const handleWindowMouseMove = (event: MouseEvent) => {
+      latestClientY = event.clientY;
+
+      if (!isDragActive) {
+        if (Math.abs(event.clientY - startClientY) < AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX) {
+          return;
+        }
+
+        clearActivationTimeout();
+        activateDrag();
+        return;
+      }
+
       applyPreview(computeVolumeDb(event.clientY));
     };
     const handleWindowMouseUp = () => {
+      if (!isDragActive) {
+        audioVolumeCleanupRef.current?.();
+        audioVolumeCleanupRef.current = null;
+        return;
+      }
+
       finishEdit();
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    activationTimeoutId = window.setTimeout(() => {
+      clearActivationTimeout();
+      activateDrag();
+    }, AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS);
     audioVolumeCleanupRef.current = () => {
+      clearActivationTimeout();
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
@@ -2226,21 +2283,18 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
                 style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
               >
+                <div
+                  className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
+                  style={{
+                    top: `${audioVolumeLineYPercent}%`,
+                    backgroundColor: audioVolumeLineStroke,
+                  }}
+                />
                 <svg
                   className="absolute inset-0 h-full w-full"
                   viewBox={`0 0 ${Math.max(1, visualWidth)} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
                   preserveAspectRatio="none"
                 >
-                  <line
-                    x1="0"
-                    y1={audioVolumeLineY}
-                    x2={visualWidth}
-                    y2={audioVolumeLineY}
-                    stroke="rgba(255,255,255,0.95)"
-                    strokeWidth="1"
-                    vectorEffect="non-scaling-stroke"
-                    strokeLinecap="round"
-                  />
                   {audioFadeInPixels > 0 && (
                     <path
                       d={`M 0 0 L ${audioFadeInPixels} 0 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} 0 100 Z`}
@@ -2312,7 +2366,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 trackLocked={trackLocked}
                 activeTool={activeTool}
                 lineYPercent={audioVolumeLineYPercent}
-                isSelected={isSelected}
                 isEditing={audioVolumeEdit !== null}
                 editLabel={audioVolumeEditLabel}
                 onVolumeMouseDown={handleAudioVolumeMouseDown}
@@ -2479,6 +2532,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevItem.sourceFps === nextItem.sourceFps &&
     prevItem.trimStart === nextItem.trimStart &&
     prevItem.speed === nextItem.speed &&
+    prevItem.volume === nextItem.volume &&
+    prevItem.audioFadeIn === nextItem.audioFadeIn &&
+    prevItem.audioFadeOut === nextItem.audioFadeOut &&
+    prevItem.audioFadeInCurve === nextItem.audioFadeInCurve &&
+    prevItem.audioFadeOutCurve === nextItem.audioFadeOutCurve &&
+    prevItem.audioFadeInCurveX === nextItem.audioFadeInCurveX &&
+    prevItem.audioFadeOutCurveX === nextItem.audioFadeOutCurveX &&
     prevIsMask === nextIsMask &&
     prevProps.timelineDuration === nextProps.timelineDuration &&
     prevProps.trackLocked === nextProps.trackLocked &&

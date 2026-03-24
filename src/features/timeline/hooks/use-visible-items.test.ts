@@ -2,7 +2,8 @@ import { createElement } from 'react';
 import { act, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { VideoItem } from '@/types/timeline';
+import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import type { Transition } from '@/types/transition';
 
 import { useVisibleItems } from './use-visible-items';
 import { useItemsStore } from '../stores/items-store';
@@ -24,6 +25,35 @@ function makeItem(id: string, from: number, duration: number): VideoItem {
   } as VideoItem;
 }
 
+function makeAudioItem(id: string, from: number, duration: number, trackId = 'audio-track'): AudioItem {
+  return {
+    id,
+    type: 'audio',
+    trackId,
+    from,
+    durationInFrames: duration,
+    label: `${id}.wav`,
+    src: 'blob:test-audio',
+    mediaId: `media-${id}`,
+  } as AudioItem;
+}
+
+function makeTrack(id: string, kind: 'video' | 'audio'): TimelineTrack {
+  return {
+    id,
+    name: kind === 'video' ? 'V1' : 'A1',
+    kind,
+    height: 80,
+    locked: false,
+    visible: true,
+    muted: false,
+    solo: false,
+    volume: 0,
+    order: kind === 'video' ? 0 : 1,
+    items: [],
+  };
+}
+
 function VisibleItemsProbe({
   onRender,
 }: {
@@ -33,6 +63,19 @@ function VisibleItemsProbe({
   const itemIds = visibleItems.map((item) => item.id);
   onRender(itemIds);
   return createElement('div', { 'data-testid': 'visible-items' }, itemIds.join(','));
+}
+
+function VisibleTransitionsProbe({
+  trackId,
+  onRender,
+}: {
+  trackId: string;
+  onRender: (transitionIds: string[]) => void;
+}) {
+  const { visibleTransitions } = useVisibleItems(trackId);
+  const transitionIds = visibleTransitions.map((transition) => transition.id);
+  onRender(transitionIds);
+  return createElement('div', { 'data-testid': `visible-transitions-${trackId}` }, transitionIds.join(','));
 }
 
 /** Replicate the hook's frame range calculation */
@@ -171,5 +214,36 @@ describe('useVisibleItems filtering logic', () => {
     expect(onRender).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
+  });
+
+  it('does not synthesize transition bridges on audio tracks for linked companions', () => {
+    const transition: Transition = {
+      id: 'tr-1',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'video-1',
+      rightClipId: 'video-2',
+      trackId: 'video-track',
+      durationInFrames: 20,
+    };
+
+    useItemsStore.getState().setTracks([
+      makeTrack('video-track', 'video'),
+      makeTrack('audio-track', 'audio'),
+    ]);
+    useItemsStore.getState().setItems([
+      makeItem('video-1', 0, 60),
+      makeAudioItem('audio-1', 0, 60),
+      makeItem('video-2', 60, 60),
+      makeAudioItem('audio-2', 60, 60),
+    ]);
+    useTransitionsStore.getState().setTransitions([transition]);
+
+    const onRender = vi.fn();
+    render(createElement(VisibleTransitionsProbe, { trackId: 'audio-track', onRender }));
+
+    expect(screen.getByTestId('visible-transitions-audio-track')).toHaveTextContent('');
+    expect(onRender).toHaveBeenCalledWith([]);
   });
 });

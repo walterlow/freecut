@@ -838,7 +838,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           ))}
 
           {/* Render transitions for this track */}
-          {trackTransitions.map((transition) => (
+          {track.kind !== 'audio' && trackTransitions.map((transition) => (
             <TransitionItem key={transition.id} transition={transition} trackHidden={!track.visible} />
           ))}
 

@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { Volume2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
+import type { TimelineItem } from '@/types/timeline';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import {
@@ -17,12 +17,11 @@ import {
   SliderInput,
 } from '../components';
 import { getMixedValue } from '../utils';
+import { getAudioSectionItems } from './audio-section-utils';
 
 interface AudioSectionProps {
   items: TimelineItem[];
 }
-
-type AudioCapableItem = VideoItem | AudioItem;
 
 /**
  * Audio section - volume and audio fades.
@@ -45,11 +44,7 @@ export function AudioSection({ items }: AudioSectionProps) {
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
   const audioItems = useMemo(
-    () =>
-      items.filter(
-        (item): item is AudioCapableItem =>
-          item.type === 'video' || item.type === 'audio'
-      ),
+    () => getAudioSectionItems(items),
     [items]
   );
 

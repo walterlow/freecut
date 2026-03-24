@@ -3,6 +3,7 @@ import {
   AUDIO_VOLUME_DB_MAX,
   AUDIO_VOLUME_DB_MIN,
   clampAudioVolumeDb,
+  getAudioVolumeDbFromDragDelta,
   getAudioVolumeDbFromOffset,
   getAudioVolumeLineY,
   getAudioVisualizationScale,
@@ -25,6 +26,16 @@ describe('audio-volume utils', () => {
     expect(getAudioVolumeDbFromOffset(0, 100)).toBe(AUDIO_VOLUME_DB_MAX);
     expect(getAudioVolumeDbFromOffset(100, 100)).toBe(AUDIO_VOLUME_DB_MIN);
     expect(getAudioVolumeDbFromOffset(50, 100)).toBeCloseTo(0, 5);
+  });
+
+  it('uses fine-adjust sensitivity for drag-based volume changes', () => {
+    const nextVolume = getAudioVolumeDbFromDragDelta({
+      startVolumeDb: 0,
+      pointerDeltaY: 10,
+      height: 100,
+    });
+
+    expect(nextVolume).toBeCloseTo(-1.9, 1);
   });
 
   it('returns a bounded visualization scale from volume dB', () => {

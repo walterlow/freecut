@@ -2,6 +2,15 @@ export const AUDIO_VOLUME_DB_MIN = -60;
 export const AUDIO_VOLUME_DB_MAX = 12;
 const AUDIO_VOLUME_PADDING_PERCENT = 12;
 const AUDIO_VOLUME_CENTER_DB = 0;
+const AUDIO_VOLUME_FINE_ADJUST_MULTIPLIER = 0.2;
+
+function getAudioVolumeBounds(height: number) {
+  const usableTop = AUDIO_VOLUME_PADDING_PERCENT;
+  const usableBottom = height - AUDIO_VOLUME_PADDING_PERCENT;
+  const centerY = (usableTop + usableBottom) / 2;
+
+  return { usableTop, usableBottom, centerY };
+}
 
 export function clampAudioVolumeDb(volume: number): number {
   return Math.max(
@@ -12,9 +21,7 @@ export function clampAudioVolumeDb(volume: number): number {
 
 export function getAudioVolumeLineY(volumeDb: number, height: number): number {
   const clampedVolume = clampAudioVolumeDb(volumeDb);
-  const usableTop = AUDIO_VOLUME_PADDING_PERCENT;
-  const usableBottom = height - AUDIO_VOLUME_PADDING_PERCENT;
-  const centerY = (usableTop + usableBottom) / 2;
+  const { usableTop, usableBottom, centerY } = getAudioVolumeBounds(height);
 
   if (clampedVolume >= AUDIO_VOLUME_CENTER_DB) {
     const positiveRatio = (AUDIO_VOLUME_DB_MAX - clampedVolume) / (AUDIO_VOLUME_DB_MAX - AUDIO_VOLUME_CENTER_DB);
@@ -26,9 +33,7 @@ export function getAudioVolumeLineY(volumeDb: number, height: number): number {
 }
 
 export function getAudioVolumeDbFromOffset(pointerOffsetY: number, height: number): number {
-  const usableTop = AUDIO_VOLUME_PADDING_PERCENT;
-  const usableBottom = height - AUDIO_VOLUME_PADDING_PERCENT;
-  const centerY = (usableTop + usableBottom) / 2;
+  const { usableTop, usableBottom, centerY } = getAudioVolumeBounds(height);
   const clampedY = Math.max(usableTop, Math.min(usableBottom, pointerOffsetY));
 
   const volume = clampedY <= centerY
@@ -36,6 +41,19 @@ export function getAudioVolumeDbFromOffset(pointerOffsetY: number, height: numbe
     : AUDIO_VOLUME_CENTER_DB - ((clampedY - centerY) / Math.max(1, usableBottom - centerY)) * (AUDIO_VOLUME_CENTER_DB - AUDIO_VOLUME_DB_MIN);
 
   return clampAudioVolumeDb(volume);
+}
+
+export function getAudioVolumeDbFromDragDelta(params: {
+  startVolumeDb: number;
+  pointerDeltaY: number;
+  height: number;
+}): number {
+  const { usableTop, usableBottom } = getAudioVolumeBounds(params.height);
+  const usableHeight = Math.max(1, usableBottom - usableTop);
+  const range = AUDIO_VOLUME_DB_MAX - AUDIO_VOLUME_DB_MIN;
+  const nextVolume = params.startVolumeDb - (params.pointerDeltaY / usableHeight) * range * AUDIO_VOLUME_FINE_ADJUST_MULTIPLIER;
+
+  return clampAudioVolumeDb(nextVolume);
 }
 
 export function getAudioVisualizationScale(volumeDb: number): number {

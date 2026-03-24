@@ -307,6 +307,45 @@ describe('TimelineStoreFacade', () => {
       expect(typeof temporal.redo).toBe('function');
       expect(typeof temporal.clear).toBe('function');
     });
+
+    it('undos and redos audio volume updates through the facade', () => {
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-a1',
+          name: 'A1',
+          kind: 'audio',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+      useItemsStore.getState().setItems([
+        {
+          id: 'audio-1',
+          type: 'audio',
+          trackId: 'track-a1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'voiceover.wav',
+          src: 'blob:audio',
+          mediaId: 'media-a1',
+          volume: 0,
+        },
+      ]);
+
+      useTimelineStore.getState().updateItem('audio-1', { volume: -9.5 });
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(-9.5);
+
+      useTimelineCommandStore.getState().undo();
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(0);
+
+      useTimelineCommandStore.getState().redo();
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(-9.5);
+    });
   });
 
   describe('actions', () => {
