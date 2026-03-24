@@ -17,6 +17,17 @@ export function hasTransitionBridgeAtHandle(
   return transitions.some((t) => t.leftClipId === itemId);
 }
 
+export function getTransitionBridgeAtHandle(
+  transitions: Transition[],
+  itemId: string,
+  handle: TrimHandle,
+): Transition | null {
+  if (handle === 'start') {
+    return transitions.find((t) => t.rightClipId === itemId) ?? null;
+  }
+  return transitions.find((t) => t.leftClipId === itemId) ?? null;
+}
+
 /**
  * Returns true when any of the provided clip IDs participates in any transition.
  */
@@ -28,4 +39,3 @@ export function hasAnyTransitionBridge(
   if (ids.size === 0) return false;
   return transitions.some((t) => ids.has(t.leftClipId) || ids.has(t.rightClipId));
 }
-

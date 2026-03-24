@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Transition } from '@/types/transition';
 import {
+  getTransitionBridgeAtHandle,
   hasAnyTransitionBridge,
   hasTransitionBridgeAtHandle,
 } from './transition-edit-guards';
@@ -34,9 +35,14 @@ describe('transition-edit-guards', () => {
     expect(hasTransitionBridgeAtHandle(transitions, 'b', 'end')).toBe(false);
   });
 
+  it('returns the transition bridge for a clip handle', () => {
+    expect(getTransitionBridgeAtHandle(transitions, 'b', 'start')?.id).toBe('a-b');
+    expect(getTransitionBridgeAtHandle(transitions, 'a', 'end')?.id).toBe('a-b');
+    expect(getTransitionBridgeAtHandle(transitions, 'x', 'start')).toBeNull();
+  });
+
   it('detects any transition participation for a selection', () => {
     expect(hasAnyTransitionBridge(transitions, ['x', 'a'])).toBe(true);
     expect(hasAnyTransitionBridge(transitions, ['x', 'y'])).toBe(false);
   });
 });
-

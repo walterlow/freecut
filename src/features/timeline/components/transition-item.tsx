@@ -362,6 +362,11 @@ export const TransitionItem = memo(function TransitionItem({
     []
   );
 
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, handle: 'left' | 'right') => {
+    selectTransition(transition.id);
+    handleResizeStart(e, handle);
+  }, [handleResizeStart, selectTransition, transition.id]);
+
   // Handle delete
   const handleDelete = useCallback(() => {
     removeTransition(transition.id);
@@ -501,11 +506,12 @@ export const TransitionItem = memo(function TransitionItem({
                 ? 'opacity-100'
                 : 'opacity-0'
             )}
+            data-transition-hit-zone="left-edge"
             onMouseEnter={() => setHoveredEdge('left')}
             onMouseLeave={() => {
               if (!isResizing) setHoveredEdge(null);
             }}
-            onMouseDown={(e) => handleResizeStart(e, 'left')}
+            onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
           >
@@ -520,11 +526,12 @@ export const TransitionItem = memo(function TransitionItem({
                 ? 'opacity-100'
                 : 'opacity-0'
             )}
+            data-transition-hit-zone="right-edge"
             onMouseEnter={() => setHoveredEdge('right')}
             onMouseLeave={() => {
               if (!isResizing) setHoveredEdge(null);
             }}
-            onMouseDown={(e) => handleResizeStart(e, 'right')}
+            onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
           >

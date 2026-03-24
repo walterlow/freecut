@@ -37,7 +37,10 @@ import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/cl
 import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
 import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
-import { hasTransitionBridgeAtHandle } from '../../utils/transition-edit-guards';
+import {
+  getTransitionBridgeAtHandle,
+  hasTransitionBridgeAtHandle,
+} from '../../utils/transition-edit-guards';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
@@ -1064,6 +1067,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const items = useTimelineStore.getState().items;
       useSelectionStore.getState().selectItems(getLinkedItemIds(items, item.id));
       return;
+    }
+
+    if (activeToolRef.current === 'select' || activeToolRef.current === 'trim-edit') {
+      const bridgedHandle = smartTrimIntentToHandle(smartTrimIntentRef.current);
+      if (bridgedHandle) {
+        const transition = getTransitionBridgeAtHandle(
+          useTransitionsStore.getState().transitions,
+          item.id,
+          bridgedHandle,
+        );
+        if (transition) {
+          useSelectionStore.getState().selectTransition(transition.id);
+          return;
+        }
+      }
     }
 
     // Selection tool: handle item selection

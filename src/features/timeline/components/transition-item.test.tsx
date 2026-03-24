@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Transition } from '@/types/transition';
 import type { VideoItem } from '@/types/timeline';
@@ -106,5 +106,20 @@ describe('TransitionItem preview bridge motion', () => {
     expect(overlay.className).toContain('inset-y-0');
     expect(overlay.style.top).toBe('var(--editor-timeline-clip-label-row-height)');
     expect(overlay.style.bottom).toBe('0px');
+  });
+
+  it('selects the transition when an edge handle is clicked', () => {
+    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 });
+    const right = makeVideoItem({ id: 'right', from: 140, durationInFrames: 80, mediaId: 'media-2' });
+    useItemsStore.getState().setItems([left, right]);
+
+    const { container } = render(<TransitionItem transition={transition} />);
+    const handle = container.querySelector('[data-transition-hit-zone="left-edge"]');
+    expect(handle).not.toBeNull();
+
+    fireEvent.mouseDown(handle!, { button: 0, clientX: 10 });
+    fireEvent.mouseUp(document, { clientX: 10 });
+
+    expect(useSelectionStore.getState().selectedTransitionId).toBe('tr-1');
   });
 });
