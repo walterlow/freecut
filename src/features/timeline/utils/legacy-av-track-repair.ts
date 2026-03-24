@@ -1,5 +1,5 @@
 import type { ItemKeyframes, PropertyKeyframes } from '@/types/keyframe';
-import type { AudioItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import { canLinkItems } from './linked-items';
 import { getLinkedAudioCompanion } from '@/shared/utils/linked-media';
 import { getTrackKind, type TrackKind } from './classic-tracks';
@@ -22,9 +22,13 @@ export interface LegacyAvRepairResult extends LegacyTimelineData {
 }
 
 interface ExistingAudioPair {
-  video: VideoItem;
+  video: VideoItem | CompositionItem;
   audio: AudioItem;
   videoLaneIndex: number;
+}
+
+function isAudioPairableVisualItem(item: TimelineItem): item is VideoItem | CompositionItem {
+  return item.type === 'video' || item.type === 'composition';
 }
 
 function sortTracksByOrder(tracks: TimelineTrack[]): TimelineTrack[] {
@@ -99,7 +103,7 @@ function findExistingAudioPairs(params: {
   trackOrderMap: Map<string, number>;
 }): ExistingAudioPair[] {
   const sortedVideos = params.items
-    .filter((item): item is VideoItem => item.type === 'video')
+    .filter((item): item is VideoItem | CompositionItem => isAudioPairableVisualItem(item))
     .toSorted((left, right) => {
       const leftTrackOrder = params.trackOrderMap.get(left.trackId) ?? 0;
       const rightTrackOrder = params.trackOrderMap.get(right.trackId) ?? 0;
@@ -120,7 +124,7 @@ function findExistingAudioPairs(params: {
       ? linkedAudio
       : null;
 
-    if (!audioCompanion) {
+    if (!audioCompanion && video.type === 'video') {
       audioCompanion = audioItems.find((audio) => !usedAudioIds.has(audio.id) && canLinkItems([video, audio])) ?? null;
     }
 
@@ -219,11 +223,22 @@ export function repairLegacyAvTrackLayout(params: LegacyAvRepairParams): LegacyA
     }
   }
 
-  const pairedAudioLaneCount = videoTrackSourceIds.length;
+  const pairedAudioLaneIndices = new Set<number>(existingAudioPairs.map((pair) => pair.videoLaneIndex));
+  for (const item of params.items) {
+    if (item.type !== 'video') continue;
+    if (!item.mediaId || params.videoHasAudioByMediaId[item.mediaId] !== true) continue;
+    const laneIndex = videoTrackLaneIndex.get(item.trackId);
+    if (laneIndex !== undefined) {
+      pairedAudioLaneIndices.add(laneIndex);
+    }
+  }
+
+  const pairedAudioLaneOrder = [...pairedAudioLaneIndices].sort((left, right) => left - right);
+  const pairedAudioLaneCount = pairedAudioLaneOrder.length;
   const emptyAudioTrackSourceIds = audioTrackSourceIds.filter((trackId) => (itemsByTrackId.get(trackId)?.length ?? 0) === 0);
   const consumedAudioSourceIds = new Set<string>();
   const pairedAudioSourceIds: string[] = [];
-  for (let laneIndex = 0; laneIndex < pairedAudioLaneCount; laneIndex += 1) {
+  for (const laneIndex of pairedAudioLaneOrder) {
     const sourceTrackId = pairedAudioTrackSourceIdByLane.get(laneIndex)
       ?? emptyAudioTrackSourceIds.shift()
       ?? videoTrackSourceIdsByLane[laneIndex]
@@ -275,12 +290,13 @@ export function repairLegacyAvTrackLayout(params: LegacyAvRepairParams): LegacyA
     repairedVideoTrackIdsByLane.set(laneIndex, nextTrack.id);
   });
 
-  pairedAudioSourceIds.forEach((sourceTrackId, laneIndex) => {
+  pairedAudioSourceIds.forEach((sourceTrackId, pairedLaneIndex) => {
+    const laneIndex = pairedAudioLaneOrder[pairedLaneIndex] ?? pairedLaneIndex;
     const nextTrack = buildTrackClone({
       sourceTrack: trackById.get(sourceTrackId) ?? null,
       kind: 'audio',
-      name: `A${laneIndex + 1}`,
-      order: videoTrackSourceIds.length + laneIndex,
+      name: `A${pairedLaneIndex + 1}`,
+      order: videoTrackSourceIds.length + pairedLaneIndex,
       usedTrackIds,
       createId,
     });

@@ -81,16 +81,15 @@ describe('repairLegacyAvTrackLayout', () => {
       'V1:video',
       'A1:audio',
       'A2:audio',
-      'A3:audio',
     ]);
     expect(result.items.filter((item) => item.type === 'audio')).toHaveLength(2);
 
+    const a1Track = result.tracks.find((track) => track.name === 'A1');
     const a2Track = result.tracks.find((track) => track.name === 'A2');
-    const a3Track = result.tracks.find((track) => track.name === 'A3');
     const generatedAudio = result.items.find((item) => item.type === 'audio' && item.mediaId === 'media-1') as AudioItem | undefined;
     const music = result.items.find((item) => item.id === 'music-1') as AudioItem | undefined;
-    expect(generatedAudio?.trackId).toBe(a2Track?.id);
-    expect(music?.trackId).toBe(a3Track?.id);
+    expect(generatedAudio?.trackId).toBe(a1Track?.id);
+    expect(music?.trackId).toBe(a2Track?.id);
     expect(result.items.find((item) => item.id === 'video-1')).toMatchObject({ linkedGroupId: generatedAudio?.linkedGroupId });
   });
 

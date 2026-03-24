@@ -29,7 +29,7 @@ import {
   TRANSITION_CATEGORY_ORDER,
   TRANSITION_CONFIGS_BY_CATEGORY,
 } from '@/features/editor/utils/transition-ui-config';
-import { getMaxTransitionDurationForHandles } from '@/features/timeline/utils/transition-utils';
+import { getMaxTransitionDurationForHandles } from '@/features/editor/deps/timeline-utils';
 
 /**
  * Single presentation option button

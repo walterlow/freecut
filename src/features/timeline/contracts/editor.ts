@@ -13,7 +13,7 @@ export { BentoLayoutDialog } from '../components/bento-layout-dialog';
 export { useTimelineShortcuts } from '../hooks/use-timeline-shortcuts';
 export { useTransitionBreakageNotifications } from '../hooks/use-transition-breakage-notifications';
 export { findNearestAvailableSpace } from '../utils/collision-utils';
-export { areFramesAligned } from '../utils/transition-utils';
+export { areFramesAligned, getMaxTransitionDurationForHandles } from '../utils/transition-utils';
 export { resolveTransitionTargetFromSelection } from '../utils/transition-targets';
 export {
   timelineToSourceFrames,

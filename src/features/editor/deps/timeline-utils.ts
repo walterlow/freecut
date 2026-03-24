@@ -6,6 +6,7 @@
 export {
   findNearestAvailableSpace,
   areFramesAligned,
+  getMaxTransitionDurationForHandles,
   resolveTransitionTargetFromSelection,
   timelineToSourceFrames,
   sourceToTimelineFrames,

@@ -26,6 +26,7 @@ import {
   getAdjacentTrackOrder,
   getTrackKind,
 } from '../utils/classic-tracks';
+import { timelineToSourceFrames } from '../utils/source-calculations';
 
 const logger = createLogger('TimelineStore');
 
@@ -135,18 +136,86 @@ async function buildVideoHasAudioMap(mediaIds: string[]): Promise<Record<string,
   return Object.fromEntries(entries);
 }
 
-function buildCompoundWrapperSourceFields(fps: number, durationInFrames: number) {
+function normalizeCompoundWrapperSourceFields(params: {
+  item: CompositionItem | (AudioItem & { compositionId: string });
+  compositionFps: number;
+  timelineFps: number;
+  fallbackDurationInFrames: number;
+}) {
+  const { item, compositionFps, timelineFps, fallbackDurationInFrames } = params;
+  const sourceFps = item.sourceFps ?? compositionFps;
+  const speed = item.speed ?? 1;
+  const sourceStart = item.sourceStart ?? 0;
+  const inferredSourceDuration = timelineToSourceFrames(
+    item.durationInFrames || fallbackDurationInFrames,
+    speed,
+    timelineFps,
+    sourceFps,
+  );
+
   return {
-    sourceStart: 0,
-    sourceEnd: durationInFrames,
-    sourceDuration: durationInFrames,
-    sourceFps: fps,
-    speed: 1,
+    sourceStart,
+    sourceEnd: item.sourceEnd ?? (sourceStart + inferredSourceDuration),
+    sourceDuration: item.sourceDuration ?? fallbackDurationInFrames,
+    sourceFps,
+    speed,
   };
 }
 
 function hasCompositionVisualItems(items: TimelineItem[]): boolean {
   return items.some((item) => item.type !== 'audio');
+}
+
+function cleanupRedundantEmptyClassicAudioTracks(project: Project): { project: Project; cleaned: boolean } {
+  if (!project.timeline?.tracks?.length) {
+    return { project, cleaned: false };
+  }
+
+  const itemsByTrackId = new Map<string, number>();
+  for (const item of project.timeline.items ?? []) {
+    itemsByTrackId.set(item.trackId, (itemsByTrackId.get(item.trackId) ?? 0) + 1);
+  }
+
+  const classicAudioTracks = (project.timeline.tracks as TimelineTrack[])
+    .map((track) => {
+      const match = track.name.match(/^A(\d+)$/i);
+      return match
+        ? { track, number: Number.parseInt(match[1]!, 10) }
+        : null;
+    })
+    .filter((entry): entry is { track: TimelineTrack; number: number } => !!entry)
+    .filter(({ track, number }) => getTrackKind(track) === 'audio' && Number.isFinite(number));
+
+  const highestOccupiedClassicAudioNumber = classicAudioTracks.reduce((highest, { track, number }) => {
+    return (itemsByTrackId.get(track.id) ?? 0) > 0
+      ? Math.max(highest, number)
+      : highest;
+  }, 0);
+
+  if (highestOccupiedClassicAudioNumber <= 0) {
+    return { project, cleaned: false };
+  }
+
+  const removableTrackIds = new Set(
+    classicAudioTracks
+      .filter(({ track, number }) => number > highestOccupiedClassicAudioNumber && (itemsByTrackId.get(track.id) ?? 0) === 0)
+      .map(({ track }) => track.id),
+  );
+
+  if (removableTrackIds.size === 0) {
+    return { project, cleaned: false };
+  }
+
+  return {
+    cleaned: true,
+    project: {
+      ...project,
+      timeline: {
+        ...project.timeline,
+        tracks: project.timeline.tracks.filter((track) => !removableTrackIds.has(track.id)),
+      },
+    },
+  };
 }
 
 function repairCompoundClipWrappers(project: Project): { project: Project; repaired: boolean } {
@@ -157,6 +226,7 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
   let tracks = project.timeline.tracks.map((track) => ({ ...track })) as TimelineTrack[];
   const items = project.timeline.items.map((item) => ({ ...item })) as TimelineItem[];
   const compositionsById = new Map((project.timeline.compositions ?? []).map((composition) => [composition.id, composition]));
+  const timelineFps = project.metadata?.fps ?? 30;
   let changed = false;
 
   const ensureTrackOfKindNear = (
@@ -200,13 +270,27 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
       tracks: composition.tracks as TimelineTrack[],
       fps: composition.fps,
     }).length > 0;
-    const sourceFields = buildCompoundWrapperSourceFields(composition.fps, composition.durationInFrames);
     const wrapperTrack = tracks.find((track) => track.id === wrapper.trackId) ?? null;
     const wrapperTrackKind = wrapperTrack ? getTrackKind(wrapperTrack) : null;
+    const existingAudioCompanion = getLinkedCompositionAudioCompanion(items, wrapper)
+      ?? items.find((item): item is AudioItem & { compositionId: string } => (
+        item.id !== wrapper.id
+        && isCompositionAudioItem(item)
+        && item.compositionId === wrapper.compositionId
+      ))
+      ?? null;
+    const sourceFields = normalizeCompoundWrapperSourceFields({
+      item: wrapper,
+      compositionFps: composition.fps,
+      timelineFps,
+      fallbackDurationInFrames: composition.durationInFrames,
+    });
 
     if (!hasVisualWrapper && hasOwnedAudio) {
       const audioTrackId = wrapperTrackKind === 'audio'
         ? wrapper.trackId
+        : existingAudioCompanion?.trackId
+        ? existingAudioCompanion.trackId
         : ensureTrackOfKindNear(wrapper.trackId, 'audio', 'below');
       items[wrapperIndex] = {
         ...wrapper,
@@ -223,20 +307,11 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
       ? ensureTrackOfKindNear(wrapper.trackId, 'video', 'above')
       : wrapper.trackId;
     const audioTrackId = hasOwnedAudio
-      ? (wrapperTrackKind === 'audio'
+      ? (existingAudioCompanion?.trackId
+          ?? (wrapperTrackKind === 'audio'
           ? wrapper.trackId
-          : ensureTrackOfKindNear(visualTrackId, 'audio', 'below'))
+          : ensureTrackOfKindNear(visualTrackId, 'audio', 'below')))
       : null;
-
-    const existingAudioCompanion = getLinkedCompositionAudioCompanion(items, {
-      ...wrapper,
-      trackId: visualTrackId,
-      linkedGroupId: wrapper.linkedGroupId,
-    }) ?? items.find((item): item is AudioItem & { compositionId: string } => (
-      item.id !== wrapper.id
-      && isCompositionAudioItem(item)
-      && item.compositionId === wrapper.compositionId
-    )) ?? null;
     const linkedGroupId = hasOwnedAudio
       ? existingAudioCompanion?.linkedGroupId ?? wrapper.linkedGroupId ?? crypto.randomUUID()
       : wrapper.linkedGroupId;
@@ -295,6 +370,12 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
     }
 
     const existingCompanion = items[companionIndex] as AudioItem & { compositionId: string };
+    const companionSourceFields = normalizeCompoundWrapperSourceFields({
+      item: existingCompanion,
+      compositionFps: composition.fps,
+      timelineFps,
+      fallbackDurationInFrames: composition.durationInFrames,
+    });
     const normalizedCompanion: AudioItem & { compositionId: string } = {
       ...existingCompanion,
       trackId: audioTrackId,
@@ -304,7 +385,7 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
       linkedGroupId,
       compositionId: nextWrapper.compositionId,
       src: existingCompanion.src || '',
-      ...sourceFields,
+      ...companionSourceFields,
     };
     items[companionIndex] = normalizedCompanion;
     if (
@@ -352,13 +433,21 @@ async function repairLegacyProjectAvLayouts(project: Project): Promise<{ project
   }
 
   const videoHasAudioByMediaId = await buildVideoHasAudioMap(videoMediaIds);
-  const rootRepair = repairLegacyAvTrackLayout({
-    tracks: (project.timeline.tracks ?? []) as TimelineTrack[],
-    items: (project.timeline.items ?? []) as TimelineItem[],
-    keyframes: (project.timeline.keyframes ?? []) as ItemKeyframes[],
-    fps: project.metadata.fps,
-    videoHasAudioByMediaId,
-  });
+  const rootItems = (project.timeline.items ?? []) as TimelineItem[];
+  const rootRepair = rootItems.some((item) => item.type === 'video')
+    ? repairLegacyAvTrackLayout({
+        tracks: (project.timeline.tracks ?? []) as TimelineTrack[],
+        items: rootItems,
+        keyframes: (project.timeline.keyframes ?? []) as ItemKeyframes[],
+        fps: project.metadata.fps,
+        videoHasAudioByMediaId,
+      })
+    : {
+        tracks: (project.timeline.tracks ?? []) as TimelineTrack[],
+        items: rootItems,
+        keyframes: (project.timeline.keyframes ?? []) as ItemKeyframes[],
+        changed: false,
+      };
   const repairedCompositions = (project.timeline.compositions ?? []).map((composition) => {
     const repair = repairLegacyAvTrackLayout({
       tracks: composition.tracks as TimelineTrack[],
@@ -392,17 +481,19 @@ async function repairLegacyProjectAvLayouts(project: Project): Promise<{ project
     },
   };
   const repairedCompoundWrappers = repairCompoundClipWrappers(repairedLayoutProject);
+  const cleanedEmptyAudioTracks = cleanupRedundantEmptyClassicAudioTracks(repairedCompoundWrappers.project);
 
   const repaired = rootRepair.changed
     || repairedCompositions.some((entry) => entry.repair.changed)
-    || repairedCompoundWrappers.repaired;
+    || repairedCompoundWrappers.repaired
+    || cleanedEmptyAudioTracks.cleaned;
   if (!repaired) {
     return { project, repaired: false };
   }
 
   return {
     repaired: true,
-    project: repairedCompoundWrappers.project,
+    project: cleanedEmptyAudioTracks.project,
   };
 }
 
