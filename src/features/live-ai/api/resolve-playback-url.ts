@@ -23,9 +23,22 @@ export async function resolvePlaybackWhepUrl(outputPlaybackId: string): Promise<
   const url = `${LIVEPEER_PLAYBACK_BASE}/${outputPlaybackId}`;
   const response = await fetch(url);
   if (!response.ok) {
+    console.warn(
+      '[resolvePlaybackWhepUrl] Playback API returned',
+      response.status,
+      'for',
+      outputPlaybackId
+    );
     return null;
   }
   const data = (await response.json()) as PlaybackResponse;
   const source = data.meta?.source?.find((s) => s.hrn === WEBRTC_SOURCE_HRN);
-  return source?.url ?? null;
+  if (!source?.url) {
+    console.warn(
+      '[resolvePlaybackWhepUrl] No WebRTC (H264) source in playback response for',
+      outputPlaybackId
+    );
+    return null;
+  }
+  return source.url;
 }

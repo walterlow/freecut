@@ -25,6 +25,12 @@ import {
   isLivepeerStudioConfigured,
 } from '../api/livepeer-studio-live-video';
 import { updateDaydreamPrompt } from '../api/daydream-update-prompt';
+import { resolvePlaybackWhepUrl } from '../api/resolve-playback-url';
+import {
+  getStreamStatus,
+  DAYDREAM_API_LOGS_URL,
+  type StreamStatusResponse,
+} from '../api/stream-status';
 import type { CuratedLoraPreset } from '../config/curated-loras';
 import {
   getCuratedLorasForFamily,
@@ -107,6 +113,10 @@ interface LiveAISessionWithBroadcastProps {
   onStreamStopped: () => void;
   previewView: PreviewView;
   setPreviewView: (v: PreviewView) => void;
+  /** When true, poll Daydream stream status and show API logs link while buffering. */
+  isDaydreamStream?: boolean;
+  /** Current model id (for SD1.5 cold start messaging). */
+  selectedModelId?: string;
 }
 
 /** Optional billing: setOnPause and billingEnabled. When billingEnabled is false, billing UI and loop are skipped. */
@@ -335,6 +345,8 @@ export function LiveAIPanelContent() {
                 onStreamStopped: handleStreamStopped,
                 previewView,
                 setPreviewView,
+                isDaydreamStream: streamSource === 'daydream',
+                selectedModelId,
               }}
             >
               <LiveAISessionWithBroadcastWithBilling
@@ -344,6 +356,8 @@ export function LiveAIPanelContent() {
                 onStreamStopped={handleStreamStopped}
                 previewView={previewView}
                 setPreviewView={setPreviewView}
+                isDaydreamStream={streamSource === 'daydream'}
+                selectedModelId={selectedModelId}
               />
             </LiveAISessionBillingErrorBoundary>
           ) : (
@@ -356,6 +370,8 @@ export function LiveAIPanelContent() {
               setPreviewView={setPreviewView}
               setOnPause={noopSetOnPause}
               billingEnabled={false}
+              isDaydreamStream={streamSource === 'daydream'}
+              selectedModelId={selectedModelId}
             />
           ))}
       </div>
@@ -578,6 +594,12 @@ function LiveAIPopoverFloating() {
   return null;
 }
 
+const STREAM_STATUS_POLL_INTERVAL_MS = 5000;
+const STREAM_STATUS_POLL_MAX_MS = 120000;
+const SD15_COLD_START_TIMEOUT_MS = 90000;
+
+const SD15_MODEL_IDS = new Set(['Lykon/dreamshaper-8', 'prompthero/openjourney-v4']);
+
 function LiveAISessionWithBroadcastCore({
   streamData,
   whipUrl,
@@ -587,13 +609,24 @@ function LiveAISessionWithBroadcastCore({
   setPreviewView,
   setOnPause,
   billingEnabled,
+  isDaydreamStream = false,
+  selectedModelId,
 }: LiveAISessionCoreProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [outputWhepUrl, setOutputWhepUrl] = useState<string | null>(null);
+  const [outputWhepUrlError, setOutputWhepUrlError] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<StreamStatusResponse | null>(null);
+  const [showColdStartTimeoutMessage, setShowColdStartTimeoutMessage] = useState(false);
+  const sessionStartRef = useRef<number>(Date.now());
+  const isSd15 = Boolean(selectedModelId && SD15_MODEL_IDS.has(selectedModelId));
+
   const broadcast = useBroadcast({ whipUrl, reconnect: { enabled: true } });
-  const isLive = broadcast.status.state === 'live';
-  const whepUrl = isLive && 'whepUrl' in broadcast.status ? broadcast.status.whepUrl : '';
-  const player = usePlayer({ whepUrl: whepUrl || null, autoPlay: true, reconnect: { enabled: true } });
+  const player = usePlayer({
+    whepUrl: outputWhepUrl ?? null,
+    autoPlay: true,
+    reconnect: { enabled: true },
+  });
 
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const isRecording = useLiveSessionStore((s) => s.isRecording);
@@ -609,6 +642,32 @@ function LiveAISessionWithBroadcastCore({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingStartRef = useRef<number>(0);
   const linkedTimelineStartRef = useRef<number>(0);
+
+  // Resolve output WHEP URL from Livepeer playback API (AI output), not broadcast's whepUrl.
+  useEffect(() => {
+    const playbackId = streamData?.outputPlaybackId;
+    if (!playbackId) {
+      setOutputWhepUrl(null);
+      setOutputWhepUrlError(null);
+      return;
+    }
+    setOutputWhepUrl(null);
+    let cancelled = false;
+    setOutputWhepUrlError(null);
+    resolvePlaybackWhepUrl(playbackId)
+      .then((url) => {
+        if (!cancelled) {
+          if (url) setOutputWhepUrl(url);
+          else setOutputWhepUrlError('Could not load playback URL');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOutputWhepUrlError('Could not load playback URL');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [streamData?.outputPlaybackId]);
 
   useEffect(() => {
     const active = broadcast.status.state === 'live';
@@ -633,9 +692,53 @@ function LiveAISessionWithBroadcastCore({
   }, [setOnPause, broadcast, localStream, onStreamStopped]);
 
   useEffect(() => {
-    if (!whepUrl || player.status.state === 'playing' || player.status.state === 'connecting') return;
+    if (!outputWhepUrl || player.status.state === 'playing' || player.status.state === 'connecting') return;
     player.play().catch(() => {});
-  }, [whepUrl]);
+  }, [outputWhepUrl, player.status.state]);
+
+  // Poll Daydream stream status while output is not playing (diagnostics / cold start).
+  useEffect(() => {
+    if (
+      !isDaydreamStream ||
+      !streamData?.id ||
+      player.status.state === 'playing' ||
+      !outputWhepUrl
+    ) {
+      setStreamStatus(null);
+      return;
+    }
+    const start = Date.now();
+    const tick = () => {
+      if (Date.now() - start > STREAM_STATUS_POLL_MAX_MS) return;
+      getStreamStatus(streamData.id).then((res) => {
+        if (res) setStreamStatus(res);
+      });
+    };
+    tick();
+    const id = setInterval(tick, STREAM_STATUS_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [
+    isDaydreamStream,
+    streamData?.id,
+    outputWhepUrl,
+    player.status.state,
+  ]);
+
+  // SD1.5 cold start: reset session start when we get output URL; show timeout message after 90s.
+  useEffect(() => {
+    if (outputWhepUrl) sessionStartRef.current = Date.now();
+  }, [outputWhepUrl]);
+  useEffect(() => {
+    if (player.status.state === 'playing') {
+      setShowColdStartTimeoutMessage(false);
+      return;
+    }
+    if (!outputWhepUrl || !isSd15) return;
+    const id = setTimeout(() => {
+      setShowColdStartTimeoutMessage(true);
+    }, SD15_COLD_START_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [outputWhepUrl, isSd15, player.status.state]);
 
   useEffect(() => {
     if (localStream && localVideoRef.current) {
@@ -863,6 +966,45 @@ function LiveAISessionWithBroadcastCore({
           </div>
         )}
       </div>
+      {outputWhepUrlError && (
+        <p className="text-xs text-destructive mt-1">{outputWhepUrlError}</p>
+      )}
+      {isSd15 && outputWhepUrl && player.status.state !== 'playing' && (
+        <p className="text-xs text-muted-foreground mt-1">
+          First frame may take 60–90 seconds for this model.
+        </p>
+      )}
+      {showColdStartTimeoutMessage && (
+        <p className="text-xs text-muted-foreground mt-1">
+          Still waiting for video.{' '}
+          <a
+            href={DAYDREAM_API_LOGS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline"
+          >
+            Check API Logs
+          </a>{' '}
+          if the issue continues.
+        </p>
+      )}
+      {isDaydreamStream && streamStatus && player.status.state !== 'playing' && (
+        <p className="text-xs text-muted-foreground mt-1">
+          {streamStatus.success
+            ? 'Stream starting…'
+            : streamStatus.error
+              ? `Status: ${streamStatus.error}`
+              : 'Stream starting…'}{' '}
+          <a
+            href={DAYDREAM_API_LOGS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline"
+          >
+            API Logs
+          </a>
+        </p>
+      )}
       <p className="text-xs text-muted-foreground mt-1">
         Broadcast: {broadcast.status.state} · Player: {player.status.state}
       </p>
