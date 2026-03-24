@@ -42,6 +42,15 @@ export default defineConfig({
             return 'core-logger';
           }
 
+          // Timeline bridge modules that re-export UI must live with the UI
+          // chunk; otherwise core ends up importing UI, which creates a
+          // feature-editing-core <-> feature-editing-ui TDZ cycle at startup.
+          if (
+            id.includes('/src/features/timeline/contracts/editor.ts')
+            || id.includes('/src/features/timeline/index.ts')
+          ) {
+            return 'feature-editing-ui';
+          }
 
           // Application feature chunks
           if (id.includes('/src/features/timeline/') || id.includes('/src/features/media-library/')) {
