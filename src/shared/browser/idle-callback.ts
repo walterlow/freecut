@@ -10,14 +10,10 @@ export type IdleDeadline = {
 type RequestIdleCallback = (cb: (deadline: IdleDeadline) => void, options?: IdleRequestOptions) => number;
 type CancelIdleCallback = (handle: number) => void;
 
-function getNative(): { requestIdleCallback?: RequestIdleCallback; cancelIdleCallback?: CancelIdleCallback } {
-  if (typeof window === 'undefined') return {};
-  const w = window as unknown as {
-    requestIdleCallback?: RequestIdleCallback;
-    cancelIdleCallback?: CancelIdleCallback;
-  };
-  return { requestIdleCallback: w.requestIdleCallback, cancelIdleCallback: w.cancelIdleCallback };
-}
+type WindowWithIdle = Window & {
+  requestIdleCallback?: RequestIdleCallback;
+  cancelIdleCallback?: CancelIdleCallback;
+};
 
 /**
  * Safari-safe `requestIdleCallback` wrapper.
@@ -26,9 +22,11 @@ function getNative(): { requestIdleCallback?: RequestIdleCallback; cancelIdleCal
  * - Falls back to `setTimeout` otherwise (e.g. older Safari).
  */
 export function requestIdle(cb: (deadline: IdleDeadline) => void, options?: IdleRequestOptions): number {
-  const native = getNative();
-  if (native.requestIdleCallback) {
-    return native.requestIdleCallback(cb, options);
+  if (typeof window !== 'undefined') {
+    const w = window as WindowWithIdle;
+    if (typeof w.requestIdleCallback === 'function') {
+      return w.requestIdleCallback(cb, options);
+    }
   }
 
   const delayMs = Math.min(50, options?.timeout ?? 50);
@@ -41,10 +39,12 @@ export function requestIdle(cb: (deadline: IdleDeadline) => void, options?: Idle
 }
 
 export function cancelIdle(handle: number): void {
-  const native = getNative();
-  if (native.cancelIdleCallback) {
-    native.cancelIdleCallback(handle);
-    return;
+  if (typeof window !== 'undefined') {
+    const w = window as WindowWithIdle;
+    if (typeof w.cancelIdleCallback === 'function') {
+      w.cancelIdleCallback(handle);
+      return;
+    }
   }
   clearTimeout(handle);
 }
