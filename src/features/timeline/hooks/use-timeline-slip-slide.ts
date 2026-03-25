@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useEditorStore } from '@/shared/state/editor';
+import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -31,6 +32,7 @@ import {
   applyTrimStartPreview,
   type PreviewItemUpdate,
 } from '../utils/item-edit-preview';
+import { hasExceededDragThreshold } from '../utils/drag-threshold';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -42,6 +44,10 @@ interface SlipSlideState {
   isConstrained: boolean;
   constraintEdge: 'start' | 'end' | null;
   constraintLabel: string | null;
+}
+
+interface SlipSlideStartOptions {
+  activateOnMoveThreshold?: boolean;
 }
 
 /**
@@ -81,6 +87,7 @@ export function useTimelineSlipSlide(
   const stateRef = useRef(state);
   stateRef.current = state;
   const latestDeltaRef = useRef(0);
+  const pendingStartCleanupRef = useRef<(() => void) | null>(null);
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
@@ -96,6 +103,31 @@ export function useTimelineSlipSlide(
     const transitions = useTransitionsStore.getState().transitions;
     return findEditNeighborsWithTransitions(currentItem, allItems, transitions);
   }, [getItemFromStore]);
+
+  const beginSlipSlideGesture = useCallback((startX: number, mode: 'slip' | 'slide') => {
+    usePlaybackStore.getState().setPreviewFrame(null);
+
+    const { leftNeighbor, rightNeighbor } = findNeighbors();
+
+    setDragState({
+      isDragging: true,
+      draggedItemIds: [item.id],
+      offset: { x: 0, y: 0 },
+    });
+
+    setState({
+      isActive: true,
+      mode,
+      startX,
+      currentDelta: 0,
+      leftNeighborId: leftNeighbor?.id ?? null,
+      rightNeighborId: rightNeighbor?.id ?? null,
+      isConstrained: false,
+      constraintEdge: null,
+      constraintLabel: null,
+    });
+    latestDeltaRef.current = 0;
+  }, [findNeighbors, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -407,40 +439,53 @@ export function useTimelineSlipSlide(
     }
   }, [state.isActive, handleMouseMove, handleMouseUp, setDragState]);
 
+  useEffect(() => () => {
+    pendingStartCleanupRef.current?.();
+  }, []);
+
   // Start slip/slide drag
   const handleSlipSlideStart = useCallback(
-    (e: React.MouseEvent, mode: 'slip' | 'slide') => {
+    (e: React.MouseEvent, mode: 'slip' | 'slide', options?: SlipSlideStartOptions) => {
       if (e.button !== 0) return;
       if (trackLocked) return;
       if (!isMediaItem(item)) return;
 
       e.stopPropagation();
+      pendingStartCleanupRef.current?.();
+
+      if (options?.activateOnMoveThreshold) {
+        const startX = e.clientX;
+        const startY = e.clientY;
+
+        const cleanupPendingStart = () => {
+          window.removeEventListener('mousemove', checkPendingStart);
+          window.removeEventListener('mouseup', cancelPendingStart);
+          pendingStartCleanupRef.current = null;
+        };
+
+        const checkPendingStart = (moveEvent: MouseEvent) => {
+          if (!hasExceededDragThreshold(startX, startY, moveEvent.clientX, moveEvent.clientY, DRAG_THRESHOLD_PIXELS)) {
+            return;
+          }
+
+          cleanupPendingStart();
+          beginSlipSlideGesture(startX, mode);
+        };
+
+        const cancelPendingStart = () => {
+          cleanupPendingStart();
+        };
+
+        pendingStartCleanupRef.current = cleanupPendingStart;
+        window.addEventListener('mousemove', checkPendingStart);
+        window.addEventListener('mouseup', cancelPendingStart);
+        return;
+      }
+
       e.preventDefault();
-      usePlaybackStore.getState().setPreviewFrame(null);
-
-      const { leftNeighbor, rightNeighbor } = findNeighbors();
-
-      // Signal drag start so other components can detect active drag
-      setDragState({
-        isDragging: true,
-        draggedItemIds: [item.id],
-        offset: { x: 0, y: 0 },
-      });
-
-      setState({
-        isActive: true,
-        mode,
-        startX: e.clientX,
-        currentDelta: 0,
-        leftNeighborId: leftNeighbor?.id ?? null,
-        rightNeighborId: rightNeighbor?.id ?? null,
-        isConstrained: false,
-        constraintEdge: null,
-        constraintLabel: null,
-      });
-      latestDeltaRef.current = 0;
+      beginSlipSlideGesture(e.clientX, mode);
     },
-    [item.id, item.type, trackLocked, findNeighbors, setDragState],
+    [beginSlipSlideGesture, item, trackLocked],
   );
 
   return {

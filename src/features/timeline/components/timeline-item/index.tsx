@@ -2225,7 +2225,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     if (activeTool === 'trim-edit' && !trackLocked && bodyIntentAtPointer) {
       if (item.type === 'video' || item.type === 'audio' || item.type === 'composition') {
-        handleSlipSlideStart(e, bodyIntentAtPointer === 'slide-body' ? 'slide' : 'slip');
+        handleSlipSlideStart(
+          e,
+          bodyIntentAtPointer === 'slide-body' ? 'slide' : 'slip',
+          { activateOnMoveThreshold: true },
+        );
       }
       return;
     }
