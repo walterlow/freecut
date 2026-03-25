@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import {
+  canLinkSelection,
   canLinkItems,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
@@ -81,6 +82,35 @@ describe('linked items', () => {
     ], 'video-1')).toBe(true);
   });
 
+  it('allows linking arbitrary multi-selection groups', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'video-1', type: 'video' }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'audio-1', type: 'audio' }),
+      makeItem({ id: 'video-2', linkedGroupId: 'video-2', type: 'video', from: 100, mediaId: 'media-2', originId: 'origin-2' }),
+    ];
+
+    expect(canLinkSelection(items, ['video-1', 'audio-1', 'video-2'])).toBe(true);
+  });
+
+  it('allows linking a selected clip with an existing linked group', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video' }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio' }),
+      makeItem({ id: 'video-2', linkedGroupId: 'video-2', type: 'video', from: 100, mediaId: 'media-2', originId: 'origin-2' }),
+    ];
+
+    expect(canLinkSelection(items, ['video-1', 'video-2'])).toBe(true);
+  });
+
+  it('blocks relinking a selection that is already one linked group', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video' }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio' }),
+    ];
+
+    expect(canLinkSelection(items, ['video-1', 'audio-1'])).toBe(false);
+  });
+
   it('reports opposing sync offsets when linked clips move independently', () => {
     const items = [
       makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', from: 0, sourceStart: 0, sourceFps: 30 }),
@@ -99,5 +129,27 @@ describe('linked items', () => {
 
     expect(getLinkedSyncOffsetFrames(items, 'video-1', 30)).toBe(-12);
     expect(getLinkedSyncOffsetFrames(items, 'audio-1', 30)).toBe(12);
+  });
+
+  it('ignores unrelated clips in a larger linked group when computing sync badges', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', from: 0, sourceStart: 0, sourceFps: 30 }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio', from: 0, sourceStart: 0, sourceFps: 30 }),
+      makeItem({ id: 'video-2', linkedGroupId: 'group-1', type: 'video', from: 120, sourceStart: 0, sourceFps: 30, mediaId: 'media-2', originId: 'origin-2' }),
+    ];
+
+    expect(getLinkedSyncOffsetFrames(items, 'video-1', 30)).toBe(null);
+    expect(getLinkedSyncOffsetFrames(items, 'audio-1', 30)).toBe(null);
+  });
+
+  it('still reports the actual audio-video drift inside a larger linked group', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', from: 0, sourceStart: 0, sourceFps: 30 }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio', from: 10, sourceStart: 0, sourceFps: 30 }),
+      makeItem({ id: 'video-2', linkedGroupId: 'group-1', type: 'video', from: 120, sourceStart: 0, sourceFps: 30, mediaId: 'media-2', originId: 'origin-2' }),
+    ];
+
+    expect(getLinkedSyncOffsetFrames(items, 'video-1', 30)).toBe(-10);
+    expect(getLinkedSyncOffsetFrames(items, 'audio-1', 30)).toBe(10);
   });
 });

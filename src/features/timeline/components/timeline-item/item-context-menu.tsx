@@ -162,12 +162,14 @@ export const ItemContextMenu = memo(function ItemContextMenu({
           <>
             {canLinkSelected && onLinkSelected && (
               <ContextMenuItem onClick={onLinkSelected}>
-                Link Audio/Video
+                Link Clips
+                <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
             {canUnlinkSelected && onUnlinkSelected && (
               <ContextMenuItem onClick={onUnlinkSelected}>
-                Unlink Audio/Video
+                Unlink Clips
+                <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
             <ContextMenuSeparator />

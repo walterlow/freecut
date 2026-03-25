@@ -24,7 +24,7 @@ import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 import { type CollisionRect } from '../../utils/collision-utils';
 import {
-  canLinkItems,
+  canLinkSelection,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
   getLinkedItems,
@@ -350,19 +350,12 @@ export function unlinkItems(ids: string[]): void {
 
 export function linkItems(ids: string[]): boolean {
   const items = useItemsStore.getState().items;
-  const selectedItems = ids
+  const expandedIds = expandSelectionWithLinkedItems(items, ids);
+  const selectedItems = expandedIds
     .map((id) => items.find((item) => item.id === id))
     .filter((item): item is TimelineItem => item !== undefined);
 
-  const isAlreadyLinkedPair = selectedItems.length === 2
-    && !!selectedItems[0]?.linkedGroupId
-    && selectedItems[0].linkedGroupId === selectedItems[1]?.linkedGroupId;
-  const canLinkSelection = selectedItems.length === 2
-    && canLinkItems(selectedItems)
-    && selectedItems.every((item) => getLinkedItemIds(items, item.id).length === 1)
-    && !isAlreadyLinkedPair;
-
-  if (!canLinkSelection) {
+  if (!canLinkSelection(items, ids) || selectedItems.length < 2) {
     return false;
   }
 

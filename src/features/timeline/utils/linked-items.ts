@@ -1,4 +1,5 @@
 import type { TimelineItem } from '@/types/timeline';
+import { getLinkedAudioCompanion, getLinkedVideoCompanion } from '@/shared/utils/linked-media';
 import { getSourceProperties, sourceToTimelineFrames } from './source-calculations';
 
 function isMediaPair(left: TimelineItem, right: TimelineItem): boolean {
@@ -114,30 +115,32 @@ function getLinkedSyncAnchorFrame(item: TimelineItem, timelineFps: number): numb
   return item.from - sourceOffsetOnTimeline;
 }
 
+function getLinkedSyncCompanion(items: TimelineItem[], anchor: TimelineItem): TimelineItem | null {
+  if (anchor.type === 'video' || anchor.type === 'composition') {
+    return getLinkedAudioCompanion(items, anchor);
+  }
+
+  if (anchor.type === 'audio') {
+    return getLinkedVideoCompanion(items, anchor);
+  }
+
+  return null;
+}
+
 export function getLinkedSyncOffsetFrames(
   items: TimelineItem[],
   itemId: string,
   timelineFps: number,
 ): number | null {
-  const linkedItems = getLinkedItems(items, itemId);
-  const anchor = linkedItems.find((item) => item.id === itemId);
-  if (!anchor || linkedItems.length <= 1) return null;
+  const anchor = items.find((item) => item.id === itemId);
+  if (!anchor) return null;
+
+  const companion = getLinkedSyncCompanion(items, anchor);
+  if (!companion) return null;
 
   const anchorSyncFrame = getLinkedSyncAnchorFrame(anchor, timelineFps);
-  let resolvedOffset: number | null = null;
-
-  for (const linkedItem of linkedItems) {
-    if (linkedItem.id === anchor.id) continue;
-
-    const candidateOffset = anchorSyncFrame - getLinkedSyncAnchorFrame(linkedItem, timelineFps);
-    if (candidateOffset === 0) continue;
-
-    if (resolvedOffset === null || Math.abs(candidateOffset) > Math.abs(resolvedOffset)) {
-      resolvedOffset = candidateOffset;
-    }
-  }
-
-  return resolvedOffset;
+  const candidateOffset = anchorSyncFrame - getLinkedSyncAnchorFrame(companion, timelineFps);
+  return candidateOffset === 0 ? null : candidateOffset;
 }
 
 export function buildSynchronizedLinkedMoveUpdates(
@@ -191,6 +194,21 @@ export function canLinkItems(items: TimelineItem[]): boolean {
   if ((left.sourceEnd ?? null) !== (right.sourceEnd ?? null)) return false;
 
   return true;
+}
+
+export function canLinkSelection(items: TimelineItem[], itemIds: string[]): boolean {
+  const uniqueSelectedIds = Array.from(new Set(itemIds)).filter((id) => items.some((item) => item.id === id));
+  if (uniqueSelectedIds.length < 2) return false;
+
+  const expandedIds = expandSelectionWithLinkedItems(items, uniqueSelectedIds);
+  if (expandedIds.length < 2) return false;
+
+  const [firstExpandedId] = expandedIds;
+  if (!firstExpandedId) return false;
+
+  const existingLinkedIds = new Set(getLinkedItemIds(items, firstExpandedId));
+  return existingLinkedIds.size !== expandedIds.length
+    || expandedIds.some((id) => !existingLinkedIds.has(id));
 }
 
 export function expandSelectionWithLinkedItems(items: TimelineItem[], itemIds: string[]): string[] {

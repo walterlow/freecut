@@ -5,11 +5,12 @@
 import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { canLinkItems, getUniqueLinkedItemAnchorIds, hasLinkedItems } from '@/features/timeline/utils/linked-items';
+import { canLinkSelection, getUniqueLinkedItemAnchorIds, hasLinkedItems } from '@/features/timeline/utils/linked-items';
 import { insertFreezeFrame, linkItems, unlinkItems } from '../../stores/actions/item-actions';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
@@ -30,6 +31,7 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const joinItems = useTimelineStore((s) => s.joinItems);
   const splitItem = useTimelineStore((s) => s.splitItem);
   const items = useTimelineStore((s) => s.items);
+  const toggleLinkedSelectionEnabled = useEditorStore((s) => s.toggleLinkedSelectionEnabled);
 
   const nudgeSelectedVisualItems = useCallback((deltaX: number, deltaY: number) => {
     if (selectedItemIds.length === 0) return;
@@ -250,15 +252,8 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   useHotkeys(
     hotkeys.LINK_AUDIO_VIDEO,
     (event) => {
-      if (selectedItemIds.length !== 2) return;
-
-      const selectedItems = selectedItemIds
-        .map((id) => items.find((item) => item.id === id))
-        .filter((item): item is NonNullable<typeof item> => item !== undefined);
-
-      if (selectedItems.length !== 2) return;
-      if (!canLinkItems(selectedItems)) return;
-      if (selectedItems.some((item) => hasLinkedItems(items, item.id))) return;
+      if (selectedItemIds.length < 2) return;
+      if (!canLinkSelection(items, selectedItemIds)) return;
 
       event.preventDefault();
       linkItems(selectedItemIds);
@@ -278,6 +273,16 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, items]
+  );
+
+  useHotkeys(
+    hotkeys.TOGGLE_LINKED_SELECTION,
+    (event) => {
+      event.preventDefault();
+      toggleLinkedSelectionEnabled();
+    },
+    HOTKEY_OPTIONS,
+    [toggleLinkedSelectionEnabled]
   );
 
   // Editing: Cmd/Ctrl+K - Split all items at gray playhead (or main playhead)

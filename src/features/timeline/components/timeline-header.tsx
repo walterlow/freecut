@@ -517,7 +517,7 @@ export const TimelineHeader = memo(function TimelineHeader({
           onClick={() => setLinkedSelectionEnabled(!linkedSelectionEnabled)}
           aria-label={linkedSelectionEnabled ? 'Disable linked selection' : 'Enable linked selection'}
           aria-pressed={linkedSelectionEnabled}
-          data-tooltip={linkedSelectionEnabled ? 'Linked Selection On' : 'Linked Selection Off'}
+          data-tooltip={`${linkedSelectionEnabled ? 'Linked Selection On' : 'Linked Selection Off'} (${formatHotkeyBinding(hotkeys.TOGGLE_LINKED_SELECTION)})`}
         >
           <Link2 className="w-3.5 h-3.5" />
         </Button>

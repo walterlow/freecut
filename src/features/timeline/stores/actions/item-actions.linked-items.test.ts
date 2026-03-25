@@ -298,20 +298,55 @@ describe('linked timeline items', () => {
     expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 30 });
   });
 
-  it('links an eligible audio/video pair with a fresh group id', () => {
+  it('links an arbitrary multi-selection with a fresh group id', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ linkedGroupId: 'video-1' }),
       makeAudioItem({ linkedGroupId: 'audio-1' }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 120,
+        linkedGroupId: 'video-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
     ]);
 
-    const linked = linkItems(['video-1', 'audio-1']);
+    const linked = linkItems(['video-1', 'audio-1', 'video-2']);
 
     const items = useItemsStore.getState().items;
     const video = items.find((item) => item.id === 'video-1');
     const audio = items.find((item) => item.id === 'audio-1');
+    const otherVideo = items.find((item) => item.id === 'video-2');
 
     expect(linked).toBe(true);
     expect(video?.linkedGroupId).toBeTruthy();
     expect(video?.linkedGroupId).toBe(audio?.linkedGroupId);
+    expect(video?.linkedGroupId).toBe(otherVideo?.linkedGroupId);
+  });
+
+  it('merges an existing linked group with additional selected clips', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({ linkedGroupId: 'group-1' }),
+      makeAudioItem({ linkedGroupId: 'group-1' }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 120,
+        linkedGroupId: 'video-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+    ]);
+
+    const linked = linkItems(['video-1', 'video-2']);
+
+    const items = useItemsStore.getState().items;
+    const video = items.find((item) => item.id === 'video-1');
+    const audio = items.find((item) => item.id === 'audio-1');
+    const otherVideo = items.find((item) => item.id === 'video-2');
+
+    expect(linked).toBe(true);
+    expect(video?.linkedGroupId).toBe(audio?.linkedGroupId);
+    expect(video?.linkedGroupId).toBe(otherVideo?.linkedGroupId);
+    expect(useSelectionStore.getState().selectedItemIds).toEqual(['video-1', 'audio-1', 'video-2']);
   });
 });

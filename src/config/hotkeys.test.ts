@@ -56,6 +56,14 @@ describe('getBrowserHostileHotkey', () => {
       browserAction: 'Reset browser zoom',
     });
   });
+
+  it('flags Ctrl+Shift+L as hostile and leaves Shift+L available', () => {
+    expect(getBrowserHostileHotkey('Ctrl+Shift+L')).toEqual({
+      binding: 'mod+shift+l',
+      browserAction: 'Focus address bar or search in some browsers',
+    });
+    expect(getBrowserHostileHotkey('Shift+L')).toBeNull();
+  });
 });
 
 describe('getHotkeyBindingFromEventData', () => {

@@ -72,7 +72,7 @@ import { getRazorSplitPosition } from '../../utils/razor-snap';
 import type { RazorSnapTarget } from '../../utils/razor-snap';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import {
-  canLinkItems,
+  canLinkSelection,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
   getLinkedItems,
@@ -1315,16 +1315,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   const getCanLinkSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length !== 2) return false;
+    if (selectedItemIds.length < 2) return false;
 
     const items = useTimelineStore.getState().items;
-    const selectedItems = selectedItemIds
-      .map((id) => items.find((timelineItem) => timelineItem.id === id))
-      .filter((timelineItem): timelineItem is NonNullable<typeof timelineItem> => timelineItem !== undefined);
-
-    return selectedItems.length === 2
-      && canLinkItems(selectedItems)
-      && selectedItems.every((selectedItem) => !hasLinkedItems(items, selectedItem.id));
+    return canLinkSelection(items, selectedItemIds);
   }, [item.id]);
 
   const getCanUnlinkSelected = useCallback(() => {
