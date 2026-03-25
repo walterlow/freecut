@@ -318,6 +318,28 @@ describe('linked edit tools', () => {
     expect(itemById['audio-right']).toMatchObject({ from: 140, durationInFrames: 40 });
   });
 
+  it('clamps slide edits before they break an existing transition on split segments', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({ id: 'video-left', durationInFrames: 60, sourceStart: 0, sourceEnd: 60, sourceDuration: 66, linkedGroupId: 'group-left' }),
+      makeAudioItem({ id: 'audio-left', durationInFrames: 60, sourceStart: 0, sourceEnd: 60, sourceDuration: 180, linkedGroupId: 'group-left' }),
+      makeVideoItem({ id: 'video-middle', from: 60, durationInFrames: 60, sourceStart: 60, sourceEnd: 120, sourceDuration: 240, linkedGroupId: 'group-middle', mediaId: 'media-2' }),
+      makeAudioItem({ id: 'audio-middle', from: 60, durationInFrames: 60, sourceStart: 60, sourceEnd: 120, sourceDuration: 240, linkedGroupId: 'group-middle', mediaId: 'media-2' }),
+      makeVideoItem({ id: 'video-right', from: 120, durationInFrames: 60, sourceStart: 120, sourceEnd: 180, sourceDuration: 300, linkedGroupId: 'group-right', mediaId: 'media-3' }),
+      makeAudioItem({ id: 'audio-right', from: 120, durationInFrames: 60, sourceStart: 120, sourceEnd: 180, sourceDuration: 300, linkedGroupId: 'group-right', mediaId: 'media-3' }),
+    ]);
+    addTransition('video-left', 'video-middle', 'crossfade', 12);
+
+    slideItem('video-middle', 5, 'video-left', 'video-right');
+
+    const itemById = useItemsStore.getState().itemById;
+    expect(itemById['video-left']).toMatchObject({ durationInFrames: 60, sourceEnd: 60 });
+    expect(itemById['video-middle']).toMatchObject({ from: 60, sourceStart: 60, sourceEnd: 120 });
+    expect(itemById['video-right']).toMatchObject({ from: 120, durationInFrames: 60 });
+    expect(useTransitionsStore.getState().transitions).toEqual([
+      expect.objectContaining({ leftClipId: 'video-left', rightClipId: 'video-middle', durationInFrames: 12 }),
+    ]);
+  });
+
   it('blocks splitting a linked companion inside the video transition bridge', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', sourceEnd: 80, sourceDuration: 120, linkedGroupId: 'group-1' }),

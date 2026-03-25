@@ -24,7 +24,7 @@ import {
   getMatchingSynchronizedLinkedCounterpart,
   getSynchronizedLinkedItems,
 } from '../utils/linked-items';
-import { clampSlipDeltaToPreserveTransitions } from '../utils/transition-utils';
+import { clampSlipDeltaToPreserveTransitions, clampSlideDeltaToPreserveTransitions } from '../utils/transition-utils';
 import {
   applyMovePreview,
   applySlipPreview,
@@ -300,16 +300,29 @@ export function useTimelineSlipSlide(
           }
         }
 
-        const clamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+        const allItems = useTimelineStore.getState().items;
+        const sourceClamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+        const transitionClamped = clampSlideDeltaToPreserveTransitions(
+          storeItem,
+          sourceClamped,
+          leftNeighborId ? (allItems.find((candidate) => candidate.id === leftNeighborId) ?? null) : null,
+          rightNeighborId ? (allItems.find((candidate) => candidate.id === rightNeighborId) ?? null) : null,
+          allItems,
+          useTransitionsStore.getState().transitions,
+          fps,
+        );
+        const clamped = transitionClamped;
         const isConstrained = clamped !== deltaFrames;
         const constraintEdge = !isConstrained
           ? null
           : deltaFrames > clamped
           ? 'end'
           : 'start';
-        const constraintLabel = isConstrained
+        const constraintLabel = !isConstrained
+          ? null
+          : sourceClamped !== deltaFrames
           ? (storeItem.from + deltaFrames < 0 ? 'timeline start' : 'neighbor limit')
-          : null;
+          : 'transition limit';
 
         // Update preview store
         const previewStore = useSlideEditPreviewStore.getState();
@@ -346,7 +359,6 @@ export function useTimelineSlipSlide(
           }));
         }
 
-        const allItems = useTimelineStore.getState().items;
         const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
         const synchronizedCounterpart = linkedSelectionEnabled
           ? getSynchronizedLinkedItems(allItems, storeItem.id)

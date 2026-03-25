@@ -7,6 +7,7 @@ import {
   canAddTransition,
   clampRippleTrimDeltaToPreserveTransition,
   clampRollingTrimDeltaToPreserveTransition,
+  clampSlideDeltaToPreserveTransitions,
   clampSlipDeltaToPreserveTransitions,
 } from './transition-utils';
 
@@ -186,5 +187,14 @@ describe('transition-utils', () => {
     const transition = createTransition('A', 'B', 30);
 
     expect(clampSlipDeltaToPreserveTransitions(right, -20, [left, right], [transition])).toBe(-5);
+  });
+
+  it('clamps slide edits so they do not invalidate transitions on the affected cut', () => {
+    const left = createVideoClip('A', 0, 60, 0, 60, 66);
+    const middle = createVideoClip('B', 60, 60, 60, 120, 240);
+    const right = createVideoClip('C', 120, 60, 120, 180, 300);
+    const transition = createTransition('A', 'B', 12);
+
+    expect(clampSlideDeltaToPreserveTransitions(middle, 5, left, right, [left, middle, right], [transition])).toBe(0);
   });
 });

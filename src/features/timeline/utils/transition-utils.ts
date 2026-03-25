@@ -20,6 +20,8 @@ import type { CanAddTransitionResult, Transition } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
 import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 import { calculateTrimSourceUpdate, type TrimHandle } from './trim-utils';
+import { computeSlideContinuitySourceDelta } from './slide-utils';
+import { applyMovePreview, applyTrimEndPreview, applyTrimStartPreview, type PreviewItemUpdate } from './item-edit-preview';
 
 const FRAME_EPSILON = 1;
 
@@ -210,6 +212,66 @@ export function clampSlipDeltaToPreserveTransitions(
   return clampDeltaToLastValidValue(requestedDelta, isValid);
 }
 
+export function clampSlideDeltaToPreserveTransitions(
+  item: TimelineItem,
+  requestedDelta: number,
+  leftNeighbor: TimelineItem | null,
+  rightNeighbor: TimelineItem | null,
+  items: TimelineItem[],
+  transitions: Transition[],
+  timelineFps: number = 30,
+): number {
+  if (requestedDelta === 0) return requestedDelta;
+
+  const affectedIds = new Set<string>([item.id]);
+  if (leftNeighbor) affectedIds.add(leftNeighbor.id);
+  if (rightNeighbor) affectedIds.add(rightNeighbor.id);
+
+  const relatedTransitions = transitions.filter((transition) => (
+    affectedIds.has(transition.leftClipId) || affectedIds.has(transition.rightClipId)
+  ));
+  if (relatedTransitions.length === 0) return requestedDelta;
+
+  const itemsById = new Map(items.map((candidate) => [candidate.id, candidate]));
+
+  const isValid = (delta: number): boolean => {
+    const previewById = new Map<string, TimelineItem>();
+
+    if (leftNeighbor) {
+      previewById.set(leftNeighbor.id, applyPreviewUpdate(leftNeighbor, applyTrimEndPreview(leftNeighbor, delta, timelineFps)));
+    }
+
+    if (rightNeighbor) {
+      previewById.set(rightNeighbor.id, applyPreviewUpdate(rightNeighbor, applyTrimStartPreview(rightNeighbor, delta, timelineFps)));
+    }
+
+    let slidItemPreview = applyPreviewUpdate(item, applyMovePreview(item, delta));
+    const continuitySourceDelta = computeSlideContinuitySourceDelta(item, leftNeighbor, rightNeighbor, delta, timelineFps);
+    if (
+      continuitySourceDelta !== 0
+      && (slidItemPreview.type === 'video' || slidItemPreview.type === 'audio' || slidItemPreview.type === 'composition')
+      && slidItemPreview.sourceEnd !== undefined
+    ) {
+      slidItemPreview = {
+        ...slidItemPreview,
+        sourceStart: (slidItemPreview.sourceStart ?? 0) + continuitySourceDelta,
+        sourceEnd: slidItemPreview.sourceEnd + continuitySourceDelta,
+      };
+    }
+    previewById.set(item.id, slidItemPreview);
+
+    return relatedTransitions.every((transition) => {
+      const leftClip = previewById.get(transition.leftClipId) ?? itemsById.get(transition.leftClipId) ?? null;
+      const rightClip = previewById.get(transition.rightClipId) ?? itemsById.get(transition.rightClipId) ?? null;
+
+      if (!leftClip || !rightClip) return true;
+      return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
+    });
+  };
+
+  return clampDeltaToLastValidValue(requestedDelta, isValid);
+}
+
 function clampDeltaToLastValidValue(
   requestedDelta: number,
   isValid: (delta: number) => boolean,
@@ -334,4 +396,8 @@ function applySlipPreview(item: TimelineItem, slipDelta: number): TimelineItem {
     sourceStart: (item.sourceStart ?? 0) + slipDelta,
     sourceEnd: item.sourceEnd !== undefined ? item.sourceEnd + slipDelta : item.sourceEnd,
   };
+}
+
+function applyPreviewUpdate(item: TimelineItem, previewUpdate: PreviewItemUpdate): TimelineItem {
+  return { ...item, ...previewUpdate } as TimelineItem;
 }

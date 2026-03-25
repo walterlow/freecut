@@ -21,6 +21,7 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
 import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
 import { type CollisionRect } from '../../utils/collision-utils';
 import {
@@ -1352,11 +1353,22 @@ export function slideItem(
   execute('SLIDE_EDIT', () => {
     const itemsStore = useItemsStore.getState();
     const items = itemsStore.items;
+    const transitions = useTransitionsStore.getState().transitions;
     // Verify the target clip exists before mutating neighbors
     const item = items.find((i) => i.id === id);
     if (!item) return;
     const leftNeighbor = leftNeighborId ? (items.find((i) => i.id === leftNeighborId) ?? null) : null;
     const rightNeighbor = rightNeighborId ? (items.find((i) => i.id === rightNeighborId) ?? null) : null;
+    const clampedSlideDelta = clampSlideDeltaToPreserveTransitions(
+      item,
+      slideDelta,
+      leftNeighbor,
+      rightNeighbor,
+      items,
+      transitions,
+      useTimelineSettingsStore.getState().fps,
+    );
+    if (clampedSlideDelta === 0) return;
     const synchronizedCounterpart = getSynchronizedLinkedItemsForEdit(items, id)
       .find((candidate) => candidate.id !== id) ?? null;
     const leftCounterpart = synchronizedCounterpart && leftNeighborId
@@ -1374,31 +1386,31 @@ export function slideItem(
       item,
       leftNeighbor,
       rightNeighbor,
-      slideDelta,
+      clampedSlideDelta,
       useTimelineSettingsStore.getState().fps,
     );
 
     // Adjust neighbors (order: shrink first, then extend â€” same as rolling edit)
-    if (slideDelta > 0) {
+    if (clampedSlideDelta > 0) {
       // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
       if (rightNeighborId) {
-        itemsStore._trimItemStart(rightNeighborId, slideDelta, { skipAdjacentClamp: true });
+        itemsStore._trimItemStart(rightNeighborId, clampedSlideDelta, { skipAdjacentClamp: true });
       }
       if (leftNeighborId) {
-        itemsStore._trimItemEnd(leftNeighborId, slideDelta, { skipAdjacentClamp: true });
+        itemsStore._trimItemEnd(leftNeighborId, clampedSlideDelta, { skipAdjacentClamp: true });
       }
     } else {
       // Sliding left: left neighbor shrinks end (frees space), right neighbor extends start
       if (leftNeighborId) {
-        itemsStore._trimItemEnd(leftNeighborId, slideDelta, { skipAdjacentClamp: true });
+        itemsStore._trimItemEnd(leftNeighborId, clampedSlideDelta, { skipAdjacentClamp: true });
       }
       if (rightNeighborId) {
-        itemsStore._trimItemStart(rightNeighborId, slideDelta, { skipAdjacentClamp: true });
+        itemsStore._trimItemStart(rightNeighborId, clampedSlideDelta, { skipAdjacentClamp: true });
       }
     }
 
     // Move the slid clip
-    itemsStore._moveItem(id, item.from + slideDelta);
+    itemsStore._moveItem(id, item.from + clampedSlideDelta);
     if (
       continuitySourceDelta !== 0
       && (item.type === 'video' || item.type === 'audio' || item.type === 'composition')
