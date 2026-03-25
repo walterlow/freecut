@@ -159,15 +159,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       const { handle, initialFrom, initialDuration } = trimStateRef.current;
 
       // Detect edit modes.
-      // Explicit tool selection takes precedence over modifier keys.
       const forcedMode = trimStateRef.current.forcedMode;
-      const activeTool = useSelectionStore.getState().activeTool;
-      const explicitRolling = activeTool === 'rolling-edit';
-      const explicitRipple = activeTool === 'ripple-edit';
       const isRollingEdit = forcedMode === 'rolling'
-        || (forcedMode === null && (explicitRolling || (!explicitRipple && altKeyRef.current && !shiftKeyRef.current)));
+        || (forcedMode === null && altKeyRef.current && !shiftKeyRef.current);
       const isRippleEdit = forcedMode === 'ripple'
-        || (forcedMode === null && (explicitRipple || (!explicitRolling && shiftKeyRef.current)));
+        || (forcedMode === null && shiftKeyRef.current);
       const allItems = useTimelineStore.getState().items;
       const transitions = useTransitionsStore.getState().transitions;
       const currentItem = getItemFromStore();
@@ -690,14 +686,11 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       const forcedMode = options?.forcedMode ?? null;
       const destroyTransitionAtHandle = options?.destroyTransitionAtHandle ?? false;
-      const activeTool = useSelectionStore.getState().activeTool;
-      const explicitRolling = activeTool === 'rolling-edit';
-      const explicitRipple = activeTool === 'ripple-edit';
-      const modifierRolling = !explicitRipple && e.altKey && !e.shiftKey;
-      const modifierRipple = !explicitRolling && e.shiftKey;
+      const modifierRolling = e.altKey && !e.shiftKey;
+      const modifierRipple = e.shiftKey;
 
-      const wantsRolling = forcedMode === 'rolling' || (forcedMode === null && (explicitRolling || modifierRolling));
-      const wantsRipple = forcedMode === 'ripple' || (forcedMode === null && (explicitRipple || modifierRipple));
+      const wantsRolling = forcedMode === 'rolling' || (forcedMode === null && modifierRolling);
+      const wantsRipple = forcedMode === 'ripple' || (forcedMode === null && modifierRipple);
       const currentItem = getItemFromStore();
       const transitions = useTransitionsStore.getState().transitions;
       let neighborId: string | null = null;

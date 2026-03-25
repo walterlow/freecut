@@ -6,7 +6,7 @@ export interface SelectionState {
   selectedTrackIds: string[]; // Multi-track selection
   activeTrackId: string | null; // Single active track
   selectionType: 'item' | 'track' | 'marker' | 'transition' | null;
-  activeTool: 'select' | 'trim-edit' | 'razor' | 'rate-stretch' | 'rolling-edit' | 'ripple-edit' | 'slip' | 'slide'; // Active timeline tool
+  activeTool: 'select' | 'trim-edit' | 'razor' | 'rate-stretch' | 'slip' | 'slide'; // Active timeline tool
   // Drag state for visual feedback
   dragState: {
     isDragging: boolean;

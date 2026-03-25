@@ -51,12 +51,12 @@ export const TrimHandles = memo(function TrimHandles({
 }: TrimHandlesProps) {
   const showLeftHandle = !trackLocked &&
     (!isAnyDragActive || isTrimming) &&
-    (activeTool === 'select' || activeTool === 'trim-edit' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit') &&
+    (activeTool === 'select' || activeTool === 'trim-edit') &&
     (hoveredEdge === 'start' || (isTrimming && trimHandle === 'start'));
 
   const showRightHandle = !trackLocked &&
     (!isAnyDragActive || isTrimming) &&
-    (activeTool === 'select' || activeTool === 'trim-edit' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit') &&
+    (activeTool === 'select' || activeTool === 'trim-edit') &&
     (hoveredEdge === 'end' || (isTrimming && trimHandle === 'end'));
 
   return (

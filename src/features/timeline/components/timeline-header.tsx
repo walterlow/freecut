@@ -1,5 +1,11 @@
 import { useRef, useEffect, useCallback, memo, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Slider } from '@/components/ui/slider';
 import {
   Film,
@@ -12,6 +18,7 @@ import {
   ArrowRightLeft,
   BetweenHorizontalEnd,
   BetweenHorizontalStart,
+  ChevronDown,
   X,
   MousePointer2,
   Undo2,
@@ -123,9 +130,7 @@ export const TimelineHeader = memo(function TimelineHeader({
     selectedItemIds.length > 0 && selectedItemIds.some((id) => hasLinkedItems(items, id))
   ), [items, selectedItemIds]);
 
-  const isTrimFamilyTool = activeTool === 'trim-edit'
-    || activeTool === 'rolling-edit'
-    || activeTool === 'ripple-edit';
+  const SlipSlideFlyoutIcon = activeTool === 'slide' ? BetweenHorizontalEnd : ArrowRightLeft;
 
 
   // Momentum state for zoom slider
@@ -294,7 +299,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             variant="ghost"
             size="icon"
             className={`h-7 w-7 ${
-              isTrimFamilyTool ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+              activeTool === 'trim-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'trim-edit' ? 'select' : 'trim-edit')}
             aria-label="Trim edit tool"
@@ -329,31 +334,39 @@ export const TimelineHeader = memo(function TimelineHeader({
             <Gauge className="w-3.5 h-3.5" />
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 ${
-              activeTool === 'slip' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={() => setActiveTool(activeTool === 'slip' ? 'select' : 'slip')}
-            aria-label="Slip tool"
-            data-tooltip="Slip Tool (Y)"
-          >
-            <ArrowRightLeft className="w-3.5 h-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 ${
-              activeTool === 'slide' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={() => setActiveTool(activeTool === 'slide' ? 'select' : 'slide')}
-            aria-label="Slide tool"
-            data-tooltip="Slide Tool (U)"
-          >
-            <BetweenHorizontalEnd className="w-3.5 h-3.5" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={`h-7 gap-1 px-2 ${
+                  activeTool === 'slip' || activeTool === 'slide'
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                    : ''
+                }`}
+                aria-label="Slip and slide tools"
+                data-tooltip="Slip / Slide Tools"
+              >
+                <span className="flex items-center gap-1">
+                  <span className="inline-flex items-center justify-center">
+                    <SlipSlideFlyoutIcon className="w-3.5 h-3.5" />
+                  </span>
+                  <ChevronDown className="w-3 h-3 opacity-70" />
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slip' ? 'select' : 'slip')}>
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span className="flex-1">Slip tool</span>
+                <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIP_TOOL)}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slide' ? 'select' : 'slide')}>
+                <BetweenHorizontalEnd className="w-3.5 h-3.5" />
+                <span className="flex-1">Slide tool</span>
+                <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIDE_TOOL)}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <Separator orientation="vertical" className="h-5 mx-1.5" />

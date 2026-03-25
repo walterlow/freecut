@@ -1265,16 +1265,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-slip-smart'
     : activeTool === 'trim-edit' && smartBodyIntent !== null
     ? 'cursor-ew-resize'
-    : hoveredEdge === 'start' && activeTool === 'ripple-edit'
-    ? 'cursor-ripple-left'
-    : hoveredEdge === 'end' && activeTool === 'ripple-edit'
-    ? 'cursor-ripple-right'
-    : hoveredEdge !== null && (activeTool === 'trim-edit' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit')
+    : hoveredEdge !== null && (activeTool === 'trim-edit' || activeTool === 'rate-stretch')
     ? 'cursor-ew-resize'
     : activeTool === 'rate-stretch'
     ? 'cursor-gauge'
-    : activeTool === 'rolling-edit' || activeTool === 'ripple-edit'
-    ? 'cursor-ew-resize'
     : activeTool === 'slip' || activeTool === 'slide'
     ? (item.type === 'video' || item.type === 'audio' || item.type === 'composition' ? 'cursor-ew-resize' : 'cursor-not-allowed')
     : isBeingDragged
@@ -2164,9 +2158,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         return;
       }
     }
-    // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
-    if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
-    if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
+    if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
     handleDragStart(e);
   }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item]);
 
@@ -2619,21 +2611,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             hoveredEdge={hoveredEdge}
             trimConstrained={trimConstrained}
             startCursorClass={
-              activeTool === 'ripple-edit' || smartTrimIntent === 'ripple-start'
+              smartTrimIntent === 'ripple-start'
                 ? 'cursor-ripple-left'
                 : smartTrimIntent === 'roll-start'
                 ? 'cursor-trim-center'
                 : 'cursor-trim-left'
             }
             endCursorClass={
-              activeTool === 'ripple-edit' || smartTrimIntent === 'ripple-end'
+              smartTrimIntent === 'ripple-end'
                 ? 'cursor-ripple-right'
                 : smartTrimIntent === 'roll-end'
                 ? 'cursor-trim-center'
                 : 'cursor-trim-right'
             }
-            startTone={activeTool === 'ripple-edit' || smartTrimIntent === 'ripple-start' || (isTrimming && trimHandle === 'start' && isRippleEdit) ? 'ripple' : 'default'}
-            endTone={activeTool === 'ripple-edit' || smartTrimIntent === 'ripple-end' || (isTrimming && trimHandle === 'end' && isRippleEdit) ? 'ripple' : 'default'}
+            startTone={smartTrimIntent === 'ripple-start' || (isTrimming && trimHandle === 'start' && isRippleEdit) ? 'ripple' : 'default'}
+            endTone={smartTrimIntent === 'ripple-end' || (isTrimming && trimHandle === 'end' && isRippleEdit) ? 'ripple' : 'default'}
             hasJoinableLeft={hasJoinableLeft}
             hasJoinableRight={hasJoinableRight}
             onTrimStart={handleSmartTrimStart}

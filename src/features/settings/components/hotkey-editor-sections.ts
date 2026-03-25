@@ -45,11 +45,10 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
     blurb: 'Tool switching for timeline editing modes.',
     items: [
       { label: 'Selection tool', keys: ['SELECTION_TOOL'] },
+      { label: 'Trim edit tool', keys: ['TRIM_EDIT_TOOL'] },
       { label: 'Razor tool', keys: ['RAZOR_TOOL'] },
       { label: 'Split at cursor', keys: ['SPLIT_AT_CURSOR'] },
       { label: 'Rate stretch tool', keys: ['RATE_STRETCH_TOOL'] },
-      { label: 'Rolling edit tool', keys: ['ROLLING_EDIT_TOOL'] },
-      { label: 'Ripple edit tool', keys: ['RIPPLE_EDIT_TOOL'] },
       { label: 'Slip tool', keys: ['SLIP_TOOL'] },
       { label: 'Slide tool', keys: ['SLIDE_TOOL'] },
     ],

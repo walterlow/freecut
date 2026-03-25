@@ -56,8 +56,6 @@ export const HOTKEYS = {
   RAZOR_TOOL: 'c',
   SPLIT_AT_CURSOR: 'shift+c',
   RATE_STRETCH_TOOL: 'r',
-  ROLLING_EDIT_TOOL: 'n',
-  RIPPLE_EDIT_TOOL: 'b',
   SLIP_TOOL: 'y',
   SLIDE_TOOL: 'u',
 
@@ -312,8 +310,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RAZOR_TOOL: 'Razor tool',
   SPLIT_AT_CURSOR: 'Split at cursor',
   RATE_STRETCH_TOOL: 'Rate stretch tool',
-  ROLLING_EDIT_TOOL: 'Rolling edit tool',
-  RIPPLE_EDIT_TOOL: 'Ripple edit tool',
   SLIP_TOOL: 'Slip tool',
   SLIDE_TOOL: 'Slide tool',
 
