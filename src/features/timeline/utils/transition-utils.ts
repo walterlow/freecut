@@ -178,6 +178,38 @@ export function clampRollingTrimDeltaToPreserveTransition(
   return clampDeltaToLastValidValue(requestedDelta, isValid);
 }
 
+export function clampSlipDeltaToPreserveTransitions(
+  item: TimelineItem,
+  requestedDelta: number,
+  items: TimelineItem[],
+  transitions: Transition[],
+): number {
+  if (requestedDelta === 0) return requestedDelta;
+
+  const relatedTransitions = transitions.filter((transition) => (
+    transition.leftClipId === item.id || transition.rightClipId === item.id
+  ));
+  if (relatedTransitions.length === 0) return requestedDelta;
+
+  const isValid = (delta: number): boolean => {
+    const slippedItem = applySlipPreview(item, delta);
+
+    return relatedTransitions.every((transition) => {
+      const leftClip = transition.leftClipId === item.id
+        ? slippedItem
+        : items.find((candidate) => candidate.id === transition.leftClipId) ?? null;
+      const rightClip = transition.rightClipId === item.id
+        ? slippedItem
+        : items.find((candidate) => candidate.id === transition.rightClipId) ?? null;
+
+      if (!leftClip || !rightClip) return true;
+      return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
+    });
+  };
+
+  return clampDeltaToLastValidValue(requestedDelta, isValid);
+}
+
 function clampDeltaToLastValidValue(
   requestedDelta: number,
   isValid: (delta: number) => boolean,
@@ -293,5 +325,13 @@ function applyStandardTrimPreview(
     from: handle === 'start' ? item.from + trimDelta : item.from,
     durationInFrames: nextDuration,
     ...sourceUpdate,
+  };
+}
+
+function applySlipPreview(item: TimelineItem, slipDelta: number): TimelineItem {
+  return {
+    ...item,
+    sourceStart: (item.sourceStart ?? 0) + slipDelta,
+    sourceEnd: item.sourceEnd !== undefined ? item.sourceEnd + slipDelta : item.sourceEnd,
   };
 }

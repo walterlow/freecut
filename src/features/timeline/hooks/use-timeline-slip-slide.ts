@@ -22,6 +22,7 @@ import {
   getMatchingSynchronizedLinkedCounterpart,
   getSynchronizedLinkedItems,
 } from '../utils/linked-items';
+import { clampSlipDeltaToPreserveTransitions } from '../utils/transition-utils';
 import {
   applyMovePreview,
   applySlipPreview,
@@ -161,8 +162,20 @@ export function useTimelineSlipSlide(
         const effectiveSourceFps = sourceFps ?? fps;
         const sourceFramesDelta = timelineToSourceFrames(deltaFrames, speed, fps, effectiveSourceFps);
 
-        const clamped = clampSlipDelta(sourceFramesDelta);
+        const sourceClamped = clampSlipDelta(sourceFramesDelta);
+        const transitionClamped = clampSlipDeltaToPreserveTransitions(
+          currentItem,
+          sourceClamped,
+          useTimelineStore.getState().items,
+          useTransitionsStore.getState().transitions,
+        );
+        const clamped = transitionClamped;
         const isConstrained = clamped !== sourceFramesDelta;
+        const constraintLabel = clamped !== sourceClamped
+          ? 'transition limit'
+          : sourceClamped !== sourceFramesDelta
+          ? 'no handle'
+          : null;
 
         // Update preview store
         const previewStore = useSlipEditPreviewStore.getState();
@@ -185,7 +198,7 @@ export function useTimelineSlipSlide(
             ...prev,
             currentDelta: clamped,
             isConstrained,
-            constraintLabel: isConstrained ? 'no handle' : null,
+            constraintLabel,
           }));
         }
 

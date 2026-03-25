@@ -694,10 +694,13 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       const explicitRolling = activeTool === 'rolling-edit';
       const explicitRipple = activeTool === 'ripple-edit';
       const modifierRolling = !explicitRipple && e.altKey && !e.shiftKey;
+      const modifierRipple = !explicitRolling && e.shiftKey;
 
       const wantsRolling = forcedMode === 'rolling' || (forcedMode === null && (explicitRolling || modifierRolling));
+      const wantsRipple = forcedMode === 'ripple' || (forcedMode === null && (explicitRipple || modifierRipple));
       const currentItem = getItemFromStore();
       const transitions = useTransitionsStore.getState().transitions;
+      let neighborId: string | null = null;
 
       if (wantsRolling) {
         const neighbor = findHandleNeighborWithTransitions(
@@ -706,7 +709,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
           useTimelineStore.getState().items,
           transitions,
         );
-        const neighborId = neighbor?.id ?? null;
+        neighborId = neighbor?.id ?? null;
         if (!neighborId) {
           toast.warning('Rolling edit needs a neighbor on this edge');
           return;
@@ -727,9 +730,9 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         initialFrom: item.from,
         initialDuration: item.durationInFrames,
         currentDelta: 0,
-        isRollingEdit: false,
-        isRippleEdit: false,
-        neighborId: null,
+        isRollingEdit: wantsRolling,
+        isRippleEdit: wantsRipple,
+        neighborId,
         forcedMode,
         isConstrained: false,
         constraintLabel: null,

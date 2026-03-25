@@ -7,6 +7,7 @@ import {
   canAddTransition,
   clampRippleTrimDeltaToPreserveTransition,
   clampRollingTrimDeltaToPreserveTransition,
+  clampSlipDeltaToPreserveTransitions,
 } from './transition-utils';
 
 function createVideoClip(
@@ -169,5 +170,21 @@ describe('transition-utils', () => {
     const transition = createTransition('A', 'B', 30);
 
     expect(clampRollingTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(-5);
+  });
+
+  it('clamps slip edits so they do not invalidate outgoing transitions', () => {
+    const left = createVideoClip('A', 0, 100, 0, 100, 130);
+    const right = createVideoClip('B', 100, 100, 40, 140, 200);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampSlipDeltaToPreserveTransitions(left, 20, [left, right], [transition])).toBe(15);
+  });
+
+  it('clamps slip edits so they do not invalidate incoming transitions', () => {
+    const left = createVideoClip('A', 0, 100, 40, 140, 200);
+    const right = createVideoClip('B', 100, 100, 20, 120, 160);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampSlipDeltaToPreserveTransitions(right, -20, [left, right], [transition])).toBe(-5);
   });
 });
