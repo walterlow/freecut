@@ -6,6 +6,7 @@ import {
   areFramesOverlapping,
   canAddTransition,
   clampRippleTrimDeltaToPreserveTransition,
+  clampRollingTrimDeltaToPreserveTransition,
 } from './transition-utils';
 
 function createVideoClip(
@@ -152,5 +153,21 @@ describe('transition-utils', () => {
     const transition = createTransition('A', 'B', 30);
 
     expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', -20, right, transition)).toBe(-9);
+  });
+
+  it('clamps rolling trims so the outgoing clip keeps enough tail handle for the transition', () => {
+    const left = createVideoClip('A', 0, 100, 0, 80, 100);
+    const right = createVideoClip('B', 100, 100, 40, 140, 200);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampRollingTrimDeltaToPreserveTransition(left, 'end', 10, right, transition)).toBe(5);
+  });
+
+  it('clamps rolling trims so the incoming clip keeps enough head handle for the transition', () => {
+    const left = createVideoClip('A', 0, 100, 30, 130, 200);
+    const right = createVideoClip('B', 100, 100, 20, 120, 160);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampRollingTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(-5);
   });
 });

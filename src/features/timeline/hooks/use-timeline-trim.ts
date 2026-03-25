@@ -30,7 +30,10 @@ import {
   applyTrimStartPreview,
   type PreviewItemUpdate,
 } from '../utils/item-edit-preview';
-import { clampRippleTrimDeltaToPreserveTransition } from '../utils/transition-utils';
+import {
+  clampRippleTrimDeltaToPreserveTransition,
+  clampRollingTrimDeltaToPreserveTransition,
+} from '../utils/transition-utils';
 import { getTransitionBridgeAtHandle } from '../utils/transition-edit-guards';
 
 interface TrimState {
@@ -296,6 +299,21 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             constraintLabel = 'cut limit';
             deltaFrames = neighborClamped;
           }
+        }
+
+        const transitionAtHandle = getTransitionBridgeAtHandle(transitions, currentItem.id, handle!);
+        const transitionClamped = clampRollingTrimDeltaToPreserveTransition(
+          currentItem,
+          handle!,
+          deltaFrames,
+          neighbor,
+          transitionAtHandle,
+          fps,
+        );
+        if (transitionClamped !== deltaFrames) {
+          isConstrained = true;
+          constraintLabel = 'transition limit';
+          deltaFrames = transitionClamped;
         }
       }
 

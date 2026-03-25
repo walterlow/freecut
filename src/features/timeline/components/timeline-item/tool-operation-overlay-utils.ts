@@ -9,6 +9,11 @@ import {
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../../utils/trim-utils';
 import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
+import { getTransitionBridgeAtHandle } from '../../utils/transition-edit-guards';
+import {
+  clampRippleTrimDeltaToPreserveTransition,
+  clampRollingTrimDeltaToPreserveTransition,
+} from '../../utils/transition-utils';
 
 const LARGE_OPERATION_DELTA = 1_000_000_000;
 const MAX_BOX_WIDTH_PX = 12000;
@@ -128,9 +133,8 @@ function clampTrimDeltaForBounds(
   isRippleEdit: boolean,
 ): number {
   let clamped = clampTrimAmount(item, handle, delta, fps).clampedAmount;
-  const rollingNeighbor = isRollingEdit
-    ? findHandleNeighborWithTransitions(item, handle, items, transitions)
-    : null;
+  const handleNeighbor = findHandleNeighborWithTransitions(item, handle, items, transitions);
+  const rollingNeighbor = isRollingEdit ? handleNeighbor : null;
 
   if (!isRippleEdit) {
     clamped = clampToAdjacentItems(
@@ -148,6 +152,28 @@ function clampTrimDeltaForBounds(
     if (Math.abs(neighborClamped) < Math.abs(clamped)) {
       clamped = neighborClamped;
     }
+
+    const transitionAtHandle = getTransitionBridgeAtHandle(transitions, item.id, handle);
+    clamped = clampRollingTrimDeltaToPreserveTransition(
+      item,
+      handle,
+      clamped,
+      rollingNeighbor,
+      transitionAtHandle,
+      fps,
+    );
+  }
+
+  if (isRippleEdit) {
+    const transitionAtHandle = getTransitionBridgeAtHandle(transitions, item.id, handle);
+    clamped = clampRippleTrimDeltaToPreserveTransition(
+      item,
+      handle,
+      clamped,
+      handleNeighbor,
+      transitionAtHandle,
+      fps,
+    );
   }
 
   return clamped;

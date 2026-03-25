@@ -140,16 +140,48 @@ export function clampRippleTrimDeltaToPreserveTransition(
 
   const isValid = (delta: number): boolean => {
     if (editsLeftClip) {
-      const leftClip = applyRippleTrimPreview(item, 'end', delta, timelineFps);
+      const leftClip = applyAnchoredTrimPreview(item, 'end', delta, timelineFps);
       const rightClip = { ...neighbor, from: neighbor.from + delta };
       return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
     }
 
     const leftClip = neighbor;
-    const rightClip = applyRippleTrimPreview(item, 'start', delta, timelineFps);
+    const rightClip = applyAnchoredTrimPreview(item, 'start', delta, timelineFps);
     return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
   };
 
+  return clampDeltaToLastValidValue(requestedDelta, isValid);
+}
+
+export function clampRollingTrimDeltaToPreserveTransition(
+  item: TimelineItem,
+  handle: TrimHandle,
+  requestedDelta: number,
+  neighbor: TimelineItem | null,
+  transition: Transition | null,
+  timelineFps: number = 30,
+): number {
+  if (!transition || !neighbor || requestedDelta === 0) return requestedDelta;
+
+  const editsLeftClip = transition.leftClipId === item.id && handle === 'end';
+  const editsRightClip = transition.rightClipId === item.id && handle === 'start';
+  if (!editsLeftClip && !editsRightClip) return requestedDelta;
+
+  const isValid = (delta: number): boolean => {
+    const leftClip = editsLeftClip ? item : neighbor;
+    const rightClip = editsLeftClip ? neighbor : item;
+    const leftPreview = applyStandardTrimPreview(leftClip, 'end', delta, timelineFps);
+    const rightPreview = applyStandardTrimPreview(rightClip, 'start', delta, timelineFps);
+    return canAddTransition(leftPreview, rightPreview, transition.durationInFrames, transition.alignment).canAdd;
+  };
+
+  return clampDeltaToLastValidValue(requestedDelta, isValid);
+}
+
+function clampDeltaToLastValidValue(
+  requestedDelta: number,
+  isValid: (delta: number) => boolean,
+): number {
   if (!isValid(0)) return 0;
   if (isValid(requestedDelta)) return requestedDelta;
 
@@ -212,7 +244,7 @@ export function getAvailableHandle(
   }
 }
 
-function applyRippleTrimPreview(
+function applyAnchoredTrimPreview(
   item: TimelineItem,
   handle: TrimHandle,
   trimDelta: number,
@@ -237,6 +269,28 @@ function applyRippleTrimPreview(
 
   return {
     ...item,
+    durationInFrames: nextDuration,
+    ...sourceUpdate,
+  };
+}
+
+function applyStandardTrimPreview(
+  item: TimelineItem,
+  handle: TrimHandle,
+  trimDelta: number,
+  timelineFps: number,
+): TimelineItem {
+  const nextDuration = Math.max(
+    1,
+    handle === 'start'
+      ? item.durationInFrames - trimDelta
+      : item.durationInFrames + trimDelta,
+  );
+  const sourceUpdate = calculateTrimSourceUpdate(item, handle, trimDelta, nextDuration, timelineFps);
+
+  return {
+    ...item,
+    from: handle === 'start' ? item.from + trimDelta : item.from,
     durationInFrames: nextDuration,
     ...sourceUpdate,
   };
