@@ -24,6 +24,7 @@ export interface OperationBoundsVisual {
   boxWidthPx: number | null;
   limitEdgePositionsPx: number[];
   edgePositionsPx: number[];
+  edgeConstraintStates: boolean[];
   constrained: boolean;
   mode: OperationMode;
 }
@@ -58,6 +59,7 @@ interface SlideBoundsOptions {
   frameToPixels: (frames: number) => number;
   leftNeighbor: TimelineItem | null;
   rightNeighbor: TimelineItem | null;
+  constraintEdge: 'start' | 'end' | null;
   constrained: boolean;
   currentLeftPx: number;
   currentRightPx: number;
@@ -67,6 +69,7 @@ interface SlipBoundsOptions {
   item: TimelineItem;
   fps: number;
   frameToPixels: (frames: number) => number;
+  constraintEdge: 'start' | 'end' | null;
   constrained: boolean;
   currentLeftPx: number;
   currentRightPx: number;
@@ -283,6 +286,7 @@ export function getTrimOperationBoundsVisual({
     ...bounds,
     limitEdgePositionsPx: [minEdgePx, maxEdgePx],
     edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+    edgeConstraintStates: [constrained],
     constrained,
     mode: isRollingEdit ? 'rolling' : isRippleEdit ? 'ripple' : 'trim',
   };
@@ -304,6 +308,7 @@ export function getStretchOperationBoundsVisual({
       boxWidthPx: null,
       limitEdgePositionsPx: [],
       edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+      edgeConstraintStates: [constrained],
       constrained,
       mode: 'stretch',
     };
@@ -323,6 +328,7 @@ export function getStretchOperationBoundsVisual({
     ...bounds,
     limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+    edgeConstraintStates: [constrained],
     constrained,
     mode: 'stretch',
   };
@@ -334,6 +340,7 @@ export function getSlideOperationBoundsVisual({
   frameToPixels,
   leftNeighbor,
   rightNeighbor,
+  constraintEdge,
   constrained,
   currentLeftPx,
   currentRightPx,
@@ -352,6 +359,7 @@ export function getSlideOperationBoundsVisual({
     ...bounds,
     limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [currentLeftPx, currentRightPx],
+    edgeConstraintStates: [constraintEdge === 'start', constraintEdge === 'end'],
     constrained,
     mode: 'slide',
   };
@@ -361,6 +369,7 @@ export function getSlipOperationBoundsVisual({
   item,
   fps,
   frameToPixels,
+  constraintEdge,
   constrained,
   currentLeftPx,
   currentRightPx,
@@ -371,6 +380,7 @@ export function getSlipOperationBoundsVisual({
       boxWidthPx: null,
       limitEdgePositionsPx: [],
       edgePositionsPx: [currentLeftPx, currentRightPx],
+      edgeConstraintStates: [constrained, constrained],
       constrained,
       mode: 'slip',
     };
@@ -383,6 +393,7 @@ export function getSlipOperationBoundsVisual({
       boxWidthPx: null,
       limitEdgePositionsPx: [],
       edgePositionsPx: [currentLeftPx, currentRightPx],
+      edgeConstraintStates: [constrained, constrained],
       constrained,
       mode: 'slip',
     };
@@ -417,6 +428,7 @@ export function getSlipOperationBoundsVisual({
     ...bounds,
     limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [currentLeftPx, currentRightPx],
+    edgeConstraintStates: [constraintEdge === 'start', constraintEdge === 'end'],
     constrained,
     mode: 'slip',
   };

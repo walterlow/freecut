@@ -315,6 +315,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     isSlipSlideActive,
     slipSlideMode,
     slipSlideConstrained,
+    slipSlideConstraintEdge,
     handleSlipSlideStart,
   } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
@@ -959,6 +960,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         frameToPixels,
         leftNeighbor: slideLeftNeighborForSlidItem,
         rightNeighbor: slideRightNeighborForSlidItem,
+        constraintEdge: slipSlideConstraintEdge,
         constrained: slipSlideConstrained,
         currentLeftPx,
         currentRightPx,
@@ -970,6 +972,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         item: contentPreviewItem,
         fps,
         frameToPixels,
+        constraintEdge: slipSlideConstraintEdge,
         constrained: slipSlideConstrained,
         currentLeftPx,
         currentRightPx,
@@ -989,6 +992,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     slideLeftNeighborForSlidItem,
     slideRightNeighborForSlidItem,
     slipSlideConstrained,
+    slipSlideConstraintEdge,
     slipSlideMode,
     stretchConstrained,
     stretchHandle,

@@ -39,6 +39,7 @@ interface SlipSlideState {
   leftNeighborId: string | null;
   rightNeighborId: string | null;
   isConstrained: boolean;
+  constraintEdge: 'start' | 'end' | null;
   constraintLabel: string | null;
 }
 
@@ -72,6 +73,7 @@ export function useTimelineSlipSlide(
     leftNeighborId: null,
     rightNeighborId: null,
     isConstrained: false,
+    constraintEdge: null,
     constraintLabel: null,
   });
 
@@ -171,6 +173,11 @@ export function useTimelineSlipSlide(
         );
         const clamped = transitionClamped;
         const isConstrained = clamped !== sourceFramesDelta;
+        const constraintEdge = !isConstrained
+          ? null
+          : sourceFramesDelta > clamped
+          ? 'end'
+          : 'start';
         const constraintLabel = clamped !== sourceClamped
           ? 'transition limit'
           : sourceClamped !== sourceFramesDelta
@@ -192,12 +199,18 @@ export function useTimelineSlipSlide(
           previewStore.setSlipDelta(clamped);
         }
 
-        if (clamped !== latestDeltaRef.current || isConstrained !== stateRef.current.isConstrained) {
+        if (
+          clamped !== latestDeltaRef.current
+          || isConstrained !== stateRef.current.isConstrained
+          || constraintEdge !== stateRef.current.constraintEdge
+          || constraintLabel !== stateRef.current.constraintLabel
+        ) {
           latestDeltaRef.current = clamped;
           setState((prev) => ({
             ...prev,
             currentDelta: clamped,
             isConstrained,
+            constraintEdge,
             constraintLabel,
           }));
         }
@@ -253,6 +266,14 @@ export function useTimelineSlipSlide(
 
         const clamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
         const isConstrained = clamped !== deltaFrames;
+        const constraintEdge = !isConstrained
+          ? null
+          : deltaFrames > clamped
+          ? 'end'
+          : 'start';
+        const constraintLabel = isConstrained
+          ? (storeItem.from + deltaFrames < 0 ? 'timeline start' : 'neighbor limit')
+          : null;
 
         // Update preview store
         const previewStore = useSlideEditPreviewStore.getState();
@@ -273,15 +294,19 @@ export function useTimelineSlipSlide(
           previewStore.setSlideDelta(clamped);
         }
 
-        if (clamped !== latestDeltaRef.current || isConstrained !== stateRef.current.isConstrained) {
+        if (
+          clamped !== latestDeltaRef.current
+          || isConstrained !== stateRef.current.isConstrained
+          || constraintEdge !== stateRef.current.constraintEdge
+          || constraintLabel !== stateRef.current.constraintLabel
+        ) {
           latestDeltaRef.current = clamped;
           setState((prev) => ({
             ...prev,
             currentDelta: clamped,
             isConstrained,
-            constraintLabel: isConstrained
-              ? (storeItem.from + deltaFrames < 0 ? 'timeline start' : 'neighbor limit')
-              : null,
+            constraintEdge,
+            constraintLabel,
           }));
         }
 
@@ -347,6 +372,7 @@ export function useTimelineSlipSlide(
         leftNeighborId: null,
         rightNeighborId: null,
         isConstrained: false,
+        constraintEdge: null,
         constraintLabel: null,
       });
       latestDeltaRef.current = 0;
@@ -402,6 +428,7 @@ export function useTimelineSlipSlide(
         leftNeighborId: leftNeighbor?.id ?? null,
         rightNeighborId: rightNeighbor?.id ?? null,
         isConstrained: false,
+        constraintEdge: null,
         constraintLabel: null,
       });
       latestDeltaRef.current = 0;
@@ -414,6 +441,7 @@ export function useTimelineSlipSlide(
     slipSlideMode: state.mode,
     slipSlideDelta: state.currentDelta,
     slipSlideConstrained: state.isConstrained,
+    slipSlideConstraintEdge: state.constraintEdge,
     slipSlideConstraintLabel: state.constraintLabel,
     handleSlipSlideStart,
   };

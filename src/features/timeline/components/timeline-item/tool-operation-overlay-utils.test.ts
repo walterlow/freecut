@@ -28,6 +28,7 @@ describe('tool operation overlay utils', () => {
       },
       fps: 30,
       frameToPixels: (frames) => frames,
+      constraintEdge: null,
       constrained: false,
       currentLeftPx: 100,
       currentRightPx: 160,

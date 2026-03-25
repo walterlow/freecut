@@ -12,6 +12,7 @@ describe('ToolOperationOverlay', () => {
           boxWidthPx: 80,
           limitEdgePositionsPx: [],
           edgePositionsPx: [10, 90],
+          edgeConstraintStates: [false, false],
           constrained: false,
           mode,
         }}
@@ -32,6 +33,7 @@ describe('ToolOperationOverlay', () => {
           boxWidthPx: 80,
           limitEdgePositionsPx: [],
           edgePositionsPx: [10, 90],
+          edgeConstraintStates: [false, false],
           constrained: false,
           mode: 'slide',
         }}
@@ -52,6 +54,7 @@ describe('ToolOperationOverlay', () => {
           boxWidthPx: 80,
           limitEdgePositionsPx: [],
           edgePositionsPx: [10, 90],
+          edgeConstraintStates: [false, false],
           constrained: false,
           mode: 'slip',
         }}
@@ -62,5 +65,64 @@ describe('ToolOperationOverlay', () => {
       top: `${EDITOR_LAYOUT.timelineClipLabelRowHeight}px`,
       bottom: '4px',
     });
+  });
+
+  it('switches the edge core to red when constrained', () => {
+    render(
+      <ToolOperationOverlay
+        visual={{
+          boxLeftPx: 10,
+          boxWidthPx: 80,
+          limitEdgePositionsPx: [],
+          edgePositionsPx: [10],
+          edgeConstraintStates: [true],
+          constrained: true,
+          mode: 'ripple',
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('tool-operation-edge-core').className).toContain('bg-red-500/90');
+    expect(screen.getByTestId('tool-operation-edge-core').className).not.toContain('bg-emerald-300/90');
+  });
+
+  it('only marks the constrained slip edge as red', () => {
+    render(
+      <ToolOperationOverlay
+        visual={{
+          boxLeftPx: 10,
+          boxWidthPx: 80,
+          limitEdgePositionsPx: [],
+          edgePositionsPx: [10, 90],
+          edgeConstraintStates: [true, false],
+          constrained: true,
+          mode: 'slip',
+        }}
+      />,
+    );
+
+    const edgeCores = screen.getAllByTestId('tool-operation-edge-core');
+    expect(edgeCores[0]).toHaveAttribute('data-edge-constrained', 'true');
+    expect(edgeCores[1]).toHaveAttribute('data-edge-constrained', 'false');
+  });
+
+  it('only marks the constrained slide edge as red', () => {
+    render(
+      <ToolOperationOverlay
+        visual={{
+          boxLeftPx: 10,
+          boxWidthPx: 80,
+          limitEdgePositionsPx: [],
+          edgePositionsPx: [10, 90],
+          edgeConstraintStates: [false, true],
+          constrained: true,
+          mode: 'slide',
+        }}
+      />,
+    );
+
+    const edgeCores = screen.getAllByTestId('tool-operation-edge-core');
+    expect(edgeCores[0]).toHaveAttribute('data-edge-constrained', 'false');
+    expect(edgeCores[1]).toHaveAttribute('data-edge-constrained', 'true');
   });
 });
