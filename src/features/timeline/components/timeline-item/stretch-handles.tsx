@@ -52,6 +52,7 @@ export const StretchHandles = memo(function StretchHandles({
       >
         <div className={cn(
           'absolute inset-y-0 left-0 w-px rounded-l-sm bg-orange-400/85 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+          isStretching && stretchHandle === 'start' && 'opacity-0',
           stretchConstrained && stretchHandle === 'start' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
         )} />
       </div>
@@ -66,6 +67,7 @@ export const StretchHandles = memo(function StretchHandles({
       >
         <div className={cn(
           'absolute inset-y-0 right-0 w-px rounded-r-sm bg-orange-400/85 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+          isStretching && stretchHandle === 'end' && 'opacity-0',
           stretchConstrained && stretchHandle === 'end' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
         )} />
       </div>

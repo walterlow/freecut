@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { cn } from '@/shared/ui/cn';
+import { EDITOR_LAYOUT } from '@/shared/ui/editor-layout';
 import type { OperationBoundsVisual } from './tool-operation-overlay-utils';
 
 interface ToolOperationOverlayProps {
@@ -11,12 +12,30 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
 }: ToolOperationOverlayProps) {
   if (!visual) return null;
 
-  const showBoundsBox = visual.mode !== 'ripple';
+  const activeEdgePositions = visual.edgePositionsPx.filter((position, index, positions) => (
+    Number.isFinite(position)
+    && positions.findIndex((candidate) => Math.abs(candidate - position) < 0.5) === index
+  ));
 
-  const boxAccentClass = visual.mode === 'ripple'
-    ? 'border-amber-200/85 bg-amber-300/[0.06] shadow-[0_0_0_1px_rgba(251,191,36,0.26),0_10px_24px_rgba(15,23,42,0.18)]'
-    : visual.mode === 'rolling'
-    ? 'border-sky-200/85 bg-sky-300/[0.05] shadow-[0_0_0_1px_rgba(125,211,252,0.24),0_10px_24px_rgba(15,23,42,0.18)]'
+  const usesCompactTopBox = visual.mode === 'rolling'
+    || visual.mode === 'slide'
+    || visual.mode === 'slip';
+  const usesFilledBoundsBox = visual.mode === 'trim'
+    || visual.mode === 'ripple'
+    || visual.mode === 'stretch';
+  const showBoundsBox = visual.boxLeftPx !== null && visual.boxWidthPx !== null;
+  const boxTop = usesCompactTopBox ? 0 : 4;
+  const boxHeight = usesCompactTopBox
+    ? Math.round(EDITOR_LAYOUT.timelineClipLabelRowHeight * 2)
+    : null;
+
+  const boxAccentClass = usesCompactTopBox
+    ? cn(
+        'border-white/85 bg-transparent shadow-[0_0_0_1px_rgba(248,250,252,0.24),0_8px_20px_rgba(15,23,42,0.16)]',
+        visual.constrained && 'border-white/95 shadow-[0_0_0_1px_rgba(255,255,255,0.36),0_0_14px_rgba(255,255,255,0.14),0_8px_20px_rgba(15,23,42,0.16)]',
+      )
+    : usesFilledBoundsBox
+    ? 'border-white/80 bg-white/[0.035] shadow-[0_0_0_1px_rgba(15,23,42,0.45),0_10px_24px_rgba(15,23,42,0.18)]'
     : 'border-white/80 bg-white/[0.035] shadow-[0_0_0_1px_rgba(15,23,42,0.45),0_10px_24px_rgba(15,23,42,0.18)]';
 
   const edgeModeClass = visual.mode === 'ripple'
@@ -27,7 +46,7 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
 
   return (
     <>
-      {showBoundsBox && visual.boxLeftPx !== null && visual.boxWidthPx !== null && (
+      {showBoundsBox && (
         <div
           className={cn(
             'absolute pointer-events-none z-30 rounded-[6px] border',
@@ -36,13 +55,13 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
           style={{
             left: `${visual.boxLeftPx}px`,
             width: `${visual.boxWidthPx}px`,
-            top: 4,
-            bottom: 4,
+            top: boxTop,
+            ...(boxHeight === null ? { bottom: 4 } : { height: boxHeight }),
           }}
         />
       )}
 
-      {visual.edgePositionsPx.map((edgePx, index) => (
+      {activeEdgePositions.map((edgePx, index) => (
         <div
           key={`${index}-${Math.round(edgePx)}`}
           className="absolute pointer-events-none z-40 -translate-x-1/2"

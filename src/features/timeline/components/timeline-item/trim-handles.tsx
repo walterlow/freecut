@@ -74,6 +74,7 @@ export const TrimHandles = memo(function TrimHandles({
           >
             <div className={cn(
               'absolute inset-y-0 left-0 w-px rounded-l-sm bg-primary/80 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+              isTrimming && trimHandle === 'start' && 'opacity-0',
               startTone === 'ripple' && 'bg-amber-300/95 shadow-[0_0_0_1px_rgba(253,224,71,0.34),0_0_12px_rgba(251,191,36,0.3)]',
               trimConstrained && trimHandle === 'start' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
             )} />
@@ -100,6 +101,7 @@ export const TrimHandles = memo(function TrimHandles({
           >
             <div className={cn(
               'absolute inset-y-0 right-0 w-px rounded-r-sm bg-primary/80 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+              isTrimming && trimHandle === 'end' && 'opacity-0',
               endTone === 'ripple' && 'bg-amber-300/95 shadow-[0_0_0_1px_rgba(253,224,71,0.34),0_0_12px_rgba(251,191,36,0.3)]',
               trimConstrained && trimHandle === 'end' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
             )} />

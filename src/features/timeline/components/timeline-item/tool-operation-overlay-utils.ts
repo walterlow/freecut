@@ -17,6 +17,7 @@ export type OperationMode = 'trim' | 'ripple' | 'rolling' | 'stretch' | 'slide' 
 export interface OperationBoundsVisual {
   boxLeftPx: number | null;
   boxWidthPx: number | null;
+  limitEdgePositionsPx: number[];
   edgePositionsPx: number[];
   constrained: boolean;
   mode: OperationMode;
@@ -87,6 +88,14 @@ function toBoxPixels(
     boxLeftPx: leftPx,
     boxWidthPx: widthPx,
   };
+}
+
+function getBoxLimitEdgePositions(
+  boxLeftPx: number | null,
+  boxWidthPx: number | null,
+): number[] {
+  if (boxLeftPx === null || boxWidthPx === null) return [];
+  return [boxLeftPx, boxLeftPx + boxWidthPx];
 }
 
 function buildTrimLinkedIds(
@@ -241,9 +250,12 @@ export function getTrimOperationBoundsVisual({
   const bounds = handle === 'start'
     ? toBoxPixels(Math.min(itemStart, itemStart + minDelta), itemEnd, frameToPixels)
     : toBoxPixels(itemStart, Math.max(itemEnd, itemEnd + maxDelta), frameToPixels);
+  const minEdgePx = Math.round(frameToPixels((handle === 'start' ? itemStart : itemEnd) + minDelta));
+  const maxEdgePx = Math.round(frameToPixels((handle === 'start' ? itemStart : itemEnd) + maxDelta));
 
   return {
     ...bounds,
+    limitEdgePositionsPx: [minEdgePx, maxEdgePx],
     edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
     constrained,
     mode: isRollingEdit ? 'rolling' : isRippleEdit ? 'ripple' : 'trim',
@@ -264,6 +276,7 @@ export function getStretchOperationBoundsVisual({
     return {
       boxLeftPx: null,
       boxWidthPx: null,
+      limitEdgePositionsPx: [],
       edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
       constrained,
       mode: 'stretch',
@@ -282,6 +295,7 @@ export function getStretchOperationBoundsVisual({
 
   return {
     ...bounds,
+    limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
     constrained,
     mode: 'stretch',
@@ -310,6 +324,7 @@ export function getSlideOperationBoundsVisual({
 
   return {
     ...bounds,
+    limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [currentLeftPx, currentRightPx],
     constrained,
     mode: 'slide',
@@ -328,6 +343,7 @@ export function getSlipOperationBoundsVisual({
     return {
       boxLeftPx: null,
       boxWidthPx: null,
+      limitEdgePositionsPx: [],
       edgePositionsPx: [currentLeftPx, currentRightPx],
       constrained,
       mode: 'slip',
@@ -339,6 +355,7 @@ export function getSlipOperationBoundsVisual({
     return {
       boxLeftPx: null,
       boxWidthPx: null,
+      limitEdgePositionsPx: [],
       edgePositionsPx: [currentLeftPx, currentRightPx],
       constrained,
       mode: 'slip',
@@ -372,6 +389,7 @@ export function getSlipOperationBoundsVisual({
 
   return {
     ...bounds,
+    limitEdgePositionsPx: getBoxLimitEdgePositions(bounds.boxLeftPx, bounds.boxWidthPx),
     edgePositionsPx: [currentLeftPx, currentRightPx],
     constrained,
     mode: 'slip',
