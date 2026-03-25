@@ -290,6 +290,24 @@ export function getTrimOperationBoundsVisual({
     };
   }
 
+  if (isRippleEdit && handle === 'start') {
+    const minVisualRightFrame = itemEnd - maxDelta;
+    const maxVisualRightFrame = itemEnd - minDelta;
+    const bounds = toBoxPixels(itemStart, maxVisualRightFrame, frameToPixels);
+
+    return {
+      ...bounds,
+      limitEdgePositionsPx: [
+        Math.round(frameToPixels(minVisualRightFrame)),
+        Math.round(frameToPixels(maxVisualRightFrame)),
+      ],
+      edgePositionsPx: [currentRightPx],
+      edgeConstraintStates: [constrained],
+      constrained,
+      mode: 'ripple',
+    };
+  }
+
   const bounds = handle === 'start'
     ? toBoxPixels(Math.min(itemStart, itemStart + minDelta), itemEnd, frameToPixels)
     : toBoxPixels(itemStart, Math.max(itemEnd, itemEnd + maxDelta), frameToPixels);

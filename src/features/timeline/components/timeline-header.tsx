@@ -9,8 +9,6 @@ import {
   Magnet,
   Scissors,
   Gauge,
-  SplitSquareHorizontal,
-  MoveHorizontal,
   ArrowRightLeft,
   BetweenHorizontalEnd,
   BetweenHorizontalStart,
@@ -124,6 +122,10 @@ export const TimelineHeader = memo(function TimelineHeader({
   const canUnlinkSelected = useMemo(() => (
     selectedItemIds.length > 0 && selectedItemIds.some((id) => hasLinkedItems(items, id))
   ), [items, selectedItemIds]);
+
+  const isTrimFamilyTool = activeTool === 'trim-edit'
+    || activeTool === 'rolling-edit'
+    || activeTool === 'ripple-edit';
 
 
   // Momentum state for zoom slider
@@ -292,7 +294,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             variant="ghost"
             size="icon"
             className={`h-7 w-7 ${
-              activeTool === 'trim-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+              isTrimFamilyTool ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
             }`}
             onClick={() => setActiveTool(activeTool === 'trim-edit' ? 'select' : 'trim-edit')}
             aria-label="Trim edit tool"
@@ -325,32 +327,6 @@ export const TimelineHeader = memo(function TimelineHeader({
             data-tooltip="Rate Stretch Tool (R)"
           >
             <Gauge className="w-3.5 h-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 ${
-              activeTool === 'rolling-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={() => setActiveTool(activeTool === 'rolling-edit' ? 'select' : 'rolling-edit')}
-            aria-label="Rolling edit tool"
-            data-tooltip="Rolling Edit Tool (N)"
-          >
-            <SplitSquareHorizontal className="w-3.5 h-3.5" />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-7 w-7 ${
-              activeTool === 'ripple-edit' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={() => setActiveTool(activeTool === 'ripple-edit' ? 'select' : 'ripple-edit')}
-            aria-label="Ripple edit tool"
-            data-tooltip="Ripple Edit Tool (B)"
-          >
-            <MoveHorizontal className="w-3.5 h-3.5" />
           </Button>
 
           <Button

@@ -78,4 +78,28 @@ describe('tool operation overlay utils', () => {
     expect(visual.boxWidthPx).toBe(10);
     expect(visual.limitEdgePositionsPx).toEqual([160, 170]);
   });
+
+  it('anchors ripple-start limits to the previewed right-edge span', () => {
+    const item = createVideoItem();
+
+    const visual = getTrimOperationBoundsVisual({
+      item,
+      items: [item],
+      transitions: [],
+      fps: 30,
+      frameToPixels: (frames) => frames,
+      handle: 'start',
+      isRollingEdit: false,
+      isRippleEdit: true,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 170,
+    });
+
+    expect(visual.mode).toBe('ripple');
+    expect(visual.boxLeftPx).toBe(100);
+    expect(visual.boxWidthPx).toBe(80);
+    expect(visual.limitEdgePositionsPx).toEqual([101, 180]);
+    expect(visual.edgePositionsPx).toEqual([170]);
+  });
 });

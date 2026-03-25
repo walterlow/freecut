@@ -60,6 +60,24 @@ describe('smart-trim-zones', () => {
     })).toBe('ripple-end');
   });
 
+  it('uses ripple intent on outer edge bands in trim edit mode', () => {
+    expect(resolveSmartTrimIntent({
+      x: SMART_TRIM_ROLL_ZONE_PX + 2,
+      width: 120,
+      hasLeftNeighbor: true,
+      hasRightNeighbor: false,
+      preferRippleOuterEdges: true,
+    })).toBe('ripple-start');
+
+    expect(resolveSmartTrimIntent({
+      x: 120 - (SMART_TRIM_ROLL_ZONE_PX + 2),
+      width: 120,
+      hasLeftNeighbor: false,
+      hasRightNeighbor: true,
+      preferRippleOuterEdges: true,
+    })).toBe('ripple-end');
+  });
+
   it('uses plain trim when no adjacent neighbor exists for rolling', () => {
     expect(resolveSmartTrimIntent({
       x: SMART_TRIM_ROLL_ZONE_PX - 1,

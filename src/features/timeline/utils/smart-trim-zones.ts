@@ -12,6 +12,7 @@ interface ResolveSmartTrimIntentParams {
   hasRightNeighbor: boolean;
   hasStartBridge?: boolean;
   hasEndBridge?: boolean;
+  preferRippleOuterEdges?: boolean;
   currentIntent?: SmartTrimIntent;
   edgeZonePx?: number;
   rollZonePx?: number;
@@ -25,6 +26,7 @@ export function resolveSmartTrimIntent({
   hasRightNeighbor,
   hasStartBridge = false,
   hasEndBridge = false,
+  preferRippleOuterEdges = false,
   currentIntent = null,
   edgeZonePx = SMART_TRIM_EDGE_ZONE_PX,
   rollZonePx = SMART_TRIM_ROLL_ZONE_PX,
@@ -34,9 +36,9 @@ export function resolveSmartTrimIntent({
 
   const resolveOuterIntent = (edge: 'start' | 'end'): SmartTrimIntent => {
     if (edge === 'start') {
-      return hasStartBridge ? 'ripple-start' : 'trim-start';
+      return (preferRippleOuterEdges || hasStartBridge) ? 'ripple-start' : 'trim-start';
     }
-    return hasEndBridge ? 'ripple-end' : 'trim-end';
+    return (preferRippleOuterEdges || hasEndBridge) ? 'ripple-end' : 'trim-end';
   };
 
   const distanceToStart = Math.max(0, x);
