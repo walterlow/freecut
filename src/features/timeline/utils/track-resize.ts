@@ -1,5 +1,6 @@
 import type { TimelineTrack } from '@/types/timeline';
 import {
+  DEFAULT_TRACK_HEIGHT,
   MAX_TRACK_HEIGHT,
   MIN_TRACK_HEIGHT,
   TRACK_SECTION_DIVIDER_HEIGHT,
@@ -56,6 +57,32 @@ export function resizeTrackInList(
   });
 
   return didChange ? nextTracks : tracks;
+}
+
+export function resizeAllTracksInList(
+  tracks: TimelineTrack[],
+  nextHeight: number
+): TimelineTrack[] {
+  const clampedHeight = clampTrackHeight(nextHeight);
+  let didChange = false;
+
+  const nextTracks = tracks.map((track) => {
+    if (track.height === clampedHeight) {
+      return track;
+    }
+
+    didChange = true;
+    return {
+      ...track,
+      height: clampedHeight,
+    };
+  });
+
+  return didChange ? nextTracks : tracks;
+}
+
+export function resetAllTrackHeights(tracks: TimelineTrack[]): TimelineTrack[] {
+  return resizeAllTracksInList(tracks, DEFAULT_TRACK_HEIGHT);
 }
 
 export function getMinimumTrackSectionSpacerHeight(trackTitleBarHeight: number): number {

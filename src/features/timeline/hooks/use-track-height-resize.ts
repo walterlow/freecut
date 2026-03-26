@@ -5,7 +5,7 @@ import { captureSnapshot } from '../stores/commands/snapshot';
 import { useTimelineCommandStore } from '../stores/timeline-command-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import type { TimelineSnapshot } from '../stores/commands/types';
-import { resizeTrackInList } from '../utils/track-resize';
+import { resetAllTrackHeights, resizeAllTracksInList, resizeTrackInList } from '../utils/track-resize';
 import { getTrackKind } from '../utils/classic-tracks';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
 
@@ -15,6 +15,8 @@ interface TrackResizeState {
   startHeight: number;
   currentHeight: number;
   deltaDirection: -1 | 1;
+  applyToAll: boolean;
+  didChange: boolean;
   beforeSnapshot: TimelineSnapshot | null;
 }
 
@@ -24,6 +26,8 @@ const IDLE_RESIZE_STATE: TrackResizeState = {
   startHeight: 0,
   currentHeight: 0,
   deltaDirection: 1,
+  applyToAll: false,
+  didChange: false,
   beforeSnapshot: null,
 };
 
@@ -36,9 +40,12 @@ export function useTrackHeightResize() {
     const state = resizeStateRef.current;
     if (!state.trackId) return;
 
-    if (state.currentHeight !== state.startHeight && state.beforeSnapshot) {
+    if (state.didChange && state.beforeSnapshot) {
       useTimelineCommandStore.getState().addUndoEntry(
-        { type: 'RESIZE_TRACK', payload: { id: state.trackId } },
+        {
+          type: state.applyToAll ? 'RESIZE_ALL_TRACKS' : 'RESIZE_TRACK',
+          payload: state.applyToAll ? { count: useItemsStore.getState().tracks.length } : { id: state.trackId },
+        },
         state.beforeSnapshot
       );
       useTimelineSettingsStore.getState().markDirty();
@@ -56,13 +63,13 @@ export function useTrackHeightResize() {
     event.preventDefault();
     event.stopPropagation();
 
-    const nextTracks = resizeTrackInList(
-      useItemsStore.getState().tracks,
-      state.trackId,
-      state.startHeight + ((event.clientY - state.startY) * state.deltaDirection)
-    );
+    const currentTracks = useItemsStore.getState().tracks;
+    const nextHeight = state.startHeight + ((event.clientY - state.startY) * state.deltaDirection);
+    const nextTracks = state.applyToAll
+      ? resizeAllTracksInList(currentTracks, nextHeight)
+      : resizeTrackInList(currentTracks, state.trackId, nextHeight);
 
-    if (nextTracks === useItemsStore.getState().tracks) {
+    if (nextTracks === currentTracks) {
       return;
     }
 
@@ -74,6 +81,7 @@ export function useTrackHeightResize() {
     setResizeState((prev) => ({
       ...prev,
       currentHeight: resizedTrack.height,
+      didChange: true,
     }));
   }, []);
 
@@ -99,6 +107,8 @@ export function useTrackHeightResize() {
       startHeight: track.height,
       currentHeight: track.height,
       deltaDirection: getTrackKind(track) === 'audio' ? 1 : -1,
+      applyToAll: event.altKey,
+      didChange: false,
       beforeSnapshot: captureSnapshot(),
     });
 
@@ -113,7 +123,9 @@ export function useTrackHeightResize() {
     }
 
     const beforeSnapshot = captureSnapshot();
-    const nextTracks = resizeTrackInList(useItemsStore.getState().tracks, trackId, DEFAULT_TRACK_HEIGHT);
+    const nextTracks = event.altKey
+      ? resetAllTrackHeights(useItemsStore.getState().tracks)
+      : resizeTrackInList(useItemsStore.getState().tracks, trackId, DEFAULT_TRACK_HEIGHT);
 
     event.preventDefault();
     event.stopPropagation();
@@ -126,7 +138,10 @@ export function useTrackHeightResize() {
     useItemsStore.getState().setTracks(nextTracks);
 
     useTimelineCommandStore.getState().addUndoEntry(
-      { type: 'RESET_TRACK_HEIGHT', payload: { id: trackId } },
+      {
+        type: event.altKey ? 'RESET_ALL_TRACK_HEIGHTS' : 'RESET_TRACK_HEIGHT',
+        payload: event.altKey ? { count: nextTracks.length } : { id: trackId },
+      },
       beforeSnapshot
     );
     useTimelineSettingsStore.getState().markDirty();
