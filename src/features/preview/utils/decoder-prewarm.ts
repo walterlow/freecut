@@ -12,6 +12,8 @@
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('DecoderPrewarm');
+const MAX_CACHED_BITMAPS_PER_SOURCE = 6;
+const PRESEEK_REQUEST_REUSE_TOLERANCE_SECONDS = 1 / 240;
 
 let worker: Worker | null = null;
 let requestId = 0;
@@ -20,14 +22,17 @@ const pendingRequests = new Map<string, {
 }>();
 
 /** Cache of pre-decoded bitmaps keyed by video source URL. Multiple entries per source. */
-const bitmapCache = new Map<string, Array<{ bitmap: ImageBitmap; timestamp: number }>>();
+type CachedBitmapEntry = { bitmap: ImageBitmap; timestamp: number };
+const bitmapCache = new Map<string, CachedBitmapEntry[]>();
+
+type InflightPreseek = {
+  timestamp: number;
+  promise: Promise<ImageBitmap | null>;
+};
 
 /** In-flight preseek promises keyed by source URL — lets the render engine await
  *  a pending worker decode instead of falling through to a blocking main-thread decode. */
-const inflightPreseekBySrc = new Map<string, {
-  timestamp: number;
-  promise: Promise<ImageBitmap | null>;
-}>();
+const inflightPreseekBySrc = new Map<string, InflightPreseek[]>();
 
 // Dev: expose cache for debugging
 if (import.meta.env.DEV) {
@@ -67,6 +72,77 @@ function ensureWorker(): Worker | null {
   }
 }
 
+function findClosestBitmapEntry(
+  src: string,
+  timestamp: number,
+  toleranceSeconds: number,
+): CachedBitmapEntry | null {
+  const entries = bitmapCache.get(src);
+  if (!entries || entries.length === 0) return null;
+
+  let best: CachedBitmapEntry | null = null;
+  let bestDist = Infinity;
+  for (const entry of entries) {
+    const dist = Math.abs(entry.timestamp - timestamp);
+    if (dist <= toleranceSeconds && dist < bestDist) {
+      bestDist = dist;
+      best = entry;
+    }
+  }
+
+  return best;
+}
+
+function findMatchingInflightPreseek(
+  src: string,
+  timestamp: number,
+  toleranceSeconds: number,
+): InflightPreseek | null {
+  const entries = inflightPreseekBySrc.get(src);
+  if (!entries || entries.length === 0) return null;
+
+  let best: InflightPreseek | null = null;
+  let bestDist = Infinity;
+  for (const entry of entries) {
+    const dist = Math.abs(entry.timestamp - timestamp);
+    if (dist <= toleranceSeconds && dist < bestDist) {
+      bestDist = dist;
+      best = entry;
+    }
+  }
+
+  return best;
+}
+
+function cachePredecodedBitmap(src: string, timestamp: number, bitmap: ImageBitmap): void {
+  const entries = bitmapCache.get(src) ?? [];
+  entries.push({ bitmap, timestamp });
+  while (entries.length > MAX_CACHED_BITMAPS_PER_SOURCE) {
+    const old = entries.shift();
+    old?.bitmap.close();
+  }
+  bitmapCache.set(src, entries);
+}
+
+function addInflightPreseek(src: string, entry: InflightPreseek): void {
+  const entries = inflightPreseekBySrc.get(src) ?? [];
+  entries.push(entry);
+  inflightPreseekBySrc.set(src, entries);
+}
+
+function removeInflightPreseek(src: string, entry: InflightPreseek): void {
+  const entries = inflightPreseekBySrc.get(src);
+  if (!entries || entries.length === 0) return;
+
+  const filtered = entries.filter((candidate) => candidate !== entry);
+  if (filtered.length === 0) {
+    inflightPreseekBySrc.delete(src);
+    return;
+  }
+
+  inflightPreseekBySrc.set(src, filtered);
+}
+
 /**
  * Pre-decode a video frame in a background Web Worker.
  * Returns the decoded ImageBitmap or null on failure.
@@ -79,6 +155,24 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
   const w = ensureWorker();
   if (!w) return Promise.resolve(null);
 
+  const cachedBitmap = getCachedPredecodedBitmap(
+    src,
+    timestamp,
+    PRESEEK_REQUEST_REUSE_TOLERANCE_SECONDS,
+  );
+  if (cachedBitmap) {
+    return Promise.resolve(cachedBitmap);
+  }
+
+  const inflightMatch = findMatchingInflightPreseek(
+    src,
+    timestamp,
+    PRESEEK_REQUEST_REUSE_TOLERANCE_SECONDS,
+  );
+  if (inflightMatch) {
+    return inflightMatch.promise;
+  }
+
   const id = `preseek-${++requestId}`;
   const promise = new Promise<ImageBitmap | null>((resolve) => {
     const timeout = setTimeout(() => {
@@ -90,15 +184,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       resolve: (bitmap) => {
         clearTimeout(timeout);
         if (bitmap) {
-          // Cache the bitmap for the render loop
-          const entries = bitmapCache.get(src) ?? [];
-          entries.push({ bitmap, timestamp });
-          // Keep at most 6 cached entries per source
-          while (entries.length > 6) {
-            const old = entries.shift();
-            old?.bitmap.close();
-          }
-          bitmapCache.set(src, entries);
+          cachePredecodedBitmap(src, timestamp, bitmap);
         }
         resolve(bitmap);
       },
@@ -122,11 +208,10 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       w.postMessage({ type: 'preseek', id, src, timestamp });
     }
   });
-  inflightPreseekBySrc.set(src, { timestamp, promise });
+  const inflightEntry: InflightPreseek = { timestamp, promise };
+  addInflightPreseek(src, inflightEntry);
   void promise.finally(() => {
-    if (inflightPreseekBySrc.get(src)?.promise === promise) {
-      inflightPreseekBySrc.delete(src);
-    }
+    removeInflightPreseek(src, inflightEntry);
   });
   return promise;
 }
@@ -136,19 +221,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
  * Returns the bitmap if it exists and is for a nearby timestamp.
  */
 export function getCachedPredecodedBitmap(src: string, timestamp: number, toleranceSeconds = 0.5): ImageBitmap | null {
-  const entries = bitmapCache.get(src);
-  if (!entries || entries.length === 0) return null;
-  // Find the closest entry within tolerance
-  let best: { bitmap: ImageBitmap; timestamp: number } | null = null;
-  let bestDist = Infinity;
-  for (const entry of entries) {
-    const dist = Math.abs(entry.timestamp - timestamp);
-    if (dist <= toleranceSeconds && dist < bestDist) {
-      bestDist = dist;
-      best = entry;
-    }
-  }
-  return best?.bitmap ?? null;
+  return findClosestBitmapEntry(src, timestamp, toleranceSeconds)?.bitmap ?? null;
 }
 
 /**
@@ -157,7 +230,9 @@ export function getCachedPredecodedBitmap(src: string, timestamp: number, tolera
  * main-thread mediabunny decode — the worker is already doing the work.
  */
 export function getInflightPreseek(src: string): Promise<ImageBitmap | null> | null {
-  return inflightPreseekBySrc.get(src)?.promise ?? null;
+  const entries = inflightPreseekBySrc.get(src);
+  const lastEntry = entries && entries.length > 0 ? entries[entries.length - 1] : null;
+  return lastEntry?.promise ?? null;
 }
 
 export async function waitForInflightPredecodedBitmap(
@@ -166,9 +241,8 @@ export async function waitForInflightPredecodedBitmap(
   toleranceSeconds = 0.5,
   maxWaitMs = 12,
 ): Promise<ImageBitmap | null> {
-  const inflight = inflightPreseekBySrc.get(src);
+  const inflight = findMatchingInflightPreseek(src, timestamp, toleranceSeconds);
   if (!inflight) return null;
-  if (Math.abs(inflight.timestamp - timestamp) > toleranceSeconds) return null;
 
   let resolved: ImageBitmap | null = null;
   if (maxWaitMs <= 0) {
@@ -228,5 +302,6 @@ export function disposePrewarmWorker(): void {
     pending.resolve(null);
   }
   pendingRequests.clear();
+  inflightPreseekBySrc.clear();
   clearPredecodedCache();
 }
