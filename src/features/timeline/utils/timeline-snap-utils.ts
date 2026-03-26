@@ -31,9 +31,13 @@ export function getFilteredItemSnapEdges(
   transitions: Transition[],
   visibleTrackIds: Set<string>,
   excludeItemIds?: string[],
+  options: {
+    includeTransitionMidpoints?: boolean;
+  } = {},
 ): ItemSnapEdge[] {
   const edges: ItemSnapEdge[] = [];
   const excludedIds = excludeItemIds ? new Set(excludeItemIds) : null;
+  const includeTransitionMidpoints = options.includeTransitionMidpoints ?? true;
 
   // Index items by ID for O(1) lookup in the transitions loop below
   const itemById = new Map(items.map((i) => [i.id, i]));
@@ -53,6 +57,7 @@ export function getFilteredItemSnapEdges(
     const leftClip = itemById.get(t.leftClipId);
     const rightClip = itemById.get(t.rightClipId);
     if (
+      includeTransitionMidpoints &&
       leftClip &&
       rightClip &&
       visibleTrackIds.has(leftClip.trackId) &&

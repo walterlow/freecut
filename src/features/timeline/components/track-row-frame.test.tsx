@@ -91,4 +91,13 @@ describe('TrackRowFrame', () => {
     expect(divider.className).toContain('absolute');
     expect(divider.className).toContain('inset-0');
   });
+
+  it('makes the full section divider row draggable when resizing is enabled', () => {
+    render(<TrackSectionDivider onMouseDown={() => undefined} />);
+
+    const handle = screen.getByRole('button', { name: 'Resize video and audio track sections' });
+
+    expect(handle.className).toContain('cursor-row-resize');
+    expect(handle.className).toContain('inset-0');
+  });
 });

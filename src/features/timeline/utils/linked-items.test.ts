@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import {
+  buildLinkedMovePreviewUpdates,
   canLinkSelection,
   canLinkItems,
   expandSelectionWithLinkedItems,
+  filterUnlockedItemIds,
   getLinkedItemIds,
   getLinkedSyncOffsetFrames,
   getUniqueLinkedItemAnchorIds,
@@ -43,6 +45,19 @@ describe('linked items', () => {
     ];
 
     expect(getLinkedItemIds(items, 'video-1')).toEqual(['video-1', 'audio-1']);
+  });
+
+  it('filters out items that sit on locked tracks', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', trackId: 'track-video' }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio', trackId: 'track-audio' }),
+    ];
+    const tracks = [
+      { id: 'track-video', locked: false },
+      { id: 'track-audio', locked: true },
+    ];
+
+    expect(filterUnlockedItemIds(items, tracks, ['video-1', 'audio-1'])).toEqual(['video-1']);
   });
 
   it('expands mixed selections with linked companions', () => {
@@ -201,5 +216,36 @@ describe('linked items', () => {
     ];
 
     expect(getLinkedSyncOffsetFrames(items, 'video-1', 30)).toBe(-10);
+  });
+
+  it('builds move preview updates only for linked clips that actually move', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', from: 0 }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio', from: 0 }),
+      makeItem({ id: 'text-1', type: 'text', from: 20 }),
+    ];
+
+    expect(buildLinkedMovePreviewUpdates(items, [
+      { id: 'audio-1', from: 12 },
+      { id: 'text-1', from: 32 },
+      { id: 'video-1', from: 0 },
+    ])).toEqual([
+      { id: 'audio-1', from: 12 },
+    ]);
+  });
+
+  it('builds matching move preview updates when linked companions move together', () => {
+    const items = [
+      makeItem({ id: 'video-1', linkedGroupId: 'group-1', type: 'video', from: 30 }),
+      makeItem({ id: 'audio-1', linkedGroupId: 'group-1', type: 'audio', from: 30 }),
+    ];
+
+    expect(buildLinkedMovePreviewUpdates(items, [
+      { id: 'video-1', from: 42 },
+      { id: 'audio-1', from: 42 },
+    ])).toEqual([
+      { id: 'video-1', from: 42 },
+      { id: 'audio-1', from: 42 },
+    ]);
   });
 });

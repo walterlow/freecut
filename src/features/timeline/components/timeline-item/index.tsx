@@ -563,11 +563,18 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const linkedEditPreviewUpdate = useLinkedEditPreviewStore(
     useCallback((s) => s.updatesById[item.id] ?? null, [item.id])
   );
+  const moveDragPreviewFromDelta = useMemo(() => {
+    if (!linkedEditPreviewUpdate || !(isDragging || isPartOfDrag) || gestureMode !== 'none') {
+      return 0;
+    }
+
+    return (linkedEditPreviewUpdate.from ?? item.from) - item.from;
+  }, [gestureMode, isDragging, isPartOfDrag, item.from, linkedEditPreviewUpdate]);
   const previewBaseItem = useMemo<TimelineItemType>(() => (
-    linkedEditPreviewUpdate
+    linkedEditPreviewUpdate && moveDragPreviewFromDelta === 0
       ? ({ ...item, ...linkedEditPreviewUpdate } as TimelineItemType)
       : item
-  ), [item, linkedEditPreviewUpdate]);
+  ), [item, linkedEditPreviewUpdate, moveDragPreviewFromDelta]);
 
   // Get visual feedback for rate stretch
   const stretchFeedback = isStretching ? getVisualFeedback() : null;
@@ -2117,7 +2124,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     };
   }, [audioVolumeEdit, contentPreviewItem]);
   const linkedSyncPreviewItem = useMemo<TimelineItemType>(() => {
-    let fromOffset = slideFromOffset + rippleEditOffset;
+    let fromOffset = slideFromOffset + rippleEditOffset + moveDragPreviewFromDelta;
 
     if (isTrimming && trimHandle === 'start') {
       fromOffset += trimDelta;
@@ -2150,6 +2157,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     slideNeighborDelta,
     slideFromOffset,
     rippleEditOffset,
+    moveDragPreviewFromDelta,
   ]);
   const suppressLinkedSyncBadge = shouldSuppressLinkedSyncBadge({
     linkedSelectionEnabled,

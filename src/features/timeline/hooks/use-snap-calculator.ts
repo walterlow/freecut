@@ -35,8 +35,12 @@ const getTracksOnDemand = () => useTimelineStore.getState().tracks;
  */
 export function useSnapCalculator(
   timelineDuration: number,
-  excludeItemIds: string | string[] | null
+  excludeItemIds: string | string[] | null,
+  options: {
+    includeTransitionMidpoints?: boolean;
+  } = {},
 ) {
+  const includeTransitionMidpoints = options.includeTransitionMidpoints ?? true;
   // Normalize to array for consistent handling
   const excludeIds = useMemo(() => {
     if (!excludeItemIds) return [];
@@ -79,12 +83,12 @@ export function useSnapCalculator(
 
     // 2. Item edges + transition midpoints (filtered by visible tracks,
     //    transition inner edges suppressed, dragged items excluded)
-    for (const edge of getFilteredItemSnapEdges(items, transitions, visibleTrackIds, excludeIds)) {
+    for (const edge of getFilteredItemSnapEdges(items, transitions, visibleTrackIds, excludeIds, { includeTransitionMidpoints })) {
       targets.push(edge);
     }
 
     return targets;
-  }, [excludeIds, timelineDuration, fps, zoomLevel]);
+  }, [excludeIds, includeTransitionMidpoints, timelineDuration, fps, zoomLevel]);
 
   /**
    * Calculate snap for a given position

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
-import type { TimelineTrack } from '@/types/timeline';
 import { useItemsStore } from '../stores/items-store';
 import { captureSnapshot } from '../stores/commands/snapshot';
 import { useTimelineCommandStore } from '../stores/timeline-command-store';
@@ -10,18 +9,12 @@ import { resizeTrackInList } from '../utils/track-resize';
 import { getTrackKind } from '../utils/classic-tracks';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
 
-interface UseTrackHeightResizeOptions {
-  getDividerAnchorY?: () => number | null;
-  syncSectionDividerAnchor?: (anchorY: number, nextTracks: TimelineTrack[]) => void;
-}
-
 interface TrackResizeState {
   trackId: string | null;
   startY: number;
   startHeight: number;
   currentHeight: number;
   deltaDirection: -1 | 1;
-  dividerAnchorY: number | null;
   beforeSnapshot: TimelineSnapshot | null;
 }
 
@@ -31,11 +24,10 @@ const IDLE_RESIZE_STATE: TrackResizeState = {
   startHeight: 0,
   currentHeight: 0,
   deltaDirection: 1,
-  dividerAnchorY: null,
   beforeSnapshot: null,
 };
 
-export function useTrackHeightResize(options: UseTrackHeightResizeOptions = {}) {
+export function useTrackHeightResize() {
   const [resizeState, setResizeState] = useState<TrackResizeState>(IDLE_RESIZE_STATE);
   const resizeStateRef = useRef(resizeState);
   resizeStateRef.current = resizeState;
@@ -77,16 +69,13 @@ export function useTrackHeightResize(options: UseTrackHeightResizeOptions = {}) 
     const resizedTrack = nextTracks.find((track) => track.id === state.trackId);
     if (!resizedTrack) return;
 
-    if (state.dividerAnchorY !== null) {
-      options.syncSectionDividerAnchor?.(state.dividerAnchorY, nextTracks);
-    }
-
     useItemsStore.getState().setTracks(nextTracks);
+
     setResizeState((prev) => ({
       ...prev,
       currentHeight: resizedTrack.height,
     }));
-  }, [options]);
+  }, []);
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
     if (!resizeStateRef.current.trackId) return;
@@ -110,15 +99,19 @@ export function useTrackHeightResize(options: UseTrackHeightResizeOptions = {}) 
       startHeight: track.height,
       currentHeight: track.height,
       deltaDirection: getTrackKind(track) === 'audio' ? 1 : -1,
-      dividerAnchorY: options.getDividerAnchorY?.() ?? null,
       beforeSnapshot: captureSnapshot(),
     });
 
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
-  }, [options]);
+  }, []);
 
   const handleResizeReset = useCallback((event: ReactMouseEvent<HTMLButtonElement>, trackId: string) => {
+    const track = useItemsStore.getState().tracks.find((candidate) => candidate.id === trackId);
+    if (!track) {
+      return;
+    }
+
     const beforeSnapshot = captureSnapshot();
     const nextTracks = resizeTrackInList(useItemsStore.getState().tracks, trackId, DEFAULT_TRACK_HEIGHT);
 
@@ -130,17 +123,14 @@ export function useTrackHeightResize(options: UseTrackHeightResizeOptions = {}) 
     }
 
     usePlaybackStore.getState().setPreviewFrame(null);
-    const dividerAnchorY = options.getDividerAnchorY?.() ?? null;
-    if (dividerAnchorY !== null) {
-      options.syncSectionDividerAnchor?.(dividerAnchorY, nextTracks);
-    }
     useItemsStore.getState().setTracks(nextTracks);
+
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'RESET_TRACK_HEIGHT', payload: { id: trackId } },
       beforeSnapshot
     );
     useTimelineSettingsStore.getState().markDirty();
-  }, [options]);
+  }, []);
 
   useEffect(() => {
     if (!resizeState.trackId) return;

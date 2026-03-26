@@ -29,10 +29,14 @@ describe('shouldSuppressLinkedSyncBadge', () => {
     expect(shouldSuppressLinkedSyncBadge(createParams())).toBe(false);
   });
 
+  it('does not suppress during move drags', () => {
+    expect(shouldSuppressLinkedSyncBadge(createParams({ isDragging: true }))).toBe(false);
+    expect(shouldSuppressLinkedSyncBadge(createParams({ isPartOfDrag: true }))).toBe(false);
+    expect(shouldSuppressLinkedSyncBadge(createParams({ isDragging: true, linkedEditPreviewActive: true }))).toBe(false);
+  });
+
   it('suppresses for all linked tool preview paths', () => {
     expect(shouldSuppressLinkedSyncBadge(createParams({ linkedEditPreviewActive: true }))).toBe(true);
-    expect(shouldSuppressLinkedSyncBadge(createParams({ isDragging: true }))).toBe(true);
-    expect(shouldSuppressLinkedSyncBadge(createParams({ isPartOfDrag: true }))).toBe(true);
     expect(shouldSuppressLinkedSyncBadge(createParams({ isTrimming: true }))).toBe(true);
     expect(shouldSuppressLinkedSyncBadge(createParams({ isStretching: true }))).toBe(true);
     expect(shouldSuppressLinkedSyncBadge(createParams({ isSlipSlideActive: true }))).toBe(true);

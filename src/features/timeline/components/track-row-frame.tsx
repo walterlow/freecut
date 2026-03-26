@@ -72,12 +72,14 @@ export function TrackSectionDivider({ className, onMouseDown }: TrackSectionDivi
       <div
         aria-hidden="true"
         data-testid="track-row-section-divider"
-        className="pointer-events-none absolute inset-0 z-30 bg-border shadow-[0_1px_0_rgba(255,255,255,0.08)]"
-      />
+        className="pointer-events-none absolute inset-0 z-30"
+      >
+        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border shadow-[0_1px_0_rgba(255,255,255,0.08)]" />
+      </div>
       {onMouseDown && (
         <button
           type="button"
-          className="absolute inset-x-0 top-1/2 z-40 h-3 -translate-y-1/2 cursor-row-resize bg-transparent"
+          className="absolute inset-0 z-40 cursor-row-resize bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           aria-label="Resize video and audio track sections"
           onMouseDown={onMouseDown}
         />

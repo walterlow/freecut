@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TRACK_SECTION_DIVIDER_HEIGHT, MAX_TRACK_HEIGHT, MIN_TRACK_HEIGHT } from '../constants';
 import {
-  getAnchoredSectionDividerOffset,
+  clampSectionDividerPosition,
   clampTrackHeight,
   getMinimumTrackSectionSpacerHeight,
   getTrackSectionLayout,
@@ -46,42 +46,92 @@ describe('track-resize', () => {
   });
 
   it('keeps the A/V spacer slightly taller than the title bar', () => {
-    expect(getMinimumTrackSectionSpacerHeight(40)).toBe(48);
-    expect(getMinimumTrackSectionSpacerHeight(44)).toBe(52);
+    expect(getMinimumTrackSectionSpacerHeight(24)).toBe(36);
+    expect(getMinimumTrackSectionSpacerHeight(26)).toBe(39);
   });
 
-  it('keeps the A/V divider anchored while video tracks grow upward', () => {
+  it('lets manual divider drags fully collapse either spacer', () => {
     const viewportHeight = 420;
-    const trackTitleBarHeight = 40;
+    const trackTitleBarHeight = 24;
     const tracks = [
       createTrack('v1', 'video', 100),
       createTrack('a1', 'audio', 100),
     ];
-    const initialLayout = getTrackSectionLayout({
+
+    const topCollapsedLayout = getTrackSectionLayout({
       viewportHeight,
       tracks,
-      sectionDividerOffset: 0,
+      sectionDividerPosition: 0,
       trackTitleBarHeight,
     });
-    const dividerAnchorY = initialLayout.topSectionSpacerHeight + initialLayout.videoSectionHeight;
-    const resizedTracks = resizeTrackInList(tracks, 'v1', 140);
-    const anchoredOffset = getAnchoredSectionDividerOffset({
+    const bottomCollapsedLayout = getTrackSectionLayout({
       viewportHeight,
-      tracks: resizedTracks,
-      dividerAnchorY,
-      trackTitleBarHeight,
-    });
-    const nextLayout = getTrackSectionLayout({
-      viewportHeight,
-      tracks: resizedTracks,
-      sectionDividerOffset: anchoredOffset,
+      tracks,
+      sectionDividerPosition: viewportHeight,
       trackTitleBarHeight,
     });
 
-    expect(initialLayout.topSectionSpacerHeight + initialLayout.videoSectionHeight).toBe(dividerAnchorY);
-    expect(nextLayout.topSectionSpacerHeight + nextLayout.videoSectionHeight).toBe(dividerAnchorY);
-    expect(nextLayout.bottomSectionSpacerHeight).toBe(
-      viewportHeight - dividerAnchorY - TRACK_SECTION_DIVIDER_HEIGHT - resizedTracks[1]!.height,
-    );
+    expect(topCollapsedLayout.videoPaneHeight).toBe(0);
+    expect(topCollapsedLayout.audioPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
+    expect(bottomCollapsedLayout.videoPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
+    expect(bottomCollapsedLayout.audioPaneHeight).toBe(0);
+  });
+
+  it('defaults the split around the section content heights', () => {
+    const viewportHeight = 420;
+    const trackTitleBarHeight = 24;
+    const tracks = [
+      createTrack('v1', 'video', 120),
+      createTrack('a1', 'audio', 80),
+    ];
+
+    const layout = getTrackSectionLayout({
+      viewportHeight,
+      tracks,
+      sectionDividerPosition: null,
+      trackTitleBarHeight,
+    });
+
+    expect(layout.videoPaneHeight).toBe(229);
+    expect(layout.audioPaneHeight).toBe(189);
+  });
+
+  it('keeps a manual divider position stable when track heights change', () => {
+    const viewportHeight = 420;
+    const trackTitleBarHeight = 24;
+    const tracks = [
+      createTrack('v1', 'video', 100),
+      createTrack('a1', 'audio', 100),
+    ];
+    const resizedTracks = resizeTrackInList(tracks, 'v1', 160);
+
+    const nextLayout = getTrackSectionLayout({
+      viewportHeight,
+      tracks: resizedTracks,
+      sectionDividerPosition: 150,
+      trackTitleBarHeight,
+    });
+
+    expect(nextLayout.videoPaneHeight).toBe(150);
+    expect(nextLayout.audioPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT - 150);
+  });
+
+  it('clamps divider positions to the available pane height', () => {
+    const viewportHeight = 420;
+    const tracks = [
+      createTrack('v1', 'video', 100),
+      createTrack('a1', 'audio', 100),
+    ];
+
+    expect(clampSectionDividerPosition({
+      viewportHeight,
+      tracks,
+      requestedDividerPosition: -20,
+    })).toBe(0);
+    expect(clampSectionDividerPosition({
+      viewportHeight,
+      tracks,
+      requestedDividerPosition: viewportHeight,
+    })).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
   });
 });

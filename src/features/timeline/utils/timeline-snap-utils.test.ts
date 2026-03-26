@@ -47,6 +47,23 @@ describe('getFilteredItemSnapEdges', () => {
     expect(edges).toContainEqual({ frame: 100, type: 'item-start', itemId: 'right' });
   });
 
+  it('can omit transition midpoints for move dragging', () => {
+    const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 });
+    const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 });
+
+    const edges = getFilteredItemSnapEdges(
+      [left, right],
+      [makeTransition()],
+      new Set(['track-1']),
+      undefined,
+      { includeTransitionMidpoints: false }
+    );
+
+    expect(edges).not.toContainEqual({ frame: 100, type: 'item-start', itemId: 'right' });
+    expect(edges).toContainEqual({ frame: 0, type: 'item-start', itemId: 'left' });
+    expect(edges).toContainEqual({ frame: 170, type: 'item-end', itemId: 'right' });
+  });
+
   it('does not include transition midpoint or edges for excluded right clip', () => {
     const left = makeItem({ id: 'left', trackId: 'track-1', from: 0, durationInFrames: 100 });
     const right = makeItem({ id: 'right', trackId: 'track-1', from: 90, durationInFrames: 80 });

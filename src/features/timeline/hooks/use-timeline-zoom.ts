@@ -77,6 +77,14 @@ export function useTimelineZoom(options: UseTimelineZoomOptions = {}) {
     [fps, pixelsToTime]
   );
 
+  const pixelsToFramePrecise = useCallback(
+    (pixels: number) => {
+      const timeInSeconds = pixelsToTime(pixels);
+      return timeInSeconds * fps;
+    },
+    [fps, pixelsToTime]
+  );
+
   /**
    * Reset zoom to 1x
    */
@@ -91,6 +99,7 @@ export function useTimelineZoom(options: UseTimelineZoomOptions = {}) {
     pixelsToTime,
     frameToPixels,
     pixelsToFrame,
+    pixelsToFramePrecise,
     zoomIn: zoomInAction, // Direct reference - store actions are stable
     zoomOut: zoomOutAction, // Direct reference - store actions are stable
     resetZoom,

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback, memo } from 'react';
+import { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 // Stores and selectors
@@ -62,8 +62,11 @@ interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
   tracks: TimelineTrackType[];
   scrollRef?: React.RefObject<HTMLDivElement | null>; // Optional ref for scroll syncing
-  topSectionSpacerHeight?: number;
-  bottomSectionSpacerHeight?: number;
+  allTracksScrollRef?: React.RefObject<HTMLDivElement | null>;
+  videoTracksScrollRef?: React.RefObject<HTMLDivElement | null>;
+  audioTracksScrollRef?: React.RefObject<HTMLDivElement | null>;
+  videoPaneHeight?: number;
+  audioPaneHeight?: number;
   onSectionDividerMouseDown?: (event: React.MouseEvent) => void;
   onZoomHandlersReady?: (handlers: {
     handleZoomChange: (newZoom: number) => void;
@@ -93,8 +96,11 @@ export const TimelineContent = memo(function TimelineContent({
   duration,
   tracks,
   scrollRef,
-  topSectionSpacerHeight = 0,
-  bottomSectionSpacerHeight = 0,
+  allTracksScrollRef,
+  videoTracksScrollRef,
+  audioTracksScrollRef,
+  videoPaneHeight = 0,
+  audioPaneHeight = 0,
   onSectionDividerMouseDown,
   onZoomHandlersReady,
   onMetricsChange,
@@ -107,10 +113,35 @@ export const TimelineContent = memo(function TimelineContent({
   // Use granular selectors - Zustand v5 best practice
   const fps = useTimelineStore((s) => s.fps);
 
+  const videoTracks = useMemo(
+    () => tracks.filter((track) => getTrackKind(track) === 'video'),
+    [tracks]
+  );
+  const audioTracks = useMemo(
+    () => tracks.filter((track) => getTrackKind(track) === 'audio'),
+    [tracks]
+  );
+  const hasTrackSections = videoTracks.length > 0 && audioTracks.length > 0;
   const firstTrackId = tracks[0]?.id ?? null;
   const lastTrackId = tracks[tracks.length - 1]?.id ?? null;
   const topZoneAnchorTrackId = tracks.find((track) => getTrackKind(track) === 'video')?.id ?? firstTrackId;
   const bottomZoneAnchorTrackId = [...tracks].reverse().find((track) => getTrackKind(track) === 'audio')?.id ?? lastTrackId;
+  const videoSectionContentHeight = useMemo(
+    () => videoTracks.reduce((sum, track) => sum + track.height, 0),
+    [videoTracks]
+  );
+  const audioSectionContentHeight = useMemo(
+    () => audioTracks.reduce((sum, track) => sum + track.height, 0),
+    [audioTracks]
+  );
+  const videoZoneHeight = useMemo(
+    () => Math.max(24, videoPaneHeight - videoSectionContentHeight),
+    [videoPaneHeight, videoSectionContentHeight]
+  );
+  const audioZoneHeight = useMemo(
+    () => Math.max(24, audioPaneHeight - audioSectionContentHeight),
+    [audioPaneHeight, audioSectionContentHeight]
+  );
 
   // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
   // when ANY item changes. Instead, use derived selectors for specific needs.
@@ -138,6 +169,7 @@ export const TimelineContent = memo(function TimelineContent({
   const dragWasActiveRef = useRef(false);
   const scrubWasActiveRef = useRef(false);
   const scrubTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const verticalScrollTargetRef = useRef<HTMLDivElement | null>(null);
 
   // Preview frame hover state
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
@@ -254,11 +286,12 @@ export const TimelineContent = memo(function TimelineContent({
   const syncViewportFromContainer = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+    const tracksViewportHeight = tracksContainerRef.current?.clientHeight ?? container.clientHeight;
     useTimelineViewportStore.getState().setViewport({
       scrollLeft: container.scrollLeft,
       scrollTop: container.scrollTop,
       viewportWidth: container.clientWidth,
-      viewportHeight: container.clientHeight,
+      viewportHeight: tracksViewportHeight,
     });
   }, []);
 
@@ -277,11 +310,12 @@ export const TimelineContent = memo(function TimelineContent({
       (scrollRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     }
     if (node) {
+      const tracksViewportHeight = tracksContainerRef.current?.clientHeight ?? node.clientHeight;
       useTimelineViewportStore.getState().setViewport({
         scrollLeft: node.scrollLeft,
         scrollTop: node.scrollTop,
         viewportWidth: node.clientWidth,
-        viewportHeight: node.clientHeight,
+        viewportHeight: tracksViewportHeight,
       });
     }
   }, [scrollRef]);
@@ -783,6 +817,14 @@ export const TimelineContent = memo(function TimelineContent({
     });
   }, [actualDuration, onMetricsChange, timelineWidth]);
 
+  const getVerticalScrollTarget = useCallback((target: EventTarget | null): HTMLDivElement | null => {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+
+    return target.closest('[data-track-section-scroll]') as HTMLDivElement | null;
+  }, []);
+
   // Momentum scroll/zoom loop using requestAnimationFrame
   const startMomentumScroll = useCallback(() => {
     if (momentumIdRef.current !== null) {
@@ -804,8 +846,9 @@ export const TimelineContent = memo(function TimelineContent({
         velocityXRef.current = 0;
       }
 
-      if (Math.abs(velocityYRef.current) > SCROLL_MIN_VELOCITY) {
-        containerRef.current.scrollTop += velocityYRef.current;
+      const verticalScrollTarget = verticalScrollTargetRef.current;
+      if (verticalScrollTarget && Math.abs(velocityYRef.current) > SCROLL_MIN_VELOCITY) {
+        verticalScrollTarget.scrollTop += velocityYRef.current;
         velocityYRef.current *= SCROLL_FRICTION;
         hasScrollMomentum = true;
       } else {
@@ -916,10 +959,12 @@ export const TimelineContent = memo(function TimelineContent({
 
       // Shift + scroll = vertical scroll ONLY
       if (event.shiftKey) {
+        verticalScrollTargetRef.current = getVerticalScrollTarget(event.target);
         velocityXRef.current = 0;
         const delta = (event.deltaX || event.deltaY) * SCROLL_SENSITIVITY;
         velocityYRef.current = velocityYRef.current * smoothingFactor + delta * SCROLL_SMOOTHING;
       } else {
+        verticalScrollTargetRef.current = null;
         // Default scroll = horizontal scroll ONLY
         velocityYRef.current = 0;
         const delta = (event.deltaY || event.deltaX) * SCROLL_SENSITIVITY;
@@ -935,101 +980,136 @@ export const TimelineContent = memo(function TimelineContent({
     return () => {
       container.removeEventListener('wheel', wheelHandler);
     };
-  }, [applyZoomWithPlayheadCentering, startMomentumScroll]);
+  }, [applyZoomWithPlayheadCentering, getVerticalScrollTarget, startMomentumScroll]);
+
+  const singleSectionTracks = videoTracks.length > 0 ? videoTracks : audioTracks;
+  const singleSectionKind = videoTracks.length > 0 ? 'video' : 'audio';
+  const singleSectionHeight = videoTracks.length > 0 ? videoPaneHeight : audioPaneHeight;
+  const singleSectionZoneHeight = videoTracks.length > 0 ? videoZoneHeight : audioZoneHeight;
+  const singleSectionAnchorTrackId = videoTracks.length > 0 ? topZoneAnchorTrackId : bottomZoneAnchorTrackId;
+
+  const renderTrackSection = (
+    sectionTracks: TimelineTrackType[],
+    options: {
+      section: 'video' | 'audio';
+      height: number;
+      zoneHeight: number;
+      anchorTrackId: string | null;
+      showTopDividerForFirstTrack: boolean;
+      scrollRef?: React.RefObject<HTMLDivElement | null>;
+    }
+  ) => (
+    <div
+      ref={options.scrollRef}
+      data-track-section-scroll={options.section}
+      className="min-h-0 overflow-y-auto overflow-x-hidden"
+      style={{ height: `${options.height}px` }}
+    >
+      <div className="relative min-h-full">
+        {options.section === 'video' && options.anchorTrackId && (
+          <TimelineMediaDropZone
+            height={options.zoneHeight}
+            zone="video"
+            anchorTrackId={options.anchorTrackId}
+          />
+        )}
+        {options.section === 'video' && !options.anchorTrackId && (
+          <div aria-hidden="true" style={{ height: `${options.zoneHeight}px` }} />
+        )}
+
+        {sectionTracks.map((track, index) => (
+          <TrackRowFrame
+            key={track.id}
+            showTopDivider={options.showTopDividerForFirstTrack && index === 0}
+          >
+            <TimelineTrack track={track} timelineWidth={timelineWidth} />
+          </TrackRowFrame>
+        ))}
+
+        {options.section === 'audio' && options.anchorTrackId && (
+          <TimelineMediaDropZone
+            height={options.zoneHeight}
+            zone="audio"
+            anchorTrackId={options.anchorTrackId}
+          />
+        )}
+        {options.section === 'audio' && !options.anchorTrackId && (
+          <div aria-hidden="true" style={{ height: `${options.zoneHeight}px` }} />
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div
       ref={mergedRef}
       data-timeline-scroll-container
-      className="flex-1 relative bg-background/30 timeline-container"
+      className="timeline-container relative flex flex-1 flex-col overflow-x-auto overflow-y-hidden bg-background/30"
       style={{
-        scrollBehavior: 'auto', // Disable smooth scrolling for instant zoom response
-        willChange: 'scroll-position', // Hint to browser for optimization
+        scrollBehavior: 'auto',
+        willChange: 'scroll-position',
       }}
       onMouseDownCapture={handleTimelineMouseDownCapture}
       onClick={handleContainerClick}
       onMouseMove={handleTimelineMouseMove}
       onMouseLeave={handleTimelineMouseLeave}
     >
-      {/* Marquee selection overlay */}
       <MarqueeOverlay marqueeState={marqueeState} />
 
-      {/* Time Ruler - sticky at top */}
-      <div className="sticky top-0 z-30 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
+      <div className="z-30 shrink-0 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
         <TimelineMarkers duration={actualDuration} width={timelineWidth} />
         <TimelinePreviewScrubber inRuler maxFrame={maxTimelineFrame} />
         <TimelinePlayhead inRuler maxFrame={maxTimelineFrame} />
       </div>
 
-      {/* Track lanes */}
       <div
-          ref={tracksContainerRef}
-          className="relative timeline-tracks"
-          style={{
-            width: `${timelineWidth}px`,
-            // CSS containment and will-change hints for scroll/paint optimization
-            contain: 'layout style paint',
-            willChange: 'contents',
-          }}
-        >
-          {topSectionSpacerHeight > 0 && topZoneAnchorTrackId && (
-            <TimelineMediaDropZone
-              height={topSectionSpacerHeight}
-              zone="video"
-              anchorTrackId={topZoneAnchorTrackId}
-            />
-          )}
-          {topSectionSpacerHeight > 0 && !topZoneAnchorTrackId && (
-            <div aria-hidden="true" style={{ height: `${topSectionSpacerHeight}px` }} />
-          )}
+        ref={tracksContainerRef}
+        className="relative timeline-tracks flex flex-1 min-h-0 flex-col"
+        style={{
+          width: `${timelineWidth}px`,
+          contain: 'layout style paint',
+          willChange: 'contents',
+        }}
+      >
+        {hasTrackSections ? (
+          <>
+            {renderTrackSection(videoTracks, {
+              section: 'video',
+              height: videoPaneHeight,
+              zoneHeight: videoZoneHeight,
+              anchorTrackId: topZoneAnchorTrackId,
+              showTopDividerForFirstTrack: true,
+              scrollRef: videoTracksScrollRef,
+            })}
+            <TrackSectionDivider onMouseDown={onSectionDividerMouseDown} />
+            {renderTrackSection(audioTracks, {
+              section: 'audio',
+              height: audioPaneHeight,
+              zoneHeight: audioZoneHeight,
+              anchorTrackId: bottomZoneAnchorTrackId,
+              showTopDividerForFirstTrack: false,
+              scrollRef: audioTracksScrollRef,
+            })}
+          </>
+        ) : (
+          renderTrackSection(singleSectionTracks, {
+            section: singleSectionKind,
+            height: singleSectionHeight,
+            zoneHeight: singleSectionZoneHeight,
+            anchorTrackId: singleSectionAnchorTrackId,
+            showTopDividerForFirstTrack: true,
+            scrollRef: allTracksScrollRef,
+          })
+        )}
 
-          {/* Render all visible tracks - virtualization removed as it caused drag lag */}
-          {/* Video editors typically have <10 tracks, making virtualization overhead not worth it */}
-          {tracks.map((track, index) => {
-            const previousTrack = index > 0 ? (tracks[index - 1] ?? null) : null;
-            const nextTrack = index < tracks.length - 1 ? (tracks[index + 1] ?? null) : null;
-            const showSectionDivider = previousTrack !== null
-              && getTrackKind(previousTrack) === 'video'
-              && getTrackKind(track) === 'audio';
-            const hideBottomDivider = nextTrack !== null
-              && getTrackKind(track) === 'video'
-              && getTrackKind(nextTrack) === 'audio';
+        {isDragging && (
+          <TimelineGuidelines
+            activeSnapTarget={activeSnapTarget}
+          />
+        )}
 
-            return (
-              <Fragment key={track.id}>
-                {showSectionDivider && (
-                  <TrackSectionDivider onMouseDown={onSectionDividerMouseDown} />
-                )}
-                <TrackRowFrame showTopDivider={index === 0} hideBottomDivider={hideBottomDivider}>
-                  <TimelineTrack track={track} timelineWidth={timelineWidth} />
-                </TrackRowFrame>
-              </Fragment>
-            );
-          })}
-
-          {bottomSectionSpacerHeight > 0 && bottomZoneAnchorTrackId && (
-            <TimelineMediaDropZone
-              height={bottomSectionSpacerHeight}
-              zone="audio"
-              anchorTrackId={bottomZoneAnchorTrackId}
-            />
-          )}
-          {bottomSectionSpacerHeight > 0 && !bottomZoneAnchorTrackId && (
-            <div aria-hidden="true" style={{ height: `${bottomSectionSpacerHeight}px` }} />
-          )}
-
-          {/* Snap guidelines (shown during drag) */}
-          {isDragging && (
-            <TimelineGuidelines
-              activeSnapTarget={activeSnapTarget}
-            />
-          )}
-
-          {/* Preview scrubber ghost line through all tracks */}
-          <TimelinePreviewScrubber maxFrame={maxTimelineFrame} />
-
-          {/* Playhead line through all tracks */}
-          <TimelinePlayhead maxFrame={maxTimelineFrame} />
+        <TimelinePreviewScrubber maxFrame={maxTimelineFrame} />
+        <TimelinePlayhead maxFrame={maxTimelineFrame} />
       </div>
     </div>
   );

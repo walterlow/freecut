@@ -1,6 +1,6 @@
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import { getLinkedAudioCompanion, getLinkedVideoCompanion } from '@/shared/utils/linked-media';
-import type { PreviewItemUpdate } from './item-edit-preview';
+import { applyMovePreview, type PreviewItemUpdate } from './item-edit-preview';
 import { getSourceProperties, sourceToTimelineFrames } from './source-calculations';
 
 function isMediaPair(left: TimelineItem, right: TimelineItem): boolean {
@@ -29,6 +29,29 @@ export function getLinkedItems(items: TimelineItem[], itemId: string): TimelineI
 
 export function getLinkedItemIds(items: TimelineItem[], itemId: string): string[] {
   return getLinkedItems(items, itemId).map((item) => item.id);
+}
+
+export function filterUnlockedItemIds(
+  items: TimelineItem[],
+  tracks: Pick<TimelineTrack, 'id' | 'locked'>[],
+  itemIds: string[],
+): string[] {
+  if (itemIds.length === 0) {
+    return [];
+  }
+
+  const lockedTrackIds = new Set(
+    tracks
+      .filter((track) => track.locked)
+      .map((track) => track.id),
+  );
+
+  if (lockedTrackIds.size === 0) {
+    return itemIds;
+  }
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  return itemIds.filter((itemId) => !lockedTrackIds.has(itemById.get(itemId)?.trackId ?? ''));
 }
 
 export function getUniqueLinkedItemAnchorIds(items: TimelineItem[], itemIds: string[]): string[] {
@@ -191,6 +214,26 @@ export function buildSynchronizedLinkedMoveUpdates(
     return delta !== 0
       ? [{ id: item.id, from: item.from + delta }]
       : [];
+  });
+}
+
+export function buildLinkedMovePreviewUpdates(
+  items: TimelineItem[],
+  movedItems: Array<{ id: string; from: number }>,
+): PreviewItemUpdate[] {
+  if (movedItems.length === 0) {
+    return [];
+  }
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+
+  return movedItems.flatMap((movedItem) => {
+    const sourceItem = itemById.get(movedItem.id);
+    if (!sourceItem || sourceItem.from === movedItem.from || getLinkedItems(items, movedItem.id).length <= 1) {
+      return [];
+    }
+
+    return [applyMovePreview(sourceItem, movedItem.from - sourceItem.from)];
   });
 }
 

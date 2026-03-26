@@ -19,9 +19,11 @@ export function shouldSuppressLinkedSyncBadge(params: LinkedSyncBadgeSuppression
     return false;
   }
 
+  if (params.isDragging || params.isPartOfDrag) {
+    return false;
+  }
+
   return params.linkedEditPreviewActive
-    || params.isDragging
-    || params.isPartOfDrag
     || params.isTrimming
     || params.isStretching
     || params.isSlipSlideActive

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
@@ -22,14 +22,12 @@ import { CompositionBreadcrumbs } from './composition-breadcrumbs';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { trackDropIndexRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
 import { createClassicTrack, getAdjacentTrackOrder, getTrackKind } from '../utils/classic-tracks';
-import { getTrackDropIndicatorTop } from '../utils/track-drop-indicator';
 import { getEmptyTrackIdsForRemoval } from '../utils/track-removal';
 import { createLogger } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
-import { TRACK_SECTION_DIVIDER_HEIGHT } from '../constants';
 import { useTrackHeightResize } from '../hooks/use-track-height-resize';
 import {
-  getAnchoredSectionDividerOffset,
+  clampSectionDividerPosition,
   getTrackSectionLayout,
 } from '../utils/track-resize';
 
@@ -87,9 +85,15 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   // Refs for syncing scroll between track headers and timeline content
   const trackHeadersViewportRef = useRef<HTMLDivElement>(null);
-  const trackHeadersContainerRef = useRef<HTMLDivElement>(null);
+  const trackHeadersRootRef = useRef<HTMLDivElement>(null);
   const timelineContentRef = useRef<HTMLDivElement>(null);
-  const sectionDividerDragRef = useRef<{ startY: number; startOffset: number } | null>(null);
+  const allTrackHeadersScrollRef = useRef<HTMLDivElement>(null);
+  const videoTrackHeadersScrollRef = useRef<HTMLDivElement>(null);
+  const audioTrackHeadersScrollRef = useRef<HTMLDivElement>(null);
+  const allTrackContentScrollRef = useRef<HTMLDivElement>(null);
+  const videoTrackContentScrollRef = useRef<HTMLDivElement>(null);
+  const audioTrackContentScrollRef = useRef<HTMLDivElement>(null);
+  const sectionDividerDragRef = useRef<{ startY: number; startDividerPosition: number } | null>(null);
 
   // Store zoom handlers from TimelineContent
   const [zoomHandlers, setZoomHandlers] = useState<{
@@ -103,7 +107,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     timelineWidth: 0,
   });
   const [trackRowsViewportHeight, setTrackRowsViewportHeight] = useState(0);
-  const [sectionDividerOffset, setSectionDividerOffset] = useState(0);
+  const [sectionDividerPosition, setSectionDividerPosition] = useState<number | null>(null);
 
   // Bottom editor panel state (Keyframes / Scopes)
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
@@ -156,47 +160,30 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   const trackSectionLayout = useMemo(() => getTrackSectionLayout({
     viewportHeight: trackRowsViewportHeight,
     tracks: visibleTracks,
-    sectionDividerOffset,
-    trackTitleBarHeight: editorLayout.timelineTracksHeaderHeight,
-  }), [editorLayout.timelineTracksHeaderHeight, sectionDividerOffset, trackRowsViewportHeight, visibleTracks]);
+    sectionDividerPosition,
+    trackTitleBarHeight: editorLayout.timelineClipLabelRowHeight,
+  }), [editorLayout.timelineClipLabelRowHeight, sectionDividerPosition, trackRowsViewportHeight, visibleTracks]);
   const {
-    maximumSectionDividerOffset: maxSectionDividerOffset,
-    clampedSectionDividerOffset,
-    topSectionSpacerHeight,
-    bottomSectionSpacerHeight,
+    clampedSectionDividerPosition,
+    videoPaneHeight,
+    audioPaneHeight,
     videoSectionHeight,
+    audioSectionHeight,
   } = trackSectionLayout;
-  const getDividerAnchorY = useCallback(() => {
-    if (!hasTrackSections) {
-      return null;
-    }
-
-    return topSectionSpacerHeight + videoSectionHeight;
-  }, [hasTrackSections, topSectionSpacerHeight, videoSectionHeight]);
-  const syncSectionDividerAnchor = useCallback((dividerAnchorY: number, nextTracks: typeof visibleTracks) => {
-    if (!hasTrackSections) {
-      return;
-    }
-
-    setSectionDividerOffset(getAnchoredSectionDividerOffset({
-      viewportHeight: trackRowsViewportHeight,
-      tracks: nextTracks,
-      dividerAnchorY,
-      trackTitleBarHeight: editorLayout.timelineTracksHeaderHeight,
-    }));
-  }, [editorLayout.timelineTracksHeaderHeight, hasTrackSections, trackRowsViewportHeight]);
-  const { handleTrackResizeStart, handleTrackResizeReset } = useTrackHeightResize({
-    getDividerAnchorY,
-    syncSectionDividerAnchor,
-  });
-  const getTrackStackOffset = useCallback((trackCount: number) => getTrackDropIndicatorTop({
-    tracks: visibleTracks,
-    dropIndex: trackCount,
-    topSectionSpacerHeight,
-    hasTrackSections,
-    videoTrackCount: videoTracks.length,
-    dividerHeight: TRACK_SECTION_DIVIDER_HEIGHT,
-  }), [hasTrackSections, topSectionSpacerHeight, videoTracks.length, visibleTracks]);
+  const { handleTrackResizeStart, handleTrackResizeReset } = useTrackHeightResize();
+  const videoZoneHeight = useMemo(
+    () => Math.max(24, videoPaneHeight - videoSectionHeight),
+    [videoPaneHeight, videoSectionHeight]
+  );
+  const audioZoneHeight = useMemo(
+    () => Math.max(24, audioPaneHeight - audioSectionHeight),
+    [audioPaneHeight, audioSectionHeight]
+  );
+  const getTrackStackOffset = useCallback((sectionTracks: typeof visibleTracks, dropIndex: number, leadingOffset = 0) => {
+    return leadingOffset + sectionTracks
+      .slice(0, Math.max(0, Math.min(dropIndex, sectionTracks.length)))
+      .reduce((sum, track) => sum + track.height, 0);
+  }, []);
 
   useEffect(() => {
     const element = trackHeadersViewportRef.current;
@@ -219,7 +206,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     event.stopPropagation();
     sectionDividerDragRef.current = {
       startY: event.clientY,
-      startOffset: clampedSectionDividerOffset,
+      startDividerPosition: clampedSectionDividerPosition,
     };
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'row-resize';
@@ -229,11 +216,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       if (!dragState) return;
 
       const deltaY = moveEvent.clientY - dragState.startY;
-      const nextOffset = Math.max(
-        -maxSectionDividerOffset,
-        Math.min(maxSectionDividerOffset, dragState.startOffset + deltaY)
-      );
-      setSectionDividerOffset(nextOffset);
+      setSectionDividerPosition(clampSectionDividerPosition({
+        viewportHeight: trackRowsViewportHeight,
+        tracks: visibleTracks,
+        requestedDividerPosition: dragState.startDividerPosition + deltaY,
+      }));
     };
 
     const handleMouseUp = () => {
@@ -246,7 +233,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [clampedSectionDividerOffset, hasTrackSections, maxSectionDividerOffset]);
+  }, [clampedSectionDividerPosition, hasTrackSections, trackRowsViewportHeight, visibleTracks]);
 
   // Set first track as active on mount
   // Use primitive dependencies to avoid re-running on unrelated track changes
@@ -258,26 +245,66 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     }
   }, [tracksLength, activeTrackId, firstTrackId, setActiveTrack]);
 
-
-  // Sync vertical scroll between track headers and timeline content using transform
   useEffect(() => {
-    const timelineContent = timelineContentRef.current;
-    const trackHeadersContainer = trackHeadersContainerRef.current;
+    const syncPairs = [
+      {
+        source: allTrackContentScrollRef.current,
+        target: allTrackHeadersScrollRef.current,
+      },
+      {
+        source: videoTrackContentScrollRef.current,
+        target: videoTrackHeadersScrollRef.current,
+      },
+      {
+        source: audioTrackContentScrollRef.current,
+        target: audioTrackHeadersScrollRef.current,
+      },
+    ].filter((pair): pair is { source: HTMLDivElement; target: HTMLDivElement } => {
+      return pair.source !== null && pair.target !== null;
+    });
 
-    if (!timelineContent || !trackHeadersContainer) return;
+    const cleanups = syncPairs.map(({ source, target }) => {
+      const handleScroll = () => {
+        if (target.scrollTop !== source.scrollTop) {
+          target.scrollTop = source.scrollTop;
+        }
+      };
 
-    const handleScroll = () => {
-      if (trackHeadersContainer) {
-        // Use transform to move the track headers container
-        trackHeadersContainer.style.transform = `translateY(-${timelineContent.scrollTop}px)`;
+      handleScroll();
+      source.addEventListener('scroll', handleScroll, { passive: true });
+      return () => source.removeEventListener('scroll', handleScroll);
+    });
+
+    return () => {
+      for (const cleanup of cleanups) {
+        cleanup();
       }
     };
+  }, [audioTracks.length, hasTrackSections, tracksLength, videoTracks.length]);
 
-    timelineContent.addEventListener('scroll', handleScroll);
-    return () => {
-      timelineContent.removeEventListener('scroll', handleScroll);
+  useLayoutEffect(() => {
+    const content = hasTrackSections
+      ? videoTrackContentScrollRef.current
+      : videoTracks.length > 0
+        ? allTrackContentScrollRef.current
+        : null;
+    const header = hasTrackSections
+      ? videoTrackHeadersScrollRef.current
+      : videoTracks.length > 0
+        ? allTrackHeadersScrollRef.current
+        : null;
+
+    const anchorToDivider = (element: HTMLDivElement | null) => {
+      if (!element) {
+        return;
+      }
+
+      element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
     };
-  }, []);
+
+    anchorToDivider(content);
+    anchorToDivider(header);
+  }, [allTrackContentScrollRef, allTrackHeadersScrollRef, hasTrackSections, videoPaneHeight, videoSectionHeight, videoTracks.length]);
 
   // Update drop indicator from shared ref (only during drag)
   // Only runs RAF loop when track dragging is active to avoid unnecessary renders
@@ -309,7 +336,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     if (!dragState?.draggedTrackIds?.length) return;
 
     const draggedIds = new Set(dragState.draggedTrackIds);
-    const container = trackHeadersContainerRef.current;
+    const container = trackHeadersRootRef.current;
     if (!container) return;
 
     let rafId: number;
@@ -538,6 +565,119 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     syncTrackSelectionAfterRemoval(tracksToRemove, remainingTrack?.id ?? null);
   }, [activeTrackId, removeTracks, selectedTrackIds, syncTrackSelectionAfterRemoval, tracks]);
 
+  const videoDropIndicatorIndex = isTrackDragging && dropIndicatorIndex >= 0 && dropIndicatorIndex <= videoTracks.length
+    ? dropIndicatorIndex
+    : -1;
+  const audioDropIndicatorIndex = isTrackDragging && dropIndicatorIndex >= videoTracks.length && dropIndicatorIndex <= visibleTracks.length
+    ? dropIndicatorIndex - videoTracks.length
+    : -1;
+  const singleSectionKind = videoTracks.length > 0 ? 'video' : 'audio';
+  const singleSectionTracks = videoTracks.length > 0 ? videoTracks : audioTracks;
+  const singleSectionHeight = videoTracks.length > 0 ? videoPaneHeight : audioPaneHeight;
+  const singleSectionZoneHeight = videoTracks.length > 0 ? videoZoneHeight : audioZoneHeight;
+  const singleDropIndicatorIndex = !hasTrackSections && isTrackDragging && dropIndicatorIndex >= 0 && dropIndicatorIndex <= visibleTracks.length
+    ? dropIndicatorIndex
+    : -1;
+
+  const renderTrackHeadersSection = (
+    sectionTracks: typeof visibleTracks,
+    options: {
+      section: 'video' | 'audio';
+      height: number;
+      zoneHeight: number;
+      scrollRef: React.RefObject<HTMLDivElement | null>;
+      dropIndicatorLocalIndex: number;
+      showTopDividerForFirstTrack: boolean;
+    }
+  ) => (
+    <div className="relative min-h-0 overflow-hidden" style={{ height: `${options.height}px` }}>
+      <div ref={options.scrollRef} className="h-full overflow-hidden">
+        <div className="relative min-h-full">
+          {options.section === 'video' && (
+            <div
+              aria-hidden="true"
+              data-track-header-new-zone="video"
+              style={{ height: `${options.zoneHeight}px` }}
+            />
+          )}
+
+          {sectionTracks.map((track, index) => {
+            const emptyTrackIdsToRemove = getEmptyTrackIdsForRemoval(tracks, itemsByTrackId, track.id);
+            return (
+              <TrackRowFrame
+                key={track.id}
+                showTopDivider={options.showTopDividerForFirstTrack && index === 0}
+                onResizeMouseDown={(event) => handleTrackResizeStart(event, track.id)}
+                onResizeDoubleClick={(event) => handleTrackResizeReset(event, track.id)}
+                resizeHandleLabel={`Resize ${track.name} height`}
+                resizeHandlePosition={getTrackKind(track) === 'video' ? 'top' : 'bottom'}
+              >
+                <TrackHeader
+                  track={track}
+                  itemCount={itemsByTrackId[track.id]?.length ?? 0}
+                  isActive={activeTrackId === track.id}
+                  isSelected={selectedTrackIdsSet.has(track.id)}
+                  canDeleteTrack={tracks.length > 1}
+                  canDeleteEmptyTracks={emptyTrackIdsToRemove.length > 0}
+                  onToggleLock={() => toggleTrackLock(track.id)}
+                  onToggleVisibility={() => toggleTrackVisibility(track.id)}
+                  onToggleMute={() => toggleTrackMute(track.id)}
+                  onToggleSolo={() => toggleTrackSolo(track.id)}
+                  onCloseGaps={() => useTimelineStore.getState().closeAllGapsOnTrack(track.id)}
+                  onAddVideoTrack={addVideoTrackToTop}
+                  onAddAudioTrack={appendAudioTrackToSection}
+                  onRepairLegacyAvTracks={() => {
+                    void useTimelineStore.getState().repairLegacyAvTracks();
+                  }}
+                  onDeleteTrack={() => handleDeleteTrack(track.id)}
+                  onDeleteEmptyTracks={() => handleDeleteEmptyTracks(track.id)}
+                  onSelect={(e) => {
+                    if (trackDragJustDroppedRef.current) return;
+                    if (e.shiftKey && activeTrackId) {
+                      const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
+                      const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
+                      if (startIdx !== -1 && endIdx !== -1) {
+                        const lo = Math.min(startIdx, endIdx);
+                        const hi = Math.max(startIdx, endIdx);
+                        const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
+                        selectTracks(rangeIds);
+                      }
+                    } else if (e.metaKey || e.ctrlKey) {
+                      toggleTrackSelection(track.id);
+                    } else {
+                      setActiveTrack(track.id);
+                    }
+                  }}
+                />
+              </TrackRowFrame>
+            );
+          })}
+
+          {options.section === 'audio' && (
+            <div
+              aria-hidden="true"
+              data-track-header-new-zone="audio"
+              style={{ height: `${options.zoneHeight}px` }}
+            />
+          )}
+
+          {options.dropIndicatorLocalIndex >= 0 && (
+            <div
+              className="absolute left-0 right-0 h-0.5 pointer-events-none z-50 shadow-lg bg-primary"
+              style={{
+                top: getTrackStackOffset(
+                  sectionTracks,
+                  options.dropIndicatorLocalIndex,
+                  options.section === 'video' ? options.zoneHeight : 0
+                ),
+              }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
 
       <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden" role="region" aria-label="Timeline">
@@ -608,101 +748,36 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
           {/* Track labels - synced scroll (no scrollbar) */}
           <div ref={trackHeadersViewportRef} className="flex-1 overflow-hidden relative">
-            <div ref={trackHeadersContainerRef} className="relative">
-              {topSectionSpacerHeight > 0 && (
-                <div
-                  aria-hidden="true"
-                  data-track-header-new-zone="video"
-                  style={{ height: `${topSectionSpacerHeight}px` }}
-                />
-              )}
-
-              {visibleTracks.map((track) => {
-                const trackIndex = visibleTracks.findIndex((candidate) => candidate.id === track.id);
-                const previousTrack = trackIndex > 0 ? (visibleTracks[trackIndex - 1] ?? null) : null;
-                const nextTrack = trackIndex < visibleTracks.length - 1 ? (visibleTracks[trackIndex + 1] ?? null) : null;
-                const emptyTrackIdsToRemove = getEmptyTrackIdsForRemoval(tracks, itemsByTrackId, track.id);
-                const showSectionDivider = previousTrack !== null
-                  && getTrackKind(previousTrack) === 'video'
-                  && getTrackKind(track) === 'audio';
-                const hideBottomDivider = nextTrack !== null
-                  && getTrackKind(track) === 'video'
-                  && getTrackKind(nextTrack) === 'audio';
-                return (
-                  <Fragment key={track.id}>
-                    {showSectionDivider && (
-                      <TrackSectionDivider onMouseDown={handleSectionDividerMouseDown} />
-                    )}
-                    <TrackRowFrame
-                      showTopDivider={trackIndex === 0}
-                      hideBottomDivider={hideBottomDivider}
-                      onResizeMouseDown={(event) => handleTrackResizeStart(event, track.id)}
-                      onResizeDoubleClick={(event) => handleTrackResizeReset(event, track.id)}
-                      resizeHandleLabel={`Resize ${track.name} height`}
-                      resizeHandlePosition={getTrackKind(track) === 'video' ? 'top' : 'bottom'}
-                    >
-                      <TrackHeader
-                        track={track}
-                        itemCount={itemsByTrackId[track.id]?.length ?? 0}
-                        isActive={activeTrackId === track.id}
-                        isSelected={selectedTrackIdsSet.has(track.id)}
-                        canDeleteTrack={tracks.length > 1}
-                        canDeleteEmptyTracks={emptyTrackIdsToRemove.length > 0}
-                        onToggleLock={() => toggleTrackLock(track.id)}
-                        onToggleVisibility={() => toggleTrackVisibility(track.id)}
-                        onToggleMute={() => toggleTrackMute(track.id)}
-                        onToggleSolo={() => toggleTrackSolo(track.id)}
-                        onCloseGaps={() => useTimelineStore.getState().closeAllGapsOnTrack(track.id)}
-                        onAddVideoTrack={addVideoTrackToTop}
-                        onAddAudioTrack={appendAudioTrackToSection}
-                        onRepairLegacyAvTracks={() => {
-                          void useTimelineStore.getState().repairLegacyAvTracks();
-                        }}
-                        onDeleteTrack={() => handleDeleteTrack(track.id)}
-                        onDeleteEmptyTracks={() => handleDeleteEmptyTracks(track.id)}
-                        onSelect={(e) => {
-                          // After a drag-drop, suppress the click to retain selection
-                          if (trackDragJustDroppedRef.current) return;
-                          if (e.shiftKey && activeTrackId) {
-                            // Range select from active track to clicked track
-                            const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
-                            const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
-                            if (startIdx !== -1 && endIdx !== -1) {
-                              const lo = Math.min(startIdx, endIdx);
-                              const hi = Math.max(startIdx, endIdx);
-                              const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
-                              selectTracks(rangeIds);
-                            }
-                          } else if (e.metaKey || e.ctrlKey) {
-                            // Multi-select with Cmd/Ctrl
-                            toggleTrackSelection(track.id);
-                          } else {
-                            // Single select - set as active
-                            setActiveTrack(track.id);
-                          }
-                        }}
-                      />
-                    </TrackRowFrame>
-                  </Fragment>
-                );
-              })}
-
-              {bottomSectionSpacerHeight > 0 && (
-                <div
-                  aria-hidden="true"
-                  data-track-header-new-zone="audio"
-                  style={{ height: `${bottomSectionSpacerHeight}px` }}
-                />
-              )}
-
-              {/* Drop indicator - shows where tracks will be dropped */}
-              {isTrackDragging && dropIndicatorIndex >= 0 && dropIndicatorIndex <= visibleTracks.length && (
-                <div
-                  className="absolute left-0 right-0 h-0.5 pointer-events-none z-50 shadow-lg bg-primary"
-                  style={{
-                    top: getTrackStackOffset(dropIndicatorIndex),
-                  }}
-                />
+            <div ref={trackHeadersRootRef} className="flex h-full min-h-0 flex-col">
+              {hasTrackSections ? (
+                <>
+                  {renderTrackHeadersSection(videoTracks, {
+                    section: 'video',
+                    height: videoPaneHeight,
+                    zoneHeight: videoZoneHeight,
+                    scrollRef: videoTrackHeadersScrollRef,
+                    dropIndicatorLocalIndex: videoDropIndicatorIndex,
+                    showTopDividerForFirstTrack: true,
+                  })}
+                  <TrackSectionDivider onMouseDown={handleSectionDividerMouseDown} />
+                  {renderTrackHeadersSection(audioTracks, {
+                    section: 'audio',
+                    height: audioPaneHeight,
+                    zoneHeight: audioZoneHeight,
+                    scrollRef: audioTrackHeadersScrollRef,
+                    dropIndicatorLocalIndex: audioDropIndicatorIndex,
+                    showTopDividerForFirstTrack: false,
+                  })}
+                </>
+              ) : (
+                renderTrackHeadersSection(singleSectionTracks, {
+                  section: singleSectionKind,
+                  height: singleSectionHeight,
+                  zoneHeight: singleSectionZoneHeight,
+                  scrollRef: allTrackHeadersScrollRef,
+                  dropIndicatorLocalIndex: singleDropIndicatorIndex,
+                  showTopDividerForFirstTrack: true,
+                })
               )}
             </div>
           </div>
@@ -713,8 +788,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           duration={duration}
           tracks={visibleTracks}
           scrollRef={timelineContentRef}
-          topSectionSpacerHeight={topSectionSpacerHeight}
-          bottomSectionSpacerHeight={bottomSectionSpacerHeight}
+          allTracksScrollRef={allTrackContentScrollRef}
+          videoTracksScrollRef={videoTrackContentScrollRef}
+          audioTracksScrollRef={audioTrackContentScrollRef}
+          videoPaneHeight={videoPaneHeight}
+          audioPaneHeight={audioPaneHeight}
           onSectionDividerMouseDown={hasTrackSections ? handleSectionDividerMouseDown : undefined}
           onZoomHandlersReady={setZoomHandlers}
           onMetricsChange={setTimelineMetrics}
