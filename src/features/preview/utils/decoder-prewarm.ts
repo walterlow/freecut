@@ -127,6 +127,8 @@ function createPoolWorker(): PoolWorker | null {
     w.addEventListener('messageerror', (e) => {
       log.warn('Decoder prewarm worker message error', { data: e.data });
     });
+    // Eagerly load mediabunny WASM so first preseek doesn't pay cold start
+    w.postMessage({ type: 'warmup' });
     return { worker: w, inflightCount: 0 };
   } catch (error) {
     log.warn('Failed to create decoder prewarm worker', { error });

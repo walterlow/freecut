@@ -447,6 +447,12 @@ self.postMessage({ type: 'ready' });
 self.onmessage = async (event: MessageEvent) => {
   const msg = event.data;
 
+  // Eagerly load mediabunny WASM so first preseek doesn't pay the cold start
+  if (msg.type === 'warmup') {
+    void getMediabunny();
+    return;
+  }
+
   // Register keyframe index for a source (sent once per source from main thread)
   if (msg.type === 'set_keyframes') {
     if (msg.src && Array.isArray(msg.keyframeTimestamps)) {

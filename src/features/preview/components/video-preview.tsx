@@ -3459,16 +3459,28 @@ export const VideoPreview = memo(function VideoPreview({
                   transitionWindow.startFrame,
                 );
               }
-              // Fire background worker preseek for transition clips so the
-              // cached bitmap is ready as a fallback if mediabunny/DOM video
-              // can't deliver the first frame fast enough.
-              for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
-                if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
-                  const localFrame = transitionWindow.startFrame - clip.from;
-                  const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                  const clipSpeed = clip.speed ?? 1;
-                  const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
-                  void workerBackgroundPreseek(clip.src, sourceTime);
+              // Fire background worker batch preseek for the first several
+              // transition frames per clip. Pre-decoding a batch gives the
+              // render loop cached bitmaps as fallback — reduces the 100-300ms
+              // cold decode stall at transition entry.
+              {
+                const preseekCount = Math.min(8, transitionWindow.endFrame - transitionWindow.startFrame);
+                const transBySource = new Map<string, number[]>();
+                for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
+                  if (clip.type !== 'video' || !('src' in clip) || !clip.src || !clip.sourceFps) continue;
+                  const timestamps: number[] = [];
+                  for (let i = 0; i < preseekCount; i++) {
+                    const localFrame = (transitionWindow.startFrame + i) - clip.from;
+                    const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+                    const clipSpeed = clip.speed ?? 1;
+                    timestamps.push((sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed);
+                  }
+                  const existing = transBySource.get(clip.src);
+                  if (existing) existing.push(...timestamps);
+                  else transBySource.set(clip.src, timestamps);
+                }
+                for (const [src, timestamps] of transBySource) {
+                  void workerBackgroundBatchPreseek(src, timestamps);
                 }
               }
             }
