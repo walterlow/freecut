@@ -41,6 +41,7 @@ import { getVisibleTrackIds } from '../utils/group-utils';
 import { getRazorSplitPosition } from '../utils/razor-snap';
 import { getTrackKind } from '../utils/classic-tracks';
 import type { RazorSnapTarget } from '../utils/razor-snap';
+import type { TimelineTrack as TimelineTrackType } from '@/types/timeline';
 import { useMarkersStore } from '../stores/markers-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
@@ -59,6 +60,7 @@ const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
 
 interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
+  tracks: TimelineTrackType[];
   scrollRef?: React.RefObject<HTMLDivElement | null>; // Optional ref for scroll syncing
   topSectionSpacerHeight?: number;
   bottomSectionSpacerHeight?: number;
@@ -89,6 +91,7 @@ interface TimelineContentProps {
  */
 export const TimelineContent = memo(function TimelineContent({
   duration,
+  tracks,
   scrollRef,
   topSectionSpacerHeight = 0,
   bottomSectionSpacerHeight = 0,
@@ -102,11 +105,8 @@ export const TimelineContent = memo(function TimelineContent({
   useWaveformPrefetch();
 
   // Use granular selectors - Zustand v5 best practice
-  const allTracks = useTimelineStore((s) => s.tracks);
   const fps = useTimelineStore((s) => s.fps);
 
-  // Derive visible tracks (hides children of collapsed groups)
-  const tracks = allTracks;
   const firstTrackId = tracks[0]?.id ?? null;
   const lastTrackId = tracks[tracks.length - 1]?.id ?? null;
   const topZoneAnchorTrackId = tracks.find((track) => getTrackKind(track) === 'video')?.id ?? firstTrackId;

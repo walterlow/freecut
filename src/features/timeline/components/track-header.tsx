@@ -1,7 +1,5 @@
 import { memo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Slider } from '@/components/ui/slider';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,7 +23,6 @@ interface TrackHeaderProps {
   onToggleVisibility: () => void;
   onToggleMute: () => void;
   onToggleSolo: () => void;
-  onSetVolume: (volume: number) => void;
   onSelect: (e: React.MouseEvent) => void;
   onCloseGaps?: () => void;
   onAddVideoTrack: () => void;
@@ -70,7 +67,6 @@ export const TrackHeader = memo(function TrackHeader({
   onToggleVisibility,
   onToggleMute,
   onToggleSolo,
-  onSetVolume,
   onSelect,
   onCloseGaps,
   onAddVideoTrack,
@@ -81,8 +77,6 @@ export const TrackHeader = memo(function TrackHeader({
 }: TrackHeaderProps) {
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
-  const trackVolume = track.volume ?? 0;
-  const formattedTrackVolume = `${trackVolume > 0 ? '+' : ''}${trackVolume.toFixed(1)} dB`;
   const itemCountLabel = `${itemCount} ${itemCount === 1 ? 'Clip' : 'Clips'}`;
 
   return (
@@ -94,7 +88,7 @@ export const TrackHeader = memo(function TrackHeader({
             cursor-grab active:cursor-grabbing relative
             ${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/50'}
             ${isActive ? 'border-l-3 border-l-primary' : 'border-l-3 border-l-transparent'}
-            transition-all duration-150
+            transition-colors duration-150
           `}
           style={{
             height: `${track.height}px`,
@@ -200,52 +194,6 @@ export const TrackHeader = memo(function TrackHeader({
             >
               <FoldHorizontal className="w-3 h-3" />
             </Button>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto h-5 px-1.5 rounded-sm text-[10px] font-mono text-muted-foreground hover:text-foreground"
-                  onClick={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  aria-label={`Track gain ${formattedTrackVolume}`}
-                >
-                  {formattedTrackVolume}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-52 p-3"
-                align="start"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-medium">Track gain</span>
-                    <span className="text-[11px] font-mono text-muted-foreground">{formattedTrackVolume}</span>
-                  </div>
-                  <Slider
-                    value={[trackVolume]}
-                    min={-60}
-                    max={12}
-                    step={0.1}
-                    onValueChange={(values) => onSetVolume(values[0] ?? 0)}
-                    aria-label="Track gain"
-                  />
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>-60 dB</span>
-                    <button
-                      type="button"
-                      className="hover:text-foreground transition-colors"
-                      onClick={() => onSetVolume(0)}
-                    >
-                      Reset
-                    </button>
-                    <span>+12 dB</span>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col items-start justify-start px-1.5 py-1">

@@ -63,7 +63,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     toggleTrackVisibility,
     toggleTrackMute,
     toggleTrackSolo,
-    setTrackVolume,
   } = useTimelineTracks();
   const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
 
@@ -653,7 +652,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                         onToggleVisibility={() => toggleTrackVisibility(track.id)}
                         onToggleMute={() => toggleTrackMute(track.id)}
                         onToggleSolo={() => toggleTrackSolo(track.id)}
-                        onSetVolume={(volume) => setTrackVolume(track.id, volume)}
                         onCloseGaps={() => useTimelineStore.getState().closeAllGapsOnTrack(track.id)}
                         onAddVideoTrack={addVideoTrackToTop}
                         onAddAudioTrack={appendAudioTrackToSection}
@@ -713,6 +711,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         {/* Timeline Canvas */}
         <TimelineContent
           duration={duration}
+          tracks={visibleTracks}
           scrollRef={timelineContentRef}
           topSectionSpacerHeight={topSectionSpacerHeight}
           bottomSectionSpacerHeight={bottomSectionSpacerHeight}
