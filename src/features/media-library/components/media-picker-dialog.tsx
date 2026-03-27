@@ -59,7 +59,7 @@ function MediaPickerItem({
   return (
     <button
       onClick={onSelect}
-      className="flex items-center gap-3 p-2 w-full text-left rounded-lg border border-transparent hover:bg-secondary/50 hover:border-border transition-colors"
+      className="flex w-full items-start gap-3 rounded-lg border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-secondary/50"
     >
       {/* Thumbnail */}
       <div className="relative w-12 h-12 rounded overflow-hidden bg-secondary flex-shrink-0">
@@ -78,7 +78,7 @@ function MediaPickerItem({
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{media.fileName}</p>
+        <p className="text-sm font-medium leading-snug break-words">{media.fileName}</p>
         <p className="text-xs text-muted-foreground">
           {mediaType === 'audio' || mediaType === 'video'
             ? formatDuration(media.duration)
@@ -136,9 +136,9 @@ export function MediaPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-[500px] max-h-[70vh]">
+      <DialogContent className="max-h-[70vh] w-[min(92vw,960px)] max-w-[960px]">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="pr-8 leading-snug break-words">{title}</DialogTitle>
           <DialogDescription>
             Choose a {filterType || 'media'} file from your library.
           </DialogDescription>
