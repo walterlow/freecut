@@ -39,7 +39,8 @@ typechain-types/
 typechain-generated/
 
 # Stylus / Cargo (contracts/stylus)
-contracts/stylus/target/
+contracts/stylus/target/*
+contracts/target/*
 
 # Testing
 coverage

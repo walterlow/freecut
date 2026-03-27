@@ -12,6 +12,11 @@ const BILLING_INTERVAL_MS = 300_000; // 5 minutes
  * Runs the 5-minute billing loop while stream is active.
  * Sends payAiRender(intervalCostUsdc6) via Smart Account; on failure pauses and sets billingError.
  * Phase 2: when user uses a gated style and holds MeToken (checkMeTokenHolder), call payWithRoyalty(amount, creatorAddress) instead; creator from Stylus style registry or cached mapping.
+ *
+ * IMPORTANT:
+ * This hook must only be mounted after Account Kit signer context is ready
+ * (user present and signerStatus.isInitializing === false). Caller is responsible
+ * for this guard to avoid useSmartAccountClient context timing errors.
  */
 export function useBillingLoop() {
   const { address } = useAccount({ type: 'LightAccount' });

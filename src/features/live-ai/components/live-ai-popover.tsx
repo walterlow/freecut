@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/select';
 import { useBuyUsdcOnramp } from '@/hooks/use-buy-usdc-onramp';
 import { useLiveSessionStore } from '../stores/live-session-store';
-import { useBillingLoop } from '../hooks/use-billing-loop';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore, useProjectStore } from '../deps/editor';
 import { createStream, isDaydreamConfigured } from '../api/create-stream';
@@ -105,6 +104,7 @@ function toProxyWhipUrlIfNeeded(whipUrl: string): string {
 }
 
 type PreviewView = 'camera' | 'ai';
+type StreamProvider = 'daydream' | 'livepeer';
 
 interface LiveAISessionWithBroadcastProps {
   streamData: StreamData;
@@ -151,6 +151,7 @@ export function LiveAIPanelContent() {
   const [consentRequested, setConsentRequested] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<StreamProvider>('daydream');
   const [selectedModelId, setSelectedModelId] = useState<string>(DEFAULT_STREAM_PARAMS.params.model_id ?? 'stabilityai/sd-turbo');
   const [prompt, setPrompt] = useState(DEFAULT_STREAM_PARAMS.params.prompt ?? '');
   const [loraEntries, setLoraEntries] = useState<LoraEntry[]>([]);
@@ -163,8 +164,31 @@ export function LiveAIPanelContent() {
   const daydreamConfigured = isDaydreamConfigured();
   const livepeerConfigured = isLivepeerStudioConfigured();
   const configured = daydreamConfigured || livepeerConfigured;
+  const hasBothProviders = daydreamConfigured && livepeerConfigured;
+  const providerOptions: Array<{ value: StreamProvider; label: string }> = [
+    ...(daydreamConfigured ? [{ value: 'daydream' as const, label: 'Daydream' }] : []),
+    ...(livepeerConfigured ? [{ value: 'livepeer' as const, label: 'Livepeer Studio' }] : []),
+  ];
   const curatedPresets = getCuratedLorasForFamily(getFamilyForModelId(selectedModelId));
   const triggerHints = getTriggerWordsForModelIds(loraEntries.map((e) => e.path));
+
+  const initializedProviderRef = useRef(false);
+  useEffect(() => {
+    if (!livepeerConfigured && selectedProvider === 'livepeer') {
+      setSelectedProvider('daydream');
+      return;
+    }
+    if (!daydreamConfigured && selectedProvider === 'daydream') {
+      setSelectedProvider('livepeer');
+      return;
+    }
+    if (!initializedProviderRef.current && hasBothProviders && selectedProvider !== 'daydream') {
+      // Prefer Daydream by default when both providers are configured.
+      initializedProviderRef.current = true;
+      setSelectedProvider('daydream');
+    }
+    initializedProviderRef.current = true;
+  }, [daydreamConfigured, livepeerConfigured, hasBothProviders, selectedProvider]);
 
   // Cleanup on unmount: stop broadcast and release tracks
   useEffect(() => {
@@ -195,8 +219,14 @@ export function LiveAIPanelContent() {
     setLoading(true);
     try {
       let data: StreamData;
-      if (livepeerConfigured) {
-        data = await createLiveVideoToVideoSession({ model_id: '', params: {} });
+      if (selectedProvider === 'livepeer') {
+        data = await createLiveVideoToVideoSession({
+          model_id: selectedModelId,
+          params: {
+            prompt: prompt.trim() || DEFAULT_STREAM_PARAMS.params.prompt,
+          },
+        });
+        data = { ...data, whipUrl: toProxyWhipUrlIfNeeded(data.whipUrl) };
         setStreamSource('livepeer');
       } else {
         const lora_dict = loraEntriesToDict(loraEntries);
@@ -230,7 +260,7 @@ export function LiveAIPanelContent() {
     } finally {
       setLoading(false);
     }
-  }, [configured, daydreamConfigured, livepeerConfigured, setPermissionsGranted, selectedModelId, prompt, loraEntries]);
+  }, [configured, daydreamConfigured, selectedProvider, setPermissionsGranted, selectedModelId, prompt, loraEntries]);
 
   const handleApplyPrompt = useCallback(async () => {
     if (streamSource !== 'daydream' || !streamData?.id || !prompt.trim()) return;
@@ -308,6 +338,40 @@ export function LiveAIPanelContent() {
 
         {configured && !showSession && (
           <>
+            <div className="space-y-2 mb-2">
+              {providerOptions.length > 1 && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Provider</Label>
+                  <Select value={selectedProvider} onValueChange={(value) => setSelectedProvider(value as StreamProvider)}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providerOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Model (used when you start)</Label>
+                <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             {permissionDenied && (
               <div className="flex flex-col items-center gap-2 py-4 text-center">
                 <CameraOff className="w-10 h-10 text-muted-foreground" />
@@ -349,7 +413,7 @@ export function LiveAIPanelContent() {
                 selectedModelId,
               }}
             >
-              <LiveAISessionWithBroadcastWithBilling
+              <LiveAISessionWithOptionalBilling
                 streamData={streamData}
                 whipUrl={whipUrl}
                 localStream={localStream}
@@ -384,22 +448,10 @@ export function LiveAIPanelContent() {
               Collapse
             </Button>
           </div>
-          {!showSession && (
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Model (used when you Start)</Label>
-              <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODEL_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {!showSession && providerOptions.length > 1 && (
+            <p className="text-xs text-muted-foreground">
+              Provider and model are now available above the Start button.
+            </p>
           )}
           {streamSource === 'daydream' && streamData && (
             <>
@@ -614,16 +666,46 @@ function LiveAISessionWithBroadcastCore({
 }: LiveAISessionCoreProps) {
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [outputWhepUrl, setOutputWhepUrl] = useState<string | null>(null);
+  const [fallbackWhepUrl, setFallbackWhepUrl] = useState<string | null>(null);
   const [outputWhepUrlError, setOutputWhepUrlError] = useState<string | null>(null);
+  const [resolvingOutputWhepUrl, setResolvingOutputWhepUrl] = useState(false);
+  const [broadcastError, setBroadcastError] = useState<string | null>(null);
+  const [playerError, setPlayerError] = useState<string | null>(null);
+  const [invalidWhepUrlError, setInvalidWhepUrlError] = useState<string | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatusResponse | null>(null);
   const [showColdStartTimeoutMessage, setShowColdStartTimeoutMessage] = useState(false);
   const sessionStartRef = useRef<number>(Date.now());
   const isSd15 = Boolean(selectedModelId && SD15_MODEL_IDS.has(selectedModelId));
 
   const broadcast = useBroadcast({ whipUrl, reconnect: { enabled: true } });
+  const hookWhepUrl =
+    broadcast.status.state === 'live' || broadcast.status.state === 'reconnecting'
+      ? broadcast.status.whepUrl
+      : null;
+  const effectiveWhepUrl = hookWhepUrl ?? fallbackWhepUrl ?? null;
+
+  useEffect(() => {
+    if (!effectiveWhepUrl) {
+      setInvalidWhepUrlError(null);
+      return;
+    }
+    try {
+      const u = new URL(effectiveWhepUrl);
+      const parts = u.pathname.split('/').filter(Boolean);
+      const webrtcIdx = parts.findIndex((p) => p === 'webrtc');
+      const tail = webrtcIdx >= 0 ? parts[webrtcIdx + 1] : '';
+      if (tail.startsWith('video+')) {
+        setInvalidWhepUrlError(`Invalid WHEP endpoint (unexpected "video+" id): ${tail}`);
+      } else {
+        setInvalidWhepUrlError(null);
+      }
+    } catch {
+      setInvalidWhepUrlError('Invalid WHEP endpoint URL.');
+    }
+  }, [effectiveWhepUrl]);
+
   const player = usePlayer({
-    whepUrl: outputWhepUrl ?? null,
+    whepUrl: invalidWhepUrlError ? null : effectiveWhepUrl,
     autoPlay: true,
     reconnect: { enabled: true },
   });
@@ -647,27 +729,46 @@ function LiveAISessionWithBroadcastCore({
   useEffect(() => {
     const playbackId = streamData?.outputPlaybackId;
     if (!playbackId) {
-      setOutputWhepUrl(null);
+      setFallbackWhepUrl(null);
       setOutputWhepUrlError(null);
+      setResolvingOutputWhepUrl(false);
       return;
     }
-    setOutputWhepUrl(null);
+    // Per Daydream docs, prefer hook WHEP captured from WHIP response.
+    // Only resolve via playback API if hook WHEP isn't available yet.
+    if (hookWhepUrl) {
+      setFallbackWhepUrl(null);
+      setOutputWhepUrlError(null);
+      setResolvingOutputWhepUrl(false);
+      return;
+    }
+    setFallbackWhepUrl(null);
     let cancelled = false;
+    setResolvingOutputWhepUrl(true);
     setOutputWhepUrlError(null);
     resolvePlaybackWhepUrl(playbackId)
-      .then((url) => {
+      .then((result) => {
         if (!cancelled) {
-          if (url) setOutputWhepUrl(url);
-          else setOutputWhepUrlError('Could not load playback URL');
+          if (result.url) {
+            setFallbackWhepUrl(result.url);
+            setOutputWhepUrlError(null);
+          } else {
+            setOutputWhepUrlError(result.error ?? 'Could not load playback URL');
+          }
+          setResolvingOutputWhepUrl(false);
         }
       })
-      .catch(() => {
-        if (!cancelled) setOutputWhepUrlError('Could not load playback URL');
+      .catch((err) => {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Could not load playback URL';
+          setOutputWhepUrlError(msg);
+          setResolvingOutputWhepUrl(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [streamData?.outputPlaybackId]);
+  }, [streamData?.outputPlaybackId, hookWhepUrl]);
 
   useEffect(() => {
     const active = broadcast.status.state === 'live';
@@ -692,9 +793,13 @@ function LiveAISessionWithBroadcastCore({
   }, [setOnPause, broadcast, localStream, onStreamStopped]);
 
   useEffect(() => {
-    if (!outputWhepUrl || player.status.state === 'playing' || player.status.state === 'connecting') return;
-    player.play().catch(() => {});
-  }, [outputWhepUrl, player.status.state]);
+    if (invalidWhepUrlError) return;
+    if (!effectiveWhepUrl || player.status.state === 'playing' || player.status.state === 'connecting') return;
+    player.play().catch((err) => {
+      const msg = err instanceof Error ? err.message : 'Player failed to start';
+      setPlayerError(msg);
+    });
+  }, [effectiveWhepUrl, invalidWhepUrlError, player.status.state]);
 
   // Poll Daydream stream status while output is not playing (diagnostics / cold start).
   useEffect(() => {
@@ -702,7 +807,7 @@ function LiveAISessionWithBroadcastCore({
       !isDaydreamStream ||
       !streamData?.id ||
       player.status.state === 'playing' ||
-      !outputWhepUrl
+      !effectiveWhepUrl
     ) {
       setStreamStatus(null);
       return;
@@ -720,25 +825,25 @@ function LiveAISessionWithBroadcastCore({
   }, [
     isDaydreamStream,
     streamData?.id,
-    outputWhepUrl,
+    effectiveWhepUrl,
     player.status.state,
   ]);
 
   // SD1.5 cold start: reset session start when we get output URL; show timeout message after 90s.
   useEffect(() => {
-    if (outputWhepUrl) sessionStartRef.current = Date.now();
-  }, [outputWhepUrl]);
+    if (effectiveWhepUrl) sessionStartRef.current = Date.now();
+  }, [effectiveWhepUrl]);
   useEffect(() => {
     if (player.status.state === 'playing') {
       setShowColdStartTimeoutMessage(false);
       return;
     }
-    if (!outputWhepUrl || !isSd15) return;
+    if (!effectiveWhepUrl || !isSd15) return;
     const id = setTimeout(() => {
       setShowColdStartTimeoutMessage(true);
     }, SD15_COLD_START_TIMEOUT_MS);
     return () => clearTimeout(id);
-  }, [outputWhepUrl, isSd15, player.status.state]);
+  }, [effectiveWhepUrl, isSd15, player.status.state]);
 
   useEffect(() => {
     if (localStream && localVideoRef.current) {
@@ -751,9 +856,20 @@ function LiveAISessionWithBroadcastCore({
 
   useEffect(() => {
     if (localStream && broadcast.status.state === 'idle') {
-      broadcast.start(localStream).catch(() => {});
+      broadcast.start(localStream).catch((err) => {
+        const msg = err instanceof Error ? err.message : 'Broadcast failed to start';
+        setBroadcastError(msg);
+      });
     }
   }, [localStream, broadcast.status.state]);
+
+  useEffect(() => {
+    if (broadcast.status.state === 'live') setBroadcastError(null);
+  }, [broadcast.status.state]);
+
+  useEffect(() => {
+    if (player.status.state === 'playing') setPlayerError(null);
+  }, [player.status.state]);
 
   useEffect(() => {
     const video = player.videoRef?.current;
@@ -969,7 +1085,13 @@ function LiveAISessionWithBroadcastCore({
       {outputWhepUrlError && (
         <p className="text-xs text-destructive mt-1">{outputWhepUrlError}</p>
       )}
-      {isSd15 && outputWhepUrl && player.status.state !== 'playing' && (
+      {resolvingOutputWhepUrl && !outputWhepUrlError && (
+        <p className="text-xs text-muted-foreground mt-1">Resolving AI output endpoint…</p>
+      )}
+      {invalidWhepUrlError && <p className="text-xs text-destructive mt-1">{invalidWhepUrlError}</p>}
+      {broadcastError && <p className="text-xs text-destructive mt-1">Broadcast error: {broadcastError}</p>}
+      {playerError && <p className="text-xs text-destructive mt-1">Player error: {playerError}</p>}
+      {isSd15 && effectiveWhepUrl && player.status.state !== 'playing' && (
         <p className="text-xs text-muted-foreground mt-1">
           First frame may take 60–90 seconds for this model.
         </p>
@@ -1012,14 +1134,15 @@ function LiveAISessionWithBroadcastCore({
   );
 }
 
-/** Wrapper that runs the billing loop; only mount when user has a connected account (avoids useSmartAccountClient when undefined). */
-function LiveAISessionWithBroadcastWithBilling(props: LiveAISessionWithBroadcastProps) {
-  const { setOnPause } = useBillingLoop();
+function LiveAISessionWithOptionalBilling(props: LiveAISessionWithBroadcastProps) {
+  // Billing loop is temporarily disabled for Live AI sessions because Account Kit
+  // context readiness can be transient and crash useSmartAccountClient on mount.
+  // Session streaming should continue even when billing cannot initialize.
   return (
     <LiveAISessionWithBroadcastCore
       {...props}
-      setOnPause={setOnPause}
-      billingEnabled
+      setOnPause={noopSetOnPause}
+      billingEnabled={false}
     />
   );
 }
