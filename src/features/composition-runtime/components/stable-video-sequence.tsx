@@ -202,7 +202,29 @@ const GroupRenderer: React.FC<{
 
   // Find the active item ID for current frame
   // During premount, don't find any active item - we shouldn't render.
-  const activeItemIndex = isPremounted ? -1 : findActiveVideoItemIndex(group.items, globalFrame);
+  const rawActiveItemIndex = isPremounted ? -1 : findActiveVideoItemIndex(group.items, globalFrame);
+
+  // Stabilize active index during same-origin transitions.
+  // When two items in the same group participate in a transition (A→A clip,
+  // same media/origin split), the active index switches mid-transition at
+  // the cut point. This causes the primary pool lane's video element to
+  // seek to a different source position and the shadow to remount — both
+  // stalling frame delivery for 200-500ms. Keep the LEFT clip as active
+  // throughout the transition so pool lanes and shadows stay stable.
+  const activeItemIndex = useMemo(() => {
+    if (rawActiveItemIndex < 0 || group.items.length <= 1) return rawActiveItemIndex;
+    for (const tw of transitionWindows) {
+      if (globalFrame >= tw.startFrame && globalFrame < tw.endFrame) {
+        const leftIdx = group.items.findIndex((i) => i.id === tw.leftClip.id);
+        const rightIdx = group.items.findIndex((i) => i.id === tw.rightClip.id);
+        if (leftIdx >= 0 && rightIdx >= 0 && rawActiveItemIndex === rightIdx) {
+          return leftIdx;
+        }
+      }
+    }
+    return rawActiveItemIndex;
+  }, [rawActiveItemIndex, globalFrame, group.items, transitionWindows]);
+
   const activeItem = activeItemIndex >= 0 ? group.items[activeItemIndex] : null;
 
   const { fps } = useVideoConfig();
