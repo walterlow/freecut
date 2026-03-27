@@ -245,18 +245,22 @@ export const TimelineHeader = memo(function TimelineHeader({
 
   return (
     <div
-      className="flex items-center justify-between px-3 border-b border-border"
+      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border px-3"
       style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineHeaderHeight }}
       role="toolbar"
       aria-label="Timeline controls"
     >
-      {/* Left: Title & Tools */}
-      <div className="flex items-center gap-2.5">
+      {/* Left: Title */}
+      <div className="flex min-w-0 items-center gap-2.5">
         <h2 className="text-xs font-semibold tracking-wide uppercase text-muted-foreground flex items-center gap-2">
           <Film className="w-3 h-3" />
           Timeline
         </h2>
+      </div>
 
+      {/* Middle: Timeline Controls */}
+      <div className="min-w-0 overflow-x-auto overflow-y-hidden">
+        <div className="flex w-max min-w-full items-center justify-center gap-2.5">
         {/* Timeline Tools */}
         <div className="flex items-center gap-1 px-1.5 py-1 bg-secondary/50 rounded-md border border-border">
           <Button
@@ -518,10 +522,11 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Link2 className="w-3.5 h-3.5" />
         </Button>
 
+        </div>
       </div>
 
       {/* Right: Zoom Controls */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-end gap-1.5">
         <Button
           variant="ghost"
           size="icon"
