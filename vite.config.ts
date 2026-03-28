@@ -1,11 +1,49 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
+const WHIP_PROXY_PREFIX = '/api/whip-proxy'
+
+/** Dev-only: handle CORS preflight for WHIP proxy so browser doesn't hit Livepeer's redirect on OPTIONS */
+function whipProxyCorsPlugin() {
+  return {
+    name: 'whip-proxy-cors',
+    configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void) => void } }) {
+      server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (req.method === 'OPTIONS' && req.url?.startsWith(WHIP_PROXY_PREFIX)) {
+          res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
+          res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, PUT, DELETE')
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+          res.setHeader('Access-Control-Max-Age', '86400')
+          res.statusCode = 200
+          res.end()
+          return
+        }
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // Polyfill Node stdlib (buffer, etc.) for browser - required by @account-kit deps (elliptic, bn.js, @solana/web3.js)
+    nodePolyfills(),
+    whipProxyCorsPlugin(),
+  {
+    name: 'html-transform-og-url',
+    transformIndexHtml(html) {
+      const baseUrl = process.env.VITE_APP_URL ?? 'https://pixels.example.com';
+      return html.replace(/%VITE_APP_URL%/g, baseUrl);
+    },
+  },
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -20,6 +58,35 @@ export default defineConfig({
     // popups usable if you add COOP later for other reasons.
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
+    proxy: {
+      [WHIP_PROXY_PREFIX]: {
+        target: 'https://ai.livepeer.com',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace(WHIP_PROXY_PREFIX, ''),
+        secure: true,
+        configure: (proxy: {
+          on: (event: string, fn: (proxyRes: IncomingMessage, req: IncomingMessage) => void) => void
+        }) => {
+          proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage) => {
+            // Rewrite redirect Location so the client stays on our origin (avoids CORS on follow)
+            if (proxyRes.statusCode >= 301 && proxyRes.statusCode < 400 && proxyRes.headers['location']) {
+              const loc = proxyRes.headers['location']
+              const origin = `http://${req.headers.host || 'localhost:5173'}`
+              try {
+                if (loc.includes('livepeer.com')) {
+                  const u = new URL(loc)
+                  proxyRes.headers['location'] = `${origin}${WHIP_PROXY_PREFIX}${u.pathname}${u.search}`
+                } else if (loc.startsWith('/')) {
+                  proxyRes.headers['location'] = `${origin}${WHIP_PROXY_PREFIX}${loc}`
+                }
+              } catch {
+                // leave Location unchanged if URL parse fails
+              }
+            }
+          })
+        },
+      },
     },
   },
   preview: {
@@ -96,6 +163,17 @@ export default defineConfig({
           }
           if (id.includes('/node_modules/gifuct-js/')) {
             return 'gif-processing';
+          }
+          // Wallet / Account Kit – separate chunk so main bundle stays smaller and wallet code is cacheable
+          if (
+            id.includes('@account-kit/') ||
+            id.includes('/wagmi/') ||
+            id.includes('@reown/') ||
+            id.includes('@walletconnect/') ||
+            id.includes('@coinbase/wallet-sdk') ||
+            id.includes('/viem/')
+          ) {
+            return 'wallet-vendor';
           }
           // UI framework
           if (id.includes('@radix-ui/')) {
