@@ -32,12 +32,41 @@ interface LivepeerStreamResponse {
   playbackId?: string;
   stream_key?: string;
   playback_id?: string;
+  webrtcUrl?: string;
+  webrtc_url?: string;
+  ingest?: {
+    webrtc?: string | { url?: string };
+  };
+}
+
+function normalizeWhipUrl(
+  candidateUrl: string,
+  playbackId: string,
+  streamKey: string
+): string {
+  const fallback = `${WHIP_BASE}/${playbackId}`;
+  if (!candidateUrl.trim()) return fallback;
+  try {
+    const parsed = new URL(candidateUrl);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const webrtcIdx = parts.findIndex((p) => p === 'webrtc');
+    const tail = webrtcIdx >= 0 ? parts[webrtcIdx + 1] : '';
+    // Livepeer ingest can return stream-key shaped ids (e.g. video+abcd) that 404 on playback hosts.
+    // Force a playback-compatible id in that case.
+    if (!tail || tail === streamKey || tail.startsWith('video+')) {
+      parsed.pathname = `/webrtc/${playbackId}`;
+      return parsed.toString();
+    }
+    return parsed.toString();
+  } catch {
+    return fallback;
+  }
 }
 
 async function createLivepeerStream(
   apiKey: string,
   name: string
-): Promise<{ streamKey: string; playbackId: string; id: string }> {
+): Promise<{ streamKey: string; playbackId: string; id: string; whipUrl: string }> {
   const res = await fetch(`${LIVEPEER_STUDIO_API}/stream`, {
     method: 'POST',
     headers: authHeaders(apiKey),
@@ -59,11 +88,22 @@ async function createLivepeerStream(
   const playbackId = data.playbackId ?? data.playback_id ?? '';
   const id = data.id ?? playbackId;
   if (!streamKey || !playbackId) throw new Error('Livepeer stream response missing streamKey or playbackId');
-  return { streamKey, playbackId, id };
+
+  const ingestWebRtc =
+    typeof data.ingest?.webrtc === 'string'
+      ? data.ingest.webrtc
+      : data.ingest?.webrtc?.url;
+  const responseWhipUrl = data.webrtcUrl ?? data.webrtc_url ?? ingestWebRtc ?? '';
+  const whipUrl = normalizeWhipUrl(responseWhipUrl, playbackId, streamKey).trim();
+  if (!whipUrl) {
+    throw new Error(`Livepeer stream response missing WHIP URL for stream "${name}"`);
+  }
+
+  return { streamKey, playbackId, id, whipUrl };
 }
 
 export interface LiveVideoToVideoParams {
-  model_id?: string;
+  model_id: string;
   params?: Record<string, unknown>;
 }
 
@@ -74,13 +114,18 @@ export interface LiveVideoToVideoParams {
  * Returns StreamData: broadcast to whipUrl (input WHIP), play outputPlaybackId.
  */
 export async function createLiveVideoToVideoSession(
-  params: LiveVideoToVideoParams = {}
+  params: LiveVideoToVideoParams
 ): Promise<StreamData> {
   const apiKey = getApiKey();
   if (!apiKey?.trim()) {
     throw new Error(
       'Livepeer Studio API key not set. Set VITE_LIVEPEER_STUDIO_API_KEY (or LIVEPEER_STUDIO_API_KEY) in .env.local.'
     );
+  }
+
+  const modelId = params.model_id?.trim();
+  if (!modelId) {
+    throw new Error('Livepeer live-video-to-video requires a model_id.');
   }
 
   const [inputStream, outputStream] = await Promise.all([
@@ -96,7 +141,7 @@ export async function createLiveVideoToVideoSession(
     publish_url,
     control_url: '',
     events_url: '',
-    model_id: params.model_id ?? '',
+    model_id: modelId,
     params: params.params ?? {},
   };
 
@@ -115,10 +160,12 @@ export async function createLiveVideoToVideoSession(
     } catch {
       if (text) msg = text;
     }
-    throw new Error(msg);
+    throw new Error(
+      `Livepeer live-video-to-video failed (${res.status}) for model "${modelId}": ${msg}`
+    );
   }
 
-  const whipUrl = `${WHIP_BASE}/${inputStream.streamKey}`;
+  const whipUrl = inputStream.whipUrl;
   return {
     id: outputStream.id,
     whipUrl,
