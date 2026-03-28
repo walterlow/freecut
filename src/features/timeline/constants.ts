@@ -31,6 +31,7 @@ export const CLIP_LABEL_ROW_HEIGHT = EDITOR_LAYOUT.timelineClipLabelRowHeight;
 
 // Video clip layout (2 rows: label | filmstrip)
 const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_ROW_HEIGHT;
+const MAX_VIDEO_FILMSTRIP_HEIGHT = MAX_TRACK_HEIGHT - CLIP_LABEL_ROW_HEIGHT;
 
 // =============================================================================
 // FILMSTRIP / THUMBNAILS
@@ -38,6 +39,8 @@ const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_ROW_HEIGHT;
 
 export const THUMBNAIL_HEIGHT = VIDEO_FILMSTRIP_HEIGHT;
 export const THUMBNAIL_WIDTH = Math.round(THUMBNAIL_HEIGHT * (16 / 9));
+export const FILMSTRIP_EXTRACT_HEIGHT = MAX_VIDEO_FILMSTRIP_HEIGHT;
+export const FILMSTRIP_EXTRACT_WIDTH = Math.round(FILMSTRIP_EXTRACT_HEIGHT * (16 / 9));
 
 // =============================================================================
 // TIMELINE LAYOUT
