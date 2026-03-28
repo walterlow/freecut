@@ -10,8 +10,6 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { useSelectionStore } from '@/shared/state/selection';
 import { createManagedWorkerPool } from '@/shared/utils/managed-worker-pool';
 
 const logger = createLogger('FilmstripCache');
@@ -44,7 +42,6 @@ const MIN_CORES_FOR_PARALLEL_WORKERS = 8; // Enable worker parallelism on mid/hi
 const HIGH_CORE_THRESHOLD = 12;
 const MAX_CONCURRENT_EXTRACTIONS_BASE = 3;
 const MAX_CONCURRENT_EXTRACTIONS_HIGH_CORE = 4;
-const MAX_CONCURRENT_EXTRACTIONS_INTERACTIVE = 1;
 const MIN_FILMSTRIP_TARGET_FRAMES = 90;
 const MAX_FILMSTRIP_TARGET_FRAMES = 300;
 const TARGET_FRAME_BUDGET_SCALE = 8;
@@ -65,11 +62,9 @@ const IMAGE_FORMAT = 'image/jpeg';
 const IMAGE_QUALITY = 0.7;
 const FRAME_MEMORY_FALLBACK_BYTES = FILMSTRIP_EXTRACT_WIDTH * FILMSTRIP_EXTRACT_HEIGHT * 4;
 const MAX_IDLE_WORKERS_BASE = 2;
-const WORKER_PARALLEL_SAVES_INTERACTIVE = 1;
 const WORKER_PARALLEL_SAVES_BASE = 4;
 const WORKER_PARALLEL_SAVES_MEMORY_PRESSURE = 2;
 const MEMORY_CHECK_INTERVAL_MS = 500;
-const EXTRACTION_ABORT_NO_SUBSCRIBER_DELAY_MS = 250;
 
 interface WorkerState {
   worker: Worker;
@@ -177,7 +172,6 @@ class FilmstripCacheService {
   private cacheMeta = new Map<string, CacheEntryMeta>();
   private cacheBytes = 0;
   private idleEvictionTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private extractionAbortTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private pendingExtractions = new Map<string, PendingExtraction>();
   private updateCallbacks = new Map<string, Set<FilmstripUpdateCallback>>();
   private loadingPromises = new Map<string, Promise<Filmstrip>>();
@@ -216,14 +210,6 @@ class FilmstripCacheService {
     if (this.isHardMemoryPressure()) return 0;
     if (this.isSoftMemoryPressure()) return 1;
     return MAX_IDLE_WORKERS_BASE;
-  }
-
-  private isInteractiveThrottleActive(): boolean {
-    if (usePlaybackStore.getState().isPlaying) {
-      return true;
-    }
-
-    return useSelectionStore.getState().dragState?.isDragging === true;
   }
 
   private releaseWorker(worker: Worker): void {
@@ -320,13 +306,6 @@ class FilmstripCacheService {
     this.idleEvictionTimers.delete(mediaId);
   }
 
-  private clearExtractionAbortTimer(mediaId: string): void {
-    const timer = this.extractionAbortTimers.get(mediaId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.extractionAbortTimers.delete(mediaId);
-  }
-
   private scheduleIdleEviction(mediaId: string): void {
     this.clearIdleEvictionTimer(mediaId);
     if (this.pendingExtractions.has(mediaId)) return;
@@ -338,20 +317,6 @@ class FilmstripCacheService {
       this.tryEvictMedia(mediaId, 'idle-timeout');
     }, CACHE_EVICT_IDLE_MS);
     this.idleEvictionTimers.set(mediaId, timer);
-  }
-
-  private scheduleExtractionAbort(mediaId: string): void {
-    this.clearExtractionAbortTimer(mediaId);
-    if (!this.pendingExtractions.has(mediaId)) return;
-    if (this.hasSubscribers(mediaId)) return;
-
-    const timer = setTimeout(() => {
-      this.extractionAbortTimers.delete(mediaId);
-      if (this.hasSubscribers(mediaId)) return;
-      if (!this.pendingExtractions.has(mediaId)) return;
-      this.abort(mediaId);
-    }, EXTRACTION_ABORT_NO_SUBSCRIBER_DELAY_MS);
-    this.extractionAbortTimers.set(mediaId, timer);
   }
 
   private hasSubscribers(mediaId: string): boolean {
@@ -404,10 +369,6 @@ class FilmstripCacheService {
   }
 
   private getMaxConcurrentExtractions(): number {
-    if (this.isInteractiveThrottleActive()) {
-      return MAX_CONCURRENT_EXTRACTIONS_INTERACTIVE;
-    }
-
     const base = typeof navigator === 'undefined'
       ? MAX_CONCURRENT_EXTRACTIONS_BASE
       : (navigator.hardwareConcurrency || 4) >= HIGH_CORE_THRESHOLD
@@ -671,7 +632,6 @@ class FilmstripCacheService {
    */
   subscribe(mediaId: string, callback: FilmstripUpdateCallback): () => void {
     this.clearIdleEvictionTimer(mediaId);
-    this.clearExtractionAbortTimer(mediaId);
     if (!this.updateCallbacks.has(mediaId)) {
       this.updateCallbacks.set(mediaId, new Set());
     }
@@ -690,7 +650,6 @@ class FilmstripCacheService {
         callbacks.delete(callback);
         if (callbacks.size === 0) {
           this.updateCallbacks.delete(mediaId);
-          this.scheduleExtractionAbort(mediaId);
           this.scheduleIdleEviction(mediaId);
         }
       }
@@ -1142,15 +1101,10 @@ class FilmstripCacheService {
       ? (navigator.hardwareConcurrency || 4)
       : 4;
     const memoryConstrained = this.isSoftMemoryPressure();
-    // Snapshot the interactive state once per dispatch. Worker extraction
-    // config is fire-and-forget, so mid-flight drag/playback changes affect the
-    // next request rather than reconfiguring already-running workers.
-    const interactiveThrottled = this.isInteractiveThrottleActive();
 
     // Determine workers per extraction based on hardware and frame count
     const maxWorkers = forceSingleWorker
       || memoryConstrained
-      || interactiveThrottled
       || hardwareConcurrency < MIN_CORES_FOR_PARALLEL_WORKERS
       ? 1
       : MAX_WORKERS;
@@ -1361,11 +1315,9 @@ class FilmstripCacheService {
         endIndex,
         totalFrames: progressFrames,
         workerId: i,
-        maxParallelSaves: interactiveThrottled
-          ? WORKER_PARALLEL_SAVES_INTERACTIVE
-          : memoryConstrained
-            ? WORKER_PARALLEL_SAVES_MEMORY_PRESSURE
-            : WORKER_PARALLEL_SAVES_BASE,
+        maxParallelSaves: memoryConstrained
+          ? WORKER_PARALLEL_SAVES_MEMORY_PRESSURE
+          : WORKER_PARALLEL_SAVES_BASE,
       };
       worker.postMessage(request);
     }
@@ -1899,7 +1851,6 @@ class FilmstripCacheService {
     const reuseCompletedWorkers = options?.reuseCompletedWorkers ?? false;
     const pending = this.pendingExtractions.get(mediaId);
     const wasActive = this.activeExtractions.delete(mediaId);
-    this.clearExtractionAbortTimer(mediaId);
     const queueIndex = this.extractionQueue.indexOf(mediaId);
     if (queueIndex !== -1) {
       this.extractionQueue.splice(queueIndex, 1);
@@ -1994,13 +1945,9 @@ class FilmstripCacheService {
     for (const mediaId of this.pendingExtractions.keys()) {
       this.abort(mediaId);
     }
-    for (const timer of this.extractionAbortTimers.values()) {
-      clearTimeout(timer);
-    }
     for (const timer of this.idleEvictionTimers.values()) {
       clearTimeout(timer);
     }
-    this.extractionAbortTimers.clear();
     this.idleEvictionTimers.clear();
     this.cache.clear();
     this.cacheMeta.clear();
@@ -2022,9 +1969,6 @@ class FilmstripCacheService {
       this.abort(mediaId);
     }
     this.workerPoolManager.terminateAll();
-    for (const timer of this.extractionAbortTimers.values()) {
-      clearTimeout(timer);
-    }
     for (const timer of this.idleEvictionTimers.values()) {
       clearTimeout(timer);
     }
@@ -2032,7 +1976,6 @@ class FilmstripCacheService {
     for (const mediaId of this.cache.keys()) {
       filmstripOPFSStorage.revokeUrls(mediaId);
     }
-    this.extractionAbortTimers.clear();
     this.idleEvictionTimers.clear();
     this.cache.clear();
     this.cacheMeta.clear();
