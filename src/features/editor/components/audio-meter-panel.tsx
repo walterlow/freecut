@@ -16,7 +16,7 @@ import {
 } from './audio-meter-utils';
 
 function toWaveformSnapshot(
-  waveform: { peaks: Float32Array; sampleRate: number } | null | undefined,
+  waveform: { peaks: Float32Array; sampleRate: number; channels?: number; stereo?: boolean } | null | undefined,
 ): AudioMeterWaveform | null {
   if (!waveform) {
     return null;
@@ -25,7 +25,30 @@ function toWaveformSnapshot(
   return {
     peaks: waveform.peaks,
     sampleRate: waveform.sampleRate,
+    channels: waveform.stereo ? 2 : (waveform.channels ?? 1),
   };
+}
+
+function animateChannel(
+  channel: { displayPercent: number; peakPercent: number; peakHoldSeconds: number },
+  targetPercent: number,
+  deltaSeconds: number,
+): void {
+  if (targetPercent >= channel.displayPercent) {
+    const attackFactor = 1 - Math.exp(-28 * deltaSeconds);
+    channel.displayPercent += (targetPercent - channel.displayPercent) * attackFactor;
+  } else {
+    channel.displayPercent = Math.max(targetPercent, channel.displayPercent - (76 * deltaSeconds));
+  }
+
+  if (channel.displayPercent >= channel.peakPercent) {
+    channel.peakPercent = channel.displayPercent;
+    channel.peakHoldSeconds = 0.22;
+  } else if (channel.peakHoldSeconds > 0) {
+    channel.peakHoldSeconds = Math.max(0, channel.peakHoldSeconds - deltaSeconds);
+  } else {
+    channel.peakPercent = Math.max(channel.displayPercent, channel.peakPercent - (54 * deltaSeconds));
+  }
 }
 
 export const AudioMeterPanel = memo(function AudioMeterPanel() {
@@ -44,13 +67,12 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const [waveformsByMediaId, setWaveformsByMediaId] = useState<Map<string, AudioMeterWaveform | null>>(new Map());
   const meterVisualRootRef = useRef<HTMLDivElement | null>(null);
-  const targetPercentRef = useRef(0);
+  const targetPercentRef = useRef({ left: 0, right: 0 });
   const isPlayingRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const meterAnimationRef = useRef({
-    displayPercent: 0,
-    peakPercent: 0,
-    peakHoldSeconds: 0,
+    left: { displayPercent: 0, peakPercent: 0, peakHoldSeconds: 0 },
+    right: { displayPercent: 0, peakPercent: 0, peakHoldSeconds: 0 },
     lastTimestamp: 0,
   });
 
@@ -199,19 +221,23 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       waveformsByMediaId,
     });
   }, [sources, waveformsByMediaId]);
+  const maxLevel = Math.max(estimate.left, estimate.right);
   const statusLabel = !isPlaying
     ? 'Idle'
     : estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0
       ? 'Scanning'
-      : formatMeterDb(estimate.level);
+      : formatMeterDb(maxLevel);
   const scanFallbackPercent = isPlaying && estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0
     ? 18
     : 0;
 
-  const applyMeterVisuals = useCallback((displayPercent: number, peakPercent: number) => {
+  const applyMeterVisuals = useCallback((leftDisplay: number, leftPeak: number, rightDisplay: number, rightPeak: number) => {
     if (meterVisualRootRef.current) {
-      meterVisualRootRef.current.style.setProperty('--audio-meter-level', `${displayPercent}%`);
-      meterVisualRootRef.current.style.setProperty('--audio-meter-peak', `${peakPercent}%`);
+      const el = meterVisualRootRef.current;
+      el.style.setProperty('--meter-l', `${leftDisplay}%`);
+      el.style.setProperty('--meter-l-peak', `${leftPeak}%`);
+      el.style.setProperty('--meter-r', `${rightDisplay}%`);
+      el.style.setProperty('--meter-r-peak', `${rightPeak}%`);
     }
   }, []);
 
@@ -223,29 +249,21 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       : (1 / 60);
     state.lastTimestamp = timestamp;
 
-    const targetPercent = targetPercentRef.current;
-    if (targetPercent >= state.displayPercent) {
-      const attackFactor = 1 - Math.exp(-28 * deltaSeconds);
-      state.displayPercent += (targetPercent - state.displayPercent) * attackFactor;
-    } else {
-      state.displayPercent = Math.max(targetPercent, state.displayPercent - (76 * deltaSeconds));
-    }
+    const { left: targetLeft, right: targetRight } = targetPercentRef.current;
+    animateChannel(state.left, targetLeft, deltaSeconds);
+    animateChannel(state.right, targetRight, deltaSeconds);
 
-    if (state.displayPercent >= state.peakPercent) {
-      state.peakPercent = state.displayPercent;
-      state.peakHoldSeconds = 0.22;
-    } else if (state.peakHoldSeconds > 0) {
-      state.peakHoldSeconds = Math.max(0, state.peakHoldSeconds - deltaSeconds);
-    } else {
-      state.peakPercent = Math.max(state.displayPercent, state.peakPercent - (54 * deltaSeconds));
-    }
-
-    applyMeterVisuals(state.displayPercent, state.peakPercent);
+    applyMeterVisuals(
+      state.left.displayPercent,
+      state.left.peakPercent,
+      state.right.displayPercent,
+      state.right.peakPercent,
+    );
 
     const shouldContinue = isPlayingRef.current
-      || targetPercent > 0.1
-      || state.displayPercent > 0.1
-      || state.peakPercent > 0.1;
+      || targetLeft > 0.1 || targetRight > 0.1
+      || state.left.displayPercent > 0.1 || state.right.displayPercent > 0.1
+      || state.left.peakPercent > 0.1 || state.right.peakPercent > 0.1;
 
     if (shouldContinue) {
       animationFrameRef.current = requestAnimationFrame(runMeterAnimation.current);
@@ -265,21 +283,24 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
-    targetPercentRef.current = Math.max(linearLevelToPercent(estimate.level), scanFallbackPercent);
+    targetPercentRef.current = {
+      left: Math.max(linearLevelToPercent(estimate.left), scanFallbackPercent),
+      right: Math.max(linearLevelToPercent(estimate.right), scanFallbackPercent),
+    };
     ensureMeterAnimation();
-  }, [ensureMeterAnimation, estimate.level, isPlaying, scanFallbackPercent]);
+  }, [ensureMeterAnimation, estimate.left, estimate.right, isPlaying, scanFallbackPercent]);
 
   useEffect(() => {
-    applyMeterVisuals(0, 0);
+    applyMeterVisuals(0, 0, 0, 0);
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
-      meterAnimationRef.current.displayPercent = 0;
-      meterAnimationRef.current.peakPercent = 0;
-      meterAnimationRef.current.peakHoldSeconds = 0;
-      meterAnimationRef.current.lastTimestamp = 0;
+      const anim = meterAnimationRef.current;
+      anim.left.displayPercent = 0; anim.left.peakPercent = 0; anim.left.peakHoldSeconds = 0;
+      anim.right.displayPercent = 0; anim.right.peakPercent = 0; anim.right.peakHoldSeconds = 0;
+      anim.lastTimestamp = 0;
     };
   }, [applyMeterVisuals]);
 
@@ -323,17 +344,40 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
               })}
             </div>
 
-            <div className="relative w-6 rounded-sm border border-border/70 bg-[#111318] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
-              <div ref={meterVisualRootRef} className="absolute inset-[2px] overflow-hidden rounded-[2px] bg-[#060708]">
-                <div
-                  className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0 ? 'opacity-60' : ''}`}
-                  style={{ height: 'var(--audio-meter-level, 0%)' }}
-                />
-                <div
-                  className="absolute inset-x-0 h-px bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.65)] transition-[bottom] duration-100 ease-out"
-                  style={{ bottom: 'calc(var(--audio-meter-peak, 0%) - 0.5px)' }}
-                />
-                <div className="absolute inset-0 bg-[linear-gradient(to_top,transparent_0%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
+            <div className="flex flex-col items-center">
+              <div ref={meterVisualRootRef} className="flex flex-1 gap-0.5">
+                {/* Left channel */}
+                <div className="relative w-[10px] rounded-sm border border-border/70 bg-[#111318] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
+                  <div className="absolute inset-[2px] overflow-hidden rounded-[2px] bg-[#060708]">
+                    <div
+                      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0 ? 'opacity-60' : ''}`}
+                      style={{ height: 'var(--meter-l, 0%)' }}
+                    />
+                    <div
+                      className="absolute inset-x-0 h-px bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.65)] transition-[bottom] duration-100 ease-out"
+                      style={{ bottom: 'calc(var(--meter-l-peak, 0%) - 0.5px)' }}
+                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_top,transparent_0%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
+                  </div>
+                </div>
+                {/* Right channel */}
+                <div className="relative w-[10px] rounded-sm border border-border/70 bg-[#111318] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
+                  <div className="absolute inset-[2px] overflow-hidden rounded-[2px] bg-[#060708]">
+                    <div
+                      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0 ? 'opacity-60' : ''}`}
+                      style={{ height: 'var(--meter-r, 0%)' }}
+                    />
+                    <div
+                      className="absolute inset-x-0 h-px bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.65)] transition-[bottom] duration-100 ease-out"
+                      style={{ bottom: 'calc(var(--meter-r-peak, 0%) - 0.5px)' }}
+                    />
+                    <div className="absolute inset-0 bg-[linear-gradient(to_top,transparent_0%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-1 flex gap-0.5 text-[8px] font-mono text-muted-foreground/50 justify-center">
+                <span className="w-[10px] text-center">L</span>
+                <span className="w-[10px] text-center">R</span>
               </div>
             </div>
           </div>

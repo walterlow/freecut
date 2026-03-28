@@ -29,6 +29,7 @@ export interface WaveformInitResponse {
   channels: number;
   sampleRate: number;
   totalSamples: number;
+  stereo: boolean;
 }
 
 export interface WaveformChunkResponse {
@@ -125,9 +126,11 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     // Create audio sample sink
     const sink = new AudioSampleSink(audioTrack);
 
+    const stereo = channels >= 2;
     const numOutputSamples = Math.max(1, Math.ceil(duration * samplesPerSecond));
-    const peaks = new Float32Array(numOutputSamples);
-    const binSampleCount = Math.max(1, Math.round(samplesPerSecond * binDurationSec));
+    const peakCount = numOutputSamples * (stereo ? 2 : 1);
+    const peaks = new Float32Array(peakCount);
+    const binSampleCount = Math.max(1, Math.round(samplesPerSecond * binDurationSec * (stereo ? 2 : 1)));
     let processedEndTimeSec = 0;
     let nextChunkStart = 0;
     let maxPeak = 0;
@@ -139,7 +142,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
       duration,
       channels,
       sampleRate: samplesPerSecond,
-      totalSamples: numOutputSamples,
+      totalSamples: peakCount,
+      stereo,
     } as WaveformInitResponse);
 
     const emitChunk = (start: number, end: number) => {
@@ -189,22 +193,35 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
         }
 
         for (let i = 0; i < frameCount; i++) {
-          let sum = 0;
-          for (let c = 0; c < channelCount; c++) {
-            sum += channelData[c]![i] ?? 0;
-          }
-
-          const mono = sum / channelCount;
-          const peak = Math.abs(mono);
           const outputIndex = Math.min(
             numOutputSamples - 1,
             sampleStartOutputIndex + Math.floor((i * samplesPerSecond) / sampleRate)
           );
 
-          if (peak > peaks[outputIndex]!) {
-            peaks[outputIndex] = peak;
-            if (peak > maxPeak) {
-              maxPeak = peak;
+          if (stereo) {
+            // L = ch0, R = ch1 (or ch0 if mono source somehow)
+            const lPeak = Math.abs(channelData[0]![i] ?? 0);
+            const rPeak = Math.abs(channelData[Math.min(1, channelCount - 1)]![i] ?? 0);
+            const lIdx = outputIndex * 2;
+            const rIdx = outputIndex * 2 + 1;
+            if (lPeak > peaks[lIdx]!) {
+              peaks[lIdx] = lPeak;
+              if (lPeak > maxPeak) maxPeak = lPeak;
+            }
+            if (rPeak > peaks[rIdx]!) {
+              peaks[rIdx] = rPeak;
+              if (rPeak > maxPeak) maxPeak = rPeak;
+            }
+          } else {
+            // Mono: mix all channels
+            let sum = 0;
+            for (let c = 0; c < channelCount; c++) {
+              sum += channelData[c]![i] ?? 0;
+            }
+            const peak = Math.abs(sum / channelCount);
+            if (peak > peaks[outputIndex]!) {
+              peaks[outputIndex] = peak;
+              if (peak > maxPeak) maxPeak = peak;
             }
           }
         }
@@ -216,8 +233,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
         // Flush full bins that can no longer change.
         const completedOutputExclusive = Math.min(
-          numOutputSamples,
-          Math.floor(processedEndTimeSec * samplesPerSecond)
+          peakCount,
+          Math.floor(processedEndTimeSec * samplesPerSecond) * (stereo ? 2 : 1)
         );
         while (nextChunkStart + binSampleCount <= completedOutputExclusive) {
           const end = nextChunkStart + binSampleCount;
@@ -242,8 +259,8 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
     self.postMessage({ type: 'progress', requestId, progress: 80 } as WaveformProgressResponse);
 
     // Flush remaining tail.
-    if (nextChunkStart < numOutputSamples) {
-      emitChunk(nextChunkStart, numOutputSamples);
+    if (nextChunkStart < peakCount) {
+      emitChunk(nextChunkStart, peakCount);
     }
 
     self.postMessage({ type: 'progress', requestId, progress: 90 } as WaveformProgressResponse);

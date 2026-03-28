@@ -128,13 +128,36 @@ describe('audio meter utils', () => {
         ['media-audio', {
           peaks: new Float32Array([0, 0.25, 1, 0.5]),
           sampleRate: 1,
+          channels: 1,
         }],
       ]),
     });
 
     expect(estimate.resolvedSourceCount).toBe(1);
     expect(estimate.unresolvedSourceCount).toBe(0);
-    expect(estimate.level).toBeGreaterThan(0.9);
-    expect(formatMeterDb(estimate.level)).toMatch(/dB$/);
+    expect(estimate.left).toBeGreaterThan(0.9);
+    expect(estimate.right).toBeGreaterThan(0.9);
+    expect(formatMeterDb(estimate.left)).toMatch(/dB$/);
+  });
+
+  it('estimates separate L/R levels from stereo waveform data', () => {
+    const estimate = estimateAudioMeterLevel({
+      sources: [{
+        mediaId: 'media-audio',
+        gain: 1,
+        sourceTimeSeconds: 0.5,
+        windowSeconds: 0.5,
+      }],
+      waveformsByMediaId: new Map([
+        ['media-audio', {
+          peaks: new Float32Array([0.8, 0.2, 1.0, 0.3]),  // L=0.8,1.0  R=0.2,0.3
+          sampleRate: 2,
+          channels: 2,
+        }],
+      ]),
+    });
+
+    expect(estimate.resolvedSourceCount).toBe(1);
+    expect(estimate.left).toBeGreaterThan(estimate.right);
   });
 });

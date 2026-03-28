@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useRef, useEffectEvent } from 'react';
-import { waveformCache, type CachedWaveform } from '../services/waveform-cache';
+import { waveformCache, getMonoPeaks, type CachedWaveform } from '../services/waveform-cache';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('useWaveform');
@@ -165,7 +165,7 @@ export function useWaveform({
   }, [mediaId]);
 
   return {
-    peaks: waveform?.peaks || null,
+    peaks: waveform ? getMonoPeaks(waveform) : null,
     duration: waveform?.duration || 0,
     sampleRate: waveform?.sampleRate || 100,
     channels: waveform?.channels || 1,

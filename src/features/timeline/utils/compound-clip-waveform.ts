@@ -1,5 +1,5 @@
 import type { CompositionOwnedAudioSource } from './composition-clip-summary';
-import type { CachedWaveform } from '../services/waveform-cache';
+import { getMonoPeaks, type CachedWaveform } from '../services/waveform-cache';
 
 export function mixCompoundClipWaveformPeaks(params: {
   sources: CompositionOwnedAudioSource[];
@@ -19,6 +19,7 @@ export function mixCompoundClipWaveformPeaks(params: {
     if (!waveform || waveform.peaks.length === 0 || waveform.sampleRate <= 0) {
       continue;
     }
+    const waveformPeaks = getMonoPeaks(waveform);
 
     const startSample = Math.max(0, Math.floor((source.from / params.fps) * sampleRate));
     const sourceDurationSamples = Math.max(0, Math.ceil((source.durationInFrames / params.fps) * sampleRate));
@@ -31,12 +32,12 @@ export function mixCompoundClipWaveformPeaks(params: {
       const localSeconds = localSample / sampleRate;
       const waveformSeconds = sourceStartSeconds + localSeconds * source.speed;
       const waveformIndex = Math.floor(waveformSeconds * waveform.sampleRate);
-      if (waveformIndex < 0 || waveformIndex >= waveform.peaks.length) {
+      if (waveformIndex < 0 || waveformIndex >= waveformPeaks.length) {
         continue;
       }
 
       const existing = peaks[outputSample] ?? 0;
-      const next = waveform.peaks[waveformIndex] ?? 0;
+      const next = waveformPeaks[waveformIndex] ?? 0;
       peaks[outputSample] = Math.min(1, Math.hypot(existing, next));
     }
   }

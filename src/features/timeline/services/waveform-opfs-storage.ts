@@ -233,8 +233,10 @@ class WaveformOPFSStorage {
   generateMultiResolution(
     sourcePeaks: Float32Array,
     sourceSampleRate: number,
-    duration: number
+    duration: number,
+    channels: number = 1
   ): { sampleRate: number; peaks: Float32Array }[] {
+    const stereo = channels >= 2;
     const levels: { sampleRate: number; peaks: Float32Array }[] = [];
 
     for (const targetRate of WAVEFORM_LEVELS) {
@@ -250,22 +252,47 @@ class WaveformOPFSStorage {
       // Downsample from source
       const numSamples = Math.ceil(duration * targetRate);
       const ratio = sourceSampleRate / targetRate;
-      const downsampled = new Float32Array(numSamples);
 
-      for (let i = 0; i < numSamples; i++) {
-        const startIdx = Math.floor(i * ratio);
-        const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePeaks.length);
+      if (stereo) {
+        // Interleaved L/R: downsample each channel independently
+        const downsampled = new Float32Array(numSamples * 2);
+        const sourcePerChannel = sourcePeaks.length / 2;
 
-        // Take max peak in the range
-        let maxPeak = 0;
-        for (let j = startIdx; j < endIdx; j++) {
-          const val = sourcePeaks[j] ?? 0;
-          if (val > maxPeak) maxPeak = val;
+        for (let i = 0; i < numSamples; i++) {
+          const startIdx = Math.floor(i * ratio);
+          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePerChannel);
+
+          let maxL = 0;
+          let maxR = 0;
+          for (let j = startIdx; j < endIdx; j++) {
+            const lVal = sourcePeaks[j * 2] ?? 0;
+            const rVal = sourcePeaks[j * 2 + 1] ?? 0;
+            if (lVal > maxL) maxL = lVal;
+            if (rVal > maxR) maxR = rVal;
+          }
+          downsampled[i * 2] = maxL;
+          downsampled[i * 2 + 1] = maxR;
         }
-        downsampled[i] = maxPeak;
-      }
 
-      levels.push({ sampleRate: targetRate, peaks: downsampled });
+        levels.push({ sampleRate: targetRate, peaks: downsampled });
+      } else {
+        // Mono: original behavior
+        const downsampled = new Float32Array(numSamples);
+
+        for (let i = 0; i < numSamples; i++) {
+          const startIdx = Math.floor(i * ratio);
+          const endIdx = Math.min(Math.floor((i + 1) * ratio), sourcePeaks.length);
+
+          let maxPeak = 0;
+          for (let j = startIdx; j < endIdx; j++) {
+            const val = sourcePeaks[j] ?? 0;
+            if (val > maxPeak) maxPeak = val;
+          }
+          downsampled[i] = maxPeak;
+        }
+
+        levels.push({ sampleRate: targetRate, peaks: downsampled });
+      }
     }
 
     return levels;

@@ -71,10 +71,12 @@ export interface AudioMeterSource {
 export interface AudioMeterWaveform {
   peaks: Float32Array;
   sampleRate: number;
+  channels: number;  // 1 = mono, 2 = interleaved stereo
 }
 
 export interface AudioMeterEstimate {
-  level: number;
+  left: number;
+  right: number;
   resolvedSourceCount: number;
   unresolvedSourceCount: number;
 }
@@ -752,13 +754,79 @@ export function estimateWaveformLevelAtTime(params: {
   return peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05);
 }
 
+export function estimateWaveformStereoLevelAtTime(params: {
+  waveform: AudioMeterWaveform;
+  sourceTimeSeconds: number;
+  windowSeconds: number;
+}): { left: number; right: number } {
+  const { waveform, sourceTimeSeconds, windowSeconds } = params;
+
+  if (waveform.channels === 1) {
+    const level = estimateWaveformLevelAtTime(params);
+    return { left: level, right: level };
+  }
+
+  // Stereo interleaved: L at even indices, R at odd indices
+  if (waveform.sampleRate <= 0 || waveform.peaks.length === 0) {
+    return { left: 0, right: 0 };
+  }
+
+  const peakIndex = Math.floor(sourceTimeSeconds * waveform.sampleRate);
+  const totalSamplesPerChannel = Math.floor(waveform.peaks.length / 2);
+  if (peakIndex < 0 || peakIndex >= totalSamplesPerChannel) {
+    return { left: 0, right: 0 };
+  }
+
+  const samplesPerPoint = Math.max(1, Math.ceil(windowSeconds * waveform.sampleRate));
+  const halfWindow = Math.floor(samplesPerPoint / 2);
+  const windowStart = Math.max(0, peakIndex - halfWindow);
+  const windowEnd = Math.min(totalSamplesPerChannel, peakIndex + halfWindow + 1);
+  const normalizationPeak = getWaveformNormalizationPeak(waveform.peaks);
+
+  function computeChannelLevel(channelOffset: number): number {
+    let max1 = 0;
+    let max2 = 0;
+    let windowSum = 0;
+    let sampleCount = 0;
+
+    for (let index = windowStart; index < windowEnd; index += 1) {
+      const value = waveform.peaks[index * 2 + channelOffset] ?? 0;
+      if (value >= max1) {
+        max2 = max1;
+        max1 = value;
+      } else if (value > max2) {
+        max2 = value;
+      }
+      windowSum += value;
+      sampleCount += 1;
+    }
+
+    if (sampleCount === 0) {
+      return 0;
+    }
+
+    const normalizedMax1 = Math.min(1.5, max1 / normalizationPeak);
+    const normalizedMax2 = Math.min(1.5, max2 / normalizationPeak);
+    const normalizedMean = Math.min(1.5, (windowSum / sampleCount) / normalizationPeak);
+    const needle = Math.max(0, normalizedMax1 - normalizedMax2);
+    const peakValue = Math.min(1.5, normalizedMean * 0.38 + normalizedMax2 * 0.34 + needle * 2.35);
+    return peakValue <= 0.001 ? 0 : Math.pow(peakValue, 1.05);
+  }
+
+  return {
+    left: computeChannelLevel(0),
+    right: computeChannelLevel(1),
+  };
+}
+
 export function estimateAudioMeterLevel(params: {
   sources: AudioMeterSource[];
   waveformsByMediaId: ReadonlyMap<string, AudioMeterWaveform | null | undefined>;
 }): AudioMeterEstimate {
   let resolvedSourceCount = 0;
   let unresolvedSourceCount = 0;
-  let totalEnergy = 0;
+  let totalEnergyL = 0;
+  let totalEnergyR = 0;
 
   for (const source of params.sources) {
     const waveform = params.waveformsByMediaId.get(source.mediaId);
@@ -767,22 +835,24 @@ export function estimateAudioMeterLevel(params: {
       continue;
     }
 
-    const waveformLevel = estimateWaveformLevelAtTime({
+    const stereoLevel = estimateWaveformStereoLevelAtTime({
       waveform,
       sourceTimeSeconds: source.sourceTimeSeconds,
       windowSeconds: source.windowSeconds,
     });
-    if (waveformLevel <= 0) {
+    if (stereoLevel.left <= 0 && stereoLevel.right <= 0) {
       resolvedSourceCount += 1;
       continue;
     }
 
-    totalEnergy += Math.pow(waveformLevel * source.gain, 2);
+    totalEnergyL += Math.pow(stereoLevel.left * source.gain, 2);
+    totalEnergyR += Math.pow(stereoLevel.right * source.gain, 2);
     resolvedSourceCount += 1;
   }
 
   return {
-    level: Math.sqrt(totalEnergy),
+    left: Math.sqrt(totalEnergyL),
+    right: Math.sqrt(totalEnergyR),
     resolvedSourceCount,
     unresolvedSourceCount,
   };

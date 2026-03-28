@@ -159,6 +159,7 @@ export interface WaveformMeta {
   binDurationSec: number; // Seconds per bin (typically 30)
   duration: number; // Audio duration in seconds
   channels: number; // Channel count from source media
+  stereo?: boolean; // True when peaks are interleaved [L0,R0,L1,R1...]
   createdAt: number;
 }
 
