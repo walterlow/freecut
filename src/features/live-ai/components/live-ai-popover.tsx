@@ -37,8 +37,10 @@ import {
   getFamilyForModelId,
   getModelLabelForId,
   getTriggerWordsForModelIds,
+  isSD15Model,
+  isSDXLTurboModel,
 } from '../config/curated-loras';
-import type { StreamData, LoraDict } from '../types';
+import type { StreamData, LoraDict, IpAdapterConfig } from '../types';
 
 const MODEL_OPTIONS = [
   { value: 'stabilityai/sd-turbo', label: 'SD 2.1 Turbo' },
@@ -89,6 +91,15 @@ const DEFAULT_STREAM_PARAMS = {
     height: 512,
   },
 };
+
+/** SD1.5-specific stream params per Daydream docs. */
+const SD15_STREAM_PARAMS = {
+  num_inference_steps: 50,
+  t_index_list: [5, 15, 32],
+  use_lcm_lora: true,
+  lcm_lora_id: 'latent-consistency/lcm-lora-sdv1-5',
+  guidance_scale: 1,
+} as const;
 
 const WHIP_PROXY_PREFIX = '/api/whip-proxy';
 
@@ -159,6 +170,10 @@ export function LiveAIPanelContent() {
   const [promptError, setPromptError] = useState<string | null>(null);
   const [loraError, setLoraError] = useState<string | null>(null);
   const [promptApplied, setPromptApplied] = useState(false);
+  const [faceIdEnabled, setFaceIdEnabled] = useState(false);
+  const [faceIdImageUrl, setFaceIdImageUrl] = useState('');
+  const [faceIdUpdating, setFaceIdUpdating] = useState(false);
+  const [faceIdError, setFaceIdError] = useState<string | null>(null);
 
   const daydreamConfigured = isDaydreamConfigured();
   const livepeerConfigured = isLivepeerStudioConfigured();
@@ -200,6 +215,12 @@ export function LiveAIPanelContent() {
         setStreamSource('livepeer');
       } else {
         const lora_dict = loraEntriesToDict(loraEntries);
+        const sd15Extra = isSD15Model(selectedModelId) ? SD15_STREAM_PARAMS : {};
+        const faceIdExtra: Record<string, unknown> = {};
+        if (isSDXLTurboModel(selectedModelId) && faceIdEnabled && faceIdImageUrl.trim()) {
+          faceIdExtra.ip_adapter = { type: 'faceid', scale: 1, enabled: true } satisfies IpAdapterConfig;
+          faceIdExtra.ip_adapter_style_image_url = faceIdImageUrl.trim();
+        }
         const params = {
           ...DEFAULT_STREAM_PARAMS,
           params: {
@@ -207,6 +228,8 @@ export function LiveAIPanelContent() {
             model_id: selectedModelId,
             prompt: prompt.trim() || DEFAULT_STREAM_PARAMS.params.prompt,
             ...(lora_dict && { lora_dict }),
+            ...sd15Extra,
+            ...faceIdExtra,
           },
         };
         data = await createStream(params);
@@ -230,7 +253,7 @@ export function LiveAIPanelContent() {
     } finally {
       setLoading(false);
     }
-  }, [configured, daydreamConfigured, livepeerConfigured, setPermissionsGranted, selectedModelId, prompt, loraEntries]);
+  }, [configured, daydreamConfigured, livepeerConfigured, setPermissionsGranted, selectedModelId, prompt, loraEntries, faceIdEnabled, faceIdImageUrl]);
 
   const handleApplyPrompt = useCallback(async () => {
     if (streamSource !== 'daydream' || !streamData?.id || !prompt.trim()) return;
@@ -269,6 +292,29 @@ export function LiveAIPanelContent() {
       setLoraUpdating(false);
     }
   }, [streamSource, streamData?.id, prompt, loraEntries]);
+
+  const handleApplyFaceId = useCallback(async () => {
+    if (streamSource !== 'daydream' || !streamData?.id) return;
+    if (faceIdEnabled && !faceIdImageUrl.trim()) {
+      setFaceIdError('Provide a reference face image URL.');
+      return;
+    }
+    setFaceIdError(null);
+    setFaceIdUpdating(true);
+    try {
+      await updateDaydreamPrompt(streamData.id, {
+        prompt: (prompt.trim() || DEFAULT_STREAM_PARAMS.params.prompt) ?? '',
+        ip_adapter: { type: 'faceid', scale: 1, enabled: faceIdEnabled },
+        ...(faceIdEnabled && faceIdImageUrl.trim()
+          ? { ip_adapter_style_image_url: faceIdImageUrl.trim() }
+          : {}),
+      });
+    } catch (e) {
+      setFaceIdError(e instanceof Error ? e.message : 'Failed to update FaceID');
+    } finally {
+      setFaceIdUpdating(false);
+    }
+  }, [streamSource, streamData?.id, prompt, faceIdEnabled, faceIdImageUrl]);
 
   const addLoraPreset = useCallback((preset: CuratedLoraPreset) => {
     setLoraEntries((prev) => [...prev, { id: nextLoraId(), path: preset.modelId, scale: preset.defaultScale }]);
@@ -487,6 +533,41 @@ export function LiveAIPanelContent() {
                   <p className="text-xs text-muted-foreground">Trigger words: {triggerHints.join(', ')}</p>
                 )}
               </div>
+              {isSDXLTurboModel(selectedModelId) && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="live-ai-faceid"
+                      checked={faceIdEnabled}
+                      onCheckedChange={setFaceIdEnabled}
+                    />
+                    <Label htmlFor="live-ai-faceid" className="text-xs cursor-pointer">
+                      FaceID (IP Adapter)
+                    </Label>
+                  </div>
+                  {faceIdEnabled && (
+                    <>
+                      <input
+                        type="url"
+                        value={faceIdImageUrl}
+                        onChange={(e) => setFaceIdImageUrl(e.target.value)}
+                        placeholder="Reference face image URL"
+                        className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={handleApplyFaceId}
+                        disabled={faceIdUpdating || !faceIdImageUrl.trim()}
+                      >
+                        {faceIdUpdating ? 'Applying…' : 'Apply FaceID'}
+                      </Button>
+                      {faceIdError && <p className="text-xs text-destructive">{faceIdError}</p>}
+                    </>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
