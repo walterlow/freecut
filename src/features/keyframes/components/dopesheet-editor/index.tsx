@@ -211,77 +211,128 @@ const MINI_ICON_BUTTON_CLASS = 'h-4 w-4 flex-shrink-0 rounded-sm p-0 leading-non
 const MINI_ICON_CLASS = 'h-[8px] w-[8px]';
 
 function InterpolationTypeIcon({ type }: { type: EasingType }) {
-  const commonProps = {
+  const iconProps = {
     width: 16,
     height: 16,
     viewBox: '0 0 16 16',
     fill: 'none',
+  };
+
+  const curveProps = {
     stroke: 'currentColor',
-    strokeWidth: 1.25,
+    strokeWidth: 0.88,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
 
-  const endpoints = (
-    <>
-      <circle cx="3" cy="12.5" r="1" fill="currentColor" stroke="none" />
-      <circle cx="13" cy="3.5" r="1" fill="currentColor" stroke="none" />
-    </>
-  );
+  const guideProps = {
+    ...curveProps,
+    strokeWidth: 0.66,
+    opacity: 0.5,
+  };
 
-  if (type === 'linear') {
-    return (
-      <svg aria-hidden="true" {...commonProps}>
-        <path d="M3.6 11.9L12.4 4.1" />
-        {endpoints}
-      </svg>
-    );
-  }
+  const start = { x: 2.1, y: 11.9 };
+  const end = { x: 13.9, y: 4.1 };
 
-  if (type === 'ease-in') {
-    return (
-      <svg aria-hidden="true" {...commonProps}>
-        <path d="M3 12.5C6.2 12.5 8.3 11.9 13 3.5" />
-        {endpoints}
-      </svg>
-    );
-  }
+  const toScreenPoint = (x: number, y: number) => ({
+    x: start.x + (end.x - start.x) * x,
+    y: start.y - (start.y - end.y) * y,
+  });
 
-  if (type === 'ease-out') {
-    return (
-      <svg aria-hidden="true" {...commonProps}>
-        <path d="M3 12.5C7.7 4.1 9.8 3.5 13 3.5" />
-        {endpoints}
-      </svg>
-    );
-  }
+  const formatPoint = (point: { x: number; y: number }) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
+  const getDistance = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  if (type === 'ease-in-out') {
-    return (
-      <svg aria-hidden="true" {...commonProps}>
-        <path d="M3 12.5C5.4 12.5 6.2 11.6 8 8C9.8 4.4 10.6 3.5 13 3.5" />
-        {endpoints}
-      </svg>
-    );
-  }
+  const renderControlHandle = (
+    anchor: { x: number; y: number },
+    control: { x: number; y: number },
+    key: string
+  ) => {
+    if (getDistance(anchor, control) < 0.9) {
+      return null;
+    }
 
-  if (type === 'cubic-bezier') {
     return (
-      <svg aria-hidden="true" {...commonProps}>
-        <path d="M3 12.5C5 12.5 5.8 6 9.6 6C11.2 6 11.8 4.4 13 3.5" />
-        <path d="M3 12.5L5 10.4" opacity="0.6" />
-        <path d="M9.6 6L12 4.1" opacity="0.6" />
-        <circle cx="5" cy="10.4" r="0.9" fill="currentColor" stroke="none" opacity="0.8" />
-        <circle cx="9.6" cy="6" r="0.9" fill="currentColor" stroke="none" opacity="0.8" />
-        {endpoints}
-      </svg>
+      <g key={key}>
+        <path d={`M${formatPoint(anchor)}L${formatPoint(control)}`} {...guideProps} />
+        <circle
+          cx={control.x}
+          cy={control.y}
+          r="0.56"
+          fill="currentColor"
+          stroke="none"
+          opacity="0.68"
+        />
+      </g>
     );
-  }
+  };
+
+  const renderBezier = (x1: number, y1: number, x2: number, y2: number) => {
+    const controlOne = toScreenPoint(x1, y1);
+    const controlTwo = toScreenPoint(x2, y2);
+
+    return (
+      <>
+        {renderControlHandle(start, controlOne, 'control-one')}
+        {renderControlHandle(end, controlTwo, 'control-two')}
+        <path
+          d={`M${formatPoint(start)}C${formatPoint(controlOne)} ${formatPoint(controlTwo)} ${formatPoint(end)}`}
+          {...curveProps}
+        />
+      </>
+    );
+  };
+
+  const iconContent = (() => {
+    if (type === 'linear') {
+      return <path d={`M${formatPoint(start)}L${formatPoint(end)}`} {...curveProps} />;
+    }
+
+    if (type === 'ease-in') {
+      return renderBezier(0.42, 0, 1, 1);
+    }
+
+    if (type === 'ease-out') {
+      return renderBezier(0, 0, 0.58, 1);
+    }
+
+    if (type === 'ease-in-out') {
+      return renderBezier(0.42, 0, 0.58, 1);
+    }
+
+    if (type === 'cubic-bezier') {
+      return renderBezier(0.2, 0.1, 0.74, 0.88);
+    }
+
+    const springOne = toScreenPoint(0.24, 0.02);
+    const springTwo = toScreenPoint(0.36, 0.58);
+    const springMid = toScreenPoint(0.52, 0.58);
+    const springThree = toScreenPoint(0.68, 0.58);
+    const springFour = toScreenPoint(0.8, 1.08);
+    const springSettle = toScreenPoint(0.9, 0.98);
+    const springFive = toScreenPoint(0.98, 1);
+
+    return (
+      <>
+        {renderControlHandle(start, springOne, 'spring-control-one')}
+        {renderControlHandle(end, springFive, 'spring-control-two')}
+        <path
+          d={[
+            `M${formatPoint(start)}`,
+            `C${formatPoint(springOne)} ${formatPoint(springTwo)} ${formatPoint(springMid)}`,
+            `C${formatPoint(springThree)} ${formatPoint(springFour)} ${formatPoint(springSettle)}`,
+            `C${formatPoint(springSettle)} ${formatPoint(springFive)} ${formatPoint(end)}`,
+          ].join(' ')}
+          {...curveProps}
+        />
+      </>
+    );
+  })();
 
   return (
-    <svg aria-hidden="true" {...commonProps}>
-      <path d="M3 12.5C4.6 12.5 5.3 8.6 7.1 8.6C9.2 8.6 9 2.2 11.2 2.2C12 2.2 12.5 2.9 13 3.5" />
-      {endpoints}
+    <svg aria-hidden="true" {...iconProps}>
+      {iconContent}
+      <circle cx={start.x} cy={start.y} r="0.74" fill="currentColor" stroke="none" />
+      <circle cx={end.x} cy={end.y} r="0.74" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -2083,6 +2134,46 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const graphDisplayPropertyLocked = graphDisplayProperty
     ? isPropertyLocked(graphDisplayProperty)
     : false;
+  const focusGraphPane = useCallback(() => {
+    graphPaneRef.current?.focus();
+  }, []);
+  const handleGraphPaneKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled || graphDisplayPropertyLocked || selectedRefs.length === 0) {
+        return;
+      }
+
+      const hasModifier = event.ctrlKey || event.metaKey || event.altKey;
+
+      if (!hasModifier && (event.key === 'Delete' || event.key === 'Backspace')) {
+        if (!onRemoveKeyframes) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        onRemoveKeyframes(selectedRefs);
+        return;
+      }
+
+      if (!hasModifier && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault();
+        event.stopPropagation();
+        nudgeSelectedKeyframes(
+          event.key === 'ArrowLeft'
+            ? (event.shiftKey ? -10 : -1)
+            : (event.shiftKey ? 10 : 1)
+        );
+      }
+    },
+    [
+      disabled,
+      graphDisplayPropertyLocked,
+      nudgeSelectedKeyframes,
+      onRemoveKeyframes,
+      selectedRefs,
+    ]
+  );
   const formatRulerTick = useCallback(
     (frame: number): string => {
       if (visualizationMode !== 'graph' || graphRulerUnit === 'frames' || !fps || fps <= 0) {
@@ -3056,7 +3147,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 <div className="flex-shrink-0 overflow-auto" style={{ width: PROPERTY_COLUMN_WIDTH }}>
                   {propertyColumnElements}
                 </div>
-                <div ref={graphPaneRef} className="min-w-0 flex-1 border-l border-border/60">
+                <div
+                  ref={graphPaneRef}
+                  data-testid="dopesheet-graph-pane"
+                  tabIndex={disabled || graphDisplayPropertyLocked ? undefined : -1}
+                  className="min-w-0 flex-1 border-l border-border/60 outline-none"
+                  onMouseEnter={focusGraphPane}
+                  onPointerDownCapture={focusGraphPane}
+                  onKeyDown={handleGraphPaneKeyDown}
+                >
                   {graphPaneSize.width > 0 && graphPaneSize.height > 0 && graphDisplayProperty ? (
                     <ValueGraphEditor
                       frameViewport={viewport}

@@ -144,6 +144,36 @@ describe('DopesheetEditor property groups', () => {
     expect(screen.queryByRole('button', { name: /set interpolation to linear/i })).toBeNull();
   });
 
+  it('deletes selected keyframes from the graph pane without bubbling to parent shortcuts', () => {
+    const onRemoveKeyframes = vi.fn();
+    const onParentKeyDown = vi.fn();
+
+    render(
+      <div onKeyDown={onParentKeyDown}>
+        <DopesheetEditor
+          itemId="item-1"
+          keyframesByProperty={{
+            x: [{ id: 'kf-1', frame: 12, value: 100, easing: 'linear' }],
+          }}
+          propertyValues={{ x: 100 }}
+          currentFrame={12}
+          width={640}
+          height={240}
+          visualizationMode="graph"
+          selectedKeyframeIds={new Set(['kf-1'])}
+          onRemoveKeyframes={onRemoveKeyframes}
+        />
+      </div>
+    );
+
+    fireEvent.keyDown(screen.getByTestId('dopesheet-graph-pane'), { key: 'Delete' });
+
+    expect(onRemoveKeyframes).toHaveBeenCalledWith([
+      { itemId: 'item-1', property: 'x', keyframeId: 'kf-1' },
+    ]);
+    expect(onParentKeyDown).not.toHaveBeenCalled();
+  });
+
   it('shows graph options for ruler units and handle visibility', () => {
     render(
       <DopesheetEditor
