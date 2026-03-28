@@ -2875,7 +2875,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   }, [commitSelectionFramePreview, onDragEnd]);
   const formatRulerTick = useCallback(
     (frame: number): string => {
-      if (visualizationMode !== 'graph' || graphRulerUnit === 'frames' || !fps || fps <= 0) {
+      if (graphRulerUnit === 'frames' || !fps || fps <= 0) {
         return String(frame);
       }
       const seconds = frame / fps;
@@ -2886,7 +2886,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       }
       return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
     },
-    [visualizationMode, graphRulerUnit, fps]
+    [graphRulerUnit, fps]
   );
 
   const rulerTickElements = useMemo(

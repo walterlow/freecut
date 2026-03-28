@@ -329,6 +329,19 @@ describe('DopesheetEditor property groups', () => {
     expect(screen.queryByText(/show all handles/i)).toBeNull();
   });
 
+  it('renders the dopesheet ruler in seconds when seconds mode is enabled', () => {
+    renderEditor({
+      visualizationMode: 'dopesheet',
+      totalFrames: 60,
+      fps: 30,
+    });
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /sheet view options/i }), { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByText(/display time ruler in seconds/i));
+
+    expect(screen.getByTestId('dopesheet-ruler')).toHaveTextContent('1.00s');
+  });
+
   it('renders clipboard controls in the bottom row', () => {
     renderEditor({
       keyframesByProperty: { x: [{ id: 'kx-1', frame: 8, value: 100, easing: 'linear' }] },
