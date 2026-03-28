@@ -177,3 +177,11 @@ export function getTriggerWordsForModelIds(modelIds: string[]): string[] {
     .map((p) => p.triggerWord)
     .filter(Boolean);
 }
+
+export function isSD15Model(modelId: string): boolean {
+  return getFamilyForModelId(modelId) === 'SD1.5';
+}
+
+export function isSDXLTurboModel(modelId: string): boolean {
+  return modelId === 'stabilityai/sdxl-turbo';
+}
