@@ -1,0 +1,136 @@
+---
+description: Generate a video from a provided image.
+alwaysApply: false
+---
+Image To Video
+Generate a video from a provided image.
+
+POST
+
+https://livepeer.studio/api/beta/generate
+/
+image-to-video
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form Bearer <token>, where <token> is your auth token.
+
+Body
+multipart/form-data
+​
+image
+filerequired
+Uploaded image to generate a video from.
+
+​
+model_id
+stringdefault:""
+Hugging Face model ID used for video generation.
+
+​
+height
+integerdefault:576
+The height in pixels of the generated video.
+
+​
+width
+integerdefault:1024
+The width in pixels of the generated video.
+
+​
+fps
+integerdefault:6
+The frames per second of the generated video.
+
+​
+motion_bucket_id
+integerdefault:127
+Used for conditioning the amount of motion for the generation. The higher the number the more motion will be in the video.
+
+​
+noise_aug_strength
+numberdefault:0.02
+Amount of noise added to the conditioning image. Higher values reduce resemblance to the conditioning image and increase motion.
+
+​
+safety_check
+booleandefault:true
+Perform a safety check to estimate if generated images could be offensive or harmful.
+
+​
+seed
+integer
+Seed for random number generation.
+
+​
+num_inference_steps
+integerdefault:25
+Number of denoising steps. More steps usually lead to higher quality images but slower inference. Modulated by strength.
+
+Response
+
+200
+
+application/json
+Successful Response
+
+Response model for video generation.
+
+​
+frames
+Media · object[][]required
+The generated video frames.
+
+Hide child attributes
+
+​
+frames.url
+stringrequired
+The URL where the media can be accessed.
+
+​
+frames.seed
+integerrequired
+The seed used to generate the media.
+
+​
+frames.nsfw
+booleanrequired
+Whether the media was flagged as NSFW.
+
+const form = new FormData();
+form.append('image', '<string>');
+form.append('model_id', '');
+form.append('height', '576');
+form.append('width', '1024');
+form.append('fps', '6');
+form.append('motion_bucket_id', '127');
+form.append('noise_aug_strength', '0.02');
+form.append('safety_check', 'true');
+form.append('seed', '123');
+form.append('num_inference_steps', '25');
+
+const options = {method: 'POST', headers: {Authorization: 'Bearer <token>'}};
+
+options.body = form;
+
+fetch('https://livepeer.studio/api/beta/generate/image-to-video', options)
+  .then(res => res.json())
+  .then(res => console.log(res))
+  .catch(err => console.error(err));
+
+200:
+{
+  "frames": [
+    [
+      {
+        "url": "<string>",
+        "seed": 123,
+        "nsfw": true
+      }
+    ]
+  ]
+}

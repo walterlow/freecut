@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Shapes, RotateCcw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Shapes, RotateCcw, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, MousePointer2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import type { ShapeItem, ShapeType, TimelineItem } from '@/types/timeline';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useGizmoStore } from '@/features/editor/deps/preview';
+import { useGizmoStore, useMaskEditorStore } from '@/features/editor/deps/preview';
 import {
   PropertySection,
   PropertyRow,
@@ -46,6 +46,7 @@ interface ShapeSectionProps {
  */
 export function ShapeSection({ items }: ShapeSectionProps) {
   const updateItem = useTimelineStore((s) => s.updateItem);
+  const { isEditing, editingItemId, penMode, startEditing, stopEditing } = useMaskEditorStore();
 
   // Gizmo store for live property preview
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
@@ -87,6 +88,8 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   const showDirection = sharedValues?.shapeType === 'triangle';
   const showPoints = sharedValues?.shapeType && ['star', 'polygon'].includes(sharedValues.shapeType);
   const showInnerRadius = sharedValues?.shapeType === 'star';
+  const singlePathShape = shapeItems.length === 1 && shapeItems[0]?.shapeType === 'path' ? shapeItems[0] : null;
+  const isEditingPathShape = !!singlePathShape && isEditing && !penMode && editingItemId === singlePathShape.id;
 
   // Update all selected shape items
   const updateShapeItems = useCallback(
@@ -325,6 +328,31 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         </Select>
       </PropertyRow>
 
+      {singlePathShape && (
+        <PropertyRow label="Path">
+          <div className="flex items-center gap-2 w-full">
+            <Button
+              variant={isEditingPathShape ? 'default' : 'outline'}
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => {
+                if (isEditingPathShape) {
+                  stopEditing();
+                } else {
+                  startEditing(singlePathShape.id);
+                }
+              }}
+            >
+              <MousePointer2 className="w-3.5 h-3.5" />
+              {isEditingPathShape ? 'Done' : 'Edit Path'}
+            </Button>
+            <span className="text-[10px] text-muted-foreground">
+              Drag points and handles in the preview.
+            </span>
+          </div>
+        </PropertyRow>
+      )}
+
       {/* Fill Color */}
       <ColorPicker
         label="Fill"
@@ -507,4 +535,3 @@ export function ShapeSection({ items }: ShapeSectionProps) {
     </PropertySection>
   );
 }
-

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
 import type { ItemKeyframes } from '@/types/keyframe';
+import { normalizeSubComposition } from '../utils/sub-composition-normalizer';
 
 /**
  * Sub-composition data — a self-contained mini-timeline stored independently.
@@ -62,13 +63,13 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
 
     addComposition: (composition) =>
       set((state) => ({
-        compositions: [...state.compositions, composition],
+        compositions: [...state.compositions, normalizeSubComposition(composition)],
       })),
 
     updateComposition: (id, updates) =>
       set((state) => ({
         compositions: state.compositions.map((c) =>
-          c.id === id ? { ...c, ...updates } : c
+          c.id === id ? normalizeSubComposition({ ...c, ...updates }) : c
         ),
       })),
 
@@ -79,7 +80,9 @@ export const useCompositionsStore = create<CompositionsState & CompositionsActio
 
     getComposition: (id) => get().compositionById[id],
 
-    setCompositions: (compositions) => set({ compositions }),
+    setCompositions: (compositions) => set({
+      compositions: compositions.map((composition) => normalizeSubComposition(composition)),
+    }),
   })
 );
 

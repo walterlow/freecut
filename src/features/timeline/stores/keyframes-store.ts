@@ -16,10 +16,11 @@ import type {
 
 interface KeyframesState {
   keyframes: ItemKeyframes[];
+  keyframesByItemId: Record<string, ItemKeyframes>;
 }
 
 /** Update payload for batch keyframe updates */
-interface KeyframeUpdatePayload {
+export interface KeyframeUpdatePayload {
   itemId: string;
   property: AnimatableProperty;
   keyframeId: string;
@@ -81,18 +82,51 @@ interface KeyframesActions {
   hasKeyframesAtFrame: (itemId: string, property: AnimatableProperty, frame: number) => boolean;
 }
 
+function buildKeyframesByItemId(keyframes: ItemKeyframes[]): Record<string, ItemKeyframes> {
+  const map: Record<string, ItemKeyframes> = {};
+  for (const ik of keyframes) {
+    map[ik.itemId] = ik;
+  }
+  return map;
+}
+
+function dedupeKeyframesByFrame(
+  keyframes: Keyframe[],
+  preferredIds: ReadonlySet<string> = new Set()
+): Keyframe[] {
+  const frameMap = new Map<number, Keyframe>();
+
+  for (const keyframe of keyframes) {
+    const existing = frameMap.get(keyframe.frame);
+    if (!existing) {
+      frameMap.set(keyframe.frame, keyframe);
+      continue;
+    }
+
+    const existingPreferred = preferredIds.has(existing.id);
+    const nextPreferred = preferredIds.has(keyframe.id);
+    if (nextPreferred || !existingPreferred) {
+      frameMap.set(keyframe.frame, keyframe);
+    }
+  }
+
+  return Array.from(frameMap.values()).sort((a, b) => a.frame - b.frame);
+}
+
 export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
   (set, get) => ({
     // State
     keyframes: [],
+    keyframesByItemId: {},
 
     // Bulk setter
-    setKeyframes: (keyframes) => set({ keyframes }),
+    setKeyframes: (keyframes) => set({ keyframes, keyframesByItemId: buildKeyframesByItemId(keyframes) }),
 
     // Add keyframe
     _addKeyframe: (itemId, property, frame, value, easing = 'linear', easingConfig) => {
       const keyframeId = crypto.randomUUID();
       const newKeyframe: Keyframe = { id: keyframeId, frame, value, easing, easingConfig };
+      let resultingId = keyframeId;
 
       set((state) => {
         const existingItemKeyframes = state.keyframes.find((k) => k.itemId === itemId);
@@ -107,6 +141,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
             // Property already has keyframes - check for existing at this frame
             const existingAtFrame = existingPropKeyframes.keyframes.find((k) => k.frame === frame);
             if (existingAtFrame) {
+              resultingId = existingAtFrame.id;
               // Update existing keyframe value
               return {
                 keyframes: state.keyframes.map((ik) =>
@@ -178,10 +213,10 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
         };
       });
 
-      return keyframeId;
+      return resultingId;
     },
 
-    // Add multiple keyframes at once (for batch operations like K hotkey)
+    // Add multiple keyframes at once for batch edits.
     _addKeyframes: (payloads) => {
       if (payloads.length === 0) return [];
 
@@ -193,8 +228,6 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
         for (const payload of payloads) {
           const { itemId, property, frame, value, easing = 'linear', easingConfig } = payload;
           const keyframeId = crypto.randomUUID();
-          newIds.push(keyframeId);
-
           const newKeyframe: Keyframe = { id: keyframeId, frame, value, easing, easingConfig };
           const existingItemIndex = newKeyframes.findIndex((k) => k.itemId === itemId);
 
@@ -213,6 +246,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                 // Update existing keyframe
                 const updatedKeyframes = [...existingProp.keyframes];
                 updatedKeyframes[existingAtFrameIndex] = { ...updatedKeyframes[existingAtFrameIndex]!, value, easing, easingConfig };
+                newIds.push(updatedKeyframes[existingAtFrameIndex]!.id);
 
                 const updatedProperties = [...existingItem.properties];
                 updatedProperties[existingPropIndex] = { ...existingProp, keyframes: updatedKeyframes };
@@ -223,6 +257,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
               } else {
                 // Add new keyframe to existing property
                 const updatedKeyframes = [...existingProp.keyframes, newKeyframe].sort((a, b) => a.frame - b.frame);
+                newIds.push(keyframeId);
 
                 const updatedProperties = [...existingItem.properties];
                 updatedProperties[existingPropIndex] = { ...existingProp, keyframes: updatedKeyframes };
@@ -234,6 +269,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
             } else {
               // Add new property with first keyframe
               const updatedProperties = [...existingItem.properties, { property, keyframes: [newKeyframe] }];
+              newIds.push(keyframeId);
 
               newKeyframes = newKeyframes.map((ik, idx) =>
                 idx === existingItemIndex ? { ...existingItem, properties: updatedProperties } : ik
@@ -241,6 +277,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
             }
           } else {
             // Create new item keyframes entry
+            newIds.push(keyframeId);
             newKeyframes = [
               ...newKeyframes,
               {
@@ -268,9 +305,10 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                   pk.property === property
                     ? {
                         ...pk,
-                        keyframes: pk.keyframes
-                          .map((k) => (k.id === keyframeId ? { ...k, ...updates } : k))
-                          .sort((a, b) => a.frame - b.frame),
+                        keyframes: dedupeKeyframesByFrame(
+                          pk.keyframes.map((k) => (k.id === keyframeId ? { ...k, ...updates } : k)),
+                          new Set([keyframeId])
+                        ),
                       }
                     : pk
                 ),
@@ -396,6 +434,15 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
     _updateKeyframes: (updates) => {
       if (updates.length === 0) return;
 
+      const preferredIdsByKey = new Map<string, Set<string>>();
+      for (const update of updates) {
+        const key = `${update.itemId}:${update.property}`;
+        if (!preferredIdsByKey.has(key)) {
+          preferredIdsByKey.set(key, new Set());
+        }
+        preferredIdsByKey.get(key)!.add(update.keyframeId);
+      }
+
       set((state) => {
         let newKeyframes = [...state.keyframes];
 
@@ -408,11 +455,12 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
                     pk.property === update.property
                       ? {
                           ...pk,
-                          keyframes: pk.keyframes
-                            .map((k) =>
+                          keyframes: dedupeKeyframesByFrame(
+                            pk.keyframes.map((k) =>
                               k.id === update.keyframeId ? { ...k, ...update.updates } : k
-                            )
-                            .sort((a, b) => a.frame - b.frame),
+                            ),
+                            preferredIdsByKey.get(`${update.itemId}:${update.property}`) ?? new Set()
+                          ),
                         }
                       : pk
                   ),
@@ -520,14 +568,14 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
       return newIds;
     },
 
-    // Read-only: Get keyframes for an item
+    // Read-only: Get keyframes for an item (O(1) via index)
     getKeyframesForItem: (itemId) => {
-      return get().keyframes.find((k) => k.itemId === itemId);
+      return get().keyframesByItemId[itemId];
     },
 
     // Read-only: Get a specific keyframe by ID
     getKeyframeById: (itemId, property, keyframeId) => {
-      const itemKeyframes = get().keyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = get().keyframesByItemId[itemId];
       if (!itemKeyframes) return undefined;
 
       const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
@@ -538,7 +586,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
 
     // Read-only: Get all keyframes for a property
     getAllKeyframesForProperty: (itemId, property) => {
-      const itemKeyframes = get().keyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = get().keyframesByItemId[itemId];
       if (!itemKeyframes) return [];
 
       const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
@@ -549,7 +597,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
 
     // Read-only: Check if keyframe exists at frame
     hasKeyframesAtFrame: (itemId, property, frame) => {
-      const itemKeyframes = get().keyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = get().keyframesByItemId[itemId];
       if (!itemKeyframes) return false;
 
       const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
@@ -559,3 +607,11 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
     },
   })
 );
+
+// Auto-rebuild keyframesByItemId index whenever keyframes array changes.
+// This avoids modifying every individual setter while keeping O(1) lookups.
+useKeyframesStore.subscribe((state, prevState) => {
+  if (state.keyframes !== prevState.keyframes && state.keyframesByItemId === prevState.keyframesByItemId) {
+    useKeyframesStore.setState({ keyframesByItemId: buildKeyframesByItemId(state.keyframes) });
+  }
+});

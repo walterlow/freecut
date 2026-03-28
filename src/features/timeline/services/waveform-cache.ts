@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
@@ -80,24 +81,23 @@ class WaveformCacheService {
   private currentCacheSize = 0;
   private pendingRequests = new Map<string, PendingRequest>();
   private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>();
-  private worker: Worker | null = null;
   private workerRequestId = 0;
   private generationQueue: QueuedGeneration[] = [];
   private activeGenerations = new Set<string>();
   private workerRejectors = new Map<string, (error: Error) => void>();
   private fallbackAbortControllers = new Map<string, AbortController>();
+  private readonly workerManager = createManagedWorker({
+    createWorker: () => new Worker(
+      new URL('./waveform-worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+  });
 
   /**
    * Get or create the waveform worker (lazy initialization)
    */
   private getWorker(): Worker {
-    if (!this.worker) {
-      this.worker = new Worker(
-        new URL('./waveform-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-    }
-    return this.worker;
+    return this.workerManager.getWorker();
   }
 
   private enqueueGeneration(
@@ -166,9 +166,12 @@ class WaveformCacheService {
     } catch (error) {
       queued.reject(error instanceof Error ? error : new Error(String(error)));
     } finally {
-      this.activeGenerations.delete(queued.mediaId);
+      // Guard both deletes with requestId so a stale finally from an aborted
+      // run doesn't stomp a newer generation's tracking entries.
       const pending = this.pendingRequests.get(queued.mediaId);
-      if (pending && pending.requestId === queued.requestId) {
+      const isStale = pending && pending.requestId !== queued.requestId;
+      if (!isStale) {
+        this.activeGenerations.delete(queued.mediaId);
         this.pendingRequests.delete(queued.mediaId);
       }
       this.processGenerationQueue();
@@ -320,7 +323,9 @@ class WaveformCacheService {
     duration: number,
     channels: number
   ): Promise<void> {
-    await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+    await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+      logger.debug('Failed to clear waveform before persist:', mediaId, e);
+    });
 
     const binCount = Math.ceil(peaks.length / WAVEFORM_BIN_SAMPLES);
     const now = Date.now();
@@ -408,7 +413,9 @@ class WaveformCacheService {
         }
 
         logger.warn(`Invalid waveform bins for ${mediaId}; clearing and regenerating`);
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear invalid waveform bins:', mediaId, e);
+        });
         return null;
       }
 
@@ -417,7 +424,9 @@ class WaveformCacheService {
       const firstBin = await getWaveformRecordFromIndexedDB(`${mediaId}:bin:0`);
       if (firstBin && 'kind' in firstBin && firstBin.kind === 'bin') {
         logger.warn(`Partial waveform bins detected without meta for ${mediaId}; regenerating`);
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear partial waveform:', mediaId, e);
+        });
         return null;
       }
     } catch (error) {
@@ -444,7 +453,9 @@ class WaveformCacheService {
       }
     } catch (err) {
       logger.warn('Failed to load waveform from OPFS, deleting corrupted data:', err);
-      await waveformOPFSStorage.delete(mediaId).catch(() => {});
+      await waveformOPFSStorage.delete(mediaId).catch((e) => {
+        logger.debug('Failed to delete corrupted OPFS waveform:', mediaId, e);
+      });
     }
 
     // Fallback: Try legacy IndexedDB and migrate.
@@ -466,7 +477,9 @@ class WaveformCacheService {
 
         this.addToMemoryCache(mediaId, cached);
         this.notifyUpdate(mediaId, cached);
-        this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch(() => {});
+        this.migrateToOPFS(mediaId, peaks, stored.duration, stored.channels).catch((e) => {
+          logger.debug('Waveform OPFS migration failed:', mediaId, e);
+        });
 
         return cached;
       }
@@ -556,9 +569,8 @@ class WaveformCacheService {
         } catch {
           // Ignore timeout abort post errors
         }
-        if (this.worker === worker) {
-          worker.terminate();
-          this.worker = null;
+        if (this.workerManager.peekWorker() === worker) {
+          this.workerManager.terminate();
         }
         rejectOnce(new Error('Worker timeout'));
       }, 90000);
@@ -658,7 +670,9 @@ class WaveformCacheService {
 
       this.workerRejectors.set(requestId, rejectOnce);
       const startWorker = async () => {
-        await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+        await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+          logger.debug('Failed to clear waveform before worker gen:', mediaId, e);
+        });
         if (settled) return;
 
         worker.addEventListener('message', handleMessage);
@@ -711,7 +725,9 @@ class WaveformCacheService {
       // Decode with AudioContext
       const audioContext = new AudioContext();
       const closeContext = () => {
-        void audioContext.close().catch(() => {});
+        void audioContext.close().catch((e) => {
+          logger.debug('Failed to close AudioContext during abort:', e);
+        });
       };
       signal?.addEventListener('abort', closeContext, { once: true });
 
@@ -785,7 +801,9 @@ class WaveformCacheService {
         return cached;
       } finally {
         signal?.removeEventListener('abort', closeContext);
-        await audioContext.close().catch(() => {});
+        await audioContext.close().catch((e) => {
+          logger.debug('Failed to close AudioContext:', e);
+        });
       }
     } catch (error) {
       if (error instanceof AbortError) {
@@ -918,9 +936,15 @@ class WaveformCacheService {
       return;
     }
 
-    // Running request
-    if (this.worker) {
-      this.worker.postMessage({
+    // Running request — clean up tracking state synchronously so that a
+    // subsequent getWaveform() call (e.g. React StrictMode remount) doesn't
+    // receive the stale, already-rejected promise.
+    this.pendingRequests.delete(mediaId);
+    this.activeGenerations.delete(mediaId);
+
+    const activeWorker = this.workerManager.peekWorker();
+    if (activeWorker) {
+      activeWorker.postMessage({
         type: 'abort',
         requestId: pending.requestId,
       });
@@ -932,6 +956,8 @@ class WaveformCacheService {
     if (rejector) {
       rejector(new AbortError());
     }
+
+    this.processGenerationQueue();
   }
 
   /**
@@ -948,7 +974,9 @@ class WaveformCacheService {
     // Clear from OPFS
     await waveformOPFSStorage.delete(mediaId);
     // Also clear IndexedDB waveform bins/meta (and legacy single record).
-    await deleteWaveformFromIndexedDB(mediaId).catch(() => {});
+    await deleteWaveformFromIndexedDB(mediaId).catch((e) => {
+      logger.debug('Failed to clear waveform from IndexedDB during cache clear:', mediaId, e);
+    });
   }
 
   /**
@@ -980,10 +1008,7 @@ class WaveformCacheService {
     this.pendingRequests.clear();
     this.updateCallbacks.clear();
     // Terminate worker
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+    this.workerManager.terminate();
   }
 
   /**
@@ -1022,4 +1047,3 @@ class WaveformCacheService {
 
 // Singleton instance
 export const waveformCache = new WaveformCacheService();
-

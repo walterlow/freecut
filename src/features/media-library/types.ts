@@ -1,9 +1,14 @@
 import type { MediaMetadata } from '@/types/storage';
+import type { TranscriptionProgressSnapshot } from '@/shared/utils/transcription-progress';
 
 export interface MediaLibraryNotification {
   type: 'info' | 'success' | 'warning' | 'error';
   message: string;
 }
+
+export type MediaTranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error';
+
+export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 
 /**
  * Information about a file with an unsupported audio codec
@@ -11,8 +16,7 @@ export interface MediaLibraryNotification {
 export interface UnsupportedCodecFile {
   fileName: string;
   audioCodec: string;
-  /** Present when imported via File System Access API; absent when imported via input[type=file] (e.g. mobile). */
-  handle?: FileSystemFileHandle;
+  handle: FileSystemFileHandle;
 }
 
 /**
@@ -76,6 +80,10 @@ export interface MediaLibraryState {
   proxyStatus: Map<string, 'generating' | 'ready' | 'error'>;
   proxyProgress: Map<string, number>;
 
+  // Transcript generation
+  transcriptStatus: Map<string, MediaTranscriptStatus>;
+  transcriptProgress: Map<string, MediaTranscriptProgress>;
+
 }
 
 export interface MediaLibraryActions {
@@ -95,10 +103,10 @@ export interface MediaLibraryActions {
    */
   importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
   /**
-   * Import media from File objects (e.g. input[type=file] on mobile when showOpenFilePicker is unavailable).
-   * Copies files to OPFS.
+   * Import media for direct placement flows.
+   * Existing media are returned too so drop targets can place duplicates without re-importing.
    */
-  importFiles: (files: File[]) => Promise<MediaMetadata[]>;
+  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
   deleteMedia: (id: string) => Promise<void>;
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 
@@ -155,4 +163,9 @@ export interface MediaLibraryActions {
   setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => void;
   clearProxyStatus: (mediaId: string) => void;
   setProxyProgress: (mediaId: string, progress: number) => void;
+
+  // Transcript generation
+  setTranscriptStatus: (mediaId: string, status: MediaTranscriptStatus) => void;
+  setTranscriptProgress: (mediaId: string, progress: MediaTranscriptProgress) => void;
+  clearTranscriptProgress: (mediaId: string) => void;
 }

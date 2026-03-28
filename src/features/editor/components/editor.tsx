@@ -13,10 +13,9 @@ import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
 import { ProjectDebugPanel } from './project-debug-panel';
+import { InteractionLockRegion } from './interaction-lock-region';
 import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
-import { ShortcutsDialog } from './shortcuts-dialog';
-import { SettingsDialog } from './settings-dialog';
 import { toast } from 'sonner';
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
@@ -25,12 +24,15 @@ import { initTransitionChainSubscription } from '@/features/editor/deps/timeline
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
+import { useSettingsStore } from '@/features/editor/deps/settings';
+import { useMaskEditorStore } from '@/features/editor/deps/preview';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useEditorStore } from '@/shared/state/editor';
-import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
+import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
+import { useMediaQuery } from '@/features/editor/hooks/use-media-query';
 import { LiveAIPopover } from '@/features/editor/deps/live-ai';
 
 const logger = createLogger('Editor');
@@ -70,15 +72,18 @@ interface EditorProps {
  * Video Editor Component
  * Memoized to prevent re-renders from route changes cascading to all children.
  */
-/** Extra percentage to add to timeline panel when graph editor is open */
-const GRAPH_PANEL_SIZE_INCREASE = 12; // ~12% extra height
-
 export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
-  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
+  const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
+  const syncSidebarLayout = useEditorStore((s) => s.syncSidebarLayout);
+  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
+  const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
+  const isMobile = useMediaQuery('(max-width: 767px)');
+  const mobileLeftInset = isMobile && leftSidebarOpen ? 'min(calc(100vw - 3rem), 320px)' : '0';
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -124,8 +129,9 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     const mql = window.matchMedia('(max-width: 767px)');
     const handler = () => {
       if (!mql.matches) return;
-      const { leftSidebarOpen, rightSidebarOpen, setRightSidebarOpen } = useEditorStore.getState();
-      if (leftSidebarOpen && rightSidebarOpen) setRightSidebarOpen(false);
+      const { leftSidebarOpen: leftOpen, rightSidebarOpen: rightOpen, setRightSidebarOpen } =
+        useEditorStore.getState();
+      if (leftOpen && rightOpen) setRightSidebarOpen(false);
     };
     mql.addEventListener('change', handler);
     return () => mql.removeEventListener('change', handler);
@@ -180,6 +186,18 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   // Track unsaved changes
   const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty);
+
+  useEffect(() => {
+    syncSidebarLayout(editorLayout);
+  }, [editorLayout, syncSidebarLayout]);
+
+  useEffect(() => {
+    if (!isMaskEditingActive) return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement) {
+      activeElement.blur();
+    }
+  }, [isMaskEditingActive]);
 
   // Save timeline to project (with guard against concurrent saves)
   const handleSave = useCallback(async () => {
@@ -260,10 +278,6 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   const timelineDuration = 30;
 
-  const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
-  const isMobile = useMediaQuery('(max-width: 767px)');
-  const mobileLeftInset = isMobile && leftSidebarOpen ? 'min(calc(100vw - 3rem), 320px)' : '0';
-
   // Track whether graph panel is currently open to avoid storing expanded size as base
   const isGraphOpenRef = useRef(false);
 
@@ -278,7 +292,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       // Opening: store current size before expanding (only if not already open)
       baseTimelineSizeRef.current = panel.getSize();
       // Expand panel to accommodate graph editor
-      const newSize = Math.min(50, baseTimelineSizeRef.current + GRAPH_PANEL_SIZE_INCREASE);
+      const newSize = Math.min(
+        editorLayout.timelineMaxSize,
+        baseTimelineSizeRef.current + editorLayout.graphPanelSizeIncrease
+      );
       panel.resize(newSize);
       isGraphOpenRef.current = true;
     } else if (!isOpen && isGraphOpenRef.current) {
@@ -286,42 +303,50 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       panel.resize(baseTimelineSizeRef.current);
       isGraphOpenRef.current = false;
     }
-  }, []);
+  }, [editorLayout.graphPanelSizeIncrease, editorLayout.timelineMaxSize]);
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div
+      className="h-screen bg-background flex flex-col overflow-hidden"
+      style={editorLayoutCssVars as import('react').CSSProperties}
+      role="application"
+      aria-label="Pixels Video Editor"
+    >
         {/* Top Toolbar */}
-        <Toolbar
-          projectId={projectId}
-          project={project}
-          isDirty={isDirty}
-          onSave={handleSave}
-          onExport={handleExport}
-          onExportBundle={handleExportBundle}
-          onOpenShortcuts={() => setShowShortcutsDialog(true)}
-          onOpenSettings={() => setShowSettingsDialog(true)}
-        />
+        <InteractionLockRegion locked={isMaskEditingActive}>
+          <Toolbar
+            projectId={projectId}
+            project={project}
+            isDirty={isDirty}
+            onSave={handleSave}
+            onExport={handleExport}
+            onExportBundle={handleExportBundle}
+          />
+        </InteractionLockRegion>
 
         {/* Resizable Layout: Main Content + Timeline */}
         <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
           {/* Main Content Area */}
-          <ResizablePanel defaultSize={70} minSize={50} maxSize={85}>
+          <ResizablePanel
+            defaultSize={100 - editorLayout.timelineDefaultSize}
+            minSize={100 - editorLayout.timelineMaxSize}
+            maxSize={100 - editorLayout.timelineMinSize}
+          >
             <div className="h-full flex overflow-hidden relative min-w-0">
               {/* Left Sidebar - Media Library */}
-              <ErrorBoundary level="feature">
-                <MediaSidebar
-                  toolbarActions={{
-                    onSave: handleSave,
-                    onExport: handleExport,
-                    onExportBundle: handleExportBundle,
-                    isDirty,
-                    onOpenSettings: () => setShowSettingsDialog(true),
-                    onOpenShortcuts: () => setShowShortcutsDialog(true),
-                  }}
-                />
-              </ErrorBoundary>
+              <InteractionLockRegion locked={isMaskEditingActive}>
+                <ErrorBoundary level="feature">
+                  <MediaSidebar
+                    toolbarActions={{
+                      onSave: handleSave,
+                      onExport: handleExport,
+                      onExportBundle: handleExportBundle,
+                      isDirty,
+                    }}
+                  />
+                </ErrorBoundary>
+              </InteractionLockRegion>
 
-              {/* Center + Right: inset on mobile when left sidebar open so timeline/preview don't overlap fixed panel */}
               <div
                 className="flex-1 flex min-w-0 overflow-hidden transition-[margin] duration-200"
                 style={mobileLeftInset !== '0' ? { marginLeft: mobileLeftInset } : undefined}
@@ -332,33 +357,44 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
                 </ErrorBoundary>
 
                 {/* Right Sidebar - Properties */}
-                <ErrorBoundary level="feature">
-                  <PropertiesSidebar />
-                </ErrorBoundary>
+                <InteractionLockRegion locked={isMaskEditingActive}>
+                  <ErrorBoundary level="feature">
+                    <PropertiesSidebar />
+                  </ErrorBoundary>
+                </InteractionLockRegion>
               </div>
             </div>
           </ResizablePanel>
 
-          <ResizableHandle withHandle className="hidden md:flex" />
+          <ResizableHandle
+            withHandle
+            className={
+              isMaskEditingActive
+                ? 'pointer-events-none opacity-60'
+                : 'hidden md:flex'
+            }
+          />
 
-          {/* Bottom - Timeline (same left inset on mobile when left sidebar open) */}
+          {/* Bottom - Timeline */}
           <ResizablePanel
             ref={timelinePanelRef}
-            defaultSize={30}
-            minSize={15}
-            maxSize={50}
+            defaultSize={editorLayout.timelineDefaultSize}
+            minSize={editorLayout.timelineMinSize}
+            maxSize={editorLayout.timelineMaxSize}
           >
-            <div
-              className="h-full min-w-0 transition-[margin] duration-200"
-              style={mobileLeftInset !== '0' ? { marginLeft: mobileLeftInset } : undefined}
-            >
-              <ErrorBoundary level="feature">
-                <Timeline
-                  duration={timelineDuration}
-                  onGraphPanelOpenChange={handleGraphPanelOpenChange}
-                />
-              </ErrorBoundary>
-            </div>
+            <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
+              <div
+                className="h-full min-w-0 transition-[margin] duration-200"
+                style={mobileLeftInset !== '0' ? { marginLeft: mobileLeftInset } : undefined}
+              >
+                <ErrorBoundary level="feature">
+                  <Timeline
+                    duration={timelineDuration}
+                    onGraphPanelOpenChange={handleGraphPanelOpenChange}
+                  />
+                </ErrorBoundary>
+              </div>
+            </InteractionLockRegion>
           </ResizablePanel>
         </ResizablePanelGroup>
 
@@ -383,15 +419,6 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         )}
       </Suspense>
 
-      <ShortcutsDialog
-        open={showShortcutsDialog}
-        onOpenChange={setShowShortcutsDialog}
-      />
-      <SettingsDialog
-        open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
-      />
-
       {/* Clear Keyframes Confirmation Dialog */}
       <ClearKeyframesDialog />
 
@@ -399,7 +426,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       <BentoLayoutDialog />
 
       {/* Debug Panel (dev mode only) */}
-      <ProjectDebugPanel projectId={projectId} />
+      {!isMaskEditingActive ? <ProjectDebugPanel projectId={projectId} /> : null}
 
       {/* Live AI Studio - dockable popover */}
       <LiveAIPopover />

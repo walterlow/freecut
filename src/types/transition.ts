@@ -19,6 +19,7 @@ export type TransitionCategory =
   | 'flip'
   | 'mask'
   | 'light'
+  | 'chromatic'
   | 'custom';
 
 /**
@@ -31,7 +32,14 @@ export type BuiltinTransitionPresentation =
   | 'slide'
   | 'flip'
   | 'clockWipe'
-  | 'iris';
+  | 'iris'
+  | 'dissolve'
+  | 'sparkles'
+  | 'glitch'
+  | 'lightLeak'
+  | 'pixelate'
+  | 'chromatic'
+  | 'radialBlur';
 
 /**
  * Visual presentation styles for transitions.
@@ -186,8 +194,8 @@ export const TRANSITION_CONFIGS: Record<TransitionType, TransitionConfig> = {
     label: 'Crossfade',
     description: 'Smooth opacity blend between clips',
     defaultDuration: 30, // 1 second at 30fps
-    minDuration: 5,
-    maxDuration: 90,
+    minDuration: 30, // 1 second at 30fps
+    maxDuration: 90, // 3 seconds at 30fps
   },
 };
 
@@ -237,136 +245,9 @@ export interface PresentationConfig {
 }
 
 /**
- * All available transition presentations with their configurations.
- * Each direction is a separate card for easy selection.
- *
- * NOTE: This is the legacy static list. The transitions panel now generates
- * configs from the registry. This is kept for backward compatibility.
+ * Presentation configs are now generated from the transition registry
+ * at runtime. See `@/features/editor/utils/transition-ui-config.ts`.
  */
-export const PRESENTATION_CONFIGS: PresentationConfig[] = [
-  // Basic transitions
-  {
-    id: 'fade',
-    label: 'Fade',
-    description: 'Simple crossfade between clips',
-    icon: 'Blend',
-    category: 'basic',
-  },
-  // Wipe transitions (each direction as separate card)
-  {
-    id: 'wipe',
-    label: 'Left',
-    description: 'Wipe from left to right',
-    icon: 'ArrowRight',
-    category: 'wipe',
-    direction: 'from-left',
-  },
-  {
-    id: 'wipe',
-    label: 'Right',
-    description: 'Wipe from right to left',
-    icon: 'ArrowLeft',
-    category: 'wipe',
-    direction: 'from-right',
-  },
-  {
-    id: 'wipe',
-    label: 'Top',
-    description: 'Wipe from top to bottom',
-    icon: 'ArrowDown',
-    category: 'wipe',
-    direction: 'from-top',
-  },
-  {
-    id: 'wipe',
-    label: 'Bottom',
-    description: 'Wipe from bottom to top',
-    icon: 'ArrowUp',
-    category: 'wipe',
-    direction: 'from-bottom',
-  },
-  // Slide transitions (each direction as separate card)
-  {
-    id: 'slide',
-    label: 'Left',
-    description: 'Slide in from left',
-    icon: 'MoveRight',
-    category: 'slide',
-    direction: 'from-left',
-  },
-  {
-    id: 'slide',
-    label: 'Right',
-    description: 'Slide in from right',
-    icon: 'MoveLeft',
-    category: 'slide',
-    direction: 'from-right',
-  },
-  {
-    id: 'slide',
-    label: 'Top',
-    description: 'Slide in from top',
-    icon: 'MoveDown',
-    category: 'slide',
-    direction: 'from-top',
-  },
-  {
-    id: 'slide',
-    label: 'Bottom',
-    description: 'Slide in from bottom',
-    icon: 'MoveUp',
-    category: 'slide',
-    direction: 'from-bottom',
-  },
-  // Flip transitions (each direction as separate card)
-  {
-    id: 'flip',
-    label: 'Left',
-    description: '3D flip from left',
-    icon: 'FlipHorizontal',
-    category: 'flip',
-    direction: 'from-left',
-  },
-  {
-    id: 'flip',
-    label: 'Right',
-    description: '3D flip from right',
-    icon: 'FlipHorizontal2',
-    category: 'flip',
-    direction: 'from-right',
-  },
-  {
-    id: 'flip',
-    label: 'Top',
-    description: '3D flip from top',
-    icon: 'FlipVertical',
-    category: 'flip',
-    direction: 'from-top',
-  },
-  {
-    id: 'flip',
-    label: 'Bottom',
-    description: '3D flip from bottom',
-    icon: 'FlipVertical2',
-    category: 'flip',
-    direction: 'from-bottom',
-  },
-  // Special / Mask transitions
-  {
-    id: 'clockWipe',
-    label: 'Clock Wipe',
-    description: 'Circular wipe like a clock hand',
-    icon: 'Clock',
-    category: 'mask',
-  },
-  {
-    id: 'iris',
-    label: 'Iris',
-    description: 'Circular iris expanding/contracting',
-    icon: 'Circle',
-    category: 'mask',
-  },
-];
 
 /**
  * Result of checking if a transition can be added

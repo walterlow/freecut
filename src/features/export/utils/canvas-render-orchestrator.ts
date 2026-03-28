@@ -711,14 +711,33 @@ export async function renderSingleFrame(options: SingleFrameOptions): Promise<Bl
     await renderer.preload();
     await renderer.renderFrame(frame);
 
-    // Scale down to thumbnail size
+    // Progressive downscale to thumbnail size to avoid aliasing/moire
+    // with high-frequency effects (e.g. halftone fine lines).
+    // Halve dimensions repeatedly until within 2x of target, then final scale.
+    let srcCanvas: OffscreenCanvas = renderCanvas;
+    let srcW = compositionWidth;
+    let srcH = compositionHeight;
+
+    while (srcW > width * 2 || srcH > height * 2) {
+      const nextW = Math.max(Math.ceil(srcW / 2), width);
+      const nextH = Math.max(Math.ceil(srcH / 2), height);
+      const step = new OffscreenCanvas(nextW, nextH);
+      const stepCtx = step.getContext('2d')!;
+      stepCtx.imageSmoothingQuality = 'high';
+      stepCtx.drawImage(srcCanvas, 0, 0, nextW, nextH);
+      srcCanvas = step;
+      srcW = nextW;
+      srcH = nextH;
+    }
+
     const thumbnailCanvas = new OffscreenCanvas(width, height);
     const thumbnailCtx = thumbnailCanvas.getContext('2d');
     if (!thumbnailCtx) {
       throw new Error('Failed to get thumbnail 2d context');
     }
 
-    thumbnailCtx.drawImage(renderCanvas, 0, 0, width, height);
+    thumbnailCtx.imageSmoothingQuality = 'high';
+    thumbnailCtx.drawImage(srcCanvas, 0, 0, width, height);
 
     const blob = await thumbnailCanvas.convertToBlob({ type: format, quality });
     return blob;

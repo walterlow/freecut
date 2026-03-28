@@ -19,6 +19,10 @@ interface TimecodeDisplayProps {
 export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
   const [showFrames, setShowFrames] = useState(false);
   const currentTimeRef = useRef<HTMLSpanElement>(null);
+  const frameDigits = Math.max(totalFrames.toString().length, 1);
+  const reservedCharWidth = Math.max(frameDigits, 11);
+  const lastFrame = Math.max(0, totalFrames - 1);
+  const reservedDisplayWidth = `calc(${reservedCharWidth * 2 + 1}ch + 1rem)`;
 
   // Use refs for values accessed in subscription to avoid stale closures
   const showFramesRef = useRef(showFrames);
@@ -61,32 +65,23 @@ export function TimecodeDisplay({ fps, totalFrames }: TimecodeDisplayProps) {
       : formatTimecode(frame, fps);
   }, [showFrames, fps, formatFrameNumber]);
 
-  // Fixed character width per display mode to prevent layout shift
-  const charWidth = showFrames
-    ? Math.max(totalFrames.toString().length, 1) // frame digits (zero-padded)
-    : 11; // SMPTE "HH:MM:SS:FF" is always 11 chars
-
   return (
-    <div
-      className="px-4 py-2.5 bg-secondary/50 rounded-md border border-border cursor-pointer select-none hover:bg-secondary/70 transition-colors"
+    <button
+      type="button"
+      className="inline-flex items-center gap-2 bg-transparent p-0 font-mono text-[13px] tabular-nums text-left transition-colors select-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm"
+      style={{ width: reservedDisplayWidth }}
       onClick={() => setShowFrames((prev) => !prev)}
     >
-      <div className="flex items-center gap-2 font-mono text-sm tabular-nums">
-        <span
-          ref={currentTimeRef}
-          className="text-primary font-semibold inline-block text-right"
-          style={{ width: `${charWidth}ch` }}
-        >
-          {showFrames ? formatFrameNumber(usePlaybackStore.getState().currentFrame) : formatTimecode(usePlaybackStore.getState().currentFrame, fps)}
-        </span>
-        <span className="text-muted-foreground/50">/</span>
-        <span
-          className="text-muted-foreground inline-block text-right"
-          style={{ width: `${charWidth}ch` }}
-        >
-          {showFrames ? formatFrameNumber(Math.max(0, totalFrames - 1)) : formatTimecode(Math.max(0, totalFrames - 1), fps)}
-        </span>
-      </div>
-    </div>
+      <span
+        ref={currentTimeRef}
+        className="text-primary font-semibold"
+      >
+        {showFrames ? formatFrameNumber(usePlaybackStore.getState().currentFrame) : formatTimecode(usePlaybackStore.getState().currentFrame, fps)}
+      </span>
+      <span className="text-muted-foreground/50">/</span>
+      <span>
+        {showFrames ? formatFrameNumber(lastFrame) : formatTimecode(lastFrame, fps)}
+      </span>
+    </button>
   );
 }

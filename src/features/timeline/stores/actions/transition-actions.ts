@@ -226,8 +226,3 @@ export function removeTransition(id: string): void {
     useTimelineSettingsStore.getState().markDirty();
   }, { id });
 }
-
-export function clearPendingBreakages(): void {
-  // No undo for this - it's ephemeral state
-  useTransitionsStore.getState().clearPendingBreakages();
-}

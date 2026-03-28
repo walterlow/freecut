@@ -3,6 +3,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { emitDomainEvent } from '@/shared/events/domain-events';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
@@ -46,10 +47,9 @@ export function applyTransitionRepairs(
 
   // Report breakages
   if (broken.length > 0) {
-    useTransitionsStore.getState().setPendingBreakages([
-      ...useTransitionsStore.getState().pendingBreakages,
-      ...broken,
-    ]);
+    emitDomainEvent('timeline.transitionBreakagesDetected', {
+      breakages: [...broken],
+    });
   }
 }
 
@@ -66,4 +66,3 @@ export function canAddKeyframeAtFrame(itemId: string, frame: number): boolean {
   const blocked = isFrameInTransitionRegion(frame, itemId, item, transitions);
   return blocked === undefined;
 }
-

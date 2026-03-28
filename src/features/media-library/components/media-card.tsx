@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, Film } from 'lucide-react';
+import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,9 +12,14 @@ import { mediaLibraryService } from '../services/media-library-service';
 import { getMediaType, formatDuration } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { useMediaLibraryStore } from '../stores/media-library-store';
-import { useTimelineStore } from '../deps/timeline-stores';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
+import { mediaTranscriptionService } from '../services/media-transcription-service';
+import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
+import {
+  getTranscriptionOverallPercent,
+  getTranscriptionStageLabel,
+} from '@/shared/utils/transcription-progress';
 
 interface MediaCardProps {
   media: MediaMetadata;
@@ -35,9 +40,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
 
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus.get(media.id));
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress.get(media.id));
+  const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus.get(media.id) ?? 'idle');
+  const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress.get(media.id));
 
   const mediaType = getMediaType(media.mimeType);
   const isImporting = importingIds.includes(media.id);
+  const isTranscribable = mediaType === 'video' || mediaType === 'audio';
   const canGenerateProxy = proxyService.needsProxy(
     media.width,
     media.height,
@@ -45,6 +53,8 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     media.audioCodec
   );
   const hasProxy = proxyStatus === 'ready';
+  const hasTranscript = transcriptStatus === 'ready';
+  const isTranscribing = transcriptStatus === 'transcribing';
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -104,6 +114,44 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     }
   };
 
+  const handleGenerateTranscript = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const store = useMediaLibraryStore.getState();
+    const previousStatus = store.transcriptStatus.get(media.id) ?? 'idle';
+
+    store.setTranscriptStatus(media.id, 'transcribing');
+    store.setTranscriptProgress(media.id, { stage: 'loading', progress: 0 });
+
+    try {
+      await mediaTranscriptionService.transcribeMedia(media.id, {
+        onProgress: (progress) => {
+          store.setTranscriptProgress(media.id, progress);
+        },
+      });
+      store.setTranscriptStatus(media.id, 'ready');
+      store.clearTranscriptProgress(media.id);
+      store.showNotification({
+        type: 'success',
+        message: `Transcript ready for "${media.fileName}"`,
+      });
+    } catch (error) {
+      if (isLocalInferenceCancellationError(error)) {
+        store.setTranscriptStatus(media.id, previousStatus);
+        store.clearTranscriptProgress(media.id);
+        return;
+      }
+
+      store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
+      store.clearTranscriptProgress(media.id);
+      store.showNotification({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to transcribe media',
+      });
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent) => {
     // Set drag data for timeline drop
     e.dataTransfer.effectAllowed = 'copy';
@@ -155,6 +203,10 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   const handleClick = (e: React.MouseEvent) => {
     onSelect?.(e);
   };
+
+  const transcriptProgressLabel = transcriptProgress
+    ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
+    : 'Transcribing...';
 
   const getIcon = () => {
     switch (mediaType) {
@@ -259,29 +311,16 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
         {/* Actions - hidden during upload */}
         {!isImporting && (
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="ghost"
                 size="icon"
-                className="min-h-11 min-w-11 h-11 w-11 md:min-h-0 md:min-w-0 md:h-6 md:w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
+                className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
               >
                 <MoreVertical className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem
-                disabled={isImporting}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  useTimelineStore.getState().addMediaToTimeline(media.id);
-                }}
-              >
-                <Film className="w-3 h-3 mr-2" />
-                Add to timeline
-              </DropdownMenuItem>
               {isBroken && onRelink && (
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
                   <RefreshCw className="w-3 h-3 mr-2" />
@@ -292,6 +331,18 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
                 <DropdownMenuItem onClick={handleGenerateProxy}>
                   <Zap className="w-3 h-3 mr-2" />
                   Generate Proxy
+                </DropdownMenuItem>
+              )}
+              {isTranscribable && !isBroken && !isTranscribing && (
+                <DropdownMenuItem onClick={handleGenerateTranscript}>
+                  <FileText className="w-3 h-3 mr-2" />
+                  {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+                </DropdownMenuItem>
+              )}
+              {isTranscribable && !isBroken && isTranscribing && (
+                <DropdownMenuItem disabled>
+                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                  {transcriptProgressLabel}
                 </DropdownMenuItem>
               )}
               {proxyStatus === 'generating' && (
@@ -420,29 +471,16 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
           {/* Actions dropdown - hidden during upload */}
           {!isImporting && (
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="min-h-11 min-w-11 h-11 w-11 md:min-h-0 md:min-w-0 md:h-5 md:w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
+                  className="h-5 w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
                 >
                   <MoreVertical className="w-2.5 h-2.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenuItem
-                  disabled={isImporting}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    useTimelineStore.getState().addMediaToTimeline(media.id);
-                  }}
-                >
-                  <Film className="w-3 h-3 mr-2" />
-                  Add to timeline
-                </DropdownMenuItem>
                 {isBroken && onRelink && (
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
                     <RefreshCw className="w-3 h-3 mr-2" />
@@ -453,6 +491,18 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
                   <DropdownMenuItem onClick={handleGenerateProxy}>
                     <Zap className="w-3 h-3 mr-2" />
                     Generate Proxy
+                  </DropdownMenuItem>
+                )}
+                {isTranscribable && !isBroken && !isTranscribing && (
+                  <DropdownMenuItem onClick={handleGenerateTranscript}>
+                    <FileText className="w-3 h-3 mr-2" />
+                    {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+                  </DropdownMenuItem>
+                )}
+                {isTranscribable && !isBroken && isTranscribing && (
+                  <DropdownMenuItem disabled>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    {transcriptProgressLabel}
                   </DropdownMenuItem>
                 )}
                 {proxyStatus === 'generating' && (

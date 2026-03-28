@@ -82,6 +82,18 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
   }
 }
 
+/**
+ * Pre-resume the shared AudioContext. Call on playback start so audio
+ * is ready immediately when video elements begin playing. Without this,
+ * the AudioContext may be suspended (browser autoplay policy) and audio
+ * lags behind video by 50-100ms on cold resume.
+ */
+export function ensureAudioContextResumed(): void {
+  if (sharedVideoAudioContext?.state === 'suspended') {
+    sharedVideoAudioContext.resume();
+  }
+}
+
 /** Expose connected-element tracking for use by video-content acquisition logic. */
 export { connectedVideoElements, videoAudioContexts };
 

@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
 
-const PREFETCH_MARGIN_PX = 200;
+/**
+ * Pixels of margin beyond the viewport for considering a clip "visible".
+ * Increased from 200 to 600 to absorb the 50ms viewport store throttle —
+ * at fast scroll speeds (~200px/frame × 3 frames), tiles stay pre-rendered
+ * 600px ahead, preventing blank flashes at the leading edge.
+ */
+const PREFETCH_MARGIN_PX = 600;
 const RATIO_EPSILON = 0.002;
 
 export interface ClipVisibilityState {

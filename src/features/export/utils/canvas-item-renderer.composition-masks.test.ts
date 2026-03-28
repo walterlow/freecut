@@ -56,11 +56,11 @@ describe('canvas-item-renderer composition masks', () => {
     mockFns.rotatePathMock.mockClear();
   });
 
-  it('applies active sub-comp masks and does not render mask shapes as regular content', async () => {
+  it('applies active sub-comp masks only to lower tracks and does not render mask shapes as regular content', async () => {
     const subMaskItem: ShapeItem = {
       id: 'sub-mask',
       type: 'shape',
-      trackId: 'sub-track',
+      trackId: 'sub-mask-track',
       from: 0,
       durationInFrames: 60,
       label: 'Mask shape',
@@ -74,7 +74,7 @@ describe('canvas-item-renderer composition masks', () => {
     const subContentItem: ShapeItem = {
       id: 'sub-content',
       type: 'shape',
-      trackId: 'sub-track',
+      trackId: 'sub-content-track',
       from: 0,
       durationInFrames: 60,
       label: 'Content shape',
@@ -100,8 +100,14 @@ describe('canvas-item-renderer composition masks', () => {
       durationInFrames: 60,
       sortedTracks: [
         {
+          order: 1,
           visible: true,
-          items: [subMaskItem, subContentItem],
+          items: [subContentItem],
+        },
+        {
+          order: 0,
+          visible: true,
+          items: [subMaskItem],
         },
       ],
       keyframesMap: new Map(),
@@ -109,13 +115,16 @@ describe('canvas-item-renderer composition masks', () => {
 
     const subCanvas = { width: 640, height: 360 } as OffscreenCanvas;
     const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const maskedItemCanvas = { width: 640, height: 360 } as OffscreenCanvas;
     const subCtx = createMockCtx();
     const subContentCtx = createMockCtx();
+    const maskedItemCtx = createMockCtx();
     const rootCtx = createMockCtx();
 
     const acquireQueue = [
       { canvas: subCanvas, ctx: subCtx },
       { canvas: subContentCanvas, ctx: subContentCtx },
+      { canvas: maskedItemCanvas, ctx: maskedItemCtx },
     ];
 
     const canvasPool = {
@@ -126,7 +135,7 @@ describe('canvas-item-renderer composition masks', () => {
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
-      canvasPool: canvasPool as ItemRenderContext['canvasPool'],
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
       textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
       renderMode: 'export',
       videoExtractors: new Map(),
@@ -167,5 +176,112 @@ describe('canvas-item-renderer composition masks', () => {
       inverted: false,
       feather: 0,
     });
+  });
+
+  it('does not apply a sub-comp mask to content above the mask track', async () => {
+    const subMaskItem: ShapeItem = {
+      id: 'sub-mask',
+      type: 'shape',
+      trackId: 'sub-mask-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Mask shape',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      isMask: true,
+      maskType: 'clip',
+      transform: { x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
+    };
+
+    const subContentItem: ShapeItem = {
+      id: 'sub-content',
+      type: 'shape',
+      trackId: 'sub-content-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Content shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      transform: { x: 0, y: 0, width: 200, height: 200, rotation: 0, opacity: 1 },
+    };
+
+    const compositionItem: CompositionItem = {
+      id: 'comp-item',
+      type: 'composition',
+      compositionId: 'sub-comp-1',
+      trackId: 'track-parent',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Composition',
+      compositionWidth: 640,
+      compositionHeight: 360,
+    };
+
+    const subData: SubCompRenderData = {
+      fps: 30,
+      durationInFrames: 60,
+      sortedTracks: [
+        {
+          order: 1,
+          visible: true,
+          items: [subMaskItem],
+        },
+        {
+          order: 0,
+          visible: true,
+          items: [subContentItem],
+        },
+      ],
+      keyframesMap: new Map(),
+    };
+
+    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const subCtx = createMockCtx();
+    const subContentCtx = createMockCtx();
+    const rootCtx = createMockCtx();
+
+    const acquireQueue = [
+      { canvas: subCanvas, ctx: subCtx },
+      { canvas: subContentCanvas, ctx: subContentCtx },
+    ];
+
+    const canvasPool = {
+      acquire: vi.fn(() => acquireQueue.shift()),
+      release: vi.fn(),
+    };
+
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1280, height: 720, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
+    };
+
+    const transform: ItemTransform = {
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 360,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    await renderItem(rootCtx, compositionItem, transform, 0, rctx);
+
+    expect(mockFns.renderShapeMock).toHaveBeenCalledTimes(1);
+    expect(mockFns.applyMasksMock).not.toHaveBeenCalled();
   });
 });

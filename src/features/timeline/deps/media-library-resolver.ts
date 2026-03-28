@@ -4,6 +4,8 @@ export {
   resolveMediaUrls,
   cleanupBlobUrls,
   getMediaDragData,
+  extractValidMediaFileEntriesFromDataTransfer,
+  supportsFileSystemDragDrop,
   setMediaDragData,
   clearMediaDragData,
   type CompositionDragData,

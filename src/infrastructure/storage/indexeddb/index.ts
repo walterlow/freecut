@@ -84,3 +84,11 @@ export {
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
 } from './decoded-preview-audio';
+
+// Transcript exports
+export {
+  getTranscript,
+  getTranscriptMediaIds,
+  saveTranscript,
+  deleteTranscript,
+} from './transcripts';

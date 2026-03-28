@@ -22,6 +22,7 @@ import {
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
+  deleteTranscript,
 } from '@/infrastructure/storage/indexeddb';
 import { gifFrameCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
@@ -29,6 +30,72 @@ import { proxyService } from './proxy-service';
 import { validateMediaFile, getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { mediaProcessorService } from './media-processor-service';
+import { generateThumbnail } from '../utils/thumbnail-generator';
+
+function getImageDimensionsFromBitmap(bitmap: ImageBitmap): { width: number; height: number } {
+  return {
+    width: bitmap.width,
+    height: bitmap.height,
+  };
+}
+
+async function getGeneratedImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(file);
+    const dimensions = getImageDimensionsFromBitmap(bitmap);
+    bitmap.close();
+    return dimensions;
+  }
+
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      });
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load generated image'));
+    };
+
+    image.src = url;
+  });
+}
+
+function getThumbnailDimensions(
+  width: number,
+  height: number,
+  maxSize: number
+): { width: number; height: number } {
+  const safeWidth = Math.max(1, Math.round(width));
+  const safeHeight = Math.max(1, Math.round(height));
+
+  if (safeWidth >= safeHeight) {
+    return {
+      width: maxSize,
+      height: Math.max(1, Math.floor(maxSize * safeHeight / safeWidth)),
+    };
+  }
+
+  return {
+    width: Math.max(1, Math.floor(maxSize * safeWidth / safeHeight)),
+    height: maxSize,
+  };
+}
+
+async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === 'function') {
+    return blob.arrayBuffer();
+  }
+
+  return new Response(blob).arrayBuffer();
+}
 /**
  * Check and request permission for a file handle
  * @returns true if permission granted, false otherwise
@@ -345,6 +412,131 @@ class MediaLibraryService {
   }
 
   /**
+   * Save a generated still image into a project-backed media library entry.
+   *
+   * Used for editor-generated assets such as preview frame captures.
+   */
+  async importGeneratedImage(
+    file: File,
+    projectId: string,
+    options?: {
+      width?: number;
+      height?: number;
+      tags?: string[];
+      thumbnailMaxSize?: number;
+      thumbnailQuality?: number;
+      codec?: string;
+    }
+  ): Promise<MediaMetadata> {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+
+    const resolvedMimeType = file.type || getMimeType(file);
+    if (!resolvedMimeType.startsWith('image/')) {
+      throw new Error(`Generated file must be an image. Received "${resolvedMimeType}".`);
+    }
+
+    const safeWidth = Number.isFinite(options?.width) && (options?.width ?? 0) > 0
+      ? Math.round(options?.width ?? 0)
+      : 0;
+    const safeHeight = Number.isFinite(options?.height) && (options?.height ?? 0) > 0
+      ? Math.round(options?.height ?? 0)
+      : 0;
+    const dimensions = safeWidth > 0 && safeHeight > 0
+      ? { width: safeWidth, height: safeHeight }
+      : await getGeneratedImageDimensions(file);
+
+    const mediaId = crypto.randomUUID();
+    const createdAt = Date.now();
+    const opfsPath = `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
+    const codec = options?.codec ?? resolvedMimeType.split('/')[1] ?? 'unknown';
+    const thumbnailMaxSize = options?.thumbnailMaxSize ?? 320;
+    const thumbnailQuality = options?.thumbnailQuality ?? 0.6;
+
+    let metadataCreated = false;
+    let thumbnailSaved = false;
+    const mediaMetadata: MediaMetadata = {
+      id: mediaId,
+      storageType: 'opfs',
+      opfsPath,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: resolvedMimeType,
+      duration: 0,
+      width: dimensions.width,
+      height: dimensions.height,
+      fps: 0,
+      codec,
+      bitrate: 0,
+      tags: options?.tags ?? [],
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    try {
+      await opfsService.saveFile(opfsPath, await blobToArrayBuffer(file));
+
+      try {
+        const thumbnailBlob = await generateThumbnail(file, {
+          maxSize: thumbnailMaxSize,
+          quality: thumbnailQuality,
+        });
+        const thumbnailDimensions = getThumbnailDimensions(
+          dimensions.width,
+          dimensions.height,
+          thumbnailMaxSize
+        );
+        const thumbnailId = crypto.randomUUID();
+
+        await saveThumbnailDB({
+          id: thumbnailId,
+          mediaId,
+          blob: thumbnailBlob,
+          timestamp: 0,
+          width: thumbnailDimensions.width,
+          height: thumbnailDimensions.height,
+        });
+
+        mediaMetadata.thumbnailId = thumbnailId;
+        thumbnailSaved = true;
+      } catch (error) {
+        logger.warn(`Failed to save generated image thumbnail for ${file.name}:`, error);
+      }
+
+      await createMediaDB(mediaMetadata);
+      metadataCreated = true;
+      await associateMediaWithProject(projectId, mediaId);
+      return mediaMetadata;
+    } catch (error) {
+      if (metadataCreated) {
+        try {
+          await deleteMediaDB(mediaId);
+        } catch (cleanupError) {
+          logger.warn(`Failed to roll back generated media metadata ${mediaId}:`, cleanupError);
+        }
+      }
+
+      if (thumbnailSaved) {
+        this.clearThumbnailCache(mediaId);
+        try {
+          await deleteThumbnailsByMediaId(mediaId);
+        } catch (cleanupError) {
+          logger.warn(`Failed to roll back generated thumbnail ${mediaId}:`, cleanupError);
+        }
+      }
+
+      try {
+        await opfsService.deleteFile(opfsPath);
+      } catch (cleanupError) {
+        logger.warn(`Failed to roll back generated OPFS file ${opfsPath}:`, cleanupError);
+      }
+
+      throw error;
+    }
+  }
+
+  /**
    * Delete media from a project with reference counting
    *
    * Removes the media association from the project. If no other projects
@@ -377,6 +569,12 @@ class MediaLibraryService {
 
       // Delete media metadata
       await deleteMediaDB(mediaId);
+
+      try {
+        await deleteTranscript(mediaId);
+      } catch (error) {
+        logger.warn('Failed to delete transcript:', error);
+      }
 
       // Delete thumbnails (clear cache first)
       this.clearThumbnailCache(mediaId);
@@ -548,6 +746,12 @@ class MediaLibraryService {
     }
 
     await deleteMediaDB(id);
+
+    try {
+      await deleteTranscript(id);
+    } catch (error) {
+      logger.warn('Failed to delete transcript:', error);
+    }
   }
 
   /**
@@ -887,4 +1091,3 @@ class MediaLibraryService {
 
 // Singleton instance
 export const mediaLibraryService = new MediaLibraryService();
-

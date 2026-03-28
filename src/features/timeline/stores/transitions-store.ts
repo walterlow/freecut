@@ -6,14 +6,12 @@ import type {
   WipeDirection,
   SlideDirection,
   FlipDirection,
-  TransitionBreakage,
 } from '@/types/transition';
 import { TRANSITION_CONFIGS } from '@/types/transition';
 
 /**
  * Transitions state - cut transitions between adjacent clips.
  * Transitions reference clips by leftClipId/rightClipId.
- * pendingBreakages is ephemeral - not tracked in undo/redo.
  */
 
 interface TransitionOverlap {
@@ -25,13 +23,11 @@ interface TransitionsState {
   transitions: Transition[];
   transitionsByTrackId: Record<string, Transition[]>;
   transitionOverlapByItemId: Record<string, TransitionOverlap>;
-  pendingBreakages: TransitionBreakage[];
 }
 
 interface TransitionsActions {
   // Bulk setters for snapshot restore
   setTransitions: (transitions: Transition[]) => void;
-  setPendingBreakages: (breakages: TransitionBreakage[]) => void;
 
   // Internal mutations (prefixed with _ to indicate called by command system)
   _addTransition: (
@@ -50,9 +46,6 @@ interface TransitionsActions {
   _removeTransition: (id: string) => void;
   _removeTransitions: (ids: string[]) => void;
   _removeTransitionsForItems: (itemIds: string[]) => void;
-
-  // Clear pending breakages after user notification
-  clearPendingBreakages: () => void;
 }
 
 function normalizeTransitionDuration(durationInFrames: number): number {
@@ -148,14 +141,12 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
     transitions: [],
     transitionsByTrackId: {},
     transitionOverlapByItemId: {},
-    pendingBreakages: [],
 
     // Bulk setters
     setTransitions: (transitions) => set((state) => {
       const normalizedTransitions = transitions.map((transition) => normalizeTransition(transition));
       return withTransitionIndexes(normalizedTransitions, state);
     }),
-    setPendingBreakages: (breakages) => set({ pendingBreakages: breakages }),
 
     // Add transition
     _addTransition: (
@@ -228,8 +219,5 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
       );
       return withTransitionIndexes(nextTransitions, state);
     }),
-
-    // Clear pending breakages
-    clearPendingBreakages: () => set({ pendingBreakages: [] }),
   })
 );

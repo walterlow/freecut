@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest';
-import type { VideoItem, AudioItem } from '@/types/timeline';
+import { createElement } from 'react';
+import { act, render } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { AudioItem, VideoItem } from '@/types/timeline';
+
+import { useWaveformPrefetch } from './use-waveform-prefetch';
+import { useItemsStore } from '../stores/items-store';
+import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
+import { useTimelineViewportStore } from '../stores/timeline-viewport-store';
+import { useZoomStore } from '../stores/zoom-store';
 
 function makeVideoItem(id: string, from: number, duration: number): VideoItem {
   return {
@@ -25,6 +34,16 @@ function makeAudioItem(id: string, from: number, duration: number): AudioItem {
     src: 'blob:test',
     mediaId: `media-${id}`,
   } as AudioItem;
+}
+
+function WaveformPrefetchProbe({
+  onRender,
+}: {
+  onRender: () => void;
+}) {
+  useWaveformPrefetch();
+  onRender();
+  return null;
 }
 
 /** Replicate the prefetch range calculation */
@@ -63,6 +82,25 @@ describe('waveform prefetch filtering', () => {
   const fps = 30;
   const pps = 100;
 
+  beforeEach(() => {
+    useTimelineSettingsStore.setState({
+      fps,
+      scrollPosition: 0,
+      snapEnabled: true,
+      isDirty: false,
+      isTimelineLoading: false,
+    });
+    useZoomStore.getState().setZoomLevelImmediate(1);
+    useItemsStore.getState().setItems([]);
+    useItemsStore.getState().setTracks([]);
+    useTimelineViewportStore.getState().setViewport({
+      scrollLeft: 0,
+      scrollTop: 0,
+      viewportWidth: 1000,
+      viewportHeight: 120,
+    });
+  });
+
   it('prefetches clips in the ahead zone but not in the visible zone', () => {
     const items = [
       makeVideoItem('visible', 0, 100),
@@ -70,7 +108,7 @@ describe('waveform prefetch filtering', () => {
       makeVideoItem('far', 700, 100),
     ];
     const candidates = getPrefetchCandidates(items, 0, 1000, pps, fps, true);
-    expect(candidates.map((i) => i.id)).toEqual(['ahead']);
+    expect(candidates.map((item) => item.id)).toEqual(['ahead']);
   });
 
   it('biases prefetch toward scroll direction when scrolling left', () => {
@@ -78,7 +116,7 @@ describe('waveform prefetch filtering', () => {
       makeAudioItem('behind-close', 70, 30),
     ];
     const candidates = getPrefetchCandidates(items, 1000, 1000, pps, fps, false);
-    expect(candidates.map((i) => i.id)).toEqual(['behind-close']);
+    expect(candidates.map((item) => item.id)).toEqual(['behind-close']);
   });
 
   it('skips non-audio/video items', () => {
@@ -87,5 +125,32 @@ describe('waveform prefetch filtering', () => {
     ];
     const candidates = getPrefetchCandidates(items, 0, 1000, pps, fps, true);
     expect(candidates).toEqual([]);
+  });
+
+  it('does not re-render its host component on viewport updates', () => {
+    const onRender = vi.fn();
+    render(createElement(WaveformPrefetchProbe, { onRender }));
+
+    expect(onRender).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useTimelineViewportStore.getState().setViewport({
+        scrollLeft: 250,
+        scrollTop: 0,
+        viewportWidth: 1000,
+        viewportHeight: 120,
+      });
+    });
+
+    act(() => {
+      useTimelineViewportStore.getState().setViewport({
+        scrollLeft: 500,
+        scrollTop: 0,
+        viewportWidth: 1000,
+        viewportHeight: 120,
+      });
+    });
+
+    expect(onRender).toHaveBeenCalledTimes(1);
   });
 });

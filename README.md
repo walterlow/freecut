@@ -1,14 +1,14 @@
-# Pixels
+# FreeCut
 
-**[Creative Pixels](https://create.creativeplatform.xyz)**
+**[freecut.net](http://freecut.net/)**
 
 **Edit videos. In your browser.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![Pixels Timeline Editor](./public/assets/landing/timeline.png)
+![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
 
-Pixels is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebCodecs, OPFS, and the File System Access API.
+FreeCut is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
 
 ## Features
 
@@ -17,36 +17,59 @@ Pixels is a browser-based multi-track video editor. No installation, no uploads 
 - Multi-track timeline with video, audio, text, image, and shape tracks
 - Track groups with mute/visible/locked propagation
 - Trim, split, join, ripple delete, and rate stretch tools
-- Per-track "Close Gaps" to remove empty space between clips, packing them left toward frame 0
+- Rolling edit, ripple edit, slip, and slide tools
+- Per-track "Close Gaps" to remove empty space between clips
 - Filmstrip thumbnails and audio waveform visualization
 - Pre-compositions (nested compositions, 1 level deep)
 - Markers for organizing your edit
 - Source monitor with mark in/out via playhead or skimmer and insert/overwrite edits
 - Undo/redo with configurable history depth
 
-### Effects & Animation
+### GPU Effects
 
-- **CSS filter effects** — brightness, contrast, saturation, blur, hue rotate, grayscale, sepia, invert
-- **Glitch effects** — RGB split, scanlines, color glitch
-- **Canvas effects** — halftone (dots, lines, rays, ripples)
-- **Overlay effects** — vignette with configurable shape, softness, and color
-- **Presets** — vintage, noir, cold, warm, dramatic, faded
-- **Keyframe animation** — Bezier curve editor, easing functions (linear, ease-in/out, cubic-bezier, spring), auto-keyframe mode
-- **Transitions** — fade, wipe, slide, 3D flip, clock wipe, iris — each with directional variants and adjustable duration/alignment
+All visual effects are WebGPU-accelerated.
+
+- **Blur** — gaussian, box, motion, radial, zoom
+- **Color** — brightness, contrast, exposure, hue shift, saturation, vibrance, temperature/tint, levels, curves, color wheels, grayscale, sepia, invert
+- **Distortion** — pixelate, RGB split, twirl, wave, bulge/pinch, kaleidoscope, mirror, fluted glass
+- **Stylize** — vignette, film grain, sharpen, posterize, glow, edge detect, scanlines, color glitch
+- **Keying** — chroma key (green/blue screen) with tolerance, softness, and spill suppression
+
+### Blend Modes
+
+25 GPU-accelerated blend modes: normal, darken, multiply, color burn, linear burn, lighten, screen, color dodge, linear dodge, overlay, soft light, hard light, vivid light, linear light, pin light, hard mix, difference, exclusion, subtract, divide, hue, saturation, color, luminosity.
+
+### Masks
+
+Layer masks with keyframeable geometry transforms for compositing and selective effect application.
+
+### Transitions
+
+- **CPU transitions** — fade, wipe, slide, 3D flip, clock wipe, iris — each with directional variants
+- **GPU transitions** — dissolve, sparkles, glitch, light leak, pixelate, chromatic aberration, radial blur
+- Adjustable duration and alignment
+
+### Keyframe Animation
+
+- Bezier curve editor with preset easing functions
+- Easing: linear, ease-in, ease-out, ease-in-out, cubic-bezier, spring
+- Auto-keyframe mode with dopesheet toggle
+- Graph editor, dopesheet, and split view
 
 ### Preview & Playback
 
-- Real-time canvas preview with transform gizmo (drag, resize, rotate)
+- Real-time WebGPU-composited preview with transform gizmo (drag, resize, rotate)
 - Frame-accurate playback via custom Clock engine
+- GPU scopes — waveform, vectorscope, histogram
 - Snap guides and timecode display
 
 ### Export
 
 - In-browser rendering via WebCodecs (no server required)
-- **Video:** MP4, MOV, WebM, MKV
-- **Audio-only:** MP3, AAC, WAV
-- **Codecs:** H.264, H.265, VP8, VP9, ProRes (proxy through 4444 XQ)
-- Quality presets: low, medium, high, ultra
+- **Video containers:** MP4, WebM, MOV, MKV
+- **Video codecs:** H.264, H.265, VP8, VP9, AV1
+- **Audio codecs:** AAC, Opus, MP3, FLAC, PCM (WAV)
+- Quality presets: low (2 Mbps), medium (5 Mbps), high (10 Mbps), ultra (20 Mbps)
 
 ### Media
 
@@ -57,6 +80,14 @@ Pixels is a browser-based multi-track video editor. No installation, no uploads 
 - Up to 5 GB per file
 - OPFS proxy video generation for smooth preview
 - Media relinking for moved or deleted files
+- Scene detection and optical flow analysis
+
+### Transcription
+
+- Browser-based speech-to-text via Whisper (runs locally in a Web Worker)
+- Models: tiny, base, small, medium, large
+- Auto-generate caption text items from transcripts
+- Multi-language support
 
 ### Other
 
@@ -65,6 +96,7 @@ Pixels is a browser-based multi-track video editor. No installation, no uploads 
 - Project bundles — export/import projects as ZIP files with Zod-validated schemas
 - IndexedDB persistence with content-addressable storage
 - Auto-save
+- Customizable keyboard shortcuts with preset import/export
 - Configurable settings (FPS, snap, waveforms, filmstrips, preview quality, export defaults, undo depth, auto-save interval)
 
 ## Quick Start
@@ -72,7 +104,7 @@ Pixels is a browser-based multi-track video editor. No installation, no uploads 
 **Prerequisites:** Node.js 18+
 
 ```bash
-git clone https://github.com/creativeplatform/pixels.git
+git clone https://github.com/walterlow/freecut.git
 cd freecut
 npm install
 npm run dev
@@ -91,7 +123,7 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 ## Browser Support
 
-Chrome 102+ required. Pixels uses WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
+Chrome 113+ required. FreeCut uses WebGPU, WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
 
 ### Brave
 
@@ -107,38 +139,51 @@ Brave disables the File System Access API by default. To enable it:
 |---|---|
 | Play / Pause | `Space` |
 | Previous / Next frame | `Left` / `Right` |
+| Previous / Next snap point | `Up` / `Down` |
 | Go to start / end | `Home` / `End` |
-| Split at playhead | `Alt+C` |
-| Join clips | `J` |
+| Split at playhead | `Ctrl+K` |
+| Split at cursor | `Shift+C` |
+| Join clips | `Shift+J` |
 | Delete selected | `Delete` |
 | Ripple delete | `Ctrl+Delete` |
 | Freeze frame | `Shift+F` |
-| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
+| Nudge item (1px / 10px) | `Shift+Arrow` / `Ctrl+Shift+Arrow` |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Shift+Z` |
 | Copy / Cut / Paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Selection tool | `V` |
 | Razor tool | `C` |
 | Rate stretch tool | `R` |
+| Rolling edit tool | `N` |
+| Ripple edit tool | `B` |
+| Slip tool | `Y` |
+| Slide tool | `U` |
 | Toggle snap | `S` |
 | Add / Remove marker | `M` / `Shift+M` |
-| Add keyframe | `K` |
-| Toggle keyframe editor | `Ctrl+K` |
+| Previous / Next marker | `[` / `]` |
+| Add keyframe | `A` |
+| Clear keyframes | `Shift+A` |
+| Toggle keyframe editor | `Ctrl+Shift+A` |
+| Keyframe view: graph / dopesheet / split | `1` / `2` / `3` |
 | Group / Ungroup tracks | `Ctrl+G` / `Ctrl+Shift+G` |
-| Mark In / Out (playhead) | `I` / `O` |
-| Mark In / Out (skimmer) | `Shift+I` / `Shift+O` |
+| Mark In / Out | `I` / `O` |
+| Clear In/Out | `Alt+X` |
 | Insert / Overwrite edit | `,` / `.` |
+| Zoom in / out | `Ctrl+=` / `Ctrl+-` |
+| Zoom to fit | `\` |
+| Zoom to 100% | `Shift+\` |
 | Save | `Ctrl+S` |
-| Export | `Ctrl+E` |
-| Zoom to fit | `Z` |
+| Export | `Ctrl+Shift+E` |
 
 ## Tech Stack
 
 - [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
 - [Vite](https://vitejs.dev/) — build tool with HMR
+- [WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API) — GPU-accelerated effects, compositing, and scopes
 - [Zustand](https://github.com/pmndrs/zustand) + [Zundo](https://github.com/charkour/zundo) — state management with undo/redo
 - [TanStack Router](https://tanstack.com/router) — file-based type-safe routing
 - [Tailwind CSS 4](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/) — styling and UI components
 - [Mediabunny](https://mediabunny.dev/) — media decoding and metadata extraction
-- Canvas + [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) — composition rendering and export
+- [WebCodecs](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API) — composition rendering and export
 - [OPFS](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system) + [IndexedDB](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) — local persistence
 - Web Workers — heavy processing off the main thread
 
@@ -153,11 +198,10 @@ npm run check:deps-contracts # Enforce deps contract seam routing
 npm run check:legacy-lib-imports # Block any "@/lib/*" usage
 npm run check:deps-wrapper-health # Fail on unused pass-through deps wrappers
 npm run check:edge-budgets # Feature seam coupling budget check
-npm run check:bundle-budgets # Build chunk size budget check
 npm run report:feature-edges # Feature dependency edge report
 npm run report:feature-edges:json # JSON feature edge report
 npm run report:deps-wrapper-health:json # JSON deps wrapper health report
-npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + build + bundle budgets
+npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + build
 npm run test           # Vitest (watch mode)
 npm run test:run       # Vitest (single run)
 npm run test:coverage  # Vitest with coverage
@@ -170,53 +214,40 @@ npm run routes         # Regenerate TanStack Router route tree
 VITE_SHOW_DEBUG_PANEL=true   # Show debug panel in dev (default: true)
 ```
 
-Copy `.env.example` to `.env.local` and set the variables you need (Alchemy, Live AI keys, payment contract, etc.). See `.env.example` for all options.
-
-### Production
-
-**Build:** `npm run build` (output in `dist/`). Full check before release: `npm run verify`.
-
-**Required env for production (Vite exposes only `VITE_*` at build time):**
-
-| Variable | Purpose |
-|--------|--------|
-| `VITE_ALCHEMY_API_KEY` | Account Kit / Connect Wallet |
-| `VITE_ALCHEMY_POLICY_ID` | Account Kit policy |
-| `VITE_ARBITRUM_PAYMENT_CONTRACT` | Live AI billing (Arbitrum) |
-| `VITE_TREASURY_ADDRESS` | Payment contract treasury |
-| `VITE_DAYDREAM_API_KEY` or `VITE_LIVEPEER_STUDIO_API_KEY` | Live AI streams |
-
-**Optional:** `VITE_USE_MAINNET=true` (mainnet chains in dev); `VITE_STYLUS_STYLE_REGISTRY` (Phase 2 style registry); `VITE_METOKEN_REGISTRY_BASE` (Phase 2 MeToken gating).
-
-**Coinbase-hosted onramp (Buy USDC):** The wallet dropdown and Live AI “Top up USDC” flow open a Coinbase-hosted onramp URL. The serverless endpoint `api/onramp-url` must be configured with **server-side only** env vars (Vercel: Project → Settings → Environment Variables): `COINBASE_CDP_API_KEY_NAME` and `COINBASE_CDP_API_KEY_SECRET` from the [Coinbase CDP Portal](https://portal.cdp.coinbase.com/projects/api-keys). Optional frontend `VITE_ONRAMP_API_URL` if the onramp API is on a different origin.
-
-**Deploy (e.g. Vercel):** Set the same `VITE_*` variables in the project’s Environment Variables. Do **not** put `DEPLOYER_PRIVATE_KEY` or other secrets in the hosting env; those stay in local `.env.local` for contract deploy scripts only.
-
-**Contracts (already deployed):**
-
-- **PaymentContract (Arbitrum):** Solidity; USDC payments and treasury. Deploy with Hardhat: `npx hardhat run scripts/deploy-payment.ts --network arbitrumOne`.
-- **StyleRegistry (Arbitrum Stylus):** Rust/WASM; style → creator. Deploy from `contracts/stylus`: `cargo stylus deploy --endpoint <RPC> --private-key <KEY>`.
-
 ### Project Structure
 
 ```text
 src/
 |- app/                     # App bootstrap and providers
 |- domain/                  # Framework-agnostic domain logic
-|- infrastructure/          # Browser/storage/worker adapters
+|  |- animation/             # Easing functions and interpolation
+|  |- projects/              # Project domain types
+|  \- timeline/              # Transitions (engine, registry, renderers)
+|- infrastructure/          # Browser/storage/GPU adapters
+|- lib/
+|  |- gpu-effects/           # WebGPU effect pipeline + shader definitions
+|  |- gpu-transitions/       # WebGPU transition pipeline + shaders
+|  |- gpu-compositor/        # WebGPU blend mode compositor
+|  |- gpu-scopes/            # WebGPU waveform/vectorscope/histogram
+|  |- masks/                 # Mask texture management
+|  |- analysis/              # Optical flow and scene detection
+|  |- thumbnails/            # GPU-accelerated thumbnail renderer
+|  |- fonts/                 # Font loading
+|  |- shapes/                # Shape path generators
+|  \- migrations/            # Data migration system
 |- features/
 |  |- editor/                # Editor shell, toolbar, panels, stores
 |  |- timeline/              # Multi-track timeline, actions, services
-|  |- preview/               # Preview canvas, transform gizmo
+|  |- preview/               # Preview canvas, transform gizmo, GPU scopes
 |  |- player/                # Playback engine (Clock, composition)
-|  |- composition-runtime/   # Composition rendering runtime (sequences/items/audio)
+|  |- composition-runtime/   # Composition rendering (sequences/items/audio/transitions)
 |  |- export/                # WebCodecs export pipeline (Web Worker)
-|  |- effects/               # Visual effects (CSS filters, glitch, halftone, vignette)
+|  |- effects/               # GPU effect system and UI panels
 |  |- keyframes/             # Keyframe animation, Bezier editor, easing
-|  |- media-library/         # Media import, metadata, OPFS proxies
+|  |- media-library/         # Media import, metadata, OPFS proxies, transcription
 |  |- project-bundle/        # Project ZIP export/import
 |  |- projects/              # Project management
-|  \- settings/             # App settings
+|  \- settings/              # App settings, keyboard shortcut editor
 |- shared/                  # Shared UI/state/utilities across layers
 |- components/ui/            # shadcn/ui components
 |- config/hotkeys.ts         # Keyboard shortcut definitions
@@ -228,10 +259,11 @@ Architecture boundary policy and migration plan: `docs/architecture-boundaries.m
 
 ## Contributing
 
-1. **Report bugs** — open an issue
-2. **Suggest features** — start a discussion
+FreeCut is open source but not open contribution — pull requests are not accepted at this time.
+
+- **Report bugs** — open an issue
+- **Suggest features** — start a discussion
 
 ## License
 
 [MIT](LICENSE)
-

@@ -367,6 +367,26 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       // >= 3 ensures the decoder has data beyond the current position,
       // preventing audio stutter on play start after seeking.
       if (audio.paused && audio.readyState >= 3) {
+        // After a large seek (e.g. element remounted at currentTime=0 but target
+        // is 70s in), wait for the browser to finish seeking before playing.
+        // Playing immediately after a large currentTime assignment causes audible
+        // jitter because the decoder hasn't buffered the new position yet.
+        const seekDistance = Math.abs(drift);
+        if (seekDistance > 1 && !audio.seeking) {
+          // Seek was large but already completed — safe to play
+        } else if (seekDistance > 1 && audio.seeking) {
+          // Still seeking — defer play until seeked event
+          const onSeeked = () => {
+            audio.removeEventListener('seeked', onSeeked);
+            if (usePlaybackStore.getState().isPlaying && audio.paused) {
+              const ctx = gainNodeRef.current ? getSharedAudioContext() : null;
+              if (ctx?.state === 'suspended') ctx.resume();
+              audio.play().catch(() => {});
+            }
+          };
+          audio.addEventListener('seeked', onSeeked, { once: true });
+          return; // Don't play yet
+        }
         // Resume shared context when this clip is using Web Audio gain.
         const sharedContext = gainNodeRef.current ? getSharedAudioContext() : null;
         if (sharedContext?.state === 'suspended') {

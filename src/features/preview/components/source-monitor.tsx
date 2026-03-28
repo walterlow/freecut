@@ -13,7 +13,9 @@ import {
 import { SourceComposition } from './source-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
+import { useSettingsStore } from '@/features/preview/deps/settings';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 
 interface SourceMonitorProps {
   mediaId: string;
@@ -39,7 +41,8 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
     }
   }, [media, onClose]);
 
-  // Resolve blob URL
+  // Resolve the original source URL once. SourceComposition can swap to a
+  // ready proxy for video preview without losing the original fallback URL.
   useEffect(() => {
     let cancelled = false;
     resolveMediaUrl(mediaId).then((url) => {
@@ -76,6 +79,7 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
           durationInFrames={durationInFrames}
         >
           <SourceMonitorInner
+            mediaId={mediaId}
             src={blobUrl}
             mediaType={mediaType}
             fileName={media.fileName}
@@ -94,6 +98,7 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
 // -- Inner component (rendered inside provider tree) --
 
 interface SourceMonitorInnerProps {
+  mediaId: string;
   src: string;
   mediaType: 'video' | 'audio' | 'image';
   fileName: string;
@@ -105,6 +110,7 @@ interface SourceMonitorInnerProps {
 }
 
 function SourceMonitorInner({
+  mediaId,
   src,
   mediaType,
   fileName,
@@ -117,17 +123,17 @@ function SourceMonitorInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentHostRef = useRef<HTMLDivElement>(null);
   const contentScaleRef = useRef<HTMLDivElement>(null);
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
 
-  // Scale composition to fit container - subtract same padding as program monitor
-  const PADDING_PX = 48;
   const updateLayout = useCallback(() => {
     const container = containerRef.current;
     const host = contentHostRef.current;
     const scaleDiv = contentScaleRef.current;
     if (!container || !host || !scaleDiv) return;
 
-    const cw = Math.max(0, container.clientWidth - PADDING_PX);
-    const ch = Math.max(0, container.clientHeight - PADDING_PX);
+    const cw = Math.max(0, container.clientWidth - editorLayout.previewPadding);
+    const ch = Math.max(0, container.clientHeight - editorLayout.previewPadding);
     const scale = cw > 0 && ch > 0
       ? Math.min(cw / mediaWidth, ch / mediaHeight)
       : 1;
@@ -143,7 +149,7 @@ function SourceMonitorInner({
     scaleDiv.style.width = `${mediaWidth}px`;
     scaleDiv.style.height = `${mediaHeight}px`;
     scaleDiv.style.transform = `scale(${scale})`;
-  }, [mediaWidth, mediaHeight]);
+  }, [editorLayout.previewPadding, mediaWidth, mediaHeight]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -237,7 +243,10 @@ function SourceMonitorInner({
       onKeyDown={handleKeyDown}
     >
       {/* Header */}
-      <div className="h-9 border-b border-border flex items-center px-3 justify-between shrink-0">
+      <div
+        className="border-b border-border flex items-center px-3 justify-between shrink-0"
+        style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
+      >
         <span className="text-xs text-muted-foreground truncate">
           Source: {fileName}
         </span>
@@ -270,6 +279,7 @@ function SourceMonitorInner({
               style={{ transformOrigin: 'top left' }}
             >
               <SourceComposition
+                mediaId={mediaId}
                 src={src}
                 mediaType={mediaType}
                 fileName={fileName}
@@ -283,7 +293,7 @@ function SourceMonitorInner({
         )}
       </div>
 
-      {/* Controls bar - same h-16 as program monitor */}
+      {/* Controls bar - same height as program monitor */}
       <SourcePlaybackControls durationInFrames={durationInFrames} fps={fps} />
     </div>
   );
@@ -448,7 +458,10 @@ function SourcePlaybackControls({
   }, [player]);
 
   return (
-    <div className="h-16 border-t border-border panel-header flex flex-col justify-center px-4 shrink-0 gap-1.5">
+    <div
+      className="border-t border-border panel-header flex flex-col justify-center px-4 shrink-0 gap-1.5"
+      style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+    >
       {/* Progress bar with I/O markers drawn on top */}
       <div
         ref={barRef}
@@ -495,7 +508,7 @@ function SourcePlaybackControls({
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => player.seek(0)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(0)}>
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -503,7 +516,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => player.frameBack(1)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameBack(1)}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -511,15 +524,15 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" className="h-8 w-8" onClick={() => player.toggle()}>
-                {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+              <Button size="icon" className="h-6 w-6" onClick={() => player.toggle()}>
+                {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top">{playing ? 'Pause' : 'Play'} (Space)</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => player.frameForward(1)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameForward(1)}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -527,7 +540,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => player.seek(lastFrame)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(lastFrame)}>
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -542,7 +555,7 @@ function SourcePlaybackControls({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-6 w-6"
                 disabled={inPoint === null && outPoint === null}
                 onClick={handleReplaySegment}
               >
@@ -553,7 +566,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleMarkIn}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkIn}>
                 <ArrowLeftToLine className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -561,7 +574,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleMarkOut}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkOut}>
                 <ArrowRightToLine className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -569,7 +582,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClearIO}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearIO}>
                 <XCircle className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -578,7 +591,7 @@ function SourcePlaybackControls({
           <div className="w-px h-4 bg-border mx-0.5" />
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => performInsertEdit()}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performInsertEdit()}>
                 <ArrowDownToLine className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -586,7 +599,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => performOverwriteEdit()}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performOverwriteEdit()}>
                 <Replace className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -597,4 +610,3 @@ function SourcePlaybackControls({
     </div>
   );
 }
-

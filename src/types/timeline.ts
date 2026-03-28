@@ -1,5 +1,6 @@
 import type { TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
+import type { BlendMode } from './blend-modes';
 
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
@@ -27,9 +28,24 @@ type BaseTimelineItem = {
   // Video properties (for video items)
   fadeIn?: number; // Video fade in duration in seconds (default: 0)
   fadeOut?: number; // Video fade out duration in seconds (default: 0)
-  // Visual effects (CSS filters, glitch effects)
+  // Visual effects (GPU shader effects)
   effects?: ItemEffect[];
+  // Blend mode for layer compositing (default: 'normal')
+  blendMode?: BlendMode;
+  // Corner pin transform (perspective warp)
+  cornerPin?: {
+    topLeft: [number, number];
+    topRight: [number, number];
+    bottomRight: [number, number];
+    bottomLeft: [number, number];
+  };
 };
+
+export interface GeneratedCaptionSource {
+  type: 'transcript';
+  clipId: string;
+  mediaId: string;
+}
 
 // Discriminated union types for different item types
 export type VideoItem = BaseTimelineItem & {
@@ -52,6 +68,7 @@ export type AudioItem = BaseTimelineItem & {
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
+  captionSource?: GeneratedCaptionSource;
   // Typography
   fontSize?: number; // Font size in pixels (default: 60)
   fontFamily?: string; // Font family name (default: 'Inter')
@@ -88,7 +105,7 @@ export type ImageItem = BaseTimelineItem & {
   sourceHeight?: number;
 };
 
-export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart';
+export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart' | 'path';
 
 export type ShapeItem = BaseTimelineItem & {
   type: 'shape';
@@ -103,6 +120,8 @@ export type ShapeItem = BaseTimelineItem & {
   direction?: 'up' | 'down' | 'left' | 'right';  // Triangle only
   points?: number;              // Star (5 default), Polygon (6 default)
   innerRadius?: number;         // Star only (ratio 0-1 of outer)
+  // Path shape (custom bezier path drawn with pen tool)
+  pathVertices?: import('@/types/masks').MaskVertex[];  // Normalized 0-1 vertices for 'path' shapeType
   // Mask properties
   isMask?: boolean;             // When true, shape acts as mask for lower tracks
   maskType?: 'clip' | 'alpha';  // clip = hard edges, alpha = soft edges

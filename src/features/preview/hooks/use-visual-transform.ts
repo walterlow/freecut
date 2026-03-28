@@ -5,12 +5,11 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import { useTimelineStore, type TimelineState } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
-import { useGizmoStore, isFullTransform } from '@/features/preview/stores/gizmo-store';
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
-  resolveTransform,
-  getSourceDimensions,
+  applyTransformOverride,
+  resolveItemTransformAtFrame,
 } from '@/features/preview/deps/composition-runtime';
-import { resolveAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { expandTextTransformForPreview } from '../utils/text-layout';
 
 interface ProjectSize {
@@ -35,6 +34,7 @@ export function useVisualTransforms(
   projectSize: ProjectSize
 ): Map<string, ResolvedTransform> {
   const allKeyframes = useTimelineStore((s: TimelineState) => s.keyframes);
+  const fps = useTimelineStore((s: TimelineState) => s.fps);
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
@@ -55,32 +55,18 @@ export function useVisualTransforms(
 
   return useMemo(() => {
     const transforms = new Map<string, ResolvedTransform>();
+    const canvas = { width: projectSize.width, height: projectSize.height, fps };
 
     for (const item of items) {
-      const sourceDimensions = getSourceDimensions(item);
-      const baseResolved = resolveTransform(
-        item,
-        { width: projectSize.width, height: projectSize.height, fps: 30 },
-        sourceDimensions
-      );
-
       const itemKeyframes = allKeyframes.find((k: ItemKeyframes) => k.itemId === item.id);
-      const relativeFrame = animationFrame - item.from;
-      let animatedTransform = baseResolved;
-      if (itemKeyframes) {
-        animatedTransform = resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
-      }
+      const animatedTransform = resolveItemTransformAtFrame(item, {
+        canvas,
+        frame: animationFrame,
+        keyframes: itemKeyframes,
+      });
 
       if (activeGizmo?.itemId === item.id && gizmoPreviewTransform) {
-        let gizmoTransform: ResolvedTransform = {
-          x: gizmoPreviewTransform.x,
-          y: gizmoPreviewTransform.y,
-          width: gizmoPreviewTransform.width,
-          height: gizmoPreviewTransform.height,
-          rotation: gizmoPreviewTransform.rotation,
-          opacity: gizmoPreviewTransform.opacity,
-          cornerRadius: gizmoPreviewTransform.cornerRadius ?? 0,
-        };
+        let gizmoTransform = applyTransformOverride(animatedTransform, gizmoPreviewTransform);
         gizmoTransform = applyTextExpansion(item, gizmoTransform, preview);
         transforms.set(item.id, gizmoTransform);
         continue;
@@ -88,24 +74,7 @@ export function useVisualTransforms(
 
       const previewTransform = preview?.[item.id]?.transform;
       if (previewTransform) {
-        let resolvedPreview: ResolvedTransform;
-        if (isFullTransform(previewTransform)) {
-          resolvedPreview = {
-            x: previewTransform.x,
-            y: previewTransform.y,
-            width: previewTransform.width,
-            height: previewTransform.height,
-            rotation: previewTransform.rotation,
-            opacity: previewTransform.opacity ?? animatedTransform.opacity,
-            cornerRadius: previewTransform.cornerRadius ?? animatedTransform.cornerRadius,
-          };
-        } else {
-          resolvedPreview = {
-            ...animatedTransform,
-            ...previewTransform,
-            cornerRadius: previewTransform.cornerRadius ?? animatedTransform.cornerRadius,
-          };
-        }
+        let resolvedPreview = applyTransformOverride(animatedTransform, previewTransform);
         resolvedPreview = applyTextExpansion(item, resolvedPreview, preview);
         transforms.set(item.id, resolvedPreview);
         continue;
@@ -115,5 +84,5 @@ export function useVisualTransforms(
     }
 
     return transforms;
-  }, [items, projectSize, allKeyframes, animationFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview]);
+  }, [items, projectSize, allKeyframes, animationFrame, activeGizmo?.itemId, gizmoPreviewTransform, preview, fps]);
 }
