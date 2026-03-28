@@ -7,6 +7,7 @@ describe('DopesheetEditor property groups', () => {
   beforeAll(() => {
     class ResizeObserverMock {
       observe() {}
+      unobserve() {}
       disconnect() {}
     }
 
@@ -158,6 +159,25 @@ describe('DopesheetEditor property groups', () => {
     expect(screen.getByRole('button', { name: /show x position curve/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /show y position curve/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /show rotation curve/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows a single horizontal zoom slider in the toolbar', () => {
+    renderEditor();
+
+    expect(screen.getAllByRole('slider')).toHaveLength(1);
+  });
+
+  it('shows horizontal and vertical zoom sliders in graph mode', () => {
+    renderEditor({
+      visualizationMode: 'graph',
+      keyframesByProperty: {
+        x: [{ id: 'kf-x', frame: 10, value: 100, easing: 'linear' }],
+      },
+      propertyValues: { x: 100 },
+      selectedProperty: 'x',
+    });
+
+    expect(screen.getAllByRole('slider')).toHaveLength(2);
   });
 
   it('shows interpolation icon controls only in graph view', () => {

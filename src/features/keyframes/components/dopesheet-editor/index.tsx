@@ -3,7 +3,7 @@
  * Shows keyframes across properties as draggable diamonds on a frame grid.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import {
   ClipboardPaste,
@@ -14,14 +14,13 @@ import {
   ChevronRight,
   LineChart,
   Lock,
-  Maximize2,
+  MoveHorizontal,
+  MoveVertical,
   MoreHorizontal,
   Scissors,
   Timer,
   Trash2,
   X,
-  ZoomIn,
-  ZoomOut,
   Magnet,
 } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
@@ -56,6 +55,7 @@ import { KeyframeTimingStrip } from './keyframe-timing-strip';
 import { normalizeKeyframeNavigatorViewport } from './compact-navigator-utils';
 import { getDopesheetRowControlState } from './row-controls';
 import { getPropertyAccordionGroups } from './property-groups';
+import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-utils';
 import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints';
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store';
@@ -497,6 +497,134 @@ function saveGraphVisibleProperties(itemId: string, properties: Set<AnimatablePr
   }
 }
 
+function clampZoomValue(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+interface MiniZoomControlProps {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  disabled?: boolean;
+  onValueChange: (value: number) => void;
+  onReset?: () => void;
+}
+
+function MiniZoomControl({
+  icon,
+  label,
+  value,
+  disabled = false,
+  onValueChange,
+  onReset,
+}: MiniZoomControlProps) {
+  const trackRef = useRef<HTMLButtonElement | null>(null);
+
+  const updateValueFromClientX = useCallback(
+    (clientX: number) => {
+      const track = trackRef.current;
+      if (!track) {
+        return;
+      }
+
+      const rect = track.getBoundingClientRect();
+      const horizontalPadding = 4;
+      const usableWidth = Math.max(1, rect.width - horizontalPadding * 2);
+      const nextValue = ((clientX - rect.left - horizontalPadding) / usableWidth) * 100;
+      onValueChange(clampZoomValue(nextValue));
+    },
+    [onValueChange]
+  );
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (disabled || event.button !== 0) {
+        return;
+      }
+
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      updateValueFromClientX(event.clientX);
+    },
+    [disabled, updateValueFromClientX]
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (disabled || !event.currentTarget.hasPointerCapture(event.pointerId)) {
+        return;
+      }
+
+      updateValueFromClientX(event.clientX);
+    },
+    [disabled, updateValueFromClientX]
+  );
+
+  const handlePointerRelease = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      if (disabled) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        onValueChange(clampZoomValue(value - 5));
+      } else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        onValueChange(clampZoomValue(value + 5));
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        onValueChange(0);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        onValueChange(100);
+      }
+    },
+    [disabled, onValueChange, value]
+  );
+
+  const thumbLeft = `calc(4px + ${(clampZoomValue(value) / 100).toFixed(4)} * (100% - 8px))`;
+
+  return (
+    <div className="flex items-center gap-1 rounded-md border border-border/70 bg-background/70 px-1 py-0.5">
+      <span className="flex h-4 w-4 items-center justify-center text-muted-foreground">{icon}</span>
+      <button
+        ref={trackRef}
+        type="button"
+        role="slider"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(clampZoomValue(value))}
+        disabled={disabled}
+        title={onReset ? `${label} - double-click to reset` : label}
+        className={cn(
+          'relative h-5 w-16 rounded-sm outline-none transition-colors',
+          disabled ? 'cursor-default opacity-50' : 'cursor-ew-resize'
+        )}
+        onDoubleClick={onReset}
+        onKeyDown={handleKeyDown}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerRelease}
+        onPointerCancel={handlePointerRelease}
+      >
+        <span className="pointer-events-none absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-muted-foreground/45" />
+        <span
+          className="pointer-events-none absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-orange-400/80 bg-background shadow-[0_0_0_1px_rgba(0,0,0,0.35)]"
+          style={{ left: thumbLeft }}
+        />
+      </button>
+    </div>
+  );
+}
+
 export const DopesheetEditor = memo(function DopesheetEditor({
   frameViewport,
   onFrameViewportChange,
@@ -661,6 +789,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const [lockedProperties, setLockedProperties] = useState<Partial<Record<AnimatableProperty, boolean>>>({});
   const [graphRulerUnit, setGraphRulerUnit] = useState<'frames' | 'seconds'>('frames');
   const [showAllGraphHandles, setShowAllGraphHandles] = useState(false);
+  const [autoZoomGraphHeight, setAutoZoomGraphHeight] = useState(true);
+  const [graphVerticalZoomValue, setGraphVerticalZoomValue] = useState(0);
   const [graphVisibleProperties, setGraphVisibleProperties] = useState<Set<AnimatableProperty>>(() =>
     loadGraphVisibleProperties(itemId, availableProperties, selectedProperty)
   );
@@ -685,6 +815,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
     saveGraphVisibleProperties(itemId, graphVisibleProperties);
   }, [graphVisibleProperties, itemId]);
+
+  useEffect(() => {
+    setGraphVerticalZoomValue(0);
+  }, [itemId, autoZoomGraphHeight]);
 
   useEffect(() => {
     const groupIds = new Set(allPropertyGroups.map((group) => group.id));
@@ -1072,6 +1206,42 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   );
 
   const frameRange = Math.max(1, viewport.endFrame - viewport.startFrame);
+  const horizontalZoomRatioBase = useMemo(
+    () => Math.max(1, contentFrameMax / Math.max(1, minViewportFrames)),
+    [contentFrameMax, minViewportFrames]
+  );
+  const horizontalZoomValue = useMemo(() => {
+    if (horizontalZoomRatioBase <= 1) {
+      return 0;
+    }
+
+    const normalized = Math.log(contentFrameMax / Math.max(1, frameRange)) / Math.log(horizontalZoomRatioBase);
+    return Math.max(0, Math.min(100, normalized * 100));
+  }, [contentFrameMax, frameRange, horizontalZoomRatioBase]);
+  const visibleGraphProperties = useMemo(
+    () => [...graphVisibleProperties],
+    [graphVisibleProperties]
+  );
+  const graphBaseValueRange = useMemo(
+    () => getCombinedGraphValueRange(
+      visibleGraphProperties.map((property) => PROPERTY_VALUE_RANGES[property] ?? null),
+      visibleGraphProperties.map((property) => keyframesByProperty[property] ?? []),
+      autoZoomGraphHeight
+    ),
+    [autoZoomGraphHeight, keyframesByProperty, visibleGraphProperties]
+  );
+  const graphBaseValueSpan = useMemo(
+    () => Math.max(0.0001, graphBaseValueRange.max - graphBaseValueRange.min),
+    [graphBaseValueRange]
+  );
+  const graphMinZoomValueSpan = useMemo(
+    () => Math.max(graphBaseValueSpan * 0.02, 0.0001),
+    [graphBaseValueSpan]
+  );
+  const verticalZoomRatioBase = useMemo(
+    () => Math.max(1, graphBaseValueSpan / graphMinZoomValueSpan),
+    [graphBaseValueSpan, graphMinZoomValueSpan]
+  );
   const fallbackTimelineWidth = Math.max(width - PROPERTY_COLUMN_WIDTH, 1);
   const effectiveTimelineWidth = Math.max(
     timelineWidth || fallbackTimelineWidth,
@@ -1315,17 +1485,17 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const zoomAroundFrame = useCallback(
     (centerFrame: number, factor: number) => {
-        updateViewport((prev) => {
-          const prevRange = Math.max(1, prev.endFrame - prev.startFrame);
-          const nextRange = Math.max(minViewportFrames, Math.min(contentFrameMax, Math.round(prevRange * factor)));
-          const ratio = (centerFrame - prev.startFrame) / prevRange;
-          let nextStart = Math.round(centerFrame - ratio * nextRange);
-          let nextEnd = nextStart + nextRange;
+      updateViewport((prev) => {
+        const prevRange = Math.max(1, prev.endFrame - prev.startFrame);
+        const nextRange = Math.max(minViewportFrames, Math.min(contentFrameMax, Math.round(prevRange * factor)));
+        const ratio = (centerFrame - prev.startFrame) / prevRange;
+        let nextStart = Math.round(centerFrame - ratio * nextRange);
+        let nextEnd = nextStart + nextRange;
 
-          if (nextStart < 0) {
-            nextEnd -= nextStart;
-            nextStart = 0;
-          }
+        if (nextStart < 0) {
+          nextEnd -= nextStart;
+          nextStart = 0;
+        }
         if (nextEnd > contentFrameMax) {
           const overflow = nextEnd - contentFrameMax;
           nextStart = Math.max(0, nextStart - overflow);
@@ -1335,6 +1505,41 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       });
     },
     [contentFrameMax, minViewportFrames, normalizeViewport, updateViewport]
+  );
+  const setHorizontalZoomValue = useCallback(
+    (nextValue: number) => {
+      if (horizontalZoomRatioBase <= 1) {
+        return;
+      }
+
+      const normalized = Math.max(0, Math.min(1, nextValue / 100));
+      const nextRange = Math.max(
+        minViewportFrames,
+        Math.min(
+          contentFrameMax,
+          Math.round(contentFrameMax / Math.pow(horizontalZoomRatioBase, normalized))
+        )
+      );
+
+      updateViewport((prev) => {
+        const centerFrame = (prev.startFrame + prev.endFrame) / 2;
+        let nextStart = Math.round(centerFrame - nextRange / 2);
+        let nextEnd = nextStart + nextRange;
+
+        if (nextStart < 0) {
+          nextEnd -= nextStart;
+          nextStart = 0;
+        }
+        if (nextEnd > contentFrameMax) {
+          const overflow = nextEnd - contentFrameMax;
+          nextStart = Math.max(0, nextStart - overflow);
+          nextEnd = contentFrameMax;
+        }
+
+        return normalizeViewport({ startFrame: nextStart, endFrame: nextEnd });
+      });
+    },
+    [contentFrameMax, horizontalZoomRatioBase, minViewportFrames, normalizeViewport, updateViewport]
   );
 
   const panFrames = useCallback(
@@ -3274,36 +3479,27 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               <Magnet className="h-3 w-3" />
             </Button>
             <div className="mx-0.5 h-3.5 w-px bg-border/80" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={() => zoomAroundFrame(currentFrame, ZOOM_OUT_FACTOR)}
-              disabled={disabled}
-              title="Zoom out"
-            >
-              <ZoomOut className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={() => zoomAroundFrame(currentFrame, ZOOM_IN_FACTOR)}
-              disabled={disabled}
-              title="Zoom in"
-            >
-              <ZoomIn className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={resetViewport}
-              disabled={disabled}
-              title="Fit to clip"
-            >
-              <Maximize2 className="h-3 w-3" />
-            </Button>
+            <MiniZoomControl
+              icon={<MoveHorizontal className="h-3 w-3" />}
+              label="Horizontal zoom"
+              value={horizontalZoomValue}
+              disabled={disabled || horizontalZoomRatioBase <= 1}
+              onValueChange={setHorizontalZoomValue}
+              onReset={resetViewport}
+            />
+            {visualizationMode === 'graph' && (
+              <>
+                <div className="mx-0.5 h-3.5 w-px bg-border/80" />
+                <MiniZoomControl
+                  icon={<MoveVertical className="h-3 w-3" />}
+                  label="Vertical zoom"
+                  value={graphVerticalZoomValue}
+                  disabled={disabled || visibleGraphProperties.length === 0 || verticalZoomRatioBase <= 1}
+                  onValueChange={setGraphVerticalZoomValue}
+                  onReset={() => setGraphVerticalZoomValue(0)}
+                />
+              </>
+            )}
           </div>
           {visualizationMode === 'graph' && (
             <DropdownMenu>
@@ -3347,6 +3543,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 >
                   <Check className={cn('h-3.5 w-3.5', !showAllGraphHandles && 'opacity-0')} />
                   Show All Handles
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setAutoZoomGraphHeight((prev) => !prev);
+                  }}
+                >
+                  <Check className={cn('h-3.5 w-3.5', !autoZoomGraphHeight && 'opacity-0')} />
+                  Auto Zoom Graph Height
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3434,6 +3639,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                       borderless
                       showAllHandles={showAllGraphHandles}
                       rulerUnit={graphRulerUnit}
+                      autoZoomGraphHeight={autoZoomGraphHeight}
+                      externalValueZoomLevel={graphVerticalZoomValue}
                       hideXLabels
                       disabled={disabled || graphDisplayPropertyLocked}
                     />

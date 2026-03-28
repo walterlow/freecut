@@ -152,6 +152,72 @@ function DragGraph({
   );
 }
 
+function DragSensitivityGraph() {
+  const [selection, setSelection] = useState<Set<string>>(new Set(['kf-1']));
+  const sensitivityViewport: GraphViewport = {
+    width: 600,
+    height: 300,
+    startFrame: 0,
+    endFrame: 60,
+    minValue: 100,
+    maxValue: 110,
+  };
+
+  const points = useMemo(
+    () => [
+      {
+        keyframe: {
+          id: 'kf-1',
+          frame: 10,
+          value: 105,
+          easing: 'linear' as const,
+        },
+        itemId: 'item-1',
+        property: 'x' as const,
+        x: 120,
+        y: 120,
+        isSelected: selection.has('kf-1'),
+        isDragging: false,
+      },
+    ],
+    [selection]
+  );
+
+  const {
+    handleKeyframePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    previewValues,
+  } = useGraphInteraction({
+    viewport: sensitivityViewport,
+    padding: DEFAULT_GRAPH_PADDING,
+    points,
+    selectedKeyframeIds: selection,
+    onSelectionChange: setSelection,
+  });
+
+  return (
+    <svg
+      data-testid="sensitivity-graph"
+      width={sensitivityViewport.width}
+      height={sensitivityViewport.height}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    >
+      <circle
+        data-testid="sensitivity-point"
+        cx={points[0]!.x}
+        cy={points[0]!.y}
+        r={10}
+        onPointerDown={(event) => handleKeyframePointerDown(points[0]!, event)}
+      />
+      <text data-testid="sensitivity-preview-values">
+        {previewValues ? JSON.stringify(previewValues) : ''}
+      </text>
+    </svg>
+  );
+}
+
 function ZoomGraph() {
   const [liveViewport, setLiveViewport] = useState<GraphViewport>({
     ...viewport,
@@ -177,6 +243,76 @@ function ZoomGraph() {
       <button type="button" onClick={zoomIn}>zoom</button>
       <output data-testid="zoom-viewport">
         {`${liveViewport.startFrame},${liveViewport.endFrame}`}
+      </output>
+    </div>
+  );
+}
+
+function WheelZoomGraph() {
+  const [liveViewport, setLiveViewport] = useState<GraphViewport>({
+    ...viewport,
+    startFrame: 0,
+    endFrame: 100,
+    minValue: 0,
+    maxValue: 100,
+  });
+
+  const { handleWheel } = useGraphInteraction({
+    viewport: liveViewport,
+    padding: DEFAULT_GRAPH_PADDING,
+    points: basePoints,
+    selectedKeyframeIds: new Set(),
+    onViewportChange: setLiveViewport,
+    maxFrame: 100,
+    minValue: 0,
+    maxValue: 100,
+  });
+
+  return (
+    <div>
+      <svg
+        data-testid="wheel-graph"
+        width={viewport.width}
+        height={viewport.height}
+        onWheel={handleWheel}
+      />
+      <output data-testid="wheel-viewport">
+        {`${liveViewport.startFrame},${liveViewport.endFrame},${liveViewport.minValue},${liveViewport.maxValue}`}
+      </output>
+    </div>
+  );
+}
+
+function WheelPanGraph() {
+  const [liveViewport, setLiveViewport] = useState<GraphViewport>({
+    ...viewport,
+    startFrame: 10,
+    endFrame: 70,
+    minValue: 0,
+    maxValue: 100,
+  });
+
+  const { handleWheel } = useGraphInteraction({
+    viewport: liveViewport,
+    padding: DEFAULT_GRAPH_PADDING,
+    points: basePoints,
+    selectedKeyframeIds: new Set(),
+    onViewportChange: setLiveViewport,
+    maxFrame: 100,
+    minValue: 0,
+    maxValue: 100,
+  });
+
+  return (
+    <div>
+      <svg
+        data-testid="pan-wheel-graph"
+        width={viewport.width}
+        height={viewport.height}
+        onWheel={handleWheel}
+      />
+      <output data-testid="pan-wheel-viewport">
+        {`${liveViewport.startFrame},${liveViewport.endFrame},${liveViewport.minValue},${liveViewport.maxValue}`}
       </output>
     </div>
   );
@@ -217,7 +353,7 @@ describe('useGraphInteraction marquee selection', () => {
   it('shows a marquee overlay and updates selection while dragging on the graph background', () => {
     render(<TestGraph />);
 
-    const svg = screen.getByTestId('graph') as SVGSVGElement;
+    const svg = screen.getByTestId('graph') as unknown as SVGSVGElement;
     installSvgDomMocks(svg);
 
     fireEvent.pointerDown(screen.getByTestId('background'), {
@@ -245,7 +381,7 @@ describe('useGraphInteraction marquee selection', () => {
     const onKeyframeMove = vi.fn();
     render(<DragGraph onKeyframeMove={onKeyframeMove} />);
 
-    const svg = screen.getByTestId('drag-graph') as SVGSVGElement;
+    const svg = screen.getByTestId('drag-graph') as unknown as SVGSVGElement;
     installSvgDomMocks(svg);
 
     fireEvent.pointerDown(screen.getByTestId('point-kf-1'), {
@@ -274,6 +410,28 @@ describe('useGraphInteraction marquee selection', () => {
     expect(movedIds).toEqual(new Set(['kf-1', 'kf-2']));
   });
 
+  it('uses the visible y-range for drag sensitivity', () => {
+    render(<DragSensitivityGraph />);
+
+    const svg = screen.getByTestId('sensitivity-graph') as unknown as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    fireEvent.pointerDown(screen.getByTestId('sensitivity-point'), {
+      button: 0,
+      clientX: 120,
+      clientY: 120,
+      pointerId: 7,
+    });
+
+    fireEvent.pointerMove(svg, {
+      clientX: 120,
+      clientY: 96,
+      pointerId: 7,
+    });
+
+    expect(screen.getByTestId('sensitivity-preview-values')).toHaveTextContent('106');
+  });
+
   it('keeps the keyframe cluster in view when zooming with graph controls', () => {
     render(<ZoomGraph />);
 
@@ -285,5 +443,53 @@ describe('useGraphInteraction marquee selection', () => {
     const [startFrame, endFrame] = screen.getByTestId('zoom-viewport').textContent!.split(',').map(Number);
     expect(startFrame).toBe(0);
     expect(endFrame).toBeCloseTo(51.2, 4);
+  });
+
+  it('uses ctrl+wheel to zoom the frame axis without changing value bounds', () => {
+    render(<WheelZoomGraph />);
+
+    const svg = screen.getByTestId('wheel-graph') as unknown as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    fireEvent.wheel(svg, {
+      deltaY: -100,
+      ctrlKey: true,
+      clientX: 300,
+      clientY: 150,
+    });
+
+    const [startFrame = 0, endFrame = 0, minValue = 0, maxValue = 0] = screen
+      .getByTestId('wheel-viewport')
+      .textContent!
+      .split(',')
+      .map(Number);
+
+    expect(endFrame - startFrame).toBeCloseTo(80, 4);
+    expect(minValue).toBe(0);
+    expect(maxValue).toBe(100);
+  });
+
+  it('uses regular wheel to pan the frame viewport', () => {
+    render(<WheelPanGraph />);
+
+    const svg = screen.getByTestId('pan-wheel-graph') as unknown as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    fireEvent.wheel(svg, {
+      deltaY: 120,
+      clientX: 300,
+      clientY: 150,
+    });
+
+    const [startFrame = 0, endFrame = 0, minValue = 0, maxValue = 0] = screen
+      .getByTestId('pan-wheel-viewport')
+      .textContent!
+      .split(',')
+      .map(Number);
+
+    expect(startFrame).toBeGreaterThan(10);
+    expect(endFrame - startFrame).toBeCloseTo(60, 4);
+    expect(minValue).toBe(0);
+    expect(maxValue).toBe(100);
   });
 });

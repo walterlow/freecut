@@ -27,6 +27,8 @@ const DRAG_THRESHOLD = 3;
 
 /** Snap threshold in pixels - keyframes snap when within this distance */
 const SNAP_THRESHOLD_PX = 8;
+const FRAME_ZOOM_IN_FACTOR = 0.8;
+const FRAME_ZOOM_OUT_FACTOR = 1.25;
 
 /** Drag start state stored in ref to avoid stale closures */
 interface DragStartState {
@@ -853,6 +855,7 @@ export function useGraphInteraction({
         const graphWidth = viewport.width - padding.left - padding.right;
         const graphHeight = viewport.height - padding.top - padding.bottom;
         const frameRange = viewport.endFrame - viewport.startFrame;
+        const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue);
         const dx = event.clientX - mouseX;
         const dy = event.clientY - mouseY;
 
@@ -872,17 +875,16 @@ export function useGraphInteraction({
 
         // Calculate DELTA in graph coordinates (relative movement)
         let frameDelta = (dx / graphWidth) * frameRange;
-        let normalizedValueDelta = -(dy / graphHeight);
+        let valueDelta = -(dy / graphHeight) * valueRange;
 
         // Alt = fine adjustment (half speed)
         if (event.altKey) {
           frameDelta *= 0.5;
-          normalizedValueDelta *= 0.5;
+          valueDelta *= 0.5;
         }
 
-        const anchorValueRange = Math.max(0.0001, anchorInitialState.maxValue - anchorInitialState.minValue);
         let newFrame = anchorInitialState.frame + frameDelta;
-        let newValue = anchorInitialState.value + normalizedValueDelta * anchorValueRange;
+        let newValue = anchorInitialState.value + valueDelta;
 
         // Shift = constrain to axis
         if (event.shiftKey) {
@@ -927,7 +929,7 @@ export function useGraphInteraction({
         newFrame = anchorInitialState.frame + constrainedFrameDelta;
 
         const appliedFrameDelta = newFrame - anchorInitialState.frame;
-        const appliedNormalizedValueDelta = (newValue - anchorInitialState.value) / anchorValueRange;
+        const appliedValueDelta = newValue - anchorInitialState.value;
         const nextPreviewValues: Record<string, { frame: number; value: number }> = {};
 
         for (const [keyframeId, initialState] of initialKeyframeStates) {
@@ -938,8 +940,7 @@ export function useGraphInteraction({
           }
           nextFrame = clampToAvoidBlockedRanges(nextFrame, initialState.frame);
 
-          const pointValueRange = Math.max(0.0001, initialState.maxValue - initialState.minValue);
-          let nextValue = initialState.value + appliedNormalizedValueDelta * pointValueRange;
+          let nextValue = initialState.value + appliedValueDelta;
           nextValue = Math.max(initialState.minValue, Math.min(initialState.maxValue, nextValue));
 
           nextPreviewValues[keyframeId] = { frame: nextFrame, value: nextValue };
@@ -1141,37 +1142,42 @@ export function useGraphInteraction({
       const mouseY = event.clientY - rect.top;
 
       const { frameRange, valueRange } = graphDimensions;
-
-      // Calculate zoom factor
-      const zoomFactor = event.deltaY > 0 ? 1.1 : 0.9;
-
-      // Get current mouse position in graph coordinates
       const { frame: mouseFrame, value: mouseValue } = screenToGraph(mouseX, mouseY);
 
-      // Calculate new ranges centered on mouse position
-      const newFrameRange = frameRange * zoomFactor;
-      const newValueRange = valueRange * zoomFactor;
-
-      // Calculate how much of the range is before/after mouse
-      const frameRatioBefore = (mouseFrame - viewport.startFrame) / frameRange;
-      const valueRatioBelow = (mouseValue - viewport.minValue) / valueRange;
-
-      const newStartFrame = mouseFrame - newFrameRange * frameRatioBefore;
-      const newEndFrame = newStartFrame + newFrameRange;
-      const newMinValue = mouseValue - newValueRange * valueRatioBelow;
-      const newMaxValue = newMinValue + newValueRange;
-
-      callbacksRef.current.onViewportChange?.({
-        ...ensureKeyframesRemainVisible({
+      if (event.ctrlKey || event.metaKey) {
+        const zoomFactor = event.deltaY > 0 ? FRAME_ZOOM_OUT_FACTOR : FRAME_ZOOM_IN_FACTOR;
+        const newFrameRange = frameRange * zoomFactor;
+        const frameRatioBefore = (mouseFrame - viewport.startFrame) / frameRange;
+        const unclampedStartFrame = mouseFrame - newFrameRange * frameRatioBefore;
+        const nextViewport = ensureKeyframesRemainVisible({
           ...viewport,
-          startFrame: Math.max(0, newStartFrame),
-          endFrame: newEndFrame,
-          minValue: newMinValue,
-          maxValue: newMaxValue,
-        }),
-      });
+          startFrame: Math.max(0, unclampedStartFrame),
+          endFrame: Math.max(0, unclampedStartFrame) + newFrameRange,
+          minValue: viewport.minValue,
+          maxValue: viewport.maxValue,
+        });
+
+        callbacksRef.current.onViewportChange?.({
+          ...nextViewport,
+          minValue: viewport.minValue,
+          maxValue: viewport.maxValue,
+        });
+        return;
+      }
+
+      void mouseValue;
+      void valueRange;
+
+      const deltaFrames = Math.round((event.deltaY / Math.max(1, graphDimensions.graphWidth)) * frameRange);
+      callbacksRef.current.onViewportChange?.(
+        clampViewportToBounds({
+          ...viewport,
+          startFrame: viewport.startFrame + deltaFrames,
+          endFrame: viewport.endFrame + deltaFrames,
+        })
+      );
     },
-    [disabled, viewport, screenToGraph, graphDimensions, ensureKeyframesRemainVisible]
+    [disabled, viewport, screenToGraph, graphDimensions, ensureKeyframesRemainVisible, clampViewportToBounds]
   );
 
   // Handle background click (deselect)

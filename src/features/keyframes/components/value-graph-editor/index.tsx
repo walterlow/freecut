@@ -28,6 +28,7 @@ import { GraphTransitionRegions } from './graph-transition-regions';
 import { useGraphInteraction } from './use-graph-interaction';
 import { KeyframeSvgMarquee } from '../keyframe-marquee';
 import type { BlockedFrameRange } from '../../utils/transition-region';
+import { getCombinedGraphValueRange } from './value-range-utils';
 
 interface ValueGraphEditorProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
@@ -96,6 +97,10 @@ interface ValueGraphEditorProps {
   showAllHandles?: boolean;
   /** How to render the time ruler */
   rulerUnit?: 'frames' | 'seconds';
+  /** Automatically fit the Y range to the active curve values */
+  autoZoomGraphHeight?: boolean;
+  /** Optional externally controlled Y zoom level (0-100) */
+  externalValueZoomLevel?: number;
   /** Hide X-axis labels when an external ruler provides them */
   hideXLabels?: boolean;
   /** Whether the editor is disabled */
@@ -142,6 +147,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   borderless = false,
   showAllHandles = false,
   rulerUnit = 'frames',
+  autoZoomGraphHeight = false,
+  externalValueZoomLevel,
   hideXLabels = false,
   disabled = false,
   className,
@@ -193,6 +200,26 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 
   // Get property value range for fixed viewport bounds
   const propertyRange = viewportProperty ? PROPERTY_VALUE_RANGES[viewportProperty] : null;
+  const viewportValueRange = useMemo(
+    () => getCombinedGraphValueRange(
+      visibleProperties.map((property) => PROPERTY_VALUE_RANGES[property] ?? null),
+      visibleProperties.map((property) => keyframesByProperty[property] || []),
+      autoZoomGraphHeight
+    ),
+    [autoZoomGraphHeight, keyframesByProperty, visibleProperties]
+  );
+  const baseValueSpan = useMemo(
+    () => Math.max(0.0001, viewportValueRange.max - viewportValueRange.min),
+    [viewportValueRange]
+  );
+  const minZoomValueSpan = useMemo(
+    () => Math.max(baseValueSpan * 0.02, 0.0001),
+    [baseValueSpan]
+  );
+  const valueZoomRatioBase = useMemo(
+    () => Math.max(1, baseValueSpan / minZoomValueSpan),
+    [baseValueSpan, minZoomValueSpan]
+  );
 
   // Calculate viewport with fixed bounds based on property range and clip duration
   const calculateFittedViewport = useCallback((): GraphViewport => {
@@ -201,10 +228,10 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       height: graphHeight,
       startFrame: 0,
       endFrame: Math.max(totalFrames, 60),
-      minValue: propertyRange?.min ?? 0,
-      maxValue: propertyRange?.max ?? 1,
+      minValue: viewportValueRange.min,
+      maxValue: viewportValueRange.max,
     };
-  }, [totalFrames, width, graphHeight, propertyRange]);
+  }, [totalFrames, width, graphHeight, viewportValueRange]);
 
   const [viewport, setViewport] = useState<GraphViewport>(() => calculateFittedViewport());
   const updateViewport = useCallback(
@@ -265,6 +292,69 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     });
   }, [frameViewport]);
 
+  useEffect(() => {
+    if (externalValueZoomLevel === undefined) {
+      return;
+    }
+
+    setViewport((prev) => {
+      if (valueZoomRatioBase <= 1 || externalValueZoomLevel <= 0) {
+        if (prev.minValue === viewportValueRange.min && prev.maxValue === viewportValueRange.max) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          minValue: viewportValueRange.min,
+          maxValue: viewportValueRange.max,
+        };
+      }
+
+      const normalized = Math.max(0, Math.min(1, externalValueZoomLevel / 100));
+      const nextSpan = Math.max(
+        minZoomValueSpan,
+        baseValueSpan / Math.pow(valueZoomRatioBase, normalized)
+      );
+      const baseCenter = (viewportValueRange.min + viewportValueRange.max) / 2;
+      let center = (prev.minValue + prev.maxValue) / 2;
+
+      if (!Number.isFinite(center)) {
+        center = baseCenter;
+      }
+
+      let nextMin = center - nextSpan / 2;
+      let nextMax = center + nextSpan / 2;
+
+      if (nextMin < viewportValueRange.min) {
+        nextMax += viewportValueRange.min - nextMin;
+        nextMin = viewportValueRange.min;
+      }
+      if (nextMax > viewportValueRange.max) {
+        nextMin -= nextMax - viewportValueRange.max;
+        nextMax = viewportValueRange.max;
+      }
+
+      nextMin = Math.max(viewportValueRange.min, nextMin);
+      nextMax = Math.min(viewportValueRange.max, nextMax);
+
+      if (prev.minValue === nextMin && prev.maxValue === nextMax) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        minValue: nextMin,
+        maxValue: nextMax,
+      };
+    });
+  }, [
+    baseValueSpan,
+    externalValueZoomLevel,
+    minZoomValueSpan,
+    valueZoomRatioBase,
+    viewportValueRange,
+  ]);
+
   const createPointsForProperty = useCallback(
     (property: AnimatableProperty): GraphKeyframePoint[] => {
       const propertyKeyframes = keyframesByProperty[property] || [];
@@ -273,17 +363,14 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       const graphWidth = viewport.width - padding.left - padding.right;
       const graphHeight = viewport.height - padding.top - padding.bottom;
       const frameRange = viewport.endFrame - viewport.startFrame;
-      const range = PROPERTY_VALUE_RANGES[property];
-      const minValue = range?.min ?? 0;
-      const maxValue = range?.max ?? 1;
-      const valueRange = Math.max(0.0001, maxValue - minValue);
+      const valueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue);
 
       return propertyKeyframes.map((keyframe) => ({
         keyframe,
         itemId,
         property,
         x: graphLeft + ((keyframe.frame - viewport.startFrame) / frameRange) * graphWidth,
-        y: graphTop + (1 - (keyframe.value - minValue) / valueRange) * graphHeight,
+        y: graphTop + (1 - (keyframe.value - viewport.minValue) / valueRange) * graphHeight,
         isSelected: selectedKeyframeIds.has(keyframe.id),
         isDragging: false,
       }));
@@ -415,11 +502,10 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       return interactivePoints.map((point) => {
         const previewValue = previewValues[point.keyframe.id];
         if (previewValue) {
-          const range = PROPERTY_VALUE_RANGES[point.property];
-          const pointValueRange = Math.max(0.0001, range.max - range.min);
+          const pointValueRange = Math.max(0.0001, viewport.maxValue - viewport.minValue);
           // Calculate new screen position from preview values
           const newX = graphLeft + ((previewValue.frame - viewport.startFrame) / frameRange) * graphWidth;
-          const newY = graphTop + (1 - (previewValue.value - range.min) / pointValueRange) * graphHeight;
+          const newY = graphTop + (1 - (previewValue.value - viewport.minValue) / pointValueRange) * graphHeight;
           return {
             ...point,
             x: newX,
@@ -750,7 +836,6 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 
     const handleNativeWheel = (e: WheelEvent) => {
       e.preventDefault();
-      e.stopPropagation();
     };
 
     svg.addEventListener('wheel', handleNativeWheel, { passive: false });
