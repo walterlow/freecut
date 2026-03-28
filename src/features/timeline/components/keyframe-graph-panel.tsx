@@ -393,7 +393,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   // Track selected property for graph editor
   const [selectedProperty, setSelectedProperty] = useState<AnimatableProperty | null>(null);
-  const [, setActiveDopesheetProperty] = useState<AnimatableProperty | null>(null);
   const [editorMode, setEditorMode] = useState<KeyframeEditorMode>(() => loadKeyframeEditorMode());
   const [advancedControlsHeight, setAdvancedControlsHeight] = useState(0);
   const [bezierDraft, setBezierDraft] = useState<Record<BezierInputKey, string>>({
@@ -433,16 +432,6 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       setSelectedProperty(null);
     }
   }, [availableProperties, selectedProperty]);
-
-  useEffect(() => {
-    setActiveDopesheetProperty((prev) =>
-      prev && availableProperties.includes(prev) ? prev : null
-    );
-  }, [availableProperties]);
-
-  useEffect(() => {
-    setActiveDopesheetProperty(null);
-  }, [selectedItemForEditor?.id]);
 
   // Build keyframes by property for the graph editor
   const keyframesByProperty = useMemo(() => {
@@ -1417,7 +1406,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 onBezierHandleMove={handleBezierHandleMove}
                 onSelectionChange={handleSelectionChange}
                 onPropertyChange={handlePropertyChange}
-                onActivePropertyChange={setActiveDopesheetProperty}
+                onActivePropertyChange={setSelectedProperty}
                 onScrub={handleScrub}
                 onScrubEnd={handleScrubEnd}
                 onDragStart={handleDragStart}

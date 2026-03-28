@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ValueGraphEditor } from './index';
 import { DEFAULT_GRAPH_PADDING } from './types';
@@ -196,6 +196,36 @@ describe('ValueGraphEditor clipping', () => {
     );
 
     expect(container.querySelectorAll('.bezier-handle').length).toBeGreaterThan(0);
+  });
+
+  it('renders interactive keyframe points for visible overlay curves', () => {
+    const onPropertyChange = vi.fn();
+    const { container } = render(
+      <TooltipProvider>
+        <ValueGraphEditor
+          itemId="item-1"
+          keyframesByProperty={{
+            x: [{ id: 'kf-x', frame: 0, value: 100, easing: 'linear' }],
+            y: [{ id: 'kf-y', frame: 30, value: 200, easing: 'linear' }],
+          }}
+          selectedProperty="x"
+          overlayProperties={['x', 'y']}
+          width={480}
+          height={260}
+          totalFrames={60}
+          showToolbar={false}
+          onPropertyChange={onPropertyChange}
+        />
+      </TooltipProvider>
+    );
+
+    const keyframePoints = container.querySelectorAll('.graph-keyframe');
+    expect(keyframePoints).toHaveLength(2);
+
+    const pointHitAreas = container.querySelectorAll('.graph-keyframe circle');
+    fireEvent.click(pointHitAreas[1]!);
+
+    expect(onPropertyChange).toHaveBeenCalledWith('y');
   });
 
   it('renders a single visible handle for one-handle easing presets', () => {

@@ -56,6 +56,10 @@ interface ValueGraphEditorProps {
   height?: number;
   /** Callback when keyframe is moved */
   onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void;
+  /** Optional frame preview override for external X-axis scrubbing */
+  previewFramesById?: Record<string, number> | null;
+  /** Optional frame-delta constraint for horizontal drags */
+  constrainFrameDelta?: (deltaFrames: number, draggedKeyframeIds: string[]) => number;
   /** Callback when bezier handles are moved */
   onBezierHandleMove?: (ref: KeyframeRef, bezier: BezierControlPoints) => void;
   /** Callback when selection changes */
@@ -118,6 +122,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   width = 600,
   height = 300,
   onKeyframeMove,
+  previewFramesById = null,
+  constrainFrameDelta,
   onBezierHandleMove,
   onSelectionChange,
   onPropertyChange,
@@ -252,27 +258,37 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     });
   }, [frameViewport]);
 
+  const createPointsForProperty = useCallback(
+    (property: AnimatableProperty): GraphKeyframePoint[] => {
+      const propertyKeyframes = keyframesByProperty[property] || [];
+      const graphLeft = padding.left;
+      const graphTop = padding.top;
+      const graphWidth = viewport.width - padding.left - padding.right;
+      const graphHeight = viewport.height - padding.top - padding.bottom;
+      const frameRange = viewport.endFrame - viewport.startFrame;
+      const range = PROPERTY_VALUE_RANGES[property];
+      const minValue = range?.min ?? 0;
+      const maxValue = range?.max ?? 1;
+      const valueRange = Math.max(0.0001, maxValue - minValue);
+
+      return propertyKeyframes.map((keyframe) => ({
+        keyframe,
+        itemId,
+        property,
+        x: graphLeft + ((keyframe.frame - viewport.startFrame) / frameRange) * graphWidth,
+        y: graphTop + (1 - (keyframe.value - minValue) / valueRange) * graphHeight,
+        isSelected: selectedKeyframeIds.has(keyframe.id),
+        isDragging: false,
+      }));
+    },
+    [itemId, keyframesByProperty, padding, selectedKeyframeIds, viewport]
+  );
+
   // Convert keyframes to graph points
   const points = useMemo((): GraphKeyframePoint[] => {
     if (!displayProperty) return [];
-
-    const graphLeft = padding.left;
-    const graphTop = padding.top;
-    const graphWidth = viewport.width - padding.left - padding.right;
-    const graphHeight = viewport.height - padding.top - padding.bottom;
-    const frameRange = viewport.endFrame - viewport.startFrame;
-    const valueRange = viewport.maxValue - viewport.minValue;
-
-    return keyframes.map((keyframe) => ({
-      keyframe,
-      itemId,
-      property: displayProperty,
-      x: graphLeft + ((keyframe.frame - viewport.startFrame) / frameRange) * graphWidth,
-      y: graphTop + (1 - (keyframe.value - viewport.minValue) / valueRange) * graphHeight,
-      isSelected: selectedKeyframeIds.has(keyframe.id),
-      isDragging: false,
-    }));
-  }, [displayProperty, keyframes, itemId, viewport, padding, selectedKeyframeIds]);
+    return createPointsForProperty(displayProperty);
+  }, [createPointsForProperty, displayProperty]);
 
   // Overlay curve colors (muted, distinct)
   const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
@@ -281,37 +297,20 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   const overlayPointSets = useMemo((): Array<{ property: AnimatableProperty; points: GraphKeyframePoint[]; color: string }> => {
     if (!overlayProperties || overlayProperties.length === 0) return [];
 
-    const graphLeft = padding.left;
-    const graphTop = padding.top;
-    const graphWidth = viewport.width - padding.left - padding.right;
-    const graphHeight = viewport.height - padding.top - padding.bottom;
-    const frameRange = viewport.endFrame - viewport.startFrame;
-
     return overlayProperties
       .filter((prop) => prop !== displayProperty) // skip the primary property
       .map((prop, index) => {
-        const propKeyframes = keyframesByProperty[prop] || [];
-        if (propKeyframes.length === 0) return null;
-
-        const range = PROPERTY_VALUE_RANGES[prop];
-        const propMinValue = range?.min ?? 0;
-        const propMaxValue = range?.max ?? 1;
-        const propValueRange = propMaxValue - propMinValue;
-
-        const points: GraphKeyframePoint[] = propKeyframes.map((keyframe) => ({
-          keyframe,
-          itemId,
-          property: prop,
-          x: graphLeft + ((keyframe.frame - viewport.startFrame) / frameRange) * graphWidth,
-          y: graphTop + (1 - (keyframe.value - propMinValue) / propValueRange) * graphHeight,
-          isSelected: false,
-          isDragging: false,
-        }));
+        const points = createPointsForProperty(prop);
+        if (points.length === 0) return null;
 
         return { property: prop, points, color: OVERLAY_COLORS[index % OVERLAY_COLORS.length]! };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-  }, [overlayProperties, displayProperty, keyframesByProperty, itemId, viewport, padding]);
+  }, [OVERLAY_COLORS, createPointsForProperty, displayProperty, overlayProperties]);
+  const interactivePoints = useMemo(
+    () => [...points, ...overlayPointSets.flatMap((overlaySet) => overlaySet.points)],
+    [overlayPointSets, points]
+  );
 
   // Calculate snap targets for keyframe dragging
   const snapTargets = useMemo(() => {
@@ -376,7 +375,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   } = useGraphInteraction({
     viewport,
     padding,
-    points,
+    points: interactivePoints,
     selectedKeyframeIds,
     maxFrame: totalFrames,
     minValue: displayProperty ? PROPERTY_VALUE_RANGES[displayProperty]?.min : undefined,
@@ -384,6 +383,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     onViewportChange: updateViewport,
     onSelectionChange,
     onKeyframeMove,
+    constrainFrameDelta,
     onBezierHandleMove,
     onDragStart,
     onDragEnd,
@@ -403,14 +403,15 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       const graphWidth = viewport.width - padding.left - padding.right;
       const graphHeight = viewport.height - padding.top - padding.bottom;
       const frameRange = viewport.endFrame - viewport.startFrame;
-      const valueRange = viewport.maxValue - viewport.minValue;
 
-      return points.map((point) => {
+      return interactivePoints.map((point) => {
         const previewValue = previewValues[point.keyframe.id];
         if (previewValue) {
+          const range = PROPERTY_VALUE_RANGES[point.property];
+          const pointValueRange = Math.max(0.0001, range.max - range.min);
           // Calculate new screen position from preview values
           const newX = graphLeft + ((previewValue.frame - viewport.startFrame) / frameRange) * graphWidth;
-          const newY = graphTop + (1 - (previewValue.value - viewport.minValue) / valueRange) * graphHeight;
+          const newY = graphTop + (1 - (previewValue.value - range.min) / pointValueRange) * graphHeight;
           return {
             ...point,
             x: newX,
@@ -425,12 +426,63 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       });
     }
 
+    if (previewFramesById) {
+      const graphLeft = padding.left;
+      const graphWidth = viewport.width - padding.left - padding.right;
+      const frameRange = viewport.endFrame - viewport.startFrame;
+
+      return interactivePoints.map((point) => {
+        const previewFrame = previewFramesById[point.keyframe.id];
+        if (previewFrame === undefined) {
+          return {
+            ...point,
+            isDragging: false,
+          };
+        }
+
+        return {
+          ...point,
+          x: graphLeft + ((previewFrame - viewport.startFrame) / frameRange) * graphWidth,
+          isDragging: true,
+        };
+      });
+    }
+
     // Not dragging - just update isDragging flag
-    return points.map((point) => ({
+    return interactivePoints.map((point) => ({
       ...point,
       isDragging: dragState?.draggedKeyframeIds?.includes(point.keyframe.id) ?? false,
     }));
-  }, [points, dragState, isDragging, previewValues, viewport, padding]);
+  }, [interactivePoints, dragState, isDragging, previewValues, previewFramesById, viewport, padding]);
+  const primaryPointsWithDragState = useMemo(
+    () => pointsWithDragState.filter((point) => point.property === displayProperty),
+    [displayProperty, pointsWithDragState]
+  );
+  const overlayPointSetsWithDragState = useMemo(() => {
+    const pointById = new Map(pointsWithDragState.map((point) => [point.keyframe.id, point]));
+    return overlayPointSets.map((overlaySet) => ({
+      ...overlaySet,
+      points: overlaySet.points.map((point) => pointById.get(point.keyframe.id) ?? point),
+    }));
+  }, [overlayPointSets, pointsWithDragState]);
+  const handleVisibleKeyframePointerDown = useCallback(
+    (point: GraphKeyframePoint, event: React.PointerEvent) => {
+      if (point.property !== displayProperty) {
+        onPropertyChange?.(point.property);
+      }
+      handleKeyframePointerDown(point, event);
+    },
+    [displayProperty, handleKeyframePointerDown, onPropertyChange]
+  );
+  const handleVisibleKeyframeClick = useCallback(
+    (point: GraphKeyframePoint, event: React.MouseEvent) => {
+      if (point.property !== displayProperty) {
+        onPropertyChange?.(point.property);
+      }
+      handleKeyframeClick(point, event);
+    },
+    [displayProperty, handleKeyframeClick, onPropertyChange]
+  );
 
   // Reset viewport (fit to content)
   const resetViewport = useCallback(() => {
@@ -966,17 +1018,17 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           )}
 
           {/* Extension lines (before/after keyframes) */}
-          <GraphExtensionLines points={pointsWithDragState} viewport={viewport} padding={padding} />
+          <GraphExtensionLines points={primaryPointsWithDragState} viewport={viewport} padding={padding} />
 
           {/* Overlay curves for additional properties (rendered first, behind primary) */}
-          {overlayPointSets.map(({ property: prop, points: overlayPts, color }) => (
+          {overlayPointSetsWithDragState.map(({ property: prop, points: overlayPts, color }) => (
             <g key={prop} opacity={0.5}>
               <GraphCurves points={overlayPts} strokeColor={color} />
             </g>
           ))}
 
           {/* Primary interpolation curves */}
-          <GraphCurves points={pointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} previewBezierConfigs={previewBezierConfigs} />
+          <GraphCurves points={primaryPointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} previewBezierConfigs={previewBezierConfigs} />
 
           {/* Playhead (rendered before keyframes so keyframes get click priority) */}
           <GraphPlayhead 
@@ -992,7 +1044,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 
           {/* Bezier handles (for selected keyframes with cubic-bezier easing) */}
           <GraphHandles
-            points={pointsWithDragState}
+            points={primaryPointsWithDragState}
             selectedKeyframeIds={selectedKeyframeIds}
             onHandlePointerDown={handleBezierPointerDown}
             draggingHandle={draggingHandle}
@@ -1005,8 +1057,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           <GraphKeyframes
             points={pointsWithDragState}
             previewValuesById={previewValues}
-            onPointerDown={handleKeyframePointerDown}
-            onClick={handleKeyframeClick}
+            onPointerDown={handleVisibleKeyframePointerDown}
+            onClick={handleVisibleKeyframeClick}
             rulerUnit={rulerUnit}
             fps={fps}
             disabled={disabled}

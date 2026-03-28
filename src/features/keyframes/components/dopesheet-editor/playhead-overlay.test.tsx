@@ -27,7 +27,7 @@ describe('DopesheetEditor playhead overlay', () => {
     const clip = screen.getByTestId('dopesheet-playhead-clip');
     const line = screen.getByTestId('dopesheet-playhead-line');
 
-    expect(clip).toHaveStyle({ left: '224px' });
+    expect(clip).toHaveStyle({ left: '248px' });
     expect(clip).toHaveClass('overflow-hidden');
     // Playhead should be clamped to 0 (left edge), not negative
     expect(line).toHaveStyle({ left: '0px' });

@@ -92,10 +92,32 @@ describe('DopesheetEditor property groups', () => {
       onPropertyChange,
     });
 
-    // All curves start visible; clicking Y toggles it off
+    expect(screen.getByRole('button', { name: /show x position curve/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /show y position curve/i })).toHaveAttribute('aria-pressed', 'false');
+
+    // Turning Y on makes it the active curve
     fireEvent.click(screen.getByRole('button', { name: /show y position curve/i }));
-    // Primary switches to first remaining visible property
-    expect(onPropertyChange).toHaveBeenCalledWith('x');
+    expect(onPropertyChange).toHaveBeenCalledWith('y');
+  });
+
+  it('keeps visibility toggles when selecting a different active row in graph mode', () => {
+    renderEditor({
+      keyframesByProperty: {
+        x: [{ id: 'kf-x', frame: 10, value: 100, easing: 'linear' }],
+        y: [{ id: 'kf-y', frame: 20, value: 200, easing: 'linear' }],
+      },
+      propertyValues: { x: 100, y: 200 },
+      visualizationMode: 'graph',
+      onPropertyChange: vi.fn(),
+    });
+
+    const yToggle = screen.getByRole('button', { name: /show y position curve/i });
+    fireEvent.click(yToggle);
+    expect(yToggle).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByText('X Position'));
+
+    expect(yToggle).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('shows interpolation icon controls only in graph view', () => {

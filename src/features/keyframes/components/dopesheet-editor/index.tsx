@@ -52,10 +52,12 @@ import type { BlockedFrameRange } from '../../utils/transition-region';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { getFrameAxisX, getFrameFromAxisX, getVisibleKeyframeX } from './layout';
 import { CompactNavigator } from './compact-navigator';
+import { KeyframeTimingStrip } from './keyframe-timing-strip';
 import { normalizeKeyframeNavigatorViewport } from './compact-navigator-utils';
 import { getDopesheetRowControlState } from './row-controls';
 import { getPropertyAccordionGroups } from './property-groups';
 import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
+import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints';
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store';
 
 interface DopesheetEditorProps {
@@ -438,6 +440,18 @@ function buildGroupedPropertyRows(
     .filter((group) => group.rows.length > 0);
 }
 
+function getDefaultGraphVisibleProperties(
+  properties: AnimatableProperty[],
+  selectedProperty: AnimatableProperty | null | undefined
+): Set<AnimatableProperty> {
+  if (selectedProperty && properties.includes(selectedProperty)) {
+    return new Set([selectedProperty]);
+  }
+
+  const firstProperty = properties[0];
+  return firstProperty ? new Set([firstProperty]) : new Set();
+}
+
 export const DopesheetEditor = memo(function DopesheetEditor({
   frameViewport,
   onFrameViewportChange,
@@ -483,6 +497,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const graphPaneRef = useRef<HTMLDivElement>(null);
   const keyframeButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const selectedPropertyRef = useRef<AnimatableProperty | null>(selectedProperty);
   const [timelineWidth, setTimelineWidth] = useState(0);
   const [graphPaneSize, setGraphPaneSize] = useState({ width: 0, height: 0 });
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -502,6 +517,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const skipNextBlurCommitPropertyRef = useRef<AnimatableProperty | null>(null);
   const skipNextHeaderFrameBlurRef = useRef<'local' | 'global' | null>(null);
   const appliedDragPreviewFramesRef = useRef<Record<string, number> | null>(null);
+  const [timingStripPreviewFrames, setTimingStripPreviewFrames] = useState<Record<string, number> | null>(null);
+  const timingStripPreviewFramesRef = useRef<Record<string, number> | null>(null);
+  const timingStripDraggedIdsRef = useRef<string[]>([]);
   const contentFrameMax = useMemo(() => Math.max(totalFrames, 1), [totalFrames]);
   const minViewportFrames = useMemo(
     () => Math.max(1, Math.min(MIN_VISIBLE_FRAMES, contentFrameMax)),
@@ -597,12 +615,26 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const [lockedProperties, setLockedProperties] = useState<Partial<Record<AnimatableProperty, boolean>>>({});
   const [graphRulerUnit, setGraphRulerUnit] = useState<'frames' | 'seconds'>('frames');
   const [showAllGraphHandles, setShowAllGraphHandles] = useState(false);
-  const [graphVisibleProperties, setGraphVisibleProperties] = useState<Set<AnimatableProperty>>(() => new Set(availableProperties));
+  const [graphVisibleProperties, setGraphVisibleProperties] = useState<Set<AnimatableProperty>>(() =>
+    getDefaultGraphVisibleProperties(availableProperties, selectedProperty)
+  );
 
   // Reset visible curves when clip selection changes
   useEffect(() => {
-    setGraphVisibleProperties(new Set(availableProperties));
+    setGraphVisibleProperties(getDefaultGraphVisibleProperties(availableProperties, selectedPropertyRef.current));
   }, [itemId, availableProperties]);
+
+  useEffect(() => {
+    selectedPropertyRef.current = selectedProperty;
+  }, [selectedProperty]);
+
+  useEffect(() => {
+    if (visualizationMode === 'graph') {
+      return;
+    }
+
+    setGraphVisibleProperties(getDefaultGraphVisibleProperties(availableProperties, selectedProperty));
+  }, [availableProperties, selectedProperty, visualizationMode]);
 
   useEffect(() => {
     const groupIds = new Set(allPropertyGroups.map((group) => group.id));
@@ -930,6 +962,27 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           : firstFrame + frameOffset,
     };
   }, [currentFrame, globalFrame, keyframeMetaById, selectedKeyframeIds]);
+  const selectedCurveProperty = useMemo(() => {
+    let property: AnimatableProperty | null = null;
+
+    for (const keyframeId of selectedKeyframeIds) {
+      const meta = keyframeMetaById.get(keyframeId);
+      if (!meta) {
+        continue;
+      }
+
+      if (property === null) {
+        property = meta.property;
+        continue;
+      }
+
+      if (property !== meta.property) {
+        return null;
+      }
+    }
+
+    return property;
+  }, [keyframeMetaById, selectedKeyframeIds]);
 
   useEffect(() => {
     setLocalFrameInputValue(
@@ -939,6 +992,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       selectedFrameSummary.globalFrame === null ? '' : String(selectedFrameSummary.globalFrame)
     );
   }, [selectedFrameSummary.globalFrame, selectedFrameSummary.localFrame]);
+
+  useEffect(() => {
+    if (visualizationMode !== 'graph' || !selectedCurveProperty) {
+      return;
+    }
+
+    if (selectedProperty !== selectedCurveProperty) {
+      onPropertyChange?.(selectedCurveProperty);
+    }
+    onActivePropertyChange?.(selectedCurveProperty);
+  }, [
+    onActivePropertyChange,
+    onPropertyChange,
+    selectedCurveProperty,
+    selectedProperty,
+    visualizationMode,
+  ]);
 
   const visibleKeyframes = useMemo(
     () =>
@@ -1014,6 +1084,17 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     },
     [applyDragPreviewFrames]
   );
+  useEffect(() => {
+    timingStripPreviewFramesRef.current = timingStripPreviewFrames;
+  }, [timingStripPreviewFrames]);
+  useEffect(() => {
+    if (visualizationMode !== 'dopesheet') {
+      scheduleDragPreviewFrames(null);
+      return;
+    }
+
+    scheduleDragPreviewFrames(timingStripPreviewFrames);
+  }, [scheduleDragPreviewFrames, timingStripPreviewFrames, visualizationMode]);
   const renderedKeyframeXById = useMemo(() => {
     const positions = new Map<string, number>();
     for (const row of sheetRows) {
@@ -1141,6 +1222,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     }
     return refs;
   }, [selectedKeyframeIds, keyframeMetaById, isPropertyLocked, itemId]);
+  const selectedRefIds = useMemo(
+    () => selectedRefs.map((ref) => ref.keyframeId),
+    [selectedRefs]
+  );
 
   const isCurrentFrameBlocked = useMemo(
     () => transitionBlockedRanges.some((range) => currentFrame >= range.start && currentFrame < range.end),
@@ -1227,6 +1312,92 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     onRemoveKeyframes(selectedRefs);
   }, [onRemoveKeyframes, selectedRefs]);
 
+  const buildSelectionFramePreview = useCallback(
+    (selectionIds: Iterable<string>, requestedDeltaFrames: number) => {
+      const movableSelectionIds = Array.from(selectionIds).filter((keyframeId) => {
+        const meta = keyframeMetaByIdRef.current.get(keyframeId);
+        return !!meta && !isPropertyLocked(meta.property);
+      });
+
+      if (movableSelectionIds.length === 0 || requestedDeltaFrames === 0) {
+        return {
+          movableSelectionIds,
+          previewFrames: null as Record<string, number> | null,
+          appliedDeltaFrames: 0,
+        };
+      }
+
+      const constrainedDeltaFrames = constrainSelectedKeyframeDelta({
+        keyframesByProperty,
+        selectedKeyframeIds: new Set(movableSelectionIds),
+        totalFrames,
+        deltaFrames: requestedDeltaFrames,
+      });
+
+      const nextPreviewFrames: Record<string, number> = {};
+      let appliedDeltaFrames = 0;
+
+      for (const keyframeId of movableSelectionIds) {
+        const meta = keyframeMetaByIdRef.current.get(keyframeId);
+        if (!meta) {
+          continue;
+        }
+
+        const initialFrame = meta.keyframe.frame;
+        let nextFrame = clampFrame(initialFrame + constrainedDeltaFrames, totalFrames);
+        nextFrame = clampToAvoidBlockedRanges(nextFrame, initialFrame, transitionBlockedRanges);
+        nextFrame = clampFrame(nextFrame, totalFrames);
+
+        if (nextFrame === initialFrame) {
+          continue;
+        }
+
+        if (appliedDeltaFrames === 0) {
+          appliedDeltaFrames = nextFrame - initialFrame;
+        }
+        nextPreviewFrames[keyframeId] = nextFrame;
+      }
+
+      return {
+        movableSelectionIds,
+        previewFrames: Object.keys(nextPreviewFrames).length > 0 ? nextPreviewFrames : null,
+        appliedDeltaFrames,
+      };
+    },
+    [isPropertyLocked, keyframesByProperty, totalFrames, transitionBlockedRanges]
+  );
+
+  const commitSelectionFramePreview = useCallback(
+    (selectionIds: Iterable<string>, previewFrames: Record<string, number> | null) => {
+      if (!onKeyframeMove || !previewFrames) {
+        return false;
+      }
+
+      let hasChanges = false;
+      for (const keyframeId of selectionIds) {
+        const nextFrame = previewFrames[keyframeId];
+        if (nextFrame === undefined) {
+          continue;
+        }
+
+        const meta = keyframeMetaByIdRef.current.get(keyframeId);
+        if (!meta || isPropertyLocked(meta.property)) {
+          continue;
+        }
+
+        onKeyframeMove(
+          { itemId, property: meta.property, keyframeId },
+          nextFrame,
+          meta.keyframe.value
+        );
+        hasChanges = true;
+      }
+
+      return hasChanges;
+    },
+    [isPropertyLocked, itemId, onKeyframeMove]
+  );
+
   const canAddKeyframeForRow = useCallback(
     (row: DopesheetPropertyRow) => {
       if (disabled || !onAddKeyframe) return false;
@@ -1258,43 +1429,32 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const moveSelectedKeyframesByDelta = useCallback(
     (deltaFrames: number) => {
-      if (disabled || !onKeyframeMove || selectedKeyframeIds.size === 0 || deltaFrames === 0) {
-        return false;
+      if (disabled || !onKeyframeMove || selectedRefIds.length === 0 || deltaFrames === 0) {
+        return { didMove: false, appliedDeltaFrames: 0 };
       }
 
-      let hasChanges = false;
+      const preview = buildSelectionFramePreview(selectedRefIds, deltaFrames);
+      if (!preview.previewFrames) {
+        return { didMove: false, appliedDeltaFrames: 0 };
+      }
+
       onDragStart?.();
-      for (const keyframeId of selectedKeyframeIds) {
-        const meta = keyframeMetaByIdRef.current.get(keyframeId);
-        if (!meta) continue;
-        if (isPropertyLocked(meta.property)) continue;
-        const initialFrame = meta.keyframe.frame;
-        let nextFrame = clampFrame(initialFrame + deltaFrames, totalFrames);
-        nextFrame = clampToAvoidBlockedRanges(nextFrame, initialFrame, transitionBlockedRanges);
-        nextFrame = clampFrame(nextFrame, totalFrames);
-        if (nextFrame === meta.keyframe.frame) continue;
-        onKeyframeMove(
-          { itemId, property: meta.property, keyframeId },
-          nextFrame,
-          meta.keyframe.value
-        );
-        hasChanges = true;
-      }
-      if (hasChanges) {
-        onDragEnd?.();
-      }
-      return hasChanges;
+      const didMove = commitSelectionFramePreview(preview.movableSelectionIds, preview.previewFrames);
+      onDragEnd?.();
+
+      return {
+        didMove,
+        appliedDeltaFrames: preview.appliedDeltaFrames,
+      };
     },
     [
+      buildSelectionFramePreview,
+      commitSelectionFramePreview,
       disabled,
-      itemId,
       onDragEnd,
       onDragStart,
       onKeyframeMove,
-      isPropertyLocked,
-      selectedKeyframeIds,
-      totalFrames,
-      transitionBlockedRanges,
+      selectedRefIds,
     ]
   );
 
@@ -1321,19 +1481,20 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       transitionBlockedRanges
     );
     targetFrame = clampFrame(targetFrame, totalFrames);
-    const deltaFrames = targetFrame - selectedFrameSummary.localFrame;
+    const moveResult = moveSelectedKeyframesByDelta(targetFrame - selectedFrameSummary.localFrame);
+    const finalLocalFrame = selectedFrameSummary.localFrame + moveResult.appliedDeltaFrames;
 
-    setLocalFrameInputValue(String(targetFrame));
+    setLocalFrameInputValue(String(finalLocalFrame));
     if (selectedFrameSummary.globalFrame !== null) {
       const frameOffset = selectedFrameSummary.globalFrame - selectedFrameSummary.localFrame;
-      setGlobalFrameInputValue(String(targetFrame + frameOffset));
+      setGlobalFrameInputValue(String(finalLocalFrame + frameOffset));
     }
 
-    if (!moveSelectedKeyframesByDelta(deltaFrames)) {
+    if (!moveResult.didMove) {
       return;
     }
 
-    onNavigateToKeyframe?.(targetFrame);
+    onNavigateToKeyframe?.(finalLocalFrame);
   }, [
     localFrameInputValue,
     moveSelectedKeyframesByDelta,
@@ -1372,17 +1533,18 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       transitionBlockedRanges
     );
     nextLocalFrame = clampFrame(nextLocalFrame, totalFrames);
-    const normalizedGlobalFrame = nextLocalFrame + frameOffset;
-    const deltaFrames = nextLocalFrame - selectedFrameSummary.localFrame;
+    const moveResult = moveSelectedKeyframesByDelta(nextLocalFrame - selectedFrameSummary.localFrame);
+    const finalLocalFrame = selectedFrameSummary.localFrame + moveResult.appliedDeltaFrames;
+    const normalizedGlobalFrame = finalLocalFrame + frameOffset;
 
-    setLocalFrameInputValue(String(nextLocalFrame));
+    setLocalFrameInputValue(String(finalLocalFrame));
     setGlobalFrameInputValue(String(normalizedGlobalFrame));
 
-    if (!moveSelectedKeyframesByDelta(deltaFrames)) {
+    if (!moveResult.didMove) {
       return;
     }
 
-    onNavigateToKeyframe?.(nextLocalFrame);
+    onNavigateToKeyframe?.(finalLocalFrame);
   }, [
     currentFrame,
     globalFrame,
@@ -1424,8 +1586,6 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const activateProperty = useCallback((property: AnimatableProperty) => {
     if (visualizationMode === 'graph') {
       onPropertyChange?.(property);
-      // Solo: show only this property's curve
-      setGraphVisibleProperties(new Set([property]));
     }
     onActivePropertyChange?.(property);
   }, [onActivePropertyChange, onPropertyChange, visualizationMode]);
@@ -1916,25 +2076,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         }
       }
 
-      const nextPreviewFrames: Record<string, number> = {};
-      for (const selectedId of dragState.selectedKeyframeIds) {
-        const initial = dragState.initialFrames.get(selectedId);
-        if (initial === undefined) continue;
-        const meta = keyframeMetaByIdRef.current.get(selectedId);
-        if (!meta) continue;
-        if (isPropertyLocked(meta.property)) continue;
-
-        let nextFrame = clampFrame(initial + deltaFrames, totalFrames);
-        nextFrame = clampToAvoidBlockedRanges(nextFrame, initial, transitionBlockedRanges);
-        nextFrame = clampFrame(nextFrame, totalFrames);
-
-        if (nextFrame === meta.keyframe.frame) continue;
-        nextPreviewFrames[selectedId] = nextFrame;
-      }
-
-      scheduleDragPreviewFrames(
-        Object.keys(nextPreviewFrames).length > 0 ? nextPreviewFrames : null
-      );
+      const preview = buildSelectionFramePreview(dragState.selectedKeyframeIds, deltaFrames);
+      scheduleDragPreviewFrames(preview.previewFrames);
     };
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -1943,20 +2086,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
       if (dragState.started) {
         const previewFrames = appliedDragPreviewFramesRef.current;
-        if (previewFrames) {
-          for (const selectedId of dragState.selectedKeyframeIds) {
-            const nextFrame = previewFrames[selectedId];
-            if (nextFrame === undefined) continue;
-            const meta = keyframeMetaByIdRef.current.get(selectedId);
-            if (!meta) continue;
-            if (isPropertyLocked(meta.property)) continue;
-            onKeyframeMove(
-              { itemId, property: meta.property, keyframeId: selectedId },
-              nextFrame,
-              meta.keyframe.value
-            );
-          }
-        }
+        commitSelectionFramePreview(dragState.selectedKeyframeIds, previewFrames);
         onDragEnd?.();
       }
       dragStateRef.current = null;
@@ -1970,19 +2100,18 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       window.removeEventListener('pointerup', handlePointerUp);
     };
   }, [
-    disabled,
-    onKeyframeMove,
-    onDragStart,
-    onDragEnd,
-    effectiveTimelineWidth,
-    frameRange,
-    totalFrames,
-      itemId,
-      isPropertyLocked,
+      disabled,
+      buildSelectionFramePreview,
+      commitSelectionFramePreview,
+      onKeyframeMove,
+      onDragStart,
+      onDragEnd,
+      effectiveTimelineWidth,
+      frameRange,
+      totalFrames,
       snapEnabled,
       snapFrame,
-    transitionBlockedRanges,
-    scheduleDragPreviewFrames,
+      scheduleDragPreviewFrames,
   ]);
 
   const scrubPointerIdRef = useRef<number | null>(null);
@@ -2174,6 +2303,75 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       selectedRefs,
     ]
   );
+  const timingStripMarkers = useMemo(
+    () => {
+      if (visualizationMode === 'graph') {
+        if (!activeSelectedProperty) {
+          return [];
+        }
+
+        return (keyframesByProperty[activeSelectedProperty] ?? []).map((keyframe) => ({
+          id: keyframe.id,
+          frame: keyframe.frame,
+          selected: selectedKeyframeIds.has(keyframe.id),
+          draggable: selectedRefIds.includes(keyframe.id),
+          label: selectedRefIds.includes(keyframe.id)
+            ? `Slide selected keyframe at frame ${keyframe.frame}`
+            : `Select keyframe at frame ${keyframe.frame}`,
+        }));
+      }
+
+      return visibleKeyframes
+        .filter(({ keyframe }) => selectedKeyframeIds.has(keyframe.id))
+        .map(({ property, keyframe }) => ({
+          id: keyframe.id,
+          frame: keyframe.frame,
+          selected: true,
+          draggable: !isPropertyLocked(property),
+          label: `Slide selected keyframe at frame ${keyframe.frame}`,
+        }));
+    },
+    [activeSelectedProperty, isPropertyLocked, keyframesByProperty, selectedKeyframeIds, selectedRefIds, visibleKeyframes, visualizationMode]
+  );
+  const constrainGraphFrameDelta = useCallback(
+    (deltaFrames: number, draggedKeyframeIds: string[]) =>
+      constrainSelectedKeyframeDelta({
+        keyframesByProperty,
+        selectedKeyframeIds: new Set(draggedKeyframeIds),
+        totalFrames,
+        deltaFrames,
+      }),
+    [keyframesByProperty, totalFrames]
+  );
+  const handleTimingStripSelectionChange = useCallback(
+    (selectedIds: Set<string>) => {
+      onSelectionChange?.(selectedIds);
+    },
+    [onSelectionChange]
+  );
+  const handleTimingStripSlideStart = useCallback((selectedIds: string[]) => {
+    if (disabled || !onKeyframeMove || selectedIds.length === 0) {
+      return;
+    }
+
+    timingStripDraggedIdsRef.current = selectedIds;
+    onDragStart?.();
+  }, [disabled, onDragStart, onKeyframeMove]);
+  const handleTimingStripSlideChange = useCallback(
+    (deltaFrames: number, selectedIds: string[]) => {
+      timingStripDraggedIdsRef.current = selectedIds;
+      const preview = buildSelectionFramePreview(selectedIds, deltaFrames);
+      setTimingStripPreviewFrames(preview.previewFrames);
+    },
+    [buildSelectionFramePreview]
+  );
+  const handleTimingStripSlideEnd = useCallback((selectedIds: string[]) => {
+    const dragIds = selectedIds.length > 0 ? selectedIds : timingStripDraggedIdsRef.current;
+    commitSelectionFramePreview(dragIds, timingStripPreviewFramesRef.current);
+    timingStripDraggedIdsRef.current = [];
+    setTimingStripPreviewFrames(null);
+    onDragEnd?.();
+  }, [commitSelectionFramePreview, onDragEnd]);
   const formatRulerTick = useCallback(
     (frame: number): string => {
       if (visualizationMode !== 'graph' || graphRulerUnit === 'frames' || !fps || fps <= 0) {
@@ -3171,6 +3369,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                       width={graphPaneSize.width}
                       height={graphPaneSize.height}
                       onKeyframeMove={onKeyframeMove}
+                      previewFramesById={timingStripPreviewFrames}
+                      constrainFrameDelta={constrainGraphFrameDelta}
                       onBezierHandleMove={onBezierHandleMove}
                       onSelectionChange={onSelectionChange}
                       onPropertyChange={onPropertyChange}
@@ -3257,6 +3457,22 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             </div>
           </>
         )}
+      </div>
+      <div className="grid" style={propertyGridStyle}>
+        <div className="h-4 border-t border-r border-border/60 bg-background/80" />
+        <div data-testid="keyframe-timing-strip-viewport-column">
+          <KeyframeTimingStrip
+            viewport={viewport}
+            contentFrameMax={contentFrameMax}
+            markers={timingStripMarkers}
+            previewFrames={timingStripPreviewFrames}
+            disabled={disabled || !onKeyframeMove || timingStripMarkers.length === 0}
+            onSelectionChange={handleTimingStripSelectionChange}
+            onSlideStart={handleTimingStripSlideStart}
+            onSlideChange={handleTimingStripSlideChange}
+            onSlideEnd={handleTimingStripSlideEnd}
+          />
+        </div>
       </div>
       <div className="grid" style={propertyGridStyle}>
         <div

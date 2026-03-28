@@ -88,6 +88,24 @@ describe('DopesheetEditor header frame inputs', () => {
     expect(onNavigateToKeyframe).toHaveBeenCalledWith(24);
   });
 
+  it('clamps the local frame input before the next keyframe so frames cannot cross', () => {
+    const { onKeyframeMove, onNavigateToKeyframe } = renderEditor({
+      selectedKeyframeIds: new Set(['kf-x-1']),
+    });
+
+    const input = screen.getByLabelText('Local frame');
+    fireEvent.change(input, { target: { value: '40' } });
+    fireEvent.blur(input);
+
+    expect(onKeyframeMove).toHaveBeenCalledWith(
+      { itemId: 'item-1', property: 'x', keyframeId: 'kf-x-1' },
+      27,
+      100
+    );
+    expect(onNavigateToKeyframe).toHaveBeenCalledWith(27);
+    expect(input).toHaveValue(27);
+  });
+
   it('moves selected same-frame keyframes together when the global frame input is edited', () => {
     const { onKeyframeMove, onNavigateToKeyframe } = renderEditor({
       selectedKeyframeIds: new Set(['kf-x-1', 'kf-y-1']),

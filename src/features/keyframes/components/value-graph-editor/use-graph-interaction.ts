@@ -12,6 +12,7 @@ import type {
   GraphDragState,
   GraphBezierHandle,
 } from './types';
+import { PROPERTY_VALUE_RANGES } from './types';
 import type { KeyframeRef, BezierControlPoints } from '@/types/keyframe';
 import { getBezierPresetForEasing } from '@/features/keyframes/utils/easing-presets';
 import { updateBezierFromHandle } from './bezier-utils';
@@ -41,6 +42,8 @@ interface DragStartState {
     property: GraphKeyframePoint['property'];
     frame: number;
     value: number;
+    minValue: number;
+    maxValue: number;
   }>;
 }
 
@@ -137,6 +140,8 @@ interface UseGraphInteractionOptions {
   onSelectionChange?: (keyframeIds: Set<string>) => void;
   /** Callback when keyframe is moved */
   onKeyframeMove?: (ref: KeyframeRef, newFrame: number, newValue: number) => void;
+  /** Optional frame-delta constraint for horizontal drags */
+  constrainFrameDelta?: (deltaFrames: number, draggedKeyframeIds: string[]) => number;
   /** Callback when bezier handle is moved */
   onBezierHandleMove?: (ref: KeyframeRef, bezier: BezierControlPoints) => void;
   /** Callback when drag starts (for undo batching) */
@@ -210,6 +215,7 @@ export function useGraphInteraction({
   onViewportChange,
   onSelectionChange,
   onKeyframeMove,
+  constrainFrameDelta,
   onBezierHandleMove,
   onDragStart,
   onDragEnd,
@@ -593,12 +599,17 @@ export function useGraphInteraction({
       const initialKeyframeStates = new Map(
         pointsForDrag.map((dragPoint) => [
           dragPoint.keyframe.id,
-          {
-            itemId: dragPoint.itemId,
-            property: dragPoint.property,
-            frame: dragPoint.keyframe.frame,
-            value: dragPoint.keyframe.value,
-          },
+          (() => {
+            const range = PROPERTY_VALUE_RANGES[dragPoint.property];
+            return {
+              itemId: dragPoint.itemId,
+              property: dragPoint.property,
+              frame: dragPoint.keyframe.frame,
+              value: dragPoint.keyframe.value,
+              minValue: range.min,
+              maxValue: range.max,
+            };
+          })(),
         ])
       );
 
@@ -839,8 +850,6 @@ export function useGraphInteraction({
         const graphWidth = viewport.width - padding.left - padding.right;
         const graphHeight = viewport.height - padding.top - padding.bottom;
         const frameRange = viewport.endFrame - viewport.startFrame;
-        const valueRange = viewport.maxValue - viewport.minValue;
-
         const dx = event.clientX - mouseX;
         const dy = event.clientY - mouseY;
 
@@ -860,16 +869,17 @@ export function useGraphInteraction({
 
         // Calculate DELTA in graph coordinates (relative movement)
         let frameDelta = (dx / graphWidth) * frameRange;
-        let valueDelta = -(dy / graphHeight) * valueRange;
+        let normalizedValueDelta = -(dy / graphHeight);
 
         // Alt = fine adjustment (half speed)
         if (event.altKey) {
           frameDelta *= 0.5;
-          valueDelta *= 0.5;
+          normalizedValueDelta *= 0.5;
         }
 
+        const anchorValueRange = Math.max(0.0001, anchorInitialState.maxValue - anchorInitialState.minValue);
         let newFrame = anchorInitialState.frame + frameDelta;
-        let newValue = anchorInitialState.value + valueDelta;
+        let newValue = anchorInitialState.value + normalizedValueDelta * anchorValueRange;
 
         // Shift = constrain to axis
         if (event.shiftKey) {
@@ -892,12 +902,7 @@ export function useGraphInteraction({
         }
 
         // Bounds checking - clamp to valid value range
-        if (clampMinValue !== undefined) {
-          newValue = Math.max(clampMinValue, newValue);
-        }
-        if (clampMaxValue !== undefined) {
-          newValue = Math.min(clampMaxValue, newValue);
-        }
+        newValue = Math.max(anchorInitialState.minValue, Math.min(anchorInitialState.maxValue, newValue));
 
         // Apply snapping if enabled (but not when Ctrl is held to temporarily disable)
         if (snapEnabled && !event.ctrlKey && !event.metaKey) {
@@ -913,8 +918,13 @@ export function useGraphInteraction({
         // Prevent dragging into blocked (transition) regions
         newFrame = clampToAvoidBlockedRanges(newFrame, anchorInitialState.frame);
 
+        const constrainedFrameDelta = constrainFrameDelta
+          ? constrainFrameDelta(newFrame - anchorInitialState.frame, Array.from(initialKeyframeStates.keys()))
+          : newFrame - anchorInitialState.frame;
+        newFrame = anchorInitialState.frame + constrainedFrameDelta;
+
         const appliedFrameDelta = newFrame - anchorInitialState.frame;
-        const appliedValueDelta = newValue - anchorInitialState.value;
+        const appliedNormalizedValueDelta = (newValue - anchorInitialState.value) / anchorValueRange;
         const nextPreviewValues: Record<string, { frame: number; value: number }> = {};
 
         for (const [keyframeId, initialState] of initialKeyframeStates) {
@@ -925,13 +935,9 @@ export function useGraphInteraction({
           }
           nextFrame = clampToAvoidBlockedRanges(nextFrame, initialState.frame);
 
-          let nextValue = initialState.value + appliedValueDelta;
-          if (clampMinValue !== undefined) {
-            nextValue = Math.max(clampMinValue, nextValue);
-          }
-          if (clampMaxValue !== undefined) {
-            nextValue = Math.min(clampMaxValue, nextValue);
-          }
+          const pointValueRange = Math.max(0.0001, initialState.maxValue - initialState.minValue);
+          let nextValue = initialState.value + appliedNormalizedValueDelta * pointValueRange;
+          nextValue = Math.max(initialState.minValue, Math.min(initialState.maxValue, nextValue));
 
           nextPreviewValues[keyframeId] = { frame: nextFrame, value: nextValue };
         }
@@ -1023,7 +1029,7 @@ export function useGraphInteraction({
         setPreviewBezierConfigs(nextPreview);
       }
     },
-    [disabled, dragState, isDragging, viewport, padding, maxFrame, clampMinValue, clampMaxValue, graphDimensions, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets, clampToAvoidBlockedRanges]
+    [disabled, dragState, isDragging, viewport, padding, maxFrame, clampMinValue, clampMaxValue, graphDimensions, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets, clampToAvoidBlockedRanges, constrainFrameDelta]
   );
 
   // Handle pointer up (SVG level)
