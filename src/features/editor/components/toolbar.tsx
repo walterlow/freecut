@@ -21,8 +21,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { LocalInferenceStatusPill } from './local-inference-status-pill';
-import { SettingsDialog } from './settings-dialog';
-import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { WalletConnectButton } from '@/components/wallet-connect-button';
@@ -40,6 +38,8 @@ interface ToolbarProps {
   onSave?: () => Promise<void>;
   onExport?: () => void;
   onExportBundle?: () => void;
+  onOpenSettings: () => void;
+  onOpenShortcuts: () => void;
 }
 
 export const Toolbar = memo(function Toolbar({
@@ -48,11 +48,11 @@ export const Toolbar = memo(function Toolbar({
   onSave,
   onExport,
   onExportBundle,
+  onOpenSettings,
+  onOpenShortcuts,
 }: ToolbarProps) {
   const navigate = useNavigate();
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   const handleBackClick = () => {
     if (isDirty) {
@@ -111,22 +111,12 @@ export const Toolbar = memo(function Toolbar({
 
       <LocalInferenceStatusPill />
 
-      <ShortcutsDialog
-        open={showShortcutsDialog}
-        onOpenChange={setShowShortcutsDialog}
-      />
-
-      <SettingsDialog
-        open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
-      />
-
-      <div className="flex items-center gap-1.5">
+      <div className="hidden items-center gap-1.5 md:flex">
         <Button
           variant="outline"
           size="icon"
           className="h-7 w-7"
-          onClick={() => setShowSettingsDialog(true)}
+          onClick={onOpenSettings}
           data-tooltip="Settings"
           data-tooltip-side="left"
           aria-label="Settings"
@@ -137,7 +127,7 @@ export const Toolbar = memo(function Toolbar({
           variant="outline"
           size="icon"
           className="h-7 w-7"
-          onClick={() => setShowShortcutsDialog(true)}
+          onClick={onOpenShortcuts}
           data-tooltip="Keyboard Shortcuts"
           data-tooltip-side="left"
           aria-label="Keyboard shortcuts"

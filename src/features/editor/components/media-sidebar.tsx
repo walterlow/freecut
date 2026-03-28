@@ -17,7 +17,6 @@ import {
   Pen,
   Wand2,
   Settings,
-  Keyboard,
   Share2,
   Save,
   Download,
@@ -65,7 +64,6 @@ export interface ToolbarActionsProps {
   onExportBundle: () => void;
   isDirty: boolean;
   onOpenSettings?: () => void;
-  onOpenShortcuts?: () => void;
 }
 
 interface MediaSidebarProps {
@@ -498,19 +496,6 @@ export const MediaSidebar = memo(function MediaSidebar({ toolbarActions }: Media
                 aria-label="Settings"
               >
                 <Settings className="w-4 h-4" />
-              </Button>
-            )}
-            {toolbarActions.onOpenShortcuts && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 rounded-lg"
-                onClick={toolbarActions.onOpenShortcuts}
-                data-tooltip="Keyboard Shortcuts"
-                data-tooltip-side="right"
-                aria-label="Keyboard shortcuts"
-              >
-                <Keyboard className="w-4 h-4" />
               </Button>
             )}
             <WalletConnectButton size="sm" compact className="h-9 w-9 rounded-lg" />

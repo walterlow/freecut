@@ -9,6 +9,8 @@ import {
 import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toolbar } from './toolbar';
+import { SettingsDialog } from './settings-dialog';
+import { ShortcutsDialog } from './shortcuts-dialog';
 import { MediaSidebar } from './media-sidebar';
 import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
@@ -75,6 +77,8 @@ interface EditorProps {
 export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [shortcutsDialogOpen, setShortcutsDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
@@ -321,6 +325,8 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             onSave={handleSave}
             onExport={handleExport}
             onExportBundle={handleExportBundle}
+            onOpenSettings={() => setSettingsDialogOpen(true)}
+            onOpenShortcuts={() => setShortcutsDialogOpen(true)}
           />
         </InteractionLockRegion>
 
@@ -342,6 +348,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
                       onExport: handleExport,
                       onExportBundle: handleExportBundle,
                       isDirty,
+                      onOpenSettings: () => setSettingsDialogOpen(true),
                     }}
                   />
                 </ErrorBoundary>
@@ -397,6 +404,15 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             </InteractionLockRegion>
           </ResizablePanel>
         </ResizablePanelGroup>
+
+      <SettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+      />
+      <ShortcutsDialog
+        open={shortcutsDialogOpen}
+        onOpenChange={setShortcutsDialogOpen}
+      />
 
       <Suspense fallback={null}>
         {/* Export Dialog */}

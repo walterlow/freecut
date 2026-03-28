@@ -252,7 +252,7 @@ function ProjectsIndex() {
             <Link to="/" className="min-w-0 flex-shrink">
               <PixelsLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
-            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            <div className="hidden flex-shrink-0 items-center gap-2 sm:gap-3 md:flex">
               <WalletConnectButton size="sm" compact className="h-10" />
               <Button
                 variant="outline"
