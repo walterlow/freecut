@@ -488,7 +488,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   return (
 
-      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden" role="region" aria-label="Timeline">
+      <div
+        className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        role="region"
+        aria-label="Timeline"
+      >
         {/* Timeline Header */}
         <TimelineHeader
           onZoomChange={zoomHandlers?.handleZoomChange}
@@ -507,10 +511,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       {/* Timeline Content */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Track Headers Sidebar */}
-        <div
-          className="border-r border-border panel-bg flex-shrink-0 flex flex-col overflow-x-hidden"
-          style={{ width: EDITOR_LAYOUT_CSS_VALUES.timelineSidebarWidth }}
-        >
+        <div className="border-r border-border panel-bg flex w-[var(--editor-timeline-sidebar-width-mobile)] flex-shrink-0 flex-col overflow-x-hidden md:w-[var(--editor-timeline-sidebar-width)]">
           {/* Tracks label with controls */}
           <div
             className="flex items-center justify-between px-3 border-b border-border bg-secondary/20 flex-shrink-0"
@@ -637,10 +638,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       />
 
       <div className="flex flex-shrink-0 overflow-hidden">
-        <div
-          className="border-r border-border panel-bg flex-shrink-0"
-          style={{ width: EDITOR_LAYOUT_CSS_VALUES.timelineSidebarWidth }}
-        />
+        <div className="border-r border-border panel-bg w-[var(--editor-timeline-sidebar-width-mobile)] flex-shrink-0 md:w-[var(--editor-timeline-sidebar-width)]" />
         <div className="flex-1 min-w-0">
           <TimelineNavigator
             actualDuration={timelineMetrics.actualDuration}
