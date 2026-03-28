@@ -6,10 +6,6 @@ import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import type { AudioItem, VideoItem } from '@/types/timeline';
 import { ClipPanel } from './index';
 
-vi.mock('./source-section', () => ({
-  SourceSection: () => <div>Source Section</div>,
-}));
-
 vi.mock('./layout-section', () => ({
   LayoutSection: () => <div>Layout Body</div>,
 }));

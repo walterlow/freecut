@@ -13,7 +13,6 @@ import type { TimelineState, TimelineActions } from '@/features/editor/deps/time
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineItem } from '@/types/timeline';
 
-import { SourceSection } from './source-section';
 import { LayoutSection } from './layout-section';
 import { FillSection } from './fill-section';
 import { VideoSection } from './video-section';
@@ -64,7 +63,6 @@ export const ClipPanel = memo(function ClipPanel() {
   const clipInspectorTab = useEditorStore((s) => s.clipInspectorTab);
   const setClipInspectorTab = useEditorStore((s) => s.setClipInspectorTab);
   const selectedItemIds = useSelectionStore((s: SelectionState & SelectionActions) => s.selectedItemIds);
-  const fps = useTimelineStore((s: TimelineState & TimelineActions) => s.fps);
   const updateItemsTransform = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItemsTransform);
   const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
   const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
@@ -191,11 +189,6 @@ export const ClipPanel = memo(function ClipPanel() {
 
   return (
     <div className="space-y-3">
-      {/* Source info - always shown at top */}
-      <SourceSection items={selectedItems} fps={fps} />
-
-      <Separator />
-
       {/* Tabbed sections */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-3 h-8">
