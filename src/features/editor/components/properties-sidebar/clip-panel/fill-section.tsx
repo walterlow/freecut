@@ -1,7 +1,18 @@
 import { useCallback, useMemo, memo } from 'react';
 import { Droplet, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { TimelineItem } from '@/types/timeline';
+import type { BlendMode } from '@/types/blend-modes';
+import { BLEND_MODE_GROUPS, BLEND_MODE_LABELS } from '@/types/blend-modes';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
@@ -19,6 +30,7 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
+  SliderInput,
 } from '../components';
 
 interface FillSectionProps {
@@ -45,6 +57,9 @@ export const FillSection = memo(function FillSection({
 
   // Get keyframes for all selected items
   const allKeyframes = useTimelineStore((s) => s.keyframes);
+
+  // Item update for non-transform properties (blend mode)
+  const updateItem = useTimelineStore((s) => s.updateItem);
 
   // Gizmo store for live preview
   const setTransformPreview = useGizmoStore((s) => s.setTransformPreview);
@@ -129,21 +144,21 @@ export const FillSection = memo(function FillSection({
     (value: number) => {
       const opacityValue = value / 100; // Convert from 0-100 to 0-1
 
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = autoKeyframeOpacity(itemId, opacityValue);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { opacity: opacityValue });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { opacity: opacityValue });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -165,25 +180,43 @@ export const FillSection = memo(function FillSection({
   // Commit corner radius (on mouse up, with auto-keyframe support)
   const handleCornerRadiusChange = useCallback(
     (value: number) => {
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = autoKeyframeCornerRadius(itemId, value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { cornerRadius: value });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { cornerRadius: value });
       }
       queueMicrotask(() => clearPreview());
     },
     [itemIds, onTransformChange, clearPreview, autoKeyframeCornerRadius, applyAutoKeyframeOperations]
+  );
+
+  // Get current blend mode (shared across selected items)
+  const blendMode = useMemo(() => {
+    if (items.length === 0) return 'normal' as BlendMode;
+    const first = items[0]!.blendMode ?? 'normal';
+    const allSame = items.every((item) => (item.blendMode ?? 'normal') === first);
+    return allSame ? first : ('mixed' as string);
+  }, [items]);
+
+  // Handle blend mode change
+  const handleBlendModeChange = useCallback(
+    (value: string) => {
+      for (const id of itemIds) {
+        updateItem(id, { blendMode: value as BlendMode });
+      }
+    },
+    [itemIds, updateItem]
   );
 
   // Reset opacity to 100%
@@ -222,7 +255,7 @@ export const FillSection = memo(function FillSection({
             property="opacity"
             currentValue={opacityRaw === 'mixed' ? 1 : opacityRaw}
           />
-          <NumberInput
+          <SliderInput
             value={opacity}
             onChange={handleOpacityChange}
             onLiveChange={handleOpacityLiveChange}
@@ -242,6 +275,30 @@ export const FillSection = memo(function FillSection({
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
+      </PropertyRow>
+
+      {/* Blend Mode */}
+      <PropertyRow label="Blend">
+        <Select
+          value={blendMode === 'mixed' ? undefined : blendMode}
+          onValueChange={handleBlendModeChange}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+            <SelectValue placeholder={blendMode === 'mixed' ? 'Mixed' : 'Normal'} />
+          </SelectTrigger>
+          <SelectContent>
+            {BLEND_MODE_GROUPS.map((group) => (
+              <SelectGroup key={group.label}>
+                <SelectLabel className="text-[10px] text-muted-foreground">{group.label}</SelectLabel>
+                {group.modes.map((mode) => (
+                  <SelectItem key={mode} value={mode} className="text-xs">
+                    {BLEND_MODE_LABELS[mode]}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
       </PropertyRow>
 
       {/* Corner Radius */}
@@ -276,4 +333,3 @@ export const FillSection = memo(function FillSection({
     </PropertySection>
   );
 });
-

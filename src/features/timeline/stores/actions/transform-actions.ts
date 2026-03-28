@@ -4,15 +4,17 @@
 
 import type { TransformProperties } from '@/types/transform';
 import type { AnimatableProperty } from '@/types/keyframe';
+import type { MaskVertex } from '@/types/masks';
 import type { LayoutConfig } from '../../utils/bento-layout';
 import type { TransformCommandOptions, TransformHistoryOperation } from '../../types';
+import type { AutoKeyframeOperation } from '@/features/timeline/deps/keyframes';
 import { computeLayout, buildTransitionChains } from '../../utils/bento-layout';
 import { useItemsStore } from '../items-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useTransitionsStore } from '../transitions-store';
 import { buildTransitionIndexes } from '../../utils/transition-indexes';
-import { execute } from './shared';
+import { canAddKeyframeAtFrame, execute, logger } from './shared';
 
 function getTransformKeys(transform: Partial<TransformProperties>): Set<string> {
   const keys = new Set<string>();
@@ -68,6 +70,12 @@ function inferTransformOperationFromMap(
   return inferTransformOperation(unionKeys);
 }
 
+interface MaskEditCommit {
+  pathVertices?: MaskVertex[];
+  transform?: Partial<TransformProperties>;
+  autoKeyframeOperations?: AutoKeyframeOperation[];
+}
+
 export function updateItemTransform(
   id: string,
   transform: Partial<TransformProperties>,
@@ -78,6 +86,83 @@ export function updateItemTransform(
     useItemsStore.getState()._updateItemTransform(id, transform);
     useTimelineSettingsStore.getState().markDirty();
   }, { id, operation, properties: [...getTransformKeys(transform)] });
+}
+
+export function commitMaskEdit(
+  id: string,
+  commit: MaskEditCommit,
+  options?: TransformCommandOptions
+): void {
+  const transform = commit.transform ?? {};
+  const transformKeys = getTransformKeys(transform);
+  const autoKeyframeOperations = commit.autoKeyframeOperations ?? [];
+
+  if (!commit.pathVertices && transformKeys.size === 0 && autoKeyframeOperations.length === 0) {
+    return;
+  }
+
+  const operation = options?.operation ?? (
+    commit.pathVertices ? 'transform' : inferTransformOperation(transformKeys)
+  );
+
+  execute('COMMIT_MASK_EDIT', () => {
+    let changed = false;
+
+    if (commit.pathVertices) {
+      useItemsStore.getState()._updateItem(id, { pathVertices: commit.pathVertices });
+      changed = true;
+    }
+
+    if (transformKeys.size > 0) {
+      useItemsStore.getState()._updateItemTransform(id, transform);
+      changed = true;
+    }
+
+    if (autoKeyframeOperations.length > 0) {
+      const keyframesStore = useKeyframesStore.getState();
+
+      for (const autoOperation of autoKeyframeOperations) {
+        if (autoOperation.type === 'update') {
+          keyframesStore._updateKeyframe(
+            autoOperation.itemId,
+            autoOperation.property,
+            autoOperation.keyframeId,
+            autoOperation.updates
+          );
+          changed = true;
+          continue;
+        }
+
+        if (!canAddKeyframeAtFrame(autoOperation.itemId, autoOperation.frame)) {
+          logger.warn('Cannot add auto keyframe in transition region', {
+            itemId: autoOperation.itemId,
+            property: autoOperation.property,
+            frame: autoOperation.frame,
+          });
+          continue;
+        }
+
+        keyframesStore._addKeyframe(
+          autoOperation.itemId,
+          autoOperation.property,
+          autoOperation.frame,
+          autoOperation.value,
+          autoOperation.easing
+        );
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      useTimelineSettingsStore.getState().markDirty();
+    }
+  }, {
+    id,
+    operation,
+    hasPathVertices: !!commit.pathVertices,
+    properties: [...transformKeys],
+    autoKeyframeOperationCount: autoKeyframeOperations.length,
+  });
 }
 
 export function resetItemTransform(id: string): void {

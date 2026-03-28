@@ -1,0 +1,140 @@
+---
+description: Generate images from text prompts.
+alwaysApply: false
+---
+Text To Image
+Generate images from text prompts.
+
+POST
+
+https://livepeer.studio/api/beta/generate
+/
+text-to-image
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form Bearer <token>, where <token> is your auth token.
+
+Body
+application/json
+​
+prompt
+stringrequired
+Text prompt(s) to guide image generation. Separate multiple prompts with '|' if supported by the model.
+
+​
+model_id
+stringdefault:""
+Hugging Face model ID used for image generation.
+
+​
+loras
+stringdefault:""
+A LoRA (Low-Rank Adaptation) model and its corresponding weight for image generation. Example: { "latent-consistency/lcm-lora-sdxl": 1.0, "nerijs/pixel-art-xl": 1.2}.
+
+​
+height
+integerdefault:576
+The height in pixels of the generated image.
+
+​
+width
+integerdefault:1024
+The width in pixels of the generated image.
+
+​
+guidance_scale
+numberdefault:7.5
+Encourages model to generate images closely linked to the text prompt (higher values may reduce image quality).
+
+​
+negative_prompt
+stringdefault:""
+Text prompt(s) to guide what to exclude from image generation. Ignored if guidance_scale < 1.
+
+​
+safety_check
+booleandefault:true
+Perform a safety check to estimate if generated images could be offensive or harmful.
+
+​
+seed
+integer
+Seed for random number generation.
+
+​
+num_inference_steps
+integerdefault:50
+Number of denoising steps. More steps usually lead to higher quality images but slower inference. Modulated by strength.
+
+​
+num_images_per_prompt
+integerdefault:1
+Number of images to generate per prompt.
+
+Response
+
+200
+
+application/json
+Successful Response
+
+Response model for image generation.
+
+​
+images
+Media · object[]required
+The generated images.
+
+Hide child attributes
+
+​
+images.url
+stringrequired
+The URL where the media can be accessed.
+
+​
+images.seed
+integerrequired
+The seed used to generate the media.
+
+​
+images.nsfw
+booleanrequired
+Whether the media was flagged as NSFW.
+
+const options = {
+  method: 'POST',
+  headers: {Authorization: 'Bearer <token>', 'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    prompt: '<string>',
+    model_id: '',
+    loras: '',
+    height: 576,
+    width: 1024,
+    guidance_scale: 7.5,
+    negative_prompt: '',
+    safety_check: true,
+    seed: 123,
+    num_inference_steps: 50,
+    num_images_per_prompt: 1
+  })
+};
+
+fetch('https://livepeer.studio/api/beta/generate/text-to-image', options)
+  .then(res => res.json())
+  .then(res => console.log(res))
+  .catch(err => console.error(err));
+
+{
+  "images": [
+    {
+      "url": "<string>",
+      "seed": 123,
+      "nsfw": true
+    }
+  ]
+}

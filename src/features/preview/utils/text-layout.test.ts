@@ -9,6 +9,7 @@ const baseItem: TextItem = {
   trackId: 'track-1',
   from: 0,
   durationInFrames: 120,
+  label: 'Text',
   text: 'Hello world',
   color: '#fff',
   fontSize: 48,
@@ -73,5 +74,29 @@ describe('expandTextTransformForPreview', () => {
 
     expect(expanded.width).toBe(600);
     expect(expanded.height).toBe(300);
+  });
+
+  it('accounts for previewed shadow and stroke when growing bounds', () => {
+    const expanded = expandTextTransformForPreview(
+      baseItem,
+      {
+        ...baseTransform,
+        height: 48,
+      },
+      {
+        textShadow: {
+          offsetX: 0,
+          offsetY: 18,
+          blur: 24,
+          color: '#000000',
+        },
+        stroke: {
+          width: 6,
+          color: '#111827',
+        },
+      }
+    );
+
+    expect(expanded.height).toBeGreaterThan(48);
   });
 });

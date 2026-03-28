@@ -52,6 +52,13 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Do not set COEP require-corp here: it blocks Account Kit / Turnkey auth iframes
+    // (auth.turnkey.com) and breaks connect wallet. Do not use COOP same-origin: it breaks
+    // Google OAuth popups (postMessage back to opener). same-origin-allow-popups keeps
+    // popups usable if you add COOP later for other reasons.
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     proxy: {
       [WHIP_PROXY_PREFIX]: {
         target: 'https://ai.livepeer.com',
@@ -80,6 +87,11 @@ export default defineConfig({
           })
         },
       },
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
     },
   },
   build: {

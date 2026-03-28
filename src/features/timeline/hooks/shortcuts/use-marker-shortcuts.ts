@@ -6,16 +6,18 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { addMarker, removeMarker } from '../../stores/actions/marker-actions';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 export function useMarkerShortcuts() {
+  const hotkeys = useResolvedHotkeys();
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
 
   // Markers: M - Add marker at playhead
   useHotkeys(
-    HOTKEYS.ADD_MARKER,
+    hotkeys.ADD_MARKER,
     (event) => {
       event.preventDefault();
       const { previewFrame, currentFrame } = usePlaybackStore.getState();
@@ -27,7 +29,7 @@ export function useMarkerShortcuts() {
 
   // Markers: Shift+M - Remove selected marker
   useHotkeys(
-    HOTKEYS.REMOVE_MARKER,
+    hotkeys.REMOVE_MARKER,
     (event) => {
       event.preventDefault();
       const id = useSelectionStore.getState().selectedMarkerId;
@@ -42,7 +44,7 @@ export function useMarkerShortcuts() {
 
   // Markers: [ - Jump to previous marker
   useHotkeys(
-    HOTKEYS.PREVIOUS_MARKER,
+    hotkeys.PREVIOUS_MARKER,
     (event) => {
       event.preventDefault();
       const currentMarkers = useMarkersStore.getState().markers;
@@ -66,7 +68,7 @@ export function useMarkerShortcuts() {
 
   // Markers: ] - Jump to next marker
   useHotkeys(
-    HOTKEYS.NEXT_MARKER,
+    hotkeys.NEXT_MARKER,
     (event) => {
       event.preventDefault();
       const currentMarkers = useMarkersStore.getState().markers;

@@ -1,7 +1,7 @@
 ﻿import { memo } from 'react';
 import { Link2Off, Diamond } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
-import { CLIP_LABEL_ROW_HEIGHT } from '@/features/timeline/constants';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
@@ -47,7 +47,7 @@ export const ClipIndicators = memo(function ClipIndicators({
       {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
-          style={{ top: 0, height: CLIP_LABEL_ROW_HEIGHT }}
+          style={{ top: 0, height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
         >
           {hasKeyframes && (
             <span title="Has keyframe animations">
@@ -97,4 +97,3 @@ export const ClipIndicators = memo(function ClipIndicators({
     </>
   );
 });
-

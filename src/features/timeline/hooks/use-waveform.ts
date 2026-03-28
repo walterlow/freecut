@@ -106,8 +106,18 @@ export function useWaveform({
       return;
     }
 
-    // Skip if not visible and not already loading
-    if (!isVisible && !isGeneratingRef.current) {
+    // Skip if already generating — prevents premature re-starts when the
+    // subscription updates waveform state (e.g. init message changes
+    // waveform?.isComplete from undefined to false).  Without this guard the
+    // re-fire hits the memory cache, returns the incomplete (all-zero) peaks
+    // immediately, and sets isLoading=false before any real data has arrived,
+    // leaving the waveform area visually empty.
+    if (isGeneratingRef.current) {
+      return;
+    }
+
+    // Skip if not visible
+    if (!isVisible) {
       return;
     }
 

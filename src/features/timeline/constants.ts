@@ -6,9 +6,14 @@ import {
   DEFAULT_TRACK_HEIGHT as SHARED_DEFAULT_TRACK_HEIGHT,
   DEFAULT_FPS as SHARED_DEFAULT_FPS,
 } from '@/domain/timeline/defaults';
+import { EDITOR_LAYOUT } from '@/shared/ui/editor-layout';
 
 export const DEFAULT_TRACK_HEIGHT = SHARED_DEFAULT_TRACK_HEIGHT;
 export const DEFAULT_FPS = SHARED_DEFAULT_FPS;
+export const TIMELINE_HEADER_HEIGHT = EDITOR_LAYOUT.timelineHeaderHeight;
+export const TIMELINE_TRACKS_HEADER_HEIGHT = EDITOR_LAYOUT.timelineTracksHeaderHeight;
+export const TIMELINE_RULER_HEIGHT = EDITOR_LAYOUT.timelineRulerHeight;
+export const TIMELINE_SIDEBAR_WIDTH = EDITOR_LAYOUT.timelineSidebarWidth;
 
 // =============================================================================
 // TRACK & CLIP DIMENSIONS
@@ -21,10 +26,10 @@ export const MAX_TRACK_HEIGHT = 200;
 const CLIP_HEIGHT = DEFAULT_TRACK_HEIGHT;
 
 // Shared clip layout
-export const CLIP_LABEL_ROW_HEIGHT = 18;
+export const CLIP_LABEL_ROW_HEIGHT = EDITOR_LAYOUT.timelineClipLabelRowHeight;
 
 // Video clip layout (3 rows: label | filmstrip | waveform)
-export const VIDEO_WAVEFORM_HEIGHT = 30;
+export const VIDEO_WAVEFORM_HEIGHT = EDITOR_LAYOUT.timelineVideoWaveformHeight;
 const VIDEO_FILMSTRIP_HEIGHT = CLIP_HEIGHT - CLIP_LABEL_ROW_HEIGHT - VIDEO_WAVEFORM_HEIGHT;
 
 // =============================================================================

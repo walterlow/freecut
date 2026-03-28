@@ -21,6 +21,7 @@ const PARTIAL_BUFFER_HEADROOM_SECONDS = 0.25;
 const DRIFT_RESYNC_MIN_ELAPSED_SECONDS = 1.0;
 const DRIFT_RESYNC_POSITIVE_THRESHOLD_SECONDS = 1.25;
 const DRIFT_RESYNC_NEGATIVE_THRESHOLD_SECONDS = -0.75;
+const BACKGROUND_RESYNC_GRACE_MS = 250;
 const WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK = true;
 
 let sharedCtx: AudioContext | null = null;
@@ -173,6 +174,8 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const audioVolumeRef = useRef<number>(audioVolume);
   const startRequestIdRef = useRef<number>(0);
   const lastObservedFrameRef = useRef<number>(frame);
+  const wasBackgroundedRef = useRef<boolean>(false);
+  const backgroundResyncGraceUntilRef = useRef<number>(0);
 
   const lastSyncContextTimeRef = useRef<number>(0);
   const lastStartOffsetRef = useRef<number>(0);
@@ -284,6 +287,56 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, []);
 
   useEffect(() => {
+    const markBackgrounded = () => {
+      backgroundResyncGraceUntilRef.current = 0;
+      wasBackgroundedRef.current = true;
+    };
+    const markForegrounded = () => {
+      if (!wasBackgroundedRef.current) return;
+      backgroundResyncGraceUntilRef.current = performance.now() + BACKGROUND_RESYNC_GRACE_MS;
+      const ctx = getSharedAudioContext();
+      if (ctx?.state === 'suspended') {
+        void ctx.resume().catch(() => undefined);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        markBackgrounded();
+      } else {
+        markForegrounded();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      if (document.hidden) return;
+      markBackgrounded();
+    };
+    const handleWindowFocus = () => {
+      markForegrounded();
+    };
+    const handlePageHide = () => {
+      markBackgrounded();
+    };
+    const handlePageShow = () => {
+      markForegrounded();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, []);
+
+  useEffect(() => {
     const ctx = getSharedAudioContext();
     const gain = gainNodeRef.current;
     if (!ctx || !gain) return;
@@ -336,6 +389,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const frameDelta = frame - lastObservedFrameRef.current;
     lastObservedFrameRef.current = frame;
     const frameSeekJumpThreshold = Math.max(8, Math.round(fps * 0.5));
+    const isBackgrounded =
+      document.hidden
+      || (typeof document.hasFocus === 'function' && !document.hasFocus());
+    const backgroundGraceActive = performance.now() < backgroundResyncGraceUntilRef.current;
+    const shouldIgnoreBackgroundResync = isBackgrounded || backgroundGraceActive;
 
     if (isPremounted) {
       stopSource(false);
@@ -353,7 +411,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         shouldStart = true;
       } else if (Math.abs(playbackRate - lastStartRateRef.current) > 0.0001) {
         shouldStart = true;
-      } else if (Math.abs(frameDelta) > frameSeekJumpThreshold) {
+      } else if (!shouldIgnoreBackgroundResync && Math.abs(frameDelta) > frameSeekJumpThreshold) {
         // Treat large frame jumps as explicit seeks and re-sync immediately.
         shouldStart = true;
       } else if (currentSource.buffer !== audioBuffer) {
@@ -367,7 +425,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       } else {
         // While decode is pending, avoid drift-driven seeks because frame cadence
         // can be jittery during warm-up and causes audible restart clicks.
-        if (!isPreviewAudioDecodePending(mediaId)) {
+        if (!shouldIgnoreBackgroundResync && !isPreviewAudioDecodePending(mediaId)) {
           const elapsedSec = ctx.currentTime - lastSyncContextTimeRef.current;
           const estimatedPosition = lastStartOffsetRef.current + elapsedSec * lastStartRateRef.current;
           const drift = estimatedPosition - targetTime;
@@ -435,8 +493,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       stopSource();
       needsInitialSyncRef.current = true;
     }
+
+    if (!isBackgrounded && !backgroundGraceActive && wasBackgroundedRef.current) {
+      wasBackgroundedRef.current = false;
+    }
   }, [frame, fps, playing, playbackRate, trimBefore, audioBuffer, mediaId, sourceFps, stopSource]);
 
   return null;
 });
-

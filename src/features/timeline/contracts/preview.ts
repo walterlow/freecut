@@ -13,6 +13,12 @@ export { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 export { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
 export { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
 export { resolveEffectiveTrackStates } from '../utils/group-utils';
+export { findBestCanvasDropPlacement } from '../utils/drop-placement';
+export {
+  buildDroppedMediaTimelineItem,
+  getDroppedMediaDurationInFrames,
+  type DroppableMediaType,
+} from '../utils/dropped-media';
 export {
   performInsertEdit,
   performOverwriteEdit,

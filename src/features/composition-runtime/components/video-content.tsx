@@ -10,14 +10,21 @@ import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/playe
 import { createLogger } from '@/shared/logging/logger';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
+  registerDomVideoElement,
+  unregisterDomVideoElement,
+} from '../utils/dom-video-element-registry';
+import {
   applyVideoElementAudioVolume,
   useVideoAudioVolume,
   connectedVideoElements,
   videoAudioContexts,
+  ensureAudioContextResumed,
 } from './video-audio-context';
 
 const videoLog = createLogger('NativePreviewVideo');
+const contentLog = createLogger('VideoContent');
 videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
+const POOL_RELEASE_STICKY_MS = 400;
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
 const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
@@ -40,7 +47,22 @@ const NativePreviewVideo: React.FC<{
   audioVolume: number;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
-}> = ({ poolClipId, itemId, src, safeTrimBefore, sequenceFrameOffset = 0, sourceFps, playbackRate, audioVolume, onError, containerRef }) => {
+  forceCssComposite?: boolean;
+  sharedTransitionSync?: boolean;
+}> = ({
+  poolClipId,
+  itemId,
+  src,
+  safeTrimBefore,
+  sequenceFrameOffset = 0,
+  sourceFps,
+  playbackRate,
+  audioVolume,
+  onError,
+  containerRef,
+  forceCssComposite = false,
+  sharedTransitionSync = false,
+}) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
   const sequenceContext = useSequenceContext();
@@ -56,6 +78,8 @@ const NativePreviewVideo: React.FC<{
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
+  const registeredElementRef = useRef<HTMLVideoElement | null>(null);
+  const registeredItemIdRef = useRef<string | null>(null);
   audioVolumeRef.current = audioVolume;
   onErrorRef.current = onError;
 
@@ -89,6 +113,8 @@ const NativePreviewVideo: React.FC<{
     fps,
     sequenceFrameOffset
   );
+  const frameRef = useRef(frame);
+  frameRef.current = frame;
 
   const shortId = poolClipId?.slice(0, 8) ?? 'no-id';
 
@@ -102,11 +128,41 @@ const NativePreviewVideo: React.FC<{
     lastSyncTimeRef.current = 0;
   }, [itemId]);
 
+  const syncRegisteredVideoElement = useCallback((nextItemId: string, nextElement: HTMLVideoElement | null) => {
+    const prevElement = registeredElementRef.current;
+    const prevItemId = registeredItemIdRef.current;
+
+    if (prevElement && prevItemId && (prevElement !== nextElement || prevItemId !== nextItemId)) {
+      unregisterDomVideoElement(prevItemId, prevElement);
+    }
+
+    if (nextElement && (prevElement !== nextElement || prevItemId !== nextItemId)) {
+      registerDomVideoElement(nextItemId, nextElement);
+    }
+
+    registeredElementRef.current = nextElement;
+    registeredItemIdRef.current = nextElement ? nextItemId : null;
+  }, []);
+
+  const clearRegisteredVideoElement = useCallback(() => {
+    const prevElement = registeredElementRef.current;
+    const prevItemId = registeredItemIdRef.current;
+    if (prevElement && prevItemId) {
+      unregisterDomVideoElement(prevItemId, prevElement);
+    }
+    registeredElementRef.current = null;
+    registeredItemIdRef.current = null;
+  }, []);
+
+  useLayoutEffect(() => {
+    syncRegisteredVideoElement(itemId, elementRef.current);
+  }, [itemId, syncRegisteredVideoElement]);
+
   // Acquire element from pool on mount
   useEffect(() => {
     // Guard: poolClipId and src are required
     if (!poolClipId || !src) {
-      console.error('[NativePreviewVideo] Missing poolClipId or src');
+      videoLog.error('Missing poolClipId or src');
       return;
     }
 
@@ -127,13 +183,13 @@ const NativePreviewVideo: React.FC<{
       if (cancelled || isVideoPoolAbortError(error)) {
         return;
       }
-      console.warn(`[NativePreviewVideo] Failed to preload ${src}:`, error);
+      videoLog.warn(`Failed to preload ${src}:`, error);
     });
 
     // Acquire element for this clip
     const element = pool.acquireForClip(poolClipId, src);
     if (!element) {
-      console.error(`[NativePreviewVideo] Failed to acquire element for ${poolClipId}`);
+      videoLog.error(`Failed to acquire element for ${poolClipId}`);
       return;
     }
 
@@ -172,25 +228,57 @@ const NativePreviewVideo: React.FC<{
     const isNearTarget = Math.abs(element.currentTime - clampedInitial) < 0.2;
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
+    elementRef.current = element;
+    syncRegisteredVideoElement(itemId, element);
+    applyVideoElementAudioVolume(element, audioVolumeRef.current);
+
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
       // but is at the right position. Resume immediately to minimize the
-      // decode pipeline interruption (pauseâ†’play in same synchronous batch).
-      elementRef.current = element;
-      applyVideoElementAudioVolume(element, audioVolumeRef.current);
+      // decode pipeline interruption (pause→play in same synchronous batch).
       element.playbackRate = playbackRate;
       element.play().catch(() => {});
       needsInitialSyncRef.current = false;
+    } else if (currentlyPlaying) {
+      // Playback is active but element isn’t at position (transition mount,
+      // shadow mount, or resume near a boundary). Seek and play immediately
+      // instead of pausing and waiting for the sync effect next frame.
+      // This eliminates ~16-50ms of React scheduling + readyState gate delay.
+      element.playbackRate = playbackRate;
+      element.currentTime = clampedInitial;
+      if (element.readyState >= 2) {
+        element.play().catch(() => {});
+      }
+      needsInitialSyncRef.current = false;
     } else {
-      // Normal mount (first mount, scrubbing, or position mismatch)
+      // Not playing (scrubbing, paused) — pause and seek
       element.pause();
-      elementRef.current = element;
-      applyVideoElementAudioVolume(element, audioVolumeRef.current);
     }
 
     // Set up event listeners
     const handleCanPlay = () => {
       videoLog.debug(`[${shortId}] canplay:`, element.readyState);
+      if (usePlaybackStore.getState().isPlaying && element.paused && element.readyState >= 2) {
+        const liveTargetTime = getVideoTargetTimeSeconds(
+          safeTrimBeforeRef.current,
+          sourceFpsRef.current,
+          frameRef.current,
+          playbackRateRef.current,
+          fpsRef.current,
+          sequenceFrameOffsetRef.current,
+        );
+        const clampedLiveTargetTime = Math.min(Math.max(0, liveTargetTime), (element.duration || Infinity) - 0.05);
+        if (Math.abs(element.currentTime - clampedLiveTargetTime) > 0.016) {
+          try {
+            element.currentTime = clampedLiveTargetTime;
+          } catch {
+            // Seek failed - element may still be stabilizing.
+          }
+        }
+        element.playbackRate = playbackRateRef.current;
+        element.play().catch(() => {});
+        needsInitialSyncRef.current = false;
+      }
     };
     const handleSeeked = () => {
       videoLog.debug(`[${shortId}] seeked:`, element.currentTime);
@@ -223,6 +311,15 @@ const NativePreviewVideo: React.FC<{
       element.style.position = 'absolute';
       element.style.top = '0';
       element.style.left = '0';
+      if (forceCssComposite) {
+        element.style.transform = 'translateZ(0)';
+        element.style.backfaceVisibility = 'hidden';
+        element.style.willChange = 'transform, opacity';
+      } else {
+        element.style.transform = '';
+        element.style.backfaceVisibility = '';
+        element.style.willChange = '';
+      }
       element.id = `pooled-video-${poolClipId}`;
       container.appendChild(element);
 
@@ -243,22 +340,18 @@ const NativePreviewVideo: React.FC<{
 
     // Force a frame render by doing a quick play/pause - some browsers need this
     // to actually display the video frame after seeking.
-    // IMPORTANT: Only do this when NOT playing. During playback, the sync effect
-    // handles play() and this timeout's playâ†’pause sequence would race with it,
-    // causing the video to get paused right after the sync effect started it.
-    const forceFrameRender = () => {
-      if (element.paused && element.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
-        element.play().then(() => {
-          element.pause();
-          videoLog.debug(`[${shortId}] forced frame render`);
-        }).catch(() => {
-          // Ignore - autoplay might be blocked
-        });
-      }
-    };
-
-    // Try after a short delay to allow the seek to complete
-    forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
+    // Only when NOT playing — during playback, the sync effect handles play()
+    // and this timeout’s play→pause sequence would race with it.
+    if (!currentlyPlaying) {
+      const forceFrameRender = () => {
+        if (element.paused && element.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
+          element.play().then(() => {
+            element.pause();
+          }).catch(() => {});
+        }
+      };
+      forceRenderTimeoutRef.current = window.setTimeout(forceFrameRender, 100);
+    }
 
     // Stall watchdog: if the element is stuck at readyState 0 for too long
     // (e.g., slow OPFS read, browser decoder init, broken file), retry load.
@@ -270,7 +363,7 @@ const NativePreviewVideo: React.FC<{
       stallTimerId = window.setTimeout(() => {
         stallTimerId = null;
         if (elementRef.current === element && element.readyState === 0) {
-          console.warn(`[NativePreviewVideo] Video stalled at readyState 0 for ${shortId}, retrying load`);
+          videoLog.warn(`Video stalled at readyState 0 for ${shortId}, retrying load`);
           try {
             element.load();
           } catch {
@@ -306,14 +399,29 @@ const NativePreviewVideo: React.FC<{
       }
 
       // Release back to pool
-      pool.releaseClip(poolClipId);
+      clearRegisteredVideoElement();
+      pool.releaseClip(poolClipId, { delayMs: POOL_RELEASE_STICKY_MS });
       elementRef.current = null;
 
       videoLog.debug(`[${shortId}] released`);
     };
     // Note: frame, fps, targetTime intentionally NOT in deps - we only want to acquire once on mount
     // Ongoing seeking is handled by the separate sync effect
-  }, [poolClipId, src, pool, containerRef, shortId]);
+  }, [poolClipId, src, pool, containerRef, shortId, itemId, syncRegisteredVideoElement, clearRegisteredVideoElement]);
+
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element) return;
+    if (forceCssComposite) {
+      element.style.transform = 'translateZ(0)';
+      element.style.backfaceVisibility = 'hidden';
+      element.style.willChange = 'transform, opacity';
+      return;
+    }
+    element.style.transform = '';
+    element.style.backfaceVisibility = '';
+    element.style.willChange = '';
+  }, [forceCssComposite]);
 
   // Sync video playback with timeline
   // Layout pass handles immediate seeks before paint to avoid one-frame stale
@@ -322,7 +430,13 @@ const NativePreviewVideo: React.FC<{
     const video = elementRef.current;
     if (!video) return;
 
-    video.playbackRate = playbackRate;
+    // Only set playbackRate from React when RVFC isn't managing drift correction.
+    // During playback with RVFC, the callback owns video.playbackRate and applies
+    // small rate adjustments for smooth drift correction. Overwriting here would
+    // undo those adjustments every frame.
+    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
+      video.playbackRate = playbackRate;
+    }
 
     const relativeFrame = frame - sequenceFrameOffset;
     const isPremounted = relativeFrame < 0;
@@ -337,14 +451,17 @@ const NativePreviewVideo: React.FC<{
     if (!canSeek) return;
 
     if (isPremounted) {
-      if (!video.paused) {
-        video.pause();
-      }
-      if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
-        try {
-          video.currentTime = clampedTargetTime;
-        } catch {
-          // Seek failed - element may still be initializing
+      const heldByTransition = video.dataset.transitionHold === '1';
+      if (!heldByTransition) {
+        if (!video.paused) {
+          video.pause();
+        }
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed - element may still be initializing
+          }
         }
       }
       return;
@@ -362,15 +479,18 @@ const NativePreviewVideo: React.FC<{
         // Seek failed - element may still be initializing
       }
     }
-  }, [frame, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
 
   // Runtime playback control + drift correction
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
 
-    // Set playback rate
-    video.playbackRate = playbackRate;
+    // Only set playbackRate from React when RVFC isn't active.
+    // RVFC owns the rate during playback for smooth drift correction.
+    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
+      video.playbackRate = playbackRate;
+    }
 
     // Update sequenceFrom for rVFC callback (global frame minus local frame)
     sequenceFromRef.current = clock.currentFrame - frame;
@@ -410,14 +530,20 @@ const NativePreviewVideo: React.FC<{
       });
     }
 
-    // During premount, always pause - don't play until clip is actually visible
+    // During premount, always pause - don't play until clip is actually visible.
+    // Exception: if the element is held by a transition session (marked via
+    // data-transition-hold), the canvas overlay needs it playing for zero-copy
+    // frame reads. Pausing it would cause a play/pause fight every frame that
+    // disrupts Chrome's video decode pipeline and produces visible judder.
     if (isPremounted) {
-      if (!video.paused) {
-        video.pause();
-      }
-      // Seek to start position so video is ready when playback reaches this clip
-      if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
-        video.currentTime = clampedTargetTime;
+      const heldByTransition = video.dataset.transitionHold === '1';
+      if (!heldByTransition) {
+        if (!video.paused) {
+          video.pause();
+        }
+        if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
+          video.currentTime = clampedTargetTime;
+        }
       }
       return;
     }
@@ -431,23 +557,26 @@ const NativePreviewVideo: React.FC<{
       // Invalidate any in-flight pre-warm promise so its .then()/.catch() no-ops
       preWarmGenRef.current += 1;
 
-      // Normal forward playback
-      // Initial sync is always needed (first play after mount/seek)
+      // Initial sync on first play after mount/seek.
+      // Skip the seek if element is already at the target (avoids readyState
+      // drop from redundant seeks, which delays play start by 100-300ms).
       if (needsInitialSyncRef.current && canSeek) {
-        try {
-          video.currentTime = clampedTargetTime;
-          lastSyncTimeRef.current = Date.now();
-          needsInitialSyncRef.current = false;
-        } catch {
-          // Seek failed - video may not be ready yet
+        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+          try {
+            video.currentTime = clampedTargetTime;
+          } catch {
+            // Seek failed - video may not be ready yet
+          }
         }
+        lastSyncTimeRef.current = Date.now();
+        needsInitialSyncRef.current = false;
       }
 
       // Drift correction: only run from React effect when rVFC is NOT available.
       // When rVFC is supported, the callback below handles drift correction
       // directly from the video's presentation callback, avoiding per-frame
       // React scheduling overhead.
-      if (!supportsRVFC) {
+      if (!supportsRVFC && !sharedTransitionSync) {
         const currentTime = video.currentTime;
         const now = Date.now();
         const drift = currentTime - clampedTargetTime;
@@ -466,10 +595,11 @@ const NativePreviewVideo: React.FC<{
         }
       }
 
-      // Play if paused and video has buffered ahead (HAVE_FUTURE_DATA).
-      // >= 3 ensures the decoder has frames in its buffer, preventing
-      // stutter on play start after seeking to a new position.
-      if (video.paused && video.readyState >= 3) {
+      // Play if paused and video has current frame data (HAVE_CURRENT_DATA).
+      // >= 2 is sufficient — the browser buffers ahead during playback.
+      // Previous >= 3 gate added 100-300ms of unnecessary cold start delay
+      // waiting for HAVE_FUTURE_DATA after every seek.
+      if (video.paused && video.readyState >= 2) {
         video.play().catch(() => {
           // Autoplay might be blocked - this is fine
         });
@@ -527,15 +657,24 @@ const NativePreviewVideo: React.FC<{
         }
       }
     }
-  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
 
   // requestVideoFrameCallback-based drift correction.
-  // Runs outside React's render cycle â€” the browser calls us exactly when a
-  // video frame is presented, so we can nudge currentTime with zero scheduling
-  // overhead. Falls back to the per-frame React effect above when unsupported.
+  // Runs outside React's render cycle — the browser calls us exactly when a
+  // video frame is presented. Uses rate-based correction for small drifts
+  // (adjusts playbackRate ±2-5% to smoothly converge) and hard seeks only
+  // for large drifts (>200ms). This eliminates the visible “drift then jump”
+  // jitter pattern that hard-seek-only correction causes.
   useEffect(() => {
     const video = elementRef.current;
-    if (!video || !isPlaying || !supportsRVFC) return;
+    if (!video || !isPlaying || !supportsRVFC || sharedTransitionSync) return;
+
+    // Pre-resume AudioContext so audio starts immediately with video.
+    // Without this, suspended AudioContext adds 50-100ms audio delay on cold resume.
+    ensureAudioContextResumed();
+
+    // Set initial playbackRate when RVFC takes over
+    video.playbackRate = playbackRateRef.current;
 
     let handle: number;
     const onVideoFrame = () => {
@@ -553,7 +692,7 @@ const NativePreviewVideo: React.FC<{
         return;
       }
 
-      const rate = playbackRateRef.current;
+      const nominalRate = playbackRateRef.current;
       const timelineFps = fpsRef.current;
       const clipSourceFps = sourceFpsRef.current;
       const trim = safeTrimBeforeRef.current;
@@ -561,7 +700,7 @@ const NativePreviewVideo: React.FC<{
         trim,
         clipSourceFps,
         localFrame,
-        rate,
+        nominalRate,
         timelineFps,
         sequenceFrameOffsetRef.current
       );
@@ -569,18 +708,30 @@ const NativePreviewVideo: React.FC<{
       const clamped = Math.min(Math.max(0, target), dur - 0.05);
 
       const drift = v.currentTime - clamped;
-      const now = Date.now();
-      const timeSinceLastSync = now - lastSyncTimeRef.current;
+      const absDrift = Math.abs(drift);
 
-      if (drift > 0.5 || (drift < -0.2 && timeSinceLastSync > 80)) {
+      if (absDrift > 0.2) {
+        // Large drift (>200ms) — hard seek, reset rate
         if (v.readyState >= 1) {
           try {
             v.currentTime = clamped;
-            lastSyncTimeRef.current = now;
+            lastSyncTimeRef.current = Date.now();
           } catch {
             // Seek may fail if element isn't fully loaded
           }
         }
+        v.playbackRate = nominalRate;
+      } else if (absDrift > 0.016) {
+        // Small drift (16-200ms) — smooth rate-based correction.
+        // Proportional: larger drift → stronger correction (up to ±5%).
+        // Converges in ~0.3-0.5s without visible jumps.
+        const correction = Math.min(0.05, absDrift * 0.3);
+        v.playbackRate = drift > 0
+          ? nominalRate * (1 - correction) // ahead → slow down
+          : nominalRate * (1 + correction); // behind → speed up
+      } else {
+        // In sync (within ~1 frame) — nominal rate
+        v.playbackRate = nominalRate;
       }
 
       handle = v.requestVideoFrameCallback(onVideoFrame);
@@ -589,8 +740,12 @@ const NativePreviewVideo: React.FC<{
     handle = video.requestVideoFrameCallback(onVideoFrame);
     return () => {
       video.cancelVideoFrameCallback(handle);
+      // Reset to nominal rate when RVFC stops managing
+      if (elementRef.current) {
+        elementRef.current.playbackRate = playbackRateRef.current;
+      }
     };
-  }, [isPlaying, poolClipId, clock]);
+  }, [clock, isPlaying, poolClipId, sharedTransitionSync]);
 
   // Keep volume/gain in sync for pooled element.
   useEffect(() => {
@@ -622,6 +777,12 @@ const NativePreviewVideo: React.FC<{
         position: 'relative',
         // Hide when premounted (frame < 0), otherwise inherit parent visibility
         visibility: isVisible ? undefined : 'hidden',
+        ...(forceCssComposite ? {
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden' as const,
+          willChange: 'transform, opacity',
+          contain: 'paint',
+        } : {}),
       }}
     >
       {/* Video element is mounted here by the useEffect */}
@@ -636,12 +797,13 @@ const NativePreviewVideo: React.FC<{
  * Uses native HTML5 video for both preview and export (via Canvas + WebCodecs).
  */
 export const VideoContent: React.FC<{
-  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
+  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string; _sharedTransitionSync?: boolean };
   muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
   sourceFps: number;
-}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps }) => {
+  forceCssComposite?: boolean;
+}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
   const audioVolume = useVideoAudioVolume(item, muted);
   const [hasError, setHasError] = useState(false);
 
@@ -650,7 +812,7 @@ export const VideoContent: React.FC<{
 
   // Handle media errors (e.g., invalid blob URL after HMR or cache cleanup)
   const handleError = useCallback((error: Error) => {
-    console.warn(`[VideoContent] Media error for item ${item.id}:`, error.message);
+    contentLog.warn(`Media error for item ${item.id}:`, error.message);
     setHasError(true);
   }, [item.id]);
 
@@ -686,6 +848,8 @@ export const VideoContent: React.FC<{
       audioVolume={audioVolume}
       onError={handleError}
       containerRef={containerRef}
+      forceCssComposite={forceCssComposite}
+      sharedTransitionSync={item._sharedTransitionSync === true}
     />
   );
 };

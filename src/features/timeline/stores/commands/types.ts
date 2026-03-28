@@ -6,7 +6,7 @@ import type { SubComposition } from '../compositions-store';
 /**
  * Snapshot of all timeline state for undo/redo.
  * This captures the complete state that can be restored.
- * Excludes ephemeral state (pendingBreakages, isDirty) that shouldn't be in history.
+ * Excludes ephemeral state (for example isDirty) that shouldn't be in history.
  */
 export interface TimelineSnapshot {
   items: TimelineItem[];

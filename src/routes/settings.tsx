@@ -69,8 +69,12 @@ function Settings() {
             </Link>
             <PixelsLogo variant="full" size="md" />
           </div>
-          <Button variant="outline" onClick={resetToDefaults}>
-            <RotateCcw className="w-4 h-4 mr-2" />
+          <Button
+            variant="outline"
+            onClick={resetToDefaults}
+            className="hidden md:inline-flex"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
             Reset to Defaults
           </Button>
         </div>

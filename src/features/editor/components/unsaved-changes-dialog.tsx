@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Save, Trash2 } from 'lucide-react';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('UnsavedChangesDialog');
 
 interface UnsavedChangesDialogProps {
   open: boolean;
@@ -36,7 +39,7 @@ export function UnsavedChangesDialog({
       onOpenChange(false);
       navigate({ to: '/projects' });
     } catch (error) {
-      console.error('Failed to save project:', error);
+      logger.error('Failed to save project:', error);
       // Keep dialog open on error
     } finally {
       setIsSaving(false);

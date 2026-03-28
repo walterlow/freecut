@@ -32,16 +32,6 @@ dist-ssr
 build
 out
 
-# Hardhat
-artifacts/
-cache/
-typechain-types/
-typechain-generated/
-
-# Stylus / Cargo (contracts/stylus)
-contracts/stylus/target/*
-contracts/target/*
-
 # Testing
 coverage
 
@@ -61,4 +51,5 @@ CLAUDE.md
 crates/*/target/
 crates/*/Cargo.lock
 .knip-report.json
-.cursor/*
+
+tmp

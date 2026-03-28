@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useZoomStore } from '../stores/zoom-store';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('TimelineZoom');
 
 interface UseTimelineZoomOptions {
   initialZoom?: number;
@@ -44,7 +47,7 @@ export function useTimelineZoom(options: UseTimelineZoomOptions = {}) {
   const pixelsToTime = useCallback(
     (pixels: number) => {
       if (pixelsPerSecond <= 0) {
-        console.warn('pixelsPerSecond is zero or negative, returning 0');
+        logger.warn('pixelsPerSecond is zero or negative, returning 0');
         return 0;
       }
       return pixels / pixelsPerSecond;

@@ -1,3 +1,7 @@
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('VideoSourcePool');
+
 /**
  * VideoSourcePool.ts - Manages video elements by source URL
  *
@@ -12,6 +16,11 @@ interface SourceMetadata {
   duration: number;
   width: number;
   height: number;
+}
+
+interface EnsureReadyLanesOptions {
+  targetTimeSeconds?: number[];
+  warmDecode?: boolean;
 }
 
 const VIDEO_POOL_ABORT_PREFIX = 'VIDEO_POOL_ABORT:';
@@ -169,6 +178,36 @@ class SourceController {
     return this.primary!;
   }
 
+  async ensureReadyLanes(
+    minTotalLanes: number,
+    options?: EnsureReadyLanesOptions,
+  ): Promise<void> {
+    if (minTotalLanes <= 0) {
+      return;
+    }
+
+    await this.ensureLoaded();
+
+    while (this.getElementCount() < minTotalLanes) {
+      const element = this.createElementSync();
+      this.overflow.push(element);
+      await this.waitForElementReady(element);
+    }
+
+    const idleElements = this.getManagedElements().filter((element) => !this.isElementInUse(element));
+    const targetTimes = options?.targetTimeSeconds ?? [];
+    for (let index = 0; index < idleElements.length; index += 1) {
+      const element = idleElements[index]!;
+      const targetTimeSeconds = targetTimes[index];
+      if (targetTimeSeconds !== undefined) {
+        this.seekElement(element, targetTimeSeconds);
+      }
+      if (options?.warmDecode) {
+        await this.warmElement(element);
+      }
+    }
+  }
+
   /**
    * Acquire a video element for a clip
    * Returns an element seeked to the correct source time
@@ -216,8 +255,8 @@ class SourceController {
     // Do NOT reuse an in-use element: this can cause cross-clip state conflicts
     // (mute/seek/playback race) and audible dropouts during transitions.
     // Instead, create an extra overflow element for this rare overlap.
-    console.warn(
-      `[SourceController] All pooled elements in use for ${this.sourceUrl}, creating extra overflow element`
+    logger.warn(
+      `All pooled elements in use for ${this.sourceUrl}, creating extra overflow element`
     );
     const extraElement = this.createElementSync();
     this.overflow.push(extraElement);
@@ -341,6 +380,75 @@ class SourceController {
     return false;
   }
 
+  private getManagedElements(): HTMLVideoElement[] {
+    return [
+      ...(this.primary ? [this.primary] : []),
+      ...(this._pendingPrimary ? [this._pendingPrimary] : []),
+      ...this.overflow,
+    ];
+  }
+
+  private async waitForElementReady(element: HTMLVideoElement): Promise<void> {
+    if (element.readyState >= 2) {
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        element.removeEventListener('canplay', handleCanPlay);
+        element.removeEventListener('error', handleError);
+      };
+
+      const handleCanPlay = () => {
+        cleanup();
+        resolve();
+      };
+
+      const handleError = () => {
+        cleanup();
+        reject(new Error(`Failed to load video: ${element.error?.message || 'Unknown error'}`));
+      };
+
+      element.addEventListener('canplay', handleCanPlay);
+      element.addEventListener('error', handleError);
+
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(
+          new Error(
+            `Video load timed out after ${SourceController.LOAD_TIMEOUT_MS}ms for: ${this.sourceUrl.slice(0, 80)}`
+          )
+        );
+      }, SourceController.LOAD_TIMEOUT_MS);
+
+      element.load();
+    });
+  }
+
+  private async warmElement(element: HTMLVideoElement): Promise<void> {
+    if (element.readyState < 2 || !element.paused) {
+      return;
+    }
+
+    const previousMuted = element.muted;
+    element.muted = true;
+    try {
+      await element.play();
+      await Promise.resolve();
+      element.pause();
+    } catch {
+      // Best-effort decoder warmup.
+    } finally {
+      element.muted = previousMuted;
+    }
+  }
+
   private createElementSync(): HTMLVideoElement {
     const element = document.createElement('video');
     element.src = this.sourceUrl;
@@ -383,6 +491,7 @@ class SourceController {
 export class VideoSourcePool {
   private sources: Map<string, SourceController> = new Map();
   private clipToSource: Map<string, string> = new Map();
+  private pendingReleaseTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   // Callbacks
   private onElementReady?: (sourceUrl: string, element: HTMLVideoElement) => void;
@@ -429,8 +538,21 @@ export class VideoSourcePool {
    * Acquire a video element for a clip
    */
   acquireForClip(clipId: string, sourceUrl: string): HTMLVideoElement | null {
-    // Release any previous assignment for this clip
-    this.releaseClip(clipId);
+    this.cancelPendingRelease(clipId);
+
+    const existingSourceUrl = this.clipToSource.get(clipId);
+    if (existingSourceUrl && existingSourceUrl !== sourceUrl) {
+      this.releaseClipNow(clipId);
+    }
+
+    const activeSourceUrl = this.clipToSource.get(clipId);
+    if (activeSourceUrl === sourceUrl) {
+      const existingController = this.sources.get(sourceUrl);
+      const existingElement = existingController?.getAssignedElement(clipId);
+      if (existingElement) {
+        return existingElement;
+      }
+    }
 
     const controller = this.getSource(sourceUrl);
     const element = controller.acquire(clipId);
@@ -445,13 +567,29 @@ export class VideoSourcePool {
   /**
    * Release a clip's element
    */
-  releaseClip(clipId: string): void {
-    const sourceUrl = this.clipToSource.get(clipId);
-    if (sourceUrl) {
-      const controller = this.sources.get(sourceUrl);
-      controller?.release(clipId);
-      this.clipToSource.delete(clipId);
+  releaseClip(clipId: string, options?: { delayMs?: number }): void {
+    const delayMs = Math.max(0, options?.delayMs ?? 0);
+    this.cancelPendingRelease(clipId);
+
+    if (delayMs > 0) {
+      const timerId = setTimeout(() => {
+        this.pendingReleaseTimers.delete(clipId);
+        this.releaseClipNow(clipId);
+      }, delayMs);
+      this.pendingReleaseTimers.set(clipId, timerId);
+      return;
     }
+
+    this.releaseClipNow(clipId);
+  }
+
+  async ensureReadyLanes(
+    sourceUrl: string,
+    minTotalLanes: number,
+    options?: EnsureReadyLanesOptions,
+  ): Promise<void> {
+    const controller = this.getSource(sourceUrl);
+    await controller.ensureReadyLanes(minTotalLanes, options);
   }
 
   /**
@@ -532,11 +670,32 @@ export class VideoSourcePool {
    * Dispose entire pool
    */
   dispose(): void {
+    for (const timerId of this.pendingReleaseTimers.values()) {
+      clearTimeout(timerId);
+    }
+    this.pendingReleaseTimers.clear();
     for (const controller of this.sources.values()) {
       controller.dispose();
     }
     this.sources.clear();
     this.clipToSource.clear();
+  }
+
+  private cancelPendingRelease(clipId: string): void {
+    const timerId = this.pendingReleaseTimers.get(clipId);
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+      this.pendingReleaseTimers.delete(clipId);
+    }
+  }
+
+  private releaseClipNow(clipId: string): void {
+    const sourceUrl = this.clipToSource.get(clipId);
+    if (!sourceUrl) return;
+
+    const controller = this.sources.get(sourceUrl);
+    controller?.release(clipId);
+    this.clipToSource.delete(clipId);
   }
 }
 

@@ -9,6 +9,8 @@ import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
 import { createDeleteActions } from './media-delete-actions';
 import { createRelinkingActions } from './media-relinking-actions';
+import { getTranscriptMediaIds } from '@/infrastructure/storage/indexeddb';
+import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress';
 
 const logger = createLogger('MediaLibraryStore');
 
@@ -61,6 +63,10 @@ export const useMediaLibraryStore = create<
       proxyStatus: new Map(),
       proxyProgress: new Map(),
 
+      // Transcript generation
+      transcriptStatus: new Map(),
+      transcriptProgress: new Map(),
+
 
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
@@ -78,6 +84,8 @@ export const useMediaLibraryStore = create<
           isLoading: !!projectId, // Set loading if switching to a project
           proxyStatus: new Map(),
           proxyProgress: new Map(),
+          transcriptStatus: new Map(),
+          transcriptProgress: new Map(),
         });
         // Note: loadMediaItems is triggered by the component's useEffect
         // Don't call it here to avoid double loading
@@ -104,6 +112,28 @@ export const useMediaLibraryStore = create<
             mediaById: buildMediaById(mediaItems),
             isLoading: false,
           });
+
+          try {
+            const transcriptIds = await getTranscriptMediaIds(mediaItems.map((item) => item.id));
+            const nextTranscriptStatus = new Map<string, 'idle' | 'ready'>();
+            for (const item of mediaItems) {
+              nextTranscriptStatus.set(item.id, transcriptIds.has(item.id) ? 'ready' : 'idle');
+            }
+            set({
+              transcriptStatus: nextTranscriptStatus,
+              transcriptProgress: new Map(),
+            });
+          } catch (error) {
+            logger.warn('[MediaLibraryStore] Failed to load transcript availability:', error);
+            const nextTranscriptStatus = new Map<string, 'idle'>();
+            for (const item of mediaItems) {
+              nextTranscriptStatus.set(item.id, 'idle');
+            }
+            set({
+              transcriptStatus: nextTranscriptStatus,
+              transcriptProgress: new Map(),
+            });
+          }
 
           // Load existing proxies from OPFS and regenerate stale entries in the background.
           try {
@@ -268,6 +298,33 @@ export const useMediaLibraryStore = create<
           return { proxyProgress: newProgress };
         });
       },
+
+      setTranscriptStatus: (mediaId, status) => {
+        set((state) => {
+          const transcriptStatus = new Map(state.transcriptStatus);
+          transcriptStatus.set(mediaId, status);
+          return { transcriptStatus };
+        });
+      },
+
+      setTranscriptProgress: (mediaId, progress) => {
+        set((state) => {
+          const transcriptProgress = new Map(state.transcriptProgress);
+          transcriptProgress.set(
+            mediaId,
+            mergeTranscriptionProgress(transcriptProgress.get(mediaId), progress)
+          );
+          return { transcriptProgress };
+        });
+      },
+
+      clearTranscriptProgress: (mediaId) => {
+        set((state) => {
+          const transcriptProgress = new Map(state.transcriptProgress);
+          transcriptProgress.delete(mediaId);
+          return { transcriptProgress };
+        });
+      },
     }),
     {
       name: 'MediaLibraryStore',
@@ -334,4 +391,3 @@ export const useFilteredMediaItems = () => {
 
   return sorted;
 };
-

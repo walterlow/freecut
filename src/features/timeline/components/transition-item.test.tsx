@@ -53,7 +53,7 @@ describe('TransitionItem preview bridge motion', () => {
     const right = makeVideoItem({ id: 'right', from: 140, durationInFrames: 80, mediaId: 'media-2' });
     useItemsStore.getState().setItems([left, right]);
 
-    render(<TransitionItem transition={transition} trackHeight={60} />);
+    render(<TransitionItem transition={transition} />);
 
     const overlay = screen.getByTitle('Fade (0.7s)');
     const initialLeftPx = parseFloat(overlay.style.left);
@@ -77,7 +77,7 @@ describe('TransitionItem preview bridge motion', () => {
     const right = makeVideoItem({ id: 'right', from: 140, durationInFrames: 80, mediaId: 'media-2' });
     useItemsStore.getState().setItems([left, right]);
 
-    render(<TransitionItem transition={transition} trackHeight={60} />);
+    render(<TransitionItem transition={transition} />);
 
     const overlay = screen.getByTitle('Fade (0.7s)');
     const initialLeftPx = parseFloat(overlay.style.left);
@@ -93,5 +93,18 @@ describe('TransitionItem preview bridge motion', () => {
 
     const updatedLeftPx = parseFloat(screen.getByTitle('Fade (0.7s)').style.left);
     expect(updatedLeftPx - initialLeftPx).toBe(-20);
+  });
+
+  it('fills the full lane height when the separator is rendered outside the row', () => {
+    const left = makeVideoItem({ id: 'left', from: 100, durationInFrames: 60 });
+    const right = makeVideoItem({ id: 'right', from: 140, durationInFrames: 80, mediaId: 'media-2' });
+    useItemsStore.getState().setItems([left, right]);
+
+    render(<TransitionItem transition={transition} />);
+
+    const overlay = screen.getByTitle('Fade (0.7s)');
+    expect(overlay.className).toContain('inset-y-0');
+    expect(overlay.style.top).toBe('');
+    expect(overlay.style.bottom).toBe('');
   });
 });

@@ -10,6 +10,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { createManagedWorkerPool } from '@/shared/utils/managed-worker-pool';
 
 const logger = createLogger('FilmstripCache');
 
@@ -172,8 +173,16 @@ class FilmstripCacheService {
   private loadingPromises = new Map<string, Promise<Filmstrip>>();
   private activeExtractions = new Set<string>();
   private extractionQueue: string[] = [];
-  private workerPool: Worker[] = [];
-  private allWorkers = new Set<Worker>();
+  private readonly workerPoolManager = createManagedWorkerPool({
+    createWorker: () => new Worker(
+      new URL('../workers/filmstrip-extraction-worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+    resetWorker: (worker) => {
+      worker.onmessage = null;
+      worker.onerror = null;
+    },
+  });
   private metricsTotals = {
     started: 0,
     completed: 0,
@@ -183,15 +192,6 @@ class FilmstripCacheService {
   private metricsHistory: ExtractionMetricSample[] = [];
   private lastMemoryCheckAt = 0;
 
-  private createWorker(): Worker {
-    const worker = new Worker(
-      new URL('../workers/filmstrip-extraction-worker.ts', import.meta.url),
-      { type: 'module' }
-    );
-    this.allWorkers.add(worker);
-    return worker;
-  }
-
   private getQueueScore(mediaId: string): number {
     const pending = this.pendingExtractions.get(mediaId);
     if (!pending) return Number.POSITIVE_INFINITY;
@@ -199,7 +199,7 @@ class FilmstripCacheService {
   }
 
   private acquireWorker(): Worker {
-    return this.workerPool.pop() ?? this.createWorker();
+    return this.workerPoolManager.acquireWorker();
   }
 
   private getMaxIdleWorkers(): number {
@@ -209,20 +209,11 @@ class FilmstripCacheService {
   }
 
   private releaseWorker(worker: Worker): void {
-    worker.onmessage = null;
-    worker.onerror = null;
-    if (this.workerPool.length >= this.getMaxIdleWorkers()) {
-      this.terminateWorker(worker);
-      return;
-    }
-    this.workerPool.push(worker);
+    this.workerPoolManager.releaseWorker(worker, { maxIdleWorkers: this.getMaxIdleWorkers() });
   }
 
   private terminateWorker(worker: Worker): void {
-    worker.onmessage = null;
-    worker.onerror = null;
-    worker.terminate();
-    this.allWorkers.delete(worker);
+    this.workerPoolManager.terminateWorker(worker);
   }
 
   /**
@@ -1170,15 +1161,27 @@ class FilmstripCacheService {
           const overallProgress = Math.min(100, Math.round((totalExtracted / progressFrames) * 100));
           pending.onProgress?.(overallProgress);
 
-          // Preferred path: use worker-provided blobs directly for progressive
-          // updates to avoid OPFS read-after-write latency.
+          // Fastest path: use transferred ImageBitmaps for instant display
+          // (no JPEG encode/decode roundtrip). Bitmaps arrive before blobs.
+          if (Array.isArray(response.bitmapFrames) && response.bitmapFrames.length > 0) {
+            this.ingestBitmapFrames(
+              mediaId,
+              response.bitmapFrames.filter((bf) =>
+                bf.index >= workerState.startIndex
+                && bf.index < workerState.endIndex
+                && !pending.extractedFrames.has(bf.index)
+              )
+            );
+          }
+
+          // When blobs arrive (after JPEG encode), upgrade frames with proper URLs
+          // and persist to OPFS. This replaces bitmap-only frames.
           if (Array.isArray(response.savedFrames) && response.savedFrames.length > 0) {
             this.ingestSavedFrames(
               mediaId,
               response.savedFrames.filter((frame) =>
                 frame.index >= workerState.startIndex
                 && frame.index < workerState.endIndex
-                && !pending.extractedFrames.has(frame.index)
               )
             );
             workerState.lastLoadedCount = Math.max(workerState.lastLoadedCount, response.frameCount);
@@ -1380,6 +1383,27 @@ class FilmstripCacheService {
     await Promise.all(loadPromises);
   }
 
+  private ingestBitmapFrames(
+    mediaId: string,
+    bitmapFrames: Array<{ index: number; bitmap: ImageBitmap }>
+  ): void {
+    const pending = this.pendingExtractions.get(mediaId);
+    if (!pending || bitmapFrames.length === 0) return;
+
+    for (const bf of bitmapFrames) {
+      if (pending.extractedFrames.has(bf.index)) {
+        // Already have this frame (e.g., from a previous blob) — close the bitmap
+        bf.bitmap.close();
+        continue;
+      }
+      const frame = filmstripOPFSStorage.createFrameFromBitmap(mediaId, bf.index, bf.bitmap);
+      if (frame) {
+        pending.extractedFrames.set(bf.index, frame);
+        this.noteFirstFrame(pending.metrics);
+      }
+    }
+  }
+
   private ingestSavedFrames(
     mediaId: string,
     savedFrames: Array<{ index: number; blob: Blob }>
@@ -1388,11 +1412,17 @@ class FilmstripCacheService {
     if (!pending || savedFrames.length === 0) return;
 
     for (const saved of savedFrames) {
-      if (pending.extractedFrames.has(saved.index)) continue;
+      const existing = pending.extractedFrames.get(saved.index);
       const frame = filmstripOPFSStorage.createFrameFromBlob(mediaId, saved.index, saved.blob);
       if (frame) {
+        // Close bitmap if this frame was previously bitmap-only
+        if (existing?.bitmap) {
+          existing.bitmap.close();
+        }
         pending.extractedFrames.set(saved.index, frame);
-        this.noteFirstFrame(pending.metrics);
+        if (!existing) {
+          this.noteFirstFrame(pending.metrics);
+        }
       }
     }
   }
@@ -1934,13 +1964,7 @@ class FilmstripCacheService {
     for (const mediaId of this.pendingExtractions.keys()) {
       this.abort(mediaId);
     }
-    for (const worker of [...this.workerPool]) {
-      this.terminateWorker(worker);
-    }
-    this.workerPool = [];
-    for (const worker of Array.from(this.allWorkers)) {
-      this.terminateWorker(worker);
-    }
+    this.workerPoolManager.terminateAll();
     for (const timer of this.idleEvictionTimers.values()) {
       clearTimeout(timer);
     }

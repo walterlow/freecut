@@ -1,69 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, memo, useRef } from 'react';
-import { Sparkles, Plus, Eye, EyeOff } from 'lucide-react';
-import { toast } from 'sonner';
+import { useCallback, useMemo, memo, useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { Sparkles, Plus, Eye, EyeOff, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import type { TimelineItem } from '@/types/timeline';
-import type {
-  ItemEffect,
-  CSSFilterType,
-  CSSFilterEffect,
-  GlitchEffect,
-  GlitchVariant,
-  HalftoneEffect,
-  VignetteEffect,
-  LUTEffect,
-  CurvesEffect,
-  WheelsEffect,
-  CurvesChannels,
-} from '@/types/effects';
-import {
-  CSS_FILTER_CONFIGS,
-  GLITCH_CONFIGS,
-  EFFECT_PRESETS,
-  HALFTONE_CONFIG,
-  CANVAS_EFFECT_CONFIGS,
-  VIGNETTE_CONFIG,
-  OVERLAY_EFFECT_CONFIGS,
-  CURVES_CONFIG,
-  WHEELS_CONFIG,
-} from '@/types/effects';
+import type { ItemEffect, GpuEffect } from '@/types/effects';
+import { EFFECT_PRESETS } from '@/types/effects';
 import { useTimelineStore } from '@/features/effects/deps/timeline-contract';
 import { useGizmoStore } from '@/features/effects/deps/preview-contract';
 import { PropertySection } from '@/shared/ui/property-controls';
-import { parseCubeLut } from '@/shared/utils/cube-lut';
-import {
-  deleteCubeLutFromLibrary,
-  loadCubeLutFromLibrary,
-  loadSavedCubeLuts,
-  saveCubeLutToLibrary,
-  type SavedCubeLut,
-} from '@/features/effects/utils/lut-library';
-import {
-  CSSFilterPanel,
-  GlitchPanel,
-  HalftonePanel,
-  VignettePanel,
-  LUTPanel,
-  CurvesPanel,
-  WheelsPanel,
-} from './panels';
-
-function createDefaultCurvesChannels(): CurvesChannels {
-  const diagonal = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
-  return {
-    master: diagonal.map((p) => ({ ...p })),
-    red: diagonal.map((p) => ({ ...p })),
-    green: diagonal.map((p) => ({ ...p })),
-    blue: diagonal.map((p) => ({ ...p })),
-  };
-}
+import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels';
+import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
+import { useEffectPreviews } from '../hooks/use-effect-previews';
 
 interface EffectsSectionProps {
   /** Visual items (already filtered to exclude audio) */
@@ -71,7 +18,7 @@ interface EffectsSectionProps {
 }
 
 /**
- * Effects section - CSS filters and glitch effects for visual items.
+ * Effects section - GPU shader effects for visual items.
  * Only shown when selection includes video, image, text, or shape clips.
  * Memoized to prevent re-renders when items prop hasn't changed.
  */
@@ -95,142 +42,147 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   // Get effects from first selected item (for display)
   // Multi-select shows first item's effects
   const effects: ItemEffect[] = visualItems[0]?.effects ?? [];
-  const [savedCubeLuts, setSavedCubeLuts] = useState<SavedCubeLut[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const luts = await loadSavedCubeLuts();
-        if (!cancelled) {
-          setSavedCubeLuts(luts);
-        }
-      } catch {
-        // OPFS may be unavailable; leave the list empty.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Add a CSS filter effect
-  const handleAddFilter = useCallback(
-    (filterType: CSSFilterType) => {
-      const config = CSS_FILTER_CONFIGS[filterType];
+  // Add a GPU shader effect
+  const handleAddGpuEffect = useCallback(
+    (gpuEffectId: string) => {
+      const defaults = getGpuEffectDefaultParams(gpuEffectId);
       itemIds.forEach((id) => {
         addEffect(id, {
-          type: 'css-filter',
-          filter: filterType,
-          value: config.default,
-        } as CSSFilterEffect);
+          type: 'gpu-effect',
+          gpuEffectType: gpuEffectId,
+          params: defaults,
+        } as GpuEffect);
       });
     },
     [itemIds, addEffect]
   );
 
-  // Add a glitch effect
-  const handleAddGlitch = useCallback(
-    (variant: GlitchVariant) => {
+  // GPU effect categories for dropdown menu
+  const gpuCategories = useMemo(() => getGpuCategoriesWithEffects(), []);
+
+  // Effect preview thumbnails — lazily GPU-rendered on first dropdown open
+  const allEffectEntries = useMemo(
+    () => gpuCategories.flatMap(({ effects: catEffects }) =>
+      catEffects.map((def) => ({ id: def.id, def }))
+    ),
+    [gpuCategories],
+  );
+  const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), []);
+  const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(allEffectEntries, presetIds);
+
+  // Update GPU effect parameter(s)
+  const handleGpuParamChange = useCallback(
+    (effectId: string, paramKey: string, value: number | boolean | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
+
+      const gpuEff = effect.effect as GpuEffect;
       itemIds.forEach((id) => {
-        addEffect(id, {
-          type: 'glitch',
-          variant,
-          intensity: 0.5,
-          speed: 1,
-          seed: Math.floor(Math.random() * 10000),
-        } as GlitchEffect);
+        updateEffect(id, effectId, {
+          effect: {
+            ...gpuEff,
+            params: { ...gpuEff.params, [paramKey]: value },
+          },
+        });
       });
+      queueMicrotask(() => clearPreview());
     },
-    [itemIds, addEffect]
+    [effects, itemIds, updateEffect, clearPreview]
   );
 
-  // Add a halftone effect
-  const handleAddHalftone = useCallback(() => {
-    itemIds.forEach((id) => {
-      addEffect(id, {
-        type: 'canvas-effect',
-        variant: 'halftone',
-        patternType: HALFTONE_CONFIG.patternType.default,
-        dotSize: HALFTONE_CONFIG.dotSize.default,
-        spacing: HALFTONE_CONFIG.spacing.default,
-        angle: HALFTONE_CONFIG.angle.default,
-        intensity: HALFTONE_CONFIG.intensity.default,
-        softness: HALFTONE_CONFIG.softness.default,
-        blendMode: HALFTONE_CONFIG.blendMode.default,
-        inverted: HALFTONE_CONFIG.inverted.default,
-        fadeAngle: HALFTONE_CONFIG.fadeAngle.default,
-        fadeAmount: HALFTONE_CONFIG.fadeAmount.default,
-        dotColor: '#000000',
-      } as HalftoneEffect);
-    });
-  }, [itemIds, addEffect]);
+  // Batch update multiple GPU effect params atomically
+  const handleGpuParamsBatchChange = useCallback(
+    (effectId: string, updates: Record<string, number | boolean | string>) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
 
-  // Add a vignette effect
-  const handleAddVignette = useCallback(() => {
-    itemIds.forEach((id) => {
-      addEffect(id, {
-        type: 'overlay-effect',
-        variant: 'vignette',
-        intensity: VIGNETTE_CONFIG.intensity.default,
-        size: VIGNETTE_CONFIG.size.default,
-        softness: VIGNETTE_CONFIG.softness.default,
-        color: '#000000',
-        shape: 'elliptical',
-      } as VignetteEffect);
-    });
-  }, [itemIds, addEffect]);
+      const gpuEff = effect.effect as GpuEffect;
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: {
+            ...gpuEff,
+            params: { ...gpuEff.params, ...updates },
+          },
+        });
+      });
+      queueMicrotask(() => clearPreview());
+    },
+    [effects, itemIds, updateEffect, clearPreview]
+  );
 
-  // Add LUT effect
-  const handleAddLut = useCallback(() => {
-    itemIds.forEach((id) => {
-      addEffect(id, {
-        type: 'color-grading',
-        variant: 'lut',
-        preset: 'cinematic',
-        intensity: 1,
-      } as LUTEffect);
-    });
-  }, [itemIds, addEffect]);
+  // Live preview for GPU effect parameter
+  const handleGpuParamLiveChange = useCallback(
+    (effectId: string, paramKey: string, value: number | boolean | string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
 
-  // Add Curves effect
-  const handleAddCurves = useCallback(() => {
-    itemIds.forEach((id) => {
-      addEffect(id, {
-        type: 'color-grading',
-        variant: 'curves',
-        channels: createDefaultCurvesChannels(),
-        shadows: CURVES_CONFIG.shadows.default,
-        midtones: CURVES_CONFIG.midtones.default,
-        highlights: CURVES_CONFIG.highlights.default,
-        contrast: CURVES_CONFIG.contrast.default,
-        red: CURVES_CONFIG.red.default,
-        green: CURVES_CONFIG.green.default,
-        blue: CURVES_CONFIG.blue.default,
-      } as CurvesEffect);
-    });
-  }, [itemIds, addEffect]);
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId || entry.effect.type !== 'gpu-effect') return entry;
+          const entryGpu = entry.effect as GpuEffect;
+          return {
+            ...entry,
+            effect: {
+              ...entryGpu,
+              params: { ...entryGpu.params, [paramKey]: value },
+            },
+          };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
 
-  // Add Wheels effect
-  const handleAddWheels = useCallback(() => {
-    itemIds.forEach((id) => {
-      addEffect(id, {
-        type: 'color-grading',
-        variant: 'wheels',
-        shadowsHue: WHEELS_CONFIG.shadowsHue.default,
-        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
-        midtonesHue: WHEELS_CONFIG.midtonesHue.default,
-        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
-        highlightsHue: WHEELS_CONFIG.highlightsHue.default,
-        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
-        temperature: WHEELS_CONFIG.temperature.default,
-        tint: WHEELS_CONFIG.tint.default,
-        saturation: WHEELS_CONFIG.saturation.default,
-      } as WheelsEffect);
-    });
-  }, [itemIds, addEffect]);
+  // Batch live preview for multiple GPU effect params atomically
+  const handleGpuParamsBatchLiveChange = useCallback(
+    (effectId: string, updates: Record<string, number | boolean | string>) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
 
-  // Apply a preset (adds multiple effects as single undo/redo action)
+      const previews: Record<string, ItemEffect[]> = {};
+      itemIds.forEach((id) => {
+        const item = visualItems.find((i) => i.id === id);
+        if (!item) return;
+        previews[id] = (item.effects ?? []).map((entry) => {
+          if (entry.id !== effectId || entry.effect.type !== 'gpu-effect') return entry;
+          const entryGpu = entry.effect as GpuEffect;
+          return {
+            ...entry,
+            effect: {
+              ...entryGpu,
+              params: { ...entryGpu.params, ...updates },
+            },
+          };
+        });
+      });
+      setEffectsPreviewNew(previews);
+    },
+    [effects, itemIds, visualItems, setEffectsPreviewNew]
+  );
+
+  // Reset GPU effect to defaults
+  const handleResetGpuEffect = useCallback(
+    (effectId: string) => {
+      const effect = effects.find((e) => e.id === effectId);
+      if (!effect || effect.effect.type !== 'gpu-effect') return;
+
+      const gpuEff = effect.effect as GpuEffect;
+      const defaults = getGpuEffectDefaultParams(gpuEff.gpuEffectType);
+      itemIds.forEach((id) => {
+        updateEffect(id, effectId, {
+          effect: { ...gpuEff, params: defaults },
+        });
+      });
+    },
+    [effects, itemIds, updateEffect]
+  );
+
+  // Apply a preset (adds multiple GPU effects as single undo/redo action)
   const handleApplyPreset = useCallback(
     (presetId: string) => {
       const preset = EFFECT_PRESETS.find((p) => p.id === presetId);
@@ -244,661 +196,6 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       addEffects(updates);
     },
     [itemIds, addEffects]
-  );
-
-  // Update effect value with live preview
-  const handleEffectChange = useCallback(
-    (effectId: string, newValue: number) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect) return;
-
-      itemIds.forEach((id) => {
-        if (effect.effect.type === 'css-filter') {
-          updateEffect(id, effectId, {
-            effect: { ...effect.effect, value: newValue } as CSSFilterEffect,
-          });
-        } else if (effect.effect.type === 'glitch') {
-          updateEffect(id, effectId, {
-            effect: { ...effect.effect, intensity: newValue } as GlitchEffect,
-          });
-        }
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  // Update halftone effect property
-  const handleHalftoneChange = useCallback(
-    (effectId: string, property: keyof HalftoneEffect, newValue: number | string | boolean) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'canvas-effect') return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, [property]: newValue } as HalftoneEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  // Live preview during drag
-  const handleEffectLiveChange = useCallback(
-    (effectId: string, newValue: number) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect) return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (item) {
-          previews[id] = (item.effects ?? []).map((e) => {
-            if (e.id !== effectId) return e;
-            if (e.effect.type === 'css-filter') {
-              return { ...e, effect: { ...e.effect, value: newValue } as CSSFilterEffect };
-            } else if (e.effect.type === 'glitch') {
-              return { ...e, effect: { ...e.effect, intensity: newValue } as GlitchEffect };
-            }
-            return e;
-          });
-        }
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  // Live preview for halftone properties
-  const handleHalftoneLiveChange = useCallback(
-    (effectId: string, property: keyof HalftoneEffect, newValue: number | string | boolean) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'canvas-effect') return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (item) {
-          previews[id] = (item.effects ?? []).map((e) => {
-            if (e.id !== effectId) return e;
-            if (e.effect.type === 'canvas-effect') {
-              return { ...e, effect: { ...e.effect, [property]: newValue } as HalftoneEffect };
-            }
-            return e;
-          });
-        }
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  // Glitch intensity handlers (convert from percentage 0-100 to internal 0-1)
-  const handleGlitchIntensityChange = useCallback(
-    (effectId: string, percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleEffectChange(effectId, normalizedValue);
-    },
-    [handleEffectChange]
-  );
-
-  const handleGlitchIntensityLiveChange = useCallback(
-    (effectId: string, percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleEffectLiveChange(effectId, normalizedValue);
-    },
-    [handleEffectLiveChange]
-  );
-
-  // Halftone intensity handlers (convert from percentage 0-100 to internal 0-1)
-  const handleHalftoneIntensityChange = useCallback(
-    (effectId: string, percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleHalftoneChange(effectId, 'intensity', normalizedValue);
-    },
-    [handleHalftoneChange]
-  );
-
-  const handleHalftoneIntensityLiveChange = useCallback(
-    (effectId: string, percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleHalftoneLiveChange(effectId, 'intensity', normalizedValue);
-    },
-    [handleHalftoneLiveChange]
-  );
-
-  // Update vignette effect property
-  const handleVignetteChange = useCallback(
-    (effectId: string, property: keyof VignetteEffect, newValue: number | string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'overlay-effect') return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, [property]: newValue } as VignetteEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  // Live preview for vignette properties
-  const handleVignetteLiveChange = useCallback(
-    (effectId: string, property: keyof VignetteEffect, newValue: number | string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'overlay-effect') return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (item) {
-          previews[id] = (item.effects ?? []).map((e) => {
-            if (e.id !== effectId) return e;
-            if (e.effect.type === 'overlay-effect') {
-              return { ...e, effect: { ...e.effect, [property]: newValue } as VignetteEffect };
-            }
-            return e;
-          });
-        }
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  // Vignette property handlers (convert from percentage 0-100 to internal 0-1)
-  const handleVignettePercentChange = useCallback(
-    (effectId: string, property: 'intensity' | 'size' | 'softness', percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleVignetteChange(effectId, property, normalizedValue);
-    },
-    [handleVignetteChange]
-  );
-
-  const handleVignettePercentLiveChange = useCallback(
-    (effectId: string, property: 'intensity' | 'size' | 'softness', percentValue: number) => {
-      const normalizedValue = percentValue / 100;
-      handleVignetteLiveChange(effectId, property, normalizedValue);
-    },
-    [handleVignetteLiveChange]
-  );
-
-  // Update color grading effect property
-  const handleColorGradingChange = useCallback(
-    (
-      effectId: string,
-      property: string,
-      newValue: unknown
-    ) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading') return;
-
-      itemIds.forEach((id) => {
-        if (effect.effect.variant === 'lut') {
-          updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as LUTEffect,
-          });
-        } else if (effect.effect.variant === 'curves') {
-          updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as CurvesEffect,
-          });
-        } else if (effect.effect.variant === 'wheels') {
-          updateEffect(id, effectId, {
-            effect: { ...effect.effect, [property]: newValue } as WheelsEffect,
-          });
-        }
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  // Live preview for color grading effect property
-  const handleColorGradingLiveChange = useCallback(
-    (
-      effectId: string,
-      property: string,
-      newValue: unknown
-    ) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading') return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (!item) return;
-        previews[id] = (item.effects ?? []).map((entry) => {
-          if (entry.id !== effectId) return entry;
-          if (entry.effect.type !== 'color-grading') return entry;
-
-          if (entry.effect.variant === 'lut') {
-            return { ...entry, effect: { ...entry.effect, [property]: newValue } as LUTEffect };
-          }
-          if (entry.effect.variant === 'curves') {
-            return { ...entry, effect: { ...entry.effect, [property]: newValue } as CurvesEffect };
-          }
-          return { ...entry, effect: { ...entry.effect, [property]: newValue } as WheelsEffect };
-        });
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  const handleCurvesChannelsChange = useCallback(
-    (effectId: string, channels: CurvesChannels) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, channels } as CurvesEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleCurvesChannelsLiveChange = useCallback(
-    (effectId: string, channels: CurvesChannels) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (!item) return;
-        previews[id] = (item.effects ?? []).map((entry) => {
-          if (entry.id !== effectId) return entry;
-          if (entry.effect.type !== 'color-grading' || entry.effect.variant !== 'curves') return entry;
-          return { ...entry, effect: { ...entry.effect, channels } as CurvesEffect };
-        });
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  const handleWheelsPairChange = useCallback(
-    (
-      effectId: string,
-      hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
-      amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
-      hue: number,
-      amount: number
-    ) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            [hueKey]: hue,
-            [amountKey]: amount,
-          } as WheelsEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleWheelsPairLiveChange = useCallback(
-    (
-      effectId: string,
-      hueKey: 'shadowsHue' | 'midtonesHue' | 'highlightsHue',
-      amountKey: 'shadowsAmount' | 'midtonesAmount' | 'highlightsAmount',
-      hue: number,
-      amount: number
-    ) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
-
-      const previews: Record<string, ItemEffect[]> = {};
-      itemIds.forEach((id) => {
-        const item = visualItems.find((i) => i.id === id);
-        if (!item) return;
-        previews[id] = (item.effects ?? []).map((entry) => {
-          if (entry.id !== effectId) return entry;
-          if (entry.effect.type !== 'color-grading' || entry.effect.variant !== 'wheels') return entry;
-          return {
-            ...entry,
-            effect: {
-              ...entry.effect,
-              [hueKey]: hue,
-              [amountKey]: amount,
-            } as WheelsEffect,
-          };
-        });
-      });
-      setEffectsPreviewNew(previews);
-    },
-    [effects, itemIds, visualItems, setEffectsPreviewNew]
-  );
-
-  // Reset CSS filter effect to default value
-  const handleResetCSSFilter = useCallback(
-    (effectId: string, filterType: CSSFilterType) => {
-      const config = CSS_FILTER_CONFIGS[filterType];
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { type: 'css-filter', filter: filterType, value: config.default } as CSSFilterEffect,
-        });
-      });
-    },
-    [itemIds, updateEffect]
-  );
-
-  // Reset glitch effect to default intensity
-  const handleResetGlitch = useCallback(
-    (effectId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'glitch') return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, intensity: 0.5 } as GlitchEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  // Reset halftone property to default
-  const handleResetHalftone = useCallback(
-    (effectId: string, property: keyof HalftoneEffect) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'canvas-effect') return;
-
-      let defaultValue: number | string | boolean;
-      switch (property) {
-        case 'patternType':
-          defaultValue = HALFTONE_CONFIG.patternType.default;
-          break;
-        case 'dotSize':
-          defaultValue = HALFTONE_CONFIG.dotSize.default;
-          break;
-        case 'spacing':
-          defaultValue = HALFTONE_CONFIG.spacing.default;
-          break;
-        case 'angle':
-          defaultValue = HALFTONE_CONFIG.angle.default;
-          break;
-        case 'intensity':
-          defaultValue = HALFTONE_CONFIG.intensity.default;
-          break;
-        case 'softness':
-          defaultValue = HALFTONE_CONFIG.softness.default;
-          break;
-        case 'blendMode':
-          defaultValue = HALFTONE_CONFIG.blendMode.default;
-          break;
-        case 'inverted':
-          defaultValue = HALFTONE_CONFIG.inverted.default;
-          break;
-        case 'fadeAngle':
-          defaultValue = HALFTONE_CONFIG.fadeAngle.default;
-          break;
-        case 'fadeAmount':
-          defaultValue = HALFTONE_CONFIG.fadeAmount.default;
-          break;
-        case 'dotColor':
-          defaultValue = '#000000';
-          break;
-        default:
-          return;
-      }
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, [property]: defaultValue } as HalftoneEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  // Reset vignette property to default
-  const handleResetVignette = useCallback(
-    (effectId: string, property: keyof VignetteEffect) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'overlay-effect') return;
-
-      let defaultValue: number | string;
-      switch (property) {
-        case 'intensity':
-          defaultValue = VIGNETTE_CONFIG.intensity.default;
-          break;
-        case 'size':
-          defaultValue = VIGNETTE_CONFIG.size.default;
-          break;
-        case 'softness':
-          defaultValue = VIGNETTE_CONFIG.softness.default;
-          break;
-        case 'color':
-          defaultValue = '#000000';
-          break;
-        default:
-          return;
-      }
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, [property]: defaultValue } as VignetteEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  const handleResetLutPreset = useCallback(
-    (effectId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            preset: 'cinematic',
-            cubeName: undefined,
-            cubeData: undefined,
-          } as LUTEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  const handleResetLutIntensity = useCallback(
-    (effectId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, intensity: 1 } as LUTEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  const handleLutPresetChange = useCallback(
-    (effectId: string, preset: LUTEffect['preset']) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            preset,
-            cubeName: undefined,
-            cubeData: undefined,
-          } as LUTEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleLutCubeImport = useCallback(
-    async (effectId: string, cubeName: string, cubeData: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-
-      const normalizedCube = cubeData.trim();
-      if (!normalizedCube) {
-        toast.error('Invalid .cube file', { description: 'The selected file is empty.' });
-        return;
-      }
-
-      try {
-        parseCubeLut(normalizedCube);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
-        toast.error('Invalid .cube file', { description: message });
-        return;
-      }
-
-      const saveResult = await saveCubeLutToLibrary(cubeName, normalizedCube);
-      setSavedCubeLuts(saveResult.luts);
-      if (saveResult.error) {
-        toast.warning('LUT applied but not saved', { description: saveResult.error });
-      }
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            cubeName: saveResult.saved?.name ?? cubeName,
-            cubeData: normalizedCube,
-          } as LUTEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleLutSavedSelect = useCallback(
-    async (effectId: string, lutId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-
-      const saved = await loadCubeLutFromLibrary(lutId);
-      if (!saved) {
-        toast.error('Saved LUT not found', {
-          description: 'This LUT may have been deleted from OPFS.',
-        });
-        setSavedCubeLuts(await loadSavedCubeLuts());
-        return;
-      }
-
-      try {
-        parseCubeLut(saved.cubeData);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Could not parse .cube LUT.';
-        toast.error('Saved LUT is invalid', { description: message });
-        return;
-      }
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            cubeName: saved.lut.name,
-            cubeData: saved.cubeData,
-          } as LUTEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleLutCubeClear = useCallback(
-    (effectId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'lut') return;
-
-      if (!effect.effect.cubeData && !effect.effect.cubeName) return;
-
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            cubeName: undefined,
-            cubeData: undefined,
-          } as LUTEffect,
-        });
-      });
-      queueMicrotask(() => clearPreview());
-    },
-    [effects, itemIds, updateEffect, clearPreview]
-  );
-
-  const handleLutSavedDelete = useCallback(
-    async (lutId: string) => {
-      const result = await deleteCubeLutFromLibrary(lutId);
-      setSavedCubeLuts(result.luts);
-      if (result.error) {
-        toast.error('Failed to delete LUT', { description: result.error });
-      }
-    },
-    []
-  );
-
-  const handleResetCurves = useCallback(
-    (effectId: string) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'curves') return;
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: {
-            ...effect.effect,
-            channels: createDefaultCurvesChannels(),
-            shadows: CURVES_CONFIG.shadows.default,
-            midtones: CURVES_CONFIG.midtones.default,
-            highlights: CURVES_CONFIG.highlights.default,
-            contrast: CURVES_CONFIG.contrast.default,
-            red: CURVES_CONFIG.red.default,
-            green: CURVES_CONFIG.green.default,
-            blue: CURVES_CONFIG.blue.default,
-          } as CurvesEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
-  );
-
-  const handleResetWheels = useCallback(
-    (effectId: string, property: keyof WheelsEffect) => {
-      const effect = effects.find((e) => e.id === effectId);
-      if (!effect || effect.effect.type !== 'color-grading' || effect.effect.variant !== 'wheels') return;
-      const defaults: Record<keyof WheelsEffect, number | string> = {
-        type: 'color-grading',
-        variant: 'wheels',
-        shadowsHue: WHEELS_CONFIG.shadowsHue.default,
-        shadowsAmount: WHEELS_CONFIG.shadowsAmount.default,
-        midtonesHue: WHEELS_CONFIG.midtonesHue.default,
-        midtonesAmount: WHEELS_CONFIG.midtonesAmount.default,
-        highlightsHue: WHEELS_CONFIG.highlightsHue.default,
-        highlightsAmount: WHEELS_CONFIG.highlightsAmount.default,
-        temperature: WHEELS_CONFIG.temperature.default,
-        tint: WHEELS_CONFIG.tint.default,
-        saturation: WHEELS_CONFIG.saturation.default,
-      };
-      itemIds.forEach((id) => {
-        updateEffect(id, effectId, {
-          effect: { ...effect.effect, [property]: defaults[property] } as WheelsEffect,
-        });
-      });
-    },
-    [effects, itemIds, updateEffect]
   );
 
   // Toggle effect visibility
@@ -936,103 +233,195 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     [itemIds, removeEffect]
   );
 
-  // Ref to blur trigger button when dropdown closes (prevents space key from reopening)
-  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  // Effect picker popover state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDropdownOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      // Blur the trigger button when menu closes so space key triggers play/pause instead
-      dropdownTriggerRef.current?.blur();
-    }
+  // Position the picker panel below the trigger button
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+
+  const openPicker = useCallback(() => {
+    triggerPreviews();
+    setSearchQuery('');
+    setPickerOpen(true);
+  }, [triggerPreviews]);
+
+  const closePicker = useCallback(() => {
+    setPickerOpen(false);
+    setSearchQuery('');
+    triggerRef.current?.blur();
   }, []);
+
+  // Position panel when opened
+  useEffect(() => {
+    if (!pickerOpen || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPanelStyle({
+      position: 'fixed',
+      top: `${rect.bottom + 4}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+    });
+    // Focus search input after render
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [pickerOpen]);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (
+        panelRef.current?.contains(e.target as Node) ||
+        triggerRef.current?.contains(e.target as Node)
+      ) return;
+      closePicker();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePicker();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pickerOpen, closePicker]);
+
+  // Filter effects and presets by search query
+  const filteredCategories = useMemo(() => {
+    if (!searchQuery.trim()) return gpuCategories;
+    const q = searchQuery.toLowerCase();
+    return gpuCategories
+      .map(({ category, effects: catEffects }) => ({
+        category,
+        effects: catEffects.filter((def) => def.name.toLowerCase().includes(q)),
+      }))
+      .filter(({ effects: catEffects }) => catEffects.length > 0);
+  }, [gpuCategories, searchQuery]);
+
+  const filteredPresets = useMemo(() => {
+    if (!searchQuery.trim()) return EFFECT_PRESETS;
+    const q = searchQuery.toLowerCase();
+    return EFFECT_PRESETS.filter((p) => p.name.toLowerCase().includes(q));
+  }, [searchQuery]);
+
+  const hasResults = filteredCategories.length > 0 || filteredPresets.length > 0;
 
   if (visualItems.length === 0) return null;
 
   return (
     <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
-      {/* Add Effect Dropdown + Toggle All */}
+      {/* Add Effect Picker + Toggle All */}
       <div className="px-2 pb-2 flex gap-1">
-        <DropdownMenu onOpenChange={handleDropdownOpenChange}>
-          <DropdownMenuTrigger asChild>
-            <Button ref={dropdownTriggerRef} variant="outline" size="sm" className="flex-1 h-7 text-xs">
-              <Plus className="w-3 h-3 mr-1" />
-              Add Effect
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-48">
-            {/* Color Adjustments */}
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Color Adjustments
+        <Button
+          ref={triggerRef}
+          variant="outline"
+          size="sm"
+          className="flex-1 h-7 text-xs"
+          onClick={() => pickerOpen ? closePicker() : openPicker()}
+        >
+          <Plus className="w-3 h-3 mr-1" />
+          Add Effect
+        </Button>
+        {pickerOpen && createPortal(
+          <div
+            ref={panelRef}
+            style={panelStyle}
+            className="z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 slide-in-from-top-2"
+          >
+            {/* Search input */}
+            <div className="p-1.5 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search effects..."
+                  className="w-full h-7 pl-7 pr-2 text-xs bg-transparent rounded-sm border border-input placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
             </div>
-            {Object.entries(CSS_FILTER_CONFIGS).map(([key, config]) => (
-              <DropdownMenuItem
-                key={key}
-                onSelect={() => handleAddFilter(key as CSSFilterType)}
-              >
-                {config.label}
-              </DropdownMenuItem>
-            ))}
 
-            <DropdownMenuSeparator />
+            {/* Scrollable effect list */}
+            <div className="max-h-[280px] overflow-y-auto overflow-x-hidden p-1">
+              {/* GPU Shader Effects */}
+              {filteredCategories.map(({ category, effects: catEffects }, index) => (
+                <div key={category}>
+                  {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                  </div>
+                  {catEffects.map((def) => (
+                    <button
+                      key={def.id}
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        handleAddGpuEffect(def.id);
+                        closePicker();
+                      }}
+                    >
+                      {effectPreviews.has(def.id) ? (
+                        <img
+                          src={effectPreviews.get(def.id)}
+                          alt=""
+                          className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                      )}
+                      {def.name}
+                    </button>
+                  ))}
+                </div>
+              ))}
 
-            {/* Glitch Effects */}
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Glitch Effects
+              {filteredPresets.length > 0 && (
+                <>
+                  {filteredCategories.length > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
+                  <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                    Presets
+                  </div>
+                  {filteredPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => {
+                        handleApplyPreset(preset.id);
+                        closePicker();
+                      }}
+                    >
+                      {effectPreviews.has(`preset:${preset.id}`) ? (
+                        <img
+                          src={effectPreviews.get(`preset:${preset.id}`)}
+                          alt=""
+                          className="w-8 h-[18px] rounded-sm object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
+                      )}
+                      {preset.name}
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* No results */}
+              {!hasResults && (
+                <div className="px-2 py-4 text-xs text-muted-foreground text-center">
+                  No effects found
+                </div>
+              )}
             </div>
-            {Object.entries(GLITCH_CONFIGS).map(([key, config]) => (
-              <DropdownMenuItem
-                key={key}
-                onSelect={() => handleAddGlitch(key as GlitchVariant)}
-              >
-                {config.label}
-              </DropdownMenuItem>
-            ))}
-
-            <DropdownMenuSeparator />
-
-            {/* Stylized Effects */}
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Stylized Effects
-            </div>
-            <DropdownMenuItem onSelect={handleAddHalftone}>
-              {CANVAS_EFFECT_CONFIGS.halftone.label}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={handleAddVignette}>
-              {OVERLAY_EFFECT_CONFIGS.vignette.label}
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            {/* Color Grading */} 
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Color Grading
-            </div>
-            <DropdownMenuItem onSelect={handleAddLut}>
-              LUT
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={handleAddCurves}>
-              Curves
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={handleAddWheels}>
-              Wheels
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            {/* Presets */}
-            <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-              Presets
-            </div>
-            {EFFECT_PRESETS.map((preset) => (
-              <DropdownMenuItem
-                key={preset.id}
-                onSelect={() => handleApplyPreset(preset.id)}
-              >
-                {preset.name}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </div>,
+          document.body
+        )}
         {effects.length > 0 && (
           <Button
             variant="outline"
@@ -1053,118 +442,54 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       {/* Active Effects List - wrapped to prevent space-y-3 from PropertySection */}
       <div className="space-y-0">
       {effects.map((effect) => {
-        if (effect.effect.type === 'css-filter') {
-          return (
-            <CSSFilterPanel
-              key={effect.id}
-              effect={effect}
-              cssEffect={effect.effect as CSSFilterEffect}
-              onEffectChange={handleEffectChange}
-              onEffectLiveChange={handleEffectLiveChange}
-              onReset={handleResetCSSFilter}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
+        if (effect.effect.type === 'gpu-effect') {
+          const gpuEff = effect.effect as GpuEffect;
+          const def = getGpuEffect(gpuEff.gpuEffectType);
+          if (!def) return null;
 
-        if (effect.effect.type === 'glitch') {
-          return (
-            <GlitchPanel
-              key={effect.id}
-              effect={effect}
-              glitchEffect={effect.effect as GlitchEffect}
-              onIntensityChange={handleGlitchIntensityChange}
-              onIntensityLiveChange={handleGlitchIntensityLiveChange}
-              onReset={handleResetGlitch}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
+          if (gpuEff.gpuEffectType === 'gpu-curves') {
+            return (
+              <GpuCurvesPanel
+                key={effect.id}
+                effect={effect}
+                gpuEffect={gpuEff}
+                definition={def}
+                onParamChange={handleGpuParamChange}
+                onParamLiveChange={handleGpuParamLiveChange}
+                onReset={handleResetGpuEffect}
+                onToggle={handleToggle}
+                onRemove={handleRemove}
+              />
+            );
+          }
 
-        if (effect.effect.type === 'canvas-effect' && effect.effect.variant === 'halftone') {
-          return (
-            <HalftonePanel
-              key={effect.id}
-              effect={effect}
-              halftone={effect.effect as HalftoneEffect}
-              onPropertyChange={handleHalftoneChange}
-              onPropertyLiveChange={handleHalftoneLiveChange}
-              onIntensityChange={handleHalftoneIntensityChange}
-              onIntensityLiveChange={handleHalftoneIntensityLiveChange}
-              onReset={handleResetHalftone}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
+          if (gpuEff.gpuEffectType === 'gpu-color-wheels') {
+            return (
+              <GpuWheelsPanel
+                key={effect.id}
+                effect={effect}
+                gpuEffect={gpuEff}
+                definition={def}
+                onParamChange={handleGpuParamChange}
+                onParamLiveChange={handleGpuParamLiveChange}
+                onParamsBatchChange={handleGpuParamsBatchChange}
+                onParamsBatchLiveChange={handleGpuParamsBatchLiveChange}
+                onReset={handleResetGpuEffect}
+                onToggle={handleToggle}
+                onRemove={handleRemove}
+              />
+            );
+          }
 
-        if (effect.effect.type === 'overlay-effect' && effect.effect.variant === 'vignette') {
           return (
-            <VignettePanel
+            <GpuEffectPanel
               key={effect.id}
               effect={effect}
-              vignette={effect.effect as VignetteEffect}
-              onPercentChange={handleVignettePercentChange}
-              onPercentLiveChange={handleVignettePercentLiveChange}
-              onColorChange={handleVignetteChange}
-              onColorLiveChange={handleVignetteLiveChange}
-              onReset={handleResetVignette}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
-
-        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'lut') {
-          return (
-            <LUTPanel
-              key={effect.id}
-              effect={effect}
-              lut={effect.effect as LUTEffect}
-              onPresetChange={handleLutPresetChange}
-              onIntensityChange={(effectId, percentValue) => handleColorGradingChange(effectId, 'intensity', percentValue / 100)}
-              onIntensityLiveChange={(effectId, percentValue) => handleColorGradingLiveChange(effectId, 'intensity', percentValue / 100)}
-              onCubeImport={handleLutCubeImport}
-              savedCubeLuts={savedCubeLuts}
-              onSavedCubeSelect={handleLutSavedSelect}
-              onSavedCubeDelete={handleLutSavedDelete}
-              onCubeClear={handleLutCubeClear}
-              onResetPreset={handleResetLutPreset}
-              onResetIntensity={handleResetLutIntensity}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
-
-        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'curves') {
-          return (
-            <CurvesPanel
-              key={effect.id}
-              effect={effect}
-              curves={effect.effect as CurvesEffect}
-              onCurvesChange={handleCurvesChannelsChange}
-              onCurvesLiveChange={handleCurvesChannelsLiveChange}
-              onReset={handleResetCurves}
-              onToggle={handleToggle}
-              onRemove={handleRemove}
-            />
-          );
-        }
-
-        if (effect.effect.type === 'color-grading' && effect.effect.variant === 'wheels') {
-          return (
-            <WheelsPanel
-              key={effect.id}
-              effect={effect}
-              wheels={effect.effect as WheelsEffect}
-              onPropertyChange={(effectId, property, value) => handleColorGradingChange(effectId, property, value)}
-              onPropertyLiveChange={(effectId, property, value) => handleColorGradingLiveChange(effectId, property, value)}
-              onWheelChange={handleWheelsPairChange}
-              onWheelLiveChange={handleWheelsPairLiveChange}
-              onReset={handleResetWheels}
+              gpuEffect={gpuEff}
+              definition={def}
+              onParamChange={handleGpuParamChange}
+              onParamLiveChange={handleGpuParamLiveChange}
+              onReset={handleResetGpuEffect}
               onToggle={handleToggle}
               onRemove={handleRemove}
             />

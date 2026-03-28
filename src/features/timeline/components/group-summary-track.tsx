@@ -33,7 +33,7 @@ export const GroupSummaryTrack = memo(function GroupSummaryTrack({ track }: Grou
 
   return (
     <div
-      className="relative border-b border-border bg-secondary/20"
+      className="relative bg-secondary/20"
       style={{ height: `${track.height}px` }}
       data-track-id={track.id}
     >

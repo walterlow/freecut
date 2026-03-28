@@ -57,7 +57,7 @@ const GraphCurve = memo(function GraphCurve({
   const color = strokeColor || '#EC407A';
 
   return (
-    <g className="graph-curve">
+    <g className="graph-curve" style={{ pointerEvents: 'none' }}>
       {/* Shadow/glow for selected curves */}
       {isSelected && (
         <path
@@ -103,7 +103,7 @@ export const GraphCurves = memo(function GraphCurves({
   if (sortedPoints.length < 2) return null;
 
   return (
-    <g className="graph-curves">
+    <g className="graph-curves" style={{ pointerEvents: 'none' }}>
       {sortedPoints.slice(0, -1).map((startPoint, index) => {
         const endPoint = sortedPoints[index + 1];
         if (!endPoint) return null;
@@ -152,7 +152,7 @@ export const GraphExtensionLines = memo(function GraphExtensionLines({
   const graphRight = viewport.width - padding.right;
 
   return (
-    <g className="graph-extension-lines">
+    <g className="graph-extension-lines" style={{ pointerEvents: 'none' }}>
       {/* Line before first keyframe */}
       {firstPoint.x > graphLeft && (
         <line
@@ -252,6 +252,7 @@ export const GraphPlayhead = memo(function GraphPlayhead({
 
     // Capture pointer for drag
     svg.setPointerCapture(event.pointerId);
+    let lastScrubbedFrame: number | null = null;
 
     const handlePointerMove = (e: PointerEvent) => {
       e.preventDefault();
@@ -259,6 +260,10 @@ export const GraphPlayhead = memo(function GraphPlayhead({
       const rect = svg.getBoundingClientRect();
       const localX = e.clientX - rect.left;
       const newFrame = screenXToFrame(localX);
+      if (newFrame === lastScrubbedFrame) {
+        return;
+      }
+      lastScrubbedFrame = newFrame;
       onScrub(newFrame);
     };
 

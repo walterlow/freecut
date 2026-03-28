@@ -9,6 +9,7 @@ import type {
   WaveformRecord,
   GifFrameData,
   DecodedPreviewAudio,
+  MediaTranscript,
 } from '@/types/storage';
 
 /**
@@ -93,9 +94,17 @@ export interface VideoEditorDB extends DBSchema {
       createdAt: number;
     };
   };
+  transcripts: {
+    key: string;
+    value: MediaTranscript;
+    indexes: {
+      mediaId: string;
+      createdAt: number;
+    };
+  };
 }
 
 export const DB_NAME = 'video-editor-db';
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 export type VideoEditorDBInstance = IDBPDatabase<VideoEditorDB>;
