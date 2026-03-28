@@ -31,7 +31,7 @@ import {
 import { removeItemsFromItemsActions as removeItems } from '@/features/media-library/deps/timeline-actions';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
-import { GRID_COLS_BY_SIZE } from './media-grid';
+import { GRID_COLS_BY_SIZE } from './media-grid-constants';
 import { CARD_GRID_BASE, CARD_LIST_BASE } from './card-styles';
 
 /**
