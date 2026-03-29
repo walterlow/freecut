@@ -13,6 +13,7 @@ export const DEFAULT_FPS = SHARED_DEFAULT_FPS;
 export const TIMELINE_HEADER_HEIGHT = EDITOR_LAYOUT.timelineHeaderHeight;
 export const TIMELINE_TRACKS_HEADER_HEIGHT = EDITOR_LAYOUT.timelineTracksHeaderHeight;
 export const TIMELINE_RULER_HEIGHT = EDITOR_LAYOUT.timelineRulerHeight;
+/** Desktop track-header column width; used for layout hints (mobile uses timelineSidebarWidthMobile via CSS). */
 export const TIMELINE_SIDEBAR_WIDTH = EDITOR_LAYOUT.timelineSidebarWidth;
 
 // =============================================================================
