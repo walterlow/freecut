@@ -102,8 +102,8 @@ interface ChannelFaderProps {
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
   dbReadoutRef?: React.RefObject<HTMLDivElement | null>;
-  /** Imperative ref for scaling per-track meter bars during drag */
-  meterBarsRef?: React.RefObject<HTMLDivElement[]>;
+  /** Shared ref for meter dB offset — ChannelStrip reads during its render cycle */
+  meterDbOffsetRef?: React.MutableRefObject<number>;
 }
 
 const ChannelFader = memo(function ChannelFader({
@@ -112,7 +112,7 @@ const ChannelFader = memo(function ChannelFader({
   itemIds,
   onVolumeChange,
   dbReadoutRef,
-  meterBarsRef,
+  meterDbOffsetRef,
 }: ChannelFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
@@ -166,25 +166,16 @@ const ChannelFader = memo(function ChannelFader({
       dbReadoutRef.current.textContent = formatFaderDb(db);
     }
     // Compute gain multiplier relative to the committed track volume.
-    // The segment's volumeDb already includes the committed trackVolumeDb,
-    // so we apply the ratio: 10^(newDb/20) / 10^(committedDb/20)
     const committedDb = volumeDb;
     const gainRatio = Math.pow(10, (db - committedDb) / 20);
     setMixerLiveGains(itemIds.map((id) => ({ itemId: id, gain: gainRatio })));
 
-    // Scale per-track meter bars to preview the volume change.
-    // linearLevelToPercent is linear in dB, so a fader dB shift = direct percent offset.
-    // Meter dB range = AUDIO_METER_MAX_DB - AUDIO_METER_MIN_DB = 6 - (-54) = 60
-    if (meterBarsRef?.current) {
-      const deltaDb = db - committedDb;
-      const percentOffset = (deltaDb / 60) * 100;
-      for (const bar of meterBarsRef.current) {
-        const baseHeight = parseFloat(bar.dataset.baseHeight ?? bar.style.height) || 0;
-        if (!bar.dataset.baseHeight) bar.dataset.baseHeight = String(baseHeight);
-        bar.style.height = `${Math.max(0, Math.min(100, baseHeight + percentOffset))}%`;
-      }
+    // Set meter dB offset — ChannelStrip reads this during its render cycle
+    // (it re-renders every frame during playback via level prop changes)
+    if (meterDbOffsetRef) {
+      meterDbOffsetRef.current = db - committedDb;
     }
-  }, [dbReadoutRef, itemIds, meterBarsRef, volumeDb]);
+  }, [dbReadoutRef, itemIds, meterDbOffsetRef, volumeDb]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -214,10 +205,8 @@ const ChannelFader = memo(function ChannelFader({
       isDraggingRef.current = false;
       dragOffsetPercentRef.current = 0;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
-      // Clear meter bar base heights so next drag captures fresh values
-      if (meterBarsRef?.current) {
-        for (const bar of meterBarsRef.current) delete bar.dataset.baseHeight;
-      }
+      // Reset meter offset
+      if (meterDbOffsetRef) meterDbOffsetRef.current = 0;
       // Commit volume without triggering composition re-render:
       // onVolumeChange mutates the track in place + markDirty.
       // Live gains stay active to compensate for stale segment volumeDb.
@@ -292,17 +281,7 @@ const ChannelStrip = memo(function ChannelStrip({
   onSoloToggle,
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
-  const meterBarsRef = useRef<HTMLDivElement[]>([]);
-  const meterLeftRef = useRef<HTMLDivElement | null>(null);
-  const meterRightRef = useRef<HTMLDivElement | null>(null);
-
-  // Keep meterBarsRef in sync with the individual bar refs
-  useEffect(() => {
-    const bars: HTMLDivElement[] = [];
-    if (meterLeftRef.current) bars.push(meterLeftRef.current);
-    if (meterRightRef.current) bars.push(meterRightRef.current);
-    meterBarsRef.current = bars;
-  });
+  const meterDbOffsetRef = useRef(0);
   const handleMuteClick = useCallback(() => {
     onMuteToggle(track.id);
   }, [onMuteToggle, track.id]);
@@ -318,8 +297,11 @@ const ChannelStrip = memo(function ChannelStrip({
       isPlaying,
     })
     : 0;
-  const leftPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) : 0;
-  const rightPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) : 0;
+  // Apply fader drag offset to meter levels.
+  // linearLevelToPercent is linear in dB (range=60), so dB offset → percent offset.
+  const meterOffset = (meterDbOffsetRef.current / 60) * 100;
+  const leftPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) + meterOffset)) : 0;
+  const rightPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) + meterOffset)) : 0;
   const showScanningFallback = fallbackPercent > 0;
 
   return (
@@ -368,7 +350,6 @@ const ChannelStrip = memo(function ChannelStrip({
         <div className="flex gap-px w-[8px] shrink-0">
           <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
             <div
-              ref={meterLeftRef}
               data-track-id={track.id}
               data-track-channel="left"
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
@@ -380,7 +361,6 @@ const ChannelStrip = memo(function ChannelStrip({
           </div>
           <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
             <div
-              ref={meterRightRef}
               data-track-id={track.id}
               data-track-channel="right"
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
@@ -400,7 +380,7 @@ const ChannelStrip = memo(function ChannelStrip({
             itemIds={track.itemIds}
             onVolumeChange={onVolumeChange}
             dbReadoutRef={dbReadoutRef}
-            meterBarsRef={meterBarsRef}
+            meterDbOffsetRef={meterDbOffsetRef}
           />
         </div>
       </div>
