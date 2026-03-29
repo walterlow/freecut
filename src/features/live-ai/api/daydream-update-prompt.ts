@@ -3,7 +3,7 @@
  * Uses PATCH /v1/streams/:id (streams.update) per Daydream docs; /beta/streams/:id/prompts returns 404.
  */
 
-import type { LoraDict } from '../types';
+import type { LoraDict, IpAdapterConfig } from '../types';
 
 const DAYDREAM_API_BASE = 'https://api.daydream.live/v1';
 
@@ -18,6 +18,10 @@ export interface UpdatePromptParams {
   guidance_scale?: number;
   /** LoRA path/id -> weight. Updating triggers pipeline reload (~30s). */
   lora_dict?: LoraDict;
+  /** SDXL FaceID: IP adapter configuration. Hot-swappable, no pipeline reload. */
+  ip_adapter?: IpAdapterConfig;
+  /** SDXL FaceID: reference face image URL. */
+  ip_adapter_style_image_url?: string;
 }
 
 /**
@@ -40,6 +44,9 @@ export async function updateDaydreamPrompt(
   if (params.model_id !== undefined) paramsPayload.model_id = params.model_id;
   if (params.guidance_scale != null) paramsPayload.guidance_scale = params.guidance_scale;
   if (params.lora_dict !== undefined) paramsPayload.lora_dict = params.lora_dict;
+  if (params.ip_adapter !== undefined) paramsPayload.ip_adapter = params.ip_adapter;
+  if (params.ip_adapter_style_image_url !== undefined)
+    paramsPayload.ip_adapter_style_image_url = params.ip_adapter_style_image_url;
 
   const body = {
     pipeline: 'streamdiffusion',
