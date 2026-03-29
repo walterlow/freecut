@@ -32,6 +32,7 @@ import {
   type AudioMeterWaveform,
 } from './audio-meter-utils';
 import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
+import { setMixerLiveGains } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
 
@@ -347,6 +348,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       id: track.id,
       name: track.name,
       kind: track.kind,
+      color: track.color,
       muted: track.muted,
       solo: track.solo,
       volume: track.volume || 0,
@@ -409,27 +411,71 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     setTrackSnapshotVersion((version) => version + 1);
   }, []);
 
-  const handleTrackMuteToggle = useCallback((trackId: string) => {
-    const currentTracks = useTimelineStore.getState().tracks;
-    const track = currentTracks.find((t) => t.id === trackId);
-    if (!track) return;
-    useTimelineStore.getState().setTracks(
-      currentTracks.map((t) =>
-        t.id === trackId ? { ...t, muted: !t.muted } : t
-      ),
-    );
+  // Collect all item IDs for a track (needed for live gain bridging)
+  const getTrackItemIds = useCallback((trackId: string): string[] => {
+    const items = useItemsStore.getState().itemsByTrackId[trackId];
+    return items ? items.map((item) => item.id) : [];
   }, []);
 
-  const handleTrackSoloToggle = useCallback((trackId: string) => {
-    const currentTracks = useTimelineStore.getState().tracks;
+  // Apply live gains to reflect current mute/solo state across all mixer tracks.
+  // Called after in-place mutation so the audio path picks up changes immediately
+  // without waiting for a full composition re-render.
+  const applyMuteSoloLiveGains = useCallback(() => {
+    const currentTracks = useItemsStore.getState().tracks;
+    const audioTracks = currentTracks.filter((t) => !t.isGroup && isAudioMixerTrack(t));
+    const anySoloed = audioTracks.some((t) => t.solo);
+
+    const entries: Array<{ itemId: string; gain: number }> = [];
+    for (const t of audioTracks) {
+      const shouldMute = t.muted || (anySoloed && !t.solo);
+      const gain = shouldMute ? 0 : 1;
+      for (const itemId of getTrackItemIds(t.id)) {
+        entries.push({ itemId, gain });
+      }
+    }
+    setMixerLiveGains(entries);
+  }, [getTrackItemIds]);
+
+  // In-place mutation for mute/solo — same pattern as volume change.
+  // setTracks() triggers full composition re-render which stalls playback.
+  // Live gains bridge the gap so audio responds immediately.
+  const handleTrackMuteToggle = useCallback((trackId: string) => {
+    const currentTracks = useItemsStore.getState().tracks;
     const track = currentTracks.find((t) => t.id === trackId);
     if (!track) return;
-    useTimelineStore.getState().setTracks(
-      currentTracks.map((t) =>
-        t.id === trackId ? { ...t, solo: !t.solo } : t
-      ),
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((t) => ({ ...t })),
+    };
+    (track as { muted: boolean }).muted = !track.muted;
+    applyMuteSoloLiveGains();
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_MUTE', payload: { id: trackId } },
+      beforeSnapshot,
     );
-  }, []);
+    setTrackSnapshotVersion((version) => version + 1);
+  }, [applyMuteSoloLiveGains]);
+
+  const handleTrackSoloToggle = useCallback((trackId: string) => {
+    const currentTracks = useItemsStore.getState().tracks;
+    const track = currentTracks.find((t) => t.id === trackId);
+    if (!track) return;
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((t) => ({ ...t })),
+    };
+    (track as { solo: boolean }).solo = !track.solo;
+    applyMuteSoloLiveGains();
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_SOLO', payload: { id: trackId } },
+      beforeSnapshot,
+    );
+    setTrackSnapshotVersion((version) => version + 1);
+  }, [applyMuteSoloLiveGains]);
 
   // ---------------------------------------------------------------------------
   // Mode dropdown (shared across both views)
@@ -481,6 +527,11 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // Meter mode (default)
   // ---------------------------------------------------------------------------
 
+  // Segmented LED mask — matches the mixer view segments
+  const segmentMask = 'repeating-linear-gradient(to top, black 0px, black 3px, transparent 3px, transparent 4px)';
+  const unlitLedBg = 'repeating-linear-gradient(to top, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 4px)';
+  const isScanningMeter = estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0;
+
   return (
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"
@@ -488,29 +539,30 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       aria-label="Audio meter"
     >
       <div
-        className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-secondary/20 px-2"
+        className="flex min-w-0 items-center justify-between gap-1 border-b border-border bg-secondary/20 px-1.5"
         style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
       >
-        <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.18em]">
+        <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.12em]">
           Meters
         </span>
         {modeDropdown}
       </div>
 
       <div className="flex-1 px-2 py-3 min-h-0">
-        <div className="h-full rounded-md border border-border/70 bg-black/30 px-2 py-3 shadow-inner">
-          <div className="mb-3 text-center text-[10px] uppercase tracking-[0.22em] text-muted-foreground/80">
+        <div className="h-full rounded-md border border-border/50 bg-black/30 px-2 py-3 shadow-[inset_0_1px_4px_rgba(0,0,0,0.4)]">
+          <div className="mb-3 text-center text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70 font-mono">
             Master
           </div>
 
-          <div className="flex h-[calc(100%-2.75rem)] items-stretch gap-2">
+          <div className="flex h-[calc(100%-2.75rem)] items-stretch gap-3">
+            {/* Scale marks */}
             <div className="relative flex-1 min-w-0">
               {AUDIO_METER_SCALE_MARKS.map((mark) => {
                 const bottom = `${dbMarkToPercent(mark)}%`;
                 return (
                   <div key={mark} className="absolute inset-x-0" style={{ bottom }}>
-                    <div className="absolute left-0 right-4 h-px bg-border/40" />
-                    <span className="absolute right-0 -translate-y-1/2 text-[10px] font-mono text-muted-foreground/70">
+                    <div className="absolute left-0 right-5 h-px bg-border/30" />
+                    <span className="absolute right-0 -translate-y-1/2 text-[10px] font-mono text-muted-foreground/50">
                       {mark}
                     </span>
                   </div>
@@ -518,45 +570,65 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
               })}
             </div>
 
+            {/* Segmented stereo meters */}
             <div className="flex flex-col items-center">
-              <div ref={meterVisualRootRef} className="flex flex-1 gap-0.5">
+              <div ref={meterVisualRootRef} className="flex flex-1 gap-[3px]">
                 {/* Left channel */}
-                <div className="relative w-[10px] rounded-sm border border-border/70 bg-[#111318] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
-                  <div className="absolute inset-[2px] overflow-hidden rounded-[2px] bg-[#060708]">
-                    <div
-                      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0 ? 'opacity-60' : ''}`}
-                      style={{ height: 'var(--meter-l, 0%)' }}
-                    />
-                    <div
-                      className="absolute inset-x-0 h-px bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.65)] transition-[bottom] duration-100 ease-out"
-                      style={{ bottom: 'calc(var(--meter-l-peak, 0%) - 0.5px)' }}
-                    />
-                    <div className="absolute inset-0 bg-[linear-gradient(to_top,transparent_0%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
-                  </div>
+                <div className="relative w-[14px] rounded-[2px] border border-border/50 bg-[#08090b] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)] overflow-hidden">
+                  {/* Unlit LED backdrop */}
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: unlitLedBg }} />
+                  {/* Active fill with segment mask */}
+                  <div
+                    className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${isScanningMeter ? 'opacity-50' : ''}`}
+                    style={{
+                      height: 'var(--meter-l, 0%)',
+                      maskImage: segmentMask,
+                      WebkitMaskImage: segmentMask,
+                    }}
+                  />
+                  {/* Peak hold — single bright segment */}
+                  <div
+                    className="absolute inset-x-0 h-[3px] bg-white/85 shadow-[0_0_5px_rgba(255,255,255,0.5)] transition-[bottom] duration-100 ease-out"
+                    style={{
+                      bottom: 'calc(var(--meter-l-peak, 0%) - 1px)',
+                      maskImage: segmentMask,
+                      WebkitMaskImage: segmentMask,
+                    }}
+                  />
                 </div>
                 {/* Right channel */}
-                <div className="relative w-[10px] rounded-sm border border-border/70 bg-[#111318] shadow-[inset_0_1px_2px_rgba(0,0,0,0.6)]">
-                  <div className="absolute inset-[2px] overflow-hidden rounded-[2px] bg-[#060708]">
-                    <div
-                      className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0 ? 'opacity-60' : ''}`}
-                      style={{ height: 'var(--meter-r, 0%)' }}
-                    />
-                    <div
-                      className="absolute inset-x-0 h-px bg-white/90 shadow-[0_0_6px_rgba(255,255,255,0.65)] transition-[bottom] duration-100 ease-out"
-                      style={{ bottom: 'calc(var(--meter-r-peak, 0%) - 0.5px)' }}
-                    />
-                    <div className="absolute inset-0 bg-[linear-gradient(to_top,transparent_0%,transparent_70%,rgba(255,255,255,0.08)_100%)]" />
-                  </div>
+                <div className="relative w-[14px] rounded-[2px] border border-border/50 bg-[#08090b] shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)] overflow-hidden">
+                  {/* Unlit LED backdrop */}
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: unlitLedBg }} />
+                  {/* Active fill with segment mask */}
+                  <div
+                    className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] transition-[height] duration-75 ease-out ${isScanningMeter ? 'opacity-50' : ''}`}
+                    style={{
+                      height: 'var(--meter-r, 0%)',
+                      maskImage: segmentMask,
+                      WebkitMaskImage: segmentMask,
+                    }}
+                  />
+                  {/* Peak hold — single bright segment */}
+                  <div
+                    className="absolute inset-x-0 h-[3px] bg-white/85 shadow-[0_0_5px_rgba(255,255,255,0.5)] transition-[bottom] duration-100 ease-out"
+                    style={{
+                      bottom: 'calc(var(--meter-r-peak, 0%) - 1px)',
+                      maskImage: segmentMask,
+                      WebkitMaskImage: segmentMask,
+                    }}
+                  />
                 </div>
               </div>
-              <div className="mt-1 flex gap-0.5 text-[8px] font-mono text-muted-foreground/50 justify-center">
-                <span className="w-[10px] text-center">L</span>
-                <span className="w-[10px] text-center">R</span>
+              <div className="mt-1 flex gap-[3px] text-[8px] font-mono text-muted-foreground/40 justify-center">
+                <span className="w-[14px] text-center">L</span>
+                <span className="w-[14px] text-center">R</span>
               </div>
             </div>
           </div>
 
-          <div className="mt-3 text-center text-[10px] font-mono text-muted-foreground">
+          {/* Peak dB readout */}
+          <div className="mt-3 text-center text-[10px] font-mono text-muted-foreground/70">
             {statusLabel}
           </div>
         </div>

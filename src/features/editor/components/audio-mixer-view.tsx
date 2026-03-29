@@ -11,6 +11,7 @@ export interface AudioMixerTrack {
   id: string;
   name: string;
   kind?: 'video' | 'audio';
+  color?: string;
   muted: boolean;
   solo: boolean;
   volume: number; // dB, -60 to +12
@@ -45,7 +46,7 @@ export interface AudioMixerViewProps {
 const FADER_DB_MIN = -60;
 const FADER_DB_MAX = 12;
 const FADER_DB_RANGE = FADER_DB_MAX - FADER_DB_MIN; // 72
-const FADER_KNOB_HEIGHT_PX = 20;
+const FADER_KNOB_HEIGHT_PX = 22;
 const FADER_KNOB_DRAG_TOLERANCE_PX = 14;
 
 function dbToFaderPercent(db: number): number {
@@ -66,6 +67,68 @@ function formatFaderDb(db: number): string {
   if (db <= FADER_DB_MIN) return '-inf';
   return `${db >= 0 ? '+' : ''}${db.toFixed(1)}`;
 }
+
+// ---------------------------------------------------------------------------
+// Segmented LED meter (shared between channel strips & bus)
+// ---------------------------------------------------------------------------
+
+// Segment dimensions: 3px tall segments with 1px gaps = 4px pitch.
+// CSS mask-image creates the segmented look over the existing gradient fill.
+// This keeps the same animation system (height %) while adding the hardware feel.
+const SEGMENT_MASK = 'repeating-linear-gradient(to top, black 0px, black 3px, transparent 3px, transparent 4px)';
+const UNLIT_LED_BG = 'repeating-linear-gradient(to top, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 3px, transparent 3px, transparent 4px)';
+
+interface SegmentedMeterBarProps {
+  /** CSS height value, e.g. "42%" */
+  height: string;
+  /** CSS bottom value for peak hold, e.g. "58%" */
+  peakBottom?: string;
+  /** Whether the source is still scanning (unresolved waveform) */
+  scanning?: boolean;
+  /** Additional className for the outer container */
+  className?: string;
+}
+
+const SegmentedMeterBar = memo(function SegmentedMeterBar({
+  height,
+  peakBottom,
+  scanning,
+  className = '',
+}: SegmentedMeterBarProps) {
+  return (
+    <div className={`relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden ${className}`}>
+      {/* Unlit LED backdrop */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: UNLIT_LED_BG }}
+      />
+
+      {/* Active fill — gradient with segment mask */}
+      <div
+        className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${scanning ? 'opacity-50' : ''}`}
+        style={{
+          height,
+          maskImage: SEGMENT_MASK,
+          WebkitMaskImage: SEGMENT_MASK,
+          transition: 'height 100ms ease-out',
+        }}
+      />
+
+      {/* Peak hold — single bright segment */}
+      {peakBottom != null && (
+        <div
+          className="absolute inset-x-0 h-[3px] rounded-[1px] bg-white/85 shadow-[0_0_4px_rgba(255,255,255,0.5)]"
+          style={{
+            bottom: peakBottom,
+            maskImage: SEGMENT_MASK,
+            WebkitMaskImage: SEGMENT_MASK,
+            transition: 'bottom 100ms ease-out',
+          }}
+        />
+      )}
+    </div>
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Scale marks (shared left column)
@@ -224,7 +287,13 @@ const ChannelFader = memo(function ChannelFader({
     [onVolumeChange, trackId],
   );
 
+  const handleDoubleClick = useCallback(() => {
+    applyDragValue(0);
+    onVolumeChange(trackId, 0);
+  }, [applyDragValue, onVolumeChange, trackId]);
+
   const knobPercent = dbToFaderPercent(volumeDb);
+  const unityPercent = dbToFaderPercent(0);
 
   return (
     <div
@@ -235,28 +304,40 @@ const ChannelFader = memo(function ChannelFader({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onDoubleClick={handleDoubleClick}
     >
       {/* Fader track line */}
-      <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/60" />
+      <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/70" />
 
-      {/* Unity (0 dB) mark */}
+      {/* Unity (0 dB) notch — small horizontal ticks */}
       <div
-        className="absolute left-0 right-0 h-px bg-muted-foreground/30"
-        style={{ bottom: `${dbToFaderPercent(0)}%` }}
-      />
+        className="absolute left-0 right-0 flex items-center justify-center"
+        style={{ bottom: `${unityPercent}%`, transform: 'translateY(50%)' }}
+      >
+        <div className="w-full h-px bg-muted-foreground/25" />
+      </div>
 
-      {/* Fader knob */}
+      {/* Fader knob — capsule shape */}
       <div
         ref={knobRef}
         data-track-id={trackId}
         data-fader-knob="true"
-        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-[14px] h-[20px] rounded-[3px] bg-zinc-400 shadow-[0_1px_3px_rgba(0,0,0,0.5)] border border-zinc-300/30 pointer-events-none"
-        style={{ top: `${100 - knobPercent}%` }}
+        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        style={{
+          top: `${100 - knobPercent}%`,
+          width: '18px',
+          height: `${FADER_KNOB_HEIGHT_PX}px`,
+        }}
       >
-        {/* Grip lines */}
-        <div className="absolute inset-x-[2px] top-[6px] h-px bg-zinc-600/60" />
-        <div className="absolute inset-x-[2px] top-[9px] h-px bg-zinc-600/60" />
-        <div className="absolute inset-x-[2px] top-[12px] h-px bg-zinc-600/60" />
+        {/* Knob body */}
+        <div className="w-full h-full rounded-[4px] bg-gradient-to-b from-zinc-300 to-zinc-400 shadow-[0_1px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3)] border border-zinc-500/40">
+          {/* Grip lines */}
+          <div className="absolute inset-x-[3px] top-[7px] h-px bg-zinc-600/50" />
+          <div className="absolute inset-x-[3px] top-[10px] h-px bg-zinc-600/50" />
+          <div className="absolute inset-x-[3px] top-[13px] h-px bg-zinc-600/50" />
+          {/* Center notch — unity indicator */}
+          <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-zinc-600/30 rounded-full mx-[2px]" />
+        </div>
       </div>
     </div>
   );
@@ -319,90 +400,92 @@ const ChannelStrip = memo(function ChannelStrip({
   const rightPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) + meterOffset)) : 0;
   const showScanningFallback = fallbackPercent > 0;
 
+  // dB readout color: green at unity, amber when boosted, dim when cut
+  const dbColor = track.volume > 0.05
+    ? 'text-amber-400/90'
+    : track.volume > -0.05
+      ? 'text-emerald-400/80'
+      : 'text-muted-foreground/60';
+
   return (
-    <div className="flex flex-col items-center h-full w-[44px] min-w-[44px] border-r border-border/40 px-0.5">
-      {/* Track name */}
+    <div className="flex h-full min-w-[52px] w-[52px]">
+      {/* Track color stripe — doubles as channel divider */}
       <div
-        className="w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground/80 truncate px-0.5 py-1 leading-tight"
-        title={track.name}
-      >
-        {track.name}
-      </div>
+        className="w-[2px] shrink-0"
+        style={{ backgroundColor: track.color || 'var(--border)' }}
+      />
 
-      {/* Solo / Mute buttons */}
-      <div className="flex gap-0.5 py-0.5 shrink-0">
-        <button
-          type="button"
-          className={`w-4 h-4 rounded-[2px] text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
-            track.solo
-              ? 'bg-amber-500 text-black shadow-[0_0_6px_rgba(245,158,11,0.5)]'
-              : 'bg-muted/50 text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground'
-          }`}
-          onClick={handleSoloClick}
-          aria-label={`Solo ${track.name}`}
-          aria-pressed={track.solo}
+      {/* Strip body */}
+      <div className="flex flex-1 flex-col items-center px-0.5">
+        {/* Track name */}
+        <div
+          className="w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground/80 truncate px-0.5 py-1 leading-tight"
+          title={track.name}
         >
-          S
-        </button>
-        <button
-          type="button"
-          className={`w-4 h-4 rounded-[2px] text-[8px] font-bold leading-none flex items-center justify-center transition-colors ${
-            track.muted
-              ? 'bg-red-600 text-white shadow-[0_0_6px_rgba(220,38,38,0.5)]'
-              : 'bg-muted/50 text-muted-foreground/50 hover:bg-muted hover:text-muted-foreground'
-          }`}
-          onClick={handleMuteClick}
-          aria-label={`Mute ${track.name}`}
-          aria-pressed={track.muted}
-        >
-          M
-        </button>
-      </div>
+          {track.name}
+        </div>
 
-      {/* Fader + mini level meter area */}
-      <div className="flex-1 w-full min-h-0 flex items-stretch gap-px py-1">
-        {/* Mini per-track level bars */}
-        <div className="flex gap-px w-[8px] shrink-0">
-          <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
-            <div
-              data-track-id={track.id}
-              data-track-channel="left"
-              className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
-              style={{
-                height: `${leftPercent}%`,
-                transition: 'height 100ms ease-out',
-              }}
+        {/* Solo / Mute buttons */}
+        <div className="flex gap-0.5 py-0.5 shrink-0">
+          <button
+            type="button"
+            className={`w-[18px] h-[16px] rounded-[3px] text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+              track.solo
+                ? 'bg-amber-500 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
+            }`}
+            onClick={handleSoloClick}
+            aria-label={`Solo ${track.name}`}
+            aria-pressed={track.solo}
+          >
+            S
+          </button>
+          <button
+            type="button"
+            className={`w-[18px] h-[16px] rounded-[3px] text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+              track.muted
+                ? 'bg-red-600 text-white shadow-[0_0_8px_rgba(220,38,38,0.4)]'
+                : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
+            }`}
+            onClick={handleMuteClick}
+            aria-label={`Mute ${track.name}`}
+            aria-pressed={track.muted}
+          >
+            M
+          </button>
+        </div>
+
+        {/* Fader + segmented level meter area */}
+        <div className="flex-1 w-full min-h-0 flex items-stretch gap-px py-1">
+          {/* Segmented per-track level bars */}
+          <div className="flex gap-px w-[10px] shrink-0">
+            <SegmentedMeterBar
+              height={`${leftPercent}%`}
+              scanning={showScanningFallback}
+            />
+            <SegmentedMeterBar
+              height={`${rightPercent}%`}
+              scanning={showScanningFallback}
             />
           </div>
-          <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
-            <div
-              data-track-id={track.id}
-              data-track-channel="right"
-              className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
-              style={{
-                height: `${rightPercent}%`,
-                transition: 'height 100ms ease-out',
-              }}
+
+          {/* Fader */}
+          <div className="flex-1 min-w-0">
+            <ChannelFader
+              trackId={track.id}
+              volumeDb={track.volume}
+              itemIds={track.itemIds}
+              onVolumeChange={onVolumeChange}
+              dbReadoutRef={dbReadoutRef}
+              meterDbOffsetRef={meterDbOffsetRef}
             />
           </div>
         </div>
 
-        {/* Fader */}
-        <div className="flex-1 min-w-0">
-          <ChannelFader
-            trackId={track.id}
-            volumeDb={track.volume}
-            itemIds={track.itemIds}
-            onVolumeChange={onVolumeChange}
-            dbReadoutRef={dbReadoutRef}
-            meterDbOffsetRef={meterDbOffsetRef}
-          />
+        {/* dB readout — color-coded */}
+        <div ref={dbReadoutRef} className={`text-[10px] font-mono py-0.5 leading-none ${dbColor}`}>
+          {formatFaderDb(track.volume)}
         </div>
-      </div>
-
-      {/* dB readout */}
-      <div ref={dbReadoutRef} className="text-[10px] font-mono text-muted-foreground py-0.5 leading-none">
-        {formatFaderDb(track.volume)}
       </div>
     </div>
   );
@@ -418,7 +501,8 @@ interface BusMeterProps {
 }
 
 const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const leftBarRef = useRef<HTMLDivElement | null>(null);
+  const rightBarRef = useRef<HTMLDivElement | null>(null);
 
   // Smooth the bus meter with CSS transitions rather than rAF
   const fallbackPercent = getMeterFallbackPercent({
@@ -430,50 +514,65 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
   const rightPercent = isPlaying ? Math.max(linearLevelToPercent(masterEstimate.right), fallbackPercent) : 0;
   const showScanningFallback = fallbackPercent > 0;
 
-  // Use a ref to imperatively update for smoother animation
+  // Use refs to imperatively update for smoother animation
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const leftBar = el.querySelector<HTMLDivElement>('[data-bus-channel="left"]');
-    const rightBar = el.querySelector<HTMLDivElement>('[data-bus-channel="right"]');
-    if (leftBar) leftBar.style.height = `${leftPercent}%`;
-    if (rightBar) rightBar.style.height = `${rightPercent}%`;
+    if (leftBarRef.current) leftBarRef.current.style.height = `${leftPercent}%`;
+    if (rightBarRef.current) rightBarRef.current.style.height = `${rightPercent}%`;
   }, [leftPercent, rightPercent]);
 
   return (
-    <div className="flex flex-col items-center h-full w-[40px] min-w-[40px] border-l border-border/60 px-1">
-      {/* Label */}
-      <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/80 py-1 leading-tight">
-        Bus
-      </div>
+    <div className="flex flex-col items-center h-full w-[52px] min-w-[52px] shrink-0">
+      {/* Inset panel */}
+      <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
+        {/* Label */}
+        <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 py-1 leading-tight font-mono whitespace-nowrap">
+          Bus 1
+        </div>
 
-      {/* Spacer to align with S/M row */}
-      <div className="h-[18px] shrink-0" />
+        {/* Spacer to align with S/M row */}
+        <div className="h-[18px] shrink-0" />
 
-      {/* Stereo meter bars */}
-      <div ref={containerRef} className="flex-1 min-h-0 flex items-stretch justify-center py-1">
-        <div className="flex gap-px w-[8px] shrink-0">
-          <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
-            <div
-              data-bus-channel="left"
-              className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
-              style={{ height: '0%', transition: 'height 100ms ease-out' }}
-            />
-          </div>
-          <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
-            <div
-              data-bus-channel="right"
-              className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
-              style={{ height: '0%', transition: 'height 100ms ease-out' }}
-            />
+        {/* Stereo segmented meter bars */}
+        <div className="flex-1 min-h-0 flex items-stretch justify-center py-1">
+          <div className="flex gap-[2px] w-[14px] shrink-0">
+            <div className="relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden">
+              {/* Unlit LED backdrop */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: UNLIT_LED_BG }} />
+              {/* Active fill */}
+              <div
+                ref={leftBarRef}
+                className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-50' : ''}`}
+                style={{
+                  height: '0%',
+                  maskImage: SEGMENT_MASK,
+                  WebkitMaskImage: SEGMENT_MASK,
+                  transition: 'height 100ms ease-out',
+                }}
+              />
+            </div>
+            <div className="relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden">
+              {/* Unlit LED backdrop */}
+              <div className="absolute inset-0 pointer-events-none" style={{ background: UNLIT_LED_BG }} />
+              {/* Active fill */}
+              <div
+                ref={rightBarRef}
+                className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-50' : ''}`}
+                style={{
+                  height: '0%',
+                  maskImage: SEGMENT_MASK,
+                  WebkitMaskImage: SEGMENT_MASK,
+                  transition: 'height 100ms ease-out',
+                }}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* L/R labels */}
-      <div className="flex gap-px w-[8px] text-[7px] font-mono text-muted-foreground/50 pb-0.5">
-        <span className="flex-1 text-center">L</span>
-        <span className="flex-1 text-center">R</span>
+        {/* L/R labels */}
+        <div className="flex gap-[2px] w-[14px] text-[7px] font-mono text-muted-foreground/40 pb-0.5">
+          <span className="flex-1 text-center">L</span>
+          <span className="flex-1 text-center">R</span>
+        </div>
       </div>
     </div>
   );
@@ -498,7 +597,7 @@ const ScaleColumn = memo(function ScaleColumn() {
           return (
             <div
               key={mark}
-              className="absolute right-0 -translate-y-1/2 text-[8px] font-mono text-muted-foreground/50 leading-none whitespace-nowrap"
+              className="absolute right-0 -translate-y-1/2 text-[9px] font-mono text-muted-foreground/70 leading-none whitespace-nowrap"
               style={{ bottom: `${percent}%` }}
             >
               {mark}
@@ -526,8 +625,8 @@ export const AudioMixerView = memo(function AudioMixerView({
 }: AudioMixerViewProps) {
   return (
     <aside
-      className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"
-      style={{ width: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth }}
+      className="panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit"
+      style={{ maxWidth: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth }}
       aria-label="Audio mixer"
     >
       {/* Header */}
@@ -547,12 +646,12 @@ export const AudioMixerView = memo(function AudioMixerView({
       </div>
 
       {/* Mixer body */}
-      <div className="flex-1 min-h-0 flex px-0.5 py-1">
+      <div className="flex-1 min-h-0 flex px-0.5 py-1 gap-0.5">
         {/* dB scale column */}
         <ScaleColumn />
 
         {/* Channel strips (scrollable) */}
-        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden">
+        <div className="min-w-0 overflow-x-auto overflow-y-hidden">
           <div className="flex h-full">
             {tracks.map((track) => (
               <ChannelStrip
@@ -567,7 +666,7 @@ export const AudioMixerView = memo(function AudioMixerView({
             ))}
 
             {tracks.length === 0 && (
-              <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/40">
+              <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
                 No audio tracks
               </div>
             )}
