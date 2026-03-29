@@ -832,9 +832,24 @@ function LiveAISessionWithBroadcastCore({
     setResolvingOutputWhepUrl(true);
     setOutputWhepUrlError(null);
     const start = Date.now();
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const attempt = () => {
       if (cancelled) return;
+
+      const retryOrStop = (error?: string | Error | null) => {
+        if (Date.now() - start < WHEP_RESOLVE_RETRY_MAX_MS) {
+          timeoutId = setTimeout(attempt, WHEP_RESOLVE_RETRY_INTERVAL_MS);
+        } else {
+          const msg =
+            error instanceof Error
+              ? error.message
+              : error ?? 'Could not load playback URL after retries';
+          setOutputWhepUrlError(msg);
+          setResolvingOutputWhepUrl(false);
+        }
+      };
+
       resolvePlaybackWhepUrl(playbackId)
         .then((result) => {
           if (cancelled) return;
@@ -842,30 +857,19 @@ function LiveAISessionWithBroadcastCore({
             setFallbackWhepUrl(result.url);
             setOutputWhepUrlError(null);
             setResolvingOutputWhepUrl(false);
-          } else if (Date.now() - start < WHEP_RESOLVE_RETRY_MAX_MS) {
-            setTimeout(attempt, WHEP_RESOLVE_RETRY_INTERVAL_MS);
           } else {
-            setOutputWhepUrlError(
-              result.error ?? 'Could not load playback URL after retries'
-            );
-            setResolvingOutputWhepUrl(false);
+            retryOrStop(result.error);
           }
         })
         .catch((err) => {
           if (cancelled) return;
-          if (Date.now() - start < WHEP_RESOLVE_RETRY_MAX_MS) {
-            setTimeout(attempt, WHEP_RESOLVE_RETRY_INTERVAL_MS);
-          } else {
-            const msg =
-              err instanceof Error ? err.message : 'Could not load playback URL after retries';
-            setOutputWhepUrlError(msg);
-            setResolvingOutputWhepUrl(false);
-          }
+          retryOrStop(err);
         });
     };
     attempt();
     return () => {
       cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [streamData?.outputPlaybackId, hookWhepUrl]);
 
