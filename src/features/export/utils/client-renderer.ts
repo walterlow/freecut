@@ -252,9 +252,13 @@ export function validateSettings(settings: ClientExportSettings): { valid: boole
     return { valid: false, error: 'Invalid frame rate (must be 1-120)' };
   }
 
-  // Check for even dimensions (required by most codecs)
-  if (settings.resolution.width % 2 !== 0 || settings.resolution.height % 2 !== 0) {
-    return { valid: false, error: 'Resolution must have even dimensions' };
+  // Auto-round odd dimensions to even (required by video codecs).
+  // Mutates in place so the rest of the export pipeline sees clean values.
+  if (settings.resolution.width % 2 !== 0) {
+    settings.resolution.width = Math.round(settings.resolution.width / 2) * 2;
+  }
+  if (settings.resolution.height % 2 !== 0) {
+    settings.resolution.height = Math.round(settings.resolution.height / 2) * 2;
   }
 
   return { valid: true };

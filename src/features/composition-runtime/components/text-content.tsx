@@ -25,6 +25,15 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
   const letterSpacing = (preview?.letterSpacing ?? item.letterSpacing ?? 0) * scaleX;
   const lineHeight = preview?.lineHeight ?? item.lineHeight ?? 1.2;
   const color = preview?.color ?? item.color;
+  const backgroundColor = preview?.backgroundColor ?? item.backgroundColor;
+  const hasTextShadowPreview = preview !== undefined && Object.prototype.hasOwnProperty.call(preview, 'textShadow');
+  const hasStrokePreview = preview !== undefined && Object.prototype.hasOwnProperty.call(preview, 'stroke');
+  const textShadow = hasTextShadowPreview
+    ? preview.textShadow
+    : item.textShadow;
+  const stroke = hasStrokePreview
+    ? preview.stroke
+    : item.stroke;
 
   // Load the Google Font and get the CSS fontFamily value
   // loadFont() blocks rendering until the font is ready (works for both preview and server render)
@@ -50,24 +59,11 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
   };
   const alignItems = verticalAlignMap[item.verticalAlign ?? 'middle'] ?? 'center';
 
-  // Build text shadow CSS if present
-  const textShadow = item.textShadow
-    ? `${item.textShadow.offsetX * scaleX}px ${item.textShadow.offsetY * scaleY}px ${item.textShadow.blur * scale}px ${item.textShadow.color}`
+  const cssTextShadow = textShadow
+    ? `${textShadow.offsetX * scaleX}px ${textShadow.offsetY * scaleY}px ${textShadow.blur * scale}px ${textShadow.color}`
     : undefined;
 
-  // Build stroke/outline effect using text-stroke or text shadow workaround
-  // Note: -webkit-text-stroke is not well supported in Composition rendering
-  // Using multiple text shadows as a fallback for stroke effect
-  const strokeShadows = item.stroke
-    ? [
-        `${item.stroke.width * scale}px 0 ${item.stroke.color}`,
-        `-${item.stroke.width * scale}px 0 ${item.stroke.color}`,
-        `0 ${item.stroke.width * scale}px ${item.stroke.color}`,
-        `0 -${item.stroke.width * scale}px ${item.stroke.color}`,
-      ].join(', ')
-    : undefined;
-
-  const finalTextShadow = [textShadow, strokeShadows].filter(Boolean).join(', ') || undefined;
+  const strokeWidth = stroke?.width ? `${stroke.width * scale * 2}px` : undefined;
 
   return (
     <div
@@ -78,7 +74,7 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
         alignItems,
         justifyContent,
         padding: `${16 * scale}px`,
-        backgroundColor: item.backgroundColor,
+        backgroundColor,
         boxSizing: 'border-box',
       }}
     >
@@ -94,7 +90,9 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
           textAlign: item.textAlign ?? 'center',
           lineHeight,
           letterSpacing,
-          textShadow: finalTextShadow,
+          textShadow: cssTextShadow,
+          WebkitTextStrokeWidth: strokeWidth,
+          WebkitTextStrokeColor: stroke?.color,
           // Best practice: use inline-block and pre-wrap to match measureText behavior
           display: 'inline-block',
           whiteSpace: 'pre-wrap',

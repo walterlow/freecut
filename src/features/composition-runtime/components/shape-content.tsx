@@ -207,6 +207,42 @@ export const ShapeContent: React.FC<{ item: ShapeItem }> = ({ item }) => {
       );
     }
 
+    case 'path': {
+      // Custom bezier path drawn with pen tool
+      const pathVerts = item.pathVertices;
+      if (!pathVerts || pathVerts.length < 2) {
+        return <div style={{ width: '100%', height: '100%', backgroundColor: fillColor }} />;
+      }
+      // Build SVG path from normalized vertices
+      const pathParts: string[] = [];
+      const firstV = pathVerts[0]!;
+      pathParts.push(`M ${firstV.position[0] * width} ${firstV.position[1] * height}`);
+      for (let i = 0; i < pathVerts.length; i++) {
+        const curr = pathVerts[i]!;
+        const next = pathVerts[(i + 1) % pathVerts.length]!;
+        const outH = curr.outHandle;
+        const inH = next.inHandle;
+        const isStraight = outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
+        if (isStraight) {
+          pathParts.push(`L ${next.position[0] * width} ${next.position[1] * height}`);
+        } else {
+          pathParts.push(`C ${(curr.position[0] + outH[0]) * width} ${(curr.position[1] + outH[1]) * height} ${(next.position[0] + inH[0]) * width} ${(next.position[1] + inH[1]) * height} ${next.position[0] * width} ${next.position[1] * height}`);
+        }
+      }
+      pathParts.push('Z');
+      return (
+        <div style={centerStyle}>
+          <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+            <path
+              d={pathParts.join(' ')}
+              fill={fillColor}
+              {...(strokeWidth > 0 && strokeColor ? { stroke: strokeColor, strokeWidth } : {})}
+            />
+          </svg>
+        </div>
+      );
+    }
+
     default:
       // Fallback to simple colored div for unknown types
       return (

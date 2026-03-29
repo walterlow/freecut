@@ -15,6 +15,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 import type {
   ProxyWorkerRequest,
@@ -69,7 +70,6 @@ type ProxyStatusListener = (
 ) => void;
 
 class ProxyService {
-  private worker: Worker | null = null;
   private proxyBlobUrlByKey = new Map<string, string>();
   private sourceBlobUrlByProxyKey = new Map<string, string>();
   private proxyKeyByMediaId = new Map<string, string>();
@@ -78,6 +78,26 @@ class ProxyService {
   private statusListener: ProxyStatusListener | null = null;
   private generatingProxyKeys = new Set<string>();
   private isRefreshing = false;
+  private readonly workerManager = createManagedWorker({
+    createWorker: () => new Worker(
+      new URL('../workers/proxy-generation-worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+    setupWorker: (worker) => {
+      worker.onmessage = (event: MessageEvent<ProxyWorkerResponse>) => {
+        this.handleWorkerMessage(event.data);
+      };
+
+      worker.onerror = (error) => {
+        logger.error('Proxy worker error:', error);
+      };
+
+      return () => {
+        worker.onmessage = null;
+        worker.onerror = null;
+      };
+    },
+  });
 
   /**
    * Register a listener for proxy status changes (used by the store)
@@ -347,21 +367,7 @@ class ProxyService {
    * Get or create the shared worker instance
    */
   private getWorker(): Worker {
-    if (!this.worker) {
-      this.worker = new Worker(
-        new URL('../workers/proxy-generation-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-
-      this.worker.onmessage = (event: MessageEvent<ProxyWorkerResponse>) => {
-        this.handleWorkerMessage(event.data);
-      };
-
-      this.worker.onerror = (error) => {
-        logger.error('Proxy worker error:', error);
-      };
-    }
-    return this.worker;
+    return this.workerManager.getWorker();
   }
 
   /**
@@ -540,4 +546,3 @@ class ProxyService {
 
 // Singleton
 export const proxyService = new ProxyService();
-

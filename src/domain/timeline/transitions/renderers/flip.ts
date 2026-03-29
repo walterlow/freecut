@@ -16,6 +16,7 @@ const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', '
 // ============================================================================
 
 const flipRenderer: TransitionRenderer = {
+  gpuTransitionId: 'flip',
   calculateStyles(progress, isOutgoing, _cw, _ch, direction): TransitionStyleCalculation {
     const dir = (direction as FlipDirection) || 'from-left';
     const axis = dir === 'from-left' || dir === 'from-right' ? 'Y' : 'X';

@@ -1,3 +1,7 @@
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('PlayerEmitter');
+
 type SeekPayload = { frame: number };
 type TimeUpdatePayload = { frame: number };
 type RateChangePayload = { playbackRate: number };
@@ -129,7 +133,7 @@ export class PlayerEmitter {
       try {
         callback({ detail: payload });
       } catch (error) {
-        console.error(`Error in event listener for ${eventName}:`, error);
+        logger.error(`Error in event listener for ${eventName}:`, error);
       }
     }
   }

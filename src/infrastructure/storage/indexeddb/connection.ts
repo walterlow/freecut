@@ -161,6 +161,19 @@ export async function getDB(): Promise<VideoEditorDBInstance> {
             });
           }
         }
+
+        // v10: Media transcripts store for local speech-to-text results.
+        if (oldVersion < 10) {
+          if (!db.objectStoreNames.contains('transcripts')) {
+            const transcriptStore = db.createObjectStore('transcripts', {
+              keyPath: 'id',
+            });
+            transcriptStore.createIndex('mediaId', 'mediaId', { unique: false });
+            transcriptStore.createIndex('createdAt', 'createdAt', {
+              unique: false,
+            });
+          }
+        }
       },
       blocked() {
         logger.warn(

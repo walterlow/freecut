@@ -2,23 +2,10 @@
 import { Button } from '@/components/ui/button';
 import {
   Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  MoveRight,
-  MoveLeft,
-  MoveDown,
-  MoveUp,
-  FlipHorizontal,
-  FlipVertical,
-  Clock,
-  Circle,
   Trash2,
   Zap,
   Copy,
   RotateCcw,
-  type LucideIcon,
 } from 'lucide-react';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -27,7 +14,6 @@ import type { TimelineState, TimelineActions } from '@/features/editor/deps/time
 import type { SelectionState, SelectionActions } from '@/shared/state/selection';
 import {
   TRANSITION_CONFIGS,
-  PRESENTATION_CONFIGS,
   type Transition,
   type TransitionPresentation,
   type TransitionTiming,
@@ -37,45 +23,12 @@ import {
   type PresentationConfig,
 } from '@/types/transition';
 import { cn } from '@/shared/ui/cn';
-
-// Icon mapping for presentation types
-const ICON_MAP: Record<string, LucideIcon> = {
-  Blend,
-  ArrowRight,
-  ArrowLeft,
-  ArrowDown,
-  ArrowUp,
-  MoveRight,
-  MoveLeft,
-  MoveDown,
-  MoveUp,
-  FlipHorizontal,
-  FlipHorizontal2: FlipHorizontal, // Use same icon, rotated via CSS if needed
-  FlipVertical,
-  FlipVertical2: FlipVertical,
-  Clock,
-  Circle,
-};
-
-// Group presentations by category for the picker
-const PRESENTATION_BY_CATEGORY = PRESENTATION_CONFIGS.reduce<
-  Record<string, PresentationConfig[]>
->((acc, config) => {
-  const category = config.category;
-  if (!acc[category]) {
-    acc[category] = [];
-  }
-  acc[category]!.push(config);
-  return acc;
-}, {});
-
-const CATEGORY_LABELS: Record<string, string> = {
-  basic: 'Basic',
-  wipe: 'Wipe',
-  slide: 'Slide',
-  flip: 'Flip',
-  special: 'Special',
-};
+import {
+  TRANSITION_ICON_MAP,
+  TRANSITION_CATEGORY_INFO,
+  TRANSITION_CATEGORY_ORDER,
+  TRANSITION_CONFIGS_BY_CATEGORY,
+} from '@/features/editor/utils/transition-ui-config';
 
 /**
  * Single presentation option button
@@ -89,7 +42,7 @@ const PresentationButton = memo(function PresentationButton({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const Icon = ICON_MAP[config.icon] || Blend;
+  const Icon = TRANSITION_ICON_MAP[config.icon] || Blend;
 
   return (
     <button
@@ -142,23 +95,27 @@ const PresentationPicker = memo(function PresentationPicker({
 
   return (
     <div className="space-y-3">
-      {Object.entries(PRESENTATION_BY_CATEGORY).map(([category, configs]) => (
-        <div key={category}>
-          <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-            {CATEGORY_LABELS[category]}
-          </span>
-          <div className="grid grid-cols-4 gap-1 mt-1">
-            {configs.map((config, idx) => (
-              <PresentationButton
-                key={`${config.id}-${config.direction || idx}`}
-                config={config}
-                isSelected={isSelected(config)}
-                onClick={() => onSelect(config.id, config.direction)}
-              />
-            ))}
+      {TRANSITION_CATEGORY_ORDER.map((category) => {
+        const configs = TRANSITION_CONFIGS_BY_CATEGORY[category];
+        if (!configs || configs.length === 0) return null;
+        return (
+          <div key={category}>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+              {TRANSITION_CATEGORY_INFO[category]?.title ?? category}
+            </span>
+            <div className="grid grid-cols-4 gap-1 mt-1">
+              {configs.map((config, idx) => (
+                <PresentationButton
+                  key={`${config.id}-${config.direction || idx}`}
+                  config={config}
+                  isSelected={isSelected(config)}
+                  onClick={() => onSelect(config.id, config.direction)}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 });
@@ -207,6 +164,9 @@ export function TransitionPanel() {
     []
   );
 
+  const minDuration = fps;
+  const maxDuration = fps * 3;
+
   // Handle presentation change
   const handlePresentationChange = useCallback(
     (
@@ -230,13 +190,13 @@ export function TransitionPanel() {
     (durationInFrames: number) => {
       if (selectedTransitionId && transitionConfig) {
         const clamped = Math.max(
-          transitionConfig.minDuration,
-          Math.min(transitionConfig.maxDuration, Math.round(durationInFrames))
+          minDuration,
+          Math.min(maxDuration, Math.round(durationInFrames))
         );
         updateTransition(selectedTransitionId, { durationInFrames: clamped });
       }
     },
-    [selectedTransitionId, transitionConfig, updateTransition]
+    [selectedTransitionId, transitionConfig, updateTransition, minDuration, maxDuration]
   );
 
   // Default duration is 1 second (fps frames)
@@ -246,12 +206,12 @@ export function TransitionPanel() {
   const handleResetDuration = useCallback(() => {
     if (selectedTransitionId && transitionConfig) {
       const clamped = Math.max(
-        transitionConfig.minDuration,
-        Math.min(transitionConfig.maxDuration, defaultDuration)
+        minDuration,
+        Math.min(maxDuration, defaultDuration)
       );
       updateTransition(selectedTransitionId, { durationInFrames: clamped });
     }
-  }, [selectedTransitionId, transitionConfig, updateTransition, defaultDuration]);
+  }, [selectedTransitionId, transitionConfig, updateTransition, defaultDuration, minDuration, maxDuration]);
 
   // Handle timing change
   const handleTimingChange = useCallback(
@@ -307,6 +267,20 @@ export function TransitionPanel() {
     [fps]
   );
 
+  const formatDurationInput = useCallback(
+    (frames: number): string => (frames / fps).toFixed(2),
+    [fps]
+  );
+
+  const parseDurationInput = useCallback(
+    (rawValue: string): number => {
+      const normalized = rawValue.trim().replace(/s$/i, '');
+      const seconds = parseFloat(normalized);
+      return Number.isFinite(seconds) ? seconds * fps : Number.NaN;
+    },
+    [fps]
+  );
+
   if (!selectedTransition || !transitionConfig) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -334,10 +308,12 @@ export function TransitionPanel() {
             <SliderInput
               value={selectedTransition.durationInFrames}
               onChange={handleDurationChange}
-              min={transitionConfig.minDuration}
-              max={transitionConfig.maxDuration}
+              min={minDuration}
+              max={maxDuration}
               step={1}
               formatValue={formatDuration}
+              formatInputValue={formatDurationInput}
+              parseInputValue={parseDurationInput}
               className="flex-1 min-w-0"
             />
             <Button
@@ -415,5 +391,3 @@ export function TransitionPanel() {
     </div>
   );
 }
-
-

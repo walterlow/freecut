@@ -4,3 +4,9 @@
  */
 
 export { resolveEffectiveTrackStates } from './timeline-contract';
+export {
+  findBestCanvasDropPlacement,
+  buildDroppedMediaTimelineItem,
+  getDroppedMediaDurationInFrames,
+  type DroppableMediaType,
+} from './timeline-contract';

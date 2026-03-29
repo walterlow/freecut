@@ -7,3 +7,4 @@ export { registerWipeTransitions } from './wipe';
 export { registerSlideTransitions } from './slide';
 export { registerFlipTransitions } from './flip';
 export { registerMaskTransitions } from './mask';
+export { registerGpuTransitions } from './gpu';

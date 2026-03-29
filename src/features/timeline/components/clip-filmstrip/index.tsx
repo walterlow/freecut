@@ -1,9 +1,12 @@
-import { memo, useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { memo, useEffect, useState, useMemo, useCallback, useRef, type RefCallback } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('ClipFilmstrip');
 
 const ZOOM_SETTLE_MS = 80;
 const PRIORITY_PAD_SECONDS = 0.75;
@@ -100,17 +103,20 @@ function getInteractionMaxTiles(pixelsPerSecond: number): number {
 }
 
 /**
- * Simple filmstrip tile - memoized to prevent unnecessary re-renders
- * Hides itself on error to avoid broken image icons
+ * Simple filmstrip tile - memoized to prevent unnecessary re-renders.
+ * Renders from ImageBitmap via canvas when available (instant, no JPEG decode),
+ * falls back to <img> for blob URL sources (OPFS-loaded frames).
  */
 const FilmstripTile = memo(function FilmstripTile({
   src,
+  bitmap,
   x,
   height,
   width,
   sourceWidth,
 }: {
   src: string;
+  bitmap?: ImageBitmap;
   x: number;
   height: number;
   width: number;
@@ -118,12 +124,41 @@ const FilmstripTile = memo(function FilmstripTile({
 }) {
   const [errorSrc, setErrorSrc] = useState<string | null>(null);
 
+  // Draw bitmap to canvas when ref is attached or bitmap changes
+  const canvasRefCallback: RefCallback<HTMLCanvasElement> = useCallback((canvas: HTMLCanvasElement | null) => {
+    if (!canvas || !bitmap || bitmap.width === 0 || bitmap.height === 0) return;
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    try {
+      if (ctx) ctx.drawImage(bitmap, 0, 0);
+    } catch {
+      // Bitmap may have been closed/detached by the time React renders
+    }
+  }, [bitmap]);
+
   const handleError = useCallback(() => {
     setErrorSrc(src);
   }, [src]);
 
+  // Bitmap path: render to canvas (instant, no JPEG decode)
+  if (bitmap) {
+    return (
+      <canvas
+        ref={canvasRefCallback}
+        className="absolute top-0"
+        style={{
+          left: x,
+          width,
+          height,
+          objectFit: 'cover',
+        }}
+      />
+    );
+  }
+
   // Hide if this specific src failed, but allow new src to try again
-  if (errorSrc === src) {
+  if (!src || errorSrc === src) {
     return null;
   }
 
@@ -301,7 +336,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           setBlobUrl(url);
         }
       } catch (error) {
-        console.error('Failed to load media blob URL:', error);
+        logger.error('Failed to load media blob URL:', error);
       }
     };
 
@@ -425,6 +460,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
           <FilmstripTile
             key={tileIndex}
             src={frame.url}
+            bitmap={frame.bitmap}
             x={x}
             height={height}
             width={width}

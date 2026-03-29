@@ -7,6 +7,10 @@
  * File structure: media/{uuid}/{filename}
  */
 
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('OPFSWorker');
+
 export interface OPFSWorkerMessage {
   type: 'save' | 'get' | 'delete' | 'list' | 'processUpload' | 'saveUpload';
   payload: {
@@ -358,7 +362,7 @@ self.onmessage = async (event: MessageEvent<OPFSWorkerMessage>) => {
   const port = event.ports[0];
 
   if (!port) {
-    console.error('No message port provided');
+    logger.error('No message port provided');
     return;
   }
 

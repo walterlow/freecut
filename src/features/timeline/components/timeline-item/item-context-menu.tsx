@@ -13,6 +13,13 @@ import {
 import { useSelectionStore } from '@/shared/state/selection';
 import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe';
 import type { PropertyKeyframes } from '@/types/keyframe';
+import type { MediaTranscriptModel } from '@/types/storage';
+import {
+  WHISPER_MODEL_LABELS,
+  WHISPER_MODEL_OPTIONS,
+} from '@/shared/utils/whisper-settings';
+import { formatHotkeyBinding } from '@/config/hotkeys';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 interface ItemContextMenuProps {
   children: ReactNode;
@@ -38,6 +45,12 @@ interface ItemContextMenuProps {
   /** Whether the playhead is within this item's bounds */
   playheadInBounds?: boolean;
   onFreezeFrame?: () => void;
+  canGenerateCaptions?: boolean;
+  canRegenerateCaptions?: boolean;
+  isGeneratingCaptions?: boolean;
+  defaultCaptionModel?: MediaTranscriptModel;
+  onGenerateCaptions?: (model: MediaTranscriptModel) => void;
+  onRegenerateCaptions?: (model: MediaTranscriptModel) => void;
   /** Whether this item is a composition item (enables enter/dissolve options) */
   isCompositionItem?: boolean;
   onEnterComposition?: () => void;
@@ -71,18 +84,29 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
+  canGenerateCaptions,
+  canRegenerateCaptions,
+  isGeneratingCaptions,
+  defaultCaptionModel,
+  onGenerateCaptions,
+  onRegenerateCaptions,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
   canCreatePreComp,
   onCreatePreComp,
 }: ItemContextMenuProps) {
+  const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
   // Filter to only properties that actually have keyframes
   const propertiesWithKeyframes = useMemo(() => {
     if (!keyframedProperties) return [];
     return keyframedProperties.filter(p => p.keyframes.length > 0);
   }, [keyframedProperties]);
+  const explicitCaptionModelOptions = useMemo(
+    () => WHISPER_MODEL_OPTIONS.filter((option) => option.value !== defaultCaptionModel),
+    [defaultCaptionModel]
+  );
 
   const hasKeyframes = propertiesWithKeyframes.length > 0;
 
@@ -134,7 +158,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
                   Clear All
-                  <ContextMenuShortcut>Shift+K</ContextMenuShortcut>
+                  <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.CLEAR_KEYFRAMES)}</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
                 {propertiesWithKeyframes.map(({ property }) => (
@@ -168,6 +192,65 @@ export const ItemContextMenu = memo(function ItemContextMenu({
               Insert Freeze Frame
               <ContextMenuShortcut>Shift+F</ContextMenuShortcut>
             </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canGenerateCaptions && onGenerateCaptions && (
+          <>
+            {isGeneratingCaptions ? (
+              <ContextMenuItem disabled>
+                Updating Captions...
+              </ContextMenuItem>
+            ) : (
+              <>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>Generate Captions for Segment</ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-48">
+                    {defaultCaptionModel && (
+                      <>
+                        <ContextMenuItem onClick={() => onGenerateCaptions(defaultCaptionModel)}>
+                          {`Default (${WHISPER_MODEL_LABELS[defaultCaptionModel]})`}
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                      </>
+                    )}
+                    {explicitCaptionModelOptions.map((option) => (
+                      <ContextMenuItem
+                        key={option.value}
+                        onClick={() => onGenerateCaptions(option.value)}
+                      >
+                        {option.label}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+
+                {canRegenerateCaptions && onRegenerateCaptions && (
+                  <ContextMenuSub>
+                    <ContextMenuSubTrigger>Regenerate Captions for Segment</ContextMenuSubTrigger>
+                    <ContextMenuSubContent className="w-48">
+                      {defaultCaptionModel && (
+                        <>
+                          <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
+                            {`Default (${WHISPER_MODEL_LABELS[defaultCaptionModel]})`}
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                        </>
+                      )}
+                      {explicitCaptionModelOptions.map((option) => (
+                        <ContextMenuItem
+                          key={option.value}
+                          onClick={() => onRegenerateCaptions(option.value)}
+                        >
+                          {option.label}
+                        </ContextMenuItem>
+                      ))}
+                    </ContextMenuSubContent>
+                  </ContextMenuSub>
+                )}
+              </>
+            )}
             <ContextMenuSeparator />
           </>
         )}

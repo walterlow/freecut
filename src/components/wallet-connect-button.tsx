@@ -10,7 +10,7 @@ import {
 } from '@account-kit/react';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { ChevronDown, Copy, DollarSign, Wallet } from 'lucide-react';
+import { Copy, DollarSign, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBuyUsdcOnramp } from '@/hooks/use-buy-usdc-onramp';
 import { Button } from '@/components/ui/button';
@@ -142,7 +142,6 @@ function WalletConnectButtonInner({
         <Button variant="outline" size={size} className={className} aria-label="Wallet">
           <Wallet className="h-4 w-4 shrink-0" />
           {!compact && <span className="hidden sm:inline">{displayText}</span>}
-          <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[12rem]">

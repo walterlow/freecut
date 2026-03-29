@@ -22,6 +22,7 @@ interface LinkedDimensionsProps {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
+  step?: number;
   className?: string;
 }
 
@@ -43,6 +44,7 @@ export function LinkedDimensions({
   minHeight = 1,
   maxWidth = 7680,
   maxHeight = 7680,
+  step = 1,
   className,
 }: LinkedDimensionsProps) {
   // Store aspect ratio when lock is engaged
@@ -96,7 +98,7 @@ export function LinkedDimensions({
         unit="px"
         min={minWidth}
         max={maxWidth}
-        step={1}
+        step={step}
         disabled={disabled}
       />
 
@@ -125,7 +127,7 @@ export function LinkedDimensions({
         unit="px"
         min={minHeight}
         max={maxHeight}
-        step={1}
+        step={step}
         disabled={disabled}
       />
     </div>

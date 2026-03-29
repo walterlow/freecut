@@ -43,10 +43,18 @@ interface MediabunnyVideoTrack {
   canDecode?: () => Promise<boolean>;
 }
 
+export interface DrawFrameCaptureResult {
+  success: boolean;
+  capturedFrame: VideoFrame | null;
+  capturedSourceTime: number | null;
+}
+
 export class VideoFrameExtractor {
   private static readonly TIMESTAMP_EPSILON = 1e-4;
   private static readonly LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
   private static readonly STREAM_BACKTRACK_SECONDS = 1.0;
+  /** Forward jump threshold: restart stream instead of reading through samples */
+  private static readonly FORWARD_JUMP_RESTART_SECONDS = 3.0;
 
   private sink: MediabunnySink | null = null;
   private input: MediabunnyInput | null = null;
@@ -179,6 +187,30 @@ export class VideoFrameExtractor {
     }
   }
 
+  async drawFrameWithCapture(
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    timestamp: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<DrawFrameCaptureResult> {
+    const success = await this.drawFrame(ctx, timestamp, x, y, width, height);
+    if (!success) {
+      return {
+        success: false,
+        capturedFrame: null,
+        capturedSourceTime: null,
+      };
+    }
+
+    return {
+      success: true,
+      capturedFrame: this.cloneCurrentVideoFrame(),
+      capturedSourceTime: this.currentSample?.timestamp ?? null,
+    };
+  }
+
   private async ensureSampleForTimestamp(timestamp: number): Promise<void> {
     if (!this.sink) return;
 
@@ -191,7 +223,14 @@ export class VideoFrameExtractor {
       this.lastRequestedTimestamp !== null
       && timestamp + VideoFrameExtractor.TIMESTAMP_EPSILON < this.lastRequestedTimestamp
     ) {
-      // Timeline time moved backward for this clip (rare during export). Restart stream.
+      // Timeline time moved backward for this clip. Restart stream.
+      this.resetSampleIterator(timestamp, 'backward');
+    } else if (
+      this.lastRequestedTimestamp !== null
+      && timestamp - this.lastRequestedTimestamp > VideoFrameExtractor.FORWARD_JUMP_RESTART_SECONDS
+    ) {
+      // Large forward jump — restart stream at new position instead of reading
+      // through hundreds of samples. Faster than sequential iteration.
       this.resetSampleIterator(timestamp, 'backward');
     }
 
@@ -247,7 +286,7 @@ export class VideoFrameExtractor {
     if (!this.sink) return;
 
     const streamStart = Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS);
-    if (reason !== 'init') {
+    if (reason === 'recover') {
       log.debug('Restarting mediabunny sample stream', {
         itemId: this.itemId,
         reason,
@@ -275,32 +314,36 @@ export class VideoFrameExtractor {
     }
 
     try {
-      if (typeof sample.draw === 'function') {
-        sample.draw(ctx, x, y, width, height);
-        return true;
+      // Prefer the VideoFrame path so we can respect visibleRect cropping.
+      // Direct sample.draw() can include padded decode columns that halftone
+      // turns into bright side fringes.
+      const videoFrame = this.getOrCreateCurrentVideoFrame();
+      if (!videoFrame) {
+        return false;
       }
 
-      // Reuse cached VideoFrame if we're drawing the same sample again.
-      // This is critical for transitions: the outgoing clip is rendered past
-      // its timeline end, which means the sample iterator is exhausted and
-      // the same last sample is drawn for many consecutive frames.  Calling
-      // toVideoFrame() after a previous VideoFrame was closed can return an
-      // empty/invalidated frame because the decoded buffer was released.
-      let videoFrame = this.cachedVideoFrame;
-      if (!videoFrame || this.cachedVideoFrameSample !== sample) {
-        // Different sample â€” release old cached frame and create new one
-        this.closeCachedVideoFrame();
-        videoFrame = sample.toVideoFrame();
-        if (!videoFrame) {
-          this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
-          this.lastFailureKind = 'decode-error';
-          return false;
-        }
-        this.cachedVideoFrame = videoFrame;
-        this.cachedVideoFrameSample = sample;
+      const visibleRect = videoFrame.visibleRect;
+      if (
+        visibleRect
+        && Number.isFinite(visibleRect.width)
+        && Number.isFinite(visibleRect.height)
+        && visibleRect.width > 0
+        && visibleRect.height > 0
+      ) {
+        ctx.drawImage(
+          videoFrame,
+          visibleRect.x,
+          visibleRect.y,
+          visibleRect.width,
+          visibleRect.height,
+          x,
+          y,
+          width,
+          height,
+        );
+      } else {
+        ctx.drawImage(videoFrame, x, y, width, height);
       }
-
-      ctx.drawImage(videoFrame, x, y, width, height);
       return true;
     } catch (error) {
       // Draw failed â€” discard the cached frame so next attempt gets a fresh one
@@ -308,6 +351,49 @@ export class VideoFrameExtractor {
       this.sampleLoopError = error;
       this.lastFailureKind = 'decode-error';
       return false;
+    }
+  }
+
+  private getOrCreateCurrentVideoFrame(): VideoFrame | null {
+    const sample = this.currentSample;
+    if (!sample) {
+      this.lastFailureKind = 'no-sample';
+      return null;
+    }
+
+    // Reuse cached VideoFrame if we're drawing the same sample again.
+    // This is critical for transitions: the outgoing clip is rendered past
+    // its timeline end, which means the sample iterator is exhausted and
+    // the same last sample is drawn for many consecutive frames. Calling
+    // toVideoFrame() after a previous VideoFrame was closed can return an
+    // empty/invalidated frame because the decoded buffer was released.
+    let videoFrame = this.cachedVideoFrame;
+    if (!videoFrame || this.cachedVideoFrameSample !== sample) {
+      this.closeCachedVideoFrame();
+      videoFrame = sample.toVideoFrame();
+      if (!videoFrame) {
+        this.sampleLoopError = new Error('Decoded sample could not be converted to VideoFrame');
+        this.lastFailureKind = 'decode-error';
+        return null;
+      }
+      this.cachedVideoFrame = videoFrame;
+      this.cachedVideoFrameSample = sample;
+    }
+
+    return videoFrame;
+  }
+
+  private cloneCurrentVideoFrame(): VideoFrame | null {
+    const videoFrame = this.getOrCreateCurrentVideoFrame();
+    if (!videoFrame) {
+      return null;
+    }
+
+    try {
+      return videoFrame.clone();
+    } catch (error) {
+      this.sampleLoopError = error;
+      return null;
     }
   }
 
@@ -431,4 +517,3 @@ export class VideoFrameExtractor {
     this.lastFailureKind = 'none';
   }
 }
-

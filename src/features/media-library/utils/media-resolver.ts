@@ -4,6 +4,9 @@ import { proxyService } from '@/features/media-library/services/proxy-service';
 import { getSharedProxyKey } from '@/features/media-library/utils/proxy-key';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import type { TimelineTrack } from '@/types/timeline';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('MediaResolver');
 
 /**
  * Pending requests to prevent concurrent OPFS access to the same file
@@ -36,7 +39,7 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       const media = await mediaLibraryService.getMedia(mediaId);
 
       if (!media) {
-        console.warn(`Media not found: ${mediaId}`);
+        logger.warn(`Media not found: ${mediaId}`);
         return ''; // Fallback: empty string (Composition will skip)
       }
 
@@ -44,14 +47,14 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       const blob = await mediaLibraryService.getMediaFile(mediaId);
 
       if (!blob) {
-        console.warn(`Media blob not found: ${mediaId}`);
+        logger.warn(`Media blob not found: ${mediaId}`);
         return '';
       }
 
       // Acquire blob URL through centralized manager (handles caching + ref counting)
       return blobUrlManager.acquire(mediaId, blob);
     } catch (error) {
-      console.error(`Failed to resolve media ${mediaId}:`, error);
+      logger.error(`Failed to resolve media ${mediaId}:`, error);
 
       // Mark media as broken if it's a file access error
       if (error instanceof FileAccessError) {

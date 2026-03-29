@@ -45,6 +45,7 @@ function calculateWipeClipPath(progress: number, direction: WipeDirection, isOut
 }
 
 const wipeRenderer: TransitionRenderer = {
+  gpuTransitionId: 'wipe',
   calculateStyles(progress, isOutgoing, _canvasWidth, _canvasHeight, direction): TransitionStyleCalculation {
     const p = clamp01(progress);
     const dir = (direction as WipeDirection) || 'from-left';

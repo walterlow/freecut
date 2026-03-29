@@ -3,6 +3,7 @@ import type {
   OPFSWorkerResponse,
   UploadProgress,
 } from '../workers/opfs-worker';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { formatBytes } from '@/utils/format-utils';
 
 /**
@@ -12,7 +13,12 @@ import { formatBytes } from '@/utils/format-utils';
  * of worker communication using MessageChannel pattern.
  */
 class OPFSService {
-  private worker: Worker | null = null;
+  private readonly workerManager = createManagedWorker({
+    createWorker: () => new Worker(
+      new URL('../workers/opfs-worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+  });
 
   /**
    * Pending read requests - prevents concurrent sync access handles on the same file
@@ -24,13 +30,7 @@ class OPFSService {
    * Initialize the OPFS worker
    */
   private getWorker(): Worker {
-    if (!this.worker) {
-      this.worker = new Worker(
-        new URL('../workers/opfs-worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-    }
-    return this.worker;
+    return this.workerManager.getWorker();
   }
 
   /**
@@ -303,10 +303,7 @@ class OPFSService {
    * Terminate the worker (cleanup)
    */
   terminate(): void {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+    this.workerManager.terminate();
   }
 }
 
