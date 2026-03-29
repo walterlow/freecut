@@ -730,6 +730,8 @@ function LiveAIPopoverFloating() {
 const STREAM_STATUS_POLL_INTERVAL_MS = 5000;
 const STREAM_STATUS_POLL_MAX_MS = 120000;
 const SD15_COLD_START_TIMEOUT_MS = 90000;
+const WHEP_RESOLVE_RETRY_INTERVAL_MS = 5000;
+const WHEP_RESOLVE_RETRY_MAX_MS = 120000;
 
 const SD15_MODEL_IDS = new Set(['Lykon/dreamshaper-8', 'prompthero/openjourney-v4']);
 
@@ -807,6 +809,8 @@ function LiveAISessionWithBroadcastCore({
   const linkedTimelineStartRef = useRef<number>(0);
 
   // Resolve output WHEP URL from Livepeer playback API (AI output), not broadcast's whepUrl.
+  // Polls with retry for SD1.5 and other models where cold start delays mean the playback
+  // source isn't immediately available (the gateway returns 404 / no WebRTC source).
   useEffect(() => {
     const playbackId = streamData?.outputPlaybackId;
     if (!playbackId) {
@@ -827,27 +831,45 @@ function LiveAISessionWithBroadcastCore({
     let cancelled = false;
     setResolvingOutputWhepUrl(true);
     setOutputWhepUrlError(null);
-    resolvePlaybackWhepUrl(playbackId)
-      .then((result) => {
-        if (!cancelled) {
-          if (result.url) {
-            setFallbackWhepUrl(result.url);
-            setOutputWhepUrlError(null);
-          } else {
-            setOutputWhepUrlError(result.error ?? 'Could not load playback URL');
-          }
-          setResolvingOutputWhepUrl(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          const msg = err instanceof Error ? err.message : 'Could not load playback URL';
+    const start = Date.now();
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const attempt = () => {
+      if (cancelled) return;
+
+      const retryOrStop = (error?: string | Error | null) => {
+        if (Date.now() - start < WHEP_RESOLVE_RETRY_MAX_MS) {
+          timeoutId = setTimeout(attempt, WHEP_RESOLVE_RETRY_INTERVAL_MS);
+        } else {
+          const msg =
+            error instanceof Error
+              ? error.message
+              : error ?? 'Could not load playback URL after retries';
           setOutputWhepUrlError(msg);
           setResolvingOutputWhepUrl(false);
         }
-      });
+      };
+
+      resolvePlaybackWhepUrl(playbackId)
+        .then((result) => {
+          if (cancelled) return;
+          if (result.url) {
+            setFallbackWhepUrl(result.url);
+            setOutputWhepUrlError(null);
+            setResolvingOutputWhepUrl(false);
+          } else {
+            retryOrStop(result.error);
+          }
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          retryOrStop(err);
+        });
+    };
+    attempt();
     return () => {
       cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [streamData?.outputPlaybackId, hookWhepUrl]);
 
