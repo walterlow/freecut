@@ -9,13 +9,16 @@ import {
 } from '@/features/editor/deps/timeline-store';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor/store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { FloatingPanel } from '@/components/ui/floating-panel';
 import { MoreHorizontal } from 'lucide-react';
 import {
   AUDIO_METER_SCALE_MARKS,
@@ -74,8 +77,13 @@ function animateChannel(
 
 const EMPTY_PER_TRACK_LEVELS = new Map<string, AudioMeterEstimate>();
 
+const FLOATING_MIXER_STORAGE_KEY = 'editor:floatingMixerBounds';
+const FLOATING_MIXER_DEFAULT_BOUNDS = { x: -1, y: -1, width: 420, height: 500 };
+
 export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const [panelMode, setPanelMode] = useState<PanelMode>('meter');
+  const mixerFloating = useEditorStore((s) => s.mixerFloating);
+  const setMixerFloating = useEditorStore((s) => s.setMixerFloating);
   const [trackSnapshotVersion, setTrackSnapshotVersion] = useState(0);
 
   const tracks = useTimelineStore((s) => s.tracks);
@@ -500,15 +508,50 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
           <span className="w-4 inline-block">{panelMode === 'mixer' ? '✓' : ''}</span>
           Mixer
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => {
+          if (!mixerFloating) setPanelMode('mixer');
+          setMixerFloating(!mixerFloating);
+        }}>
+          <span className="w-4 inline-block">{mixerFloating ? '✓' : ''}</span>
+          Float Mixer
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 
   // ---------------------------------------------------------------------------
-  // Mixer mode
+  // Floating mixer (rendered via portal, independent of panel mode)
   // ---------------------------------------------------------------------------
 
-  if (panelMode === 'mixer') {
+  const floatingMixer = mixerFloating ? (
+    <FloatingPanel
+      title="Mixer"
+      defaultBounds={FLOATING_MIXER_DEFAULT_BOUNDS}
+      minWidth={200}
+      minHeight={280}
+      storageKey={FLOATING_MIXER_STORAGE_KEY}
+      onClose={() => setMixerFloating(false)}
+      headerExtra={modeDropdown}
+    >
+      <AudioMixerView
+        tracks={mixerTracks}
+        perTrackLevels={perTrackLevels}
+        masterEstimate={estimate}
+        isPlaying={isPlaying}
+        onTrackVolumeChange={handleTrackVolumeChange}
+        onTrackMuteToggle={handleTrackMuteToggle}
+        onTrackSoloToggle={handleTrackSoloToggle}
+        expanded
+      />
+    </FloatingPanel>
+  ) : null;
+
+  // ---------------------------------------------------------------------------
+  // Mixer mode (docked)
+  // ---------------------------------------------------------------------------
+
+  if (panelMode === 'mixer' && !mixerFloating) {
     return (
       <AudioMixerView
         tracks={mixerTracks}
@@ -524,7 +567,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }
 
   // ---------------------------------------------------------------------------
-  // Meter mode (default)
+  // Meter mode (default) — also shows floating mixer if enabled
   // ---------------------------------------------------------------------------
 
   // Segmented LED mask — matches the mixer view segments
@@ -533,6 +576,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const isScanningMeter = estimate.unresolvedSourceCount > 0 && estimate.resolvedSourceCount === 0;
 
   return (
+    <>
+    {floatingMixer}
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"
       style={{ width: EDITOR_LAYOUT_CSS_VALUES.timelineMeterWidth }}
@@ -634,5 +679,6 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         </div>
       </div>
     </aside>
+    </>
   );
 });

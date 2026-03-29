@@ -15,6 +15,7 @@ export interface EditorState {
   sourcePatchAudioEnabled: boolean;
   linkedSelectionEnabled: boolean;
   colorScopesOpen: boolean;
+  mixerFloating: boolean;
 }
 
 export interface EditorActions {
@@ -47,4 +48,6 @@ export interface EditorActions {
   toggleLinkedSelectionEnabled: () => void;
   setColorScopesOpen: (open: boolean) => void;
   toggleColorScopesOpen: () => void;
+  setMixerFloating: (floating: boolean) => void;
+  toggleMixerFloating: () => void;
 }

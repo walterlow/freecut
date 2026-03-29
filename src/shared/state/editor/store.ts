@@ -50,6 +50,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   sourcePatchAudioEnabled: true,
   linkedSelectionEnabled: true,
   colorScopesOpen: false,
+  mixerFloating: (() => {
+    try { return localStorage.getItem('editor:mixerFloating') === 'true'; } catch { return false; }
+  })(),
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -100,4 +103,13 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   toggleLinkedSelectionEnabled: () => set((state) => ({ linkedSelectionEnabled: !state.linkedSelectionEnabled })),
   setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
   toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
+  setMixerFloating: (floating) => {
+    try { localStorage.setItem('editor:mixerFloating', String(floating)); } catch { /* noop */ }
+    set({ mixerFloating: floating });
+  },
+  toggleMixerFloating: () => set((state) => {
+    const next = !state.mixerFloating;
+    try { localStorage.setItem('editor:mixerFloating', String(next)); } catch { /* noop */ }
+    return { mixerFloating: next };
+  }),
 }));

@@ -37,6 +37,8 @@ export interface AudioMixerViewProps {
   onTrackMuteToggle: (trackId: string) => void;
   onTrackSoloToggle: (trackId: string) => void;
   headerExtra?: ReactNode;
+  /** Expanded layout for floating panel — wider strips, bigger meters */
+  expanded?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +358,7 @@ interface ChannelStripProps {
     resolvedSourceCount: number;
   } | undefined;
   isPlaying: boolean;
+  expanded?: boolean;
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   onMuteToggle: (trackId: string) => void;
   onSoloToggle: (trackId: string) => void;
@@ -365,6 +368,7 @@ const ChannelStrip = memo(function ChannelStrip({
   track,
   level,
   isPlaying,
+  expanded,
   onVolumeChange,
   onMuteToggle,
   onSoloToggle,
@@ -407,8 +411,12 @@ const ChannelStrip = memo(function ChannelStrip({
       ? 'text-emerald-400/80'
       : 'text-muted-foreground/60';
 
+  const stripWidth = expanded ? 'min-w-[68px] w-[68px]' : 'min-w-[52px] w-[52px]';
+  const meterBarWidth = expanded ? 'w-[14px]' : 'w-[10px]';
+  const buttonSize = expanded ? 'w-[22px] h-[18px] text-[10px]' : 'w-[18px] h-[16px] text-[9px]';
+
   return (
-    <div className="flex h-full min-w-[52px] w-[52px]">
+    <div className={`flex h-full ${stripWidth}`}>
       {/* Track color stripe — doubles as channel divider */}
       <div
         className="w-[2px] shrink-0"
@@ -416,20 +424,20 @@ const ChannelStrip = memo(function ChannelStrip({
       />
 
       {/* Strip body */}
-      <div className="flex flex-1 flex-col items-center px-0.5">
+      <div className={`flex flex-1 flex-col items-center ${expanded ? 'px-1' : 'px-0.5'}`}>
         {/* Track name */}
         <div
-          className="w-full text-center text-[10px] uppercase tracking-wider text-muted-foreground/80 truncate px-0.5 py-1 leading-tight"
+          className={`w-full text-center uppercase tracking-wider text-muted-foreground/80 truncate px-0.5 py-1 leading-tight ${expanded ? 'text-[11px]' : 'text-[10px]'}`}
           title={track.name}
         >
           {track.name}
         </div>
 
         {/* Solo / Mute buttons */}
-        <div className="flex gap-0.5 py-0.5 shrink-0">
+        <div className={`flex ${expanded ? 'gap-1' : 'gap-0.5'} py-0.5 shrink-0`}>
           <button
             type="button"
-            className={`w-[18px] h-[16px] rounded-[3px] text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+            className={`${buttonSize} rounded-[3px] font-bold leading-none flex items-center justify-center transition-colors ${
               track.solo
                 ? 'bg-amber-500 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]'
                 : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
@@ -442,7 +450,7 @@ const ChannelStrip = memo(function ChannelStrip({
           </button>
           <button
             type="button"
-            className={`w-[18px] h-[16px] rounded-[3px] text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+            className={`${buttonSize} rounded-[3px] font-bold leading-none flex items-center justify-center transition-colors ${
               track.muted
                 ? 'bg-red-600 text-white shadow-[0_0_8px_rgba(220,38,38,0.4)]'
                 : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
@@ -456,9 +464,9 @@ const ChannelStrip = memo(function ChannelStrip({
         </div>
 
         {/* Fader + segmented level meter area */}
-        <div className="flex-1 w-full min-h-0 flex items-stretch gap-px py-1">
+        <div className={`flex-1 w-full min-h-0 flex items-stretch ${expanded ? 'gap-0.5' : 'gap-px'} py-1`}>
           {/* Segmented per-track level bars */}
-          <div className="flex gap-px w-[10px] shrink-0">
+          <div className={`flex gap-px ${meterBarWidth} shrink-0`}>
             <SegmentedMeterBar
               height={`${leftPercent}%`}
               scanning={showScanningFallback}
@@ -622,36 +630,47 @@ export const AudioMixerView = memo(function AudioMixerView({
   onTrackMuteToggle,
   onTrackSoloToggle,
   headerExtra,
+  expanded,
 }: AudioMixerViewProps) {
+  // When expanded (floating), fill the panel; when docked, fit content up to max
+  const outerClassName = expanded
+    ? 'panel-bg flex h-full flex-col overflow-hidden'
+    : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit';
+  const outerStyle = expanded
+    ? undefined
+    : { maxWidth: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth };
+
   return (
     <aside
-      className="panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit"
-      style={{ maxWidth: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth }}
+      className={outerClassName}
+      style={outerStyle}
       aria-label="Audio mixer"
     >
-      {/* Header */}
-      <div
-        className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-secondary/20 px-2"
-        style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
-      >
-        <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.18em]">
-          Mixer
-        </span>
-        {headerExtra ?? (
-          <span
-            className={`h-2 w-2 rounded-full ${isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.7)]' : 'bg-muted-foreground/30'}`}
-            aria-hidden="true"
-          />
-        )}
-      </div>
+      {/* Header — only shown when docked (floating panel has its own title bar) */}
+      {!expanded && (
+        <div
+          className="flex min-w-0 items-center justify-between gap-2 border-b border-border bg-secondary/20 px-2"
+          style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
+        >
+          <span className="min-w-0 text-xs text-muted-foreground font-mono uppercase tracking-[0.18em]">
+            Mixer
+          </span>
+          {headerExtra ?? (
+            <span
+              className={`h-2 w-2 rounded-full ${isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.7)]' : 'bg-muted-foreground/30'}`}
+              aria-hidden="true"
+            />
+          )}
+        </div>
+      )}
 
       {/* Mixer body */}
-      <div className="flex-1 min-h-0 flex px-0.5 py-1 gap-0.5">
+      <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
         {/* dB scale column */}
         <ScaleColumn />
 
         {/* Channel strips (scrollable) */}
-        <div className="min-w-0 overflow-x-auto overflow-y-hidden">
+        <div className={`${expanded ? 'flex-1' : ''} min-w-0 overflow-x-auto overflow-y-hidden`}>
           <div className="flex h-full">
             {tracks.map((track) => (
               <ChannelStrip
@@ -659,11 +678,17 @@ export const AudioMixerView = memo(function AudioMixerView({
                 track={track}
                 level={perTrackLevels.get(track.id)}
                 isPlaying={isPlaying}
+                expanded={expanded}
                 onVolumeChange={onTrackVolumeChange}
                 onMuteToggle={onTrackMuteToggle}
                 onSoloToggle={onTrackSoloToggle}
               />
             ))}
+
+            {/* Trailing border after last strip */}
+            {tracks.length > 0 && (
+              <div className="w-[2px] shrink-0 bg-border/40" />
+            )}
 
             {tracks.length === 0 && (
               <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
