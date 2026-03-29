@@ -8,6 +8,7 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
+import { useMixerLiveGainEpoch, getMixerLiveGain } from '@/shared/state/mixer-live-gain';
 
 let sharedAudioContext: AudioContext | null = null;
 
@@ -183,7 +184,12 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
 
   // Apply master preview volume from playback controls
   const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
-  const finalVolume = itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier);
+
+  // Mixer fader live gain — updated during drag without re-rendering the composition
+  useMixerLiveGainEpoch();
+  const mixerGain = getMixerLiveGain(itemId);
+
+  const finalVolume = itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier) * mixerGain;
 
   // Use HTML5 audio with native preservesPitch.
   // Export uses Canvas + WebCodecs (client-render-engine.ts) which handles audio separately.

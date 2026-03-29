@@ -342,6 +342,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       muted: track.muted,
       solo: track.solo,
       volume: track.volume || 0,
+      itemIds: track.items.map((item) => item.id),
     }));
   }, [mixerSourceTracks]);
 

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { linearLevelToPercent } from './audio-meter-utils';
+import { setMixerLiveGains, clearMixerLiveGains } from '@/shared/state/mixer-live-gain';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +14,7 @@ export interface AudioMixerTrack {
   muted: boolean;
   solo: boolean;
   volume: number; // dB, -60 to +12
+  itemIds: string[]; // item IDs on this track (for live gain during fader drag)
 }
 
 export interface AudioMixerViewProps {
@@ -94,6 +96,8 @@ function getMeterFallbackPercent(params: {
 interface ChannelFaderProps {
   trackId: string;
   volumeDb: number;
+  /** Item IDs on this track — used to set per-item live gain during drag */
+  itemIds: string[];
   /** Called once on drag end — triggers store update + markDirty */
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
@@ -103,6 +107,7 @@ interface ChannelFaderProps {
 const ChannelFader = memo(function ChannelFader({
   trackId,
   volumeDb,
+  itemIds,
   onVolumeChange,
   dbReadoutRef,
 }: ChannelFaderProps) {
@@ -148,7 +153,7 @@ const ChannelFader = memo(function ChannelFader({
     return currentPercent - ((pointerYFromBottom / rect.height) * 100);
   }, []);
 
-  // Pure DOM update — zero store writes, zero React renders
+  // Pure DOM update + live audio gain — zero store writes, zero React renders of composition
   const applyDragValue = useCallback((db: number) => {
     latestDbRef.current = db;
     if (knobRef.current) {
@@ -157,7 +162,13 @@ const ChannelFader = memo(function ChannelFader({
     if (dbReadoutRef?.current) {
       dbReadoutRef.current.textContent = formatFaderDb(db);
     }
-  }, [dbReadoutRef]);
+    // Compute gain multiplier relative to the committed track volume.
+    // The segment's volumeDb already includes the committed trackVolumeDb,
+    // so we apply the ratio: 10^(newDb/20) / 10^(committedDb/20)
+    const committedDb = volumeDb;
+    const gainRatio = Math.pow(10, (db - committedDb) / 20);
+    setMixerLiveGains(itemIds.map((id) => ({ itemId: id, gain: gainRatio })));
+  }, [dbReadoutRef, itemIds, volumeDb]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -187,7 +198,8 @@ const ChannelFader = memo(function ChannelFader({
       isDraggingRef.current = false;
       dragOffsetPercentRef.current = 0;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
-      // Single store write on release — no writes during drag
+      // Clear live gain overrides, then commit to store (single write)
+      clearMixerLiveGains();
       onVolumeChange(trackId, latestDbRef.current);
     },
     [onVolumeChange, trackId],
@@ -350,6 +362,7 @@ const ChannelStrip = memo(function ChannelStrip({
           <ChannelFader
             trackId={track.id}
             volumeDb={track.volume}
+            itemIds={track.itemIds}
             onVolumeChange={onVolumeChange}
             dbReadoutRef={dbReadoutRef}
           />

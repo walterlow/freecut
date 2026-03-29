@@ -8,6 +8,7 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
+import { useMixerLiveGainEpoch, getMixerLiveGain } from '@/shared/state/mixer-live-gain';
 import {
   getOrDecodeAudio,
   getOrDecodeAudioForPlayback,
@@ -150,7 +151,12 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const linearVolume = Math.pow(10, effectiveVolumeDb / 20);
   const itemVolume = muted ? 0 : Math.max(0, linearVolume * fadeMultiplier);
   const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
-  const audioVolume = itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier);
+
+  // Mixer fader live gain — updated during drag without re-rendering the composition
+  useMixerLiveGainEpoch();
+  const mixerGain = getMixerLiveGain(itemId);
+
+  const audioVolume = itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier) * mixerGain;
 
   const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
 
@@ -330,7 +336,8 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const now = ctx.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(Math.max(0, audioVolume), now + GAIN_RAMP_SECONDS);
+    const safeVolume = Number.isFinite(audioVolume) ? Math.max(0, audioVolume) : 0;
+    gain.gain.linearRampToValueAtTime(safeVolume, now + GAIN_RAMP_SECONDS);
   }, [audioVolume]);
 
   const stopSource = useCallback((fadeOut: boolean = true) => {
