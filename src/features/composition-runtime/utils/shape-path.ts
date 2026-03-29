@@ -1,4 +1,5 @@
 ﻿import type { ShapeItem } from '@/types/timeline';
+import type { MaskVertex } from '@/types/masks';
 import {
   makeRect,
   makeCircle,
@@ -216,6 +217,13 @@ export function getShapePath(
       break;
     }
 
+    case 'path': {
+      // Custom bezier path — vertices are normalized 0-1 within the shape's bounding box
+      path = pathVerticesToSvgPath(shape.pathVertices ?? [], width, height);
+      path = translatePath(path, boxLeft, boxTop);
+      break;
+    }
+
     default: {
       // Fallback to rectangle
       const fallbackResult = makeRect({ width, height, cornerRadius: 0 });
@@ -328,5 +336,45 @@ export function rotatePath(
   }
 
   return result.join(' ');
+}
+
+/**
+ * Convert normalized MaskVertex[] (0-1) to an SVG path string at the given dimensions.
+ * Used by 'path' shape type for custom bezier paths drawn with the pen tool.
+ */
+function pathVerticesToSvgPath(
+  vertices: MaskVertex[],
+  width: number,
+  height: number,
+): string {
+  if (vertices.length < 2) return `M 0 0 L ${width} 0 L ${width} ${height} L 0 ${height} Z`;
+
+  const parts: string[] = [];
+  const first = vertices[0]!;
+  parts.push(`M ${first.position[0] * width} ${first.position[1] * height}`);
+
+  for (let i = 0; i < vertices.length; i++) {
+    const curr = vertices[i]!;
+    const next = vertices[(i + 1) % vertices.length]!;
+
+    const outH = curr.outHandle;
+    const inH = next.inHandle;
+
+    const isStraight =
+      outH[0] === 0 && outH[1] === 0 && inH[0] === 0 && inH[1] === 0;
+
+    if (isStraight) {
+      parts.push(`L ${next.position[0] * width} ${next.position[1] * height}`);
+    } else {
+      const cp1x = (curr.position[0] + outH[0]) * width;
+      const cp1y = (curr.position[1] + outH[1]) * height;
+      const cp2x = (next.position[0] + inH[0]) * width;
+      const cp2y = (next.position[1] + inH[1]) * height;
+      parts.push(`C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${next.position[0] * width} ${next.position[1] * height}`);
+    }
+  }
+
+  parts.push('Z');
+  return parts.join(' ');
 }
 

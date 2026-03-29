@@ -6,6 +6,8 @@ import { useTimelineStore } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import { useGizmoStore } from '../stores/gizmo-store';
+import { useCornerPinStore } from '../stores/corner-pin-store';
+import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { TransformGizmo } from './transform-gizmo';
 import { GroupGizmo } from './group-gizmo';
 import { SelectableItem } from './selectable-item';
@@ -14,6 +16,7 @@ import { screenToCanvas, transformToScreenBounds } from '../utils/coordinate-tra
 import { useMarqueeSelection, isMarqueeJustFinished, type Rect } from '@/hooks/use-marquee-selection';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
+import { useCanvasMediaDrop } from '../hooks/use-canvas-media-drop';
 import {
   getAutoKeyframeOperation,
   GIZMO_ANIMATABLE_PROPS,
@@ -149,6 +152,8 @@ export function GizmoOverlay({
   const setCanvasSize = useGizmoStore((s) => s.setCanvasSize);
   const setSnappingEnabled = useGizmoStore((s) => s.setSnappingEnabled);
   const snapLines = useGizmoStore((s) => s.snapLines);
+  const isCornerPinEditing = useCornerPinStore((s) => s.isEditing);
+  const isMaskEditing = useMaskEditorStore((s) => s.isEditing);
   const startTranslate = useGizmoStore((s) => s.startTranslate);
   const updateInteraction = useGizmoStore((s) => s.updateInteraction);
   const endInteraction = useGizmoStore((s) => s.endInteraction);
@@ -217,6 +222,17 @@ export function GizmoOverlay({
       zoom,
     };
   }, [containerRect, playerSize, projectSize, zoom]);
+
+  const {
+    dropState,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+  } = useCanvasMediaDrop({
+    coordParams,
+    projectSize,
+  });
 
   // Get visual transforms for all visible items (base + keyframes + preview).
   const visualTransformsMap = useVisualTransforms(visibleItems, projectSize);
@@ -307,7 +323,8 @@ export function GizmoOverlay({
       const autoKeyframedProps = new Set<TransformAnimatableProperty>();
       const autoOps: AutoKeyframeOperation[] = [];
 
-      // Auto-keyframe properties that have existing keyframes
+      // Auto-keyframe properties that already have a key at this frame
+      // or have been explicitly armed from the dopesheet.
       for (const prop of GIZMO_ANIMATABLE_PROPS) {
         const operation = getAutoKeyframeOperation(
           item,
@@ -580,10 +597,11 @@ export function GizmoOverlay({
       }}
       onDoubleClick={(e) => e.stopPropagation()}
     >
-      {/* Marquee selection rectangle */}
-      <MarqueeOverlay marqueeState={marqueeState} />
+      {/* Marquee selection rectangle - hidden during corner pin / mask editing */}
+      {!isCornerPinEditing && !isMaskEditing && <MarqueeOverlay marqueeState={marqueeState} />}
 
       {/* Player area - receives clicks for deselection and contains gizmos */}
+      {/* Disabled entirely during corner pin / mask editing so the overlay gets exclusive input */}
       <div
         className="absolute"
         style={{
@@ -591,11 +609,34 @@ export function GizmoOverlay({
           left: overlayPadding,
           width: playerSize.width,
           height: playerSize.height,
-          pointerEvents: 'auto',
+          pointerEvents: (isCornerPinEditing || isMaskEditing) ? 'none' : 'auto',
         }}
         onClick={handleBackgroundClick}
         onContextMenu={handleContextMenu}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
+        {dropState && (
+          <div
+            className={`absolute inset-0 pointer-events-none z-20 flex items-center justify-center border-2 border-dashed ${
+              dropState.allowed
+                ? 'border-primary/70 bg-primary/10'
+                : 'border-destructive/60 bg-destructive/10'
+            }`}
+          >
+            <div className="rounded-lg border border-border/70 bg-background/90 px-4 py-3 text-center shadow-lg backdrop-blur-sm">
+              <p className={`text-sm font-semibold ${dropState.allowed ? 'text-primary' : 'text-destructive'}`}>
+                {dropState.title}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dropState.description}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Clickable areas for UNSELECTED visible items */}
         {/* Selected items are handled by their respective gizmos (TransformGizmo or GroupGizmo) */}
         {unselectedItems.map((item) => {
@@ -621,8 +662,8 @@ export function GizmoOverlay({
           );
         })}
 
-        {/* Transform gizmo(s) for selected items - single or group */}
-        {selectedItems.length === 1 && selectedItems[0] ? (
+        {/* Transform gizmo(s) for selected items - hidden during corner pin / mask editing */}
+        {(isCornerPinEditing || isMaskEditing) ? null : selectedItems.length === 1 && selectedItems[0] ? (
           <TransformGizmo
             item={selectedItems[0]}
             coordParams={coordParams}

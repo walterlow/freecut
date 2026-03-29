@@ -21,6 +21,7 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
+  SliderInput,
   AlignmentButtons,
   type AlignmentType,
 } from '../components';
@@ -178,23 +179,21 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit X position (with auto-keyframe support)
   const handleXChange = useCallback(
     (value: number) => {
-      // Try auto-keyframe first for items with keyframes
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = getAutoKeyframeOperation(itemId, 'x', value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      // Fall back to base transform for items without keyframes
-      if (!allHandled) {
-        onTransformChange(itemIds, { x: value });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { x: value });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -216,21 +215,21 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit Y position (with auto-keyframe support)
   const handleYChange = useCallback(
     (value: number) => {
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = getAutoKeyframeOperation(itemId, 'y', value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { y: value });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { y: value });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -258,29 +257,29 @@ export const LayoutSection = memo(function LayoutSection({
   const handleWidthChange = useCallback(
     (value: number) => {
       const newHeight = aspectLocked && height !== 'mixed' ? Math.round(value / currentAspectRatio) : null;
-
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackUpdates = new Map<string, Partial<TransformProperties>>();
       for (const itemId of itemIds) {
         const widthOperation = getAutoKeyframeOperation(itemId, 'width', value);
         const heightOperation = newHeight !== null ? getAutoKeyframeOperation(itemId, 'height', newHeight) : null;
-        const widthHandled = Boolean(widthOperation);
-        const heightHandled = newHeight !== null ? Boolean(heightOperation) : true;
         if (widthOperation) autoOps.push(widthOperation);
         if (heightOperation) autoOps.push(heightOperation);
-        if (!widthHandled || !heightHandled) {
-          allHandled = false;
+        const updates: Partial<TransformProperties> = {};
+        if (!widthOperation) {
+          updates.width = value;
+        }
+        if (newHeight !== null && !heightOperation) {
+          updates.height = newHeight;
+        }
+        if (Object.keys(updates).length > 0) {
+          fallbackUpdates.set(itemId, updates);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        if (newHeight !== null) {
-          onTransformChange(itemIds, { width: value, height: newHeight });
-        } else {
-          onTransformChange(itemIds, { width: value });
-        }
+      if (fallbackUpdates.size > 0) {
+        updateItemsTransformMap(fallbackUpdates, { operation: 'resize' });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -293,6 +292,7 @@ export const LayoutSection = memo(function LayoutSection({
       currentAspectRatio,
       getAutoKeyframeOperation,
       applyAutoKeyframeOperations,
+      updateItemsTransformMap,
     ]
   );
 
@@ -317,29 +317,29 @@ export const LayoutSection = memo(function LayoutSection({
   const handleHeightChange = useCallback(
     (value: number) => {
       const newWidth = aspectLocked && width !== 'mixed' ? Math.round(value * currentAspectRatio) : null;
-
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackUpdates = new Map<string, Partial<TransformProperties>>();
       for (const itemId of itemIds) {
         const heightOperation = getAutoKeyframeOperation(itemId, 'height', value);
         const widthOperation = newWidth !== null ? getAutoKeyframeOperation(itemId, 'width', newWidth) : null;
-        const heightHandled = Boolean(heightOperation);
-        const widthHandled = newWidth !== null ? Boolean(widthOperation) : true;
         if (heightOperation) autoOps.push(heightOperation);
         if (widthOperation) autoOps.push(widthOperation);
-        if (!heightHandled || !widthHandled) {
-          allHandled = false;
+        const updates: Partial<TransformProperties> = {};
+        if (!heightOperation) {
+          updates.height = value;
+        }
+        if (newWidth !== null && !widthOperation) {
+          updates.width = newWidth;
+        }
+        if (Object.keys(updates).length > 0) {
+          fallbackUpdates.set(itemId, updates);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        if (newWidth !== null) {
-          onTransformChange(itemIds, { width: newWidth, height: value });
-        } else {
-          onTransformChange(itemIds, { height: value });
-        }
+      if (fallbackUpdates.size > 0) {
+        updateItemsTransformMap(fallbackUpdates, { operation: 'resize' });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -352,6 +352,7 @@ export const LayoutSection = memo(function LayoutSection({
       currentAspectRatio,
       getAutoKeyframeOperation,
       applyAutoKeyframeOperations,
+      updateItemsTransformMap,
     ]
   );
 
@@ -370,21 +371,21 @@ export const LayoutSection = memo(function LayoutSection({
   // Commit rotation (on mouse up, with auto-keyframe support)
   const handleRotationChange = useCallback(
     (value: number) => {
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = getAutoKeyframeOperation(itemId, 'rotation', value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { rotation: value });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { rotation: value });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -689,7 +690,7 @@ export const LayoutSection = memo(function LayoutSection({
             property="rotation"
             currentValue={rotation === 'mixed' ? 0 : rotation}
           />
-          <NumberInput
+          <SliderInput
             value={rotation}
             onChange={handleRotationChange}
             onLiveChange={handleRotationLiveChange}

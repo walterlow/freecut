@@ -131,14 +131,24 @@ function buildMediaDependencyKey(mediaDependencyIds: string[]): string {
   return mediaDependencyIds.join('|');
 }
 
+function computeMaxItemEndFrame(items: TimelineItem[]): number {
+  let max = 0;
+  for (const item of items) {
+    const end = item.from + item.durationInFrames;
+    if (end > max) max = end;
+  }
+  return max;
+}
+
 function withItemIndexes(
   items: TimelineItem[],
   previous: Pick<ItemsState, 'itemsByTrackId' | 'itemById'>
-): Pick<ItemsState, 'items' | 'itemsByTrackId' | 'itemById'> {
+): Pick<ItemsState, 'items' | 'itemsByTrackId' | 'itemById' | 'maxItemEndFrame'> {
   return {
     items,
     itemsByTrackId: buildItemsByTrackId(items, previous.itemsByTrackId),
     itemById: buildItemById(items, previous.itemById),
+    maxItemEndFrame: computeMaxItemEndFrame(items),
   };
 }
 
@@ -167,6 +177,7 @@ interface ItemsState {
   items: TimelineItem[];
   itemsByTrackId: Record<string, TimelineItem[]>;
   itemById: Record<string, TimelineItem>;
+  maxItemEndFrame: number;
   mediaDependencyIds: string[];
   mediaDependencyVersion: number;
   tracks: TimelineTrack[];
@@ -215,6 +226,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
     items: [],
     itemsByTrackId: {},
     itemById: {},
+    maxItemEndFrame: 0,
     mediaDependencyIds: [],
     mediaDependencyVersion: 0,
     tracks: [],

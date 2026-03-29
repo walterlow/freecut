@@ -1,0 +1,86 @@
+---
+description: Swaps let you convert any token to any other token onchain.
+alwaysApply: false
+---
+# Same-chain swaps (Alpha)
+
+> Convert any token to any other token onchain using Alchemy Smart Wallets, with gas sponsorship and post-swap action support.
+
+Swaps let you convert any token to any other token onchain. They're built natively into Smart Wallets and you can integrate in minutes.
+
+Smart Wallets also allow you to add actions after the swap completes. For example, you can deposit your newly swapped tokens into a DeFi protocol.
+
+Swaps work just like any other Smart Wallet transaction, so you can sponsor gas to do gasless swaps, or pay for gas in an ERC-20 token.
+
+[Cross-chain swaps are live! Send your first cross-chain swap now!](/docs/wallets/transactions/cross-chain-swap-tokens)
+
+<Tip>
+  Swaps are in alpha. Note that there may be changes in the future to simplify
+  the endpoint/sdk. We will let you know if/when that happens.
+</Tip>
+
+# The Swap flow
+
+## **Flow**
+
+1. Request a swap quote
+2. Sign the prepared swap calls (including any post swap action)
+3. Send prepared calls
+4. Wait for onchain confirmation
+
+## **Swap options**
+
+When requesting a swap quote, you can specify either an amount in, or a minimum amount out.
+
+```tsx
+// Mode 1: Swap exact input amount
+{
+  fromAmount: "0x2710";
+} // Swap exactly 0.01 USDC (10000 in hex, 6 decimals)
+
+// Mode 2: Get minimum output amount
+{
+  minimumToAmount: "0x5AF3107A4000";
+} // Get at least 0.0001 ETH (18 decimals). We calculate how much USDC you need to spend to get at least your desired ETH amount.
+```
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+* An [Alchemy API Key](https://dashboard.alchemy.com/apps)
+* If you're sponsoring gas, then a [Gas Manager](https://dashboard.alchemy.com/gas-manager/policy/create) policy
+* A small amount of USDC for testing (~$1 worth is enough!)
+  * **Important**: You'll need to send these tokens to your smart wallet address to be able to swap!
+* A signer to own the account and sign messages
+
+<Tabs>
+  <Tab title="JavaScript" language="typescript">
+    <Markdown src="client.mdx" />
+  </Tab>
+
+  <Tab title="API" language="bash">
+    <Markdown src="api.mdx" />
+  </Tab>
+</Tabs>
+
+# FAQs
+
+## What chains are supported?
+
+Chains supported (for now) are: Ethereum, Arbitrum, Base, Berachain, BSC/BNB, Ink, Monad, Optimism, Polygon, Unichain and World Chain mainnets.
+
+## Does the Swap API support cross-chain swaps?
+
+Currently, the Swap API supports only single-chain swaps. Cross-chain swaps are coming soon!
+
+## How do you encode values?
+
+Values are simply passed as hexadecimal strings. The Swap API doesn't add complexity to consider decimals, so 0x01 is always the smallest amount of a given asset.
+1 ETH, or DAI (18 decimals) is `0xDE0B6B3A7640000`
+1 USDC (6 decimals) is `0xF4240`
+This removes any ambiguity— if it’s numerical, it’s a hex.
+
+## What is the expiry?
+
+The expiry is an informational indicator of when you can expect to be able to process the swap request. If you’re at/near the expiry, it might be a good time to request a new quote.

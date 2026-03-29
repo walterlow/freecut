@@ -30,7 +30,6 @@ export function clearTimeline(): void {
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
     useTransitionsStore.getState().setTransitions([]);
-    useTransitionsStore.getState().setPendingBreakages([]);
     useKeyframesStore.getState().setKeyframes([]);
     useMarkersStore.getState().setMarkers([]);
     useMarkersStore.getState().clearInOutPoints();

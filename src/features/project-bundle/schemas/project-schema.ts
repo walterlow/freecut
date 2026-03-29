@@ -96,6 +96,12 @@ const textStrokeSchema = z.object({
   color: z.string(),
 });
 
+const captionSourceSchema = z.object({
+  type: z.literal('transcript'),
+  clipId: z.string().min(1),
+  mediaId: z.string().min(1),
+});
+
 // Mask schemas
 const maskTypeSchema = z.enum(['clip', 'alpha']);
 
@@ -263,6 +269,7 @@ const timelineItemSchema = z.object({
   trimEnd: z.number().optional(),
   // Text fields
   text: z.string().optional(),
+  captionSource: captionSourceSchema.optional(),
   fontSize: z.number().optional(),
   fontFamily: z.string().optional(),
   fontWeight: fontWeightSchema.optional(),
@@ -391,7 +398,6 @@ const projectSchema = z.object({
   updatedAt: z.number().int().min(0),
   duration: z.number().min(0),
   thumbnail: z.string().optional(),
-  thumbnailUrl: z.string().optional(), // deprecated
   metadata: projectResolutionSchema,
   timeline: timelineSchema.optional(),
 });

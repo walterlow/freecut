@@ -203,6 +203,267 @@ const migrations: Record<number, Migration> = {
       };
     },
   },
+
+  /**
+   * Version 6: Migrate legacy effects to GPU shader effects
+   *
+   * Converts CSS filter, glitch, canvas-effect (halftone), overlay-effect (vignette),
+   * and color-grading effects to their GPU equivalents. LUT effects are dropped
+   * (no GPU equivalent for custom .cube files).
+   */
+  6: {
+    version: 6,
+    description:
+      'Migrate legacy effects (CSS filters, glitch, halftone, vignette, color grading) to GPU shader effects',
+    migrate: (project: Project): Project => {
+      if (!project.timeline?.items) {
+        return project;
+      }
+
+      const updatedItems = project.timeline.items.map((item) => {
+        const effects = (item as Record<string, unknown>).effects as
+          | Array<{ id: string; effect: Record<string, unknown>; enabled: boolean }>
+          | undefined;
+
+        if (!effects || effects.length === 0) {
+          return item;
+        }
+
+        const convertedEffects: Array<{ id: string; effect: Record<string, unknown>; enabled: boolean }> = [];
+
+        for (const entry of effects) {
+          const effect = entry.effect;
+          const type = effect.type as string;
+
+          // Pass through existing gpu-effect entries unchanged
+          if (type === 'gpu-effect') {
+            convertedEffects.push(entry);
+            continue;
+          }
+
+          if (type === 'css-filter') {
+            const filter = effect.filter as string;
+            const value = effect.value as number;
+            let gpuEffect: Record<string, unknown> | null = null;
+
+            switch (filter) {
+              case 'brightness':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-brightness',
+                  params: { amount: (value - 100) / 100 },
+                };
+                break;
+              case 'contrast':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-contrast',
+                  params: { amount: value / 100 },
+                };
+                break;
+              case 'saturate':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-saturation',
+                  params: { amount: value / 100 },
+                };
+                break;
+              case 'blur':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-gaussian-blur',
+                  params: { radius: value, samples: 5 },
+                };
+                break;
+              case 'hue-rotate':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-hue-shift',
+                  params: { shift: value / 360 },
+                };
+                break;
+              case 'grayscale':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-grayscale',
+                  params: { amount: value / 100 },
+                };
+                break;
+              case 'sepia':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-sepia',
+                  params: { amount: value / 100 },
+                };
+                break;
+              case 'invert':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-invert',
+                  params: {},
+                };
+                break;
+              default:
+                // Unknown css-filter variant — pass through as-is
+                convertedEffects.push(entry);
+                continue;
+            }
+
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+            continue;
+          }
+
+          if (type === 'glitch') {
+            const variant = effect.variant as string;
+            const intensity = effect.intensity as number;
+            let gpuEffect: Record<string, unknown> | null = null;
+
+            switch (variant) {
+              case 'rgb-split':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-rgb-split',
+                  params: { amount: intensity * 0.05, angle: 0 },
+                };
+                break;
+              case 'scanlines':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-scanlines',
+                  params: { density: 5, opacity: intensity },
+                };
+                break;
+              case 'color-glitch':
+                gpuEffect = {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-color-glitch',
+                  params: { intensity, speed: 1 },
+                };
+                break;
+              default:
+                convertedEffects.push(entry);
+                continue;
+            }
+
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+            continue;
+          }
+
+          if (type === 'canvas-effect' && effect.variant === 'halftone') {
+            const gpuEffect = {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-halftone',
+              params: {
+                patternType: effect.patternType,
+                dotSize: effect.dotSize,
+                spacing: effect.spacing,
+                angle: effect.angle,
+                intensity: effect.intensity,
+                invert: effect.inverted ?? false,
+              },
+            };
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+            continue;
+          }
+
+          if (type === 'overlay-effect' && effect.variant === 'vignette') {
+            const gpuEffect = {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-vignette',
+              params: {
+                amount: effect.intensity,
+                size: effect.size ?? 0.5,
+                softness: effect.softness ?? 0.5,
+                roundness: 1,
+              },
+            };
+            convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+            continue;
+          }
+
+          if (type === 'color-grading') {
+            const variant = effect.variant as string;
+
+            if (variant === 'lut') {
+              // Drop LUT effects — no GPU equivalent for custom .cube files
+              continue;
+            }
+
+            if (variant === 'curves') {
+              const gpuEffect = {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-curves',
+                params: {
+                  shadows: effect.shadows,
+                  midtones: effect.midtones,
+                  highlights: effect.highlights,
+                  contrast: effect.contrast,
+                  red: effect.red,
+                  green: effect.green,
+                  blue: effect.blue,
+                },
+              };
+              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+              continue;
+            }
+
+            if (variant === 'wheels') {
+              const gpuEffect = {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-color-wheels',
+                params: {
+                  shadowsHue: effect.shadowsHue,
+                  shadowsAmount: effect.shadowsAmount,
+                  midtonesHue: effect.midtonesHue,
+                  midtonesAmount: effect.midtonesAmount,
+                  highlightsHue: effect.highlightsHue,
+                  highlightsAmount: effect.highlightsAmount,
+                  temperature: effect.temperature,
+                  tint: effect.tint,
+                  saturation: effect.saturation,
+                },
+              };
+              convertedEffects.push({ id: entry.id, effect: gpuEffect, enabled: entry.enabled });
+              continue;
+            }
+          }
+
+          // Unknown effect type — pass through as-is
+          convertedEffects.push(entry);
+        }
+
+        return {
+          ...item,
+          effects: convertedEffects,
+        };
+      });
+
+      return {
+        ...project,
+        timeline: {
+          ...project.timeline,
+          items: updatedItems,
+        },
+      };
+    },
+  },
+
+  /**
+   * Version 7: Add blend mode, masks, and corner pin fields
+   *
+   * New optional fields on timeline items:
+   * - blendMode: layer compositing blend mode (default: 'normal')
+   * - masks: bezier mask paths array (default: [])
+   * - cornerPin: perspective warp corners (default: undefined)
+   *
+   * These fields are all optional with sensible defaults so no data
+   * transformation is needed — this migration just bumps the version.
+   */
+  7: {
+    version: 7,
+    description: 'Add blend mode, masks, and corner pin fields to timeline items',
+    migrate: (project: Project): Project => project,
+  },
 };
 
 /**

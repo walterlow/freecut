@@ -83,6 +83,32 @@ export interface ThumbnailData {
   height: number;
 }
 
+export type MediaTranscriptModel =
+  | 'whisper-tiny'
+  | 'whisper-base'
+  | 'whisper-small'
+  | 'whisper-large';
+
+export type MediaTranscriptQuantization = 'hybrid' | 'fp32' | 'fp16' | 'q8' | 'q4';
+
+export interface MediaTranscriptSegment {
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface MediaTranscript {
+  id: string; // Same as mediaId
+  mediaId: string;
+  model: MediaTranscriptModel;
+  language?: string;
+  quantization: MediaTranscriptQuantization;
+  text: string;
+  segments: MediaTranscriptSegment[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 // Density tier for filmstrip thumbnails
 export type FilmstripDensity = 'low' | 'medium' | 'high';
 

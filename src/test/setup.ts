@@ -1,4 +1,6 @@
 import '@testing-library/jest-dom';
+import { afterEach } from 'vitest';
+import { resetAutoKeyframeStore } from '@/features/keyframes/stores/auto-keyframe-store';
 
 // Mock ImageData for Canvas operations
 type TestGlobalWithImageData = typeof globalThis & { ImageData?: typeof ImageData };
@@ -29,3 +31,7 @@ if (typeof testGlobal.ImageData === 'undefined') {
 
   testGlobal.ImageData = MockImageData as unknown as typeof ImageData;
 }
+
+afterEach(() => {
+  resetAutoKeyframeStore();
+});

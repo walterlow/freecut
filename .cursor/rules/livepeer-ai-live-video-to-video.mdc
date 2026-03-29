@@ -1,0 +1,106 @@
+---
+description: Apply transformations to a live video streamed to the returned endpoints.
+alwaysApply: false
+---
+Live Video To Video
+Apply transformations to a live video streamed to the returned endpoints.
+
+POST
+
+https://livepeer.studio/api/beta/generate
+/
+live-video-to-video
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form Bearer <token>, where <token> is your auth token.
+
+Body
+application/json
+​
+subscribe_url
+stringrequired
+Source URL of the incoming stream to subscribe to.
+
+​
+publish_url
+stringrequired
+Destination URL of the outgoing stream to publish.
+
+​
+control_url
+stringdefault:""
+URL for subscribing via Trickle protocol for updates in the live video-to-video generation params.
+
+​
+events_url
+stringdefault:""
+URL for publishing events via Trickle protocol for pipeline status and logs.
+
+​
+model_id
+stringdefault:""
+Name of the pipeline to run in the live video to video job. Notice that this is named model_id for consistency with other routes, but it does not refer to a Hugging Face model ID. The exact model(s) depends on the pipeline implementation and might be configurable via the params argument.
+
+​
+params
+Params · object
+Initial parameters for the pipeline.
+
+Response
+
+200
+
+application/json
+Successful Response
+
+Response model for live video-to-video generation.
+
+​
+subscribe_url
+stringrequired
+Source URL of the incoming stream to subscribe to
+
+​
+publish_url
+stringrequired
+Destination URL of the outgoing stream to publish to
+
+​
+control_url
+stringdefault:""
+URL for updating the live video-to-video generation
+
+​
+events_url
+stringdefault:""
+URL for subscribing to events for pipeline status and logs
+
+const options = {
+  method: 'POST',
+  headers: {Authorization: 'Bearer <token>', 'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    subscribe_url: '<string>',
+    publish_url: '<string>',
+    control_url: '',
+    events_url: '',
+    model_id: '',
+    params: {}
+  })
+};
+
+fetch('https://livepeer.studio/api/beta/generate/live-video-to-video', options)
+  .then(res => res.json())
+  .then(res => console.log(res))
+  .catch(err => console.error(err));
+
+200:
+{
+  "subscribe_url": "<string>",
+  "publish_url": "<string>",
+  "control_url": "",
+  "events_url": ""
+}

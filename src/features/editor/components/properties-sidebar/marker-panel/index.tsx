@@ -114,13 +114,14 @@ export function MarkerPanel() {
             onChange={handleFrameChange}
             min={0}
             step={1}
+            unit="fr"
             className="flex-1 min-w-0"
           />
         </PropertyRow>
 
         {/* Timecode (read-only) */}
         <PropertyRow label="Time">
-          <span className="text-xs font-mono text-muted-foreground">
+          <span className="text-xs font-mono tabular-nums text-muted-foreground">
             {formatTimecode(selectedMarker.frame)}
           </span>
         </PropertyRow>
@@ -161,4 +162,3 @@ export function MarkerPanel() {
     </div>
   );
 }
-

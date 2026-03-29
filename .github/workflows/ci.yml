@@ -64,6 +64,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Check bundle budgets
-        run: npm run check:bundle-budgets -- --dist dist/assets

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
@@ -9,37 +9,104 @@ import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
-import { useProjectStore } from '@/features/timeline/deps/projects';
 import {
   mediaLibraryService,
   opfsService,
 } from '@/features/timeline/deps/media-library-service';
-import { resolveMediaUrl, getMediaType } from '@/features/timeline/deps/media-library-resolver';
-import { findNearestAvailableSpace } from '../../utils/collision-utils';
-import { buildTimelineBaseItem, buildTypedTimelineItem } from '../../utils/build-timeline-item-from-media';
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, logger } from './shared';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import { type CollisionRect } from '../../utils/collision-utils';
+
+function findNextAvailableSpaceOnTrack(
+  proposedFrom: number,
+  durationInFrames: number,
+  trackItems: ReadonlyArray<CollisionRect>
+): number {
+  let nextFrom = Math.max(0, proposedFrom);
+
+  for (const item of trackItems) {
+    const itemEnd = item.from + item.durationInFrames;
+    if (itemEnd <= nextFrom) {
+      continue;
+    }
+
+    if (item.from >= nextFrom + durationInFrames) {
+      break;
+    }
+
+    nextFrom = itemEnd;
+  }
+
+  return nextFrom;
+}
+
+function placeItemsWithoutTimelineOverlap(items: TimelineItem[]): TimelineItem[] {
+  const occupiedRangesByTrack = new Map<string, CollisionRect[]>();
+  const placedItems: TimelineItem[] = [];
+
+  for (const item of useItemsStore.getState().items) {
+    const trackItems = occupiedRangesByTrack.get(item.trackId);
+    if (trackItems) {
+      trackItems.push(item);
+    } else {
+      occupiedRangesByTrack.set(item.trackId, [item]);
+    }
+  }
+
+  for (const trackItems of occupiedRangesByTrack.values()) {
+    trackItems.sort((a, b) => a.from - b.from);
+  }
+
+  for (const item of items) {
+    let trackItems = occupiedRangesByTrack.get(item.trackId);
+    if (!trackItems) {
+      trackItems = [];
+      occupiedRangesByTrack.set(item.trackId, trackItems);
+    }
+
+    const finalFrom = findNextAvailableSpaceOnTrack(
+      item.from,
+      item.durationInFrames,
+      trackItems
+    );
+    const placedItem = finalFrom === item.from
+      ? item
+      : { ...item, from: finalFrom };
+
+    placedItems.push(placedItem);
+    trackItems.push({
+      trackId: placedItem.trackId,
+      from: placedItem.from,
+      durationInFrames: placedItem.durationInFrames,
+    });
+    trackItems.sort((a, b) => a.from - b.from);
+  }
+
+  return placedItems;
+}
 
 export function addItem(item: TimelineItem): void {
+  const [placedItem] = placeItemsWithoutTimelineOverlap([item]);
+
   execute('ADD_ITEM', () => {
-    useItemsStore.getState()._addItem(item);
+    useItemsStore.getState()._addItem(placedItem);
     useTimelineSettingsStore.getState().markDirty();
-  }, { itemId: item.id, type: item.type });
+  }, { itemId: placedItem.id, type: placedItem.type });
 }
 
 export function addItems(items: TimelineItem[]): void {
   if (items.length === 0) return;
+  const placedItems = placeItemsWithoutTimelineOverlap(items);
 
   execute('ADD_ITEMS', () => {
-    useItemsStore.getState()._addItems(items);
+    useItemsStore.getState()._addItems(placedItems);
     useTimelineSettingsStore.getState().markDirty();
-  }, { count: items.length });
+  }, { count: placedItems.length });
 }
 
 export function updateItem(id: string, updates: Partial<TimelineItem>): void {
@@ -774,179 +841,3 @@ export function slideItem(
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });
 }
-
-/**
- * Add a single media item to the timeline at the current playhead on the active
- * (or first available) track. Used for mobile/tap "Add to timeline" without drag-and-drop.
- */
-export async function addMediaToTimeline(mediaId: string): Promise<void> {
-  try {
-    const media = useMediaLibraryStore.getState().mediaById[mediaId];
-    if (!media) {
-      logger.warn('Add to timeline: media not found', { mediaId });
-      toast.error('Media not found');
-      return;
-    }
-
-    const { tracks, items } = useItemsStore.getState();
-    const fps = useTimelineSettingsStore.getState().fps;
-    const currentFrame = usePlaybackStore.getState().currentFrame;
-    const currentProject = useProjectStore.getState().currentProject;
-    const canvasWidth = currentProject?.metadata?.width ?? 1920;
-    const canvasHeight = currentProject?.metadata?.height ?? 1080;
-
-    const droppableTracks = tracks.filter(
-      (t) => !t.isGroup && t.visible && !t.locked
-    );
-    const activeTrackId = useSelectionStore.getState().activeTrackId;
-    const targetTrack =
-      (activeTrackId && droppableTracks.find((t) => t.id === activeTrackId)) ??
-      droppableTracks[0];
-
-    if (!targetTrack) {
-      toast.error('No track available to add media');
-      return;
-    }
-
-    const mediaType = getMediaType(media.mimeType);
-    const durationInFrames =
-      mediaType === 'image'
-        ? fps * 3
-        : Math.round(media.duration * fps) || fps;
-    const itemDuration = durationInFrames > 0 ? durationInFrames : fps;
-
-    const finalPosition = findNearestAvailableSpace(
-      Math.max(0, currentFrame),
-      itemDuration,
-      targetTrack.id,
-      items
-    );
-    if (finalPosition === null) {
-      toast.error('No space on track for this clip');
-      return;
-    }
-
-    const blobUrl = await resolveMediaUrl(mediaId);
-    if (!blobUrl) {
-      toast.error('Could not load media');
-      return;
-    }
-
-    const needsThumbnail = mediaType === 'video' || mediaType === 'image';
-    const thumbnailUrl = needsThumbnail
-      ? await mediaLibraryService.getThumbnailBlobUrl(mediaId)
-      : null;
-
-    const baseItem = buildTimelineBaseItem({
-      media,
-      mediaId,
-      label: media.fileName,
-      trackId: targetTrack.id,
-      from: finalPosition,
-      durationInFrames: itemDuration,
-      timelineFps: fps,
-    });
-    const timelineItem = buildTypedTimelineItem({
-      baseItem,
-      mediaType,
-      blobUrl,
-      thumbnailUrl,
-      media,
-      canvasWidth,
-      canvasHeight,
-    });
-    if (!timelineItem) {
-      toast.error('Unsupported media type');
-      return;
-    }
-
-    addItem(timelineItem);
-  } catch (err) {
-    logger.error('Add to timeline failed', { mediaId, err });
-    toast.error('Could not add to timeline');
-  }
-}
-
-import type { InsertRecordedClipParams } from '../../types';
-
-/**
- * Import a recorded Live AI blob as media and add it to the timeline at the
- * recorded start position. Used when committing a take from the Live AI popover.
- */
-export async function insertRecordedClip(params: InsertRecordedClipParams): Promise<void> {
-  const { blob, durationMs, linkedTimelineStart, projectId } = params;
-  try {
-    const file = new File([blob], 'live-ai-recording.webm', { type: 'video/webm' });
-    const media = await mediaLibraryService.importMediaWithFile(file, projectId);
-    await useMediaLibraryStore.getState().loadMediaItems();
-
-    const { tracks, items } = useItemsStore.getState();
-    const fps = useTimelineSettingsStore.getState().fps;
-    const currentProject = useProjectStore.getState().currentProject;
-    const canvasWidth = currentProject?.metadata?.width ?? 1920;
-    const canvasHeight = currentProject?.metadata?.height ?? 1080;
-
-    const droppableTracks = tracks.filter(
-      (t) => !t.isGroup && t.visible && !t.locked
-    );
-    const activeTrackId = useSelectionStore.getState().activeTrackId;
-    const targetTrack =
-      (activeTrackId && droppableTracks.find((t) => t.id === activeTrackId)) ??
-      droppableTracks[0];
-
-    if (!targetTrack) {
-      toast.error('No track available to add clip');
-      return;
-    }
-
-    const durationInFrames = Math.round((durationMs / 1000) * fps) || fps;
-    const finalPosition = findNearestAvailableSpace(
-      Math.max(0, linkedTimelineStart),
-      durationInFrames,
-      targetTrack.id,
-      items
-    );
-    if (finalPosition === null) {
-      toast.error('No space on track for this clip');
-      return;
-    }
-
-    const blobUrl = await resolveMediaUrl(media.id);
-    if (!blobUrl) {
-      toast.error('Could not load recorded media');
-      return;
-    }
-
-    const thumbnailUrl = await mediaLibraryService.getThumbnailBlobUrl(media.id);
-
-    const baseItem = buildTimelineBaseItem({
-      media,
-      mediaId: media.id,
-      label: media.fileName,
-      trackId: targetTrack.id,
-      from: finalPosition,
-      durationInFrames,
-      timelineFps: fps,
-    });
-    const timelineItem = buildTypedTimelineItem({
-      baseItem,
-      mediaType: 'video',
-      blobUrl,
-      thumbnailUrl,
-      media,
-      canvasWidth,
-      canvasHeight,
-    });
-    if (!timelineItem) {
-      toast.error('Unsupported media type');
-      return;
-    }
-
-    addItem(timelineItem);
-    toast.success('Clip added to timeline');
-  } catch (err) {
-    logger.error('Insert recorded clip failed', { err });
-    toast.error('Could not add clip to timeline');
-  }
-}
-

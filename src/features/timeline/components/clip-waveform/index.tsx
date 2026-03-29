@@ -7,6 +7,9 @@ import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { needsCustomAudioDecoder } from '@/features/timeline/deps/composition-runtime';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('ClipWaveform');
 
 // Continuous filled-path waveform styling (NLE-style)
 const WAVEFORM_VERTICAL_PADDING_PX = 3;
@@ -117,7 +120,7 @@ export const ClipWaveform = memo(function ClipWaveform({
           setBlobUrl(url);
         }
       } catch (error) {
-        console.error('Failed to load media blob URL:', error);
+        logger.error('Failed to load media blob URL:', error);
       }
     };
 

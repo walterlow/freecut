@@ -6,6 +6,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { createManagedWorker } from '@/shared/utils/managed-worker';
 import type {
   ProcessMediaRequest,
   ProcessMediaResponse,
@@ -29,50 +30,40 @@ interface PendingRequest {
 }
 
 class MediaProcessorService {
-  private worker: Worker | null = null;
   private requestId = 0;
   private pendingRequests = new Map<string, PendingRequest>();
-  private workerReady = false;
-  private initPromise: Promise<void> | null = null;
-
-  /**
-   * Initialize the worker (lazy)
-   */
-  private async ensureWorker(): Promise<Worker> {
-    if (this.worker && this.workerReady) {
-      return this.worker;
-    }
-
-    if (this.initPromise) {
-      await this.initPromise;
-      return this.worker!;
-    }
-
-    this.initPromise = new Promise<void>((resolve) => {
-      this.worker = new Worker(
-        new URL('../workers/media-processor.worker.ts', import.meta.url),
-        { type: 'module' }
-      );
-
-      this.worker.onmessage = (event: MessageEvent<ProcessMediaResponse>) => {
+  private readonly workerManager = createManagedWorker({
+    createWorker: () => new Worker(
+      new URL('../workers/media-processor.worker.ts', import.meta.url),
+      { type: 'module' }
+    ),
+    setupWorker: (worker) => {
+      worker.onmessage = (event: MessageEvent<ProcessMediaResponse>) => {
         this.handleMessage(event.data);
       };
 
-      this.worker.onerror = (event) => {
+      worker.onerror = (event) => {
         logger.error('Media processor worker error:', event.message);
-        // Reject all pending requests
+        this.workerManager.terminate();
+
         for (const [id, pending] of this.pendingRequests) {
           pending.reject(new Error(`Worker error: ${event.message}`));
           this.pendingRequests.delete(id);
         }
       };
 
-      this.workerReady = true;
-      resolve();
-    });
+      return () => {
+        worker.onmessage = null;
+        worker.onerror = null;
+      };
+    },
+  });
 
-    await this.initPromise;
-    return this.worker!;
+  /**
+   * Initialize the worker (lazy)
+   */
+  private ensureWorker(): Worker {
+    return this.workerManager.getWorker();
   }
 
   /**
@@ -118,7 +109,7 @@ class MediaProcessorService {
       thumbnailTimestamp?: number;
     }
   ): Promise<ProcessMediaResult> {
-    const worker = await this.ensureWorker();
+    const worker = this.ensureWorker();
     const requestId = `media-${++this.requestId}`;
 
     return new Promise<ProcessMediaResult>((resolve, reject) => {
@@ -224,12 +215,7 @@ class MediaProcessorService {
    * Terminate the worker
    */
   dispose(): void {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-      this.workerReady = false;
-      this.initPromise = null;
-    }
+    this.workerManager.terminate();
 
     // Reject all pending requests
     for (const [id, pending] of this.pendingRequests) {
@@ -241,4 +227,3 @@ class MediaProcessorService {
 
 // Singleton instance
 export const mediaProcessorService = new MediaProcessorService();
-

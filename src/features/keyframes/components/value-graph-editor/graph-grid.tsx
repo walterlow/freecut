@@ -116,7 +116,7 @@ export const GraphGrid = memo(function GraphGrid({
   }, [minValue, maxValue, yMajorInterval, graphTop, valueRange, graphHeight]);
 
   return (
-    <g className="graph-grid">
+    <g className="graph-grid" style={{ pointerEvents: 'none' }}>
       {/* Graph background */}
       <rect
         x={graphLeft}

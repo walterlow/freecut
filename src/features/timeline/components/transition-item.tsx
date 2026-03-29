@@ -27,7 +27,6 @@ import {
 
 interface TransitionItemProps {
   transition: Transition;
-  trackHeight: number;
   trackHidden?: boolean;
 }
 
@@ -43,7 +42,6 @@ const EDGE_HOVER_ZONE = 6;
 
 export const TransitionItem = memo(function TransitionItem({
   transition,
-  trackHeight,
   trackHidden = false,
 }: TransitionItemProps) {
   const { frameToPixels } = useTimelineZoomContext();
@@ -356,10 +354,6 @@ export const TransitionItem = memo(function TransitionItem({
     return null;
   }
 
-  // Calculate dimensions
-  const overlayHeight = Math.min(28, trackHeight - 4);
-  const overlayTop = (trackHeight - overlayHeight) / 2;
-
   // Get presentation label
   const presentationLabel = transition.presentation?.charAt(0).toUpperCase() + transition.presentation?.slice(1) || 'Fade';
 
@@ -372,16 +366,14 @@ export const TransitionItem = memo(function TransitionItem({
         <div
           ref={containerRef}
           className={cn(
-            'absolute',
+            'absolute inset-y-0 overflow-hidden rounded-sm',
             isSelected &&
-              'ring-2 ring-primary ring-offset-1 ring-offset-background rounded',
-            isResizing && 'ring-2 ring-purple-400'
+              'ring-2 ring-inset ring-primary',
+            isResizing && 'ring-2 ring-inset ring-purple-400'
           )}
           style={{
             left: `${position.left}px`,
             width: `${position.width}px`,
-            top: `${overlayTop}px`,
-            height: `${overlayHeight}px`,
             zIndex: isResizing ? 50 : 10,
             opacity: trackHidden ? 0.3 : undefined,
             cursor,
@@ -395,10 +387,11 @@ export const TransitionItem = memo(function TransitionItem({
           {/* CapCut-style transition region overlay - more transparent */}
           <div
             className={cn(
-              'w-full h-full rounded-md flex items-center justify-center gap-1 px-1',
-              'bg-gradient-to-r from-purple-500/20 via-purple-400/35 to-purple-500/20',
-              'border border-purple-400/30',
-              'hover:from-purple-500/30 hover:via-purple-400/45 hover:to-purple-500/30',
+              'flex h-full w-full items-center justify-center gap-1 px-1.5',
+              'bg-gradient-to-r from-purple-500/22 via-purple-400/46 to-purple-500/22',
+              'border border-purple-400/35',
+              'shadow-[inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-1px_0_rgba(255,255,255,0.06)]',
+              'hover:from-purple-500/28 hover:via-purple-400/54 hover:to-purple-500/28',
               'hover:border-purple-400/50'
             )}
           >
@@ -458,5 +451,3 @@ export const TransitionItem = memo(function TransitionItem({
     </ContextMenu>
   );
 });
-
-

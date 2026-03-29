@@ -3,6 +3,7 @@
  */
 
 import type { Keyframe, AnimatableProperty } from '@/types/keyframe';
+import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
 
 /**
  * Viewport configuration for the graph.
@@ -67,6 +68,8 @@ export interface GraphDragState {
   type: 'keyframe' | 'bezier-handle';
   /** Keyframe ID being dragged */
   keyframeId: string;
+  /** All keyframe IDs participating in the drag */
+  draggedKeyframeIds?: string[];
   /** Item ID of the keyframe */
   itemId: string;
   /** Property of the keyframe */
@@ -84,37 +87,6 @@ export interface GraphDragState {
   /** For bezier handles, initial control point */
   initialControlPoint?: { x: number; y: number };
 }
-
-/**
- * Value range configuration for a property.
- */
-interface PropertyValueRange {
-  /** Property type */
-  property: AnimatableProperty;
-  /** Minimum value */
-  min: number;
-  /** Maximum value */
-  max: number;
-  /** Unit of measurement */
-  unit: string;
-  /** Number of decimal places to show */
-  decimals: number;
-}
-
-/**
- * Default value ranges for each animatable property.
- * These are the actual internal values as stored in keyframes.
- */
-export const PROPERTY_VALUE_RANGES: Record<AnimatableProperty, PropertyValueRange> = {
-  x: { property: 'x', min: -1000, max: 2000, unit: 'px', decimals: 0 },
-  y: { property: 'y', min: -1000, max: 2000, unit: 'px', decimals: 0 },
-  width: { property: 'width', min: 0, max: 2000, unit: 'px', decimals: 0 },
-  height: { property: 'height', min: 0, max: 2000, unit: 'px', decimals: 0 },
-  rotation: { property: 'rotation', min: -360, max: 360, unit: '°', decimals: 1 },
-  opacity: { property: 'opacity', min: 0, max: 1, unit: '', decimals: 2 },
-  cornerRadius: { property: 'cornerRadius', min: 0, max: 1000, unit: 'px', decimals: 0 },
-  volume: { property: 'volume', min: -60, max: 20, unit: 'dB', decimals: 1 },
-};
 
 /**
  * Padding configuration for the graph.
@@ -136,3 +108,5 @@ export const DEFAULT_GRAPH_PADDING: GraphPadding = {
   bottom: 40,
   left: 50,
 };
+
+export { PROPERTY_VALUE_RANGES };

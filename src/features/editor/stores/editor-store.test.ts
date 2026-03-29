@@ -1,18 +1,28 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useEditorStore } from './editor-store';
+import {
+  DEFAULT_EDITOR_DENSITY_PRESET,
+  getEditorLayout,
+} from '@/shared/ui/editor-layout';
+import { useSettingsStore } from '@/features/editor/deps/settings';
 
 describe('editor-store', () => {
   beforeEach(() => {
+    useSettingsStore.getState().setSetting('editorDensity', DEFAULT_EDITOR_DENSITY_PRESET);
+    const editorLayout = getEditorLayout(DEFAULT_EDITOR_DENSITY_PRESET);
+
     // Reset store to defaults between tests
     useEditorStore.setState({
       activePanel: null,
       leftSidebarOpen: true,
       rightSidebarOpen: true,
       activeTab: 'media',
-      sidebarWidth: 320,
-      rightSidebarWidth: 320,
+      clipInspectorTab: 'transform',
+      sidebarWidth: editorLayout.sidebarDefaultWidth,
+      rightSidebarWidth: editorLayout.sidebarDefaultWidth,
       timelineHeight: 250,
       sourcePreviewMediaId: null,
+      colorScopesOpen: false,
     });
   });
 
@@ -22,7 +32,9 @@ describe('editor-store', () => {
     expect(state.leftSidebarOpen).toBe(true);
     expect(state.rightSidebarOpen).toBe(true);
     expect(state.activeTab).toBe('media');
+    expect(state.clipInspectorTab).toBe('transform');
     expect(state.sourcePreviewMediaId).toBe(null);
+    expect(state.colorScopesOpen).toBe(false);
   });
 
   it('sets active panel', () => {
@@ -61,6 +73,14 @@ describe('editor-store', () => {
     expect(useEditorStore.getState().activeTab).toBe('transitions');
   });
 
+  it('sets clip inspector tab', () => {
+    useEditorStore.getState().setClipInspectorTab('effects');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('effects');
+
+    useEditorStore.getState().setClipInspectorTab('media');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('media');
+  });
+
   it('sets sidebar widths', () => {
     useEditorStore.getState().setSidebarWidth(400);
     expect(useEditorStore.getState().sidebarWidth).toBe(400);
@@ -82,11 +102,32 @@ describe('editor-store', () => {
     expect(useEditorStore.getState().sourcePreviewMediaId).toBe(null);
   });
 
+  it('toggles the color scopes monitor', () => {
+    expect(useEditorStore.getState().colorScopesOpen).toBe(false);
+
+    useEditorStore.getState().toggleColorScopesOpen();
+    expect(useEditorStore.getState().colorScopesOpen).toBe(true);
+
+    useEditorStore.getState().setColorScopesOpen(false);
+    expect(useEditorStore.getState().colorScopesOpen).toBe(false);
+  });
+
   it('directly sets left/right sidebar open state', () => {
     useEditorStore.getState().setLeftSidebarOpen(false);
     expect(useEditorStore.getState().leftSidebarOpen).toBe(false);
 
     useEditorStore.getState().setRightSidebarOpen(false);
     expect(useEditorStore.getState().rightSidebarOpen).toBe(false);
+  });
+
+  it('reclamps sidebar widths when syncing sidebar layout', () => {
+    useEditorStore.getState().setSidebarWidth(480);
+    useEditorStore.getState().setRightSidebarWidth(480);
+
+    const compactLayout = getEditorLayout('compact');
+    useEditorStore.getState().syncSidebarLayout(compactLayout);
+
+    expect(useEditorStore.getState().sidebarWidth).toBe(compactLayout.sidebarMaxWidth);
+    expect(useEditorStore.getState().rightSidebarWidth).toBe(compactLayout.sidebarMaxWidth);
   });
 });

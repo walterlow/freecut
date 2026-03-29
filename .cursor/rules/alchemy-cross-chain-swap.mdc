@@ -1,0 +1,104 @@
+---
+description: Cross-chain swaps let you convert tokens across different blockchain networks in a single transaction.
+alwaysApply: false
+---
+# Cross-chain swaps (Alpha)
+
+> Convert tokens across different blockchain networks in a single transaction using Alchemy Smart Wallets, with gas sponsorship support.
+
+Cross-chain swaps let you convert tokens across different blockchain networks in a single transaction. They're built natively into Smart Wallets and you can integrate in minutes.
+
+Cross-chain swaps work just like any other Smart Wallet transaction, so you can sponsor gas to do gasless swaps, or pay for gas in an ERC-20 token.
+
+<Tip>
+  Cross-chain swaps are in alpha. Note that there may be changes in the future
+  to simplify the endpoint/sdk. We will let you know if/when that happens.
+</Tip>
+
+# The Cross-chain Swap flow
+
+## **Flow**
+
+1. Request a cross-chain swap quote
+2. Sign the prepared swap calls
+3. Send prepared calls
+4. Wait for cross-chain confirmation
+
+## **Swap options**
+
+<Info>
+  **Important**: Cross-chain swaps do not support `postCalls`. You cannot batch
+  additional actions after a cross-chain swap completes (for now).
+</Info>
+
+When requesting a cross-chain swap quote, you can specify either a `fromAmount` , or a `minimumToAmount`.
+
+```tsx
+// Mode 1: Swap exact input amount
+{
+  // Swap exactly 0.01 USDC (10000 in hex, 6 decimals)
+  fromAmount: "0x2710";
+} 
+
+// Mode 2: Get minimum output amount
+{
+  // Get at least 0.0001 ETH (18 decimals). The amount you need to spend is calculated to get at least your desired ETH amount.
+  minimumToAmount: "0x5AF3107A4000";
+}
+```
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+* An [Alchemy API Key](https://dashboard.alchemy.com/apps)
+* If you're sponsoring gas, then a [Gas Manager](https://dashboard.alchemy.com/gas-manager/policy/create) policy
+* A small amount of tokens for testing (~$1 worth is enough!)
+  * **Important**: You'll need to send these tokens to your smart wallet address to be able to swap!
+* A signer to own the account and sign messages
+
+<Tabs>
+  <Tab title="JavaScript" language="typescript">
+    <Markdown src="client.mdx" />
+  </Tab>
+
+  <Tab title="API" language="bash">
+    <Markdown src="api.mdx" />
+  </Tab>
+</Tabs>
+
+# FAQs
+
+## What chains are supported for cross-chain swaps?
+
+Chains supported (for now) are: Arbitrum, Arbitrum Nova, Base, Berachain, Boba Network, BSC/BNB, Celo, Ethereum, Hyperliquid, Ink, Optimism, Plasma, Polygon, Shape, Soneium, Story, Unichain, World Chain, and Zora mainnets.
+
+## Can I batch additional calls after a cross-chain swap?
+
+No, `postCalls` are not supported for cross-chain swaps (for now). You can only perform the swap itself across chains.
+
+## How long do cross-chain swaps take?
+
+Cross-chain swaps typically take longer than single-chain swaps due to the need for cross-chain messaging and confirmation. The exact time depends on the source and destination chains involved in the swap.
+
+## How do you encode values?
+
+Values are simply passed as hexadecimal strings. The Swap API doesn't add complexity to consider decimals, so 0x01 is always the smallest amount of a given asset.
+1 ETH, or DAI (18 decimals) is `0xDE0B6B3A7640000`
+1 USDC (6 decimals) is `0xF4240`
+This removes any ambiguity— if it's numerical, it's a hex.
+
+## What is the expiry?
+
+The expiry is an informational indicator of when you can expect to be able to process the swap request. If you're at/near the expiry, it might be a good time to request a new quote.
+
+## What are the different status codes for cross-chain swaps?
+
+Cross-chain swaps may have additional status codes beyond standard transaction statuses to reflect the cross-chain nature of the transaction. These are:
+
+* 120: Cross-chain in progress
+* 410: Cross-chain refund
+
+## When is a CallId returned from `wallet_requestQuote_v0`?
+
+Any time you’re requesting a cross-chain quote via `wallet_requestQuote_v0` , a `callId` is returned. This `callId` includes important data for cross-chain tracking. You can use this just like any other `callId` in `wallet_getCallsStatus`!

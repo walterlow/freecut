@@ -7,10 +7,14 @@ const DEFAULT_SETTINGS = {
   showWaveforms: true,
   showFilmstrips: true,
   previewQuality: 'high' as const,
+  editorDensity: 'compact' as const,
   defaultExportFormat: 'mp4' as const,
   defaultExportQuality: 'high' as const,
   maxUndoHistory: 50,
   autoSaveInterval: 0,
+  defaultWhisperModel: 'whisper-tiny' as const,
+  defaultWhisperQuantization: 'hybrid' as const,
+  defaultWhisperLanguage: '',
 };
 
 describe('settings-store', () => {
@@ -25,10 +29,14 @@ describe('settings-store', () => {
     expect(state.showWaveforms).toBe(true);
     expect(state.showFilmstrips).toBe(true);
     expect(state.previewQuality).toBe('high');
+    expect(state.editorDensity).toBe('compact');
     expect(state.defaultExportFormat).toBe('mp4');
     expect(state.defaultExportQuality).toBe('high');
     expect(state.maxUndoHistory).toBe(50);
     expect(state.autoSaveInterval).toBe(0);
+    expect(state.defaultWhisperModel).toBe('whisper-tiny');
+    expect(state.defaultWhisperQuantization).toBe('hybrid');
+    expect(state.defaultWhisperLanguage).toBe('');
   });
 
   describe('setSetting', () => {
@@ -48,6 +56,20 @@ describe('settings-store', () => {
 
       useSettingsStore.getState().setSetting('defaultExportFormat', 'webm');
       expect(useSettingsStore.getState().defaultExportFormat).toBe('webm');
+
+      useSettingsStore.getState().setSetting('defaultWhisperLanguage', 'en');
+      expect(useSettingsStore.getState().defaultWhisperLanguage).toBe('en');
+
+      useSettingsStore.getState().setSetting('editorDensity', 'default');
+      expect(useSettingsStore.getState().editorDensity).toBe('default');
+    });
+
+    it('updates whisper defaults', () => {
+      useSettingsStore.getState().setSetting('defaultWhisperModel', 'whisper-small');
+      useSettingsStore.getState().setSetting('defaultWhisperQuantization', 'q8');
+
+      expect(useSettingsStore.getState().defaultWhisperModel).toBe('whisper-small');
+      expect(useSettingsStore.getState().defaultWhisperQuantization).toBe('q8');
     });
 
     it('updates auto-save interval', () => {
@@ -69,6 +91,8 @@ describe('settings-store', () => {
       useSettingsStore.getState().setSetting('snapEnabled', false);
       useSettingsStore.getState().setSetting('previewQuality', 'low');
       useSettingsStore.getState().setSetting('autoSaveInterval', 10);
+      useSettingsStore.getState().setSetting('defaultWhisperModel', 'whisper-large');
+      useSettingsStore.getState().setSetting('defaultWhisperLanguage', 'es');
 
       // Reset
       useSettingsStore.getState().resetToDefaults();
@@ -77,7 +101,44 @@ describe('settings-store', () => {
       expect(state.defaultFps).toBe(DEFAULT_SETTINGS.defaultFps);
       expect(state.snapEnabled).toBe(DEFAULT_SETTINGS.snapEnabled);
       expect(state.previewQuality).toBe(DEFAULT_SETTINGS.previewQuality);
+      expect(state.editorDensity).toBe(DEFAULT_SETTINGS.editorDensity);
       expect(state.autoSaveInterval).toBe(DEFAULT_SETTINGS.autoSaveInterval);
+      expect(state.defaultWhisperModel).toBe(DEFAULT_SETTINGS.defaultWhisperModel);
+      expect(state.defaultWhisperLanguage).toBe(DEFAULT_SETTINGS.defaultWhisperLanguage);
+    });
+  });
+
+  describe('replaceHotkeyOverrides', () => {
+    it('replaces hotkey overrides with a sanitized imported preset', () => {
+      useSettingsStore.getState().setHotkeyBinding('PLAY_PAUSE', 'shift+space');
+
+      useSettingsStore.getState().replaceHotkeyOverrides(
+        {
+          EXPORT: 'Ctrl+E',
+          PLAY_PAUSE: 'space',
+          UNKNOWN_COMMAND: 'q',
+        } as never
+      );
+
+      expect(useSettingsStore.getState().hotkeyOverrides).toEqual({
+        EXPORT: 'mod+e',
+      });
+    });
+
+    it('does not update state for equivalent overrides with different key order', () => {
+      useSettingsStore.getState().replaceHotkeyOverrides({
+        PLAY_PAUSE: 'shift+space',
+        EXPORT: 'ctrl+e',
+      });
+
+      const previousState = useSettingsStore.getState();
+
+      useSettingsStore.getState().replaceHotkeyOverrides({
+        EXPORT: 'ctrl+e',
+        PLAY_PAUSE: 'shift+space',
+      });
+
+      expect(useSettingsStore.getState()).toBe(previousState);
     });
   });
 });
