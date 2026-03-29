@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { linearLevelToPercent } from './audio-meter-utils';
-import { setMixerLiveGains, clearMixerLiveGains } from '@/shared/state/mixer-live-gain';
+import { setMixerLiveGains } from '@/shared/state/mixer-live-gain';
 
 // ---------------------------------------------------------------------------
 // Types
