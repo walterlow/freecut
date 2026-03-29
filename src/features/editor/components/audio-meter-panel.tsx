@@ -4,16 +4,29 @@ import { importMediaLibraryService } from '@/features/editor/deps/media-library'
 import { usePlaybackStore } from '@/shared/state/playback';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { MoreHorizontal } from 'lucide-react';
+import {
   AUDIO_METER_SCALE_MARKS,
   compileAudioMeterGraph,
   dbMarkToPercent,
   estimateAudioMeterLevel,
+  estimatePerTrackLevels,
   formatMeterDb,
+  isAudioMixerTrack,
   linearLevelToPercent,
   resolveCompiledAudioMeterSources,
   type AudioMeterCompositionLookup,
+  type AudioMeterEstimate,
   type AudioMeterWaveform,
 } from './audio-meter-utils';
+import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
+
+type PanelMode = 'meter' | 'mixer';
 
 function toWaveformSnapshot(
   waveform: { peaks: Float32Array; sampleRate: number; channels?: number; stereo?: boolean } | null | undefined,
@@ -51,7 +64,11 @@ function animateChannel(
   }
 }
 
+const EMPTY_PER_TRACK_LEVELS = new Map<string, AudioMeterEstimate>();
+
 export const AudioMeterPanel = memo(function AudioMeterPanel() {
+  const [panelMode, setPanelMode] = useState<PanelMode>('meter');
+
   const tracks = useTimelineStore((s) => s.tracks);
   const transitions = useTimelineStore((s) => s.transitions);
   const fps = useTimelineStore((s) => s.fps);
@@ -231,6 +248,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     ? 18
     : 0;
 
+  // ---------------------------------------------------------------------------
+  // Meter animation (only active in meter mode, but state kept alive)
+  // ---------------------------------------------------------------------------
+
   const applyMeterVisuals = useCallback((leftDisplay: number, leftPeak: number, rightDisplay: number, rightPeak: number) => {
     if (meterVisualRootRef.current) {
       const el = meterVisualRootRef.current;
@@ -304,6 +325,123 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     };
   }, [applyMeterVisuals]);
 
+  // ---------------------------------------------------------------------------
+  // Mixer-mode data
+  // ---------------------------------------------------------------------------
+
+  const mixerSourceTracks = useMemo(() => {
+    if (panelMode !== 'mixer') return [];
+    return combinedTracks.filter((track) => isAudioMixerTrack(track));
+  }, [combinedTracks, panelMode]);
+
+  const mixerTracks = useMemo<AudioMixerTrack[]>(() => {
+    return mixerSourceTracks.map((track) => ({
+      id: track.id,
+      name: track.name,
+      kind: track.kind,
+      muted: track.muted,
+      solo: track.solo,
+      volume: track.volume || 0,
+    }));
+  }, [mixerSourceTracks]);
+
+  const perTrackLevels = useMemo(() => {
+    if (panelMode !== 'mixer' || playbackGain <= 0.0001) return EMPTY_PER_TRACK_LEVELS;
+    return estimatePerTrackLevels({
+      tracks: combinedTracks,
+      sources,
+      waveformsByMediaId,
+      targetTrackIds: mixerSourceTracks.map((track) => track.id),
+    });
+  }, [combinedTracks, mixerSourceTracks, panelMode, playbackGain, sources, waveformsByMediaId]);
+
+  const handleTrackVolumeChange = useCallback((trackId: string, volumeDb: number) => {
+    if (!Number.isFinite(volumeDb)) return;
+    // Direct store update (no undo) for smooth fader dragging
+    const currentTracks = useItemsStore.getState().tracks;
+    useItemsStore.getState().setTracks(
+      currentTracks.map((track) =>
+        track.id === trackId
+          ? { ...track, volume: volumeDb }
+          // Sanitize NaN volumes on other tracks (legacy project data)
+          : Number.isFinite(track.volume) ? track : { ...track, volume: 0 }
+      ),
+    );
+    useTimelineStore.getState().markDirty();
+  }, []);
+
+  const handleTrackMuteToggle = useCallback((trackId: string) => {
+    const currentTracks = useTimelineStore.getState().tracks;
+    const track = currentTracks.find((t) => t.id === trackId);
+    if (!track) return;
+    useTimelineStore.getState().setTracks(
+      currentTracks.map((t) =>
+        t.id === trackId ? { ...t, muted: !t.muted } : t
+      ),
+    );
+  }, []);
+
+  const handleTrackSoloToggle = useCallback((trackId: string) => {
+    const currentTracks = useTimelineStore.getState().tracks;
+    const track = currentTracks.find((t) => t.id === trackId);
+    if (!track) return;
+    useTimelineStore.getState().setTracks(
+      currentTracks.map((t) =>
+        t.id === trackId ? { ...t, solo: !t.solo } : t
+      ),
+    );
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Mode dropdown (shared across both views)
+  // ---------------------------------------------------------------------------
+
+  const modeDropdown = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="h-5 w-5 flex items-center justify-center rounded text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/50 transition-colors"
+          aria-label="Panel mode"
+        >
+          <MoreHorizontal size={14} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[120px]">
+        <DropdownMenuItem onClick={() => setPanelMode('meter')}>
+          <span className="w-4 inline-block">{panelMode === 'meter' ? '✓' : ''}</span>
+          Meters
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setPanelMode('mixer')}>
+          <span className="w-4 inline-block">{panelMode === 'mixer' ? '✓' : ''}</span>
+          Mixer
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  // ---------------------------------------------------------------------------
+  // Mixer mode
+  // ---------------------------------------------------------------------------
+
+  if (panelMode === 'mixer') {
+    return (
+      <AudioMixerView
+        tracks={mixerTracks}
+        perTrackLevels={perTrackLevels}
+        masterEstimate={estimate}
+        isPlaying={isPlaying}
+        onTrackVolumeChange={handleTrackVolumeChange}
+        onTrackMuteToggle={handleTrackMuteToggle}
+        onTrackSoloToggle={handleTrackSoloToggle}
+        headerExtra={modeDropdown}
+      />
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meter mode (default)
+  // ---------------------------------------------------------------------------
+
   return (
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"
@@ -317,10 +455,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
           Meters
         </span>
-        <span
-          className={`h-2 w-2 rounded-full ${isPlaying ? 'bg-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.7)]' : 'bg-muted-foreground/30'}`}
-          aria-hidden="true"
-        />
+        {modeDropdown}
       </div>
 
       <div className="flex-1 px-2 py-3 min-h-0">

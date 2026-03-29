@@ -215,7 +215,7 @@ export function collectVisualTrackItems({
         ...item,
         zIndex: (maxOrder - (track.order ?? 0)) * 1000,
         muted: track.muted ?? false,
-        trackVolumeDb: track.volume ?? 0,
+        trackVolumeDb: track.volume || 0,
         trackOrder: track.order ?? 0,
         trackVisible: visibleTrackIds.has(track.id),
       }))
@@ -235,7 +235,7 @@ export function collectAudioTrackItems({
       .map((item) => ({
         ...item,
         muted: track.muted,
-        trackVolumeDb: track.volume ?? 0,
+        trackVolumeDb: track.volume || 0,
         trackVisible: visibleTrackIds.has(track.id),
       }))
   );
