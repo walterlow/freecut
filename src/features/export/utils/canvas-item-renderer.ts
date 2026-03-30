@@ -500,20 +500,17 @@ async function renderVideoItem(
   // Always try DOM video for variable-speed clips during playback. Mediabunny's
   // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
   // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
-  if (domVideo && domVideoDecision.shouldDraw) {
-    // Variable-speed clips naturally drift from their DOM video element
-    // because the browser plays at 1x while sourceTime advances at speed.
-    // Use a wider threshold proportional to speed to avoid falling back
-    // to mediabunny decode (which causes 50-500ms freezes on first decode).
-    // For variable-speed clips, use a very wide threshold to avoid EVER
-    // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
-    // is visually acceptable; mediabunny stalls are not.
-    //
-    // During transitions (entry ramp-up and exit handoff), the DOM video
-    // element may be settling — play() was just called, Chrome's decoder
-    // is ramping up.  Accept very high drift (1s) to prefer a stale
-    // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
-    // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
+  // During transitions, ALWAYS prefer DOM video over mediabunny fallback.
+  // A stale zero-copy frame (~1ms) is vastly better than a mediabunny cold
+  // decode (500-2000ms) that freezes the entire preview.  Near source EOF
+  // the drift can exceed the normal threshold, but the visual difference
+  // of a slightly stale frame during a transition is imperceptible compared
+  // to a multi-second freeze.
+  const shouldDrawDomVideo = domVideo && (
+    domVideoDecision.shouldDraw
+    || (rctx.isRenderingTransition && domVideoDecision.hasReadyDomVideo)
+  );
+  if (shouldDrawDomVideo) {
     const drawDimensions = calculateMediaDrawDimensions(
       domVideo.videoWidth,
       domVideo.videoHeight,
@@ -527,11 +524,6 @@ async function renderVideoItem(
       drawDimensions.width,
       drawDimensions.height,
     );
-    // For variable-speed clips using DOM fallback during playback,
-    // DON'T kick off mediabunny init — keep using DOM video for the
-    // entire playback session. Mediabunny init + keyframe seek takes
-    // 400-500ms on the main thread, causing visible frame drops.
-    // DOM video has slight timing drift at speed != 1, but no freezes.
     return;
   }
 
