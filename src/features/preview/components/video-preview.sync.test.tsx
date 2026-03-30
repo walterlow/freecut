@@ -615,7 +615,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith([0]);
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({ frames: [0] });
     });
   });
 
@@ -685,7 +685,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith([24]);
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({ frames: [24] });
     });
   });
 
@@ -822,7 +822,9 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith();
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({
+        ranges: [{ startFrame: 0, endFrame: 120 }],
+      });
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
     });
 

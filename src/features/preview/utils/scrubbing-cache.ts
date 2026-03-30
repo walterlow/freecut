@@ -11,6 +11,12 @@
  * When all tiers are warm, scrubbing doesn't decode at all.
  */
 
+import {
+  hasFrameInvalidation,
+  isFrameInRanges,
+  type FrameInvalidationRequest,
+} from '@/shared/utils/frame-invalidation';
+
 // ---------------------------------------------------------------------------
 // Tier 1 — VRAM GPU Texture Cache
 // ---------------------------------------------------------------------------
@@ -133,6 +139,14 @@ class GpuTextureCache {
 
   get size(): number {
     return this.cache.size;
+  }
+
+  deleteMatching(predicate: (frame: number) => boolean): void {
+    for (const [frame, entry] of this.cache.entries()) {
+      if (!predicate(frame)) continue;
+      entry.texture.destroy();
+      this.cache.delete(frame);
+    }
   }
 
   clear(): void {
@@ -259,6 +273,16 @@ class RamPreviewCache {
 
   get size(): number {
     return this.cache.size;
+  }
+
+  deleteMatching(predicate: (frame: number) => boolean): void {
+    for (const [frame, bitmap] of this.cache.entries()) {
+      if (!predicate(frame)) continue;
+      bitmap.close();
+      this.cache.delete(frame);
+      this.currentBytes -= this.bytesPerFrame;
+    }
+    this.currentBytes = Math.max(0, this.currentBytes);
   }
 
   clear(): void {
@@ -488,16 +512,23 @@ export class ScrubbingCache {
   // Invalidation
   // -----------------------------------------------------------------------
 
-  /** Evict specific frames or flush all tiers. */
-  invalidate(frames?: number[]): void {
-    if (!frames) {
+  /** Evict specific cached frames, cached frame ranges, or flush all tiers. */
+  invalidate(request?: FrameInvalidationRequest): void {
+    if (!request || !hasFrameInvalidation(request)) {
       this.tier1.clear();
       this.tier3.clear();
       return;
     }
-    // Selective invalidation is expensive for GPU textures — flush all tiers
-    this.tier1.clear();
-    this.tier3.clear();
+
+    const explicitFrames = request.frames ? new Set(request.frames) : null;
+    const ranges = request.ranges ?? [];
+    const shouldDeleteFrame = (frame: number) => (
+      (explicitFrames?.has(frame) ?? false)
+      || isFrameInRanges(frame, ranges)
+    );
+
+    this.tier1.deleteMatching(shouldDeleteFrame);
+    this.tier3.deleteMatching(shouldDeleteFrame);
   }
 
   /** Clear Tier 2 (per-video last-frame). Call when timeline items change. */

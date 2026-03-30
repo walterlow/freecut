@@ -78,6 +78,7 @@ import { useCustomPlayer } from '../hooks/use-custom-player';
 import { getBestDomVideoElementForItem, transitionSafePlay } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
 
 // DEV-only: cached reference loaded via dynamic import so the module
 // is excluded from production bundles entirely.
@@ -151,6 +152,7 @@ import {
   parsePreviewPerfPanelQuery,
   blobToDataUrl,
 } from '../utils/preview-constants';
+import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalidation';
 
 const logger = createLogger('VideoPreview');
 
@@ -1685,6 +1687,13 @@ export const VideoPreview = memo(function VideoPreview({
   }, [
     keyframes,
   ]);
+  const previousFastScrubVisualStateRef = useRef<{
+    tracks: CompositionInputProps['tracks'];
+    keyframes: typeof fastScrubScaledKeyframes;
+  }>({
+    tracks: fastScrubScaledTracks,
+    keyframes: fastScrubScaledKeyframes,
+  });
 
   const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
     fps,
@@ -2506,6 +2515,22 @@ export const VideoPreview = memo(function VideoPreview({
   // Visual-only edits should keep the warm renderer alive. Invalidate cached
   // frames and ask the overlay to repaint instead of rebuilding GPU/decoder state.
   useEffect(() => {
+    const previousVisualState = previousFastScrubVisualStateRef.current;
+    previousFastScrubVisualStateRef.current = {
+      tracks: fastScrubScaledTracks,
+      keyframes: fastScrubScaledKeyframes,
+    };
+
+    const visualInvalidationRanges = collectVisualInvalidationRanges({
+      previousTracks: previousVisualState.tracks,
+      nextTracks: fastScrubScaledTracks,
+      previousKeyframes: previousVisualState.keyframes,
+      nextKeyframes: fastScrubScaledKeyframes,
+    });
+    if (visualInvalidationRanges.length === 0) {
+      return;
+    }
+
     const scrubRenderer = scrubRendererRef.current;
     const bgRenderer = bgTransitionRendererRef.current;
     const scrubRendererMatchesStructure = (
@@ -2519,21 +2544,34 @@ export const VideoPreview = memo(function VideoPreview({
       return;
     }
 
+    const invalidationRequest = { ranges: visualInvalidationRanges };
     if (scrubRenderer && scrubRendererMatchesStructure) {
-      scrubRenderer.invalidateFrameCache();
+      scrubRenderer.invalidateFrameCache(invalidationRequest);
     }
     if (bgRenderer && bgRendererMatchesStructure) {
-      bgRenderer.invalidateFrameCache();
+      bgRenderer.invalidateFrameCache(invalidationRequest);
     }
-
-    scrubOffscreenRenderedFrameRef.current = null;
-    transitionSessionBufferedFramesRef.current.clear();
 
     const playbackState = usePlaybackStore.getState();
     const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const currentFrameInvalidated = isFrameInRanges(targetFrame, visualInvalidationRanges);
+
+    if (
+      scrubOffscreenRenderedFrameRef.current !== null
+      && isFrameInRanges(scrubOffscreenRenderedFrameRef.current, visualInvalidationRanges)
+    ) {
+      scrubOffscreenRenderedFrameRef.current = null;
+    }
+
+    for (const frame of [...transitionSessionBufferedFramesRef.current.keys()]) {
+      if (!isFrameInRanges(frame, visualInvalidationRanges)) continue;
+      transitionSessionBufferedFramesRef.current.delete(frame);
+    }
+
     if (
       scrubRenderer
       && scrubRendererMatchesStructure
+      && currentFrameInvalidated
       && (
         forceFastScrubOverlay
         || playbackState.previewFrame !== null
@@ -2547,6 +2585,8 @@ export const VideoPreview = memo(function VideoPreview({
     }
   }, [
     fastScrubInputProps,
+    fastScrubScaledKeyframes,
+    fastScrubScaledTracks,
     fastScrubRendererStructureKey,
     forceFastScrubOverlay,
   ]);
@@ -4044,7 +4084,7 @@ export const VideoPreview = memo(function VideoPreview({
       // Invalidate before requesting a repaint so gizmo resize/translate and
       // live panel previews re-composite immediately.
       if ((unifiedPreviewChanged || transformPreviewChanged) && scrubRendererRef.current) {
-        scrubRendererRef.current.invalidateFrameCache([currentFrame]);
+        scrubRendererRef.current.invalidateFrameCache({ frames: [currentFrame] });
       }
 
       scrubRequestedFrameRef.current = currentFrame;
@@ -4059,7 +4099,7 @@ export const VideoPreview = memo(function VideoPreview({
 
       const currentFrame = usePlaybackStore.getState().currentFrame;
       if (scrubRendererRef.current) {
-        scrubRendererRef.current.invalidateFrameCache([currentFrame]);
+        scrubRendererRef.current.invalidateFrameCache({ frames: [currentFrame] });
       }
       scrubRequestedFrameRef.current = currentFrame;
       void pumpRenderLoop();
@@ -4075,7 +4115,7 @@ export const VideoPreview = memo(function VideoPreview({
       if (!forceFastScrubOverlay && playbackState.previewFrame === null) return;
 
       if (scrubRendererRef.current) {
-        scrubRendererRef.current.invalidateFrameCache([targetFrame]);
+        scrubRendererRef.current.invalidateFrameCache({ frames: [targetFrame] });
       }
       scrubRequestedFrameRef.current = targetFrame;
       void pumpRenderLoop();

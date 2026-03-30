@@ -20,6 +20,11 @@ import {
   resolveTransitionFrameState,
   type TransitionFrameState,
 } from './transition-scene';
+import {
+  hasFrameInvalidation,
+  isFrameInRanges,
+  type FrameInvalidationRequest,
+} from '@/shared/utils/frame-invalidation';
 
 export type TransformOverride = Partial<ResolvedTransform> | undefined;
 
@@ -33,6 +38,14 @@ export interface FrameCompositionScene<TItem extends TimelineItem = TimelineItem
   frame: number;
   activeShapeMasks: ResolvedShapeMask[];
   transitionFrameState: TransitionFrameState<TItem>;
+}
+
+export interface FrameCompositionSceneCache {
+  resolve(
+    params: Parameters<typeof resolveFrameCompositionScene>[0],
+    revision?: unknown,
+  ): FrameCompositionScene;
+  invalidate(request?: FrameInvalidationRequest): void;
 }
 
 export function applyTransformOverride(
@@ -174,26 +187,95 @@ export function resolveFrameCompositionScene({
 }
 
 /**
- * Cached version of resolveFrameCompositionScene.
- * Returns the cached result when called with the same frame number consecutively
- * (common during playback where the same frame renders at multiple vsyncs).
+ * Create a renderer-scoped scene cache.
+ * Cache hits require the same frame, revision token, render plan, canvas,
+ * and preview callback identities.
  */
-let _cachedScene: FrameCompositionScene | null = null;
-let _cachedSceneFrame = -1;
+export function createFrameCompositionSceneCache(): FrameCompositionSceneCache {
+  let cachedScene: FrameCompositionScene | null = null;
+  let cachedFrame = -1;
+  let cachedRevision: unknown = undefined;
+  let cachedRenderPlan: CompositionRenderPlan | null = null;
+  let cachedCanvasWidth = -1;
+  let cachedCanvasHeight = -1;
+  let cachedCanvasFps = -1;
+  let cachedGetKeyframes: ((itemId: string) => ItemKeyframes | undefined) | undefined;
+  let cachedGetPreviewTransform: ((itemId: string) => TransformOverride) | undefined;
+  let cachedGetPreviewPathVertices: PreviewPathVerticesOverride | undefined;
+
+  return {
+    resolve(params, revision) {
+      const canvasMatches = (
+        cachedCanvasWidth === params.canvas.width
+        && cachedCanvasHeight === params.canvas.height
+        && cachedCanvasFps === params.canvas.fps
+      );
+      const callbacksMatch = (
+        cachedGetKeyframes === params.getKeyframes
+        && cachedGetPreviewTransform === params.getPreviewTransform
+        && cachedGetPreviewPathVertices === params.getPreviewPathVertices
+      );
+
+      if (
+        cachedScene
+        && cachedFrame === params.frame
+        && cachedRevision === revision
+        && cachedRenderPlan === params.renderPlan
+        && canvasMatches
+        && callbacksMatch
+      ) {
+        return cachedScene;
+      }
+
+      cachedScene = resolveFrameCompositionScene(params);
+      cachedFrame = params.frame;
+      cachedRevision = revision;
+      cachedRenderPlan = params.renderPlan;
+      cachedCanvasWidth = params.canvas.width;
+      cachedCanvasHeight = params.canvas.height;
+      cachedCanvasFps = params.canvas.fps;
+      cachedGetKeyframes = params.getKeyframes;
+      cachedGetPreviewTransform = params.getPreviewTransform;
+      cachedGetPreviewPathVertices = params.getPreviewPathVertices;
+      return cachedScene;
+    },
+    invalidate(request) {
+      if (
+        cachedScene
+        && request
+        && hasFrameInvalidation(request)
+      ) {
+        const isMatchingFrame = request.frames?.includes(cachedFrame) ?? false;
+        const isMatchingRange = request.ranges ? isFrameInRanges(cachedFrame, request.ranges) : false;
+        if (!isMatchingFrame && !isMatchingRange) {
+          return;
+        }
+      }
+
+      cachedScene = null;
+      cachedFrame = -1;
+      cachedRevision = undefined;
+      cachedRenderPlan = null;
+      cachedCanvasWidth = -1;
+      cachedCanvasHeight = -1;
+      cachedCanvasFps = -1;
+      cachedGetKeyframes = undefined;
+      cachedGetPreviewTransform = undefined;
+      cachedGetPreviewPathVertices = undefined;
+    },
+  };
+}
+
+const defaultFrameSceneCache = createFrameCompositionSceneCache();
 
 export function resolveFrameCompositionSceneCached(
   params: Parameters<typeof resolveFrameCompositionScene>[0],
+  revision?: unknown,
 ): FrameCompositionScene {
-  if (_cachedScene && _cachedSceneFrame === params.frame) {
-    return _cachedScene;
-  }
-  _cachedSceneFrame = params.frame;
-  _cachedScene = resolveFrameCompositionScene(params);
-  return _cachedScene;
+  return defaultFrameSceneCache.resolve(params, revision);
 }
 
-/** Invalidate the cached scene (call when composition structure changes). */
+/** Invalidate the default cached scene (call when composition structure changes). */
 export function invalidateFrameSceneCache(): void {
-  _cachedScene = null;
-  _cachedSceneFrame = -1;
+  defaultFrameSceneCache.invalidate();
 }

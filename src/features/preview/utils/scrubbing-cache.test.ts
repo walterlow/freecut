@@ -59,3 +59,23 @@ describe('ScrubbingCache tier 2 video frames', () => {
     expect(cache.getVideoFrameEntry('item-1')).toBeUndefined();
   });
 });
+
+describe('ScrubbingCache frame invalidation', () => {
+  it('invalidates only cached frames that overlap the requested ranges', () => {
+    const cache = new ScrubbingCache();
+    const changedFrame = createMockFrame();
+    const untouchedFrame = createMockFrame();
+
+    cache.putRamFrame(10, changedFrame);
+    cache.putRamFrame(20, untouchedFrame);
+
+    cache.invalidate({
+      ranges: [{ startFrame: 8, endFrame: 12 }],
+    });
+
+    expect(changedFrame.close).toHaveBeenCalledTimes(1);
+    expect(cache.getFrame(10)).toBeNull();
+    expect(untouchedFrame.close).not.toHaveBeenCalled();
+    expect(cache.getFrame(20)).toBe(untouchedFrame);
+  });
+});

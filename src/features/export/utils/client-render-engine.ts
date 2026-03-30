@@ -59,11 +59,12 @@ import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-
 import { getCompositeOperation } from '@/types/blend-mode-css';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
+import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
 
 // Item renderer
 import {
+  createFrameCompositionSceneCache,
   type PreviewPathVerticesOverride,
-  resolveFrameCompositionSceneCached,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
   resolveFrameRenderScene,
@@ -155,6 +156,8 @@ export async function createCompositionRenderer(
     height: canvas.height,
     fps,
   };
+  const frameSceneCache = createFrameCompositionSceneCache();
+  let frameSceneRevision = 0;
 
   const renderPlan = resolveCompositionRenderPlan({ tracks, transitions });
   const { trackRenderState } = renderPlan;
@@ -1088,14 +1091,14 @@ export async function createCompositionRenderer(
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       );
 
-      const frameScene = resolveFrameCompositionSceneCached({
+      const frameScene = frameSceneCache.resolve({
         renderPlan,
         frame,
         canvas: canvasSettings,
         getKeyframes: getCurrentKeyframes,
         getPreviewTransform: renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         getPreviewPathVertices: renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
-      });
+      }, frameSceneRevision);
       const { activeTransitions, transitionClipIds } = frameScene.transitionFrameState;
 
       // Debug: Log transition state at key frames (only in development)
@@ -1791,9 +1794,11 @@ export async function createCompositionRenderer(
     },
 
 
-    /** Evict specific frames from the render cache (e.g. after effect param changes). */
-    invalidateFrameCache(frames?: number[]) {
-      scrubbingCache?.invalidate(frames);
+    /** Evict cached render frames or cached frame ranges after visual edits. */
+    invalidateFrameCache(request?: FrameInvalidationRequest) {
+      frameSceneRevision += 1;
+      frameSceneCache.invalidate(request);
+      scrubbingCache?.invalidate(request);
     },
 
     /** Get the scrubbing cache instance for stats/GPU wiring. */
@@ -1880,6 +1885,7 @@ export async function createCompositionRenderer(
       gpuTransitionPipeline = null;
       gpuPipeline?.destroy();
       gpuPipeline = null;
+      frameSceneCache.invalidate();
       canvasPool.dispose();
       textMeasureCache.clear();
 
