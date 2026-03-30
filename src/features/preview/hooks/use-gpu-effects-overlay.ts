@@ -14,7 +14,7 @@ export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],
   transitionCount: number,
 ): boolean {
-  void transitionCount;
+  if (transitionCount > 0) return true;
   return (
     items.some((item) =>
       item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')

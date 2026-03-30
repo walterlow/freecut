@@ -1698,11 +1698,32 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 3)),
     [fps, playbackTransitionLookaheadFrames],
   );
-  const playingComplexTransitionPrearmFrames = useMemo(
-    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
-    [fps, playbackTransitionLookaheadFrames],
-  );
-  const playbackTransitionPrerenderRunwayFrames = 8;
+  // Prearm far enough ahead so the full transition can be pre-rendered
+  // before the playhead arrives.  Each transition frame takes ~40-80ms
+  // to render (two video decodes + GPU shader), so the lookahead must
+  // cover: transitionDuration × renderTimePerFrame / frameDuration.
+  // Use 3× the longest transition as a safe margin.
+  const playingComplexTransitionPrearmFrames = useMemo(() => {
+    const longestTransition = playbackTransitionWindows.length > 0
+      ? Math.max(...playbackTransitionWindows.map(w => w.endFrame - w.startFrame))
+      : 0;
+    // 3× transition duration gives enough wall-clock time to pre-render
+    // all frames even when each takes ~2 frame-budgets to render
+    const dynamicLookahead = longestTransition * 3;
+    return Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5), dynamicLookahead);
+  }, [fps, playbackTransitionLookaheadFrames, playbackTransitionWindows]);
+  // Pre-render runway sized to the longest transition in the composition.
+  // Each transition frame requires decoding two clips + GPU shader (~40-80ms),
+  // well above the 33ms frame budget at 30fps.  Pre-rendering the full
+  // transition into a buffer lets the RAF pump present frames at 0ms each.
+  const playbackTransitionPrerenderRunwayFrames = useMemo(() => {
+    if (playbackTransitionWindows.length === 0) return 8;
+    const longestTransition = Math.max(
+      ...playbackTransitionWindows.map(w => w.endFrame - w.startFrame),
+    );
+    // Add a small margin so the buffer doesn't run out on the last frame
+    return longestTransition + 2;
+  }, [playbackTransitionWindows]);
   const playbackTransitionEffectfulStartFrames = useMemo(() => {
     const hasExpensiveVisuals = (item: TimelineItem) => (
       item.effects?.some((effect) => effect.enabled)
@@ -3465,7 +3486,7 @@ export const VideoPreview = memo(function VideoPreview({
               // render loop cached bitmaps as fallback — reduces the 100-300ms
               // cold decode stall at transition entry.
               {
-                const preseekCount = Math.min(8, transitionWindow.endFrame - transitionWindow.startFrame);
+                const preseekCount = transitionWindow.endFrame - transitionWindow.startFrame;
                 const transBySource = new Map<string, number[]>();
                 for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
                   if (clip.type !== 'video' || !('src' in clip) || !clip.src || !clip.sourceFps) continue;
@@ -3485,6 +3506,12 @@ export const VideoPreview = memo(function VideoPreview({
                 }
               }
             }
+            // Schedule full frame pre-render during playback so the
+            // transition buffer is filled before the playhead arrives.
+            // Without this, only decoder warmup runs — no frames are
+            // actually rendered into the buffer during continuous playback.
+            schedulePlaybackTransitionPrepare(prearmStartFrame);
+
             pushTransitionTrace('playing_prearm', {
               targetFrame: prearmStartFrame,
             });
