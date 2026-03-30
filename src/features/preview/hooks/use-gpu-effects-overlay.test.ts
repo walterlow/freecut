@@ -17,10 +17,10 @@ function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
 
 describe('shouldForceContinuousPreviewOverlay', () => {
   it('does not force continuous overlay for transitions alone', () => {
-    expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1)).toBe(false);
+    expect(shouldForceContinuousPreviewOverlay([createVideoItem()], 1, 0)).toBe(false);
   });
 
-  it('forces continuous overlay for enabled gpu effects', () => {
+  it('forces continuous overlay for enabled gpu effects on the active frame', () => {
     const effectedItem = createVideoItem({
       effects: [
         {
@@ -35,14 +35,40 @@ describe('shouldForceContinuousPreviewOverlay', () => {
       ],
     });
 
-    expect(shouldForceContinuousPreviewOverlay([effectedItem], 0)).toBe(true);
+    expect(shouldForceContinuousPreviewOverlay([effectedItem], 0, 0)).toBe(true);
   });
 
-  it('forces continuous overlay for non-normal blend modes', () => {
+  it('does not force continuous overlay for gpu effects on inactive clips', () => {
+    const effectedItem = createVideoItem({
+      effects: [
+        {
+          id: 'effect-1',
+          enabled: true,
+          effect: {
+            type: 'gpu-effect',
+            gpuEffectType: 'gpu-halftone',
+            params: { amount: 0.5 },
+          },
+        },
+      ],
+    });
+
+    expect(shouldForceContinuousPreviewOverlay([effectedItem], 0, 120)).toBe(false);
+  });
+
+  it('forces continuous overlay for non-normal blend modes on the active frame', () => {
     const blendedItem = createVideoItem({
       blendMode: 'screen',
     });
 
-    expect(shouldForceContinuousPreviewOverlay([blendedItem], 0)).toBe(true);
+    expect(shouldForceContinuousPreviewOverlay([blendedItem], 0, 0)).toBe(true);
+  });
+
+  it('does not force continuous overlay for non-normal blend modes on inactive clips', () => {
+    const blendedItem = createVideoItem({
+      blendMode: 'screen',
+    });
+
+    expect(shouldForceContinuousPreviewOverlay([blendedItem], 0, 120)).toBe(false);
   });
 });

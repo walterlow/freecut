@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useItemsStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
+import { usePlaybackStore } from '@/shared/state/playback';
 import type { TimelineItem } from '@/types/timeline';
 
 /**
@@ -13,12 +14,21 @@ import type { TimelineItem } from '@/types/timeline';
 export function shouldForceContinuousPreviewOverlay(
   items: TimelineItem[],
   transitionCount: number,
+  frame: number,
 ): boolean {
   void transitionCount;
+  if (!Number.isFinite(frame)) {
+    return false;
+  }
+
   return (
     items.some((item) =>
-      item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')
-      || (item.blendMode && item.blendMode !== 'normal')
+      frame >= item.from
+      && frame < (item.from + item.durationInFrames)
+      && (
+        item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')
+        || (item.blendMode && item.blendMode !== 'normal')
+      )
     )
   );
 }
@@ -31,13 +41,24 @@ export function useGpuEffectsOverlay(..._args: unknown[]) {
     const check = () => {
       const items = useItemsStore.getState().items;
       const transitions = useTransitionsStore.getState().transitions;
+      const playback = usePlaybackStore.getState();
+      const frame = playback.previewFrame ?? playback.currentFrame;
 
-      setNeedsOverlay(shouldForceContinuousPreviewOverlay(items, transitions.length));
+      setNeedsOverlay((prev) => {
+        const next = shouldForceContinuousPreviewOverlay(items, transitions.length, frame);
+        return prev === next ? prev : next;
+      });
     };
     check();
     const unsubItems = useItemsStore.subscribe(check);
     const unsubTransitions = useTransitionsStore.subscribe(check);
-    return () => { unsubItems(); unsubTransitions(); };
+    const unsubPlayback = usePlaybackStore.subscribe((state, prev) => {
+      if (state.currentFrame === prev.currentFrame && state.previewFrame === prev.previewFrame) {
+        return;
+      }
+      check();
+    });
+    return () => { unsubItems(); unsubTransitions(); unsubPlayback(); };
   }, []);
 
   return needsOverlay;
