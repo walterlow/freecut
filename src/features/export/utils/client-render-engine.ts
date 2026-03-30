@@ -1421,50 +1421,60 @@ export async function createCompositionRenderer(
           : null;
 
         if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
-          // GPU compositing path — pixel-perfect blend modes via WebGPU
-          const device = gpuPipeline!.getDevice();
-          const w = canvasSettings.width;
-          const h = canvasSettings.height;
-          const layers: CompositeLayer[] = [];
-          const layerTextures: GPUTexture[] = [];
+          // GPU compositing path — pixel-perfect blend modes via WebGPU.
+          // Wrapped in try-catch so GPU failures (device lost, validation
+          // errors) fall through to the Canvas 2D compositor below instead
+          // of crashing the export worker.
+          let gpuCompositeOk = false;
           const compositedResults: Array<{
             task: typeof renderTasks[number];
             result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
           }> = [];
+          const layerTextures: GPUTexture[] = [];
 
-          for (let i = 0; i < results.length; i++) {
-            const task = renderTasks[i]!;
-            const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
-            if (!result) continue;
-            compositedResults.push({ task, result });
+          try {
+            const device = gpuPipeline!.getDevice();
+            const w = canvasSettings.width;
+            const h = canvasSettings.height;
+            const layers: CompositeLayer[] = [];
 
-            const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+            for (let i = 0; i < results.length; i++) {
+              const task = renderTasks[i]!;
+              const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
+              if (!result) continue;
+              compositedResults.push({ task, result });
 
-            // Upload item canvas to GPU texture (pooled — no per-frame alloc)
-            const tex = gpuTexturePool!.acquire(w, h);
-            device.queue.copyExternalImageToTexture(
-              { source: result.source, flipY: false },
-              { texture: tex },
-              { width: w, height: h },
-            );
-            layerTextures.push(tex);
+              const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
 
-            layers.push({
-              params: { ...DEFAULT_LAYER_PARAMS, blendMode, sourceAspect: w / h, outputAspect: w / h },
-              textureView: tex.createView(),
-              maskView: gpuMaskManager.getFallbackView(),
-            });
+              // Upload item canvas to GPU texture (pooled — no per-frame alloc)
+              const tex = gpuTexturePool!.acquire(w, h);
+              device.queue.copyExternalImageToTexture(
+                { source: result.source, flipY: false },
+                { texture: tex },
+                { width: w, height: h },
+              );
+              layerTextures.push(tex);
+
+              layers.push({
+                params: { ...DEFAULT_LAYER_PARAMS, blendMode, sourceAspect: w / h, outputAspect: w / h },
+                textureView: tex.createView(),
+                maskView: gpuMaskManager.getFallbackView(),
+              });
+            }
+
+            const compositedToGpuCanvas = layers.length > 0
+              && gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx);
+
+            if (compositedToGpuCanvas) {
+              finalCompositeSource = gpuCompositeOutput.canvas;
+              gpuCompositeOk = true;
+            }
+          } catch {
+            // GPU compositing failed — fall through to Canvas 2D below
           }
 
-          const compositedToGpuCanvas = layers.length > 0
-            && gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx);
-
-          if (compositedToGpuCanvas) {
-            finalCompositeSource = gpuCompositeOutput.canvas;
-          } else {
-            // Fall back to the established Canvas2D compositor if the GPU target
-            // isn't available for this frame. This preserves feature parity and
-            // avoids dropping content when WebGPU canvas presentation fails.
+          if (!gpuCompositeOk) {
+            // Canvas 2D fallback when GPU composite failed or returned false
             for (const { task, result } of compositedResults) {
               const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
               if (blendMode && blendMode !== 'normal') {

@@ -528,21 +528,31 @@ export function renderTransition(
   // Try registry renderer first
   const renderer = transitionRegistry.getRenderer(presentation);
 
-  // GPU-accelerated path: use TransitionPipeline when available
+  // GPU-accelerated path: use TransitionPipeline when available.
+  // Wrap in try-catch so GPU failures (device lost, validation errors)
+  // fall through to the Canvas 2D fallback instead of crashing the worker.
   if (renderer?.gpuTransitionId && gpuTransitionPipeline?.has(renderer.gpuTransitionId)) {
-    const result = gpuTransitionPipeline.render(
-      renderer.gpuTransitionId,
-      leftCanvas,
-      rightCanvas,
-      progress,
-      canvas.width,
-      canvas.height,
-      direction as string,
-      transition.properties,
-    );
-    if (result) {
-      ctx.drawImage(result, 0, 0);
-      return;
+    try {
+      const result = gpuTransitionPipeline.render(
+        renderer.gpuTransitionId,
+        leftCanvas,
+        rightCanvas,
+        progress,
+        canvas.width,
+        canvas.height,
+        direction as string,
+        transition.properties,
+      );
+      if (result) {
+        ctx.drawImage(result, 0, 0);
+        return;
+      }
+    } catch (gpuError) {
+      // GPU render failed — fall through to Canvas 2D path
+      log.warn('GPU transition render failed, using Canvas 2D fallback', {
+        presentation,
+        error: gpuError instanceof Error ? gpuError.message : String(gpuError),
+      });
     }
   }
 

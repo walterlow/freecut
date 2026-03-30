@@ -507,18 +507,21 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
   // Start the output
   await output.start();
 
-  // Feed audio buffer after output has started
-  // AudioBufferSource.add() must be called after output.start()
+  // Feed audio buffer after output has started — run concurrently with
+  // frame rendering so audio encoding doesn't block the start of video.
+  // AudioBufferSource.add() must be called after output.start().
+  let audioFeedPromise: Promise<void> | null = null;
   if (audioSource && audioBuffer) {
-    try {
-      await audioSource.add(audioBuffer);
+    const src = audioSource;
+    const buf = audioBuffer;
+    audioFeedPromise = src.add(buf).then(() => {
       getLog().info('Audio buffer fed to encoder', {
-        duration: audioBuffer.duration,
-        samples: audioBuffer.length,
+        duration: buf.duration,
+        samples: buf.length,
       });
-    } catch (error) {
+    }).catch((error) => {
       getLog().error('Failed to feed audio to encoder', { error });
-    }
+    });
   }
 
   onProgress({
@@ -618,7 +621,10 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       message: 'Finalizing video...',
     });
 
-    // Close audio source before finalizing (signals no more audio data)
+    // Wait for audio encoding to complete, then close (signals no more audio data)
+    if (audioFeedPromise) {
+      await audioFeedPromise;
+    }
     if (audioSource) {
       try {
         audioSource.close();
