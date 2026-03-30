@@ -127,6 +127,8 @@ export async function createCompositionRenderer(
     getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
     getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
     getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
+    getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined;
+    getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined;
     domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
@@ -142,6 +144,8 @@ export async function createCompositionRenderer(
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
   const getPreviewPathVerticesOverride = options.getPreviewPathVerticesOverride;
+  const getLiveItemSnapshot = options.getLiveItemSnapshot;
+  const getLiveKeyframes = options.getLiveKeyframes;
   const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
@@ -266,6 +270,13 @@ export async function createCompositionRenderer(
 
   // Build lookup maps
   const keyframesMap = buildKeyframesMap(keyframes);
+  const getCurrentKeyframes = (itemId: string): ItemKeyframes | undefined => (
+    getLiveKeyframes?.(itemId) ?? keyframesMap.get(itemId)
+  );
+  const getCurrentItem = <TItem extends TimelineItem>(item: TItem): TItem => {
+    const liveItem = getLiveItemSnapshot?.(item.id);
+    return liveItem && liveItem.type === item.type ? liveItem as TItem : item;
+  };
 
   // === PERFORMANCE OPTIMIZATION: Use mediabunny for video decoding ===
   // VideoFrameExtractor provides precise frame access without seek delays
@@ -1081,7 +1092,7 @@ export async function createCompositionRenderer(
         renderPlan,
         frame,
         canvas: canvasSettings,
-        getKeyframes: (itemId) => keyframesMap.get(itemId),
+        getKeyframes: getCurrentKeyframes,
         getPreviewTransform: renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         getPreviewPathVertices: renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       });
@@ -1117,7 +1128,8 @@ export async function createCompositionRenderer(
         let hasAnyGpuEffects = false;
         for (const track of sortedTracks) {
           if (!visibleTrackIds.has(track.id)) continue;
-          for (const item of track.items ?? []) {
+          for (const baseItem of track.items ?? []) {
+            const item = getCurrentItem(baseItem);
             if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
             if (item.effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect')) {
               hasAnyGpuEffects = true;
@@ -1150,12 +1162,13 @@ export async function createCompositionRenderer(
        * immediately in export mode.
        */
       const renderItemWithEffects = async (
-        item: TimelineItem,
+        baseItem: TimelineItem,
         trackOrder: number,
         deferred: boolean,
       ): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null> => {
+        const item = getCurrentItem(baseItem);
         // Get animated transform
-        const itemKeyframes = keyframesMap.get(item.id);
+        const itemKeyframes = getCurrentKeyframes(item.id);
         let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
         if (renderMode === 'preview') {
           const previewOverride = getPreviewTransformOverride?.(item.id);
@@ -1237,7 +1250,8 @@ export async function createCompositionRenderer(
       };
 
       // Helper to check if item should be rendered
-      const shouldRenderItem = (item: TimelineItem): boolean => {
+      const shouldRenderItem = (baseItem: TimelineItem): boolean => {
+        const item = getCurrentItem(baseItem);
         // Skip items not visible at this frame
         if (frame < item.from || frame >= item.from + item.durationInFrames) {
           return false;
@@ -1268,7 +1282,8 @@ export async function createCompositionRenderer(
       // - No transparency effects
       // - No active masks (masks could reveal content below)
 
-      const isFullyOccluding = (item: TimelineItem, trackOrder: number): boolean => {
+      const isFullyOccluding = (baseItem: TimelineItem, trackOrder: number): boolean => {
+        const item = getCurrentItem(baseItem);
         // Only videos and images can be fully opaque
         if (item.type !== 'video' && item.type !== 'image') return false;
 
@@ -1282,7 +1297,7 @@ export async function createCompositionRenderer(
         if (item.cornerPin) return false;
 
         // Get animated transform at current frame
-        const itemKeyframes = keyframesMap.get(item.id);
+        const itemKeyframes = getCurrentKeyframes(item.id);
         const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
 
         // Check opacity (must be 1.0)
@@ -1413,7 +1428,10 @@ export async function createCompositionRenderer(
         // Composite all results in z-order (preserved by renderTasks ordering)
         // Use GPU compositor for pixel-perfect blend modes when available
         const hasNonNormalBlend = renderTasks.some(
-          (t) => t.type === 'item' && t.item.blendMode && t.item.blendMode !== 'normal',
+          (t) => t.type === 'item' && (() => {
+            const item = getCurrentItem(t.item);
+            return Boolean(item.blendMode && item.blendMode !== 'normal');
+          })(),
         );
         const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor();
         const gpuCompositeOutput = useGpuCompositor
@@ -1438,7 +1456,9 @@ export async function createCompositionRenderer(
             if (!result) continue;
             compositedResults.push({ task, result });
 
-            const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
+            const blendMode = task.type === 'item'
+              ? (getCurrentItem(task.item).blendMode ?? 'normal')
+              : 'normal';
 
             // Upload item canvas to GPU texture (pooled — no per-frame alloc)
             const tex = gpuTexturePool!.acquire(w, h);
@@ -1466,7 +1486,9 @@ export async function createCompositionRenderer(
             // isn't available for this frame. This preserves feature parity and
             // avoids dropping content when WebGPU canvas presentation fails.
             for (const { task, result } of compositedResults) {
-              const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+              const blendMode = task.type === 'item'
+                ? getCurrentItem(task.item).blendMode
+                : undefined;
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
               }
@@ -1492,7 +1514,9 @@ export async function createCompositionRenderer(
             const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
             if (!result) continue;
 
-            const blendMode = task.type === 'item' ? task.item.blendMode : undefined;
+            const blendMode = task.type === 'item'
+              ? getCurrentItem(task.item).blendMode
+              : undefined;
             if (blendMode && blendMode !== 'normal') {
               contentCtx.globalCompositeOperation = getCompositeOperation(blendMode);
             }

@@ -689,6 +689,148 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('reuses the active fast-scrub renderer for committed transform updates on gpu-effect clips', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-halftone',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        transform: {
+          x: 0,
+          y: 0,
+          width: 1920,
+          height: 1080,
+          rotation: 0,
+          opacity: 1,
+        },
+        effects: [
+          {
+            id: 'effect-halftone',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-halftone',
+              params: {
+                patternType: 'dots',
+                dotSize: 8,
+                spacing: 7,
+                angle: 107,
+                intensity: 0.4,
+                invert: false,
+                size: 0.2,
+                radius: 0.89,
+                contrast: 0.38,
+                grainOverlay: 0.29,
+                grainSize: 0.35,
+                grainMixer: 0.22,
+              },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(24);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+    renderer.renderFrame.mockClear();
+    renderer.dispose.mockClear();
+
+    act(() => {
+      useItemsStore.getState().setItems([
+        {
+          id: 'item-halftone',
+          type: 'video',
+          trackId: 'track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:mock-video',
+          transform: {
+            x: 120,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            rotation: 0,
+            opacity: 1,
+          },
+          effects: [
+            {
+              id: 'effect-halftone',
+              enabled: true,
+              effect: {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-halftone',
+                params: {
+                  patternType: 'dots',
+                  dotSize: 8,
+                  spacing: 7,
+                  angle: 107,
+                  intensity: 0.4,
+                  invert: false,
+                  size: 0.2,
+                  radius: 0.89,
+                  contrast: 0.38,
+                  grainOverlay: 0.29,
+                  grainSize: 0.35,
+                  grainMixer: 0.22,
+                },
+              },
+            },
+          ],
+        } as TimelineItem,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith();
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+    });
+
+    expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    expect(rendererMockState.instances).toHaveLength(1);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
   it('clears stale previewFrame on mount', async () => {
     act(() => {
       usePlaybackStore.getState().setPreviewFrame(60);

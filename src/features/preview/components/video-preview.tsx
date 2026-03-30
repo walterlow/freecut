@@ -230,6 +230,7 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubPreloadPromiseRef = useRef<Promise<void> | null>(null);
   const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
   const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
+  const scrubRendererStructureKeyRef = useRef<string | null>(null);
   const scrubRenderInFlightRef = useRef(false);
   const scrubRenderGenerationRef = useRef(0);
   const scrubRequestedFrameRef = useRef<number | null>(null);
@@ -238,6 +239,7 @@ export const VideoPreview = memo(function VideoPreview({
   // with the rAF pump's render loop (different canvas, different decoders).
   const bgTransitionRendererRef = useRef<CompositionRenderer | null>(null);
   const bgTransitionInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
+  const bgTransitionRendererStructureKeyRef = useRef<string | null>(null);
   const bgTransitionRenderInFlightRef = useRef(false);
   const scrubPrewarmQueueRef = useRef<number[]>([]);
   const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
@@ -1652,6 +1654,32 @@ export const VideoPreview = memo(function VideoPreview({
     fastScrubTracksFingerprint,
   ]);
 
+  const fastScrubLiveItemsById = useMemo(() => {
+    const map = new Map<string, TimelineItem>();
+    for (const track of fastScrubScaledTracks) {
+      for (const item of track.items as TimelineItem[]) {
+        map.set(item.id, item);
+      }
+    }
+    return map;
+  }, [fastScrubScaledTracks]);
+  const fastScrubLiveItemsByIdRef = useRef<Map<string, TimelineItem>>(fastScrubLiveItemsById);
+  fastScrubLiveItemsByIdRef.current = fastScrubLiveItemsById;
+
+  const fastScrubKeyframesByItemId = useMemo(() => (
+    new Map(keyframes.map((entry) => [entry.itemId, entry]))
+  ), [keyframes]);
+  const fastScrubKeyframesByItemIdRef = useRef<Map<string, typeof keyframes[number]>>(fastScrubKeyframesByItemId);
+  fastScrubKeyframesByItemIdRef.current = fastScrubKeyframesByItemId;
+
+  const getLiveItemSnapshot = useCallback((itemId: string) => {
+    return fastScrubLiveItemsByIdRef.current.get(itemId);
+  }, []);
+
+  const getLiveKeyframes = useCallback((itemId: string) => {
+    return fastScrubKeyframesByItemIdRef.current.get(itemId);
+  }, []);
+
   const fastScrubScaledKeyframes = useMemo(() => {
     return keyframes;
   }, [
@@ -1674,6 +1702,32 @@ export const VideoPreview = memo(function VideoPreview({
     transitions,
     project.backgroundColor,
     fastScrubScaledKeyframes,
+  ]);
+
+  const playbackTransitionFingerprint = useMemo(() => (
+    transitions
+      .map((transition) => (
+        `${transition.id}:${transition.type}:${transition.leftClipId}:${transition.rightClipId}:${transition.trackId ?? ''}:${transition.durationInFrames}:${transition.presentation ?? ''}:${transition.timing ?? ''}`
+      ))
+      .join('|')
+  ), [transitions]);
+
+  const fastScrubRendererStructureKey = useMemo(() => (
+    [
+      fps,
+      project.width,
+      project.height,
+      project.backgroundColor ?? '',
+      fastScrubTracksFingerprint,
+      playbackTransitionFingerprint,
+    ].join('::')
+  ), [
+    fastScrubTracksFingerprint,
+    fps,
+    playbackTransitionFingerprint,
+    project.backgroundColor,
+    project.height,
+    project.width,
   ]);
 
   const playbackTransitionWindows = useMemo(() => {
@@ -2114,6 +2168,7 @@ export const VideoPreview = memo(function VideoPreview({
       }
       scrubRendererRef.current = null;
     }
+    scrubRendererStructureKeyRef.current = null;
 
     scrubOffscreenCanvasRef.current = null;
     scrubOffscreenCtxRef.current = null;
@@ -2122,6 +2177,7 @@ export const VideoPreview = memo(function VideoPreview({
       try { bgTransitionRendererRef.current.dispose(); } catch { /* */ }
       bgTransitionRendererRef.current = null;
     }
+    bgTransitionRendererStructureKeyRef.current = null;
     bgTransitionInitPromiseRef.current = null;
     bgTransitionRenderInFlightRef.current = false;
   }, [clearPendingFastScrubHandoff, clearTransitionPlaybackSession]);
@@ -2130,6 +2186,12 @@ export const VideoPreview = memo(function VideoPreview({
   // transition frames without conflicting with the main rAF pump renderer.
   const ensureBgTransitionRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!FAST_SCRUB_RENDERER_ENABLED || typeof OffscreenCanvas === 'undefined' || isResolving) return null;
+    if (
+      bgTransitionRendererRef.current
+      && bgTransitionRendererStructureKeyRef.current !== fastScrubRendererStructureKey
+    ) {
+      disposeFastScrubRenderer();
+    }
     if (bgTransitionRendererRef.current) return bgTransitionRendererRef.current;
     if (bgTransitionInitPromiseRef.current) return bgTransitionInitPromiseRef.current;
 
@@ -2144,11 +2206,14 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
           getPreviewPathVerticesOverride,
+          getLiveItemSnapshot,
+          getLiveKeyframes,
         });
         if ('warmGpuPipeline' in renderer) {
           void renderer.warmGpuPipeline();
         }
         bgTransitionRendererRef.current = renderer;
+        bgTransitionRendererStructureKeyRef.current = fastScrubRendererStructureKey;
         return renderer;
       } catch {
         return null;
@@ -2157,12 +2222,31 @@ export const VideoPreview = memo(function VideoPreview({
       }
     })();
     return bgTransitionInitPromiseRef.current;
-  }, [fastScrubInputProps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, getPreviewPathVerticesOverride, isResolving, renderSize.width, renderSize.height]);
+  }, [
+    disposeFastScrubRenderer,
+    fastScrubInputProps,
+    fastScrubRendererStructureKey,
+    getLiveItemSnapshot,
+    getLiveKeyframes,
+    getPreviewCornerPinOverride,
+    getPreviewEffectsOverride,
+    getPreviewPathVerticesOverride,
+    getPreviewTransformOverride,
+    isResolving,
+    renderSize.width,
+    renderSize.height,
+  ]);
 
   const ensureFastScrubRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!FAST_SCRUB_RENDERER_ENABLED) return null;
     if (typeof OffscreenCanvas === 'undefined') return null;
     if (isResolving) return null;
+    if (
+      scrubRendererRef.current
+      && scrubRendererStructureKeyRef.current !== fastScrubRendererStructureKey
+    ) {
+      disposeFastScrubRenderer();
+    }
     if (scrubRendererRef.current) return scrubRendererRef.current;
     if (scrubInitPromiseRef.current) return scrubInitPromiseRef.current;
 
@@ -2178,6 +2262,8 @@ export const VideoPreview = memo(function VideoPreview({
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
           getPreviewPathVerticesOverride,
+          getLiveItemSnapshot,
+          getLiveKeyframes,
         });
         const playbackState = usePlaybackStore.getState();
         const interactionMode = getPreviewInteractionMode({
@@ -2214,6 +2300,7 @@ export const VideoPreview = memo(function VideoPreview({
         scrubOffscreenCtxRef.current = offscreenCtx;
         scrubOffscreenRenderedFrameRef.current = null;
         scrubRendererRef.current = renderer;
+        scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
         // Eagerly warm the GPU pipeline in the background so the first
         // transition frame doesn't pay the ~100-150ms WebGPU init cost.
         if ('warmGpuPipeline' in renderer) {
@@ -2233,7 +2320,21 @@ export const VideoPreview = memo(function VideoPreview({
     })();
 
     return scrubInitPromiseRef.current;
-  }, [fastScrubInputProps, fps, getPreviewTransformOverride, getPreviewEffectsOverride, getPreviewCornerPinOverride, getPreviewPathVerticesOverride, isResolving, renderSize.height, renderSize.width]);
+  }, [
+    disposeFastScrubRenderer,
+    fastScrubInputProps,
+    fastScrubRendererStructureKey,
+    fps,
+    getLiveItemSnapshot,
+    getLiveKeyframes,
+    getPreviewTransformOverride,
+    getPreviewEffectsOverride,
+    getPreviewCornerPinOverride,
+    getPreviewPathVerticesOverride,
+    isResolving,
+    renderSize.height,
+    renderSize.width,
+  ]);
 
   const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<OffscreenCanvas | null> => {
     const offscreen = scrubOffscreenCanvasRef.current;
@@ -2400,7 +2501,55 @@ export const VideoPreview = memo(function VideoPreview({
   // Dispose/recreate fast scrub renderer when composition inputs change.
   useEffect(() => {
     disposeFastScrubRenderer();
-  }, [disposeFastScrubRenderer, fastScrubInputProps, renderSize.height, renderSize.width]);
+  }, [disposeFastScrubRenderer, fastScrubRendererStructureKey, renderSize.height, renderSize.width]);
+
+  // Visual-only edits should keep the warm renderer alive. Invalidate cached
+  // frames and ask the overlay to repaint instead of rebuilding GPU/decoder state.
+  useEffect(() => {
+    const scrubRenderer = scrubRendererRef.current;
+    const bgRenderer = bgTransitionRendererRef.current;
+    const scrubRendererMatchesStructure = (
+      scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+    );
+    const bgRendererMatchesStructure = (
+      bgTransitionRendererStructureKeyRef.current === fastScrubRendererStructureKey
+    );
+
+    if (!scrubRendererMatchesStructure && !bgRendererMatchesStructure) {
+      return;
+    }
+
+    if (scrubRenderer && scrubRendererMatchesStructure) {
+      scrubRenderer.invalidateFrameCache();
+    }
+    if (bgRenderer && bgRendererMatchesStructure) {
+      bgRenderer.invalidateFrameCache();
+    }
+
+    scrubOffscreenRenderedFrameRef.current = null;
+    transitionSessionBufferedFramesRef.current.clear();
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    if (
+      scrubRenderer
+      && scrubRendererMatchesStructure
+      && (
+        forceFastScrubOverlay
+        || playbackState.previewFrame !== null
+        || showFastScrubOverlayRef.current
+        || showPlaybackTransitionOverlayRef.current
+        || isGizmoInteractingRef.current
+      )
+    ) {
+      scrubRequestedFrameRef.current = targetFrame;
+      void resumeScrubLoopRef.current();
+    }
+  }, [
+    fastScrubInputProps,
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+  ]);
 
   const captureCurrentFrame = useCallback(async (options?: CaptureOptions): Promise<string | null> => {
     if (captureInFlightRef.current) {
