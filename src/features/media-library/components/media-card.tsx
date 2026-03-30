@@ -85,11 +85,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     e.preventDefault();
     e.stopPropagation();
     try {
-      const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-      if (blobUrl) {
+      const blob = await mediaLibraryService.getMediaFile(media.id);
+      if (blob) {
+        const blobUrl = URL.createObjectURL(blob);
         const proxyKey = getSharedProxyKey(media);
         proxyService.setProxyKey(media.id, proxyKey);
-        proxyService.generateProxy(media.id, blobUrl, media.width, media.height, proxyKey);
+        proxyService.generateProxy(media.id, blobUrl, media.width, media.height, proxyKey, blob);
       }
     } catch {
       useMediaLibraryStore.getState().setProxyStatus(media.id, 'error');

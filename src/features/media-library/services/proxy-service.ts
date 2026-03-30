@@ -190,7 +190,8 @@ class ProxyService {
     blobUrl: string,
     sourceWidth: number,
     sourceHeight: number,
-    proxyKey?: string
+    proxyKey?: string,
+    sourceBlob?: Blob,
   ): void {
     if (proxyKey) {
       this.setProxyKey(mediaId, proxyKey);
@@ -226,6 +227,7 @@ class ProxyService {
       type: 'generate',
       mediaId: resolvedProxyKey,
       blobUrl,
+      sourceBlob: sourceBlob ?? undefined,
       sourceWidth,
       sourceHeight,
     } as ProxyWorkerRequest);

@@ -60,11 +60,14 @@ function processImportResults(
           const proxyKey = getSharedProxyKey(metadata);
           proxyService.setProxyKey(metadata.id, proxyKey);
 
-          // Auto-generate proxy for high-res or problematic-codec videos
+          // Auto-generate proxy for high-res or problematic-codec videos.
+          // Pass the File blob directly so the worker can use BlobSource
+          // (avoids fetch overhead vs UrlSource with blob: URLs).
           if (proxyService.needsProxy(metadata.width, metadata.height, metadata.mimeType, metadata.audioCodec)) {
-            mediaLibraryService.getMediaBlobUrl(metadata.id).then((blobUrl) => {
-              if (blobUrl) {
-                proxyService.generateProxy(metadata.id, blobUrl, metadata.width, metadata.height, proxyKey);
+            mediaLibraryService.getMediaFile(metadata.id).then((blob) => {
+              if (blob) {
+                const blobUrl = URL.createObjectURL(blob);
+                proxyService.generateProxy(metadata.id, blobUrl, metadata.width, metadata.height, proxyKey, blob);
               }
             }).catch(() => {});
           }

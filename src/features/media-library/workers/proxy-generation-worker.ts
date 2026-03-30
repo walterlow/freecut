@@ -22,6 +22,7 @@ export interface ProxyGenerateRequest {
   type: 'generate';
   mediaId: string; // proxyKey (kept as mediaId for message compatibility)
   blobUrl: string;
+  sourceBlob?: Blob;
   sourceWidth: number;
   sourceHeight: number;
 }
@@ -119,7 +120,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const { mediaId, blobUrl, sourceWidth, sourceHeight } = request;
 
   const {
-    Input, UrlSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
+    Input, UrlSource, BlobSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
     QUALITY_LOW, MP4, WEBM, MATROSKA,
   } = await loadMediabunny();
 
@@ -138,8 +139,14 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     createdAt,
   });
 
+  // Prefer BlobSource when the caller sends the actual Blob — avoids
+  // fetch request overhead on every read vs UrlSource with blob: URLs.
+  const source = request.sourceBlob
+    ? new BlobSource(request.sourceBlob)
+    : new UrlSource(blobUrl);
+
   const input = new Input({
-    source: new UrlSource(blobUrl),
+    source,
     formats: [MP4, WEBM, MATROSKA],
   });
 
@@ -166,15 +173,16 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
           height: proxyDimensions.height,
           fit: 'contain',
           codec: 'avc',
-          // Faster proxy generation preset.
           bitrate: QUALITY_LOW,
           hardwareAcceleration: 'prefer-hardware',
           // Cap at 30fps — halves decode+encode work for 60fps sources.
           // Preview playback is capped at project FPS (typically 24-30),
           // so extra source frames add no visual benefit to the proxy.
           frameRate: 30,
-          // Short GOP to speed up random-access decode during scrubbing.
-          keyFrameInterval: 1,
+          // 2s GOP balances scrub seek speed vs generation time.
+          // 1s (previous) forced 30 I-frames/sec — much more expensive
+          // to encode than P-frames. Default 5s is too long for scrubbing.
+          keyFrameInterval: 2,
         },
         audio: {
           // Scrub proxy is video-only for faster generation and smaller files.
