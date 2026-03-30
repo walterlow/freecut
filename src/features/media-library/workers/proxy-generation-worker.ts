@@ -169,6 +169,10 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
           // Faster proxy generation preset.
           bitrate: QUALITY_LOW,
           hardwareAcceleration: 'prefer-hardware',
+          // Cap at 30fps — halves decode+encode work for 60fps sources.
+          // Preview playback is capped at project FPS (typically 24-30),
+          // so extra source frames add no visual benefit to the proxy.
+          frameRate: 30,
           // Short GOP to speed up random-access decode during scrubbing.
           keyFrameInterval: 1,
         },
