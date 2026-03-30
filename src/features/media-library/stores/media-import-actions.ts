@@ -57,7 +57,17 @@ function processImportResults(
         }));
 
         if (metadata.mimeType.startsWith('video/')) {
-          proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+          const proxyKey = getSharedProxyKey(metadata);
+          proxyService.setProxyKey(metadata.id, proxyKey);
+
+          // Auto-generate proxy for high-res or problematic-codec videos
+          if (proxyService.needsProxy(metadata.width, metadata.height, metadata.mimeType, metadata.audioCodec)) {
+            mediaLibraryService.getMediaBlobUrl(metadata.id).then((blobUrl) => {
+              if (blobUrl) {
+                proxyService.generateProxy(metadata.id, blobUrl, metadata.width, metadata.height, proxyKey);
+              }
+            }).catch(() => {});
+          }
         }
         results.push(metadata);
         importedCount += 1;
