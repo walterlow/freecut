@@ -18,6 +18,10 @@ export interface TransformCommandOptions {
   operation?: TransformHistoryOperation;
 }
 
+export interface LoadTimelineOptions {
+  allowProjectUpgrade?: boolean;
+}
+
 export interface TimelineState {
   tracks: TimelineTrack[];
   items: TimelineItem[];
@@ -112,7 +116,7 @@ export interface TimelineActions {
   hasKeyframesAtFrame: (itemId: string, property: AnimatableProperty, frame: number) => boolean;
   repairLegacyAvTracks: () => Promise<boolean>;
   saveTimeline: (projectId: string) => Promise<void>;
-  loadTimeline: (projectId: string) => Promise<void>;
+  loadTimeline: (projectId: string, options?: LoadTimelineOptions) => Promise<void>;
   clearTimeline: () => void;
   markDirty: () => void;
   markClean: () => void;

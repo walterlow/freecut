@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { generateTemplateName } from './project-helpers';
+import { CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
+import {
+  createProjectObject,
+  formatProjectUpgradeBackupName,
+  generateTemplateName,
+} from './project-helpers';
 import { PROJECT_TEMPLATES } from './validation';
 
 describe('generateTemplateName', () => {
@@ -253,5 +258,26 @@ describe('PROJECT_TEMPLATES', () => {
       expect(template?.width).toBe(1080);
       expect(template?.height).toBe(1350);
     });
+  });
+});
+
+describe('createProjectObject', () => {
+  it('stamps new projects with the current schema version', () => {
+    const project = createProjectObject({
+      name: 'Migration Guard',
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    });
+
+    expect(project.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+  });
+});
+
+describe('formatProjectUpgradeBackupName', () => {
+  it('includes the source and target schema versions in the backup name', () => {
+    expect(formatProjectUpgradeBackupName('Demo Project', 4, 9)).toBe(
+      'Demo Project (Backup before upgrade v4 to v9)'
+    );
   });
 });

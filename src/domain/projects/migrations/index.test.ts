@@ -264,4 +264,67 @@ describe('migrateProject transition normalization', () => {
       expect.objectContaining({ id: 'comp-transition-1', durationInFrames: 20 }),
     ]);
   });
+
+  it('renumbers legacy track orders and backfills missing origin ids', () => {
+    const project = createBaseProject({
+      tracks: [
+        createTrack('video-top', -2, 'video'),
+        createTrack('video-main', 4, 'video'),
+        createTrack('audio-main', 9, 'audio'),
+      ],
+      items: [
+        {
+          id: 'composition-1',
+          type: 'composition',
+          trackId: 'video-main',
+          from: 0,
+          durationInFrames: 60,
+          label: 'Legacy comp',
+          compositionId: 'comp-1',
+          compositionWidth: 1920,
+          compositionHeight: 1080,
+        },
+      ],
+      transitions: [],
+      compositions: [{
+        id: 'comp-1',
+        name: 'Comp 1',
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 60,
+        tracks: [
+          createTrack('comp-video', 7, 'video'),
+          createTrack('comp-audio', 12, 'audio'),
+        ],
+        items: [
+          {
+            id: 'comp-video-1',
+            type: 'video',
+            trackId: 'comp-video',
+            from: 0,
+            durationInFrames: 60,
+            label: 'Comp Video',
+            src: 'comp-video.mp4',
+            mediaId: 'media-1',
+          },
+        ],
+      }],
+    });
+
+    const result = migrateProject(project);
+
+    expect(result.project.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    expect(result.project.timeline?.tracks.map((track) => ({ id: track.id, order: track.order }))).toEqual([
+      { id: 'video-top', order: 0 },
+      { id: 'video-main', order: 1 },
+      { id: 'audio-main', order: 2 },
+    ]);
+    expect(result.project.timeline?.items[0]?.originId).toBe('composition-1');
+    expect(result.project.timeline?.compositions?.[0]?.tracks.map((track) => ({ id: track.id, order: track.order }))).toEqual([
+      { id: 'comp-video', order: 0 },
+      { id: 'comp-audio', order: 1 },
+    ]);
+    expect(result.project.timeline?.compositions?.[0]?.items[0]?.originId).toBe('comp-video-1');
+  });
 });

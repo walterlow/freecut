@@ -47,6 +47,7 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
       </SequenceContext.Provider>
     ),
     useSequenceContext: () => React.useContext(SequenceContext),
+    useVideoSourcePool: () => ({ ensureReadyLanes: vi.fn(() => Promise.resolve()) }),
     VideoConfigProvider: ({
       children,
       fps,
@@ -69,6 +70,10 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
     useVideoConfig: () => React.useContext(VideoConfigContext),
   };
 });
+
+vi.mock('../hooks/use-transition-participant-sync', () => ({
+  useTransitionParticipantSync: vi.fn(),
+}));
 
 vi.mock('./item', async () => {
   const { useItemKeyframesFromContext } = await import('../contexts/keyframes-context');

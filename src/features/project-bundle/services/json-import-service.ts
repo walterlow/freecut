@@ -26,6 +26,7 @@ import {
   getAllMedia,
   associateMediaWithProject,
 } from '@/infrastructure/storage/indexeddb';
+import { migrateProject } from '@/domain/projects/migrations';
 
 /**
  * Validate a snapshot without importing
@@ -71,6 +72,28 @@ export async function validateSnapshotData(
       errors.push({
         path: msg.split(':')[0] || '',
         message: msg,
+        code: 'schema_mismatch',
+      });
+    }
+  }
+
+  if (validation.success) {
+    try {
+      const migrationResult = migrateProject(validation.data.project as Project);
+      if (migrationResult.migrated) {
+        const appliedRange = migrationResult.appliedMigrations.length > 0
+          ? `v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
+          : 'current normalized format';
+        warnings.push({
+          path: 'project.schemaVersion',
+          message: `Snapshot will be upgraded from ${appliedRange} during import`,
+          code: 'version_mismatch',
+        });
+      }
+    } catch (error) {
+      errors.push({
+        path: 'project',
+        message: `Snapshot migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
         code: 'schema_mismatch',
       });
     }
@@ -135,7 +158,14 @@ async function importProjectFromSnapshot(
   }
 
   // Prepare project data
-  let project: Project = { ...snapshot.project };
+  const migrationResult = migrateProject(snapshot.project as Project);
+  let project: Project = { ...migrationResult.project };
+  if (migrationResult.migrated) {
+    const appliedRange = migrationResult.appliedMigrations.length > 0
+      ? `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`
+      : 'Normalized project to current format';
+    warnings.push(appliedRange);
+  }
 
   // Generate new ID if requested
   if (generateNewIds) {
@@ -410,4 +440,3 @@ export async function showImportFilePicker(
     input.click();
   });
 }
-

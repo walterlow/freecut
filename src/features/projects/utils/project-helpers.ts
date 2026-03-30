@@ -1,3 +1,4 @@
+import { CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
 import type { Project } from '@/types/project';
 
 /**
@@ -166,6 +167,7 @@ export function createProjectObject(
     createdAt: now,
     updatedAt: now,
     duration: 0,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     thumbnail: undefined,
   };
 }
@@ -183,6 +185,17 @@ export function duplicateProject(project: Project): Project {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+/**
+ * Format the default backup name used before upgrading a legacy project.
+ */
+export function formatProjectUpgradeBackupName(
+  projectName: string,
+  fromVersion: number,
+  toVersion: number
+): string {
+  return `${projectName} (Backup before upgrade v${fromVersion} to v${toVersion})`;
 }
 
 /**

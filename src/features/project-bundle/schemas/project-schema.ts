@@ -74,6 +74,7 @@ const shapeTypeSchema = z.enum([
   'star',
   'polygon',
   'heart',
+  'path',
 ]);
 
 const directionSchema = z.enum(['up', 'down', 'left', 'right']);
@@ -104,6 +105,12 @@ const captionSourceSchema = z.object({
 
 // Mask schemas
 const maskTypeSchema = z.enum(['clip', 'alpha']);
+
+const maskVertexSchema = z.object({
+  position: z.tuple([z.number(), z.number()]),
+  inHandle: z.tuple([z.number(), z.number()]),
+  outHandle: z.tuple([z.number(), z.number()]),
+});
 
 // ============================================================================
 // Effect Schemas
@@ -215,6 +222,12 @@ const wheelsEffectSchema = z.object({
   saturation: z.number().min(-100).max(100),
 });
 
+const gpuEffectSchema = z.object({
+  type: z.literal('gpu-effect'),
+  gpuEffectType: z.string().min(1),
+  params: z.record(z.string(), z.union([z.number(), z.boolean(), z.string()])),
+});
+
 const colorGradingEffectSchema = z.discriminatedUnion('variant', [
   lutEffectSchema,
   curvesEffectSchema,
@@ -222,6 +235,7 @@ const colorGradingEffectSchema = z.discriminatedUnion('variant', [
 ]);
 
 const visualEffectSchema = z.union([
+  gpuEffectSchema,
   cssFilterEffectSchema,
   glitchEffectSchema,
   halftoneEffectSchema,
@@ -244,6 +258,13 @@ const transformSchema = z.object({
   opacity: z.number().min(0).max(1).optional(),
   cornerRadius: z.number().min(0).optional(),
   aspectRatioLocked: z.boolean().optional(),
+});
+
+const cornerPinSchema = z.object({
+  topLeft: z.tuple([z.number(), z.number()]),
+  topRight: z.tuple([z.number(), z.number()]),
+  bottomRight: z.tuple([z.number(), z.number()]),
+  bottomLeft: z.tuple([z.number(), z.number()]),
 });
 
 const timelineItemSchema = z.object({
@@ -292,6 +313,7 @@ const timelineItemSchema = z.object({
   direction: directionSchema.optional(),
   points: z.number().optional(),
   innerRadius: z.number().optional(),
+  pathVertices: z.array(maskVertexSchema).optional(),
   // Mask fields
   isMask: z.boolean().optional(),
   maskType: maskTypeSchema.optional(),
@@ -305,9 +327,13 @@ const timelineItemSchema = z.object({
   // Transform
   transform: transformSchema.optional(),
   // Audio properties
-  volume: z.number().min(0).max(2).optional(),
+  volume: z.number().min(-60).max(12).optional(),
   audioFadeIn: z.number().min(0).optional(),
   audioFadeOut: z.number().min(0).optional(),
+  audioFadeInCurve: z.number().min(-1).max(1).optional(),
+  audioFadeOutCurve: z.number().min(-1).max(1).optional(),
+  audioFadeInCurveX: z.number().min(0).max(1).optional(),
+  audioFadeOutCurveX: z.number().min(0).max(1).optional(),
   // Video properties
   fadeIn: z.number().min(0).optional(),
   fadeOut: z.number().min(0).optional(),
@@ -315,7 +341,13 @@ const timelineItemSchema = z.object({
   effects: z.array(itemEffectSchema).optional(),
   // Adjustment layer
   effectOpacity: z.number().min(0).max(1).optional(),
-});
+  // Composition item fields
+  compositionWidth: z.number().optional(),
+  compositionHeight: z.number().optional(),
+  // Layer compositing
+  blendMode: z.string().optional(),
+  cornerPin: cornerPinSchema.optional(),
+}).passthrough();
 
 // ============================================================================
 // Track Schema
@@ -330,11 +362,11 @@ const trackSchema = z.object({
   muted: z.boolean(),
   solo: z.boolean(),
   color: z.string().optional(),
-  order: z.number().int().min(0),
+  order: z.number().int(),
   parentTrackId: z.string().optional(),
   isGroup: z.boolean().optional(),
   isCollapsed: z.boolean().optional(),
-});
+}).passthrough();
 
 // ============================================================================
 // Marker and Transition Schemas
@@ -374,18 +406,33 @@ const transitionSchema = z.object({
 // Timeline Schema
 // ============================================================================
 
+const compositionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  items: z.array(timelineItemSchema),
+  tracks: z.array(trackSchema),
+  transitions: z.array(transitionSchema).optional(),
+  keyframes: z.array(itemKeyframesSchema).optional(),
+  fps: z.number().int().min(1).max(240),
+  width: z.number().int().min(1).max(7680),
+  height: z.number().int().min(1).max(4320),
+  durationInFrames: z.number().int().min(1),
+  backgroundColor: z.string().optional(),
+}).passthrough();
+
 const timelineSchema = z.object({
   tracks: z.array(trackSchema),
   items: z.array(timelineItemSchema),
   currentFrame: z.number().int().min(0).optional(),
-  zoomLevel: z.number().min(0.1).max(10).optional(),
+  zoomLevel: z.number().min(0.01).max(10).optional(),
   scrollPosition: z.number().min(0).optional(),
   inPoint: z.number().int().min(0).optional(),
   outPoint: z.number().int().min(0).optional(),
   markers: z.array(markerSchema).optional(),
   transitions: z.array(transitionSchema).optional(),
+  compositions: z.array(compositionSchema).optional(),
   keyframes: z.array(itemKeyframesSchema).optional(),
-});
+}).passthrough();
 
 // ============================================================================
 // Project Resolution Schema
@@ -409,10 +456,12 @@ const projectSchema = z.object({
   createdAt: z.number().int().min(0),
   updatedAt: z.number().int().min(0),
   duration: z.number().min(0),
+  schemaVersion: z.number().int().optional(),
   thumbnail: z.string().optional(),
+  thumbnailId: z.string().optional(),
   metadata: projectResolutionSchema,
   timeline: timelineSchema.optional(),
-});
+}).passthrough();
 
 // ============================================================================
 // Media Reference Schema
@@ -443,7 +492,7 @@ const snapshotSchema = z.object({
   project: projectSchema,
   mediaReferences: z.array(mediaReferenceSchema),
   checksum: z.string().optional(),
-});
+}).passthrough();
 
 // ============================================================================
 // Type Exports (inferred from schemas)

@@ -12,7 +12,7 @@
  */
 
 import { useSyncExternalStore, useRef, useCallback } from 'react';
-import type { TimelineState, TimelineActions } from '../types';
+import type { TimelineState, TimelineActions, LoadTimelineOptions } from '../types';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { Transition } from '@/types/transition';
@@ -731,7 +731,10 @@ async function saveTimeline(projectId: string): Promise<void> {
  * 4. Persists migrated projects back to storage
  * 5. Restores timeline state to stores
  */
-async function loadTimeline(projectId: string): Promise<void> {
+async function loadTimeline(
+  projectId: string,
+  options: LoadTimelineOptions = {}
+): Promise<void> {
   // Mark loading started - used to coordinate initial player sync
   useTimelineSettingsStore.getState().setTimelineLoading(true);
 
@@ -739,6 +742,14 @@ async function loadTimeline(projectId: string): Promise<void> {
     const rawProject = await getProject(projectId);
     if (!rawProject) {
       throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const storedSchemaVersion = rawProject.schemaVersion ?? 1;
+    const requiresUpgrade = storedSchemaVersion < CURRENT_SCHEMA_VERSION;
+    if (requiresUpgrade && !options.allowProjectUpgrade) {
+      throw new Error(
+        `Project schema v${storedSchemaVersion} requires confirmation before upgrading to v${CURRENT_SCHEMA_VERSION}`
+      );
     }
 
     // Run migrations and normalization

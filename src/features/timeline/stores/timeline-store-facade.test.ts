@@ -444,6 +444,19 @@ describe('TimelineStoreFacade', () => {
   });
 
   describe('loadTimeline', () => {
+    it('requires explicit approval before upgrading an older stored project', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        schemaVersion: 0,
+        metadata: { fps: 30 },
+        timeline: null,
+      });
+
+      await expect(
+        useTimelineStore.getState().loadTimeline('project-1')
+      ).rejects.toThrow('requires confirmation before upgrading');
+    });
+
     it('initializes default tracks for new project with no timeline', async () => {
       indexedDbMocks.getProject.mockResolvedValue({
         id: 'project-1',

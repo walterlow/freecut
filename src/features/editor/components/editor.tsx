@@ -1,4 +1,5 @@
-﻿import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
+import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
+import { useNavigate, useRouter } from '@tanstack/react-router';
 import { createLogger } from '@/shared/logging/logger';
 import {
   ResizablePanelGroup,
@@ -18,7 +19,10 @@ import { ClearKeyframesDialog } from './clear-keyframes-dialog';
 import { toast } from 'sonner';
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
-import { useTimelineShortcuts, useTransitionBreakageNotifications } from '@/features/editor/deps/timeline-hooks';
+import {
+  useTimelineShortcuts,
+  useTransitionBreakageNotifications,
+} from '@/features/editor/deps/timeline-hooks';
 import { initTransitionChainSubscription } from '@/features/editor/deps/timeline-subscriptions';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { importBundleExportDialog } from '@/features/editor/deps/project-bundle';
@@ -31,8 +35,12 @@ import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runti
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
 import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
+import { createProjectUpgradeBackup } from '@/features/projects/services/project-upgrade-service';
+import { formatProjectUpgradeBackupName } from '@/features/projects/utils/project-helpers';
+import { ProjectUpgradeDialog } from './project-upgrade-dialog';
 
 const logger = createLogger('Editor');
+const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId';
 const LazyExportDialog = lazy(() =>
   importExportDialog().then((module) => ({
     default: module.ExportDialog,
@@ -63,13 +71,90 @@ interface EditorProps {
     fps: number;
     backgroundColor?: string;
   };
+  migration: {
+    storedSchemaVersion: number;
+    currentSchemaVersion: number;
+    requiresUpgrade: boolean;
+  };
 }
 
 /**
- * Video Editor Component
- * Memoized to prevent re-renders from route changes cascading to all children.
+ * Video Editor entrypoint.
+ * Shows an explicit backup-and-upgrade prompt for legacy projects before loading editor state.
  */
-export const Editor = memo(function Editor({ projectId, project }: EditorProps) {
+export const Editor = memo(function Editor({ projectId, project, migration }: EditorProps) {
+  const navigate = useNavigate();
+  const [upgradeApproved, setUpgradeApproved] = useState(!migration.requiresUpgrade);
+  const [isPreparingUpgrade, setIsPreparingUpgrade] = useState(false);
+  const backupName = formatProjectUpgradeBackupName(
+    project.name,
+    migration.storedSchemaVersion,
+    migration.currentSchemaVersion
+  );
+
+  useEffect(() => {
+    setUpgradeApproved(!migration.requiresUpgrade);
+    setIsPreparingUpgrade(false);
+  }, [migration.requiresUpgrade, projectId]);
+
+  const handleCancelUpgrade = useCallback(() => {
+    navigate({ to: '/projects' });
+  }, [navigate]);
+
+  const handleConfirmUpgrade = useCallback(async () => {
+    setIsPreparingUpgrade(true);
+
+    try {
+      const backup = await createProjectUpgradeBackup(projectId, {
+        fromVersion: migration.storedSchemaVersion,
+        toVersion: migration.currentSchemaVersion,
+        backupName,
+      });
+      toast.success('Backup created before upgrade', {
+        description: backup.name,
+      });
+      setUpgradeApproved(true);
+    } catch (error) {
+      logger.error('Failed to create upgrade backup:', error);
+      toast.error('Failed to create backup before upgrade', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    } finally {
+      setIsPreparingUpgrade(false);
+    }
+  }, [
+    backupName,
+    migration.currentSchemaVersion,
+    migration.storedSchemaVersion,
+    projectId,
+  ]);
+
+  if (!upgradeApproved) {
+    return (
+      <div className="min-h-screen bg-background">
+        <ProjectUpgradeDialog
+          open
+          projectName={project.name}
+          storedSchemaVersion={migration.storedSchemaVersion}
+          currentSchemaVersion={migration.currentSchemaVersion}
+          backupName={backupName}
+          isUpgrading={isPreparingUpgrade}
+          onCancel={handleCancelUpgrade}
+          onConfirm={handleConfirmUpgrade}
+        />
+      </div>
+    );
+  }
+
+  return <LoadedEditor projectId={projectId} project={project} migration={migration} />;
+});
+
+export const LoadedEditor = memo(function LoadedEditor({
+  projectId,
+  project,
+  migration,
+}: EditorProps) {
+  const router = useRouter();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
@@ -78,13 +163,18 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
   const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
   const syncSidebarLayout = useEditorStore((s) => s.syncSidebarLayout);
   const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
+  const hasRefreshedMigrationStateRef = useRef(false);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
 
+  useEffect(() => {
+    hasRefreshedMigrationStateRef.current = false;
+  }, [projectId]);
+
   // Initialize transition chain subscription (pre-computes chains from timeline data)
-  // This subscription recomputes chains when items/transitions change â€” deferred to idle
-  // time so it doesn't compete with the initial editor render
+  // This subscription recomputes chains when items/transitions change - deferred to idle
+  // time so it doesn't compete with the initial editor render.
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     const id = requestIdleCallback(() => {
@@ -96,7 +186,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     };
   }, []);
 
-  // Preload export dialogs during idle time so they open instantly
+  // Preload export dialogs during idle time so they open instantly.
   useEffect(() => {
     const id = requestIdleCallback(() => {
       preloadExportDialog();
@@ -105,7 +195,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     return () => cancelIdleCallback(id);
   }, []);
 
-  // Initialize timeline from project data (or create default tracks for new projects)
+  // Initialize timeline from project data (or create default tracks for new projects).
   useEffect(() => {
     const { setCurrentProject: setMediaProject } = useMediaLibraryStore.getState();
     const { setCurrentProject } = useProjectStore.getState();
@@ -125,6 +215,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       name: project.name,
       description: '',
       duration: 0,
+      schemaVersion: migration.currentSchemaVersion,
       metadata: {
         width: project.width,
         height: project.height,
@@ -137,12 +228,33 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
     // Load timeline from IndexedDB - single source of truth for all timeline state
     const { loadTimeline } = useTimelineStore.getState();
-    loadTimeline(projectId).catch((error) => {
-      logger.error('Failed to load timeline:', error);
-    });
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await loadTimeline(projectId, { allowProjectUpgrade: migration.requiresUpgrade });
+
+        if (cancelled || !migration.requiresUpgrade || hasRefreshedMigrationStateRef.current) {
+          return;
+        }
+
+        hasRefreshedMigrationStateRef.current = true;
+
+        // Refresh the editor route metadata once the approved legacy project has
+        // opened successfully so future reopens do not briefly show the upgrade prompt.
+        await router.invalidate({
+          filter: (match) =>
+            match.routeId === EDITOR_PROJECT_ROUTE_ID &&
+            match.params.projectId === projectId,
+        });
+      } catch (error) {
+        logger.error('Failed to load timeline:', error);
+      }
+    })();
 
     // Cleanup: clear project context, stop playback, and release blob URLs when leaving editor
     return () => {
+      cancelled = true;
       const cleanupPlaybackStore = usePlaybackStore.getState();
       cleanupPlaybackStore.setPreviewFrame(null);
       useMediaLibraryStore.getState().setCurrentProject(null);
@@ -150,7 +262,18 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       cleanupPlaybackStore.pause();
       clearPreviewAudioCache();
     };
-  }, [projectId]); // Re-initialize when projectId changes
+  }, [
+    migration.currentSchemaVersion,
+    migration.requiresUpgrade,
+    project.backgroundColor,
+    project.fps,
+    project.height,
+    project.id,
+    project.name,
+    project.width,
+    projectId,
+    router,
+  ]);
 
   // Track unsaved changes
   const isDirty = useTimelineStore((s: { isDirty: boolean }) => s.isDirty);
@@ -203,7 +326,10 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
     // Show native save picker BEFORE opening the modal dialog to avoid
     // focus-loss conflicts between the native picker and Radix Dialog.
     if (typeof window.showSaveFilePicker === 'function') {
-      const safeName = project.name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, '_').substring(0, 100);
+      const safeName = project.name
+        .replace(/[<>:"/\\|?*]/g, '_')
+        .replace(/\s+/g, '_')
+        .substring(0, 100);
       try {
         const handle = await window.showSaveFilePicker({
           suggestedName: `${safeName}.freecut.zip`,
@@ -216,7 +342,7 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
         });
         setBundleFileHandle(handle);
       } catch {
-        // User cancelled the picker â€” don't open the dialog
+        // User cancelled the picker - don't open the dialog
         return;
       }
     } else {
@@ -253,71 +379,74 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
       role="application"
       aria-label="FreeCut Video Editor"
     >
-        {/* Top Toolbar */}
+      {/* Top Toolbar */}
+      <InteractionLockRegion locked={isMaskEditingActive}>
+        <Toolbar
+          projectId={projectId}
+          project={project}
+          isDirty={isDirty}
+          onSave={handleSave}
+          onExport={handleExport}
+          onExportBundle={handleExportBundle}
+        />
+      </InteractionLockRegion>
+
+      {/* Main Layout: Full-height sidebar + vertical split */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar - Media Library (full height) */}
         <InteractionLockRegion locked={isMaskEditingActive}>
-          <Toolbar
-            projectId={projectId}
-            project={project}
-            isDirty={isDirty}
-            onSave={handleSave}
-            onExport={handleExport}
-            onExportBundle={handleExportBundle}
-          />
+          <ErrorBoundary level="feature">
+            <MediaSidebar />
+          </ErrorBoundary>
         </InteractionLockRegion>
 
-        {/* Main Layout: Full-height sidebar + vertical split */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar - Media Library (full height) */}
-          <InteractionLockRegion locked={isMaskEditingActive}>
-            <ErrorBoundary level="feature">
-              <MediaSidebar />
-            </ErrorBoundary>
-          </InteractionLockRegion>
+        {/* Right side: Preview/Properties + Timeline */}
+        <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
+          {/* Top - Preview + Properties */}
+          <ResizablePanel
+            defaultSize={100 - editorLayout.timelineDefaultSize}
+            minSize={100 - editorLayout.timelineMaxSize}
+            maxSize={100 - editorLayout.timelineMinSize}
+          >
+            <div className="h-full flex overflow-hidden relative">
+              {/* Center - Preview */}
+              <ErrorBoundary level="feature">
+                <PreviewArea project={project} />
+              </ErrorBoundary>
 
-          {/* Right side: Preview/Properties + Timeline */}
-          <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
-            {/* Top - Preview + Properties */}
-            <ResizablePanel
-              defaultSize={100 - editorLayout.timelineDefaultSize}
-              minSize={100 - editorLayout.timelineMaxSize}
-              maxSize={100 - editorLayout.timelineMinSize}
-            >
-              <div className="h-full flex overflow-hidden relative">
-                {/* Center - Preview */}
+              {/* Right Sidebar - Properties */}
+              <InteractionLockRegion locked={isMaskEditingActive}>
                 <ErrorBoundary level="feature">
-                  <PreviewArea project={project} />
-                </ErrorBoundary>
-
-                {/* Right Sidebar - Properties */}
-                <InteractionLockRegion locked={isMaskEditingActive}>
-                  <ErrorBoundary level="feature">
-                    <PropertiesSidebar />
-                  </ErrorBoundary>
-                </InteractionLockRegion>
-              </div>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle className={isMaskEditingActive ? 'pointer-events-none opacity-60' : undefined} />
-
-            {/* Bottom - Timeline */}
-            <ResizablePanel
-              defaultSize={editorLayout.timelineDefaultSize}
-              minSize={editorLayout.timelineMinSize}
-              maxSize={editorLayout.timelineMaxSize}
-            >
-              <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
-                <ErrorBoundary level="feature">
-                  <div className="h-full flex overflow-hidden">
-                    <div className="min-w-0 flex-1">
-                      <Timeline duration={timelineDuration} />
-                    </div>
-                    <AudioMeterPanel />
-                  </div>
+                  <PropertiesSidebar />
                 </ErrorBoundary>
               </InteractionLockRegion>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </div>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle
+            withHandle
+            className={isMaskEditingActive ? 'pointer-events-none opacity-60' : undefined}
+          />
+
+          {/* Bottom - Timeline */}
+          <ResizablePanel
+            defaultSize={editorLayout.timelineDefaultSize}
+            minSize={editorLayout.timelineMinSize}
+            maxSize={editorLayout.timelineMaxSize}
+          >
+            <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
+              <ErrorBoundary level="feature">
+                <div className="h-full flex overflow-hidden">
+                  <div className="min-w-0 flex-1">
+                    <Timeline duration={timelineDuration} />
+                  </div>
+                  <AudioMeterPanel />
+                </div>
+              </ErrorBoundary>
+            </InteractionLockRegion>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
 
       <Suspense fallback={null}>
         {/* Export Dialog */}
