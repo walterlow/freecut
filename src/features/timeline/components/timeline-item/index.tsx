@@ -51,6 +51,7 @@ import { shouldSuppressTimelineItemClickAfterDrag } from './post-drag-click-guar
 import { TrimHandles } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
 import { AudioFadeHandles } from './audio-fade-handles';
+import { VideoFadeHandles } from './video-fade-handles';
 import { AudioVolumeControl } from './audio-volume-control';
 import { JoinIndicators } from './join-indicators';
 import { SegmentStatusOverlays } from './segment-status-overlays';
@@ -137,6 +138,7 @@ const ACTIVE_CURSOR_CLASSES = [
 
 // Width in pixels for trim edge hover detection
 const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
+const VIDEO_FADE_EPSILON = 0.0001;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
@@ -1599,6 +1601,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Composition operations
   const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
+  const [videoFadeEdit, setVideoFadeEdit] = useState<{
+    handle: AudioFadeHandle;
+    previewFadeIn: number;
+    previewFadeOut: number;
+    originalFadeIn: number;
+    originalFadeOut: number;
+    isCommitting: boolean;
+  } | null>(null);
+  const videoFadeEditRef = useRef(videoFadeEdit);
+  videoFadeEditRef.current = videoFadeEdit;
+  const videoFadeCleanupRef = useRef<(() => void) | null>(null);
   const [audioFadeEdit, setAudioFadeEdit] = useState<{
     handle: AudioFadeHandle;
     previewFadeIn: number;
@@ -1634,10 +1647,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   audioVolumeEditRef.current = audioVolumeEdit;
   const audioVolumeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => {
+    videoFadeCleanupRef.current?.();
     audioFadeCleanupRef.current?.();
     audioFadeCurveCleanupRef.current?.();
     audioVolumeCleanupRef.current?.();
   }, []);
+  const displayedVideoFadeIn = item.type === 'video'
+    ? (videoFadeEdit?.previewFadeIn ?? item.fadeIn ?? 0)
+    : 0;
+  const displayedVideoFadeOut = item.type === 'video'
+    ? (videoFadeEdit?.previewFadeOut ?? item.fadeOut ?? 0)
+    : 0;
   const displayedAudioFadeIn = item.type === 'audio'
     ? (audioFadeEdit?.previewFadeIn ?? item.audioFadeIn ?? 0)
     : 0;
@@ -1659,6 +1679,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const displayedAudioVolumeDb = item.type === 'audio'
     ? (audioVolumeEdit?.previewVolume ?? item.volume ?? 0)
     : 0;
+  const videoFadeInPixels = useMemo(
+    () => item.type === 'video' ? getAudioFadePixels(displayedVideoFadeIn, fps, frameToPixels, visualWidth) : 0,
+    [displayedVideoFadeIn, fps, frameToPixels, item.type, visualWidth]
+  );
+  const videoFadeOutPixels = useMemo(
+    () => item.type === 'video' ? getAudioFadePixels(displayedVideoFadeOut, fps, frameToPixels, visualWidth) : 0,
+    [displayedVideoFadeOut, fps, frameToPixels, item.type, visualWidth]
+  );
+  const videoFadeLineYPercent = 50;
   const audioFadeInPixels = useMemo(
     () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeIn, fps, frameToPixels, visualWidth) : 0,
     [displayedAudioFadeIn, fps, frameToPixels, item.type, visualWidth]
@@ -1674,6 +1703,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const audioFadeOutHoverLabel = useMemo(
     () => `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
     [displayedAudioFadeOut]
+  );
+  const videoFadeInHoverLabel = useMemo(
+    () => `Fade In ${displayedVideoFadeIn.toFixed(2)}s`,
+    [displayedVideoFadeIn]
+  );
+  const videoFadeOutHoverLabel = useMemo(
+    () => `Fade Out ${displayedVideoFadeOut.toFixed(2)}s`,
+    [displayedVideoFadeOut]
   );
   const audioVolumeEditLabel = useMemo(() => {
     if (!audioVolumeEdit) return null;
@@ -1735,7 +1772,44 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }),
     [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
   );
+  const videoFadeInPath = useMemo(
+    () => getAudioFadeCurvePath({
+      handle: 'in',
+      fadePixels: videoFadeInPixels,
+      clipWidthPixels: visualWidth,
+      curve: 0,
+      curveX: 0.52,
+    }),
+    [videoFadeInPixels, visualWidth]
+  );
+  const videoFadeOutPath = useMemo(
+    () => getAudioFadeCurvePath({
+      handle: 'out',
+      fadePixels: videoFadeOutPixels,
+      clipWidthPixels: visualWidth,
+      curve: 0,
+      curveX: 0.52,
+    }),
+    [videoFadeOutPixels, visualWidth]
+  );
+  const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!videoFadeEdit?.isCommitting || item.type !== 'video') {
+      return;
+    }
+
+    const committedFade = videoFadeEdit.handle === 'in'
+      ? (item.fadeIn ?? 0)
+      : (item.fadeOut ?? 0);
+    const previewFade = videoFadeEdit.handle === 'in'
+      ? videoFadeEdit.previewFadeIn
+      : videoFadeEdit.previewFadeOut;
+
+    if (Math.abs(committedFade - previewFade) <= VIDEO_FADE_EPSILON) {
+      setVideoFadeEdit(null);
+    }
+  }, [item, videoFadeEdit]);
   useEffect(() => {
     if (!audioFadeEdit?.isCommitting || item.type !== 'audio') {
       return;
@@ -1784,6 +1858,84 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       setAudioFadeCurveEdit(null);
     }
   }, [audioFadeCurveEdit, item]);
+  const handleVideoFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
+    if (item.type !== 'video' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const originalFadeIn = displayedVideoFadeIn;
+    const originalFadeOut = displayedVideoFadeOut;
+    const persistedFadeIn = item.fadeIn ?? 0;
+    const persistedFadeOut = item.fadeOut ?? 0;
+    const computeFadeSeconds = (clientX: number) => {
+      const rect = videoControlsRef.current?.getBoundingClientRect() ?? transformRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return handle === 'in' ? originalFadeIn : originalFadeOut;
+      }
+
+      return getAudioFadeSecondsFromOffset({
+        handle,
+        clipWidthPixels: rect.width,
+        pointerOffsetPixels: clientX - rect.left,
+        fps,
+        maxDurationFrames: item.durationInFrames,
+        pixelsToFrame,
+      });
+    };
+
+    const applyPreview = (nextFadeSeconds: number) => {
+      setVideoFadeEdit({
+        handle,
+        previewFadeIn: handle === 'in' ? nextFadeSeconds : originalFadeIn,
+        previewFadeOut: handle === 'out' ? nextFadeSeconds : originalFadeOut,
+        originalFadeIn,
+        originalFadeOut,
+        isCommitting: false,
+      });
+    };
+
+    const finishEdit = () => {
+      const latestState = videoFadeEditRef.current;
+      const committedFade = handle === 'in'
+        ? (latestState?.previewFadeIn ?? originalFadeIn)
+        : (latestState?.previewFadeOut ?? originalFadeOut);
+      videoFadeCleanupRef.current?.();
+      videoFadeCleanupRef.current = null;
+
+      if (handle === 'in') {
+        if (Math.abs(committedFade - persistedFadeIn) > VIDEO_FADE_EPSILON) {
+          setVideoFadeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+          updateTimelineItem(item.id, { fadeIn: committedFade });
+        } else {
+          setVideoFadeEdit(null);
+        }
+      } else if (Math.abs(committedFade - persistedFadeOut) > VIDEO_FADE_EPSILON) {
+        setVideoFadeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+        updateTimelineItem(item.id, { fadeOut: committedFade });
+      } else {
+        setVideoFadeEdit(null);
+      }
+    };
+
+    applyPreview(computeFadeSeconds(e.clientX));
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      applyPreview(computeFadeSeconds(event.clientX));
+    };
+    const handleWindowMouseUp = () => {
+      finishEdit();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    videoFadeCleanupRef.current = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, item, pixelsToFrame, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
@@ -2115,6 +2267,26 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       updateTimelineItem(item.id, { volume: 0 });
     }
   }, [item, trackLocked, updateTimelineItem]);
+  const handleVideoFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
+    if (item.type !== 'video' || trackLocked) {
+      return;
+    }
+
+    videoFadeCleanupRef.current?.();
+    videoFadeCleanupRef.current = null;
+    setVideoFadeEdit(null);
+
+    if (handle === 'in') {
+      if ((item.fadeIn ?? 0) > VIDEO_FADE_EPSILON) {
+        updateTimelineItem(item.id, { fadeIn: 0 });
+      }
+      return;
+    }
+
+    if ((item.fadeOut ?? 0) > VIDEO_FADE_EPSILON) {
+      updateTimelineItem(item.id, { fadeOut: 0 });
+    }
+  }, [item, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked) {
       return;
@@ -2156,6 +2328,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [item, trackLocked, updateTimelineItem]);
   const contentVisualPreviewItem = useMemo<TimelineItemType>(() => {
+    if (contentPreviewItem.type === 'video' && videoFadeEdit !== null) {
+      return {
+        ...contentPreviewItem,
+        fadeIn: videoFadeEdit.previewFadeIn,
+        fadeOut: videoFadeEdit.previewFadeOut,
+      };
+    }
+
     if (contentPreviewItem.type !== 'audio') {
       return contentPreviewItem;
     }
@@ -2168,7 +2348,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ...contentPreviewItem,
       volume: audioVolumeEdit.previewVolume,
     };
-  }, [audioVolumeEdit, contentPreviewItem]);
+  }, [audioVolumeEdit, contentPreviewItem, videoFadeEdit]);
   const linkedSyncPreviewItem = useMemo<TimelineItemType>(() => {
     let fromOffset = slideFromOffset + rippleEditOffset + moveDragPreviewFromDelta;
 
@@ -2657,6 +2837,33 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
             <SegmentStatusOverlays overlays={segmentOverlays} />
 
+            {item.type === 'video' && (
+              <div
+                ref={videoControlsRef}
+                className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
+                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+              >
+                <svg
+                  className="absolute inset-0 h-full w-full"
+                  viewBox={`0 0 ${Math.max(1, visualWidth)} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                  preserveAspectRatio="none"
+                >
+                  {videoFadeInPixels > 0 && (
+                    <path
+                      d={videoFadeInPath}
+                      fill="rgba(15,23,42,0.46)"
+                    />
+                  )}
+                  {videoFadeOutPixels > 0 && (
+                    <path
+                      d={videoFadeOutPath}
+                      fill="rgba(15,23,42,0.46)"
+                    />
+                  )}
+                </svg>
+              </div>
+            )}
+
             {item.type === 'audio' && (
               <div
                 ref={audioControlsRef}
@@ -2717,6 +2924,28 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               isShape={item.type === 'shape'}
             />
           </div>
+
+          {item.type === 'video' && (
+            <div
+              className="absolute inset-x-0 bottom-0 z-30"
+              style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+            >
+              <VideoFadeHandles
+                trackLocked={trackLocked}
+                activeTool={activeTool}
+                clipWidth={visualWidth}
+                lineYPercent={videoFadeLineYPercent}
+                fadeInPixels={videoFadeInPixels}
+                fadeOutPixels={videoFadeOutPixels}
+                isSelected={isSelected}
+                isEditing={videoFadeEdit !== null}
+                fadeInLabel={videoFadeInHoverLabel}
+                fadeOutLabel={videoFadeOutHoverLabel}
+                onFadeHandleMouseDown={handleVideoFadeHandleMouseDown}
+                onFadeHandleDoubleClick={handleVideoFadeHandleDoubleClick}
+              />
+            </div>
+          )}
 
           {/* Trim handles */}
           {item.type === 'audio' && (
