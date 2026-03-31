@@ -1,0 +1,80 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { TimelineTrack } from '@/types/timeline';
+
+import { useItemsStore } from '../stores/items-store';
+import { TrackHeader } from './track-header';
+
+vi.mock('../hooks/use-track-drag', () => ({
+  useTrackDrag: () => ({
+    handleDragStart: () => undefined,
+  }),
+}));
+
+function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
+  return {
+    id: 'track-1',
+    name: 'V1',
+    kind: 'video',
+    height: 72,
+    locked: false,
+    visible: true,
+    muted: false,
+    solo: false,
+    volume: 0,
+    order: 0,
+    items: [],
+    ...overrides,
+  };
+}
+
+function renderTrackHeader(track: TimelineTrack, onToggleDisabled = vi.fn()) {
+  render(
+    <TrackHeader
+      track={track}
+      isActive={false}
+      isSelected={false}
+      canDeleteTrack
+      canDeleteEmptyTracks
+      onToggleLock={() => undefined}
+      onToggleDisabled={onToggleDisabled}
+      onToggleSolo={() => undefined}
+      onSelect={() => undefined}
+      onCloseGaps={() => undefined}
+      onAddVideoTrack={() => undefined}
+      onAddAudioTrack={() => undefined}
+      onRepairLegacyAvTracks={() => undefined}
+      onDeleteTrack={() => undefined}
+      onDeleteEmptyTracks={() => undefined}
+    />
+  );
+
+  return { onToggleDisabled };
+}
+
+describe('TrackHeader', () => {
+  beforeEach(() => {
+    useItemsStore.getState().setItems([]);
+  });
+
+  it('renders a unified disable control for video tracks', () => {
+    const { onToggleDisabled } = renderTrackHeader(makeTrack({ kind: 'video', visible: true, muted: false }));
+
+    expect(screen.getByRole('button', { name: 'Disable track' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hide track' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mute track' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable track' }));
+
+    expect(onToggleDisabled).toHaveBeenCalledTimes(1);
+  });
+
+  it('derives the disable state from audio mute status', () => {
+    renderTrackHeader(makeTrack({ id: 'track-2', name: 'A1', kind: 'audio', muted: true }));
+
+    expect(screen.getByRole('button', { name: 'Enable track' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show track' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Unmute track' })).not.toBeInTheDocument();
+  });
+});

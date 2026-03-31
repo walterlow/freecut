@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTimelineStore } from '../stores/timeline-store';
+import { getTrackKind } from '../utils/classic-tracks';
 
 function clampTrackVolume(volume: number): number {
   return Math.max(-60, Math.min(12, Math.round(volume * 10) / 10));
@@ -179,6 +180,36 @@ export function useTimelineTracks() {
   );
 
   /**
+   * Toggle the primary disabled state for a track.
+   * Video tracks use visibility, audio tracks use mute, and unknown tracks
+   * fall back to toggling both to keep the control deterministic.
+   */
+  const toggleTrackDisabled = useCallback(
+    (id: string) => {
+      const currentTracks = useTimelineStore.getState().tracks;
+      const track = currentTracks.find((t) => t.id === id);
+      if (!track) return;
+
+      const kind = getTrackKind(track);
+      if (kind === 'video') {
+        updateTrack(id, { visible: track.visible === false ? true : false });
+        return;
+      }
+      if (kind === 'audio') {
+        updateTrack(id, { muted: !track.muted });
+        return;
+      }
+
+      const isDisabled = track.visible === false || track.muted;
+      updateTrack(id, {
+        visible: isDisabled,
+        muted: !isDisabled,
+      });
+    },
+    [updateTrack]
+  );
+
+  /**
    * Toggle track solo state
    * Only one track can be soloed at a time - soloing a track will unsolo all others
    * Reads latest state to avoid stale closure bugs
@@ -209,6 +240,7 @@ export function useTimelineTracks() {
     insertTrack,
     updateTrack,
     reorderTracks,
+    toggleTrackDisabled,
     toggleTrackLock,
     toggleTrackVisibility,
     toggleTrackMute,

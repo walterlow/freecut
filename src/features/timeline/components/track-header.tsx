@@ -7,11 +7,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, FoldHorizontal } from 'lucide-react';
+import { Power, PowerOff, Lock, GripVertical, Radio, FoldHorizontal } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
 import { useItemsStore } from '../stores/items-store';
+import { getTrackKind } from '../utils/classic-tracks';
 
 interface TrackHeaderProps {
   track: TimelineTrack;
@@ -20,8 +21,7 @@ interface TrackHeaderProps {
   canDeleteTrack: boolean;
   canDeleteEmptyTracks: boolean;
   onToggleLock: () => void;
-  onToggleVisibility: () => void;
-  onToggleMute: () => void;
+  onToggleDisabled: () => void;
   onToggleSolo: () => void;
   onSelect: (e: React.MouseEvent) => void;
   onCloseGaps?: () => void;
@@ -62,8 +62,7 @@ export const TrackHeader = memo(function TrackHeader({
   canDeleteTrack,
   canDeleteEmptyTracks,
   onToggleLock,
-  onToggleVisibility,
-  onToggleMute,
+  onToggleDisabled,
   onToggleSolo,
   onSelect,
   onCloseGaps,
@@ -74,6 +73,12 @@ export const TrackHeader = memo(function TrackHeader({
   onDeleteEmptyTracks,
 }: TrackHeaderProps) {
   const itemCount = useItemsStore((s) => s.itemsByTrackId[track.id]?.length ?? 0);
+  const trackKind = getTrackKind(track);
+  const isTrackDisabled = trackKind === 'audio'
+    ? track.muted
+    : trackKind === 'video'
+      ? track.visible === false
+      : track.visible === false || track.muted;
 
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
@@ -104,43 +109,23 @@ export const TrackHeader = memo(function TrackHeader({
             <div className="flex h-5 w-4 shrink-0 items-center justify-center">
               <GripVertical className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
             </div>
-            {/* Visibility Button */}
+            {/* Disable Button */}
             <Button
               variant="ghost"
               size="icon"
               className="h-5 w-5 rounded hover:bg-secondary"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleVisibility();
+                onToggleDisabled();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label={track.visible ? 'Hide track' : 'Show track'}
-              data-tooltip={track.visible ? 'Hide track' : 'Show track'}
+              aria-label={isTrackDisabled ? 'Enable track' : 'Disable track'}
+              data-tooltip={isTrackDisabled ? 'Enable track' : 'Disable track'}
             >
-              {track.visible ? (
-                <Eye className="w-3 h-3" />
+              {isTrackDisabled ? (
+                <PowerOff className="w-3 h-3 text-primary" />
               ) : (
-                <EyeOff className="w-3 h-3 opacity-50" />
-              )}
-            </Button>
-
-            {/* Audio Mute Button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 rounded hover:bg-secondary"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMute();
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              aria-label={track.muted ? 'Unmute track' : 'Mute track'}
-              data-tooltip={track.muted ? 'Unmute track' : 'Mute track'}
-            >
-              {track.muted ? (
-                <VolumeX className="w-3 h-3 opacity-50" />
-              ) : (
-                <Volume2 className="w-3 h-3" />
+                <Power className="w-3 h-3 opacity-70" />
               )}
             </Button>
 
