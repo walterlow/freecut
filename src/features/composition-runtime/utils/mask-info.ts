@@ -46,7 +46,7 @@ export function reuseStableMaskInfos(previous: MaskInfo[], next: MaskInfo[]): Ma
     const previousMask = previous[index];
     if (
       previousMask
-      && previousMask.shape.id === mask.shape.id
+      && previousMask.shape === mask.shape
       && previousMask.trackOrder === mask.trackOrder
       && sameMaskTransform(previousMask.transform, mask.transform)
     ) {

@@ -137,10 +137,16 @@ function createMockCanvasContext(): CanvasRenderingContext2D {
     save: vi.fn(),
     restore: vi.fn(),
     translate: vi.fn(),
+    scale: vi.fn(),
     rotate: vi.fn(),
     beginPath: vi.fn(),
     rect: vi.fn(),
     clip: vi.fn(),
+    closePath: vi.fn(),
+    bezierCurveTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    arc: vi.fn(),
+    setLineDash: vi.fn(),
     roundRect: vi.fn(),
     fill: vi.fn(),
     stroke: vi.fn(),
@@ -325,6 +331,24 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
   getBestDomVideoElementForItem: vi.fn(() => null),
+  applyTransformOverride: (base: Record<string, unknown>, override?: Record<string, unknown>) => ({
+    ...base,
+    ...override,
+    opacity: override?.opacity ?? base.opacity,
+    cornerRadius: override?.cornerRadius ?? base.cornerRadius,
+  }),
+  resolveItemTransformAtFrame: (
+    item: { transform?: Record<string, number | undefined> },
+    { canvas }: { canvas: { width: number; height: number } }
+  ) => ({
+    x: item.transform?.x ?? 0,
+    y: item.transform?.y ?? 0,
+    width: item.transform?.width ?? canvas.width,
+    height: item.transform?.height ?? canvas.height,
+    rotation: item.transform?.rotation ?? 0,
+    opacity: item.transform?.opacity ?? 1,
+    cornerRadius: item.transform?.cornerRadius ?? 0,
+  }),
 }));
 
 vi.mock('./gizmo-overlay', () => ({
@@ -522,6 +546,219 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('keeps mask gizmo drags on the player path instead of the fast-scrub overlay', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-shape',
+        name: 'Shape',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'mask-1',
+        type: 'shape',
+        trackId: 'track-shape',
+        from: 0,
+        durationInFrames: 120,
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+        transform: {
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 180,
+          rotation: 0,
+          opacity: 1,
+        },
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(24);
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      useMaskEditorStore.setState({
+        isEditing: true,
+        editingItemId: 'mask-1',
+        previewVertices: null,
+      });
+      useGizmoStore.setState({
+        activeGizmo: {
+          mode: 'translate',
+          activeHandle: null,
+          startPoint: { x: 0, y: 0 },
+          startTransform: {
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 180,
+            rotation: 0,
+            opacity: 1,
+          },
+          currentPoint: { x: 0, y: 0 },
+          shiftKey: false,
+          ctrlKey: false,
+          altKey: false,
+          itemId: 'mask-1',
+          itemType: 'shape',
+        },
+        previewTransform: {
+          x: 24,
+          y: 12,
+          width: 320,
+          height: 180,
+          rotation: 0,
+          opacity: 1,
+        },
+      });
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+
+    expect(createCompositionRendererMock).not.toHaveBeenCalled();
+    expect(scrubCanvas.style.visibility).toBe('hidden');
+  });
+
+  it('hides the fast-scrub overlay during mask vertex drags even when gpu effects would normally force it', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'mask-1',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        shapeType: 'path',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+        pathVertices: [
+          { position: [0.2, 0.2], inHandle: [0.2, 0.2], outHandle: [0.2, 0.2] },
+          { position: [0.8, 0.2], inHandle: [0.8, 0.2], outHandle: [0.8, 0.2] },
+          { position: [0.8, 0.8], inHandle: [0.8, 0.8], outHandle: [0.8, 0.8] },
+        ],
+        transform: {
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 180,
+          rotation: 0,
+          opacity: 1,
+        },
+      } as TimelineItem,
+      {
+        id: 'item-effected',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.8 },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+
+    act(() => {
+      useMaskEditorStore.setState({
+        isEditing: true,
+        editingItemId: 'mask-1',
+        draggingVertexIndex: 0,
+        previewVertices: [
+          { position: [0.25, 0.2], inHandle: [0.25, 0.2], outHandle: [0.25, 0.2] },
+          { position: [0.8, 0.2], inHandle: [0.8, 0.2], outHandle: [0.8, 0.2] },
+          { position: [0.8, 0.8], inHandle: [0.8, 0.8], outHandle: [0.8, 0.8] },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+    expect(renderer.invalidateFrameCache).not.toHaveBeenCalled();
+  });
+
   it('invalidates the current fast-scrub frame when single-item gizmo preview changes', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -619,11 +856,11 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('invalidates the current fast-scrub frame when mask point preview vertices change', async () => {
+  it('keeps mask point preview edits on the player path during scrub preview', async () => {
     useItemsStore.getState().setTracks([
       {
-        id: 'track-video',
-        name: 'Video',
+        id: 'track-mask',
+        name: 'Mask',
         height: 60,
         locked: false,
         visible: true,
@@ -632,8 +869,43 @@ describe('VideoPreview sync behavior', () => {
         order: 0,
         items: [],
       },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
     ]);
     useItemsStore.getState().setItems([
+      {
+        id: 'mask-1',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        shapeType: 'path',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+        pathVertices: [
+          { position: [0.2, 0.2], inHandle: [0.2, 0.2], outHandle: [0.2, 0.2] },
+          { position: [0.8, 0.2], inHandle: [0.8, 0.2], outHandle: [0.8, 0.2] },
+          { position: [0.8, 0.8], inHandle: [0.8, 0.8], outHandle: [0.8, 0.8] },
+        ],
+        transform: {
+          x: 0,
+          y: 0,
+          width: 320,
+          height: 180,
+          rotation: 0,
+          opacity: 1,
+        },
+      } as TimelineItem,
       {
         id: 'item-1',
         type: 'video',
@@ -641,15 +913,17 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         src: 'blob:mock-video',
-      } as ReturnType<typeof useItemsStore.getState>['items'][number],
+      } as TimelineItem,
     ]);
 
-    render(
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />
     );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
@@ -667,6 +941,7 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalled();
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
     renderer.invalidateFrameCache.mockClear();
 
@@ -674,19 +949,31 @@ describe('VideoPreview sync behavior', () => {
       useMaskEditorStore.setState({
         isEditing: true,
         editingItemId: 'mask-1',
+        draggingVertexIndex: 0,
         previewVertices: [
           {
             position: [0.3, 0.2],
             inHandle: [0.3, 0.2],
             outHandle: [0.3, 0.2],
           },
+          {
+            position: [0.8, 0.2],
+            inHandle: [0.8, 0.2],
+            outHandle: [0.8, 0.2],
+          },
+          {
+            position: [0.8, 0.8],
+            inHandle: [0.8, 0.8],
+            outHandle: [0.8, 0.8],
+          },
         ],
       });
     });
 
     await waitFor(() => {
-      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({ frames: [24] });
+      expect(scrubCanvas.style.visibility).toBe('hidden');
     });
+    expect(renderer.invalidateFrameCache).not.toHaveBeenCalled();
   });
 
   it('reuses the active fast-scrub renderer for committed transform updates on gpu-effect clips', async () => {
