@@ -38,7 +38,7 @@ import { useCornerPinStore } from '../stores/corner-pin-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
 import type { CompositionInputProps } from '@/types/export';
 import type { ItemEffect } from '@/types/effects';
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { isMarqueeJustFinished } from '@/hooks/use-marquee-selection';
 import { createCompositionRenderer } from '@/features/preview/deps/export';
@@ -350,9 +350,6 @@ export const VideoPreview = memo(function VideoPreview({
   const activeGizmoItemId = useGizmoStore((s) => s.activeGizmo?.itemId ?? null);
   const isGizmoInteracting = useGizmoStore((s) => s.activeGizmo !== null);
   const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
-  const isMaskPreviewInteracting = useMaskEditorStore(
-    (s) => s.draggingVertexIndex !== null || s.draggingHandle !== null || s.previewVertices !== null
-  );
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const showGpuEffectsOverlay = useGpuEffectsOverlay(gpuEffectsCanvasRef, playerContainerRef, scrubOffscreenCanvasRef, scrubFrameDirtyRef);
   const zoom = usePlaybackStore((s) => s.zoom);
@@ -372,12 +369,17 @@ export const VideoPreview = memo(function VideoPreview({
       : null,
     [activeGizmoItemId, items]
   );
+  const isGizmoOnMaskShape = useMemo(
+    () => activeGizmoItemId
+      ? items.some((item) => item.id === activeGizmoItemId && item.type === 'shape' && (item as ShapeItem).isMask)
+      : false,
+    [activeGizmoItemId, items]
+  );
 
   const isGizmoInteractingRef = useRef(isGizmoInteracting);
   isGizmoInteractingRef.current = isGizmoInteracting;
   const preferPlayerForTextGizmoRef = useRef(false);
   const preferPlayerForMaskGizmoRef = useRef(false);
-  const preferPlayerForGizmoRef = useRef(false);
   const preferPlayerForStyledTextScrubRef = useRef(false);
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
@@ -385,7 +387,8 @@ export const VideoPreview = memo(function VideoPreview({
 
   const shouldPreferPlayerForPreview = useCallback((previewFrame: number | null) => {
     return (
-      preferPlayerForGizmoRef.current
+      preferPlayerForTextGizmoRef.current
+      || preferPlayerForMaskGizmoRef.current
       || (preferPlayerForStyledTextScrubRef.current && previewFrame !== null)
     );
   }, []);
@@ -2161,12 +2164,7 @@ export const VideoPreview = memo(function VideoPreview({
     return getUpcomingTransitionStartFrame(frame, playingComplexTransitionPrearmFrames);
   }, [getUpcomingTransitionStartFrame, playingComplexTransitionPrearmFrames]);
 
-  // Mask editing should favor correctness over the raster fast-scrub overlay.
-  // Temporarily drop back to the Player path for live mask interactions so
-  // hard-edge clip masks do not soften while dragging, even on effected clips.
-  const preferPlayerForMaskGizmo = isMaskEditingActive
-    && (isGizmoInteracting || isMaskPreviewInteracting);
-  const forceFastScrubOverlay = showGpuEffectsOverlay && !preferPlayerForMaskGizmo;
+  const forceFastScrubOverlay = showGpuEffectsOverlay;
   // Styled, animated text can visibly flip between the DOM Player renderer
   // and the fast-scrub canvas renderer. Keep scrub preview on the Player path.
   const preferPlayerForStyledTextScrub = (
@@ -2178,10 +2176,18 @@ export const VideoPreview = memo(function VideoPreview({
     && isGizmoInteracting
     && activeGizmoItemType === 'text'
   );
-  const preferPlayerForGizmo = preferPlayerForTextGizmo || preferPlayerForMaskGizmo;
+  // Mask gizmo interactions on non-GPU clips stay on the DOM Player path to
+  // avoid a ±1 frame shift when the canvas overlay activates (mediabunny
+  // frame-accurate decode vs browser video imprecise seek).
+  // Unlike the text gizmo pref, this does NOT suppress forceFastScrubOverlay —
+  // GPU-effected clips already have the overlay active so no path switch occurs.
+  const preferPlayerForMaskGizmo = (
+    !forceFastScrubOverlay
+    && isGizmoInteracting
+    && isGizmoOnMaskShape
+  );
   preferPlayerForTextGizmoRef.current = preferPlayerForTextGizmo;
   preferPlayerForMaskGizmoRef.current = preferPlayerForMaskGizmo;
-  preferPlayerForGizmoRef.current = preferPlayerForGizmo;
   preferPlayerForStyledTextScrubRef.current = preferPlayerForStyledTextScrub;
 
   // Keep the on-screen scrub canvas at project resolution so quality toggles
@@ -3986,7 +3992,7 @@ export const VideoPreview = memo(function VideoPreview({
       const useCurrentFrameAsTarget = (
         forceFastScrubOverlay
         || isPausedInsideTransition
-        || (isGizmoInteractingRef.current && !preferPlayerForGizmoRef.current)
+        || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current && !preferPlayerForMaskGizmoRef.current)
       );
       const prevIsPausedInsideTransition = (
         !prev.isPlaying
@@ -3996,7 +4002,7 @@ export const VideoPreview = memo(function VideoPreview({
       const prevUseCurrentFrameAsTarget = (
         forceFastScrubOverlay
         || prevIsPausedInsideTransition
-        || (isGizmoInteractingRef.current && !preferPlayerForGizmoRef.current)
+        || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current && !preferPlayerForMaskGizmoRef.current)
       );
       const targetFrame = state.previewFrame ?? (useCurrentFrameAsTarget ? state.currentFrame : null);
       const prevTargetFrame = prev.previewFrame ?? (prevUseCurrentFrameAsTarget ? prev.currentFrame : null);
@@ -4165,12 +4171,6 @@ export const VideoPreview = memo(function VideoPreview({
     // the frame is unchanged so the fast-scrub overlay does not reuse a stale
     // cached bitmap for the current frame.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
-      const maskState = useMaskEditorStore.getState();
-      if (maskState.isEditing && maskState.editingItemId !== null && state.activeGizmo?.itemId === maskState.editingItemId) {
-        hideFastScrubOverlay();
-        hidePlaybackTransitionOverlay();
-        return;
-      }
       if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) return;
       if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
@@ -4211,14 +4211,6 @@ export const VideoPreview = memo(function VideoPreview({
       const previewVerticesChanged = state.previewVertices !== prev.previewVertices;
       const editingItemChanged = state.editingItemId !== prev.editingItemId;
       if (!previewVerticesChanged && !editingItemChanged) return;
-
-      const isMaskInteractionPreviewPreferred = state.isEditing
-        && (state.draggingVertexIndex !== null || state.draggingHandle !== null || state.previewVertices !== null);
-      if (isMaskInteractionPreviewPreferred) {
-        hideFastScrubOverlay();
-        hidePlaybackTransitionOverlay();
-        return;
-      }
 
       const playbackState = usePlaybackStore.getState();
       if (shouldPreferPlayerForPreview(playbackState.previewFrame)) return;
@@ -4333,7 +4325,7 @@ export const VideoPreview = memo(function VideoPreview({
       }
       scrubRequestedFrameRef.current = initialPlaybackState.previewFrame;
       void pumpRenderLoop();
-    } else if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForGizmo)) {
+    } else if (forceFastScrubOverlay || (isGizmoInteracting && !preferPlayerForTextGizmo && !preferPlayerForMaskGizmo)) {
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
       if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm && playbackTransitionState.nextTransitionStartFrame !== null) {
@@ -4436,8 +4428,8 @@ export const VideoPreview = memo(function VideoPreview({
     // immediately on interaction start/end.
     isGizmoInteracting,
     preferPlayerForStyledTextScrub,
-    preferPlayerForGizmo,
     preferPlayerForTextGizmo,
+    preferPlayerForMaskGizmo,
     clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
