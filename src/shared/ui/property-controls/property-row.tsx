@@ -23,7 +23,7 @@ export function PropertyRow({
   className,
 }: PropertyRowProps) {
   const labelContent = (
-    <span className="text-xs text-muted-foreground min-w-[56px]">{label}</span>
+    <span className="text-xs text-muted-foreground min-w-[56px] text-right">{label}</span>
   );
 
   return (

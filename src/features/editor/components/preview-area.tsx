@@ -3,6 +3,7 @@ import { Columns2 } from 'lucide-react';
 import {
   VideoPreview,
   PlaybackControls,
+  AlignmentToolbar,
   TimecodeDisplay,
   PreviewZoomControls,
   SourceMonitor,
@@ -594,16 +595,23 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
           ) : (
             <InteractionLockRegion locked={false} overlayClassName="rounded-none">
               <div
-                className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-2.5 overflow-hidden"
+                className="border-t border-border panel-header relative flex items-center px-3 flex-shrink-0 overflow-hidden"
                 style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
               >
                 <div className="flex-shrink-0">
                   <TimecodeDisplay fps={fps} totalFrames={totalFrames} />
                 </div>
-                <div className="flex-1 min-w-0" />
-                <PlaybackControls totalFrames={totalFrames} fps={fps} />
-                <div className="flex-1 min-w-0" />
-                <div className="flex items-center gap-2 flex-shrink-0">
+
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="flex items-center gap-2.5 pointer-events-auto">
+                    <PlaybackControls totalFrames={totalFrames} fps={fps} />
+                  </div>
+                </div>
+
+                <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-0">
+                    <AlignmentToolbar projectSize={{ width, height }} />
+                  </div>
                   <PreviewZoomControls />
                 </div>
               </div>

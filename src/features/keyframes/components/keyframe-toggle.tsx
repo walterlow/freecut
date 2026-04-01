@@ -145,14 +145,11 @@ export function KeyframeToggle({
     currentValue,
   ]);
 
-  // Don't render if outside item bounds
-  // Valid frame range is [0, durationInFrames - 1] since durationInFrames is a count
-  if (!firstItem || relativeFrame < 0 || relativeFrame >= firstItem.durationInFrames) {
-    return null;
-  }
+  // Disable when playhead is outside item bounds
+  const isOutsideBounds = !firstItem || relativeFrame < 0 || relativeFrame >= firstItem.durationInFrames;
 
   // Compute effective disabled state
-  const effectiveDisabled = disabled || isInTransition;
+  const effectiveDisabled = disabled || isInTransition || isOutsideBounds;
 
   return (
     <Tooltip>

@@ -119,6 +119,9 @@ const TEXT_EFFECT_PRESETS = [
 interface TextSectionProps {
   items: TimelineItem[];
   canvas: CanvasSettings;
+  showContentSection?: boolean;
+  showEffectSection?: boolean;
+  showAnimationSection?: boolean;
 }
 
 function normalizeTextShadow(
@@ -144,7 +147,13 @@ function normalizeTextStroke(
 /**
  * Text section - properties for text items (font, color, alignment, etc.)
  */
-export function TextSection({ items, canvas }: TextSectionProps) {
+export function TextSection({
+  items,
+  canvas,
+  showContentSection = true,
+  showEffectSection = true,
+  showAnimationSection = true,
+}: TextSectionProps) {
   const updateItem = useTimelineStore((s) => s.updateItem);
   const addKeyframes = useTimelineStore((s) => s.addKeyframes);
 
@@ -615,326 +624,332 @@ export function TextSection({ items, canvas }: TextSectionProps) {
 
   return (
     <>
-      <PropertySection title="Text" icon={Type} defaultOpen={true}>
-        {/* Text Content */}
-        <PropertyRow label="Content">
-          <Textarea
-            value={sharedValues.text ?? ''}
-            onChange={handleTextChange}
-            placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
-            className="min-h-[60px] text-xs flex-1 min-w-0"
-            rows={3}
-          />
-        </PropertyRow>
+      {showContentSection && (
+        <PropertySection title="Text" icon={Type} defaultOpen={true}>
+          {/* Text Content */}
+          <PropertyRow label="Content">
+            <Textarea
+              value={sharedValues.text ?? ''}
+              onChange={handleTextChange}
+              placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
+              className="min-h-[60px] text-xs flex-1 min-w-0"
+              rows={3}
+            />
+          </PropertyRow>
 
-        {/* Font Family */}
-        <PropertyRow label="Font" className="items-start">
-          <FontPicker
-            value={sharedValues.fontFamily}
-            placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
-            previewText={fontPreviewText}
-            onValueChange={handleFontFamilyChange}
-          />
-        </PropertyRow>
+          {/* Font Family */}
+          <PropertyRow label="Font" className="items-start">
+            <FontPicker
+              value={sharedValues.fontFamily}
+              placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
+              previewText={fontPreviewText}
+              onValueChange={handleFontFamilyChange}
+            />
+          </PropertyRow>
 
-        {/* Font Size */}
-        <PropertyRow label="Size">
-          <NumberInput
-            value={sharedValues.fontSize}
-            onChange={handleFontSizeChange}
-            onLiveChange={handleFontSizeLiveChange}
-            min={8}
-            max={500}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
+          {/* Font Size */}
+          <PropertyRow label="Size">
+            <NumberInput
+              value={sharedValues.fontSize}
+              onChange={handleFontSizeChange}
+              onLiveChange={handleFontSizeLiveChange}
+              min={8}
+              max={500}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
 
-        {/* Font Weight */}
-        <PropertyRow label="Weight">
-          <Select
-            value={sharedValues.fontWeight}
-            onValueChange={handleFontWeightChange}
-          >
-            <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-              <SelectValue placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'} />
-            </SelectTrigger>
-            <SelectContent>
-              {supportedFontWeightOptions.map((weight) => (
-                <SelectItem key={weight.value} value={weight.value} className="text-xs">
-                  {weight.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </PropertyRow>
+          {/* Font Weight */}
+          <PropertyRow label="Weight">
+            <Select
+              value={sharedValues.fontWeight}
+              onValueChange={handleFontWeightChange}
+            >
+              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                <SelectValue placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'} />
+              </SelectTrigger>
+              <SelectContent>
+                {supportedFontWeightOptions.map((weight) => (
+                  <SelectItem key={weight.value} value={weight.value} className="text-xs">
+                    {weight.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </PropertyRow>
 
-        {/* Font Style */}
-        <PropertyRow label="Style">
-          <div className="flex gap-1">
-            <Button
-              variant={isBoldActive ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleBoldToggle}
-              title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
-              aria-label="Bold"
-              aria-pressed={isBoldActive}
-              disabled={!canUseBold}
-            >
-              <Bold className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={isItalicActive ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleItalicToggle}
-              title="Italic"
-              aria-label="Italic"
-              aria-pressed={isItalicActive}
-            >
-              <Italic className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={isUnderlineActive ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleUnderlineToggle}
-              title="Underline"
-              aria-label="Underline"
-              aria-pressed={isUnderlineActive}
-            >
-              <Underline className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </PropertyRow>
-
-        {/* Text Align */}
-        <PropertyRow label="Align">
-          <div className="flex gap-1">
-            <Button
-              variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleTextAlignChange('left')}
-              title="Align Left"
-            >
-              <AlignLeft className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={sharedValues.textAlign === 'center' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleTextAlignChange('center')}
-              title="Align Center"
-            >
-              <AlignCenter className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={sharedValues.textAlign === 'right' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleTextAlignChange('right')}
-              title="Align Right"
-            >
-              <AlignRight className="w-3.5 h-3.5" />
-            </Button>
-            <div className="w-px h-5 bg-border mx-1" />
-            <Button
-              variant={sharedValues.verticalAlign === 'top' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleVerticalAlignChange('top')}
-              title="Align Top"
-            >
-              <AlignStartHorizontal className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={sharedValues.verticalAlign === 'middle' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleVerticalAlignChange('middle')}
-              title="Align Middle"
-            >
-              <AlignCenterHorizontal className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant={sharedValues.verticalAlign === 'bottom' ? 'secondary' : 'ghost'}
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => handleVerticalAlignChange('bottom')}
-              title="Align Bottom"
-            >
-              <AlignEndHorizontal className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-        </PropertyRow>
-
-        {/* Text Color */}
-        <ColorPicker
-          label="Color"
-          color={sharedValues.color ?? '#ffffff'}
-          onChange={handleColorChange}
-          onLiveChange={handleColorLiveChange}
-          onReset={() => handleColorChange('#ffffff')}
-          defaultColor="#ffffff"
-        />
-
-        {/* Letter Spacing */}
-        <PropertyRow label="Spacing">
-          <NumberInput
-            value={sharedValues.letterSpacing}
-            onChange={handleLetterSpacingChange}
-            onLiveChange={handleLetterSpacingLiveChange}
-            min={-20}
-            max={100}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-
-        {/* Line Height */}
-        <PropertyRow label="Line H.">
-          <NumberInput
-            value={sharedValues.lineHeight}
-            onChange={handleLineHeightChange}
-            onLiveChange={handleLineHeightLiveChange}
-            min={0.5}
-            max={3}
-            step={0.1}
-            unit="x"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-      </PropertySection>
-
-      <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
-        <PropertyRow label="Presets" className="items-start">
-          <div className="grid w-full grid-cols-2 gap-1.5">
-            {TEXT_EFFECT_PRESETS.map((preset) => (
+          {/* Font Style */}
+          <PropertyRow label="Style">
+            <div className="flex gap-1">
               <Button
-                key={preset.id}
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplyTextEffectPreset(preset.id)}
+                variant={isBoldActive ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleBoldToggle}
+                title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
+                aria-label="Bold"
+                aria-pressed={isBoldActive}
+                disabled={!canUseBold}
               >
-                {preset.label}
+                <Bold className="w-3.5 h-3.5" />
               </Button>
-            ))}
-          </div>
-        </PropertyRow>
+              <Button
+                variant={isItalicActive ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleItalicToggle}
+                title="Italic"
+                aria-label="Italic"
+                aria-pressed={isItalicActive}
+              >
+                <Italic className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={isUnderlineActive ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleUnderlineToggle}
+                title="Underline"
+                aria-label="Underline"
+                aria-pressed={isUnderlineActive}
+              >
+                <Underline className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </PropertyRow>
 
-        <ColorPicker
-          label="Shadow"
-          color={sharedValues.shadowColor || '#000000'}
-          onChange={handleShadowColorChange}
-          onLiveChange={handleShadowColorLiveChange}
-          onReset={() => handleShadowColorChange('#000000')}
-          defaultColor="#000000"
-        />
+          {/* Text Align */}
+          <PropertyRow label="Align">
+            <div className="flex gap-1">
+              <Button
+                variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleTextAlignChange('left')}
+                title="Align Left"
+              >
+                <AlignLeft className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={sharedValues.textAlign === 'center' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleTextAlignChange('center')}
+                title="Align Center"
+              >
+                <AlignCenter className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={sharedValues.textAlign === 'right' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleTextAlignChange('right')}
+                title="Align Right"
+              >
+                <AlignRight className="w-3.5 h-3.5" />
+              </Button>
+              <div className="w-px h-5 bg-border mx-1" />
+              <Button
+                variant={sharedValues.verticalAlign === 'top' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleVerticalAlignChange('top')}
+                title="Align Top"
+              >
+                <AlignStartHorizontal className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={sharedValues.verticalAlign === 'middle' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleVerticalAlignChange('middle')}
+                title="Align Middle"
+              >
+                <AlignCenterHorizontal className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant={sharedValues.verticalAlign === 'bottom' ? 'secondary' : 'ghost'}
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => handleVerticalAlignChange('bottom')}
+                title="Align Bottom"
+              >
+                <AlignEndHorizontal className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </PropertyRow>
 
-        <PropertyRow label="Shadow X">
-          <NumberInput
-            value={shadowOffsetX}
-            onChange={handleShadowOffsetXChange}
-            onLiveChange={handleShadowOffsetXLiveChange}
-            min={-100}
-            max={100}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-
-        <PropertyRow label="Shadow Y">
-          <NumberInput
-            value={shadowOffsetY}
-            onChange={handleShadowOffsetYChange}
-            onLiveChange={handleShadowOffsetYLiveChange}
-            min={-100}
-            max={100}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-
-        <PropertyRow label="Shadow B.">
-          <NumberInput
-            value={shadowBlur}
-            onChange={handleShadowBlurChange}
-            onLiveChange={handleShadowBlurLiveChange}
-            min={0}
-            max={80}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-
-        <PropertyRow label="Stroke W.">
-          <NumberInput
-            value={strokeWidth}
-            onChange={handleStrokeWidthChange}
-            onLiveChange={handleStrokeWidthLiveChange}
-            min={0}
-            max={24}
-            step={1}
-            unit="px"
-            className="flex-1 min-w-0"
-          />
-        </PropertyRow>
-
-        {(strokeWidth === 'mixed' || strokeWidth > 0) && (
+          {/* Text Color */}
           <ColorPicker
-            label="Stroke"
-            color={sharedValues.strokeColor || '#111827'}
-            onChange={handleStrokeColorChange}
-            onLiveChange={handleStrokeColorLiveChange}
-            onReset={() => handleStrokeColorChange('#111827')}
-            defaultColor="#111827"
+            label="Color"
+            color={sharedValues.color ?? '#ffffff'}
+            onChange={handleColorChange}
+            onLiveChange={handleColorLiveChange}
+            onReset={() => handleColorChange('#ffffff')}
+            defaultColor="#ffffff"
           />
-        )}
-      </PropertySection>
 
-      <PropertySection title="Animation" icon={Sparkles} defaultOpen={true}>
-        <PropertyRow label="Intro" className="items-start">
-          <div className="grid w-full grid-cols-4 gap-1.5">
-            {TEXT_ANIMATION_PRESETS.map((preset) => (
-              <Button
-                key={preset.id}
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplyTextAnimationPreset('intro', preset.id)}
-              >
-                {preset.label}
-              </Button>
-            ))}
+          {/* Letter Spacing */}
+          <PropertyRow label="Spacing">
+            <NumberInput
+              value={sharedValues.letterSpacing}
+              onChange={handleLetterSpacingChange}
+              onLiveChange={handleLetterSpacingLiveChange}
+              min={-20}
+              max={100}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          {/* Line Height */}
+          <PropertyRow label="Line H.">
+            <NumberInput
+              value={sharedValues.lineHeight}
+              onChange={handleLineHeightChange}
+              onLiveChange={handleLineHeightLiveChange}
+              min={0.5}
+              max={3}
+              step={0.1}
+              unit="x"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+        </PropertySection>
+      )}
+
+      {showEffectSection && (
+        <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="Presets" className="items-start">
+            <div className="grid w-full grid-cols-2 gap-1.5">
+              {TEXT_EFFECT_PRESETS.map((preset) => (
+                <Button
+                  key={preset.id}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplyTextEffectPreset(preset.id)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </PropertyRow>
+
+          <ColorPicker
+            label="Shadow"
+            color={sharedValues.shadowColor || '#000000'}
+            onChange={handleShadowColorChange}
+            onLiveChange={handleShadowColorLiveChange}
+            onReset={() => handleShadowColorChange('#000000')}
+            defaultColor="#000000"
+          />
+
+          <PropertyRow label="Shadow X">
+            <NumberInput
+              value={shadowOffsetX}
+              onChange={handleShadowOffsetXChange}
+              onLiveChange={handleShadowOffsetXLiveChange}
+              min={-100}
+              max={100}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Shadow Y">
+            <NumberInput
+              value={shadowOffsetY}
+              onChange={handleShadowOffsetYChange}
+              onLiveChange={handleShadowOffsetYLiveChange}
+              min={-100}
+              max={100}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Shadow B.">
+            <NumberInput
+              value={shadowBlur}
+              onChange={handleShadowBlurChange}
+              onLiveChange={handleShadowBlurLiveChange}
+              min={0}
+              max={80}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          <PropertyRow label="Stroke W.">
+            <NumberInput
+              value={strokeWidth}
+              onChange={handleStrokeWidthChange}
+              onLiveChange={handleStrokeWidthLiveChange}
+              min={0}
+              max={24}
+              step={1}
+              unit="px"
+              className="flex-1 min-w-0"
+            />
+          </PropertyRow>
+
+          {(strokeWidth === 'mixed' || strokeWidth > 0) && (
+            <ColorPicker
+              label="Stroke"
+              color={sharedValues.strokeColor || '#111827'}
+              onChange={handleStrokeColorChange}
+              onLiveChange={handleStrokeColorLiveChange}
+              onReset={() => handleStrokeColorChange('#111827')}
+              defaultColor="#111827"
+            />
+          )}
+        </PropertySection>
+      )}
+
+      {showAnimationSection && (
+        <PropertySection title="Animation" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="Intro" className="items-start">
+            <div className="grid w-full grid-cols-4 gap-1.5">
+              {TEXT_ANIMATION_PRESETS.map((preset) => (
+                <Button
+                  key={preset.id}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplyTextAnimationPreset('intro', preset.id)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </PropertyRow>
+          <PropertyRow label="Outro" className="items-start">
+            <div className="grid w-full grid-cols-4 gap-1.5">
+              {TEXT_ANIMATION_PRESETS.map((preset) => (
+                <Button
+                  key={`outro-${preset.id}`}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplyTextAnimationPreset('outro', preset.id)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
+          </PropertyRow>
+          <div className="px-1 pt-1 text-[11px] text-muted-foreground">
+            Applies short ease-out text motion at the start or end of each selected clip.
           </div>
-        </PropertyRow>
-        <PropertyRow label="Outro" className="items-start">
-          <div className="grid w-full grid-cols-4 gap-1.5">
-            {TEXT_ANIMATION_PRESETS.map((preset) => (
-              <Button
-                key={`outro-${preset.id}`}
-                variant="outline"
-                size="sm"
-                className="h-7 text-[11px]"
-                onClick={() => handleApplyTextAnimationPreset('outro', preset.id)}
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-        </PropertyRow>
-        <div className="px-1 pt-1 text-[11px] text-muted-foreground">
-          Applies short ease-out text motion at the start or end of each selected clip.
-        </div>
-      </PropertySection>
+        </PropertySection>
+      )}
     </>
   );
 }

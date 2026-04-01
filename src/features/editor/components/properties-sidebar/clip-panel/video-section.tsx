@@ -78,7 +78,7 @@ function formatCropValue(value: number): string {
 }
 
 /**
- * Video section - playback rate, video fades, and edge crop.
+ * Playback section - playback rate, video fades, and edge crop.
  *
  * Speed changes affect clip duration (rate stretch behavior):
  * - Faster speed = shorter clip (same content plays faster)
@@ -325,7 +325,7 @@ export function VideoSection({ items }: VideoSectionProps) {
 
   return (
     <>
-      <PropertySection title="Video" icon={Video} defaultOpen={true}>
+      <PropertySection title="Playback" icon={Video} defaultOpen={true}>
         {/* Playback Rate - affects clip duration */}
         <PropertyRow label="Speed">
           <div className="flex items-center gap-1 w-full">
@@ -401,7 +401,7 @@ export function VideoSection({ items }: VideoSectionProps) {
       </PropertySection>
 
       <PropertySection title="Cropping" icon={Crop} defaultOpen={true}>
-        <PropertyRow label="Crop Left">
+        <PropertyRow label="Left">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropLeft}
@@ -427,7 +427,7 @@ export function VideoSection({ items }: VideoSectionProps) {
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Crop Right">
+        <PropertyRow label="Right">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropRight}
@@ -453,7 +453,7 @@ export function VideoSection({ items }: VideoSectionProps) {
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Crop Top">
+        <PropertyRow label="Top">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropTop}
@@ -479,7 +479,7 @@ export function VideoSection({ items }: VideoSectionProps) {
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Crop Bottom">
+        <PropertyRow label="Bottom">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropBottom}

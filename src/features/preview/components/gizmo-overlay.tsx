@@ -200,7 +200,7 @@ export function GizmoOverlay({
       .toSorted((a, b) => (trackOrder.get(b.trackId) ?? 0) - (trackOrder.get(a.trackId) ?? 0));
   }, [visualItems, tracks, isPlaying, frameUpdateKey]);
 
-  // Get selected items (use Set for O(1) lookups)
+  // Get selected items visible on the current preview frame.
   const selectedItems = useMemo(() => {
     return visibleItems.filter((item) => selectedItemIdsSet.has(item.id));
   }, [visibleItems, selectedItemIdsSet]);
