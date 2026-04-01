@@ -8,6 +8,7 @@ import { waveformCache } from '../services/waveform-cache';
 
 export type { TimelineState, TimelineActions } from '../types';
 export { useTimelineStore } from '../stores/timeline-store';
+export { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 export { useItemsStore } from '../stores/items-store';
 export { useKeyframesStore } from '../stores/keyframes-store';
 export { useCompositionsStore } from '../stores/compositions-store';

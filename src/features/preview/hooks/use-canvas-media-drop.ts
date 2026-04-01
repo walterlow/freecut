@@ -13,7 +13,9 @@ import {
   extractValidMediaFileEntriesFromDataTransfer,
   getMediaDragData,
   getMediaType,
+  getMimeType,
   mediaLibraryService,
+  mediaProcessorService,
   resolveMediaUrl,
   useMediaLibraryStore,
 } from '@/features/preview/deps/media-library';
@@ -21,6 +23,10 @@ import { screenToCanvas } from '../utils/coordinate-transform';
 import type { CoordinateParams } from '../types/gizmo';
 import type { TimelineItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
+import {
+  useProjectMediaMatchDialogStore,
+  type ProjectMediaMatchChoice,
+} from '@/shared/state/project-media-match-dialog';
 
 type DropSource = 'library' | 'external-file';
 
@@ -42,10 +48,36 @@ interface PlaceMediaOnCanvasParams {
   label: string;
   clientX: number;
   clientY: number;
+  placementProjectSize?: { width: number; height: number };
+  preserveInitialPlacement?: boolean;
 }
 
 function isVisualMediaType(value: unknown): value is Extract<DroppableMediaType, 'video' | 'image'> {
   return value === 'video' || value === 'image';
+}
+
+function normalizeMatchedProjectDimension(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  const rounded = Math.round(value);
+  return rounded % 2 === 0 ? rounded : rounded + 1;
+}
+
+function getMatchedProjectSize(media: Pick<MediaMetadata, 'width' | 'height'>) {
+  const width = normalizeMatchedProjectDimension(media.width);
+  const height = normalizeMatchedProjectDimension(media.height);
+
+  if (width === 0 || height === 0) {
+    return null;
+  }
+
+  return { width, height };
+}
+
+function shouldPreserveInitialPlacement(choice: ProjectMediaMatchChoice): boolean {
+  return choice === 'match-both' || choice === 'size-only';
 }
 
 function clampDropPosition(
@@ -183,11 +215,14 @@ export function useCanvasMediaDrop({
     label,
     clientX,
     clientY,
+    placementProjectSize,
+    preserveInitialPlacement = false,
   }: PlaceMediaOnCanvasParams) => {
     if (!coordParams || !isVisualMediaType(mediaType)) {
       return;
     }
 
+    const effectiveProjectSize = placementProjectSize ?? projectSize;
     const timelineState = useTimelineStore.getState();
     const playbackState = usePlaybackStore.getState();
     const selectionState = useSelectionStore.getState();
@@ -221,8 +256,8 @@ export function useCanvasMediaDrop({
       timelineFps: timelineState.fps,
       blobUrl,
       thumbnailUrl,
-      canvasWidth: projectSize.width,
-      canvasHeight: projectSize.height,
+      canvasWidth: effectiveProjectSize.width,
+      canvasHeight: effectiveProjectSize.height,
       placement: {
         trackId: placement.trackId,
         from: placement.from,
@@ -230,11 +265,17 @@ export function useCanvasMediaDrop({
       },
     });
 
-    const canvasPoint = screenToCanvas(clientX, clientY, coordParams);
-    const positionedItem = clampDropPosition(baseItem, canvasPoint, projectSize);
-    timelineState.addItem(positionedItem);
+    const placedItem = preserveInitialPlacement
+      ? baseItem
+      : clampDropPosition(
+        baseItem,
+        screenToCanvas(clientX, clientY, coordParams),
+        effectiveProjectSize
+      );
+
+    timelineState.addItem(placedItem);
     selectionState.setActiveTrack(placement.trackId);
-    selectionState.selectItems([positionedItem.id]);
+    selectionState.selectItems([placedItem.id]);
   }, [coordParams, projectSize]);
 
   const handleLibraryDrop = useCallback(async (
@@ -325,6 +366,33 @@ export function useCanvasMediaDrop({
       return;
     }
 
+    const mediaState = useMediaLibraryStore.getState();
+    const currentProjectId = mediaState.currentProjectId;
+    const hasExistingProjectVideo = mediaState.mediaItems.some((item) => item.mimeType.startsWith('video/'));
+
+    let preInspectedMetadata: { type: string; width: number; height: number; fps: number } | null = null;
+
+    if (entry.mediaType === 'video' && currentProjectId && !hasExistingProjectVideo) {
+      try {
+        const mimeType = getMimeType(entry.file);
+        const { metadata } = await mediaProcessorService.processMedia(entry.file, mimeType, {
+          generateThumbnail: false,
+        });
+
+        if (metadata.type !== 'video') {
+          toast.error('Unable to inspect dropped video.');
+          return;
+        }
+
+        preInspectedMetadata = metadata;
+      } catch (error) {
+        toast.error('Unable to inspect dropped file.', {
+          description: error instanceof Error ? error.message : 'Please try again.',
+        });
+        return;
+      }
+    }
+
     const importedMedia = await useMediaLibraryStore
       .getState()
       .importHandlesForPlacement([entry.handle]);
@@ -340,12 +408,31 @@ export function useCanvasMediaDrop({
       return;
     }
 
+    let placementProjectSize: { width: number; height: number } | undefined;
+    let preserveInitialPlacement = false;
+
+    if (preInspectedMetadata && currentProjectId) {
+      const matchChoice = await useProjectMediaMatchDialogStore.getState().requestProjectMediaMatch(currentProjectId, {
+        fileName: entry.file.name,
+        width: preInspectedMetadata.width,
+        height: preInspectedMetadata.height,
+        fps: preInspectedMetadata.fps,
+      });
+
+      preserveInitialPlacement = shouldPreserveInitialPlacement(matchChoice);
+      if (preserveInitialPlacement) {
+        placementProjectSize = getMatchedProjectSize(preInspectedMetadata) ?? undefined;
+      }
+    }
+
     await placeMediaOnCanvas({
       media: imported,
       mediaType: importedType,
       label: imported.fileName,
       clientX: event.clientX,
       clientY: event.clientY,
+      placementProjectSize,
+      preserveInitialPlacement,
     });
   }, [placeMediaOnCanvas]);
 

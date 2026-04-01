@@ -40,6 +40,7 @@ import {
   buildGhostPreviewsFromTrackMediaDropPlan,
   planTrackMediaDropPlacements,
 } from '../utils/track-media-drop';
+import { preflightFirstTimelineVideoProjectMatch } from '../utils/external-file-project-match';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -170,9 +171,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const clearTrackGhostPreviews = useTrackDropPreviewStore((s) => s.clearGhostPreviews);
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
   const importHandlesForPlacement = useMediaLibraryStore((s) => s.importHandlesForPlacement);
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const canvasWidth = currentProject?.metadata.width ?? 1920;
-  const canvasHeight = currentProject?.metadata.height ?? 1080;
 
   // Zoom utilities for position calculation
   const { pixelsToFrame, frameToPixels } = useTimelineZoomContext();
@@ -200,6 +198,14 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const offsetX = (event.clientX - containerRect.left) + scrollLeft;
     return pixelsToFrame(offsetX);
   }, [pixelsToFrame]);
+
+  const getCurrentCanvasSize = useCallback(() => {
+    const liveProject = useProjectStore.getState().currentProject;
+    return {
+      width: liveProject?.metadata.width ?? 1920,
+      height: liveProject?.metadata.height ?? 1080,
+    };
+  }, []);
 
   const resolveTimelineItemsForEntries = useCallback(async (
     entries: DroppedMediaEntry[],
@@ -244,6 +250,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
         const primaryPlacement = placements.find((placement) => placement.mediaType !== 'audio') ?? placements[0]!;
         const linkedAudioPlacement = placements.find((placement) => placement.mediaType === 'audio');
+        const canvasSize = getCurrentCanvasSize();
 
         return buildDroppedMediaTimelineItems({
           media: droppedEntry.media,
@@ -253,8 +260,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           timelineFps: fps,
           blobUrl,
           thumbnailUrl,
-          canvasWidth,
-          canvasHeight,
+          canvasWidth: canvasSize.width,
+          canvasHeight: canvasSize.height,
           placement: {
             primary: {
               trackId: primaryPlacement.trackId,
@@ -278,7 +285,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       items: resolvedTimelineItems.flatMap((timelineItems) => timelineItems ?? []),
       tracks: workingTracks,
     };
-  }, [canvasHeight, canvasWidth, fps, track.id]);
+  }, [fps, getCurrentCanvasSize, track.id]);
 
   const buildGhostPreviewsForEntries = useCallback((
     entries: Array<{ label: string; mediaType: DroppableMediaType; duration?: number; hasLinkedAudio?: boolean }>,
@@ -401,17 +408,19 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return null;
     }
 
+    const canvasSize = getCurrentCanvasSize();
+
     return createTimelineTemplateItem({
       template,
       placement: {
         trackId: targetTrack.id,
         from: finalPosition,
         durationInFrames,
-        canvasWidth,
-        canvasHeight,
+        canvasWidth: canvasSize.width,
+        canvasHeight: canvasSize.height,
       },
     });
-  }, [canvasHeight, canvasWidth, fps, track.id]);
+  }, [fps, getCurrentCanvasSize, track.id]);
 
   const clearExternalPreviewSession = useCallback(() => {
     externalPreviewItemsRef.current = null;
@@ -894,6 +903,15 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }
 
     if (entries.length === 0) {
+      return;
+    }
+
+    try {
+      await preflightFirstTimelineVideoProjectMatch(entries);
+    } catch (error) {
+      toast.error('Unable to inspect dropped file.', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
       return;
     }
 

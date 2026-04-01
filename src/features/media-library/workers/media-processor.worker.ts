@@ -83,6 +83,7 @@ export interface ProcessMediaRequest {
     thumbnailMaxSize?: number;
     thumbnailQuality?: number;
     thumbnailTimestamp?: number;
+    generateThumbnail?: boolean;
   };
 }
 
@@ -447,6 +448,7 @@ async function processMedia(
     thumbnailMaxSize = 320,
     thumbnailQuality = 0.6,
     thumbnailTimestamp = 1,
+    generateThumbnail = true,
   } = options;
 
   let metadata: VideoMetadata | AudioMetadata | ImageMetadata;
@@ -455,16 +457,20 @@ async function processMedia(
   if (mimeType.startsWith('video/')) {
     // Video: extract metadata and generate thumbnail in parallel after metadata
     metadata = await extractVideoMetadata(file);
-    try {
-      thumbnail = await generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp);
-    } catch (err) {
-      logger.warn('Failed to generate video thumbnail:', err);
+    if (generateThumbnail) {
+      try {
+        thumbnail = await generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp);
+      } catch (err) {
+        logger.warn('Failed to generate video thumbnail:', err);
+      }
     }
   } else if (mimeType.startsWith('audio/')) {
     // Audio: metadata and thumbnail are independent
     const [audioMeta, audioThumb] = await Promise.all([
       extractAudioMetadata(file),
-      generateAudioThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined),
+      generateThumbnail
+        ? generateAudioThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
+        : Promise.resolve(undefined),
     ]);
     metadata = audioMeta;
     thumbnail = audioThumb;
@@ -472,7 +478,9 @@ async function processMedia(
     // Image: metadata and thumbnail can run in parallel
     const [imageMeta, imageThumb] = await Promise.all([
       extractImageMetadata(file),
-      generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined),
+      generateThumbnail
+        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
+        : Promise.resolve(undefined),
     ]);
     metadata = imageMeta;
     thumbnail = imageThumb;

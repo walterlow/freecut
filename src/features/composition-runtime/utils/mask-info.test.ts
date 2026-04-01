@@ -10,9 +10,10 @@ function createMaskInfo(
   id: string,
   trackOrder: number = 0,
   overrides: Partial<MaskInfo['transform']> = {},
+  shape?: MaskInfo['shape'],
 ): MaskInfo {
   return {
-    shape: { id } as MaskInfo['shape'],
+    shape: shape ?? ({ id } as MaskInfo['shape']),
     trackOrder,
     transform: {
       x: 10,
@@ -32,24 +33,37 @@ describe('mask-info helpers', () => {
     expect(materializeMaskInfos([])).toBe(EMPTY_MASK_INFOS);
   });
 
-  it('reuses the previous mask array when shape ids and transforms are unchanged', () => {
-    const previous = [createMaskInfo('mask-1'), createMaskInfo('mask-2')];
-    const next = [createMaskInfo('mask-1'), createMaskInfo('mask-2')];
+  it('reuses the previous mask array when shape refs and transforms are unchanged', () => {
+    const shape1 = { id: 'mask-1' } as MaskInfo['shape'];
+    const shape2 = { id: 'mask-2' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, shape1), createMaskInfo('mask-2', 0, {}, shape2)];
+    const next = [createMaskInfo('mask-1', 0, {}, shape1), createMaskInfo('mask-2', 0, {}, shape2)];
 
     expect(reuseStableMaskInfos(previous, next)).toBe(previous);
   });
 
+  it('returns a new array when shape reference changes (e.g. maskType update)', () => {
+    const shape1 = { id: 'mask-1', maskType: 'alpha' } as MaskInfo['shape'];
+    const shape1Updated = { id: 'mask-1', maskType: 'clip' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, shape1)];
+    const next = [createMaskInfo('mask-1', 0, {}, shape1Updated)];
+
+    expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);
+  });
+
   it('returns a new array when any mask transform changes', () => {
-    const previous = [createMaskInfo('mask-1')];
-    const next = [createMaskInfo('mask-1', 0, { x: 42 })];
+    const sharedShape = { id: 'mask-1' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, sharedShape)];
+    const next = [createMaskInfo('mask-1', 0, { x: 42 }, sharedShape)];
 
     expect(reuseStableMaskInfos(previous, next)).toEqual(next);
     expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);
   });
 
   it('returns a new array when any mask track order changes', () => {
-    const previous = [createMaskInfo('mask-1', 0)];
-    const next = [createMaskInfo('mask-1', 1)];
+    const sharedShape = { id: 'mask-1' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, sharedShape)];
+    const next = [createMaskInfo('mask-1', 1, {}, sharedShape)];
 
     expect(reuseStableMaskInfos(previous, next)).toEqual(next);
     expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);

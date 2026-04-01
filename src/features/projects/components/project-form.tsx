@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@/components/ui/button';
@@ -10,9 +10,9 @@ import {
   type ProjectFormData,
   type ProjectTemplate,
   DEFAULT_PROJECT_VALUES,
-  FPS_PRESETS,
   PROJECT_TEMPLATES,
 } from '../utils/validation';
+import { getProjectFpsOptions } from '../utils/project-fps';
 import { ProjectTemplatePicker } from './project-template-picker';
 
 interface ProjectFormProps {
@@ -64,6 +64,7 @@ export function ProjectForm({
   }, [defaultValues?.width, defaultValues?.height]);
 
   const fps = watch('fps');
+  const fpsOptions = useMemo(() => getProjectFpsOptions(fps), [fps]);
 
   const handleSelectTemplate = (template: ProjectTemplate) => {
     setSelectedTemplateId(template.id);
@@ -207,7 +208,7 @@ export function ProjectForm({
                      <SelectValue />
                    </SelectTrigger>
                    <SelectContent>
-                     {FPS_PRESETS.map((preset) => (
+                     {fpsOptions.map((preset) => (
                        <SelectItem key={preset.value} value={preset.value.toString()}>
                          {preset.label}
                        </SelectItem>

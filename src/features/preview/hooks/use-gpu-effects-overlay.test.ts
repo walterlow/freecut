@@ -71,4 +71,32 @@ describe('shouldForceContinuousPreviewOverlay', () => {
 
     expect(shouldForceContinuousPreviewOverlay([blendedItem], 0, 120)).toBe(false);
   });
+
+  it('forces continuous overlay for preview-only gpu effects on the active frame', () => {
+    const previewedItem = createVideoItem();
+
+    expect(
+      shouldForceContinuousPreviewOverlay(
+        [previewedItem],
+        0,
+        0,
+        new Map([
+          [
+            previewedItem.id,
+            [
+              {
+                id: 'effect-preview',
+                enabled: true,
+                effect: {
+                  type: 'gpu-effect',
+                  gpuEffectType: 'gpu-sepia',
+                  params: { amount: 0.8 },
+                },
+              },
+            ],
+          ],
+        ]),
+      ),
+    ).toBe(true);
+  });
 });

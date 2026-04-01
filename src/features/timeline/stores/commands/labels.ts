@@ -54,6 +54,30 @@ export function formatTimelineCommandLabel(command: TimelineCommand): string {
     return formatTransformLabel(command);
   }
 
+  if (command.type === 'UPDATE_PROJECT_METADATA') {
+    const fields = Array.isArray(command.payload?.fields)
+      ? command.payload.fields.filter((field): field is string => typeof field === 'string')
+      : [];
+
+    if (fields.includes('fps') && (fields.includes('width') || fields.includes('height'))) {
+      return 'Resize canvas and change frame rate';
+    }
+
+    if (fields.includes('width') || fields.includes('height')) {
+      return 'Resize canvas';
+    }
+
+    if (fields.includes('fps')) {
+      return 'Change frame rate';
+    }
+
+    if (fields.includes('backgroundColor')) {
+      return 'Change canvas background';
+    }
+
+    return 'Update project settings';
+  }
+
   if (command.type === 'APPLY_AUTO_KEYFRAME_OPERATIONS') {
     const count = readCount(command.payload);
     if (count !== null) {
@@ -83,4 +107,3 @@ export function formatTimelineCommandLabel(command: TimelineCommand): string {
   }
   return base;
 }
-

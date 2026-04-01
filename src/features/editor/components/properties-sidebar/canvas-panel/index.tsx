@@ -6,11 +6,13 @@ import { useProjectStore } from '@/features/editor/deps/projects';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore } from '@/features/editor/deps/preview';
 import { HexColorPicker } from 'react-colorful';
+import { toast } from 'sonner';
 import {
   PropertySection,
   PropertyRow,
   LinkedDimensions,
 } from '../components';
+import { commitProjectMetadataChange } from '@/features/editor/utils/project-metadata-history';
 
 /**
  * Isolated color picker using react-colorful.
@@ -111,65 +113,89 @@ export const CanvasPanel = memo(function CanvasPanel() {
 
 
   // All handlers must be defined before any early returns (Rules of Hooks)
-  const projectId = currentProject?.id;
   const width = currentProject?.metadata.width ?? 1920;
   const height = currentProject?.metadata.height ?? 1080;
   const storedBackgroundColor = currentProject?.metadata.backgroundColor ?? '#000000';
 
+  const applyProjectMetadataChange = useCallback(async (
+    updates: Parameters<typeof commitProjectMetadataChange>[0]['updates'],
+    command: Parameters<typeof commitProjectMetadataChange>[0]['command']
+  ) => {
+    if (!currentProject) {
+      return;
+    }
+
+    try {
+      await commitProjectMetadataChange({
+        project: currentProject,
+        updates,
+        command,
+        updateProject,
+        markDirty,
+      });
+    } catch (error) {
+      toast.error('Failed to update canvas settings', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+    }
+  }, [currentProject, markDirty, updateProject]);
+
 
   const handleWidthChange = useCallback(
     (newWidth: number) => {
-      if (projectId) {
-        updateProject(projectId, { width: Math.round(newWidth / 2) * 2 });
-        markDirty();
-      }
+      const normalizedWidth = Math.round(newWidth / 2) * 2;
+      void applyProjectMetadataChange(
+        { width: normalizedWidth },
+        { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['width'] } }
+      );
     },
-    [projectId, updateProject, markDirty]
+    [applyProjectMetadataChange]
   );
 
   const handleHeightChange = useCallback(
     (newHeight: number) => {
-      if (projectId) {
-        updateProject(projectId, { height: Math.round(newHeight / 2) * 2 });
-        markDirty();
-      }
+      const normalizedHeight = Math.round(newHeight / 2) * 2;
+      void applyProjectMetadataChange(
+        { height: normalizedHeight },
+        { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['height'] } }
+      );
     },
-    [projectId, updateProject, markDirty]
+    [applyProjectMetadataChange]
   );
 
   const handleSwapDimensions = useCallback(() => {
-    if (projectId) {
-      updateProject(projectId, { width: height, height: width });
-      markDirty();
-    }
-  }, [projectId, width, height, updateProject, markDirty]);
+    void applyProjectMetadataChange(
+      { width: height, height: width },
+      { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['width', 'height'], operation: 'swap' } }
+    );
+  }, [applyProjectMetadataChange, height, width]);
 
   const handleResetDimensions = useCallback(() => {
-    if (projectId) {
-      updateProject(projectId, { width: 1920, height: 1080 });
-      markDirty();
-    }
-  }, [projectId, updateProject, markDirty]);
+    void applyProjectMetadataChange(
+      { width: 1920, height: 1080 },
+      { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['width', 'height'], operation: 'reset' } }
+    );
+  }, [applyProjectMetadataChange]);
 
   // Commit background color to store on release
   const handleBackgroundColorChange = useCallback(
     (color: string) => {
-      if (projectId) {
-        updateProject(projectId, { backgroundColor: color });
-        markDirty();
-      }
+      void applyProjectMetadataChange(
+        { backgroundColor: color },
+        { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['backgroundColor'] } }
+      );
     },
-    [projectId, updateProject, markDirty]
+    [applyProjectMetadataChange]
   );
 
   // Reset background color to black
   const handleResetBackgroundColor = useCallback(() => {
     if (storedBackgroundColor === '#000000') return; // Already default
-    if (projectId) {
-      updateProject(projectId, { backgroundColor: '#000000' });
-      markDirty();
-    }
-  }, [projectId, storedBackgroundColor, updateProject, markDirty]);
+    void applyProjectMetadataChange(
+      { backgroundColor: '#000000' },
+      { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['backgroundColor'], operation: 'reset' } }
+    );
+  }, [applyProjectMetadataChange, storedBackgroundColor]);
 
   // Format duration as MM:SS.FF
   const formatDuration = (frames: number): string => {

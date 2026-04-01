@@ -337,6 +337,7 @@ export function getActiveMasksForFrame(
   keyframes: MaskKeyframeResolver,
   getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined,
   getPreviewPathVerticesOverride?: PreviewPathVerticesOverride,
+  getLiveItem?: (itemId: string) => ShapeItem | undefined,
 ): Array<{
   path: Path2D;
   inverted: boolean;
@@ -351,8 +352,12 @@ export function getActiveMasksForFrame(
     maskType: 'clip' | 'alpha';
     trackOrder: number;
   }> = [];
+  const liveMasks = index.masks.map(({ mask, trackOrder }) => ({
+    mask: (getLiveItem?.(mask.id) ?? mask),
+    trackOrder,
+  }));
   const activeMaskShapes = resolveActiveShapeMasksAtFrame(
-    index.masks.map(({ mask, trackOrder }) => ({ mask, trackOrder })),
+    liveMasks,
     {
       canvas,
       frame,

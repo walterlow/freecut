@@ -215,52 +215,6 @@ export const TimelineContent = memo(function TimelineContent({
     });
   }, []);
 
-  // Clear selection when the playhead leaves the selected clip's time range
-  // Only clears if the playhead moves outside the selected item(s), not when crossing other clips' boundaries
-  useEffect(() => {
-    let prevFrame = usePlaybackStore.getState().currentFrame;
-
-    return usePlaybackStore.subscribe((state) => {
-      const currentFrame = state.currentFrame;
-      if (currentFrame === prevFrame) return;
-
-      const { selectedItemIds } = useSelectionStore.getState();
-      if (selectedItemIds.length === 0) {
-        prevFrame = currentFrame;
-        return;
-      }
-
-      // Read selected items by ID map to avoid O(n) scan per playback tick.
-      const itemById = useItemsStore.getState().itemById;
-      let hasExistingSelection = false;
-      let isWithinSelectedItems = false;
-      for (const selectedId of selectedItemIds) {
-        const item = itemById[selectedId];
-        if (!item) continue;
-        hasExistingSelection = true;
-        const itemStart = item.from;
-        const itemEnd = item.from + item.durationInFrames;
-        if (currentFrame >= itemStart && currentFrame < itemEnd) {
-          isWithinSelectedItems = true;
-          break;
-        }
-      }
-
-      if (!hasExistingSelection) {
-        prevFrame = currentFrame;
-        return;
-      }
-
-      // If playhead moved outside all selected items, clear selection
-      if (!isWithinSelectedItems) {
-        useSelectionStore.getState().clearItemSelection();
-      }
-
-      prevFrame = currentFrame;
-    });
-  }, []); // No dependencies - reads items on-demand
-
-
   const frameToPixelsRef = useRef(frameToPixels);
   frameToPixelsRef.current = frameToPixels;
 

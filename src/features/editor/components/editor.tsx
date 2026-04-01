@@ -37,6 +37,7 @@ import { importExportDialog } from '@/features/editor/deps/export-contract';
 import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
 import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
+import { ProjectMediaMatchDialog } from './project-media-match-dialog';
 
 const logger = createLogger('Editor');
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId';
@@ -476,6 +477,8 @@ export const LoadedEditor = memo(function LoadedEditor({
 
       {/* Clear Keyframes Confirmation Dialog */}
       <ClearKeyframesDialog />
+
+      <ProjectMediaMatchDialog projectId={projectId} />
 
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />

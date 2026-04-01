@@ -294,6 +294,12 @@ export async function createCompositionRenderer(
     const liveItem = getLiveItemSnapshot?.(item.id);
     return liveItem && liveItem.type === item.type ? liveItem as TItem : item;
   };
+  const getLiveMaskItem = getLiveItemSnapshot
+    ? (itemId: string) => {
+        const live = getLiveItemSnapshot(itemId);
+        return live && live.type === 'shape' ? live as ShapeItem : undefined;
+      }
+    : undefined;
 
   // === PERFORMANCE OPTIMIZATION: Use mediabunny for video decoding ===
   // VideoFrameExtractor provides precise frame access without seek delays
@@ -1103,6 +1109,7 @@ export async function createCompositionRenderer(
         getCurrentKeyframes,
         renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
+        renderMode === 'preview' ? getLiveMaskItem : undefined,
       );
 
       const frameScene = frameSceneCache.resolve({

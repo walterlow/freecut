@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  DEFAULT_PROJECT_FPS_OPTIONS,
+  isAllowedProjectFps,
+} from './project-fps';
 
 /**
  * Validation schema for project creation/update form
@@ -35,8 +39,8 @@ export const projectFormSchema = z.object({
     .int('FPS must be an integer')
     .min(1, 'FPS must be at least 1')
     .max(240, 'FPS must be at most 240')
-    .refine((fps) => [24, 25, 30, 50, 60, 120, 240].includes(fps), {
-      message: 'FPS should be a common frame rate (24, 25, 30, 50, 60, 120, 240)',
+    .refine((fps) => isAllowedProjectFps(fps), {
+      message: 'FPS should be a supported frame rate',
     }),
 
   backgroundColor: z
@@ -149,14 +153,8 @@ export const RESOLUTION_PRESETS = [
  * Common FPS presets
  */
 export const FPS_PRESETS = [
-  { label: '24 fps (Film)', value: 24 },
-  { label: '25 fps (PAL)', value: 25 },
-  { label: '30 fps (Standard)', value: 30 },
-  { label: '50 fps (PAL High)', value: 50 },
-  { label: '60 fps (Smooth)', value: 60 },
-  { label: '120 fps (High Speed)', value: 120 },
-  { label: '240 fps (Ultra High Speed)', value: 240 },
-] as const;
+  ...DEFAULT_PROJECT_FPS_OPTIONS,
+];
 
 /**
  * Default form values

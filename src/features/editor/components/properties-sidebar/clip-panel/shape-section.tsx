@@ -15,6 +15,7 @@ import {
   PropertySection,
   PropertyRow,
   NumberInput,
+  SliderInput,
   ColorPicker,
 } from '../components';
 
@@ -256,7 +257,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
         isMask: checked,
         // Set defaults when enabling mask
         maskType: checked ? 'clip' : undefined,
-        maskFeather: checked ? 10 : undefined,
+        maskFeather: checked ? 0 : undefined,
         maskInvert: checked ? false : undefined,
       });
     },
@@ -266,9 +267,17 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   // Mask type handler
   const handleMaskTypeChange = useCallback(
     (value: string) => {
-      updateShapeItems({ maskType: value as 'clip' | 'alpha' });
+      const nextMaskType = value as 'clip' | 'alpha';
+      updateShapeItems({
+        maskType: nextMaskType,
+        maskFeather: nextMaskType === 'alpha'
+          ? (typeof sharedValues?.maskFeather === 'number' && sharedValues.maskFeather > 0
+            ? sharedValues.maskFeather
+            : 10)
+          : 0,
+      });
     },
-    [updateShapeItems]
+    [sharedValues?.maskFeather, updateShapeItems]
   );
 
   // Mask feather handlers with live preview
@@ -495,7 +504,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
           {sharedValues.maskType === 'alpha' && (
             <PropertyRow label="Feather">
               <div className="flex items-center gap-1 w-full">
-                <NumberInput
+                <SliderInput
                   value={sharedValues.maskFeather}
                   onChange={handleMaskFeatherChange}
                   onLiveChange={handleMaskFeatherLiveChange}

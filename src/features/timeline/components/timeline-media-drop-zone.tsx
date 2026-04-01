@@ -33,6 +33,7 @@ import {
   buildGhostPreviewsFromNewTrackZonePlan,
   planNewTrackZonePlacements,
 } from '../utils/new-track-zone-media';
+import { preflightFirstTimelineVideoProjectMatch } from '../utils/external-file-project-match';
 
 const logger = createLogger('TimelineMediaDropZone');
 
@@ -135,9 +136,6 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
   const clearZoneGhostPreviews = useNewTrackZonePreviewStore((s) => s.clearGhostPreviews);
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
   const importHandlesForPlacement = useMediaLibraryStore((s) => s.importHandlesForPlacement);
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const canvasWidth = currentProject?.metadata.width ?? 1920;
-  const canvasHeight = currentProject?.metadata.height ?? 1080;
   const { pixelsToFrame, frameToPixels } = useTimelineZoomContext();
   const ghostPreviews = useMemo(
     () => allGhostPreviews.filter((ghost) => ghost.targetZone === zone),
@@ -187,6 +185,14 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       : null;
   }, [anchorTrackId]);
 
+  const getCurrentCanvasSize = useCallback(() => {
+    const liveProject = useProjectStore.getState().currentProject;
+    return {
+      width: liveProject?.metadata.width ?? 1920,
+      height: liveProject?.metadata.height ?? 1080,
+    };
+  }, []);
+
   const resolveTimelineItemsForEntries = useCallback(async (
     entries: DroppedMediaEntry[],
     dropFrame: number
@@ -234,6 +240,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
 
         const primaryPlacement = placements.find((placement) => placement.mediaType !== 'audio') ?? placements[0]!;
         const linkedAudioPlacement = placements.find((placement) => placement.mediaType === 'audio');
+        const canvasSize = getCurrentCanvasSize();
 
         return buildDroppedMediaTimelineItems({
           media: droppedEntry.media,
@@ -243,8 +250,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           timelineFps: fps,
           blobUrl,
           thumbnailUrl,
-          canvasWidth,
-          canvasHeight,
+          canvasWidth: canvasSize.width,
+          canvasHeight: canvasSize.height,
           placement: {
             primary: {
               trackId: primaryPlacement.trackId,
@@ -268,7 +275,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       items: resolvedTimelineItems.flatMap((timelineItems) => timelineItems ?? []),
       tracks: workingTracks,
     };
-  }, [anchorTrackId, canvasHeight, canvasWidth, fps, zone]);
+  }, [anchorTrackId, fps, getCurrentCanvasSize, zone]);
 
   const buildGhostPreviewsForEntries = useCallback((entries: PreviewEntry[], dropFrame: number): GhostPreviewItem[] => {
     const currentTracks = useTimelineStore.getState().tracks;
@@ -369,6 +376,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       return null;
     }
 
+    const canvasSize = getCurrentCanvasSize();
+
     return {
       item: createTimelineTemplateItem({
         template,
@@ -376,13 +385,13 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           trackId: createdTrack.trackId,
           from: finalPosition,
           durationInFrames,
-          canvasWidth,
-          canvasHeight,
+          canvasWidth: canvasSize.width,
+          canvasHeight: canvasSize.height,
         },
       }),
       tracks: createdTrack.tracks,
     };
-  }, [canvasHeight, canvasWidth, ensureVideoZoneTrack, fps, zone]);
+  }, [ensureVideoZoneTrack, fps, getCurrentCanvasSize, zone]);
 
   const clearExternalPreviewSession = useCallback(() => {
     externalPreviewItemsRef.current = null;
@@ -775,6 +784,15 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     if (entries.length === 0) {
+      return;
+    }
+
+    try {
+      await preflightFirstTimelineVideoProjectMatch(entries);
+    } catch (error) {
+      toast.error('Unable to inspect dropped file.', {
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
       return;
     }
 

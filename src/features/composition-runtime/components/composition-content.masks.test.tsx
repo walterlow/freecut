@@ -184,6 +184,8 @@ describe('CompositionContent masks', () => {
 
     const maskedElement = container.querySelector('[style*="clip-path"]');
     expect(maskedElement).not.toBeNull();
+    expect((maskedElement as HTMLElement).style.width).toBe('100%');
+    expect((maskedElement as HTMLElement).style.height).toBe('100%');
     const before = maskedElement?.getAttribute('style');
 
     act(() => {
@@ -212,6 +214,68 @@ describe('CompositionContent masks', () => {
 
     const after = container.querySelector('[style*="clip-path"]')?.getAttribute('style');
     expect(after).not.toBe(before);
+  });
+
+  it('keeps clip masks hard-edged even if a feather value is present', () => {
+    const contentItem: ShapeItem = {
+      id: 'content-shape',
+      type: 'shape',
+      trackId: 'content-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Content shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const maskItem: ShapeItem = {
+      id: 'clip-mask-with-feather',
+      type: 'shape',
+      trackId: 'mask-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Clip mask with feather',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      isMask: true,
+      maskType: 'clip',
+      maskFeather: 18,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const { container } = render(
+      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+        <Item
+          item={contentItem}
+          muted={false}
+          masks={[
+            {
+              shape: maskItem,
+              transform: maskItem.transform!,
+              trackOrder: 1,
+            },
+          ]}
+        />
+      </VideoConfigProvider>
+    );
+
+    expect(container.querySelector('[style*="clip-path"]')).not.toBeNull();
+    expect(container.querySelector('mask')).toBeNull();
   });
 
   it('applies sub-comp masks only to content on lower tracks', () => {

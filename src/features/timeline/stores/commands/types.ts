@@ -2,6 +2,7 @@ import type { TimelineItem, TimelineTrack, ProjectMarker } from '@/types/timelin
 import type { Transition } from '@/types/transition';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { SubComposition } from '../compositions-store';
+import type { ProjectResolution } from '@/types/project';
 
 /**
  * Snapshot of all timeline state for undo/redo.
@@ -21,6 +22,8 @@ export interface TimelineSnapshot {
   scrollPosition: number;
   snapEnabled: boolean;
   currentFrame: number;
+  projectId: string | null;
+  projectMetadata: ProjectResolution | null;
 }
 
 /**

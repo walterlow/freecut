@@ -278,7 +278,11 @@ export function useItemVisualState(
     // All masks use the first mask's type settings
     const firstMask = masks[0]!;
     const maskType = firstMask.shape.maskType ?? 'clip';
-    const maskFeather = (firstMask.shape.maskFeather ?? 0) * uniformScale;
+    // Feather only applies to alpha masks. Clip masks stay hard-edged even if
+    // older item data still carries a persisted maskFeather value.
+    const maskFeather = maskType === 'alpha'
+      ? (firstMask.shape.maskFeather ?? 0) * uniformScale
+      : 0;
     const maskInvert = firstMask.shape.maskInvert ?? false;
     const getPreviewPathVertices = (shapeId: string) => (
       previewMaskEditingItemId === shapeId

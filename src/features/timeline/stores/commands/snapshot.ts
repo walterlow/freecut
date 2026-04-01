@@ -6,6 +6,71 @@ import { useMarkersStore } from '../markers-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useCompositionsStore } from '../compositions-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useProjectStore } from '@/features/timeline/deps/projects';
+import { updateProject } from '@/infrastructure/storage/indexeddb';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('TimelineSnapshot');
+
+function projectMetadataEqual(
+  left: TimelineSnapshot['projectMetadata'],
+  right: TimelineSnapshot['projectMetadata']
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return left.width === right.width
+    && left.height === right.height
+    && left.fps === right.fps
+    && (left.backgroundColor ?? '#000000') === (right.backgroundColor ?? '#000000');
+}
+
+function restoreProjectMetadata(snapshot: TimelineSnapshot): void {
+  if (!snapshot.projectId || !snapshot.projectMetadata) {
+    return;
+  }
+
+  const projectStoreState = useProjectStore.getState();
+  const currentProject = projectStoreState.currentProject;
+  const storedProject = currentProject?.id === snapshot.projectId
+    ? currentProject
+    : projectStoreState.projects.find((project) => project.id === snapshot.projectId) ?? null;
+
+  if (!storedProject || projectMetadataEqual(storedProject.metadata, snapshot.projectMetadata)) {
+    return;
+  }
+
+  const nextUpdatedAt = Date.now();
+  useProjectStore.setState((state) => ({
+    currentProject: state.currentProject?.id === snapshot.projectId
+      ? {
+        ...state.currentProject,
+        metadata: { ...snapshot.projectMetadata! },
+        updatedAt: nextUpdatedAt,
+      }
+      : state.currentProject,
+    projects: state.projects.map((project) => (
+      project.id === snapshot.projectId
+        ? {
+          ...project,
+          metadata: { ...snapshot.projectMetadata! },
+          updatedAt: nextUpdatedAt,
+        }
+        : project
+    )),
+  }));
+
+  void Promise.resolve(updateProject(snapshot.projectId, {
+    metadata: { ...snapshot.projectMetadata },
+  })).catch((error) => {
+    logger.error(`Failed to persist restored project metadata for ${snapshot.projectId}:`, error);
+  });
+}
 
 /**
  * Capture a snapshot of all timeline state.
@@ -19,6 +84,8 @@ export function captureSnapshot(): TimelineSnapshot {
   const settingsState = useTimelineSettingsStore.getState();
   const compositionsState = useCompositionsStore.getState();
   const playbackState = usePlaybackStore.getState();
+  const projectState = useProjectStore.getState();
+  const currentProject = projectState.currentProject;
 
   return {
     items: itemsState.items,
@@ -33,6 +100,10 @@ export function captureSnapshot(): TimelineSnapshot {
     scrollPosition: settingsState.scrollPosition,
     snapEnabled: settingsState.snapEnabled,
     currentFrame: playbackState.currentFrame,
+    projectId: currentProject?.id ?? null,
+    projectMetadata: currentProject
+      ? { ...currentProject.metadata }
+      : null,
   };
 }
 
@@ -67,6 +138,9 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
 
   // Restore playhead position
   usePlaybackStore.getState().setCurrentFrame(snapshot.currentFrame);
+
+  // Restore current project metadata so canvas/project changes undo with the editor history.
+  restoreProjectMetadata(snapshot);
 }
 
 /**
@@ -86,6 +160,8 @@ export function snapshotsEqual(a: TimelineSnapshot, b: TimelineSnapshot): boolea
     a.fps === b.fps &&
     a.scrollPosition === b.scrollPosition &&
     a.snapEnabled === b.snapEnabled &&
-    a.currentFrame === b.currentFrame
+    a.currentFrame === b.currentFrame &&
+    a.projectId === b.projectId &&
+    projectMetadataEqual(a.projectMetadata, b.projectMetadata)
   );
 }

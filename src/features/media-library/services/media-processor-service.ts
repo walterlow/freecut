@@ -107,6 +107,7 @@ class MediaProcessorService {
       thumbnailMaxSize?: number;
       thumbnailQuality?: number;
       thumbnailTimestamp?: number;
+      generateThumbnail?: boolean;
     }
   ): Promise<ProcessMediaResult> {
     const worker = this.ensureWorker();

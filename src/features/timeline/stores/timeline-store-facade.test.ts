@@ -89,6 +89,8 @@ import { useTimelineCommandStore } from './timeline-command-store';
 import { useCompositionsStore } from './compositions-store';
 import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineStore } from './timeline-store-facade';
+import { useProjectStore } from '@/features/timeline/deps/projects';
+import { captureSnapshot } from './commands/snapshot';
 
 describe('TimelineStoreFacade', () => {
   beforeEach(() => {
@@ -111,6 +113,17 @@ describe('TimelineStoreFacade', () => {
     useCompositionNavigationStore.getState().resetToRoot();
     useTimelineCommandStore.getState().clearHistory();
     mediaLibraryMocks.mediaById = {};
+    useProjectStore.setState({
+      projects: [],
+      currentProject: null,
+      isLoading: false,
+      error: null,
+      searchQuery: '',
+      sortField: 'updatedAt',
+      sortDirection: 'desc',
+      filterResolution: undefined,
+      filterFps: undefined,
+    });
   });
 
   describe('getSnapshot / getState', () => {
@@ -347,6 +360,97 @@ describe('TimelineStoreFacade', () => {
 
       useTimelineCommandStore.getState().redo();
       expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(-9.5);
+    });
+
+    it('undos and redos current project metadata changes through the shared history', async () => {
+      useProjectStore.setState({
+        projects: [{
+          id: 'project-1',
+          name: 'Test Project',
+          description: '',
+          createdAt: 1,
+          updatedAt: 1,
+          duration: 0,
+          metadata: {
+            width: 1920,
+            height: 1080,
+            fps: 30,
+            backgroundColor: '#000000',
+          },
+        }],
+        currentProject: {
+          id: 'project-1',
+          name: 'Test Project',
+          description: '',
+          createdAt: 1,
+          updatedAt: 1,
+          duration: 0,
+          metadata: {
+            width: 1920,
+            height: 1080,
+            fps: 30,
+            backgroundColor: '#000000',
+          },
+        },
+      });
+
+      const beforeSnapshot = captureSnapshot();
+      useProjectStore.setState((state) => ({
+        currentProject: state.currentProject
+          ? {
+            ...state.currentProject,
+            metadata: {
+              ...state.currentProject.metadata,
+              width: 1280,
+              height: 720,
+            },
+          }
+          : null,
+        projects: state.projects.map((project) => (
+          project.id === 'project-1'
+            ? {
+              ...project,
+              metadata: {
+                ...project.metadata,
+                width: 1280,
+                height: 720,
+              },
+            }
+            : project
+        )),
+      }));
+      useTimelineCommandStore.getState().addUndoEntry(
+        { type: 'UPDATE_PROJECT_METADATA', payload: { fields: ['width', 'height'] } },
+        beforeSnapshot
+      );
+
+      expect(useProjectStore.getState().currentProject?.metadata).toMatchObject({
+        width: 1280,
+        height: 720,
+      });
+
+      useTimelineCommandStore.getState().undo();
+      expect(useProjectStore.getState().currentProject?.metadata).toMatchObject({
+        width: 1920,
+        height: 1080,
+      });
+
+      useTimelineCommandStore.getState().redo();
+      expect(useProjectStore.getState().currentProject?.metadata).toMatchObject({
+        width: 1280,
+        height: 720,
+      });
+
+      await Promise.resolve();
+      expect(indexedDbMocks.updateProject).toHaveBeenCalledWith(
+        'project-1',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            width: 1280,
+            height: 720,
+          }),
+        })
+      );
     });
   });
 

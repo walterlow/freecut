@@ -86,6 +86,10 @@ vi.mock('./clear-keyframes-dialog', () => ({
   ClearKeyframesDialog: () => null,
 }));
 
+vi.mock('./project-media-match-dialog', () => ({
+  ProjectMediaMatchDialog: () => null,
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
