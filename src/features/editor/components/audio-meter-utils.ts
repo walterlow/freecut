@@ -18,7 +18,8 @@ import {
   type VideoAudioSegment,
 } from '@/features/editor/deps/composition-runtime';
 
-const AUDIO_METER_MAX_DEPTH = 1;
+// Safety guard against corrupted circular composition graphs while allowing deep nesting.
+const AUDIO_METER_MAX_DEPTH = 16;
 const AUDIO_METER_MIN_DB = -54;
 const AUDIO_METER_MAX_DB = 6;
 const DEFAULT_WINDOW_SECONDS = 1 / 24;

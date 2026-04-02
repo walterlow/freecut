@@ -5,6 +5,7 @@ import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-sto
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { createLogger } from '@/shared/logging/logger';
 import type { SubComposition } from '../../stores/compositions-store';
+import { useCompositionsStore } from '../../stores/compositions-store';
 import { waveformCache, type CachedWaveform } from '../../services/waveform-cache';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 import { getCompositionOwnedAudioSources } from '../../utils/composition-clip-summary';
@@ -37,6 +38,7 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
   const mediaById = useMediaLibraryStore((s) => s.mediaById);
+  const compositionById = useCompositionsStore((s) => s.compositionById);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -61,12 +63,11 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
 
   const mediaFpsById = useMemo<Record<string, number | undefined>>(() => {
     const byId: Record<string, number | undefined> = {};
-    for (const item of composition.items) {
-      if (!item.mediaId || byId[item.mediaId] !== undefined) continue;
-      byId[item.mediaId] = mediaById[item.mediaId]?.fps;
+    for (const [mediaId, media] of Object.entries(mediaById)) {
+      byId[mediaId] = media?.fps;
     }
     return byId;
-  }, [composition.items, mediaById]);
+  }, [mediaById]);
 
   const ownedAudioSources = useMemo(
     () => getCompositionOwnedAudioSources({
@@ -74,8 +75,9 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
       tracks: composition.tracks,
       fps: composition.fps,
       mediaFpsById,
+      compositionById,
     }),
-    [composition.fps, composition.items, composition.tracks, mediaFpsById]
+    [composition.fps, composition.items, composition.tracks, compositionById, mediaFpsById]
   );
   const mediaIds = useMemo(
     () => Array.from(new Set(ownedAudioSources.map((source) => source.mediaId))).sort(),

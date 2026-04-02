@@ -12,6 +12,8 @@ export interface CompositionBreadcrumb {
   compositionId: string | null;
   /** Display label */
   label: string;
+  /** Wrapper item used to enter this composition, when applicable */
+  entryItemId?: string;
 }
 
 /**
@@ -39,7 +41,7 @@ interface CompositionNavigationState {
 
 interface CompositionNavigationActions {
   /** Enter a sub-composition for editing */
-  enterComposition: (compositionId: string, label: string) => void;
+  enterComposition: (compositionId: string, label: string, entryItemId?: string) => void;
   /** Exit the current sub-composition (go up one level) */
   exitComposition: () => void;
   /** Navigate directly to a specific breadcrumb level */
@@ -107,7 +109,32 @@ function loadComposition(compositionId: string): boolean {
   return true;
 }
 
-const MAX_DEPTH = 2;
+function findCompositionEntryItem(
+  items: TimelineItem[],
+  compositionId: string,
+  entryItemId?: string,
+): TimelineItem | null {
+  if (entryItemId) {
+    const exactMatch = items.find((item) => (
+      item.id === entryItemId
+      && item.compositionId === compositionId
+      && (item.type === 'composition' || item.type === 'audio')
+    ));
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  const visualMatch = items.find((item) => item.type === 'composition' && item.compositionId === compositionId);
+  if (visualMatch) {
+    return visualMatch;
+  }
+
+  return items.find((item) => item.type === 'audio' && item.compositionId === compositionId) ?? null;
+}
+
+// Safety guard against corrupted circular data while still allowing deeply nested clips.
+const MAX_DEPTH = 16;
 
 export const useCompositionNavigationStore = create<
   CompositionNavigationState & CompositionNavigationActions
@@ -116,7 +143,7 @@ export const useCompositionNavigationStore = create<
   activeCompositionId: null,
   stashStack: [],
 
-  enterComposition: (compositionId, label) => {
+  enterComposition: (compositionId, label, entryItemId) => {
     // Pause playback before switching timeline context
     usePlaybackStore.getState().pause();
 
@@ -145,9 +172,7 @@ export const useCompositionNavigationStore = create<
     // Map the global playhead to a local frame within the sub-composition.
     // Find a composition item on the current timeline that references this compositionId.
     const globalFrame = usePlaybackStore.getState().currentFrame;
-    const compItem = stash.items.find(
-      (i) => i.type === 'composition' && (i as { compositionId?: string }).compositionId === compositionId
-    );
+    const compItem = findCompositionEntryItem(stash.items, compositionId, entryItemId);
     let localFrame = 0;
     if (compItem) {
       const relativeFrame = globalFrame - compItem.from;
@@ -158,7 +183,7 @@ export const useCompositionNavigationStore = create<
     usePlaybackStore.getState().setCurrentFrame(localFrame);
 
     set({
-      breadcrumbs: [...state.breadcrumbs, { compositionId, label }],
+      breadcrumbs: [...state.breadcrumbs, { compositionId, label, ...(compItem?.id && { entryItemId: compItem.id }) }],
       activeCompositionId: compositionId,
       stashStack: [...state.stashStack, stash],
     });

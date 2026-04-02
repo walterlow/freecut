@@ -34,8 +34,8 @@ export interface MaskInfo {
   trackOrder: number;
 }
 
-/** Max nesting depth for composition rendering to prevent infinite recursion */
-const MAX_RENDER_DEPTH = 2;
+/** Safety guard against corrupted circular composition graphs. */
+const MAX_RENDER_DEPTH = 16;
 
 interface ItemProps {
   item: TimelineItem;

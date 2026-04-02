@@ -38,8 +38,11 @@ import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
 import { useFilteredMediaItems, useMediaLibraryStore } from '../stores/media-library-store';
 import {
+  deleteCompoundClips,
+  getCompoundClipDeletionImpact,
+  getMediaDeletionImpact,
+  removeProjectItems,
   useCompositionsStore,
-  useTimelineStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores';
 import { useProjectStore } from '@/features/media-library/deps/projects';
@@ -86,10 +89,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [mediaOpen, setMediaOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Timeline store selectors - don't subscribe to items to avoid re-renders
-  // Read items from store directly when needed (in delete handler)
-  const removeTimelineItems = useTimelineStore((s) => s.removeItems);
-
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
@@ -126,7 +125,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
   const filteredMediaItems = useFilteredMediaItems();
   const compositions = useCompositionsStore((s) => s.compositions);
-  const removeComposition = useCompositionsStore((s) => s.removeComposition);
 
   // Composition navigation â€” show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
@@ -433,21 +431,22 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       parts.push(`${pendingDeletion.mediaIds.length} media item${pendingDeletion.mediaIds.length === 1 ? '' : 's'}`);
     }
     if (pendingDeletion.compositionIds.length > 0) {
-      parts.push(`${pendingDeletion.compositionIds.length} composition${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
+      parts.push(`${pendingDeletion.compositionIds.length} compound clip${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
     }
     return parts.join(' and ');
   }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length]);
 
-  // Read from stores directly to avoid subscribing to timeline items array
-  const affectedTimelineItems = useMemo(() => {
-    if (deleteAssetCount === 0) return [];
-    const timelineItems = useTimelineStore.getState().items;
-    return timelineItems.filter(
-      (item) =>
-        (item.mediaId && pendingDeletion.mediaIds.includes(item.mediaId))
-        || (item.type === 'composition' && item.compositionId && pendingDeletion.compositionIds.includes(item.compositionId))
-    );
-  }, [deleteAssetCount, pendingDeletion]);
+  const affectedMediaImpact = useMemo(() => (
+    pendingDeletion.mediaIds.length > 0
+      ? getMediaDeletionImpact(pendingDeletion.mediaIds)
+      : { itemIds: [], rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 }
+  ), [pendingDeletion.mediaIds]);
+  const compoundClipDeleteImpact = useMemo(() => (
+    pendingDeletion.compositionIds.length > 0
+      ? getCompoundClipDeletionImpact(pendingDeletion.compositionIds)
+      : { rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 }
+  ), [pendingDeletion.compositionIds]);
+  const affectedAssetInstanceCount = affectedMediaImpact.totalReferenceCount + compoundClipDeleteImpact.totalReferenceCount;
 
   const handleDeleteSelected = () => {
     if (selectedAssetCount === 0) return;
@@ -463,17 +462,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     setShowDeleteDialog(false);
     try {
       // First remove timeline items that reference selected library assets
-      if (affectedTimelineItems.length > 0) {
-        const timelineItemIds = affectedTimelineItems.map((item) => item.id);
-        removeTimelineItems(timelineItemIds);
+      if (affectedMediaImpact.itemIds.length > 0) {
+        removeProjectItems(affectedMediaImpact.itemIds);
       }
 
       if (pendingDeletion.mediaIds.length > 0) {
         await deleteMediaBatch(pendingDeletion.mediaIds);
       }
 
-      for (const compositionId of pendingDeletion.compositionIds) {
-        removeComposition(compositionId);
+      if (pendingDeletion.compositionIds.length > 0) {
+        deleteCompoundClips(pendingDeletion.compositionIds);
       }
 
       clearSelection();
@@ -934,13 +932,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   Are you sure you want to delete {deleteSummary || `${deleteAssetCount} selected asset${deleteAssetCount === 1 ? '' : 's'}`}?
                   This action cannot be undone.
                 </p>
-                {affectedTimelineItems.length > 0 && (
+                {affectedAssetInstanceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">Timeline clips will be removed</p>
+                      <p className="font-medium">Linked instances will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedTimelineItems.length} clip{affectedTimelineItems.length > 1 ? 's' : ''} in the timeline reference{affectedTimelineItems.length === 1 ? 's' : ''} these assets and will also be deleted.
+                        {affectedAssetInstanceCount} clip{affectedAssetInstanceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference these assets and will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -951,7 +949,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}{affectedTimelineItems.length > 0 ? ` & ${affectedTimelineItems.length} clip${affectedTimelineItems.length > 1 ? 's' : ''}` : ''}
+              Delete {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}{affectedAssetInstanceCount > 0 ? ` & ${affectedAssetInstanceCount} clip${affectedAssetInstanceCount > 1 ? 's' : ''}` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

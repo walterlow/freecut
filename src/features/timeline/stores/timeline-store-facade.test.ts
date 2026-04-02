@@ -30,7 +30,7 @@ const mediaResolverMocks = vi.hoisted(() => ({
 }));
 
 const mediaValidationMocks = vi.hoisted(() => ({
-  validateMediaReferences: vi.fn(),
+  validateProjectMediaReferences: vi.fn(),
 }));
 
 const mediaLibraryMocks = vi.hoisted(() => ({
@@ -96,7 +96,13 @@ describe('TimelineStoreFacade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     playbackMocks.currentFrame = 0;
+    playbackMocks.setCurrentFrame.mockImplementation((frame: number) => {
+      playbackMocks.currentFrame = frame;
+    });
     zoomMocks.level = 1;
+    zoomMocks.setZoomLevel.mockImplementation((level: number) => {
+      zoomMocks.level = level;
+    });
     // Reset all domain stores
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
@@ -545,6 +551,201 @@ describe('TimelineStoreFacade', () => {
         })
       );
     });
+
+    it('restores the full nested composition path after saving', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30, width: 1920, height: 1080 },
+        timeline: {
+          tracks: [],
+          items: [],
+          currentFrame: 0,
+          zoomLevel: 1,
+          scrollPosition: 0,
+          keyframes: [],
+          transitions: [],
+          markers: [],
+        },
+      });
+
+      useCompositionsStore.getState().setCompositions([
+        {
+          id: 'comp-a',
+          name: 'Comp A',
+          tracks: [{
+            id: 'track-a',
+            name: 'V1',
+            kind: 'video',
+            order: 0,
+            height: 80,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+            items: [],
+          }],
+          items: [{
+            id: 'item-a',
+            type: 'composition',
+            compositionId: 'comp-b',
+            trackId: 'track-a',
+            from: 0,
+            durationInFrames: 40,
+            label: 'Comp B',
+            compositionWidth: 1920,
+            compositionHeight: 1080,
+          }],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 40,
+        },
+        {
+          id: 'comp-b',
+          name: 'Comp B',
+          tracks: [],
+          items: [],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 40,
+        },
+      ]);
+
+      useCompositionNavigationStore.getState().enterComposition('comp-a', 'Comp A');
+      useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B');
+
+      await useTimelineStore.getState().saveTimeline('project-1');
+
+      const navState = useCompositionNavigationStore.getState();
+      expect(navState.breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
+        'Main Timeline',
+        'Comp A',
+        'Comp B',
+      ]);
+      expect(navState.activeCompositionId).toBe('comp-b');
+    });
+
+    it('restores the exact nested entry instance after saving', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30, width: 1920, height: 1080 },
+        timeline: {
+          tracks: [],
+          items: [],
+          currentFrame: 0,
+          zoomLevel: 1,
+          scrollPosition: 0,
+          keyframes: [],
+          transitions: [],
+          markers: [],
+        },
+      });
+
+      useItemsStore.getState().setTracks([{
+        id: 'root-track',
+        name: 'V1',
+        kind: 'video',
+        order: 0,
+        height: 80,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        items: [],
+      }]);
+      useItemsStore.getState().setItems([{
+        id: 'root-comp-a',
+        type: 'composition',
+        compositionId: 'comp-a',
+        trackId: 'root-track',
+        from: 50,
+        durationInFrames: 200,
+        label: 'Comp A',
+        compositionWidth: 1920,
+        compositionHeight: 1080,
+      }]);
+
+      useCompositionsStore.getState().setCompositions([
+        {
+          id: 'comp-a',
+          name: 'Comp A',
+          tracks: [{
+            id: 'track-a',
+            name: 'V1',
+            kind: 'video',
+            order: 0,
+            height: 80,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+            items: [],
+          }],
+          items: [
+            {
+              id: 'item-b-first',
+              type: 'composition',
+              compositionId: 'comp-b',
+              trackId: 'track-a',
+              from: 0,
+              durationInFrames: 40,
+              label: 'Comp B',
+              compositionWidth: 1920,
+              compositionHeight: 1080,
+            },
+            {
+              id: 'item-b-second',
+              type: 'composition',
+              compositionId: 'comp-b',
+              trackId: 'track-a',
+              from: 100,
+              durationInFrames: 40,
+              label: 'Comp B',
+              compositionWidth: 1920,
+              compositionHeight: 1080,
+            },
+          ],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 140,
+        },
+        {
+          id: 'comp-b',
+          name: 'Comp B',
+          tracks: [],
+          items: [],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 40,
+        },
+      ]);
+
+      playbackMocks.currentFrame = 160;
+      useCompositionNavigationStore.getState().enterComposition('comp-a', 'Comp A', 'root-comp-a');
+      useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B', 'item-b-second');
+
+      expect(playbackMocks.currentFrame).toBe(10);
+
+      await useTimelineStore.getState().saveTimeline('project-1');
+
+      expect(playbackMocks.currentFrame).toBe(10);
+      expect(useCompositionNavigationStore.getState().breadcrumbs).toMatchObject([
+        { compositionId: null, label: 'Main Timeline' },
+        { compositionId: 'comp-a', label: 'Comp A', entryItemId: 'root-comp-a' },
+        { compositionId: 'comp-b', label: 'Comp B', entryItemId: 'item-b-second' },
+      ]);
+    });
   });
 
   describe('loadTimeline', () => {
@@ -567,7 +768,7 @@ describe('TimelineStoreFacade', () => {
         metadata: { fps: 30 },
         timeline: null,
       });
-      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([]);
 
       await useTimelineStore.getState().loadTimeline('project-1');
 
@@ -594,7 +795,7 @@ describe('TimelineStoreFacade', () => {
           markers: [],
         },
       });
-      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([]);
 
       await useTimelineStore.getState().loadTimeline('project-1');
 
@@ -620,7 +821,7 @@ describe('TimelineStoreFacade', () => {
         metadata: { fps: 30 },
         timeline: null,
       });
-      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([]);
 
       await useTimelineStore.getState().loadTimeline('project-1');
 
@@ -679,7 +880,7 @@ describe('TimelineStoreFacade', () => {
           }],
         },
       });
-      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([]);
 
       await useTimelineStore.getState().loadTimeline('project-1');
 
@@ -809,7 +1010,7 @@ describe('TimelineStoreFacade', () => {
           }],
         },
       });
-      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+      mediaValidationMocks.validateProjectMediaReferences.mockResolvedValue([]);
 
       await useTimelineStore.getState().loadTimeline('project-1');
 

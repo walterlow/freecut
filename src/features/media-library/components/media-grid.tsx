@@ -5,7 +5,10 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('MediaGrid');
 import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
-import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
+import {
+  getMediaDeletionImpact,
+  removeProjectItems,
+} from '@/features/media-library/deps/timeline-stores';
 import { useEditorStore } from '@/shared/state/editor';
 import {
   AlertDialog,
@@ -44,16 +47,11 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const setSourcePreviewMediaId = useEditorStore((s) => s.setSourcePreviewMediaId);
 
-  // Timeline store for checking references - don't subscribe to items to avoid re-renders
-  const removeTimelineItems = useTimelineStore((s) => s.removeItems);
-
-  // Find timeline items that reference the media being deleted
-  // Read from store directly to avoid subscribing to items array
-  const affectedTimelineItems = useMemo(() => {
-    if (!mediaIdToDelete) return [];
-    const timelineItems = useTimelineStore.getState().items;
-    return timelineItems.filter((item) => item.mediaId === mediaIdToDelete);
-  }, [mediaIdToDelete]);
+  const affectedMediaImpact = useMemo(() => (
+    mediaIdToDelete
+      ? getMediaDeletionImpact([mediaIdToDelete])
+      : { itemIds: [], rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 }
+  ), [mediaIdToDelete]);
 
   const handleCardSelect = (mediaId: string, event?: React.MouseEvent) => {
     // Shift click: select range from last selected item to this item
@@ -100,9 +98,8 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     setShowDeleteDialog(false);
     try {
       // First remove timeline items that reference this media
-      if (affectedTimelineItems.length > 0) {
-        const timelineItemIds = affectedTimelineItems.map((item) => item.id);
-        removeTimelineItems(timelineItemIds);
+      if (affectedMediaImpact.itemIds.length > 0) {
+        removeProjectItems(affectedMediaImpact.itemIds);
       }
 
       // Then delete the media from the library
@@ -233,13 +230,13 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
                   Are you sure you want to delete "{filteredItems.find(m => m.id === mediaIdToDelete)?.fileName}"?
                   This action cannot be undone.
                 </p>
-                {affectedTimelineItems.length > 0 && (
+                {affectedMediaImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
                       <p className="font-medium">Timeline clips will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedTimelineItems.length} clip{affectedTimelineItems.length > 1 ? 's' : ''} in the timeline use{affectedTimelineItems.length === 1 ? 's' : ''} this media and will also be deleted.
+                        {affectedMediaImpact.totalReferenceCount} clip{affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference this media and will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -250,7 +247,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleCancelDelete}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete{affectedTimelineItems.length > 0 ? ` & ${affectedTimelineItems.length} clip${affectedTimelineItems.length > 1 ? 's' : ''}` : ''}
+              Delete{affectedMediaImpact.totalReferenceCount > 0 ? ` & ${affectedMediaImpact.totalReferenceCount} clip${affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''}` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

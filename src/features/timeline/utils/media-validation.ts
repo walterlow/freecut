@@ -47,6 +47,27 @@ export async function validateMediaReferences(
   return orphans;
 }
 
+export async function validateProjectMediaReferences(params: {
+  rootItems: TimelineItem[];
+  compositions: Array<{ items: TimelineItem[] }>;
+  projectId: string;
+}): Promise<OrphanedClipInfo[]> {
+  const allItems = [
+    ...params.rootItems,
+    ...params.compositions.flatMap((composition) => composition.items),
+  ];
+
+  if (allItems.length === 0) {
+    return [];
+  }
+
+  const dedupedItems = Array.from(
+    new Map(allItems.map((item) => [item.id, item])).values()
+  );
+
+  return validateMediaReferences(dedupedItems, params.projectId);
+}
+
 /**
  * Find matching media item by filename (case-insensitive).
  * Used for auto-relinking orphaned clips to existing media in the library.

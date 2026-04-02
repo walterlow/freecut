@@ -10,4 +10,5 @@ export {
   timelineToSourceFrames,
   sourceToTimelineFrames,
 } from '@/features/timeline/utils/source-calculations';
+export { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/timeline/utils/composition-graph';
 export { gifFrameCache, type CachedGifFrames } from '@/features/timeline/services/gif-frame-cache';

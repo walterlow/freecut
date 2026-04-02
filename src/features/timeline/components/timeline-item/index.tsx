@@ -1168,7 +1168,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     // Compound clip wrappers: enter the sub-composition
     if ((item.type === 'composition' || (item.type === 'audio' && item.compositionId)) && item.compositionId) {
-      useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label);
+      useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
       return;
     }
 
@@ -1602,7 +1602,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Composition operations
   const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
   const isVisualFadeItem = supportsVisualFadeControls(item);
-  const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
   const [videoFadeEdit, setVideoFadeEdit] = useState<{
     handle: AudioFadeHandle;
     previewFadeIn: number;
@@ -2417,7 +2416,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   const handleEnterComposition = useCallback(() => {
     if (!isCompositionItem || !item.compositionId) return;
-    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label);
+    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
   }, [isCompositionItem, item]);
 
   const handleDissolveComposition = useCallback(() => {
@@ -2783,7 +2782,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
-        canCreatePreComp={isSelected && !isInsideSubComp}
+        canCreatePreComp={isSelected}
         onCreatePreComp={handleCreatePreComp}
       >
         <div

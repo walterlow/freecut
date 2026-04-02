@@ -6,7 +6,9 @@ import type { VisualEffect, ItemEffect } from '@/types/effects';
 import { clampTrimAmount, clampToAdjacentItems, calculateTrimSourceUpdate } from '../utils/trim-utils';
 import { getSourceProperties, isMediaItem, calculateSplitSourceBoundaries, timelineToSourceFrames, calculateSpeed, clampSpeed } from '../utils/source-calculations';
 import { getLinkedItems } from '../utils/linked-items';
+import { isCompositionWrapperItem, wouldCreateCompositionCycle } from '../utils/composition-graph';
 import { useCompositionNavigationStore } from './composition-navigation-store';
+import { useCompositionsStore } from './compositions-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTransitionsStore } from './transitions-store';
 import { clampAudioFadeCurve, clampAudioFadeCurveX } from '@/shared/utils/audio-fade-curve';
@@ -417,15 +419,25 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       const state = get();
       const itemsMap = new Map(state.items.map((i) => [i.id, i]));
       const newItems: TimelineItem[] = [];
-      const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+      const compositionById = useCompositionsStore.getState().compositionById;
       const linkedGroupMap = new Map<string, string>();
 
       for (let i = 0; i < itemIds.length; i++) {
         const original = itemsMap.get(itemIds[i]!);
         const position = positions[i]!;
         if (!original || !position) continue;
-        // Skip composition items when inside a sub-composition (1-level nesting limit)
-        if (isInsideSubComp && original.type === 'composition') continue;
+        if (
+          activeCompositionId !== null
+          && isCompositionWrapperItem(original)
+          && wouldCreateCompositionCycle({
+            parentCompositionId: activeCompositionId,
+            insertedCompositionId: original.compositionId,
+            compositionById,
+          })
+        ) {
+          continue;
+        }
 
         const duplicate = {
           ...original,

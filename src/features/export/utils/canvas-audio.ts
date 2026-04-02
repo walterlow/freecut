@@ -15,6 +15,7 @@ import {
   timelineToSourceFrames,
   sourceToTimelineFrames,
   useCompositionsStore,
+  collectReachableCompositionIdsFromTracks,
 } from '@/features/export/deps/timeline';
 import {
   getPropertyKeyframes,
@@ -511,8 +512,10 @@ function appendCompositionAudioSegments(params: {
     durationInFrames: number;
   };
   fps: number;
+  visited?: Set<string>;
 }): void {
   const { segments, track, compositionItem, subComp, fps } = params;
+  const visited = params.visited ?? new Set<string>();
   const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
   const compFrom = compositionItem.from;
   const wrapperSpeed = compositionItem.speed ?? 1;
@@ -523,17 +526,8 @@ function appendCompositionAudioSegments(params: {
   const trackMuted = track.muted ?? false;
 
   for (const subItem of subComp.items) {
-    if (subItem.type !== 'video' && subItem.type !== 'audio') continue;
-    if (subItem.type === 'video' && linkedSubCompVideoIds.has(subItem.id)) continue;
-
     const subTrack = subComp.tracks.find((candidate) => candidate.id === subItem.trackId);
     const subTrackMuted = subTrack?.muted ?? false;
-    const src = (subItem.mediaId ? blobUrlManager.get(subItem.mediaId) : null)
-      ?? (subItem as VideoItem | AudioItem).src ?? '';
-    if (!src) continue;
-
-    const subItemKeyframes = subComp.keyframes?.find((keyframe) => keyframe.itemId === subItem.id);
-    const subVolumeKfs = getPropertyKeyframes(subItemKeyframes, 'volume');
     const overlapStart = Math.max(subItem.from, sourceOffset);
     const overlapEnd = Math.min(subItem.from + subItem.durationInFrames, wrapperSourceEnd);
     if (overlapEnd <= overlapStart) continue;
@@ -552,6 +546,60 @@ function appendCompositionAudioSegments(params: {
       wrapperSourceFps,
       subItem.sourceFps ?? wrapperSourceFps,
     );
+
+    if (subItem.type === 'composition' || isCompositionAudioItem(subItem)) {
+      if (subItem.type === 'composition' && getLinkedCompositionAudioCompanion(subComp.items, subItem)) continue;
+      if (visited.has(subItem.compositionId)) continue;
+
+      const nestedSubComp = useCompositionsStore.getState().getComposition(subItem.compositionId);
+      if (!nestedSubComp) continue;
+
+      const nestedWrapper = {
+        ...subItem,
+        from: effectiveStart,
+        durationInFrames: effectiveDuration,
+        speed: (subItem.speed ?? 1) * wrapperSpeed,
+        sourceStart: effectiveSourceStart,
+        sourceFps: subItem.sourceFps ?? wrapperSourceFps,
+        ...(subItem.sourceEnd !== undefined && {
+          sourceEnd: Math.max(
+            effectiveSourceStart + 1,
+            subItem.sourceEnd - timelineToSourceFrames(
+              (subItem.from + subItem.durationInFrames) - overlapEnd,
+              subItem.speed ?? 1,
+              wrapperSourceFps,
+              subItem.sourceFps ?? wrapperSourceFps,
+            ),
+          ),
+        }),
+      } as CompositionItem | (AudioItem & { compositionId: string });
+
+      // Volumes are dB offsets — sum them so nested levels accumulate correctly.
+      const nestedVisited = new Set(visited);
+      nestedVisited.add(subItem.compositionId);
+      appendCompositionAudioSegments({
+        segments,
+        track: {
+          ...track,
+          muted: trackMuted || subTrackMuted,
+          volume: (track.volume ?? 0) + (subTrack?.volume ?? 0),
+        },
+        compositionItem: nestedWrapper,
+        subComp: nestedSubComp,
+        fps,
+        visited: nestedVisited,
+      });
+      continue;
+    }
+
+    if (subItem.type !== 'video' && subItem.type !== 'audio') continue;
+    if (subItem.type === 'video' && linkedSubCompVideoIds.has(subItem.id)) continue;
+    const src = (subItem.mediaId ? blobUrlManager.get(subItem.mediaId) : null)
+      ?? (subItem as VideoItem | AudioItem).src ?? '';
+    if (!src) continue;
+
+    const subItemKeyframes = subComp.keyframes?.find((keyframe) => keyframe.itemId === subItem.id);
+    const subVolumeKfs = getPropertyKeyframes(subItemKeyframes, 'volume');
 
     const rawFadeInFrames = sourceToTimelineFrames((subItem.audioFadeIn ?? 0) * wrapperSourceFps, wrapperSpeed, wrapperSourceFps, fps);
     const rawFadeOutFrames = sourceToTimelineFrames((subItem.audioFadeOut ?? 0) * wrapperSourceFps, wrapperSpeed, wrapperSourceFps, fps);
@@ -1420,17 +1468,15 @@ function mixAudioTracks(
 async function resolveSubCompMediaUrls(composition: CompositionInputProps): Promise<void> {
   const tracks = composition.tracks ?? [];
   const urlResolutions: Promise<void>[] = [];
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (item.type !== 'composition' && !isCompositionAudioItem(item)) continue;
-      const compItem = item as CompositionItem | (AudioItem & { compositionId: string });
-      const subComp = useCompositionsStore.getState().getComposition(compItem.compositionId);
-      if (!subComp) continue;
-      for (const subItem of subComp.items) {
-        if (subItem.type !== 'video' && subItem.type !== 'audio') continue;
-        if (subItem.mediaId && !blobUrlManager.get(subItem.mediaId)) {
-          urlResolutions.push(resolveMediaUrl(subItem.mediaId).then(() => {}));
-        }
+  const compositionById = useCompositionsStore.getState().compositionById;
+  const reachableCompositionIds = collectReachableCompositionIdsFromTracks(tracks, compositionById);
+  for (const compositionId of reachableCompositionIds) {
+    const subComp = compositionById[compositionId];
+    if (!subComp) continue;
+    for (const subItem of subComp.items) {
+      if (subItem.type !== 'video' && subItem.type !== 'audio') continue;
+      if (subItem.mediaId && !blobUrlManager.get(subItem.mediaId)) {
+        urlResolutions.push(resolveMediaUrl(subItem.mediaId).then(() => {}));
       }
     }
   }

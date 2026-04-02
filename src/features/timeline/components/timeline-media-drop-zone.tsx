@@ -1,10 +1,11 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { TimelineItem as TimelineItemType, CompositionItem } from '@/types/timeline';
+import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import { createLogger } from '@/shared/logging/logger';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useCompositionsStore } from '../stores/compositions-store';
 import { useNewTrackZonePreviewStore, type NewTrackZoneGhostPreview } from '../stores/new-track-zone-preview-store';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
@@ -19,6 +20,7 @@ import {
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
+import { wouldCreateCompositionCycle } from '../utils/composition-graph';
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
@@ -29,6 +31,10 @@ import {
   getDroppedMediaDurationInFrames,
   type DroppableMediaType,
 } from '../utils/dropped-media';
+import {
+  buildDroppedCompositionTimelineItems,
+  compositionHasOwnedAudio,
+} from '../utils/dropped-composition';
 import {
   buildGhostPreviewsFromNewTrackZonePlan,
   planNewTrackZonePlacements,
@@ -493,26 +499,58 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     if (data.type === 'composition') {
-      const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-      if (isInsideSubComp || zone !== 'video') {
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+      if (
+        zone !== 'video'
+        || wouldCreateCompositionCycle({
+          parentCompositionId: activeCompositionId,
+          insertedCompositionId: data.compositionId,
+          compositionById: useCompositionsStore.getState().compositionById,
+        })
+      ) {
         e.dataTransfer.dropEffect = 'none';
+        setIsDragOver(false);
         clearZoneGhostPreviews();
         return;
       }
 
-      const previews = buildGhostPreviewsForEntries([
-        {
+      const compositionById = useCompositionsStore.getState().compositionById;
+      const composition = compositionById[data.compositionId];
+      if (!composition) {
+        e.dataTransfer.dropEffect = 'none';
+        setIsDragOver(false);
+        clearZoneGhostPreviews();
+        return;
+      }
+
+      const currentTracks = useTimelineStore.getState().tracks;
+      const preferredTrackHeight = currentTracks.find((candidate) => candidate.id === anchorTrackId)?.height ?? 64;
+      const { plannedItems } = planNewTrackZonePlacements({
+        entries: [{
+          payload: data,
           label: data.name,
-          mediaType: 'image',
-          duration: data.durationInFrames / fps,
-        },
-      ], dropFrame).map((preview) => ({
-        ...preview,
-        label: data.name,
-        width: frameToPixels(data.durationInFrames),
-        type: 'composition' as const,
-        targetZone: 'video' as const,
-      }));
+          mediaType: 'video',
+          durationInFrames: data.durationInFrames,
+          hasLinkedAudio: compositionHasOwnedAudio({ composition, compositionById }),
+        }],
+        dropFrame,
+        tracks: currentTracks,
+        existingItems: useTimelineStore.getState().items,
+        anchorTrackId,
+        zone,
+        preferredTrackHeight,
+      });
+      const plannedItem = plannedItems[0];
+      const previews = plannedItem
+        ? buildGhostPreviewsFromNewTrackZonePlan({
+          plannedItems: [plannedItem],
+          frameToPixels,
+        }).map((preview) => ({
+          ...preview,
+          label: data.name,
+          type: preview.type === 'video' ? 'composition' as const : preview.type,
+        }))
+        : [];
       if (previews.length === 0) {
         e.dataTransfer.dropEffect = 'none';
         setIsDragOver(false);
@@ -629,55 +667,65 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         const data = JSON.parse(rawJson);
 
         if (data.type === 'composition') {
-          const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-          if (isInsideSubComp || zone !== 'video') {
+          const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+          if (
+            zone !== 'video'
+            || wouldCreateCompositionCycle({
+              parentCompositionId: activeCompositionId,
+              insertedCompositionId: data.compositionId,
+              compositionById: useCompositionsStore.getState().compositionById,
+            })
+          ) {
             return;
           }
 
-          const { compositionId, name, durationInFrames, width, height } = data as CompositionDragData;
+          const { compositionId, name, durationInFrames } = data as CompositionDragData;
           const currentTracks = useTimelineStore.getState().tracks;
-          const createdTrack = ensureVideoZoneTrack(currentTracks);
-          if (!createdTrack) {
+          const preferredTrackHeight = currentTracks.find((track) => track.id === anchorTrackId)?.height ?? 64;
+          const compositionById = useCompositionsStore.getState().compositionById;
+          const composition = compositionById[compositionId];
+          if (!composition) {
+            logger.warn('Cannot drop composition into new track zone: compound clip definition not found');
             return;
           }
 
-          const proposedPosition = Math.max(0, dropFrame);
-          const storeItems = useTimelineStore.getState().items;
-          const finalPosition = findNearestAvailableSpace(
-            proposedPosition,
-            durationInFrames,
-            createdTrack.trackId,
-            storeItems,
-          );
-
-          if (finalPosition === null) {
+          const { plannedItems, tracks: nextTracks } = planNewTrackZonePlacements({
+            entries: [{
+              payload: data,
+              label: name,
+              mediaType: 'video',
+              durationInFrames,
+              hasLinkedAudio: compositionHasOwnedAudio({ composition, compositionById }),
+            }],
+            dropFrame,
+            tracks: currentTracks,
+            existingItems: useTimelineStore.getState().items,
+            anchorTrackId,
+            zone,
+            preferredTrackHeight,
+          });
+          const plannedItem = plannedItems[0];
+          if (!plannedItem) {
             logger.warn('Cannot drop composition into new track zone: no available space');
             return;
           }
 
-          if (createdTrack.tracks !== currentTracks) {
-            useTimelineStore.getState().setTracks(createdTrack.tracks);
+          if (nextTracks !== currentTracks) {
+            useTimelineStore.getState().setTracks(nextTracks);
           }
 
-          const compositionItem: CompositionItem = {
-            id: crypto.randomUUID(),
-            type: 'composition',
-            trackId: createdTrack.trackId,
-            from: finalPosition,
-            durationInFrames,
-            label: name,
+          const droppedItems = buildDroppedCompositionTimelineItems({
             compositionId,
-            compositionWidth: width,
-            compositionHeight: height,
-            transform: {
-              x: 0,
-              y: 0,
-              rotation: 0,
-              opacity: 1,
-            },
-          };
+            composition,
+            label: name,
+            placements: plannedItem.placements,
+          });
+          if (droppedItems.length === 0) {
+            logger.warn('Cannot drop composition into new track zone: failed to build compound clip wrappers');
+            return;
+          }
 
-          addItem(compositionItem);
+          addItems(droppedItems);
           return;
         }
 

@@ -287,6 +287,74 @@ describe('audio meter utils', () => {
     expect(levels.get('track-empty')?.left ?? 0).toBe(0);
   });
 
+  it('resolves audio through deeply nested compound clips in compiled graphs', () => {
+    const rootWrapper = makeAudioItem({
+      id: 'comp-audio-root',
+      trackId: 'track-root',
+      compositionId: 'composition-1',
+      mediaId: undefined,
+      src: '',
+    });
+    const childWrapper = makeAudioItem({
+      id: 'comp-audio-child',
+      trackId: 'track-child',
+      compositionId: 'composition-2',
+      mediaId: undefined,
+      src: '',
+    });
+    const grandchildWrapper = makeAudioItem({
+      id: 'comp-audio-grandchild',
+      trackId: 'track-grandchild',
+      compositionId: 'composition-3',
+      mediaId: undefined,
+      src: '',
+    });
+    const deepestAudio = makeAudioItem({
+      id: 'deep-audio',
+      trackId: 'track-deep',
+      mediaId: 'deep-media',
+      src: 'blob:deep',
+    });
+
+    const graph = compileAudioMeterGraph({
+      tracks: [makeTrack({ id: 'track-root', items: [rootWrapper] })],
+      transitions: [],
+      fps: 30,
+      compositionsById: {
+        'composition-1': {
+          id: 'composition-1',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ id: 'track-child', items: [childWrapper] })],
+        },
+        'composition-2': {
+          id: 'composition-2',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ id: 'track-grandchild', items: [grandchildWrapper] })],
+        },
+        'composition-3': {
+          id: 'composition-3',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ id: 'track-deep', items: [deepestAudio] })],
+        },
+      },
+    });
+
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    });
+
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({
+      mediaId: 'deep-media',
+      trackId: 'track-root',
+    });
+  });
+
   it('estimates a mixed level from cached waveform peaks', () => {
     const estimate = estimateAudioMeterLevel({
       sources: [{

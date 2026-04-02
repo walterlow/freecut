@@ -15,6 +15,8 @@ import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
 import { formatSignedFrameDelta } from '@/utils/time-utils';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 
+const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
+
 interface ClipContentProps {
   item: TimelineItem;
   clipWidth: number;
@@ -60,6 +62,9 @@ export const ClipContent = memo(function ClipContent({
   const composition = useCompositionsStore(
     useCallback((s) => (compositionId ? s.compositionById[compositionId] ?? null : null), [compositionId])
   );
+  const compositionById = useCompositionsStore(
+    useCallback((s) => (compositionId ? s.compositionById : EMPTY_COMPOSITION_LOOKUP), [compositionId])
+  );
   const hasCompositionAudioCompanion = useItemsStore(
     useCallback(
       (s) => item.type === 'composition' && hasLinkedAudioCompanion(s.items, item),
@@ -73,6 +78,7 @@ export const ClipContent = memo(function ClipContent({
         audioMediaId: null,
         hasOwnedAudio: false,
         hasMultipleOwnedAudioSources: false,
+        visualSource: null,
       };
     }
 
@@ -80,9 +86,11 @@ export const ClipContent = memo(function ClipContent({
       items: composition.items,
       tracks: composition.tracks,
       fps: composition.fps,
+      compositionById,
       });
-  }, [composition]);
-  const compositionVisualMediaId = compositionSummary.visualMediaId;
+  }, [composition, compositionById]);
+  const compositionVisualSource = compositionSummary.visualSource;
+  const compositionVisualMediaId = compositionVisualSource?.mediaId ?? null;
   const showCompositionWaveform = showWaveforms && compositionSummary.hasOwnedAudio && !hasCompositionAudioCompanion;
   const linkedSyncOffsetLabel = linkedSyncOffsetFrames === null
     ? null
@@ -174,17 +182,18 @@ export const ClipContent = memo(function ClipContent({
   );
   const compositionVisualSourceDuration = compositionVisualMediaDuration > 0
     ? compositionVisualMediaDuration
-    : (compositionSourceDurationFrames / compositionVisualSourceFps);
+    : ((compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames) / compositionVisualSourceFps);
   const compositionVisualSourceStart = compositionVisualMediaDuration > 0
-    ? (compositionSourceStartFrames / compositionSourceDurationFrames) * compositionVisualMediaDuration
-    : (compositionSourceStartFrames / compositionVisualSourceFps);
+    ? ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / Math.max(1, compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames)) * compositionVisualMediaDuration
+    : ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / compositionVisualSourceFps);
+  const compositionVisualSpeed = compositionVisualSource?.speed ?? 1;
   const compoundClipTimelineFps = composition?.fps ?? fps;
   const compoundClipSourceDuration = compositionSourceDurationFrames / compoundClipTimelineFps;
   const compoundClipSourceStart = compositionSourceStartFrames / compoundClipTimelineFps;
 
   const renderCompoundClipLabel = useCallback((label: string) => (
     <div
-      className="flex items-center gap-1.5 px-2 shrink-0"
+      className="flex items-center gap-1.5 px-2 text-[11px] font-medium truncate shrink-0"
       style={{
         height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
         lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
@@ -319,7 +328,7 @@ export const ClipContent = memo(function ClipContent({
                 sourceStart={compositionVisualSourceStart}
                 sourceDuration={compositionVisualSourceDuration}
                 trimStart={0}
-                speed={1}
+                speed={compositionVisualSpeed}
                 fps={fps}
                 isVisible={isClipVisible}
                 visibleStartRatio={visibleStartRatio}
@@ -368,11 +377,8 @@ export const ClipContent = memo(function ClipContent({
       );
     }
     return (
-      <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">Compound Clip</div>
-        <div className="text-xs font-medium truncate flex-1">
-          {item.label || 'Composition'}
-        </div>
+      <div className="absolute inset-0 flex flex-col overflow-hidden">
+        {renderCompoundClipLabel(item.label || 'Compound Clip')}
       </div>
     );
   }

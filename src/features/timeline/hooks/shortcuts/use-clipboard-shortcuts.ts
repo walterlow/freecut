@@ -10,10 +10,12 @@ import { useZoomStore } from '../../stores/zoom-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useClipboardStore } from '@/shared/state/clipboard';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
+import { useCompositionsStore } from '../../stores/compositions-store';
 import { useKeyframeSelectionStore } from '../../stores/keyframe-selection-store';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { Transition } from '@/types/transition';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { isCompositionWrapperItem, wouldCreateCompositionCycle } from '../../utils/composition-graph';
 
 function revealPastedItems(itemIds: readonly string[]): void {
   if (itemIds.length === 0) {
@@ -154,11 +156,18 @@ export function useClipboardShortcuts() {
         const usedTrackIds = new Set<string>();
         const linkedGroupMap = new Map<string, string>();
 
-        // Filter out composition items when pasting inside a sub-composition (1-level nesting limit)
-        const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-        const pasteItems = isInsideSubComp
-          ? itemsClipboard.items.filter((item) => item.type !== 'composition')
-          : itemsClipboard.items;
+        const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+        const compositionById = useCompositionsStore.getState().compositionById;
+        const pasteItems = activeCompositionId === null
+          ? itemsClipboard.items
+          : itemsClipboard.items.filter((item) => (
+            !isCompositionWrapperItem(item)
+            || !wouldCreateCompositionCycle({
+              parentCompositionId: activeCompositionId,
+              insertedCompositionId: item.compositionId,
+              compositionById,
+            })
+          ));
         if (pasteItems.length === 0) return;
 
         const findNextAvailableSpace = (

@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import { summarizeCompositionClipContent } from './composition-clip-summary';
+import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import {
+  getCompositionOwnedAudioSources,
+  summarizeCompositionClipContent,
+} from './composition-clip-summary';
 
-function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'order'>): TimelineTrack {
+function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order'>): TimelineTrack {
   return {
-    name: overrides.id,
+    kind: 'video',
     height: 80,
     locked: false,
     visible: true,
     muted: false,
     solo: false,
-    volume: 0,
     items: [],
     ...overrides,
   };
@@ -20,85 +22,183 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
     id: 'video-1',
     type: 'video',
-    trackId: 'v1',
+    trackId: 'track-v1',
     from: 0,
-    durationInFrames: 90,
+    durationInFrames: 30,
+    label: 'Video',
     src: 'blob:video',
     mediaId: 'media-video',
-    label: 'Video',
+    sourceStart: 0,
+    sourceEnd: 30,
+    sourceDuration: 120,
+    sourceFps: 30,
     ...overrides,
-  } as VideoItem;
+  };
 }
 
 function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
   return {
     id: 'audio-1',
     type: 'audio',
-    trackId: 'a1',
+    trackId: 'track-a1',
     from: 0,
-    durationInFrames: 90,
+    durationInFrames: 30,
+    label: 'Audio',
     src: 'blob:audio',
     mediaId: 'media-audio',
-    label: 'Audio',
+    sourceStart: 0,
+    sourceEnd: 30,
+    sourceDuration: 120,
+    sourceFps: 30,
     ...overrides,
-  } as AudioItem;
+  };
 }
 
-describe('summarizeCompositionClipContent', () => {
-  it('uses top video for visuals and linked audio item for owned audio', () => {
+function makeCompositionItem(overrides: Partial<CompositionItem> = {}): CompositionItem {
+  return {
+    id: 'comp-1',
+    type: 'composition',
+    trackId: 'track-v1',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Compound',
+    compositionId: 'child-comp',
+    compositionWidth: 1920,
+    compositionHeight: 1080,
+    transform: { x: 0, y: 0, rotation: 0, opacity: 1 },
+    sourceStart: 0,
+    sourceEnd: 30,
+    sourceDuration: 30,
+    sourceFps: 30,
+    speed: 1,
+    ...overrides,
+  };
+}
+
+describe('composition-clip-summary', () => {
+  it('finds nested visual media and maps its effective source window', () => {
+    const compositionById = {
+      'child-comp': {
+        id: 'child-comp',
+        name: 'Child',
+        items: [
+          makeVideoItem({
+            id: 'child-video',
+            trackId: 'child-track-v1',
+            from: 5,
+            durationInFrames: 20,
+            mediaId: 'nested-visual',
+            sourceStart: 100,
+            sourceEnd: 120,
+            sourceDuration: 240,
+            sourceFps: 30,
+          }),
+        ],
+        tracks: [makeTrack({ id: 'child-track-v1', name: 'V1', order: 0, kind: 'video' })],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 40,
+      },
+    };
+
     const summary = summarizeCompositionClipContent({
-      tracks: [
-        makeTrack({ id: 'v1', kind: 'video', order: 0 }),
-        makeTrack({ id: 'a1', kind: 'audio', order: 1 }),
-      ],
       items: [
-        makeVideoItem({ id: 'video-1', trackId: 'v1', mediaId: 'media-video', linkedGroupId: 'group-1' }),
-        makeAudioItem({ id: 'audio-1', trackId: 'a1', mediaId: 'media-video', linkedGroupId: 'group-1' }),
+        makeCompositionItem({
+          id: 'parent-wrapper',
+          trackId: 'track-v1',
+          compositionId: 'child-comp',
+          durationInFrames: 5,
+          sourceStart: 5,
+          sourceEnd: 15,
+          sourceDuration: 40,
+          speed: 2,
+        }),
       ],
+      tracks: [makeTrack({ id: 'track-v1', name: 'V1', order: 0, kind: 'video' })],
+      fps: 30,
+      compositionById,
     });
 
-    expect(summary).toEqual({
-      visualMediaId: 'media-video',
-      audioMediaId: 'media-video',
-      hasOwnedAudio: true,
-      hasMultipleOwnedAudioSources: false,
+    expect(summary.visualMediaId).toBe('nested-visual');
+    expect(summary.visualSource).toMatchObject({
+      itemId: 'child-video',
+      mediaId: 'nested-visual',
+      sourceStart: 100,
+      sourceDuration: 240,
+      sourceFps: 30,
+      speed: 2,
     });
   });
 
-  it('treats standalone video as the owned audio source when no paired audio exists', () => {
-    const summary = summarizeCompositionClipContent({
-      tracks: [makeTrack({ id: 'v1', kind: 'video', order: 0 })],
-      items: [makeVideoItem({ id: 'video-standalone', trackId: 'v1', mediaId: 'media-video' })],
-    });
+  it('collects nested audio once when a compound clip has linked visual and audio wrappers', () => {
+    const compositionById = {
+      'child-comp': {
+        id: 'child-comp',
+        name: 'Child',
+        items: [
+          makeVideoItem({
+            id: 'child-video',
+            trackId: 'child-track-v1',
+            linkedGroupId: 'linked-1',
+            mediaId: 'nested-video',
+          }),
+          makeAudioItem({
+            id: 'child-audio',
+            trackId: 'child-track-a1',
+            linkedGroupId: 'linked-1',
+            mediaId: 'nested-audio',
+          }),
+        ],
+        tracks: [
+          makeTrack({ id: 'child-track-v1', name: 'V1', order: 0, kind: 'video' }),
+          makeTrack({ id: 'child-track-a1', name: 'A1', order: 1, kind: 'audio' }),
+        ],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 30,
+      },
+    };
 
-    expect(summary.audioMediaId).toBe('media-video');
-    expect(summary.hasOwnedAudio).toBe(true);
-  });
-
-  it('supports audio-only compound clips', () => {
-    const summary = summarizeCompositionClipContent({
-      tracks: [makeTrack({ id: 'a1', kind: 'audio', order: 0 })],
-      items: [makeAudioItem({ id: 'audio-only', trackId: 'a1', mediaId: 'media-audio' })],
-    });
-
-    expect(summary.visualMediaId).toBeNull();
-    expect(summary.audioMediaId).toBe('media-audio');
-    expect(summary.hasOwnedAudio).toBe(true);
-  });
-
-  it('ignores non-visible tracks when a solo track is active', () => {
-    const summary = summarizeCompositionClipContent({
-      tracks: [
-        makeTrack({ id: 'v1', kind: 'video', order: 0, solo: true }),
-        makeTrack({ id: 'a1', kind: 'audio', order: 1, solo: false }),
-      ],
+    const sources = getCompositionOwnedAudioSources({
       items: [
-        makeVideoItem({ id: 'video-solo', trackId: 'v1', mediaId: 'media-video' }),
-        makeAudioItem({ id: 'audio-muted-by-solo', trackId: 'a1', mediaId: 'media-audio' }),
+        makeCompositionItem({
+          id: 'parent-visual',
+          trackId: 'track-v1',
+          compositionId: 'child-comp',
+          linkedGroupId: 'linked-parent',
+        }),
+        makeAudioItem({
+          id: 'parent-audio',
+          trackId: 'track-a1',
+          compositionId: 'child-comp',
+          mediaId: undefined,
+          src: '',
+          linkedGroupId: 'linked-parent',
+        }),
       ],
+      tracks: [
+        makeTrack({ id: 'track-v1', name: 'V1', order: 0, kind: 'video' }),
+        makeTrack({ id: 'track-a1', name: 'A1', order: 1, kind: 'audio' }),
+      ],
+      fps: 30,
+      compositionById,
     });
 
-    expect(summary.visualMediaId).toBe('media-video');
-    expect(summary.audioMediaId).toBe('media-video');
+    expect(sources).toHaveLength(1);
+    expect(sources[0]).toMatchObject({
+      itemId: 'child-audio',
+      mediaId: 'nested-audio',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceFps: 30,
+      speed: 1,
+    });
   });
 });

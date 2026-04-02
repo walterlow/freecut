@@ -61,6 +61,7 @@ import { getCompositeOperation } from '@/types/blend-mode-css';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
+import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
 
 // Item renderer
 import {
@@ -810,90 +811,79 @@ export async function createCompositionRenderer(
       const subCompMediaItems: Array<{ subItem: TimelineItem; src: string }> = [];
       const pendingResolutions: Array<{ subItem: TimelineItem; mediaId: string }> = [];
       const prioritySubCompVideoItemIds = new Set<string>();
-
+      const compositionById = useCompositionsStore.getState().compositionById;
+      // Collect priority video item IDs from all depths of nested compositions
+      // whose root-level wrapper falls within the priority scrub window.
       for (const track of tracks) {
         for (const item of track.items ?? []) {
           if (item.type !== 'composition') continue;
           const compItem = item as CompositionItem;
-          getLog().info('Found composition item in export tracks', {
-            itemId: compItem.id.substring(0, 8),
-            compositionId: compItem.compositionId.substring(0, 8),
-            from: compItem.from,
-            duration: compItem.durationInFrames,
-          });
-          const subComp = useCompositionsStore.getState().getComposition(compItem.compositionId);
-          if (!subComp) {
-            getLog().warn('Sub-composition not found in store!', {
-              compositionId: compItem.compositionId,
-              storeCompositionCount: useCompositionsStore.getState().compositions.length,
-              storeCompositionIds: useCompositionsStore.getState().compositions.map(c => c.id.substring(0, 8)),
-            });
-            continue;
-          }
-          getLog().info('Sub-composition loaded', {
-            compositionId: subComp.id.substring(0, 8),
-            name: subComp.name,
-            items: subComp.items.length,
-            tracks: subComp.tracks.length,
-            fps: subComp.fps,
-            durationInFrames: subComp.durationInFrames,
-          });
-
-          // Build pre-computed render data for this sub-composition (once)
-          if (!subCompRenderData.has(compItem.compositionId)) {
-            // Sort tracks once (bottom-to-top: highest order first)
-            const sorted = [...subComp.tracks].sort(
-              (a, b) => (b.order ?? 0) - (a.order ?? 0)
-            );
-
-            // Pre-assign items to tracks and filter out audio/adjustment
-            const sortedWithItems = sorted.map(t => ({
-              order: t.order ?? 0,
-              visible: t.visible !== false,
-              items: subComp.items.filter(
-                i => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
-              ),
-            }));
-
-            // Build keyframes map for O(1) lookup
-            const subKfMap = new Map<string, ItemKeyframes>();
-            for (const kf of subComp.keyframes ?? []) {
-              subKfMap.set(kf.itemId, kf);
-            }
-
-            subCompRenderData.set(compItem.compositionId, {
-              fps: subComp.fps,
-              durationInFrames: subComp.durationInFrames,
-              sortedTracks: sortedWithItems,
-              keyframesMap: subKfMap,
-            });
-          }
-
-          // Collect media items for preloading.
-          // Sub-comp items were moved out of the main timeline, so resolveMediaUrls
-          // (which runs on main comp tracks) never acquires their blob URLs.
-          // We must resolve via blobUrlManager (shared mediaId) or resolveMediaUrl (OPFS).
+          const subComp = compositionById[compItem.compositionId];
+          if (!subComp) continue;
           const subCompIsPriority = priorityFrame !== null
             && (compItem.from <= priorityFrame + priorityWindowFrames)
             && (compItem.from + compItem.durationInFrames >= priorityFrame - priorityWindowFrames);
-          for (const subItem of subComp.items) {
-            if (subItem.type !== 'video' && subItem.type !== 'image') continue;
-            if (subCompIsPriority && subItem.type === 'video') {
-              prioritySubCompVideoItemIds.add(subItem.id);
-            }
-            if (subItem.mediaId) {
-              // Prefer fresh blob URL from manager (may already be acquired for shared media)
-              const src = blobUrlManager.get(subItem.mediaId);
-              if (src) {
-                subCompMediaItems.push({ subItem, src });
-              } else {
-                pendingResolutions.push({ subItem, mediaId: subItem.mediaId });
+          if (!subCompIsPriority) continue;
+          const nestedCompIds = collectReachableCompositionIdsFromItems(subComp.items, compositionById);
+          const allComps = [subComp, ...nestedCompIds.flatMap((id) => compositionById[id] ? [compositionById[id]] : [])];
+          for (const comp of allComps) {
+            for (const subItem of comp.items) {
+              if (subItem.type === 'video') {
+                prioritySubCompVideoItemIds.add(subItem.id);
               }
-            } else {
-              // No mediaId â€” use stored src as last resort
-              const src = (subItem as VideoItem | ImageItem).src ?? '';
-              if (src) subCompMediaItems.push({ subItem, src });
             }
+          }
+        }
+      }
+
+      const reachableCompositionIds = collectReachableCompositionIdsFromTracks(tracks, compositionById);
+      for (const compositionId of reachableCompositionIds) {
+        const subComp = compositionById[compositionId];
+        if (!subComp) {
+          getLog().warn('Sub-composition not found in store!', {
+            compositionId,
+            storeCompositionCount: useCompositionsStore.getState().compositions.length,
+            storeCompositionIds: useCompositionsStore.getState().compositions.map((c) => c.id.substring(0, 8)),
+          });
+          continue;
+        }
+
+        if (!subCompRenderData.has(compositionId)) {
+          const sorted = [...subComp.tracks].sort(
+            (a, b) => (b.order ?? 0) - (a.order ?? 0)
+          );
+          const sortedWithItems = sorted.map((t) => ({
+            order: t.order ?? 0,
+            visible: t.visible !== false,
+            items: subComp.items.filter(
+              (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
+            ),
+          }));
+          const subKfMap = new Map<string, ItemKeyframes>();
+          for (const kf of subComp.keyframes ?? []) {
+            subKfMap.set(kf.itemId, kf);
+          }
+
+          subCompRenderData.set(compositionId, {
+            fps: subComp.fps,
+            durationInFrames: subComp.durationInFrames,
+            sortedTracks: sortedWithItems,
+            keyframesMap: subKfMap,
+          });
+        }
+
+        for (const subItem of subComp.items) {
+          if (subItem.type !== 'video' && subItem.type !== 'image') continue;
+          if (subItem.mediaId) {
+            const src = blobUrlManager.get(subItem.mediaId);
+            if (src) {
+              subCompMediaItems.push({ subItem, src });
+            } else {
+              pendingResolutions.push({ subItem, mediaId: subItem.mediaId });
+            }
+          } else {
+            const src = (subItem as VideoItem | ImageItem).src ?? '';
+            if (src) subCompMediaItems.push({ subItem, src });
           }
         }
       }

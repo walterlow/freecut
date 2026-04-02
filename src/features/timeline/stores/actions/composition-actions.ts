@@ -28,7 +28,19 @@ import {
   getLinkedCompositionVisualCompanion,
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
-import { applyTransitionRepairs, execute } from './shared';
+import {
+  getDirectReferencedCompositionIds,
+  wouldCreateCompositionCycle,
+} from '../../utils/composition-graph';
+import {
+  applyTransitionRepairs,
+  computeCompositionDuration,
+  execute,
+  getCurrentTimelineSnapshot,
+  getEffectiveCompositions,
+  getRootTimelineSnapshot,
+  type TimelineSnapshotLike,
+} from './shared';
 
 function getTrackKindForSelectedItems(track: TimelineTrack | undefined, trackItems: TimelineItem[]): TrackKind {
   return getTrackKind(track ?? { id: '', name: '', height: DEFAULT_TRACK_HEIGHT, locked: false, visible: true, muted: false, solo: false, order: 0, items: [] })
@@ -47,6 +59,175 @@ function buildCompoundWrapperSourceFields(composition: SubComposition) {
     sourceFps: composition.fps,
     speed: 1,
   };
+}
+
+function expandSelectionWithCompoundClipCompanions(
+  items: TimelineItem[],
+  selectedIds: readonly string[],
+): string[] {
+  const expandedIds = new Set(selectedIds);
+
+  for (const item of items) {
+    if (!expandedIds.has(item.id)) continue;
+
+    if (item.type === 'composition') {
+      const companion = getLinkedCompositionAudioCompanion(items, item);
+      if (companion) {
+        expandedIds.add(companion.id);
+      }
+      continue;
+    }
+
+    if (isCompositionAudioItem(item)) {
+      const companion = getLinkedCompositionVisualCompanion(items, item);
+      if (companion) {
+        expandedIds.add(companion.id);
+      }
+    }
+  }
+
+  return Array.from(expandedIds);
+}
+
+export interface CompoundClipDeletionImpact {
+  rootReferenceCount: number;
+  nestedReferenceCount: number;
+  totalReferenceCount: number;
+}
+
+function renameCompositionReferences(items: TimelineItem[], compositionId: string, nextLabel: string): TimelineItem[] {
+  const targetIds = new Set([compositionId]);
+  let changed = false;
+  const renamedItems = items.map((item) => {
+    if (!isCompoundClipReference(item, targetIds)) {
+      return item;
+    }
+    if (item.label === nextLabel) {
+      return item;
+    }
+    changed = true;
+    return {
+      ...item,
+      label: nextLabel,
+    };
+  });
+
+  return changed ? renamedItems : items;
+}
+
+function isCompoundClipReference(item: TimelineItem, targetIds: ReadonlySet<string>): boolean {
+  return !!item.compositionId
+    && (item.type === 'composition' || isCompositionAudioItem(item))
+    && targetIds.has(item.compositionId);
+}
+
+function countCompoundClipReferences(items: TimelineItem[], targetIds: ReadonlySet<string>): number {
+  return items.filter((item) => isCompoundClipReference(item, targetIds)).length;
+}
+
+function sanitizeTimelineSnapshot<TSnapshot extends TimelineSnapshotLike>(
+  snapshot: TSnapshot,
+  targetIds: ReadonlySet<string>,
+): TSnapshot & { removedItemIds: string[] } {
+  const removedItemIds = snapshot.items
+    .filter((item) => isCompoundClipReference(item, targetIds))
+    .map((item) => item.id);
+
+  if (removedItemIds.length === 0) {
+    return {
+      ...snapshot,
+      removedItemIds,
+    };
+  }
+
+  const removedIdSet = new Set(removedItemIds);
+  return {
+    ...snapshot,
+    items: snapshot.items.filter((item) => !removedIdSet.has(item.id)),
+    transitions: snapshot.transitions.filter((transition) => (
+      !removedIdSet.has(transition.leftClipId) && !removedIdSet.has(transition.rightClipId)
+    )),
+    keyframes: snapshot.keyframes.filter((keyframe) => !removedIdSet.has(keyframe.itemId)),
+    removedItemIds,
+  };
+}
+
+export function getCompoundClipDeletionImpact(compositionIds: string[]): CompoundClipDeletionImpact {
+  const targetIds = new Set(compositionIds.filter(Boolean));
+  if (targetIds.size === 0) {
+    return {
+      rootReferenceCount: 0,
+      nestedReferenceCount: 0,
+      totalReferenceCount: 0,
+    };
+  }
+
+  const currentSnapshot = getCurrentTimelineSnapshot();
+  const rootReferenceCount = countCompoundClipReferences(
+    getRootTimelineSnapshot(currentSnapshot).items,
+    targetIds,
+  );
+  const nestedReferenceCount = getEffectiveCompositions(currentSnapshot)
+    .filter((composition) => !targetIds.has(composition.id))
+    .reduce((count, composition) => count + countCompoundClipReferences(composition.items, targetIds), 0);
+
+  return {
+    rootReferenceCount,
+    nestedReferenceCount,
+    totalReferenceCount: rootReferenceCount + nestedReferenceCount,
+  };
+}
+
+export function renameCompoundClip(compositionId: string, nextName: string): boolean {
+  const trimmedName = nextName.trim();
+  if (!compositionId || !trimmedName) return false;
+
+  return execute('RENAME_COMPOUND_CLIP', () => {
+    const composition = useCompositionsStore.getState().getComposition(compositionId);
+    if (!composition || composition.name === trimmedName) {
+      return false;
+    }
+
+    useCompositionsStore.getState().updateComposition(compositionId, { name: trimmedName });
+
+    const currentSnapshot = getCurrentTimelineSnapshot();
+    const renamedCurrentItems = renameCompositionReferences(currentSnapshot.items, compositionId, trimmedName);
+    if (renamedCurrentItems !== currentSnapshot.items) {
+      useItemsStore.getState().setItems(renamedCurrentItems);
+    }
+
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+    const nextCompositions = useCompositionsStore.getState().compositions.map((entry) => {
+      if (entry.id === compositionId) {
+        return entry;
+      }
+
+      const sourceItems = entry.id === activeCompositionId ? renamedCurrentItems : entry.items;
+      const renamedItems = renameCompositionReferences(sourceItems, compositionId, trimmedName);
+      return renamedItems === sourceItems
+        ? entry
+        : {
+          ...entry,
+          items: renamedItems,
+        };
+    });
+    useCompositionsStore.getState().setCompositions(nextCompositions);
+
+    useCompositionNavigationStore.setState((state) => ({
+      breadcrumbs: state.breadcrumbs.map((breadcrumb) => (
+        breadcrumb.compositionId === compositionId
+          ? { ...breadcrumb, label: trimmedName }
+          : breadcrumb
+      )),
+      stashStack: state.stashStack.map((stash) => ({
+        ...stash,
+        items: renameCompositionReferences(stash.items, compositionId, trimmedName),
+      })),
+    }));
+
+    useTimelineSettingsStore.getState().markDirty();
+    return true;
+  }, { compositionId, nextName: trimmedName });
 }
 
 function mapRestoredTrackGroup(params: {
@@ -202,26 +383,37 @@ function mapSubCompItemToWrapperWindow(params: {
  * 4. Removes original items from the main timeline.
  * 5. Inserts linked compound wrappers on the target video/audio lanes.
  *
- * Only allowed on the root timeline (1-level nesting limit).
+ * Supports nested compound clips, but prevents circular composition references.
  */
 export function createPreComp(name?: string, itemIds?: string[]): TimelineItem | null {
   return execute('CREATE_PRE_COMP', () => {
-    // Block pre-comp creation inside a sub-composition (1-level nesting limit)
-    if (useCompositionNavigationStore.getState().activeCompositionId !== null) return null;
     const { items, tracks } = useItemsStore.getState();
     const { transitions } = useTransitionsStore.getState();
     const { keyframes } = useKeyframesStore.getState();
     const { fps } = useTimelineSettingsStore.getState();
     const requestedIds = itemIds ?? useSelectionStore.getState().selectedItemIds;
     const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
-    const selectedIds = linkedSelectionEnabled
+    const baseSelectedIds = linkedSelectionEnabled
       ? expandSelectionWithLinkedItems(items, requestedIds)
       : Array.from(new Set(requestedIds));
+    const selectedIds = expandSelectionWithCompoundClipCompanions(items, baseSelectedIds);
 
     if (selectedIds.length === 0) return null;
 
     const selectedItems = items.filter((i) => selectedIds.includes(i.id));
     if (selectedItems.length === 0) return null;
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+    const compositionById = useCompositionsStore.getState().compositionById;
+
+    if (activeCompositionId !== null) {
+      const selectedCompositionIds = getDirectReferencedCompositionIds(selectedItems);
+      const wouldCycle = selectedCompositionIds.some((compositionId) => wouldCreateCompositionCycle({
+        parentCompositionId: activeCompositionId,
+        insertedCompositionId: compositionId,
+        compositionById,
+      }));
+      if (wouldCycle) return null;
+    }
 
     // --- 1. Calculate bounding box ---
     const minFrom = Math.min(...selectedItems.map((i) => i.from));
@@ -326,6 +518,7 @@ export function createPreComp(name?: string, itemIds?: string[]): TimelineItem |
       items: subCompItems,
       tracks: subCompTracks,
       fps,
+      compositionById,
     }).length > 0;
 
     const visualSourceTrackIds = sourceTrackIds.filter((trackId) => (
@@ -598,7 +791,20 @@ export function dissolvePreComp(compositionItemId: string): boolean {
       }];
     });
 
-    // Restore transitions with remapped IDs
+    // Remove the compound wrappers
+    if (wrapperIds.length > 0) {
+      useItemsStore.getState()._removeItems(wrapperIds);
+    }
+
+    // Add restored items
+    if (restoredItems.length > 0) {
+      useItemsStore.getState()._addItems(restoredItems);
+    }
+
+    // Repair any external transitions that referenced the removed wrapper clips.
+    applyTransitionRepairs(wrapperIds, new Set(wrapperIds));
+
+    // Restore transitions with remapped IDs after the restored clips exist.
     const subTransitions = subComp.transitions ?? [];
     if (subTransitions.length > 0) {
       const currentTransitions = useTransitionsStore.getState().transitions;
@@ -616,7 +822,7 @@ export function dissolvePreComp(compositionItemId: string): boolean {
         }];
       });
       useTransitionsStore.getState().setTransitions([...currentTransitions, ...restoredTransitions]);
-      if (restoredItems.length > 0) {
+      if (restoredTransitions.length > 0) {
         applyTransitionRepairs(restoredItems.map((item) => item.id));
       }
     }
@@ -632,24 +838,8 @@ export function dissolvePreComp(compositionItemId: string): boolean {
       useKeyframesStore.getState().setKeyframes([...currentKeyframes, ...restoredKeyframes]);
     }
 
-    // Remove the compound wrappers
-    if (wrapperIds.length > 0) {
-      useItemsStore.getState()._removeItems(wrapperIds);
-    }
-
-    // Add restored items
-    for (const item of restoredItems) {
-      useItemsStore.getState()._addItem(item);
-    }
-
-    // Check if composition is still referenced by other items
-    const remainingRefs = useItemsStore.getState().items.filter(
-      (item) => item.compositionId === compositionId
-        && (item.type === 'composition' || isCompositionAudioItem(item))
-    );
-
-    // Only remove the sub-composition if no other items reference it
-    if (remainingRefs.length === 0) {
+    // Only remove the compound definition when nothing else in the project references it.
+    if (getCompoundClipDeletionImpact([compositionId]).totalReferenceCount === 0) {
       useCompositionsStore.getState().removeComposition(compositionId);
     }
 
@@ -659,4 +849,83 @@ export function dissolvePreComp(compositionItemId: string): boolean {
     useTimelineSettingsStore.getState().markDirty();
     return true;
   }, { compositionItemId });
+}
+
+export function deleteCompoundClips(compositionIds: string[]): boolean {
+  const targetIds = Array.from(new Set(compositionIds.filter(Boolean)));
+  if (targetIds.length === 0) return false;
+
+  return execute('DELETE_COMPOUND_CLIPS', () => {
+    const targetIdSet = new Set(targetIds);
+    const navState = useCompositionNavigationStore.getState();
+    const deletesOpenComposition = navState.breadcrumbs.some((breadcrumb) => (
+      breadcrumb.compositionId !== null && targetIdSet.has(breadcrumb.compositionId)
+    ));
+
+    if (deletesOpenComposition) {
+      useCompositionNavigationStore.getState().resetToRoot();
+    }
+
+    const currentSnapshot = getCurrentTimelineSnapshot();
+    const sanitizedCurrent = sanitizeTimelineSnapshot(currentSnapshot, targetIdSet);
+    if (sanitizedCurrent.removedItemIds.length > 0) {
+      useItemsStore.getState().setItems(sanitizedCurrent.items);
+      useTransitionsStore.getState().setTransitions(sanitizedCurrent.transitions);
+      useKeyframesStore.getState().setKeyframes(sanitizedCurrent.keyframes);
+    }
+
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+    const nextCompositions = useCompositionsStore.getState().compositions.flatMap((composition) => {
+      if (targetIdSet.has(composition.id)) {
+        return [];
+      }
+
+      const baseSnapshot: TimelineSnapshotLike = composition.id === activeCompositionId
+        ? {
+          items: sanitizedCurrent.items,
+          tracks: sanitizedCurrent.tracks,
+          transitions: sanitizedCurrent.transitions,
+          keyframes: sanitizedCurrent.keyframes,
+        }
+        : {
+          items: composition.items,
+          tracks: composition.tracks,
+          transitions: composition.transitions,
+          keyframes: composition.keyframes,
+        };
+
+      const sanitizedComposition = sanitizeTimelineSnapshot(baseSnapshot, targetIdSet);
+      return [{
+        ...composition,
+        items: sanitizedComposition.items,
+        tracks: sanitizedComposition.tracks,
+        transitions: sanitizedComposition.transitions,
+        keyframes: sanitizedComposition.keyframes,
+        durationInFrames: computeCompositionDuration(
+          sanitizedComposition.items,
+          composition.durationInFrames,
+        ),
+      }];
+    });
+    useCompositionsStore.getState().setCompositions(nextCompositions);
+
+    const latestNavState = useCompositionNavigationStore.getState();
+    if (latestNavState.stashStack.length > 0) {
+      useCompositionNavigationStore.setState((state) => ({
+        stashStack: state.stashStack.map((stash) => {
+          const sanitizedStash = sanitizeTimelineSnapshot(stash, targetIdSet);
+          return {
+            ...stash,
+            items: sanitizedStash.items,
+            transitions: sanitizedStash.transitions,
+            keyframes: sanitizedStash.keyframes,
+          };
+        }),
+      }));
+    }
+
+    useSelectionStore.getState().clearSelection();
+    useTimelineSettingsStore.getState().markDirty();
+    return true;
+  }, { compositionIds: targetIds });
 }

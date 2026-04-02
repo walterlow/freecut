@@ -2,7 +2,7 @@ import { useState, useRef, memo, useCallback, useMemo } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('TimelineTrack');
-import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType, CompositionItem } from '@/types/timeline';
+import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
@@ -10,6 +10,7 @@ import { useTimelineStore } from '../stores/timeline-store';
 import { useTrackDropPreviewStore, type TrackDropGhostPreview } from '../stores/track-drop-preview-store';
 import { useVisibleItems } from '../hooks/use-visible-items';
 import { useItemsStore } from '../stores/items-store';
+import { useCompositionsStore } from '../stores/compositions-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
@@ -26,6 +27,7 @@ import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { resolveEffectiveTrackStates } from '../utils/group-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
+import { wouldCreateCompositionCycle } from '../utils/composition-graph';
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
@@ -37,6 +39,10 @@ import {
   getDroppedMediaDurationInFrames,
   type DroppableMediaType,
 } from '../utils/dropped-media';
+import {
+  buildDroppedCompositionTimelineItems,
+  compositionHasOwnedAudio,
+} from '../utils/dropped-composition';
 import {
   buildGhostPreviewsFromTrackMediaDropPlan,
   planTrackMediaDropPlacements,
@@ -621,50 +627,56 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const previews: GhostPreviewItem[] = [];
 
     if (data.type === 'composition') {
-      const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-      if (isInsideSubComp) {
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+      if (wouldCreateCompositionCycle({
+        parentCompositionId: activeCompositionId,
+        insertedCompositionId: data.compositionId,
+        compositionById: useCompositionsStore.getState().compositionById,
+      })) {
         e.dataTransfer.dropEffect = 'none';
         clearTrackGhostPreviews();
         return;
       }
 
       const store = useTimelineStore.getState();
-      const targetTrack = findCompatibleTrackForItemType({
+      const compositionById = useCompositionsStore.getState().compositionById;
+      const composition = compositionById[data.compositionId];
+      if (!composition) {
+        e.dataTransfer.dropEffect = 'none';
+        clearTrackGhostPreviews();
+        return;
+      }
+      const hasOwnedAudio = compositionHasOwnedAudio({ composition, compositionById });
+      const { plannedItems } = planTrackMediaDropPlacements({
+        entries: [{
+          payload: data,
+          label: data.name,
+          mediaType: 'video',
+          durationInFrames: data.durationInFrames,
+          hasLinkedAudio: hasOwnedAudio,
+        }],
+        dropFrame,
         tracks: store.tracks,
-        items: store.items,
-        itemType: 'composition',
-        preferredTrackId: track.id,
-        allowPreferredTrackFallback: false,
+        existingItems: store.items,
+        dropTargetTrackId: track.id,
       });
-      if (!targetTrack) {
+      const plannedItem = plannedItems[0];
+      if (!plannedItem) {
         e.dataTransfer.dropEffect = 'none';
         setIsDragOver(false);
         clearTrackGhostPreviews();
         return;
       }
-
-      const proposedPosition = Math.max(0, dropFrame);
-      const storeItems = store.items;
-      const finalPosition = findNearestAvailableSpace(
-        proposedPosition,
-        data.durationInFrames,
-        targetTrack.id,
-        storeItems
-      );
-
-      if (finalPosition !== null) {
-        previews.push({
-          left: frameToPixels(finalPosition),
-          width: frameToPixels(data.durationInFrames),
+      previews.push(
+        ...buildGhostPreviewsFromTrackMediaDropPlan({
+          plannedItems: [plannedItem],
+          frameToPixels,
+        }).map((preview) => ({
+          ...preview,
           label: data.name,
-          type: 'composition',
-          targetTrackId: targetTrack.id,
-        });
-      } else {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
-      }
-
+          type: preview.type === 'video' ? 'composition' as const : preview.type,
+        }))
+      );
       setTrackGhostPreviews(previews);
       return;
     }
@@ -763,58 +775,58 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         const data = JSON.parse(rawJson);
 
         if (data.type === 'composition') {
-          const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-          if (isInsideSubComp) {
+          const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+          if (wouldCreateCompositionCycle({
+            parentCompositionId: activeCompositionId,
+            insertedCompositionId: data.compositionId,
+            compositionById: useCompositionsStore.getState().compositionById,
+          })) {
             return;
           }
 
-          const { compositionId, name, durationInFrames, width, height } = data as CompositionDragData;
+          const { compositionId, name, durationInFrames } = data as CompositionDragData;
           const store = useTimelineStore.getState();
-          const targetTrack = findCompatibleTrackForItemType({
+          const compositionById = useCompositionsStore.getState().compositionById;
+          const composition = compositionById[compositionId];
+          if (!composition) {
+            logger.warn('Cannot drop composition: compound clip definition not found');
+            return;
+          }
+          const { plannedItems, tracks: nextTracks } = planTrackMediaDropPlacements({
+            entries: [{
+              payload: data,
+              label: name,
+              mediaType: 'video',
+              durationInFrames,
+              hasLinkedAudio: compositionHasOwnedAudio({ composition, compositionById }),
+            }],
+            dropFrame,
             tracks: store.tracks,
-            items: store.items,
-            itemType: 'composition',
-            preferredTrackId: track.id,
-            allowPreferredTrackFallback: false,
+            existingItems: store.items,
+            dropTargetTrackId: track.id,
           });
-          if (!targetTrack) {
-            logger.warn('Cannot drop composition: no compatible video track found');
+          const plannedItem = plannedItems[0];
+          if (!plannedItem) {
+            logger.warn('Cannot drop composition: no available placement found');
             return;
           }
 
-          const proposedPosition = Math.max(0, dropFrame);
-          const storeItems = store.items;
-          const finalPosition = findNearestAvailableSpace(
-            proposedPosition,
-            durationInFrames,
-            targetTrack.id,
-            storeItems
-          );
-
-          if (finalPosition === null) {
-            logger.warn('Cannot drop composition: no available space on track');
-            return;
+          if (nextTracks !== store.tracks) {
+            useTimelineStore.getState().setTracks(nextTracks);
           }
 
-          const compositionItem: CompositionItem = {
-            id: crypto.randomUUID(),
-            type: 'composition',
-            trackId: targetTrack.id,
-            from: finalPosition,
-            durationInFrames,
-            label: name,
+          const droppedItems = buildDroppedCompositionTimelineItems({
             compositionId,
-            compositionWidth: width,
-            compositionHeight: height,
-            transform: {
-              x: 0,
-              y: 0,
-              rotation: 0,
-              opacity: 1,
-            },
-          };
+            composition,
+            label: name,
+            placements: plannedItem.placements,
+          });
+          if (droppedItems.length === 0) {
+            logger.warn('Cannot drop composition: failed to build compound clip wrappers');
+            return;
+          }
 
-          addItem(compositionItem);
+          addItems(droppedItems);
           return;
         }
 
