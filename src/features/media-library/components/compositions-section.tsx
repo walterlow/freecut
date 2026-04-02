@@ -343,10 +343,14 @@ function CompositionCard({
             style={CARD_PERF_STYLE}
             className={cn(
               CARD_GRID_BASE,
-              selected && 'border-violet-500 ring-2 ring-violet-500/20 shadow-lg shadow-violet-500/10',
               isInsideSubComp
                 ? 'opacity-50 cursor-not-allowed border-border'
-                : 'cursor-grab border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
+                : cn(
+                    'cursor-grab',
+                    selected
+                      ? 'border-violet-500 ring-2 ring-violet-500/20 shadow-lg shadow-violet-500/10'
+                      : 'border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
+                  )
             )}
           >
             {/* Thumbnail area â€” gradient with centered icon */}
@@ -424,10 +428,14 @@ function CompositionCard({
           style={CARD_PERF_STYLE}
           className={cn(
             CARD_LIST_BASE,
-            selected && 'border-violet-500 ring-1 ring-violet-500/20',
             isInsideSubComp
               ? 'opacity-50 cursor-not-allowed border-border'
-              : 'cursor-grab border-border hover:border-violet-500/50'
+              : cn(
+                  'cursor-grab',
+                  selected
+                    ? 'border-violet-500 ring-1 ring-violet-500/20'
+                    : 'border-border hover:border-violet-500/50'
+                )
           )}
         >
           {/* Thumbnail */}
