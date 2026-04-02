@@ -5,6 +5,7 @@
 
 export { VideoPreview } from '@/features/preview/components/video-preview';
 export { PlaybackControls } from '@/features/preview/components/playback-controls';
+export { AlignmentToolbar } from '@/features/preview/components/alignment-hud';
 export { TimecodeDisplay } from '@/features/preview/components/timecode-display';
 export { PreviewZoomControls } from '@/features/preview/components/preview-zoom-controls';
 export { SourceMonitor } from '@/features/preview/components/source-monitor';

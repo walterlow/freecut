@@ -225,11 +225,6 @@ export function AudioSection({ items }: AudioSectionProps) {
       {/* Volume in dB (-60 to +20, 0 dB = unity gain) */}
       <PropertyRow label="Gain">
         <div className="flex items-center gap-1 w-full">
-          <KeyframeToggle
-            itemIds={itemIds}
-            property="volume"
-            currentValue={volume === 'mixed' ? 0 : volume}
-          />
           <SliderInput
             value={volume}
             onChange={handleVolumeChange}
@@ -239,6 +234,11 @@ export function AudioSection({ items }: AudioSectionProps) {
             step={0.1}
             unit="dB"
             className="flex-1 min-w-0"
+          />
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="volume"
+            currentValue={volume === 'mixed' ? 0 : volume}
           />
           <Button
             variant="ghost"

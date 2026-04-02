@@ -19,7 +19,7 @@ describe('editor-store', () => {
       rightSidebarOpen: true,
       keyframeEditorOpen: false,
       activeTab: 'media',
-      clipInspectorTab: 'transform',
+      clipInspectorTab: 'video',
       sidebarWidth: editorLayout.leftSidebarDefaultWidth,
       rightSidebarWidth: editorLayout.rightSidebarDefaultWidth,
       timelineHeight: 250,
@@ -36,7 +36,7 @@ describe('editor-store', () => {
     expect(state.rightSidebarOpen).toBe(true);
     expect(state.keyframeEditorOpen).toBe(false);
     expect(state.activeTab).toBe('media');
-    expect(state.clipInspectorTab).toBe('transform');
+    expect(state.clipInspectorTab).toBe('video');
     expect(state.sourcePreviewMediaId).toBe(null);
     expect(state.linkedSelectionEnabled).toBe(true);
     expect(state.colorScopesOpen).toBe(false);
@@ -95,8 +95,8 @@ describe('editor-store', () => {
     useEditorStore.getState().setClipInspectorTab('effects');
     expect(useEditorStore.getState().clipInspectorTab).toBe('effects');
 
-    useEditorStore.getState().setClipInspectorTab('media');
-    expect(useEditorStore.getState().clipInspectorTab).toBe('media');
+    useEditorStore.getState().setClipInspectorTab('audio');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('audio');
   });
 
   it('sets sidebar widths', () => {

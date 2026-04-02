@@ -43,7 +43,7 @@ interface FillSectionProps {
 type MixedValue = number | 'mixed';
 
 /**
- * Fill section - opacity and corner radius.
+ * Composite section - opacity, blend mode, and corner radius.
  * Memoized to prevent re-renders when props haven't changed.
  */
 export const FillSection = memo(function FillSection({
@@ -261,15 +261,10 @@ export const FillSection = memo(function FillSection({
   }, [items, itemIds, onTransformChange, canvas]);
 
   return (
-    <PropertySection title="Fill" icon={Droplet} defaultOpen={true}>
+    <PropertySection title="Composite" icon={Droplet} defaultOpen={true}>
       {/* Opacity */}
       <PropertyRow label="Opacity">
         <div className="flex items-center gap-1 w-full">
-          <KeyframeToggle
-            itemIds={itemIds}
-            property="opacity"
-            currentValue={opacityRaw === 'mixed' ? 1 : opacityRaw}
-          />
           <SliderInput
             value={opacity}
             onChange={handleOpacityChange}
@@ -279,6 +274,11 @@ export const FillSection = memo(function FillSection({
             step={1}
             unit="%"
             className="flex-1 min-w-0"
+          />
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="opacity"
+            currentValue={opacityRaw === 'mixed' ? 1 : opacityRaw}
           />
           <Button
             variant="ghost"
@@ -319,11 +319,6 @@ export const FillSection = memo(function FillSection({
       {/* Corner Radius */}
       <PropertyRow label="Radius">
         <div className="flex items-center gap-1 w-full">
-          <KeyframeToggle
-            itemIds={itemIds}
-            property="cornerRadius"
-            currentValue={cornerRadius === 'mixed' ? 0 : cornerRadius}
-          />
           <NumberInput
             value={cornerRadius}
             onChange={handleCornerRadiusChange}
@@ -333,6 +328,11 @@ export const FillSection = memo(function FillSection({
             step={1}
             unit="px"
             className="flex-1 min-w-0"
+          />
+          <KeyframeToggle
+            itemIds={itemIds}
+            property="cornerRadius"
+            currentValue={cornerRadius === 'mixed' ? 0 : cornerRadius}
           />
           <Button
             variant="ghost"

@@ -1,71 +1,69 @@
 import { useCallback, useRef } from 'react';
+import { ZoomIn } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { usePreviewZoom } from '../hooks/use-preview-zoom';
 
 export function PreviewZoomControls() {
   const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
-  const zoomTriggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const currentLabel = zoom === -1
     ? 'Auto'
     : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
 
-  const handleSelectTriggerKeyDown = useCallback((event: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key !== ' ' && event.code !== 'Space') return;
-    // Space is reserved for global play/pause; prevent SelectTrigger from opening.
-    event.preventDefault();
+  const blurTrigger = useCallback(() => {
+    triggerRef.current?.blur();
   }, []);
-
-  const blurZoomTrigger = useCallback(() => {
-    zoomTriggerRef.current?.blur();
-  }, []);
-
-  const handleValueChange = (value: string) => {
-    const preset = zoomPresets.find((p) => p.label === value);
-    if (preset) {
-      handlePresetZoom(preset);
-    }
-    requestAnimationFrame(blurZoomTrigger);
-  };
 
   return (
-    <div className="flex items-center gap-1">
-      <Select
-        value={currentLabel}
-        onOpenChange={(open) => {
-          if (!open) {
-            requestAnimationFrame(blurZoomTrigger);
-          }
-        }}
-        onValueChange={handleValueChange}
-      >
-        <SelectTrigger
-          ref={zoomTriggerRef}
-          className="w-20 h-7 text-xs"
-          data-tooltip="Preview Zoom"
-          onKeyDown={handleSelectTriggerKeyDown}
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            requestAnimationFrame(blurZoomTrigger);
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) requestAnimationFrame(blurTrigger);
+      }}
+    >
+      <DropdownMenuTrigger asChild>
+        <Button
+          ref={triggerRef}
+          variant="ghost"
+          className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1 px-1.5"
+          style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize }}
+          data-tooltip={`Zoom: ${currentLabel}`}
+          aria-label={`Preview zoom: ${currentLabel}`}
+          onKeyDown={(e) => {
+            // Space is reserved for global play/pause
+            if (e.key === ' ' || e.code === 'Space') e.preventDefault();
           }}
         >
-          {zoomPresets.map((preset) => (
-            <SelectItem key={preset.label} value={preset.label} className="text-xs">
+          <ZoomIn className="w-3.5 h-3.5" />
+          <span className="text-[10px] leading-none">{currentLabel}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          requestAnimationFrame(blurTrigger);
+        }}
+      >
+        {zoomPresets.map((preset) => (
+          <DropdownMenuItem
+            key={preset.label}
+            className="text-xs"
+            onSelect={() => handlePresetZoom(preset)}
+          >
+            <span className={zoom === preset.value || (preset.value === 'fit' && zoom === -1) ? 'font-semibold' : ''}>
               {preset.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -64,7 +64,7 @@ const AUDIO_ITEM: AudioItem = {
   mediaId: 'media-audio-1',
 };
 
-function activateTab(name: 'Effects' | 'Media' | 'Transform') {
+function activateTab(name: 'Audio' | 'Effects' | 'Video') {
   const tab = screen.getByRole('tab', { name });
   fireEvent.mouseDown(tab, { button: 0, ctrlKey: false });
   fireEvent.focus(tab);
@@ -72,7 +72,7 @@ function activateTab(name: 'Effects' | 'Media' | 'Transform') {
 
 function resetStores(items: Array<VideoItem | AudioItem>, selectedItemIds: string[]) {
   useEditorStore.setState({
-    clipInspectorTab: 'transform',
+    clipInspectorTab: 'video',
     linkedSelectionEnabled: true,
   });
 
@@ -129,7 +129,7 @@ describe('ClipPanel inspector tabs', () => {
   });
 
   it('falls back to the first valid tab and updates the remembered tab', async () => {
-    useEditorStore.getState().setClipInspectorTab('transform');
+    useEditorStore.getState().setClipInspectorTab('video');
     resetStores([AUDIO_ITEM], [AUDIO_ITEM.id]);
 
     render(<ClipPanel />);
@@ -137,7 +137,7 @@ describe('ClipPanel inspector tabs', () => {
     await waitFor(() => {
       expect(screen.getByText('Audio Body')).toBeInTheDocument();
     });
-    expect(screen.getByRole('tab', { name: 'Media' })).toHaveAttribute('data-state', 'active');
-    expect(useEditorStore.getState().clipInspectorTab).toBe('media');
+    expect(screen.getByRole('tab', { name: 'Audio' })).toHaveAttribute('data-state', 'active');
+    expect(useEditorStore.getState().clipInspectorTab).toBe('audio');
   });
 });

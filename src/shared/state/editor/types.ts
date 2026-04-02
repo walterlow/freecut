@@ -1,4 +1,4 @@
-export type ClipInspectorTab = 'transform' | 'effects' | 'media';
+export type ClipInspectorTab = 'video' | 'audio' | 'effects';
 
 export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;

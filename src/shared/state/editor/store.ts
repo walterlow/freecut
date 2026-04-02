@@ -41,7 +41,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarOpen: true,
   keyframeEditorOpen: false,
   activeTab: 'media',
-  clipInspectorTab: 'transform',
+  clipInspectorTab: 'video',
   sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.leftSidebarDefaultWidth),
   rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.rightSidebarDefaultWidth),
   timelineHeight: 250,

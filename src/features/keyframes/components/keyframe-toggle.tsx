@@ -145,14 +145,11 @@ export function KeyframeToggle({
     currentValue,
   ]);
 
-  // Don't render if outside item bounds
-  // Valid frame range is [0, durationInFrames - 1] since durationInFrames is a count
-  if (!firstItem || relativeFrame < 0 || relativeFrame >= firstItem.durationInFrames) {
-    return null;
-  }
+  // Disable when playhead is outside item bounds
+  const isOutsideBounds = !firstItem || relativeFrame < 0 || relativeFrame >= firstItem.durationInFrames;
 
   // Compute effective disabled state
-  const effectiveDisabled = disabled || isInTransition;
+  const effectiveDisabled = disabled || isInTransition || isOutsideBounds;
 
   return (
     <Tooltip>
@@ -175,9 +172,11 @@ export function KeyframeToggle({
           aria-label={
             isInTransition
               ? 'Keyframes blocked (transition region)'
-              : hasKeyframe
-                ? 'Remove keyframe'
-                : 'Add keyframe'
+              : isOutsideBounds
+                ? 'Playhead outside clip bounds'
+                : hasKeyframe
+                  ? 'Remove keyframe'
+                  : 'Add keyframe'
           }
         >
           <Diamond
@@ -191,6 +190,8 @@ export function KeyframeToggle({
       <TooltipContent side="top" className="text-xs max-w-[200px]">
         {isInTransition && transitionBlockedRange ? (
           <>{getTransitionBlockedMessage(transitionBlockedRange)}</>
+        ) : isOutsideBounds ? (
+          <>Playhead is outside clip bounds</>
         ) : hasKeyframe ? (
           <>Remove keyframe at frame {relativeFrame}</>
         ) : (
