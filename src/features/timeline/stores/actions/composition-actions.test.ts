@@ -168,4 +168,68 @@ describe('composition-actions split wrappers', () => {
     expect(items.filter((item) => item.type === 'audio' && item.compositionId)).toHaveLength(1);
     expect(useCompositionsStore.getState().compositions).toHaveLength(1);
   });
+
+  it('preserves internal transitions when dissolving a compound clip', () => {
+    useItemsStore.getState().setTracks([
+      makeTrack({ id: 'track-v1', name: 'V1', kind: 'video', order: 0 }),
+    ]);
+    useItemsStore.getState().setItems([
+      makeVideoItem({
+        id: 'video-1',
+        trackId: 'track-v1',
+        from: 0,
+        durationInFrames: 60,
+        sourceStart: 0,
+        sourceEnd: 60,
+        sourceDuration: 120,
+      }),
+      makeVideoItem({
+        id: 'video-2',
+        trackId: 'track-v1',
+        from: 60,
+        durationInFrames: 60,
+        label: 'clip-2.mp4',
+        src: 'blob:video-2',
+        mediaId: 'media-2',
+        linkedGroupId: undefined,
+        sourceStart: 60,
+        sourceEnd: 120,
+        sourceDuration: 180,
+      }),
+    ]);
+    useTransitionsStore.getState().setTransitions([{
+      id: 'transition-1',
+      leftClipId: 'video-1',
+      rightClipId: 'video-2',
+      trackId: 'track-v1',
+      type: 'crossfade',
+      durationInFrames: 12,
+      presentation: 'fade',
+      timing: 'linear',
+      alignment: 0.5,
+    }]);
+    useSelectionStore.getState().selectItems(['video-1', 'video-2']);
+
+    const created = createPreComp('Compound 1');
+    expect(created?.type).toBe('composition');
+    expect(useCompositionsStore.getState().compositions[0]?.transitions).toHaveLength(1);
+
+    expect(dissolvePreComp(created!.id)).toBe(true);
+
+    const restoredItems = useItemsStore.getState().items.filter((item) => item.type === 'video');
+    const restoredIds = new Set(restoredItems.map((item) => item.id));
+    const restoredTransitions = useTransitionsStore.getState().transitions;
+
+    expect(restoredItems).toHaveLength(2);
+    expect(restoredTransitions).toHaveLength(1);
+    expect(restoredTransitions[0]).toMatchObject({
+      type: 'crossfade',
+      durationInFrames: 12,
+      trackId: 'track-v1',
+      timing: 'linear',
+      alignment: 0.5,
+    });
+    expect(restoredIds.has(restoredTransitions[0]!.leftClipId)).toBe(true);
+    expect(restoredIds.has(restoredTransitions[0]!.rightClipId)).toBe(true);
+  });
 });

@@ -123,7 +123,7 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
         allowed: false,
         source: 'library',
         title: 'Drop On Timeline',
-        description: 'Compositions still place best on the timeline.',
+        description: 'Compound clips still place best on the timeline.',
       };
     }
 

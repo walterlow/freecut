@@ -433,7 +433,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       parts.push(`${pendingDeletion.mediaIds.length} media item${pendingDeletion.mediaIds.length === 1 ? '' : 's'}`);
     }
     if (pendingDeletion.compositionIds.length > 0) {
-      parts.push(`${pendingDeletion.compositionIds.length} composition${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
+      parts.push(`${pendingDeletion.compositionIds.length} compound clip${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
     }
     return parts.join(' and ');
   }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length]);

@@ -184,7 +184,7 @@ export const ClipContent = memo(function ClipContent({
 
   const renderCompoundClipLabel = useCallback((label: string) => (
     <div
-      className="flex items-center gap-1.5 px-2 shrink-0"
+      className="flex items-center gap-1.5 px-2 text-[11px] font-medium truncate shrink-0"
       style={{
         height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
         lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
@@ -368,11 +368,8 @@ export const ClipContent = memo(function ClipContent({
       );
     }
     return (
-      <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">Compound Clip</div>
-        <div className="text-xs font-medium truncate flex-1">
-          {item.label || 'Composition'}
-        </div>
+      <div className="absolute inset-0 flex flex-col overflow-hidden">
+        {renderCompoundClipLabel(item.label || 'Compound Clip')}
       </div>
     );
   }

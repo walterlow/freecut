@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Layers, Trash2, ChevronRight } from 'lucide-react';
 import {
   Collapsible,
@@ -157,7 +157,7 @@ export function CompositionsSection() {
           />
           <Layers className="w-3 h-3 text-violet-400" />
           <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-            Compositions
+            Compound Clips
           </span>
           <span className="text-[10px] tabular-nums text-muted-foreground/60">
             {compositions.length}
@@ -191,11 +191,10 @@ export function CompositionsSection() {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Delete confirmation dialog */}
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete composition?</AlertDialogTitle>
+            <AlertDialogTitle>Delete compound clip?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
@@ -208,7 +207,7 @@ export function CompositionsSection() {
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
                       <p className="font-medium">Timeline references will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {refsOnTimeline.length} composition item{refsOnTimeline.length > 1 ? 's' : ''} on the timeline will also be deleted.
+                        {refsOnTimeline.length} compound clip item{refsOnTimeline.length > 1 ? 's' : ''} on the timeline will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -230,8 +229,6 @@ export function CompositionsSection() {
     </>
   );
 }
-
-// --- Composition card ---
 
 interface CompositionCardProps {
   composition: SubComposition;
@@ -353,11 +350,9 @@ function CompositionCard({
                   )
             )}
           >
-            {/* Thumbnail area â€” gradient with centered icon */}
             <div className="flex-1 bg-secondary relative overflow-hidden min-h-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
               <Layers className="w-8 h-8 text-violet-400/70" />
 
-              {/* Bottom overlay badges */}
               <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between gap-1 pointer-events-none">
                 <div className="p-0.5 rounded bg-violet-600/90 text-white">
                   <Layers className="w-2.5 h-2.5" />
@@ -368,7 +363,6 @@ function CompositionCard({
               </div>
             </div>
 
-            {/* Footer */}
             <div className="px-1.5 py-1 bg-panel-bg/50 flex-shrink-0">
               <div className="flex items-center justify-between gap-1">
                 <div className="flex-1 min-w-0">
@@ -390,7 +384,6 @@ function CompositionCard({
               </div>
             </div>
 
-            {/* Film strip edge detail */}
             <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
             <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
           </div>
@@ -398,7 +391,7 @@ function CompositionCard({
 
         <ContextMenuContent>
           <ContextMenuItem onClick={() => onEnter(composition)}>
-            Enter Composition
+            Enter Compound Clip
           </ContextMenuItem>
           <ContextMenuItem onClick={() => onStartRename(composition)}>
             Rename
@@ -414,7 +407,6 @@ function CompositionCard({
     );
   }
 
-  // List view (default) â€” matches MediaCard list layout
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -438,12 +430,10 @@ function CompositionCard({
                 )
           )}
         >
-          {/* Thumbnail */}
           <div className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
             <Layers className="w-5 h-5 text-violet-400" />
           </div>
 
-          {/* Info */}
           <div className="flex-1 min-w-0">
             {isEditing ? (
               <input
@@ -460,7 +450,6 @@ function CompositionCard({
               </h3>
             )}
             <div className="flex items-center gap-2 mt-0.5">
-              {/* Type badge */}
               <div className="p-0.5 rounded bg-violet-600/90 text-white flex-shrink-0">
                 <Layers className="w-2.5 h-2.5" />
               </div>
@@ -474,7 +463,7 @@ function CompositionCard({
 
       <ContextMenuContent>
         <ContextMenuItem onClick={() => onEnter(composition)}>
-          Enter Composition
+          Enter Compound Clip
         </ContextMenuItem>
         <ContextMenuItem onClick={() => onStartRename(composition)}>
           Rename

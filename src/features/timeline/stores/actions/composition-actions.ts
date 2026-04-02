@@ -598,7 +598,17 @@ export function dissolvePreComp(compositionItemId: string): boolean {
       }];
     });
 
-    // Restore transitions with remapped IDs
+    // Remove the compound wrappers
+    if (wrapperIds.length > 0) {
+      useItemsStore.getState()._removeItems(wrapperIds);
+    }
+
+    // Add restored items
+    if (restoredItems.length > 0) {
+      useItemsStore.getState()._addItems(restoredItems);
+    }
+
+    // Restore transitions with remapped IDs after the restored clips exist.
     const subTransitions = subComp.transitions ?? [];
     if (subTransitions.length > 0) {
       const currentTransitions = useTransitionsStore.getState().transitions;
@@ -616,7 +626,7 @@ export function dissolvePreComp(compositionItemId: string): boolean {
         }];
       });
       useTransitionsStore.getState().setTransitions([...currentTransitions, ...restoredTransitions]);
-      if (restoredItems.length > 0) {
+      if (restoredTransitions.length > 0) {
         applyTransitionRepairs(restoredItems.map((item) => item.id));
       }
     }
@@ -630,16 +640,6 @@ export function dissolvePreComp(compositionItemId: string): boolean {
         itemId: itemIdMapping.get(kf.itemId) ?? kf.itemId,
       }));
       useKeyframesStore.getState().setKeyframes([...currentKeyframes, ...restoredKeyframes]);
-    }
-
-    // Remove the compound wrappers
-    if (wrapperIds.length > 0) {
-      useItemsStore.getState()._removeItems(wrapperIds);
-    }
-
-    // Add restored items
-    for (const item of restoredItems) {
-      useItemsStore.getState()._addItem(item);
     }
 
     // Check if composition is still referenced by other items
