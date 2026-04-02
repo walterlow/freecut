@@ -46,6 +46,10 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.rightSidebarDefaultWidth),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
+  mediaSkimPreviewMediaId: null,
+  mediaSkimPreviewFrame: null,
+  compoundClipSkimPreviewCompositionId: null,
+  compoundClipSkimPreviewFrame: null,
   sourcePatchVideoEnabled: true,
   sourcePatchAudioEnabled: true,
   linkedSelectionEnabled: true,
@@ -94,7 +98,72 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     ),
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
-  setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
+  setSourcePreviewMediaId: (mediaId) => set({
+    sourcePreviewMediaId: mediaId,
+    mediaSkimPreviewMediaId: null,
+    mediaSkimPreviewFrame: null,
+    compoundClipSkimPreviewCompositionId: null,
+    compoundClipSkimPreviewFrame: null,
+  }),
+  setMediaSkimPreview: (mediaId, frame = null) => set((state) => {
+    const nextFrame = mediaId ? frame : null;
+    if (
+      state.mediaSkimPreviewMediaId === mediaId
+      && state.mediaSkimPreviewFrame === nextFrame
+      && state.compoundClipSkimPreviewCompositionId === null
+      && state.compoundClipSkimPreviewFrame === null
+    ) {
+      return state;
+    }
+
+    return {
+      mediaSkimPreviewMediaId: mediaId,
+      mediaSkimPreviewFrame: nextFrame,
+      compoundClipSkimPreviewCompositionId: null,
+      compoundClipSkimPreviewFrame: null,
+    };
+  }),
+  clearMediaSkimPreview: () => set((state) => {
+    if (state.mediaSkimPreviewMediaId === null && state.mediaSkimPreviewFrame === null) {
+      return state;
+    }
+
+    return {
+      mediaSkimPreviewMediaId: null,
+      mediaSkimPreviewFrame: null,
+    };
+  }),
+  setCompoundClipSkimPreview: (compositionId, frame = null) => set((state) => {
+    const nextFrame = compositionId ? frame : null;
+    if (
+      state.compoundClipSkimPreviewCompositionId === compositionId
+      && state.compoundClipSkimPreviewFrame === nextFrame
+      && state.mediaSkimPreviewMediaId === null
+      && state.mediaSkimPreviewFrame === null
+    ) {
+      return state;
+    }
+
+    return {
+      compoundClipSkimPreviewCompositionId: compositionId,
+      compoundClipSkimPreviewFrame: nextFrame,
+      mediaSkimPreviewMediaId: null,
+      mediaSkimPreviewFrame: null,
+    };
+  }),
+  clearCompoundClipSkimPreview: () => set((state) => {
+    if (
+      state.compoundClipSkimPreviewCompositionId === null
+      && state.compoundClipSkimPreviewFrame === null
+    ) {
+      return state;
+    }
+
+    return {
+      compoundClipSkimPreviewCompositionId: null,
+      compoundClipSkimPreviewFrame: null,
+    };
+  }),
   setSourcePatchVideoEnabled: (enabled) => set({ sourcePatchVideoEnabled: enabled }),
   setSourcePatchAudioEnabled: (enabled) => set({ sourcePatchAudioEnabled: enabled }),
   toggleSourcePatchVideoEnabled: () => set((state) => ({ sourcePatchVideoEnabled: !state.sourcePatchVideoEnabled })),

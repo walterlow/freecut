@@ -17,6 +17,7 @@ import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
+import { useEditorStore } from '@/shared/state/editor';
 import {
   getTranscriptionOverallPercent,
   getTranscriptionStageLabel,
@@ -35,6 +36,7 @@ interface MediaCardProps {
 
 export function MediaCard({ media, selected = false, isBroken = false, onSelect, onDoubleClick, onDelete, onRelink, viewMode = 'grid' }: MediaCardProps) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [skimProgress, setSkimProgress] = useState<number | null>(null);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const importingIds = useMediaLibraryStore((s) => s.importingIds);
@@ -57,7 +59,10 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   const hasTranscript = transcriptStatus === 'ready';
   const isTranscribing = transcriptStatus === 'transcribing';
   const thumbnailRef = useRef<HTMLImageElement>(null);
+  const thumbnailContainerRef = useRef<HTMLDivElement | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
+  const setMediaSkimPreview = useEditorStore((s) => s.setMediaSkimPreview);
+  const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -233,6 +238,55 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     onSelect?.(e);
   };
 
+  const canHoverPreview = (mediaType === 'video' || mediaType === 'image') && !isBroken && !isImporting;
+  const canScrubPreview = mediaType === 'video' && media.duration > 0 && !isBroken && !isImporting;
+
+  const updateSkimPreview = useCallback((clientX: number) => {
+    const thumbnailContainer = thumbnailContainerRef.current;
+    if (!thumbnailContainer || !canHoverPreview) return;
+
+    if (!canScrubPreview) {
+      setSkimProgress(null);
+      setMediaSkimPreview(media.id, 0);
+      return;
+    }
+
+    const rect = thumbnailContainer.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const durationInFrames = Math.max(1, Math.round(media.duration * (media.fps || 30)));
+    const frame = Math.min(durationInFrames - 1, Math.max(0, Math.round(progress * (durationInFrames - 1))));
+
+    setSkimProgress(progress);
+    setMediaSkimPreview(media.id, frame);
+  }, [canHoverPreview, canScrubPreview, media.duration, media.fps, media.id, setMediaSkimPreview]);
+
+  const handleThumbnailPointerEnter = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canHoverPreview || event.pointerType === 'touch') return;
+    updateSkimPreview(event.clientX);
+  }, [canHoverPreview, updateSkimPreview]);
+
+  const handleThumbnailPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canScrubPreview || event.pointerType === 'touch') return;
+    updateSkimPreview(event.clientX);
+  }, [canScrubPreview, updateSkimPreview]);
+
+  const handleThumbnailPointerLeave = useCallback(() => {
+    if (!canHoverPreview) return;
+    setSkimProgress(null);
+    clearMediaSkimPreview();
+  }, [canHoverPreview, clearMediaSkimPreview]);
+
+  useEffect(() => {
+    if (!canHoverPreview) return;
+    return () => {
+      if (useEditorStore.getState().mediaSkimPreviewMediaId === media.id) {
+        clearMediaSkimPreview();
+      }
+    };
+  }, [canHoverPreview, clearMediaSkimPreview, media.id]);
+
   const transcriptProgressLabel = transcriptProgress
     ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
     : 'Transcribing...';
@@ -270,7 +324,13 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
         onDoubleClick={isImporting ? undefined : (e) => { e.stopPropagation(); onDoubleClick?.(); }}
       >
         {/* Thumbnail */}
-        <div className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 relative">
+        <div
+          ref={thumbnailContainerRef}
+          className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 relative"
+          onPointerEnter={handleThumbnailPointerEnter}
+          onPointerMove={handleThumbnailPointerMove}
+          onPointerLeave={handleThumbnailPointerLeave}
+        >
           {thumbnailUrl ? (
             <img
               src={thumbnailUrl}
@@ -304,6 +364,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
             <div className="absolute bottom-0.5 right-0.5 p-0.5 rounded bg-green-500/90 text-black">
               <Zap className="w-2.5 h-2.5" />
             </div>
+          )}
+          {canScrubPreview && skimProgress !== null && (
+              <div
+                className="absolute inset-y-0 w-px bg-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.25)] pointer-events-none"
+                style={{ left: `${skimProgress * 100}%` }}
+              />
           )}
         </div>
 
@@ -419,7 +485,13 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary via-muted to-secondary" />
 
       {/* Thumbnail - takes most of square space */}
-      <div className="flex-1 bg-secondary relative overflow-hidden min-h-0">
+      <div
+        ref={thumbnailContainerRef}
+        className="flex-1 bg-secondary relative overflow-hidden min-h-0"
+        onPointerEnter={handleThumbnailPointerEnter}
+        onPointerMove={handleThumbnailPointerMove}
+        onPointerLeave={handleThumbnailPointerLeave}
+      >
         {thumbnailUrl ? (
           <img
             ref={thumbnailRef}
@@ -484,6 +556,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
               </div>
             )}
           </div>
+        )}
+        {canScrubPreview && skimProgress !== null && (
+            <div
+              className="absolute inset-y-0 w-px bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.3)] pointer-events-none"
+              style={{ left: `${skimProgress * 100}%` }}
+            />
         )}
       </div>
 

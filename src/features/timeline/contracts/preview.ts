@@ -26,3 +26,10 @@ export {
   performOverwriteEdit,
 } from '../stores/actions/source-edit-actions';
 export { resolveSourceEditTrackTargets } from '../utils/source-edit-targeting';
+export {
+  useCompositionsStore,
+} from '../stores/compositions-store';
+export {
+  buildSubCompositionInput,
+  collectSubCompositionMediaIds,
+} from '../utils/sub-composition-preview';

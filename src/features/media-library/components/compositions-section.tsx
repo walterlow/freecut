@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/shared/ui/cn';
+import { useEditorStore } from '@/shared/state/editor';
 import {
   deleteCompoundClips,
   getCompoundClipDeletionImpact,
@@ -35,6 +36,7 @@ import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { GRID_COLS_BY_SIZE } from './media-grid-constants';
 import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
+import { compoundClipThumbnailService } from '../services/compound-clip-thumbnail-service';
 
 /**
  * Compositions section in the media library.
@@ -258,6 +260,14 @@ function CompositionCard({
   onCancelRename,
 }: CompositionCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const thumbnailContainerRef = useRef<HTMLDivElement | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [skimProgress, setSkimProgress] = useState<number | null>(null);
+  const thisComposition = useCompositionsStore(
+    useCallback((s) => s.compositionById[composition.id], [composition.id])
+  );
+  const setCompoundClipSkimPreview = useEditorStore((s) => s.setCompoundClipSkimPreview);
+  const clearCompoundClipSkimPreview = useEditorStore((s) => s.clearCompoundClipSkimPreview);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -265,6 +275,26 @@ function CompositionCard({
       inputRef.current.select();
     }
   }, [isEditing]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadThumbnail = async () => {
+      const url = await compoundClipThumbnailService.getThumbnailBlobUrl(composition.id);
+      if (mounted) {
+        setThumbnailUrl(url);
+      }
+    };
+
+    void loadThumbnail();
+
+    return () => {
+      mounted = false;
+      if (useEditorStore.getState().compoundClipSkimPreviewCompositionId === composition.id) {
+        clearCompoundClipSkimPreview();
+      }
+    };
+  }, [clearCompoundClipSkimPreview, composition.id, thisComposition]);
 
   const handleDragStart = useCallback(
     (e: React.DragEvent) => {
@@ -314,6 +344,41 @@ function CompositionCard({
     [isEditing, onSelect]
   );
 
+  const canHoverPreview = composition.durationInFrames > 0;
+
+  const updateSkimPreview = useCallback((clientX: number) => {
+    const thumbnailContainer = thumbnailContainerRef.current;
+    if (!thumbnailContainer || !canHoverPreview) return;
+
+    const rect = thumbnailContainer.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    const progress = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const frame = Math.min(
+      composition.durationInFrames - 1,
+      Math.max(0, Math.round(progress * Math.max(0, composition.durationInFrames - 1))),
+    );
+
+    setSkimProgress(progress);
+    setCompoundClipSkimPreview(composition.id, frame);
+  }, [canHoverPreview, composition.durationInFrames, composition.id, setCompoundClipSkimPreview]);
+
+  const handleThumbnailPointerEnter = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canHoverPreview || event.pointerType === 'touch') return;
+    updateSkimPreview(event.clientX);
+  }, [canHoverPreview, updateSkimPreview]);
+
+  const handleThumbnailPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!canHoverPreview || event.pointerType === 'touch') return;
+    updateSkimPreview(event.clientX);
+  }, [canHoverPreview, updateSkimPreview]);
+
+  const handleThumbnailPointerLeave = useCallback(() => {
+    if (!canHoverPreview) return;
+    setSkimProgress(null);
+    clearCompoundClipSkimPreview();
+  }, [canHoverPreview, clearCompoundClipSkimPreview]);
+
   const itemCount = composition.items.length;
   const fps = composition.fps || 30;
   const durationSecs = composition.durationInFrames / fps;
@@ -346,8 +411,22 @@ function CompositionCard({
                   )
             )}
           >
-            <div className="flex-1 bg-secondary relative overflow-hidden min-h-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
-              <Layers className="w-8 h-8 text-violet-400/70" />
+            <div
+              ref={thumbnailContainerRef}
+              className="flex-1 bg-secondary relative overflow-hidden min-h-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30"
+              onPointerEnter={handleThumbnailPointerEnter}
+              onPointerMove={handleThumbnailPointerMove}
+              onPointerLeave={handleThumbnailPointerLeave}
+            >
+              {thumbnailUrl ? (
+                <img
+                  src={thumbnailUrl}
+                  alt={composition.name}
+                  className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+                />
+              ) : (
+                <Layers className="w-8 h-8 text-violet-400/70" />
+              )}
 
               <div className="absolute inset-x-0 bottom-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent flex items-center justify-between gap-1 pointer-events-none">
                 <div className="p-0.5 rounded bg-violet-600/90 text-white">
@@ -357,6 +436,12 @@ function CompositionCard({
                   {durationLabel}
                 </div>
               </div>
+              {skimProgress !== null && (
+                <div
+                  className="absolute inset-y-0 w-px bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.3)] pointer-events-none"
+                  style={{ left: `${skimProgress * 100}%` }}
+                />
+              )}
             </div>
 
             <div className="px-1.5 py-1 bg-panel-bg/50 flex-shrink-0">
@@ -426,8 +511,28 @@ function CompositionCard({
                 )
           )}
         >
-          <div className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30">
-            <Layers className="w-5 h-5 text-violet-400" />
+          <div
+            ref={thumbnailContainerRef}
+            className="w-16 h-12 bg-secondary rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gradient-to-br from-violet-600/20 to-violet-900/30 relative"
+            onPointerEnter={handleThumbnailPointerEnter}
+            onPointerMove={handleThumbnailPointerMove}
+            onPointerLeave={handleThumbnailPointerLeave}
+          >
+            {thumbnailUrl ? (
+              <img
+                src={thumbnailUrl}
+                alt={composition.name}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Layers className="w-5 h-5 text-violet-400" />
+            )}
+            {skimProgress !== null && (
+              <div
+                className="absolute inset-y-0 w-px bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.3)] pointer-events-none"
+                style={{ left: `${skimProgress * 100}%` }}
+              />
+            )}
           </div>
 
           <div className="flex-1 min-w-0">

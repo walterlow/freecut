@@ -9,6 +9,8 @@ export { AlignmentToolbar } from '@/features/preview/components/alignment-hud';
 export { TimecodeDisplay } from '@/features/preview/components/timecode-display';
 export { PreviewZoomControls } from '@/features/preview/components/preview-zoom-controls';
 export { SourceMonitor } from '@/features/preview/components/source-monitor';
+export { InlineSourcePreview } from '@/features/preview/components/inline-source-preview';
+export { InlineCompositionPreview } from '@/features/preview/components/inline-composition-preview';
 export { ColorScopesPanel } from '@/features/preview/components/color-scopes-panel';
 export { ColorScopesMonitor } from '@/features/preview/components/color-scopes-monitor';
 

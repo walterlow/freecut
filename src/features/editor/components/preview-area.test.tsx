@@ -16,6 +16,8 @@ vi.mock('@/features/editor/deps/preview', async () => {
     TimecodeDisplay: () => <div data-testid="timecode-display" />,
     PreviewZoomControls: () => <div data-testid="preview-zoom-controls" />,
     SourceMonitor: () => <div data-testid="source-monitor" />,
+    InlineSourcePreview: () => <div data-testid="inline-source-preview" />,
+    InlineCompositionPreview: () => <div data-testid="inline-composition-preview" />,
     ColorScopesMonitor: () => <div data-testid="color-scopes-monitor" />,
   };
 });
@@ -26,6 +28,10 @@ function resetStores() {
   useEditorStore.setState({
     linkedSelectionEnabled: true,
     sourcePreviewMediaId: null,
+    mediaSkimPreviewMediaId: null,
+    mediaSkimPreviewFrame: null,
+    compoundClipSkimPreviewCompositionId: null,
+    compoundClipSkimPreviewFrame: null,
     colorScopesOpen: false,
   });
 }
@@ -138,6 +144,40 @@ describe('PreviewArea mask editor toolbar', () => {
     expect(
       screen.getByTestId('color-scopes-monitor').closest('[data-interaction-locked="true"]')
     ).toBeTruthy();
+  });
+
+  it('shows the media skim preview in the program monitor while hover preview is active', () => {
+    useEditorStore.setState({
+      mediaSkimPreviewMediaId: 'media-1',
+      mediaSkimPreviewFrame: 24,
+    });
+
+    render(
+      <PreviewArea
+        project={{ width: 1920, height: 1080, fps: 30 }}
+      />
+    );
+
+    expect(screen.getByTestId('inline-source-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('video-preview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('playback-controls')).toBeInTheDocument();
+  });
+
+  it('shows the compound clip skim preview in the program monitor while hover preview is active', () => {
+    useEditorStore.setState({
+      compoundClipSkimPreviewCompositionId: 'composition-1',
+      compoundClipSkimPreviewFrame: 42,
+    });
+
+    render(
+      <PreviewArea
+        project={{ width: 1920, height: 1080, fps: 30 }}
+      />
+    );
+
+    expect(screen.getByTestId('inline-composition-preview')).toBeInTheDocument();
+    expect(screen.queryByTestId('video-preview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('playback-controls')).toBeInTheDocument();
   });
 
   it('enables knot conversion buttons for a selected point and dispatches the request', () => {

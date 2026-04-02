@@ -30,3 +30,11 @@ export {
 
 export { autoMatchOrphanedClips } from '../utils/media-validation';
 export { gifFrameCache } from '../services/gif-frame-cache';
+export { resolveMediaUrl, resolveMediaUrls } from '../deps/media-library-contract';
+export { renderSingleFrame } from '../deps/export-contract';
+export {
+  buildSubCompositionInput,
+  buildSubCompositionPreviewSignature,
+  collectSubCompositionMediaIds,
+  getSubCompositionThumbnailFrame,
+} from '../utils/sub-composition-preview';

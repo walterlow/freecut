@@ -27,27 +27,37 @@ import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-la
 
 interface SourceMonitorProps {
   mediaId: string;
-  onClose: () => void;
+  onClose?: () => void;
+  variant?: 'panel' | 'program';
+  interactive?: boolean;
+  seekFrame?: number | null;
 }
 
 const SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS = 33;
 
-export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: SourceMonitorProps) {
+export const SourceMonitor = memo(function SourceMonitor({
+  mediaId,
+  onClose,
+  variant = 'panel',
+  interactive = true,
+  seekFrame = null,
+}: SourceMonitorProps) {
   const [blobUrl, setBlobUrl] = useState<string>('');
   const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId));
 
   // Sync current media ID into source player store for I/O points
   useEffect(() => {
+    if (!interactive) return;
     useSourcePlayerStore.getState().setCurrentMediaId(mediaId);
     return () => {
       useSourcePlayerStore.getState().setCurrentMediaId(null);
     };
-  }, [mediaId]);
+  }, [interactive, mediaId]);
 
   // Auto-close if media is deleted
   useEffect(() => {
     if (!media) {
-      onClose();
+      onClose?.();
     }
   }, [media, onClose]);
 
@@ -98,6 +108,9 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
             mediaHeight={mediaHeight}
             durationInFrames={durationInFrames}
             fps={fps}
+            variant={variant}
+            interactive={interactive}
+            seekFrame={seekFrame}
             onClose={onClose}
           />
         </VideoConfigProvider>
@@ -118,7 +131,10 @@ interface SourceMonitorInnerProps {
   mediaHeight: number;
   durationInFrames: number;
   fps: number;
-  onClose: () => void;
+  variant: 'panel' | 'program';
+  interactive: boolean;
+  seekFrame: number | null;
+  onClose?: () => void;
 }
 
 function SourceMonitorInner({
@@ -131,6 +147,9 @@ function SourceMonitorInner({
   mediaHeight,
   durationInFrames,
   fps,
+  variant,
+  interactive,
+  seekFrame,
   onClose,
 }: SourceMonitorInnerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -234,16 +253,18 @@ function SourceMonitorInner({
 
   // Reset hover and player methods on unmount
   useEffect(() => {
+    if (!interactive) return;
     return () => {
       setHoveredPanel(null);
       setPlayerMethods(null);
     };
-  }, [setHoveredPanel, setPlayerMethods]);
+  }, [interactive, setHoveredPanel, setPlayerMethods]);
 
   // Handle I/O shortcuts locally on this element (not global useHotkeys)
   const wrapperRef = useRef<HTMLDivElement>(null);
   const hadFocusRef = useRef(false);
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!interactive) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     const { currentSourceFrame, setInPoint, setOutPoint, clearInOutPoints } = useSourcePlayerStore.getState();
     if (e.key === 'i' || e.key === 'I') {
@@ -259,9 +280,10 @@ function SourceMonitorInner({
       e.stopPropagation();
       clearInOutPoints();
     }
-  }, []);
+  }, [interactive]);
 
   const handleMouseEnter = useCallback(() => {
+    if (!interactive) return;
     setHoveredPanel('source');
     // Only grab focus if nothing meaningful is focused (avoid stealing from inputs)
     const active = document.activeElement;
@@ -269,15 +291,16 @@ function SourceMonitorInner({
       wrapperRef.current?.focus();
       hadFocusRef.current = true;
     }
-  }, [setHoveredPanel]);
+  }, [interactive, setHoveredPanel]);
 
   const handleMouseLeave = useCallback(() => {
+    if (!interactive) return;
     setHoveredPanel(null);
     if (hadFocusRef.current) {
       wrapperRef.current?.blur();
       hadFocusRef.current = false;
     }
-  }, [setHoveredPanel]);
+  }, [interactive, setHoveredPanel]);
 
   return (
     <div
@@ -288,22 +311,23 @@ function SourceMonitorInner({
       onMouseLeave={handleMouseLeave}
       onKeyDown={handleKeyDown}
     >
-      {/* Header */}
-      <div
-        className="border-b border-border flex items-center px-3 justify-between shrink-0"
-        style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
-      >
-        <span className="text-xs text-muted-foreground truncate">
-          Source: {fileName}
-        </span>
-        <button
-          onClick={onClose}
-          className="p-1 rounded hover:bg-muted transition-colors shrink-0"
-          aria-label="Close source monitor"
+      {variant === 'panel' && (
+        <div
+          className="border-b border-border flex items-center px-3 justify-between shrink-0"
+          style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
         >
-          <X className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
-      </div>
+          <span className="text-xs text-muted-foreground truncate">
+            Source: {fileName}
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-muted transition-colors shrink-0"
+            aria-label="Close source monitor"
+          >
+            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
+      )}
 
       {/* Video area - same gradient bg as composition panel */}
       <div
@@ -345,6 +369,8 @@ function SourceMonitorInner({
         fps={fps}
         mediaType={mediaType}
         hasAudio={hasAudio}
+        interactive={interactive}
+        seekFrame={seekFrame}
       />
     </div>
   );
@@ -357,11 +383,15 @@ function SourcePlaybackControls({
   fps,
   mediaType,
   hasAudio,
+  interactive,
+  seekFrame,
 }: {
   durationInFrames: number;
   fps: number;
   mediaType: 'video' | 'audio' | 'image';
   hasAudio: boolean;
+  interactive: boolean;
+  seekFrame: number | null;
 }) {
   const clock = useClock();
   const player = usePlayer(durationInFrames);
@@ -387,7 +417,9 @@ function SourcePlaybackControls({
 
   const updateFrameDisplay = useCallback((frame: number) => {
     currentFrameRef.current = frame;
-    useSourcePlayerStore.getState().setCurrentSourceFrame(frame);
+    if (interactive) {
+      useSourcePlayerStore.getState().setCurrentSourceFrame(frame);
+    }
     if (progressRef.current) {
       const progress = lastFrame > 0 ? (frame / lastFrame) * 100 : 0;
       progressRef.current.style.width = `${progress}%`;
@@ -395,10 +427,11 @@ function SourcePlaybackControls({
     if (currentTimeRef.current) {
       currentTimeRef.current.textContent = formatTime(frame);
     }
-  }, [formatTime, lastFrame]);
+  }, [formatTime, interactive, lastFrame]);
 
   // Bridge player methods into the source player store for keyboard shortcuts
   useEffect(() => {
+    if (!interactive) return;
     const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods;
     setPlayerMethods({
       toggle: player.toggle,
@@ -410,7 +443,7 @@ function SourcePlaybackControls({
     return () => {
       useSourcePlayerStore.getState().setPlayerMethods(null);
     };
-  }, [player.toggle, player.seek, player.frameBack, player.frameForward, durationInFrames]);
+  }, [durationInFrames, interactive, player.toggle, player.seek, player.frameBack, player.frameForward]);
 
   useEffect(() => {
     updateFrameDisplay(clock.currentFrame);
@@ -427,11 +460,17 @@ function SourcePlaybackControls({
   // Consume pending seek (e.g. double-click opens clip at its In point)
   const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame);
   useEffect(() => {
+    if (!interactive) return;
     if (pendingSeekFrame !== null) {
       player.seek(pendingSeekFrame);
       useSourcePlayerStore.getState().setPendingSeekFrame(null);
     }
-  }, [pendingSeekFrame, player]);
+  }, [interactive, pendingSeekFrame, player]);
+
+  useEffect(() => {
+    if (seekFrame === null) return;
+    player.seek(seekFrame);
+  }, [player, seekFrame]);
 
   // Read I/O points from store
   const inPoint = useSourcePlayerStore((s) => s.inPoint);
@@ -501,11 +540,11 @@ function SourcePlaybackControls({
   }, []);
 
   // I/O marker positions as percentages
-  const inPct = inPoint !== null && lastFrame > 0 ? (inPoint / lastFrame) * 100 : null;
-  const outPct = outPoint !== null && lastFrame > 0 ? (outPoint / lastFrame) * 100 : null;
+  const inPct = interactive && inPoint !== null && lastFrame > 0 ? (inPoint / lastFrame) * 100 : null;
+  const outPct = interactive && outPoint !== null && lastFrame > 0 ? (outPoint / lastFrame) * 100 : null;
 
   // Duration display when both I/O are set
-  const ioDuration = inPoint !== null && outPoint !== null
+  const ioDuration = interactive && inPoint !== null && outPoint !== null
     ? formatTime(outPoint - inPoint)
     : null;
 
@@ -710,121 +749,124 @@ function SourcePlaybackControls({
           </Tooltip>
         </div>
 
-        {/* Source editing buttons */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                disabled={inPoint === null && outPoint === null}
-                onClick={handleReplaySegment}
-              >
-                <Repeat className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Play In to Out</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkIn}>
-                <ArrowLeftToLine className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Mark In (I)</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkOut}>
-                <ArrowRightToLine className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Mark Out (O)</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearIO}>
-                <XCircle className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
-          </Tooltip>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          <div className="flex items-center gap-1 shrink-0">
-            <div className="flex items-center gap-0.5 rounded-md border border-border bg-secondary/50 px-1 py-0.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
-                      sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-                    }`}
-                    onClick={toggleSourcePatchVideoEnabled}
-                    aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
-                    aria-pressed={sourcePatchVideoEnabled}
-                  >
-                    V
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{videoPatchTooltip}</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
-                      sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-                    }`}
-                    onClick={toggleSourcePatchAudioEnabled}
-                    aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
-                    aria-pressed={sourcePatchAudioEnabled}
-                  >
-                    A
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{audioPatchTooltip}</TooltipContent>
-              </Tooltip>
-            </div>
-            {patchTargetPreview.status ? (
-              <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                {patchTargetPreview.status}
-              </span>
-            ) : (
-              <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
-                {patchTargetPreview.videoTargetName ? (
-                  <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
-                    {'V->'}{patchTargetPreview.videoTargetName}
-                  </span>
-                ) : null}
-                {patchTargetPreview.audioTargetName ? (
-                  <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
-                    {'A->'}{patchTargetPreview.audioTargetName}
-                  </span>
-                ) : null}
+        {interactive ? (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={inPoint === null && outPoint === null}
+                  onClick={handleReplaySegment}
+                >
+                  <Repeat className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Play In to Out</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkIn}>
+                  <ArrowLeftToLine className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Mark In (I)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkOut}>
+                  <ArrowRightToLine className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Mark Out (O)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearIO}>
+                  <XCircle className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
+            </Tooltip>
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-0.5 rounded-md border border-border bg-secondary/50 px-1 py-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
+                        sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                      }`}
+                      onClick={toggleSourcePatchVideoEnabled}
+                      aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
+                      aria-pressed={sourcePatchVideoEnabled}
+                    >
+                      V
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{videoPatchTooltip}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
+                        sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                      }`}
+                      onClick={toggleSourcePatchAudioEnabled}
+                      aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
+                      aria-pressed={sourcePatchAudioEnabled}
+                    >
+                      A
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">{audioPatchTooltip}</TooltipContent>
+                </Tooltip>
               </div>
-            )}
+              {patchTargetPreview.status ? (
+                <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                  {patchTargetPreview.status}
+                </span>
+              ) : (
+                <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                  {patchTargetPreview.videoTargetName ? (
+                    <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
+                      {'V->'}{patchTargetPreview.videoTargetName}
+                    </span>
+                  ) : null}
+                  {patchTargetPreview.audioTargetName ? (
+                    <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
+                      {'A->'}{patchTargetPreview.audioTargetName}
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="w-px h-4 bg-border mx-0.5" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performInsertEdit()}>
+                  <ArrowDownToLine className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Insert (,)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performOverwriteEdit()}>
+                  <Replace className="w-3.5 h-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Overwrite (.)</TooltipContent>
+            </Tooltip>
           </div>
-          <div className="w-px h-4 bg-border mx-0.5" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performInsertEdit()}>
-                <ArrowDownToLine className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Insert (,)</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performOverwriteEdit()}>
-                <Replace className="w-3.5 h-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Overwrite (.)</TooltipContent>
-          </Tooltip>
-        </div>
+        ) : (
+          <div className="w-[11ch] shrink-0" aria-hidden="true" />
+        )}
       </div>
     </div>
   );

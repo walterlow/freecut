@@ -11,6 +11,10 @@ export interface EditorState {
   rightSidebarWidth: number;
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
+  mediaSkimPreviewMediaId: string | null;
+  mediaSkimPreviewFrame: number | null;
+  compoundClipSkimPreviewCompositionId: string | null;
+  compoundClipSkimPreviewFrame: number | null;
   sourcePatchVideoEnabled: boolean;
   sourcePatchAudioEnabled: boolean;
   linkedSelectionEnabled: boolean;
@@ -40,6 +44,10 @@ export interface EditorActions {
   }) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
+  setMediaSkimPreview: (mediaId: string | null, frame?: number | null) => void;
+  clearMediaSkimPreview: () => void;
+  setCompoundClipSkimPreview: (compositionId: string | null, frame?: number | null) => void;
+  clearCompoundClipSkimPreview: () => void;
   setSourcePatchVideoEnabled: (enabled: boolean) => void;
   setSourcePatchAudioEnabled: (enabled: boolean) => void;
   toggleSourcePatchVideoEnabled: () => void;

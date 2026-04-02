@@ -11,6 +11,7 @@ export {
 export {
   applyTransformOverride,
   resolveItemTransformAtFrame,
+  resolveItemTransformAtRelativeFrame,
   resolveActiveShapeMasksAtFrame,
 } from '@/features/composition-runtime/utils/frame-scene';
 export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout';

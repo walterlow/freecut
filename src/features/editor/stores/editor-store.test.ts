@@ -24,6 +24,10 @@ describe('editor-store', () => {
       rightSidebarWidth: editorLayout.rightSidebarDefaultWidth,
       timelineHeight: 250,
       sourcePreviewMediaId: null,
+      mediaSkimPreviewMediaId: null,
+      mediaSkimPreviewFrame: null,
+      compoundClipSkimPreviewCompositionId: null,
+      compoundClipSkimPreviewFrame: null,
       linkedSelectionEnabled: true,
       colorScopesOpen: false,
     });
@@ -38,6 +42,10 @@ describe('editor-store', () => {
     expect(state.activeTab).toBe('media');
     expect(state.clipInspectorTab).toBe('video');
     expect(state.sourcePreviewMediaId).toBe(null);
+    expect(state.mediaSkimPreviewMediaId).toBe(null);
+    expect(state.mediaSkimPreviewFrame).toBe(null);
+    expect(state.compoundClipSkimPreviewCompositionId).toBe(null);
+    expect(state.compoundClipSkimPreviewFrame).toBe(null);
     expect(state.linkedSelectionEnabled).toBe(true);
     expect(state.colorScopesOpen).toBe(false);
   });
@@ -113,11 +121,64 @@ describe('editor-store', () => {
   });
 
   it('sets source preview media id', () => {
+    useEditorStore.getState().setMediaSkimPreview('media-hover', 12);
     useEditorStore.getState().setSourcePreviewMediaId('media-123');
     expect(useEditorStore.getState().sourcePreviewMediaId).toBe('media-123');
+    expect(useEditorStore.getState().mediaSkimPreviewMediaId).toBe(null);
+    expect(useEditorStore.getState().mediaSkimPreviewFrame).toBe(null);
+    expect(useEditorStore.getState().compoundClipSkimPreviewCompositionId).toBe(null);
+    expect(useEditorStore.getState().compoundClipSkimPreviewFrame).toBe(null);
 
     useEditorStore.getState().setSourcePreviewMediaId(null);
     expect(useEditorStore.getState().sourcePreviewMediaId).toBe(null);
+  });
+
+  it('tracks media skim preview state', () => {
+    useEditorStore.getState().setMediaSkimPreview('media-123', 45);
+    expect(useEditorStore.getState().mediaSkimPreviewMediaId).toBe('media-123');
+    expect(useEditorStore.getState().mediaSkimPreviewFrame).toBe(45);
+
+    useEditorStore.getState().clearMediaSkimPreview();
+    expect(useEditorStore.getState().mediaSkimPreviewMediaId).toBe(null);
+    expect(useEditorStore.getState().mediaSkimPreviewFrame).toBe(null);
+  });
+
+  it('tracks compound clip skim preview state', () => {
+    useEditorStore.getState().setCompoundClipSkimPreview('composition-123', 18);
+    expect(useEditorStore.getState().compoundClipSkimPreviewCompositionId).toBe('composition-123');
+    expect(useEditorStore.getState().compoundClipSkimPreviewFrame).toBe(18);
+    expect(useEditorStore.getState().mediaSkimPreviewMediaId).toBe(null);
+    expect(useEditorStore.getState().mediaSkimPreviewFrame).toBe(null);
+
+    useEditorStore.getState().clearCompoundClipSkimPreview();
+    expect(useEditorStore.getState().compoundClipSkimPreviewCompositionId).toBe(null);
+    expect(useEditorStore.getState().compoundClipSkimPreviewFrame).toBe(null);
+  });
+
+  it('does not publish a new state object when skim preview values are unchanged', () => {
+    useEditorStore.getState().setMediaSkimPreview('media-123', 45);
+    const currentState = useEditorStore.getState();
+
+    useEditorStore.getState().setMediaSkimPreview('media-123', 45);
+    expect(useEditorStore.getState()).toBe(currentState);
+
+    useEditorStore.getState().clearMediaSkimPreview();
+    const clearedState = useEditorStore.getState();
+
+    useEditorStore.getState().clearMediaSkimPreview();
+    expect(useEditorStore.getState()).toBe(clearedState);
+
+    useEditorStore.getState().setCompoundClipSkimPreview('composition-123', 18);
+    const compoundCurrentState = useEditorStore.getState();
+
+    useEditorStore.getState().setCompoundClipSkimPreview('composition-123', 18);
+    expect(useEditorStore.getState()).toBe(compoundCurrentState);
+
+    useEditorStore.getState().clearCompoundClipSkimPreview();
+    const compoundClearedState = useEditorStore.getState();
+
+    useEditorStore.getState().clearCompoundClipSkimPreview();
+    expect(useEditorStore.getState()).toBe(compoundClearedState);
   });
 
   it('toggles the color scopes monitor', () => {

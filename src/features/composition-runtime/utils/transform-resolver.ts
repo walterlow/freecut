@@ -4,6 +4,7 @@ import type {
   CanvasSettings,
 } from '@/types/transform';
 import type { TimelineItem, VideoItem, ImageItem, CompositionItem } from '@/types/timeline';
+import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 
 /**
  * Resolve transform properties to concrete values for rendering.
@@ -62,11 +63,23 @@ export function getSourceDimensions(
     if (videoItem.sourceWidth && videoItem.sourceHeight) {
       return { width: videoItem.sourceWidth, height: videoItem.sourceHeight };
     }
+    if (videoItem.mediaId) {
+      const media = useMediaLibraryStore.getState().mediaById[videoItem.mediaId];
+      if (media?.width && media?.height) {
+        return { width: media.width, height: media.height };
+      }
+    }
   }
   if (item.type === 'image') {
     const imageItem = item as ImageItem;
     if (imageItem.sourceWidth && imageItem.sourceHeight) {
       return { width: imageItem.sourceWidth, height: imageItem.sourceHeight };
+    }
+    if (imageItem.mediaId) {
+      const media = useMediaLibraryStore.getState().mediaById[imageItem.mediaId];
+      if (media?.width && media?.height) {
+        return { width: media.width, height: media.height };
+      }
     }
   }
   if (item.type === 'composition') {

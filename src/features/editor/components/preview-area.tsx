@@ -7,6 +7,8 @@ import {
   TimecodeDisplay,
   PreviewZoomControls,
   SourceMonitor,
+  InlineSourcePreview,
+  InlineCompositionPreview,
   ColorScopesMonitor,
 } from '@/features/editor/deps/preview';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
@@ -80,6 +82,53 @@ function PreviewSplitHandle({
     </div>
   );
 }
+
+const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
+  project,
+  containerSize,
+  suspendOverlay,
+}: {
+  project: {
+    width: number;
+    height: number;
+    fps: number;
+    backgroundColor?: string;
+  };
+  containerSize: {
+    width: number;
+    height: number;
+  };
+  suspendOverlay: boolean;
+}) {
+  const mediaSkimPreviewMediaId = useEditorStore((s) => s.mediaSkimPreviewMediaId);
+  const mediaSkimPreviewFrame = useEditorStore((s) => s.mediaSkimPreviewFrame);
+  const compoundClipSkimPreviewCompositionId = useEditorStore((s) => s.compoundClipSkimPreviewCompositionId);
+  const compoundClipSkimPreviewFrame = useEditorStore((s) => s.compoundClipSkimPreviewFrame);
+
+  return (
+    <ErrorBoundary level="component">
+      {compoundClipSkimPreviewCompositionId ? (
+        <InlineCompositionPreview
+          compositionId={compoundClipSkimPreviewCompositionId}
+          seekFrame={compoundClipSkimPreviewFrame}
+          containerSize={containerSize}
+        />
+      ) : mediaSkimPreviewMediaId ? (
+        <InlineSourcePreview
+          mediaId={mediaSkimPreviewMediaId}
+          seekFrame={mediaSkimPreviewFrame}
+          containerSize={containerSize}
+        />
+      ) : (
+        <VideoPreview
+          project={project}
+          containerSize={containerSize}
+          suspendOverlay={suspendOverlay}
+        />
+      )}
+    </ErrorBoundary>
+  );
+});
 
 /**
  * Preview Area Component
@@ -482,13 +531,11 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
           <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden" aria-label="Preview canvas region">
-            <ErrorBoundary level="component">
-              <VideoPreview
-                project={liveProject}
-                containerSize={containerSize}
-                suspendOverlay={isPanelDragging}
-              />
-            </ErrorBoundary>
+            <ProgramPreviewSurface
+              project={liveProject}
+              containerSize={containerSize}
+              suspendOverlay={isPanelDragging}
+            />
           </div>
 
           {isPenModeActive ? (
