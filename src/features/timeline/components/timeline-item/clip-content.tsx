@@ -15,6 +15,8 @@ import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
 import { formatSignedFrameDelta } from '@/utils/time-utils';
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 
+const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
+
 interface ClipContentProps {
   item: TimelineItem;
   clipWidth: number;
@@ -60,7 +62,9 @@ export const ClipContent = memo(function ClipContent({
   const composition = useCompositionsStore(
     useCallback((s) => (compositionId ? s.compositionById[compositionId] ?? null : null), [compositionId])
   );
-  const compositionById = useCompositionsStore((s) => s.compositionById);
+  const compositionById = useCompositionsStore(
+    useCallback((s) => (compositionId ? s.compositionById : EMPTY_COMPOSITION_LOOKUP), [compositionId])
+  );
   const hasCompositionAudioCompanion = useItemsStore(
     useCallback(
       (s) => item.type === 'composition' && hasLinkedAudioCompanion(s.items, item),

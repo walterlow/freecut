@@ -509,6 +509,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         })
       ) {
         e.dataTransfer.dropEffect = 'none';
+        setIsDragOver(false);
         clearZoneGhostPreviews();
         return;
       }
@@ -517,6 +518,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       const composition = compositionById[data.compositionId];
       if (!composition) {
         e.dataTransfer.dropEffect = 'none';
+        setIsDragOver(false);
         clearZoneGhostPreviews();
         return;
       }

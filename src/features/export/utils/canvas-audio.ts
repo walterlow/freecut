@@ -512,8 +512,10 @@ function appendCompositionAudioSegments(params: {
     durationInFrames: number;
   };
   fps: number;
+  visited?: Set<string>;
 }): void {
   const { segments, track, compositionItem, subComp, fps } = params;
+  const visited = params.visited ?? new Set<string>();
   const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
   const compFrom = compositionItem.from;
   const wrapperSpeed = compositionItem.speed ?? 1;
@@ -547,6 +549,7 @@ function appendCompositionAudioSegments(params: {
 
     if (subItem.type === 'composition' || isCompositionAudioItem(subItem)) {
       if (subItem.type === 'composition' && getLinkedCompositionAudioCompanion(subComp.items, subItem)) continue;
+      if (visited.has(subItem.compositionId)) continue;
 
       const nestedSubComp = useCompositionsStore.getState().getComposition(subItem.compositionId);
       if (!nestedSubComp) continue;
@@ -571,6 +574,9 @@ function appendCompositionAudioSegments(params: {
         }),
       } as CompositionItem | (AudioItem & { compositionId: string });
 
+      // Volumes are dB offsets — sum them so nested levels accumulate correctly.
+      const nestedVisited = new Set(visited);
+      nestedVisited.add(subItem.compositionId);
       appendCompositionAudioSegments({
         segments,
         track: {
@@ -581,6 +587,7 @@ function appendCompositionAudioSegments(params: {
         compositionItem: nestedWrapper,
         subComp: nestedSubComp,
         fps,
+        visited: nestedVisited,
       });
       continue;
     }

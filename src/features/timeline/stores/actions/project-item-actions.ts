@@ -1,88 +1,25 @@
-import type { TimelineItem, TimelineTrack } from '@/types/timeline';
-import type { Transition } from '@/types/transition';
-import type { ItemKeyframes } from '@/types/keyframe';
+import type { TimelineItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
-import { useCompositionsStore, type SubComposition } from '../compositions-store';
+import { useCompositionsStore } from '../compositions-store';
 import { useCompositionNavigationStore } from '../composition-navigation-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { applyTransitionRepairs, execute } from './shared';
-
-type TimelineSnapshotLike = {
-  items: TimelineItem[];
-  tracks: TimelineTrack[];
-  transitions: Transition[];
-  keyframes: ItemKeyframes[];
-};
-
-type TimelineScopeSnapshot = TimelineSnapshotLike & {
-  compositionId: string | null;
-};
+import {
+  applyTransitionRepairs,
+  execute,
+  getCurrentTimelineSnapshot,
+  getEffectiveCompositions,
+  getRootTimelineSnapshot,
+  type TimelineSnapshotLike,
+} from './shared';
 
 export interface MediaDeletionImpact {
   itemIds: string[];
   rootReferenceCount: number;
   nestedReferenceCount: number;
   totalReferenceCount: number;
-}
-
-function getCurrentTimelineSnapshot(): TimelineSnapshotLike {
-  return {
-    items: useItemsStore.getState().items,
-    tracks: useItemsStore.getState().tracks,
-    transitions: useTransitionsStore.getState().transitions,
-    keyframes: useKeyframesStore.getState().keyframes,
-  };
-}
-
-function getRootTimelineSnapshot(currentSnapshot: TimelineSnapshotLike): TimelineScopeSnapshot {
-  const navState = useCompositionNavigationStore.getState();
-  if (navState.activeCompositionId === null) {
-    return {
-      compositionId: null,
-      ...currentSnapshot,
-    };
-  }
-
-  const rootStash = navState.stashStack[0];
-  if (!rootStash) {
-    return {
-      compositionId: null,
-      items: [],
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-    };
-  }
-
-  return {
-    compositionId: rootStash.compositionId,
-    items: rootStash.items,
-    tracks: rootStash.tracks,
-    transitions: rootStash.transitions,
-    keyframes: rootStash.keyframes,
-  };
-}
-
-function getEffectiveCompositions(currentSnapshot: TimelineSnapshotLike): SubComposition[] {
-  const { activeCompositionId } = useCompositionNavigationStore.getState();
-  const compositions = useCompositionsStore.getState().compositions;
-
-  return compositions.map((composition) => {
-    if (composition.id !== activeCompositionId) {
-      return composition;
-    }
-
-    return {
-      ...composition,
-      items: currentSnapshot.items,
-      tracks: currentSnapshot.tracks,
-      transitions: currentSnapshot.transitions,
-      keyframes: currentSnapshot.keyframes,
-    };
-  });
 }
 
 function isMediaReferenceItem(item: TimelineItem, mediaIds: ReadonlySet<string>): boolean {

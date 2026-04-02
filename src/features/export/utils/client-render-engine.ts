@@ -61,7 +61,7 @@ import { getCompositeOperation } from '@/types/blend-mode-css';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
-import { collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
+import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
 
 // Item renderer
 import {
@@ -812,6 +812,8 @@ export async function createCompositionRenderer(
       const pendingResolutions: Array<{ subItem: TimelineItem; mediaId: string }> = [];
       const prioritySubCompVideoItemIds = new Set<string>();
       const compositionById = useCompositionsStore.getState().compositionById;
+      // Collect priority video item IDs from all depths of nested compositions
+      // whose root-level wrapper falls within the priority scrub window.
       for (const track of tracks) {
         for (const item of track.items ?? []) {
           if (item.type !== 'composition') continue;
@@ -822,9 +824,13 @@ export async function createCompositionRenderer(
             && (compItem.from <= priorityFrame + priorityWindowFrames)
             && (compItem.from + compItem.durationInFrames >= priorityFrame - priorityWindowFrames);
           if (!subCompIsPriority) continue;
-          for (const subItem of subComp.items) {
-            if (subItem.type === 'video') {
-              prioritySubCompVideoItemIds.add(subItem.id);
+          const nestedCompIds = collectReachableCompositionIdsFromItems(subComp.items, compositionById);
+          const allComps = [subComp, ...nestedCompIds.flatMap((id) => compositionById[id] ? [compositionById[id]] : [])];
+          for (const comp of allComps) {
+            for (const subItem of comp.items) {
+              if (subItem.type === 'video') {
+                prioritySubCompVideoItemIds.add(subItem.id);
+              }
             }
           }
         }

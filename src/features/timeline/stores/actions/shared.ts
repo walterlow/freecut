@@ -2,11 +2,17 @@
  * Shared helpers for timeline action modules.
  */
 
+import type { TimelineItem, TimelineTrack } from '@/types/timeline';
+import type { Transition } from '@/types/transition';
+import type { ItemKeyframes } from '@/types/keyframe';
 import { createLogger } from '@/shared/logging/logger';
 import { emitDomainEvent } from '@/shared/events/domain-events';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
+import { useKeyframesStore } from '../keyframes-store';
+import { useCompositionsStore, type SubComposition } from '../compositions-store';
+import { useCompositionNavigationStore } from '../composition-navigation-store';
 import { repairTransitions } from '../../utils/transition-auto-repair';
 import { isFrameInTransitionRegion } from '@/features/timeline/deps/keyframes';
 
@@ -68,4 +74,82 @@ export function canAddKeyframeAtFrame(itemId: string, frame: number): boolean {
   const transitions = useTransitionsStore.getState().transitions;
   const blocked = isFrameInTransitionRegion(frame, itemId, item, transitions);
   return blocked === undefined;
+}
+
+// --- Shared timeline snapshot helpers ---
+
+export type TimelineSnapshotLike = {
+  items: TimelineItem[];
+  tracks: TimelineTrack[];
+  transitions: Transition[];
+  keyframes: ItemKeyframes[];
+};
+
+export type TimelineScopeSnapshot = TimelineSnapshotLike & {
+  compositionId: string | null;
+};
+
+export function getCurrentTimelineSnapshot(): TimelineSnapshotLike {
+  return {
+    items: useItemsStore.getState().items,
+    tracks: useItemsStore.getState().tracks,
+    transitions: useTransitionsStore.getState().transitions,
+    keyframes: useKeyframesStore.getState().keyframes,
+  };
+}
+
+export function getRootTimelineSnapshot(currentSnapshot: TimelineSnapshotLike): TimelineScopeSnapshot {
+  const navState = useCompositionNavigationStore.getState();
+  if (navState.activeCompositionId === null) {
+    return {
+      compositionId: null,
+      ...currentSnapshot,
+    };
+  }
+
+  const rootStash = navState.stashStack[0];
+  if (!rootStash) {
+    return {
+      compositionId: null,
+      items: [],
+      tracks: [],
+      transitions: [],
+      keyframes: [],
+    };
+  }
+
+  return {
+    compositionId: rootStash.compositionId,
+    items: rootStash.items,
+    tracks: rootStash.tracks,
+    transitions: rootStash.transitions,
+    keyframes: rootStash.keyframes,
+  };
+}
+
+export function getEffectiveCompositions(currentSnapshot: TimelineSnapshotLike): SubComposition[] {
+  const { activeCompositionId } = useCompositionNavigationStore.getState();
+  const compositions = useCompositionsStore.getState().compositions;
+
+  return compositions.map((composition) => {
+    if (composition.id !== activeCompositionId) {
+      return composition;
+    }
+
+    return {
+      ...composition,
+      items: currentSnapshot.items,
+      tracks: currentSnapshot.tracks,
+      transitions: currentSnapshot.transitions,
+      keyframes: currentSnapshot.keyframes,
+    };
+  });
+}
+
+export function computeCompositionDuration(items: TimelineItem[], fallbackDuration: number): number {
+  if (items.length === 0) return 0;
+  return Math.max(
+    fallbackDuration,
+    ...items.map((item) => item.from + item.durationInFrames),
+  );
 }

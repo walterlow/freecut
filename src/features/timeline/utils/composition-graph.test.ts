@@ -141,4 +141,48 @@ describe('composition-graph', () => {
       'comp-c',
     ]);
   });
+
+  it('follows audio-type wrappers with compositionId', () => {
+    const compositionById = {
+      'comp-audio': makeComposition({
+        id: 'comp-audio',
+        name: 'Audio Comp',
+        items: [{
+          id: 'nested-video',
+          type: 'video',
+          trackId: 'nested-track',
+          from: 0,
+          durationInFrames: 30,
+          label: 'Video',
+          src: 'blob:video',
+          mediaId: 'media-1',
+        }],
+      }),
+    };
+    const tracks: TimelineTrack[] = [{
+      id: 'root-track',
+      name: 'A1',
+      kind: 'audio',
+      height: 80,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 0,
+      items: [{
+        id: 'audio-wrapper',
+        type: 'audio',
+        compositionId: 'comp-audio',
+        trackId: 'root-track',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Audio Comp',
+        src: '',
+      }],
+    }];
+
+    expect(collectReachableCompositionIdsFromTracks(tracks, compositionById)).toEqual([
+      'comp-audio',
+    ]);
+  });
 });

@@ -3,8 +3,6 @@
  */
 
 import type { AudioItem, TimelineItem, TimelineTrack, CompositionItem } from '@/types/timeline';
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { Transition } from '@/types/transition';
 import {
   createClassicTrack,
   findNearestTrackByKind,
@@ -34,7 +32,15 @@ import {
   getDirectReferencedCompositionIds,
   wouldCreateCompositionCycle,
 } from '../../utils/composition-graph';
-import { applyTransitionRepairs, execute } from './shared';
+import {
+  applyTransitionRepairs,
+  computeCompositionDuration,
+  execute,
+  getCurrentTimelineSnapshot,
+  getEffectiveCompositions,
+  getRootTimelineSnapshot,
+  type TimelineSnapshotLike,
+} from './shared';
 
 function getTrackKindForSelectedItems(track: TimelineTrack | undefined, trackItems: TimelineItem[]): TrackKind {
   return getTrackKind(track ?? { id: '', name: '', height: DEFAULT_TRACK_HEIGHT, locked: false, visible: true, muted: false, solo: false, order: 0, items: [] })
@@ -83,13 +89,6 @@ function expandSelectionWithCompoundClipCompanions(
   return Array.from(expandedIds);
 }
 
-type TimelineSnapshotLike = {
-  items: TimelineItem[];
-  tracks: TimelineTrack[];
-  transitions: Transition[];
-  keyframes: ItemKeyframes[];
-};
-
 export interface CompoundClipDeletionImpact {
   rootReferenceCount: number;
   nestedReferenceCount: number;
@@ -126,14 +125,6 @@ function countCompoundClipReferences(items: TimelineItem[], targetIds: ReadonlyS
   return items.filter((item) => isCompoundClipReference(item, targetIds)).length;
 }
 
-function computeCompositionDuration(items: TimelineItem[], fallbackDuration: number): number {
-  if (items.length === 0) return 0;
-  return Math.max(
-    fallbackDuration,
-    ...items.map((item) => item.from + item.durationInFrames),
-  );
-}
-
 function sanitizeTimelineSnapshot<TSnapshot extends TimelineSnapshotLike>(
   snapshot: TSnapshot,
   targetIds: ReadonlySet<string>,
@@ -159,59 +150,6 @@ function sanitizeTimelineSnapshot<TSnapshot extends TimelineSnapshotLike>(
     keyframes: snapshot.keyframes.filter((keyframe) => !removedIdSet.has(keyframe.itemId)),
     removedItemIds,
   };
-}
-
-function getCurrentTimelineSnapshot(): TimelineSnapshotLike {
-  return {
-    items: useItemsStore.getState().items,
-    tracks: useItemsStore.getState().tracks,
-    transitions: useTransitionsStore.getState().transitions,
-    keyframes: useKeyframesStore.getState().keyframes,
-  };
-}
-
-function getRootTimelineSnapshot(currentSnapshot: TimelineSnapshotLike): TimelineSnapshotLike {
-  const navState = useCompositionNavigationStore.getState();
-  if (navState.activeCompositionId === null) {
-    return currentSnapshot;
-  }
-
-  const rootStash = navState.stashStack[0];
-  if (!rootStash) {
-    return {
-      items: [],
-      tracks: [],
-      transitions: [],
-      keyframes: [],
-    };
-  }
-
-  return {
-    items: rootStash.items,
-    tracks: rootStash.tracks,
-    transitions: rootStash.transitions,
-    keyframes: rootStash.keyframes,
-  };
-}
-
-function getEffectiveCompositions(currentSnapshot: TimelineSnapshotLike): SubComposition[] {
-  const { activeCompositionId } = useCompositionNavigationStore.getState();
-  const compositions = useCompositionsStore.getState().compositions;
-
-  return compositions.map((composition) => {
-    if (composition.id !== activeCompositionId) {
-      return composition;
-    }
-
-    return {
-      ...composition,
-      items: currentSnapshot.items,
-      tracks: currentSnapshot.tracks,
-      transitions: currentSnapshot.transitions,
-      keyframes: currentSnapshot.keyframes,
-      durationInFrames: computeCompositionDuration(currentSnapshot.items, composition.durationInFrames),
-    };
-  });
 }
 
 export function getCompoundClipDeletionImpact(compositionIds: string[]): CompoundClipDeletionImpact {
@@ -580,6 +518,7 @@ export function createPreComp(name?: string, itemIds?: string[]): TimelineItem |
       items: subCompItems,
       tracks: subCompTracks,
       fps,
+      compositionById,
     }).length > 0;
 
     const visualSourceTrackIds = sourceTrackIds.filter((trackId) => (
@@ -861,6 +800,9 @@ export function dissolvePreComp(compositionItemId: string): boolean {
     if (restoredItems.length > 0) {
       useItemsStore.getState()._addItems(restoredItems);
     }
+
+    // Repair any external transitions that referenced the removed wrapper clips.
+    applyTransitionRepairs(wrapperIds, new Set(wrapperIds));
 
     // Restore transitions with remapped IDs after the restored clips exist.
     const subTransitions = subComp.transitions ?? [];
