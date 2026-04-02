@@ -1,14 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ClientCodec } from './client-renderer';
+const { mockCanEncodeVideo } = vi.hoisted(() => ({
+  mockCanEncodeVideo: vi.fn<(codec: ClientCodec, options?: { width?: number; height?: number; bitrate?: number }) => Promise<boolean>>(),
+}));
+
+vi.mock('mediabunny', async () => {
+  const actual = await vi.importActual<typeof import('mediabunny')>('mediabunny');
+  return {
+    ...actual,
+    canEncodeVideo: mockCanEncodeVideo,
+  };
+});
+
 import {
   getCompatibleVideoCodecs,
   getDefaultAudioCodec,
   getDefaultVideoCodec,
+  getSupportedCodecs,
+  getVideoBitrateForQuality,
   mapToClientSettings,
   selectFallbackVideoCodec,
   validateSettings,
 } from './client-renderer';
 
 describe('client-renderer export matrix', () => {
+  beforeEach(() => {
+    mockCanEncodeVideo.mockReset();
+  });
+
   it('exposes AV1 only for containers that can actually carry it', () => {
     expect(getCompatibleVideoCodecs('mp4')).toEqual(['h264', 'h265']);
     expect(getCompatibleVideoCodecs('webm')).toEqual(['vp9', 'vp8', 'av1']);
@@ -32,6 +51,7 @@ describe('client-renderer export matrix', () => {
 
     expect(clientSettings.codec).toBe('av1');
     expect(clientSettings.container).toBe('webm');
+    expect(clientSettings.videoBitrate).toBe(getVideoBitrateForQuality('high'));
   });
 
   it('only falls back to codecs that match the selected container', () => {
@@ -63,6 +83,23 @@ describe('client-renderer export matrix', () => {
     })).toEqual({
       valid: false,
       error: 'Audio export must use an audio-only container',
+    });
+  });
+
+  it('uses Mediabunny encoder checks for supported codec detection', async () => {
+    mockCanEncodeVideo.mockImplementation(async (codec) => codec === 'avc' || codec === 'vp9');
+
+    const supported = await getSupportedCodecs({
+      width: 1920,
+      height: 1080,
+      bitrate: 10_000_000,
+    });
+
+    expect(supported).toEqual(['avc', 'vp9']);
+    expect(mockCanEncodeVideo).toHaveBeenCalledWith('avc', {
+      width: 1920,
+      height: 1080,
+      bitrate: 10_000_000,
     });
   });
 });

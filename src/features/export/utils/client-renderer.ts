@@ -58,6 +58,12 @@ export interface ClientRenderResult {
   fileSize: number;
 }
 
+export interface CodecSupportCheckOptions {
+  width: number;
+  height: number;
+  bitrate?: number;
+}
+
 const EXPORT_CODEC_TO_CLIENT_CODEC: Record<ExportSettings['codec'], ClientCodec> = {
   h264: 'avc',
   h265: 'hevc',
@@ -98,6 +104,16 @@ const DEFAULT_VIDEO_CODEC_BY_CONTAINER: Record<ClientVideoContainer, ExportVideo
 
 const DEFAULT_FALLBACK_CODEC_ORDER: ClientCodec[] = ['avc', 'hevc', 'vp9', 'vp8', 'av1'];
 
+let mediabunnyEncodeApiPromise: Promise<Pick<typeof import('mediabunny'), 'canEncodeVideo'>> | null = null;
+
+function getMediabunnyEncodeApi() {
+  if (!mediabunnyEncodeApiPromise) {
+    mediabunnyEncodeApiPromise = import('mediabunny').then(({ canEncodeVideo }) => ({ canEncodeVideo }));
+  }
+
+  return mediabunnyEncodeApiPromise;
+}
+
 export function getCompatibleVideoCodecs(container: ClientVideoContainer): ExportVideoCodec[] {
   return [...EXPORT_VIDEO_CODECS_BY_CONTAINER[container]];
 }
@@ -136,14 +152,6 @@ export function selectFallbackVideoCodec(
  * Maps export settings to client-compatible settings
  */
 export function mapToClientSettings(settings: ExportSettings, fps: number): ClientExportSettings {
-  // Map quality to bitrate (in bits per second)
-  const bitrateMap: Record<ExportSettings['quality'], number> = {
-    low: 2_000_000, // 2 Mbps
-    medium: 5_000_000, // 5 Mbps
-    high: 10_000_000, // 10 Mbps
-    ultra: 20_000_000, // 20 Mbps
-  };
-
   const codec = mapExportCodecToClientCodec(settings.codec);
   const container = getPreferredContainerForCodec(codec);
 
@@ -154,7 +162,7 @@ export function mapToClientSettings(settings: ExportSettings, fps: number): Clie
     quality: settings.quality,
     resolution: settings.resolution,
     fps,
-    videoBitrate: bitrateMap[settings.quality],
+    videoBitrate: getVideoBitrateForQuality(settings.quality),
     audioBitrate: 192_000, // 192 kbps
   };
 }
@@ -189,27 +197,15 @@ function isAudioOnlyContainer(container: ClientContainer): container is ClientAu
 /**
  * Check if a codec is supported by WebCodecs in this browser
  */
-async function isCodecSupported(codec: ClientCodec, width: number, height: number): Promise<boolean> {
-  if (!('VideoEncoder' in window)) {
-    return false;
-  }
-
-  const codecStrings: Record<ClientCodec, string> = {
-    avc: 'avc1.42E01E', // H.264 Baseline
-    hevc: 'hvc1.1.6.L93.B0', // HEVC Main
-    vp8: 'vp8',
-    vp9: 'vp09.00.10.08',
-    av1: 'av01.0.04M.08',
-  };
+async function isCodecSupported(codec: ClientCodec, options: CodecSupportCheckOptions): Promise<boolean> {
+  const { canEncodeVideo } = await getMediabunnyEncodeApi();
 
   try {
-    const support = await VideoEncoder.isConfigSupported({
-      codec: codecStrings[codec],
-      width,
-      height,
-      bitrate: 5_000_000,
+    return await canEncodeVideo(codec, {
+      width: options.width,
+      height: options.height,
+      bitrate: options.bitrate,
     });
-    return support.supported ?? false;
   } catch {
     return false;
   }
@@ -218,12 +214,18 @@ async function isCodecSupported(codec: ClientCodec, width: number, height: numbe
 /**
  * Get list of supported codecs for client-side rendering
  */
-export async function getSupportedCodecs(width: number, height: number): Promise<ClientCodec[]> {
+export async function getSupportedCodecs(
+  widthOrOptions: number | CodecSupportCheckOptions,
+  height?: number
+): Promise<ClientCodec[]> {
+  const options: CodecSupportCheckOptions = typeof widthOrOptions === 'number'
+    ? { width: widthOrOptions, height: height ?? 1080 }
+    : widthOrOptions;
   const codecs: ClientCodec[] = ['avc', 'hevc', 'vp8', 'vp9', 'av1'];
   const supported: ClientCodec[] = [];
 
   for (const codec of codecs) {
-    if (await isCodecSupported(codec, width, height)) {
+    if (await isCodecSupported(codec, options)) {
       supported.push(codec);
     }
   }
@@ -364,6 +366,17 @@ export function getAudioBitrateForQuality(quality: ClientExportSettings['quality
     high: 256_000, // 256 kbps
     ultra: 320_000, // 320 kbps
   };
+  return bitrateMap[quality];
+}
+
+export function getVideoBitrateForQuality(quality: ExportSettings['quality']): number {
+  const bitrateMap: Record<ExportSettings['quality'], number> = {
+    low: 2_000_000, // 2 Mbps
+    medium: 5_000_000, // 5 Mbps
+    high: 10_000_000, // 10 Mbps
+    ultra: 20_000_000, // 20 Mbps
+  };
+
   return bitrateMap[quality];
 }
 

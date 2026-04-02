@@ -7,7 +7,13 @@
 
 import { useState, useCallback, useRef } from 'react';
 import type { ExportSettings, ExtendedExportSettings, CompositionInputProps } from '@/types/export';
-import type { RenderProgress, ClientRenderResult, ClientVideoContainer, ClientAudioContainer } from '../utils/client-renderer';
+import type {
+  RenderProgress,
+  ClientRenderResult,
+  ClientVideoContainer,
+  ClientAudioContainer,
+  ClientCodec,
+} from '../utils/client-renderer';
 import {
   mapToClientSettings,
   validateSettings,
@@ -16,6 +22,7 @@ import {
   estimateFileSize,
   getDefaultAudioCodec,
   getAudioBitrateForQuality,
+  getVideoBitrateForQuality,
   getPreferredContainerForCodec,
   selectFallbackVideoCodec,
 } from '../utils/client-renderer';
@@ -60,7 +67,11 @@ interface UseClientRenderReturn {
   resetState: () => void;
 
   // Utilities
-  getSupportedCodecs: () => Promise<string[]>;
+  getSupportedCodecs: (options?: {
+    resolution?: { width: number; height: number };
+    quality?: ExportSettings['quality'];
+    bitrate?: number;
+  }) => Promise<ClientCodec[]>;
   estimateFileSize: (settings: ExportSettings, durationSeconds: number) => string;
 }
 
@@ -308,10 +319,10 @@ export function useClientRender(): UseClientRenderReturn {
           }
 
           // Check codec support
-          const supportedCodecs = await getSupportedCodecs(
-            clientSettings.resolution.width,
-            clientSettings.resolution.height
-          );
+          const supportedCodecs = await getSupportedCodecs({
+            resolution: clientSettings.resolution,
+            bitrate: clientSettings.videoBitrate,
+          });
 
           if (!supportedCodecs.includes(clientSettings.codec)) {
             const containerFallback = selectFallbackVideoCodec(
@@ -535,12 +546,17 @@ export function useClientRender(): UseClientRenderReturn {
   /**
    * Get supported codecs for the current resolution
    */
-  const getSupportedCodecsForResolution = useCallback(async () => {
-    const state = useTimelineStore.getState();
-    const width = state.tracks.length > 0 ? 1920 : 1920; // Default to 1080p
-    const height = state.tracks.length > 0 ? 1080 : 1080;
+  const getSupportedCodecsForResolution = useCallback(async (options?: {
+    resolution?: { width: number; height: number };
+    quality?: ExportSettings['quality'];
+    bitrate?: number;
+  }) => {
+    const currentProject = useProjectStore.getState().currentProject;
+    const width = options?.resolution?.width ?? currentProject?.metadata?.width ?? 1920;
+    const height = options?.resolution?.height ?? currentProject?.metadata?.height ?? 1080;
+    const bitrate = options?.bitrate ?? (options?.quality ? getVideoBitrateForQuality(options.quality) : undefined);
 
-    const codecs = await getSupportedCodecs(width, height);
+    const codecs = await getSupportedCodecs({ width, height, bitrate });
     return codecs;
   }, []);
 
