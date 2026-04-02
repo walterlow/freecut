@@ -198,8 +198,10 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       setMediaDragData(dragData);
     }
 
-    // Custom drag image: show just the thumbnail at natural aspect ratio
-    const thumbEl = thumbnailRef.current;
+    // Custom drag image: show just the thumbnail at natural aspect ratio.
+    // thumbnailRef is on the grid-view <img>; for list view, query the card element.
+    const thumbEl = thumbnailRef.current
+      ?? (e.currentTarget as HTMLElement).querySelector<HTMLImageElement>('img[alt]');
     if (thumbEl && thumbEl.naturalWidth > 0) {
       const maxDim = 120;
       const ratio = thumbEl.naturalWidth / thumbEl.naturalHeight;

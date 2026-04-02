@@ -294,13 +294,15 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
 
   const tag = svgMatch[0];
 
-  const wAttr = tag.match(/\bwidth=["'](\d+(?:\.\d+)?)/);
-  const hAttr = tag.match(/\bheight=["'](\d+(?:\.\d+)?)/);
+  // Match numeric lengths only (with optional "px" unit), reject %, em, etc.
+  const wAttr = tag.match(/\bwidth=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/);
+  const hAttr = tag.match(/\bheight=["'](\d+(?:\.\d+)?)\s*(?:px)?["']/);
   if (wAttr && hAttr) {
     return { width: Math.round(parseFloat(wAttr[1]!)), height: Math.round(parseFloat(hAttr[1]!)) };
   }
 
-  const vb = tag.match(/viewBox=["']\s*(-?[\d.]+)\s+(-?[\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  // viewBox: allow negative min-x/min-y, flexible whitespace (spaces or commas)
+  const vb = tag.match(/viewBox=["']\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/);
   if (vb) {
     return { width: Math.round(parseFloat(vb[3]!)), height: Math.round(parseFloat(vb[4]!)) };
   }
@@ -313,8 +315,8 @@ function parseSvgDimensions(svgText: string): { width: number; height: number } 
  * Falls back to SVG XML parsing for SVG files (createImageBitmap
  * doesn't support SVGs in web workers).
  */
-async function extractImageMetadata(file: File): Promise<ImageMetadata> {
-  if (file.type === 'image/svg+xml') {
+async function extractImageMetadata(file: File, mimeType: string): Promise<ImageMetadata> {
+  if (mimeType === 'image/svg+xml') {
     const text = await file.text();
     const dims = parseSvgDimensions(text);
     return {
@@ -396,11 +398,12 @@ async function generateVideoThumbnail(
 async function generateImageThumbnail(
   file: File,
   maxSize: number,
-  quality: number
+  quality: number,
+  mimeType: string
 ): Promise<Blob> {
   // SVG thumbnails can't be generated in workers (createImageBitmap doesn't
   // support SVGs here). The main thread handles SVG thumbnail fallback.
-  if (file.type === 'image/svg+xml') {
+  if (mimeType === 'image/svg+xml') {
     throw new Error('SVG thumbnail generation not supported in worker');
   }
 
@@ -519,9 +522,9 @@ async function processMedia(
   } else if (mimeType.startsWith('image/')) {
     // Image: metadata and thumbnail can run in parallel
     const [imageMeta, imageThumb] = await Promise.all([
-      extractImageMetadata(file),
+      extractImageMetadata(file, mimeType),
       generateThumbnail
-        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality).catch(() => undefined)
+        ? generateImageThumbnail(file, thumbnailMaxSize, thumbnailQuality, mimeType).catch(() => undefined)
         : Promise.resolve(undefined),
     ]);
     metadata = imageMeta;

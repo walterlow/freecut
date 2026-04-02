@@ -394,9 +394,10 @@ export const ClipContent = memo(function ClipContent({
 
   // Image items - label + filmstrip
   if (item.type === 'image' && item.src && item.mediaId) {
-    const label = item.label?.toLowerCase() ?? '';
-    const isAnimatedGif = isGifUrl(item.src) || label.endsWith('.gif');
-    const isAnimatedWebp = isWebpUrl(item.src) || label.endsWith('.webp');
+    // Detect animation from media metadata (reliable), falling back to URL heuristics
+    const mediaMimeType = useMediaLibraryStore.getState().mediaById[item.mediaId]?.mimeType;
+    const isAnimatedGif = mediaMimeType === 'image/gif' || isGifUrl(item.src);
+    const isAnimatedWebp = mediaMimeType === 'image/webp' || isWebpUrl(item.src);
     const isAnimated = isAnimatedGif || isAnimatedWebp;
 
     return (
@@ -419,8 +420,14 @@ export const ClipContent = memo(function ClipContent({
               clipWidth={clipWidth}
               isVisible={isClipVisible}
               src={item.src}
-              speed={item.speed ?? 1}
+              sourceStart={sourceStart}
+              sourceDuration={sourceDuration}
+              trimStart={trimStart}
+              speed={speed}
               fps={fps}
+              visibleStartRatio={visibleStartRatio}
+              visibleEndRatio={visibleEndRatio}
+              pixelsPerSecond={pixelsPerSecond}
             />
           )}
         </div>

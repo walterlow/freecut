@@ -19,10 +19,21 @@ interface ImageFilmstripProps {
   isVisible: boolean;
   /** Source URL for the image (blob URL) */
   src: string;
+  /** Source start time in seconds */
+  sourceStart: number;
+  /** Total source duration in seconds */
+  sourceDuration: number;
+  /** Trim start in seconds */
+  trimStart: number;
   /** Playback speed multiplier */
   speed: number;
   /** Frames per second */
   fps: number;
+  /** Visible horizontal range within this clip (0-1 ratios) */
+  visibleStartRatio?: number;
+  visibleEndRatio?: number;
+  /** Pixels per second from parent */
+  pixelsPerSecond: number;
 }
 
 /**
@@ -61,6 +72,8 @@ const AnimatedTile = memo(function AnimatedTile({
   );
 });
 
+const VIEWPORT_PAD_TILES = 2;
+
 /**
  * Image Filmstrip Component
  *
@@ -74,8 +87,12 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
   clipWidth,
   isVisible,
   src,
+  sourceStart,
+  trimStart,
   speed,
-  fps,
+  visibleStartRatio = 0,
+  visibleEndRatio = 1,
+  pixelsPerSecond,
 }: ImageFilmstripProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
@@ -124,6 +141,8 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
   // Resolve the URL to use: prefer freshly resolved blobUrl, fall back to item.src
   const resolvedSrc = blobUrl || src;
 
+  const effectiveStart = Math.max(0, sourceStart + trimStart);
+
   // Animated image filmstrip: tile extracted frames.
   // Must be called unconditionally (Rules of Hooks) — returns [] when not animated.
   const tiles = useMemo(() => {
@@ -134,6 +153,14 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
     const tileCount = Math.ceil(clipWidth / tileWidth);
     if (tileCount <= 0) return [];
 
+    // Viewport culling — only generate tiles in the visible range + padding
+    const visibleStartX = clipWidth * Math.max(0, Math.min(1, visibleStartRatio));
+    const visibleEndX = clipWidth * Math.max(visibleStartRatio, Math.min(1, visibleEndRatio));
+    const paddedStartX = Math.max(0, visibleStartX - tileWidth * VIEWPORT_PAD_TILES);
+    const paddedEndX = Math.min(clipWidth, visibleEndX + tileWidth * VIEWPORT_PAD_TILES);
+    const startTile = Math.max(0, Math.floor(paddedStartX / tileWidth));
+    const endTile = Math.min(tileCount, Math.ceil(paddedEndX / tileWidth));
+
     // Build cumulative durations for frame lookup
     const cumDurations: number[] = [];
     let cumMs = 0;
@@ -142,18 +169,17 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
       cumDurations.push(cumMs);
     }
 
-    // Map clip pixels to animation time, looping through the cycle.
-    const clipDurationMs = (clipWidth / fps) * 1000 / speed;
     const result: { tileIndex: number; bitmap: ImageBitmap; x: number; width: number }[] = [];
 
-    for (let i = 0; i < tileCount; i++) {
+    for (let i = startTile; i < endTile; i++) {
       const x = i * tileWidth;
       const w = Math.min(tileWidth, clipWidth - x);
       if (w <= 0) break;
 
-      // Map tile center to a time position in the looped animation
+      // Map tile center pixel to source time in seconds, then to animation time (looped)
       const tileCenterX = x + w * 0.5;
-      const timeMs = ((tileCenterX / clipWidth) * clipDurationMs) % totalDuration;
+      const sourceTimeSeconds = effectiveStart + (tileCenterX / pixelsPerSecond) * speed;
+      const timeMs = (sourceTimeSeconds * 1000) % totalDuration;
 
       // Find the frame at this time using cumulative durations
       let frameIndex = 0;
@@ -172,7 +198,7 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
     }
 
     return result;
-  }, [isAnimated, frames, durations, totalDuration, clipWidth, tileWidth, height, speed, fps]);
+  }, [isAnimated, frames, durations, totalDuration, clipWidth, tileWidth, height, speed, effectiveStart, pixelsPerSecond, visibleStartRatio, visibleEndRatio]);
 
   // Static image filmstrip: tile the image using CSS background-repeat
   if (!isAnimated) {

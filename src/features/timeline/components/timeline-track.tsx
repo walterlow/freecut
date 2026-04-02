@@ -23,6 +23,7 @@ import {
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
+import { resolveEffectiveTrackStates } from '../utils/group-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import {
@@ -159,20 +160,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const lastDragFrameRef = useRef(0);
 
   // Resolve whether this track is effectively disabled for drops.
-  // A track is drop-disabled when it's locked, hidden (video), or muted (audio),
-  // including state inherited from a parent group track.
+  // Uses the shared resolveEffectiveTrackStates helper so group-inherited
+  // locked/visible/muted flags are consistent with the rest of the codebase.
   const isDropDisabled = useTimelineStore((s) => {
-    const parentGroup = track.parentTrackId
-      ? s.tracks.find((t) => t.id === track.parentTrackId)
-      : undefined;
-    const locked = track.locked || (parentGroup?.locked ?? false);
-    if (locked) return true;
-    const visible = track.visible !== false && (parentGroup?.visible !== false);
-    const muted = track.muted || (parentGroup?.muted ?? false);
-    const kind = track.kind;
-    if (kind === 'audio') return muted;
-    if (kind === 'video') return !visible;
-    return !visible || muted;
+    const effective = resolveEffectiveTrackStates(s.tracks).find((t) => t.id === track.id);
+    if (!effective) return track.locked;
+    if (effective.locked) return true;
+    const kind = effective.kind;
+    if (kind === 'audio') return effective.muted;
+    if (kind === 'video') return effective.visible === false;
+    return effective.visible === false || effective.muted;
   });
 
   // Virtualized items/transitions â€” only those overlapping the visible viewport + buffer
