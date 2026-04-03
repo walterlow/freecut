@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { linearLevelToPercent } from './audio-meter-utils';
+import { linearLevelToPercent, setLiveTrackVolumeOverride, clearLiveTrackVolumeOverride, setLiveBusVolumeOverride, clearLiveBusVolumeOverride } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
 
 // ---------------------------------------------------------------------------
@@ -175,8 +175,6 @@ interface ChannelFaderProps {
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
   dbReadoutRef?: React.RefObject<HTMLDivElement | null>;
-  /** Shared ref for meter dB offset — ChannelStrip reads during its render cycle */
-  meterDbOffsetRef?: React.MutableRefObject<number>;
 }
 
 const ChannelFader = memo(function ChannelFader({
@@ -185,7 +183,6 @@ const ChannelFader = memo(function ChannelFader({
   itemIds,
   onVolumeChange,
   dbReadoutRef,
-  meterDbOffsetRef,
 }: ChannelFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
@@ -248,12 +245,10 @@ const ChannelFader = memo(function ChannelFader({
       gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
     })));
 
-    // Set meter dB offset — ChannelStrip reads this during its render cycle
-    // (it re-renders every frame during playback via level prop changes)
-    if (meterDbOffsetRef) {
-      meterDbOffsetRef.current = db - committedDb;
-    }
-  }, [dbReadoutRef, itemIds, meterDbOffsetRef, volumeDb]);
+    // Feed live volume into the meter source builder so both per-track
+    // and bus meters update in real-time during drag.
+    setLiveTrackVolumeOverride(trackId, db);
+  }, [dbReadoutRef, itemIds, trackId, volumeDb]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -294,7 +289,10 @@ const ChannelFader = memo(function ChannelFader({
     if (target && pointerId !== undefined) {
       target.releasePointerCapture?.(pointerId);
     }
+    // Commit to store first so the graph recompiles with the new value,
+    // then clear the live override so the next resolution uses the compiled value.
     onVolumeChange(trackId, latestDbRef.current);
+    clearLiveTrackVolumeOverride(trackId);
   }, [onVolumeChange, trackId]);
 
   const handlePointerUp = useCallback(
@@ -399,13 +397,6 @@ const ChannelStrip = memo(function ChannelStrip({
   onSoloToggle,
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
-  const meterDbOffsetRef = useRef(0);
-  // Reset meter offset when the track volume prop updates (store committed)
-  const prevVolumeRef = useRef(track.volume);
-  if (prevVolumeRef.current !== track.volume) {
-    prevVolumeRef.current = track.volume;
-    meterDbOffsetRef.current = 0;
-  }
   const handleMuteClick = useCallback(() => {
     onMuteToggle(track.id);
   }, [onMuteToggle, track.id]);
@@ -421,12 +412,8 @@ const ChannelStrip = memo(function ChannelStrip({
       isPlaying,
     })
     : 0;
-  const canVisualizeMeterOffset = fallbackPercent > 0 || !!(level && (level.left > 0 || level.right > 0));
-  // Apply fader drag offset to meter levels.
-  // linearLevelToPercent is linear in dB (range=60), so dB offset → percent offset.
-  const meterOffset = canVisualizeMeterOffset ? (meterDbOffsetRef.current / 60) * 100 : 0;
-  const leftPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) + meterOffset)) : 0;
-  const rightPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) + meterOffset)) : 0;
+  const leftPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) : 0;
+  const rightPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) : 0;
   const showScanningFallback = fallbackPercent > 0;
 
   // dB readout color: green at unity, amber when boosted, dim when cut
@@ -518,7 +505,6 @@ const ChannelStrip = memo(function ChannelStrip({
               itemIds={track.itemIds}
               onVolumeChange={onVolumeChange}
               dbReadoutRef={dbReadoutRef}
-              meterDbOffsetRef={meterDbOffsetRef}
             />
           </div>
         </div>
@@ -608,6 +594,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
       itemId: id,
       gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
     })));
+    setLiveBusVolumeOverride(db);
   }, [allItemIds]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -641,6 +628,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
       target.releasePointerCapture?.(pointerId);
     }
     onVolumeChange(latestDbRef.current);
+    clearLiveBusVolumeOverride();
   }, [onVolumeChange]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {

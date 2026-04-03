@@ -360,6 +360,7 @@ describe('audio meter utils', () => {
       sources: [{
         mediaId: 'media-audio',
         gain: 1,
+        trackVolumeGain: 1,
         sourceTimeSeconds: 2,
         windowSeconds: 0.1,
       }],
@@ -384,6 +385,7 @@ describe('audio meter utils', () => {
       sources: [{
         mediaId: 'media-audio',
         gain: 1,
+        trackVolumeGain: 1,
         sourceTimeSeconds: 0.5,
         windowSeconds: 0.5,
       }],

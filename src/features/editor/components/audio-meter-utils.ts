@@ -38,6 +38,7 @@ export interface AudioMeterGraphNode {
   directSegments: Array<{
     segment: AudioSegment | VideoAudioSegment;
     trackId: string;
+    trackVolumeGain: number;
   }>;
   compoundSegments: Array<{
     segment: CompoundAudioSegment;
@@ -70,7 +71,10 @@ type EnrichedCompositionItem = CompositionItem & {
 
 export interface AudioMeterSource {
   mediaId: string;
+  /** Item-level gain (fades, crossfades, item volumeDb) — excludes track and master faders. */
   gain: number;
+  /** Linear gain from the owning track's volume fader (dB → linear). 1 = 0 dB. */
+  trackVolumeGain: number;
   sourceTimeSeconds: number;
   windowSeconds: number;
   trackId?: string;
@@ -87,6 +91,56 @@ export interface AudioMeterEstimate {
   right: number;
   resolvedSourceCount: number;
   unresolvedSourceCount: number;
+}
+
+// Live track volume overrides (dB) set during fader drag.
+// The meter source builder reads these to produce real-time post-fader levels
+// without waiting for the store to commit on drag release.
+const liveTrackVolumeOverrides = new Map<string, number>();
+let liveOverrideVersion = 0;
+const liveOverrideListeners = new Set<() => void>();
+
+function notifyLiveOverrideListeners(): void {
+  liveOverrideVersion += 1;
+  for (const listener of liveOverrideListeners) {
+    listener();
+  }
+}
+
+export function subscribeLiveOverrideVersion(callback: () => void): () => void {
+  liveOverrideListeners.add(callback);
+  return () => { liveOverrideListeners.delete(callback); };
+}
+
+export function getLiveOverrideVersion(): number {
+  return liveOverrideVersion;
+}
+
+export function setLiveTrackVolumeOverride(trackId: string, volumeDb: number): void {
+  liveTrackVolumeOverrides.set(trackId, volumeDb);
+  notifyLiveOverrideListeners();
+}
+
+export function clearLiveTrackVolumeOverride(trackId: string): void {
+  liveTrackVolumeOverrides.delete(trackId);
+  notifyLiveOverrideListeners();
+}
+
+// Live bus/master volume override (dB) set during bus fader drag.
+let liveBusVolumeOverrideDb: number | null = null;
+
+export function setLiveBusVolumeOverride(volumeDb: number): void {
+  liveBusVolumeOverrideDb = volumeDb;
+  notifyLiveOverrideListeners();
+}
+
+export function clearLiveBusVolumeOverride(): void {
+  liveBusVolumeOverrideDb = null;
+  notifyLiveOverrideListeners();
+}
+
+export function getLiveBusVolumeOverride(): number | null {
+  return liveBusVolumeOverrideDb;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -141,11 +195,12 @@ function appendDirectSegmentSources(params: {
   frame: number;
   fps: number;
   gainMultiplier: number;
+  trackVolumeGain: number;
   segments: Array<AudioSegment | VideoAudioSegment>;
   sources: AudioMeterSource[];
   trackId?: string;
 }): void {
-  const { frame, fps, gainMultiplier, segments, sources } = params;
+  const { frame, fps, gainMultiplier, trackVolumeGain, segments, sources } = params;
 
   for (const segment of segments) {
     if (segment.muted || !segment.mediaId) continue;
@@ -159,6 +214,7 @@ function appendDirectSegmentSources(params: {
     sources.push({
       mediaId: segment.mediaId,
       gain: segmentGain,
+      trackVolumeGain,
       sourceTimeSeconds: getSegmentSourceTimeSeconds({
         trimBefore: segment.trimBefore,
         sourceFps,
@@ -357,14 +413,21 @@ function appendAudioMeterSources(params: {
     ...buildTransitionVideoAudioSegments(managedLinkedAudioItems, managedLinkedAudioTransitionDefs, fps),
   ];
 
+  const trackVolumeByTrackId = new Map(effectiveTracks.map((track) => [
+    track.id,
+    toLinearGain(liveTrackVolumeOverrides.get(track.id) ?? track.volume ?? 0),
+  ]));
+
   for (const segment of directSegments) {
+    const trackId = ownerTrackId ?? directTrackIdByItemId.get(segment.itemId) ?? '';
     appendDirectSegmentSources({
       frame,
       fps,
       gainMultiplier,
+      trackVolumeGain: trackVolumeByTrackId.get(directTrackIdByItemId.get(segment.itemId) ?? '') ?? 1,
       segments: [segment],
       sources,
-      trackId: ownerTrackId ?? directTrackIdByItemId.get(segment.itemId) ?? '',
+      trackId,
     });
   }
 
@@ -516,6 +579,7 @@ function buildAudioMeterGraphNode(params: {
     ...videoAudioItems.map((item) => [item.id, item.trackId] as const),
     ...managedLinkedAudioItems.map((item) => [item.id, item.trackId] as const),
   ]);
+  const trackVolumeByTrackId = new Map(tracks.map((track) => [track.id, toLinearGain(track.volume ?? 0)]));
   const directSegments = [
     ...buildStandaloneAudioSegments(standaloneAudioItems, fps),
     ...buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
@@ -523,6 +587,7 @@ function buildAudioMeterGraphNode(params: {
   ].map((segment) => ({
     segment,
     trackId: directTrackIdByItemId.get(segment.itemId) ?? '',
+    trackVolumeGain: trackVolumeByTrackId.get(directTrackIdByItemId.get(segment.itemId) ?? '') ?? 1,
   }));
 
   const compoundAudioItems = audioItems.filter((item): item is EnrichedCompositionAudioItem => isCompositionAudioItem(item));
@@ -608,10 +673,14 @@ function appendAudioMeterSourcesFromGraph(params: {
   }
 
   for (const directEntry of graphNode.directSegments) {
+    // Prefer live fader override so the bus meter reacts during drag.
+    const liveOverride = liveTrackVolumeOverrides.get(directEntry.trackId);
+    const trackVolumeGain = liveOverride !== undefined ? toLinearGain(liveOverride) : directEntry.trackVolumeGain;
     appendDirectSegmentSources({
       frame,
       fps: graphNode.fps,
       gainMultiplier,
+      trackVolumeGain,
       segments: [directEntry.segment],
       sources,
       trackId: ownerTrackId ?? directEntry.trackId,
@@ -893,8 +962,9 @@ export function estimateAudioMeterLevel(params: {
       continue;
     }
 
-    totalEnergyL += Math.pow(stereoLevel.left * source.gain, 2);
-    totalEnergyR += Math.pow(stereoLevel.right * source.gain, 2);
+    const effectiveGain = source.gain * source.trackVolumeGain;
+    totalEnergyL += Math.pow(stereoLevel.left * effectiveGain, 2);
+    totalEnergyR += Math.pow(stereoLevel.right * effectiveGain, 2);
     resolvedSourceCount += 1;
   }
 
