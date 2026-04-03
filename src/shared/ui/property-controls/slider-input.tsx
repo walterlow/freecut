@@ -153,6 +153,7 @@ export const SliderInput = memo(function SliderInput({
 
   const showInputRef = useRef(false);
   const isSubmittingRef = useRef(false);
+  const cancelEditRef = useRef(false);
   const fillPercentRef = useRef(fillPercent);
   const rubberStretchRef = useRef(rubberStretch);
   const localValueRef = useRef<number | null>(localValue);
@@ -243,8 +244,10 @@ export const SliderInput = memo(function SliderInput({
 
   useEffect(() => {
     localValueRef.current = localValue;
-    updateDisplayedValue(localValue);
-  }, [localValue, updateDisplayedValue]);
+    if (!isInteracting) {
+      updateDisplayedValue(localValue);
+    }
+  }, [isInteracting, localValue, updateDisplayedValue]);
 
   useEffect(() => {
     if (isInteracting) {
@@ -257,8 +260,10 @@ export const SliderInput = memo(function SliderInput({
 
   useEffect(() => {
     rubberStretchRef.current = rubberStretch;
-    updateStretchVisual(rubberStretch);
-  }, [rubberStretch, updateStretchVisual]);
+    if (!isInteracting) {
+      updateStretchVisual(rubberStretch);
+    }
+  }, [isInteracting, rubberStretch, updateStretchVisual]);
 
   const positionToValue = useCallback(
     (clientX: number) => {
@@ -280,25 +285,25 @@ export const SliderInput = memo(function SliderInput({
 
   const emitLiveChange = useCallback(
     (newValue: number) => {
-      if (onLiveChange) {
-        if (liveChangeThrottleMs <= 0) {
-          onLiveChange(newValue);
-          return;
-        }
-        const now = performance.now();
-        if (now - lastLiveChangeRef.current >= liveChangeThrottleMs) {
-          lastLiveChangeRef.current = now;
-          onLiveChange(newValue);
-        }
+      const handler = onLiveChange ?? onChange;
+      if (liveChangeThrottleMs <= 0) {
+        handler(newValue);
+        return;
+      }
+      const now = performance.now();
+      if (now - lastLiveChangeRef.current >= liveChangeThrottleMs) {
+        lastLiveChangeRef.current = now;
+        handler(newValue);
       }
     },
-    [liveChangeThrottleMs, onLiveChange]
+    [liveChangeThrottleMs, onChange, onLiveChange]
   );
 
   const openTextInput = useCallback(() => {
     const raw = formatInputValue
       ? formatInputValue(numericValue)
       : numericValue.toFixed(decimalsForStep(step));
+    cancelEditRef.current = false;
     setShowInput(true);
     showInputRef.current = true;
     setInputValue(raw);
@@ -306,7 +311,10 @@ export const SliderInput = memo(function SliderInput({
   }, [formatInputValue, numericValue, step]);
 
   const commitTextInput = useCallback(() => {
-    if (isSubmittingRef.current) return;
+    if (isSubmittingRef.current || cancelEditRef.current) {
+      cancelEditRef.current = false;
+      return;
+    }
     isSubmittingRef.current = true;
 
     const raw = inputValueRef.current;
@@ -490,6 +498,7 @@ export const SliderInput = memo(function SliderInput({
     if (e.key === 'Enter') {
       commitTextInput();
     } else if (e.key === 'Escape') {
+      cancelEditRef.current = true;
       setShowInput(false);
       showInputRef.current = false;
     }

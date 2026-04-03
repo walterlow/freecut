@@ -119,11 +119,13 @@ export function getLiveOverrideVersion(): number {
 }
 
 export function setLiveTrackVolumeOverride(trackId: string, volumeDb: number): void {
+  if (liveTrackVolumeOverrides.get(trackId) === volumeDb) return;
   liveTrackVolumeOverrides.set(trackId, volumeDb);
   notifyLiveOverrideListeners();
 }
 
 export function clearLiveTrackVolumeOverride(trackId: string): void {
+  if (!liveTrackVolumeOverrides.has(trackId)) return;
   liveTrackVolumeOverrides.delete(trackId);
   notifyLiveOverrideListeners();
 }
@@ -132,11 +134,13 @@ export function clearLiveTrackVolumeOverride(trackId: string): void {
 let liveBusVolumeOverrideDb: number | null = null;
 
 export function setLiveBusVolumeOverride(volumeDb: number): void {
+  if (liveBusVolumeOverrideDb === volumeDb) return;
   liveBusVolumeOverrideDb = volumeDb;
   notifyLiveOverrideListeners();
 }
 
 export function clearLiveBusVolumeOverride(): void {
+  if (liveBusVolumeOverrideDb === null) return;
   liveBusVolumeOverrideDb = null;
   notifyLiveOverrideListeners();
 }
@@ -527,7 +531,7 @@ function appendAudioMeterSources(params: {
       ownerTrackId,
       sources,
       wrapper,
-      wrapperGain: getTrackGainCorrection(track.id, toLinearGain(track.volume ?? 0)),
+      wrapperGain: getTrackGainCorrection(wrapper.trackId, committedTrackVolumeByTrackId.get(wrapper.trackId) ?? 1),
     });
   }
 }

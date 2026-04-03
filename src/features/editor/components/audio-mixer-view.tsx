@@ -328,6 +328,7 @@ const ChannelFader = memo(function ChannelFader({
   const handleDoubleClick = useCallback(() => {
     applyDragValue(0);
     onVolumeChange(trackId, 0);
+    clearLiveTrackVolumeOverride(trackId);
   }, [applyDragValue, onVolumeChange, trackId]);
 
   const knobPercent = dbToFaderPercent(volumeDb);
@@ -675,6 +676,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
   const handleDoubleClick = useCallback(() => {
     applyBusDragValue(0);
     onVolumeChange(0);
+    clearLiveBusVolumeOverride();
   }, [applyBusDragValue, onVolumeChange]);
 
   // Smooth the bus meter with CSS transitions rather than rAF

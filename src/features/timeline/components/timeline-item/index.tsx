@@ -1811,13 +1811,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       audioVolumeEditLabelRef.current.textContent = `Volume ${previewVolumeDb >= 0 ? '+' : ''}${previewVolumeDb.toFixed(1)} dB`;
     }
   }, []);
+  const itemType = item.type;
+  const itemVolume = item.volume;
   useEffect(() => {
-    if (item.type !== 'audio' || audioVolumeEdit !== null) {
+    if (itemType !== 'audio' || audioVolumeEdit !== null) {
       return;
     }
 
-    applyAudioVolumeVisualPreview(item.volume ?? 0);
-  }, [applyAudioVolumeVisualPreview, audioVolumeEdit, item]);
+    applyAudioVolumeVisualPreview(itemVolume ?? 0);
+  }, [applyAudioVolumeVisualPreview, audioVolumeEdit, itemType, itemVolume]);
   const finalizeAudioVolumeChange = useCallback((nextVolume: number, options?: {
     preserveLiveGainOnCommit?: boolean;
     commitFromActiveEdit?: boolean;

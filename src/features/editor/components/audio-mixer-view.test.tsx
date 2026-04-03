@@ -372,11 +372,26 @@ describe('AudioMixerView', () => {
 
     const { container, rerender } = render(<AudioMixerView {...props} />);
 
+    const faderRoot = container.querySelector('[data-track-id="track-1"][data-fader-root="true"]') as HTMLDivElement | null;
     const leftBar = container.querySelector('[data-track-id="track-1"][data-track-channel="left"]') as HTMLDivElement | null;
+    expect(faderRoot).not.toBeNull();
     expect(leftBar).not.toBeNull();
 
-    // Simulate the estimation pipeline updating with a +6 dB boost already
-    // baked into the level (as getTrackGainCorrection would during fader drag).
+    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
+      value: () => ({
+        x: 0, y: 20, top: 20, bottom: 220, left: 0, right: 20,
+        width: 20, height: 200, toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(faderRoot!, 'setPointerCapture', { value: vi.fn(), configurable: true });
+    Object.defineProperty(faderRoot!, 'releasePointerCapture', { value: vi.fn(), configurable: true });
+
+    // Start a drag to enter the mid-drag path
+    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 });
+    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 40 });
+
+    // Simulate the estimation pipeline delivering boosted levels mid-drag
+    // (as getTrackGainCorrection would bake the fader override into the level).
     const boostedLevel = 0.1 * Math.pow(10, 6 / 20); // ~0.2
     rerender(
       <AudioMixerView
@@ -395,7 +410,6 @@ describe('AudioMixerView', () => {
     const heightAfterPipeline = parseFloat(leftBar!.style.height);
 
     // Re-render again with the same levels — height must not change.
-    // The old bug would have re-applied an offset here, pushing the bar higher.
     rerender(
       <AudioMixerView
         {...props}
@@ -411,6 +425,9 @@ describe('AudioMixerView', () => {
     );
 
     expect(parseFloat(leftBar!.style.height)).toBeCloseTo(heightAfterPipeline, 5);
+
+    // End drag
+    fireEvent.pointerUp(faderRoot!, { pointerId: 1, clientY: 40 });
   });
 
   it('keeps dragging active while meter props rerender during the gesture', () => {
