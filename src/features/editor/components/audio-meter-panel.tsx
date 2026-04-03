@@ -98,6 +98,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const volume = usePlaybackStore((s) => s.volume);
+  const setVolume = usePlaybackStore((s) => s.setVolume);
   const muted = usePlaybackStore((s) => s.muted);
 
   const [waveformsByMediaId, setWaveformsByMediaId] = useState<Map<string, AudioMeterWaveform | null>>(new Map());
@@ -503,6 +504,23 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [applyMuteSoloLiveGains]);
 
   // ---------------------------------------------------------------------------
+  // Master volume (dB <-> linear gain for bus fader)
+  // ---------------------------------------------------------------------------
+
+  const masterVolumeDb = useMemo(() => {
+    if (volume <= 0) return -60;
+    return Math.max(-60, Math.min(12, 20 * Math.log10(volume)));
+  }, [volume]);
+
+  const handleMasterVolumeChange = useCallback((db: number) => {
+    if (db <= -60) {
+      setVolume(0);
+    } else {
+      setVolume(Math.pow(10, db / 20));
+    }
+  }, [setVolume]);
+
+  // ---------------------------------------------------------------------------
   // Mode dropdown (shared across both views)
   // ---------------------------------------------------------------------------
 
@@ -556,6 +574,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         perTrackLevels={perTrackLevels}
         masterEstimate={estimate}
         isPlaying={isPlaying}
+        masterVolumeDb={masterVolumeDb}
+        onMasterVolumeChange={handleMasterVolumeChange}
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
@@ -575,6 +595,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         perTrackLevels={perTrackLevels}
         masterEstimate={estimate}
         isPlaying={isPlaying}
+        masterVolumeDb={masterVolumeDb}
+        onMasterVolumeChange={handleMasterVolumeChange}
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
