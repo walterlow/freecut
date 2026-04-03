@@ -31,7 +31,6 @@ import {
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
-import { MediaInfoPanel } from './media-info-panel';
 import { CompositionsSection } from './compositions-section';
 import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
@@ -85,7 +84,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const isFocusedRef = useRef(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
-  const [infoPanelDismissed, setInfoPanelDismissed] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -149,25 +147,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   const selectedAssetCount = selectedMediaIds.length + selectedCompositionIds.length;
   const deleteAssetCount = pendingDeletion.mediaIds.length + pendingDeletion.compositionIds.length;
-  const prevSelectionKeyRef = useRef('');
-  const selectionKey = useMemo(
-    () => `m:${selectedMediaIds.join(',')}|c:${selectedCompositionIds.join(',')}`,
-    [selectedCompositionIds, selectedMediaIds]
-  );
-
-  // Reset info panel dismissed state when selection changes
-  useEffect(() => {
-    if (selectionKey !== prevSelectionKeyRef.current) {
-      setInfoPanelDismissed(false);
-      prevSelectionKeyRef.current = selectionKey;
-    }
-  }, [selectionKey]);
-
-  // Resolve the selected media item for the info panel (single media selection only)
-  const selectedMediaForInfo = useMemo(() => {
-    if (selectedCompositionIds.length > 0 || selectedMediaIds.length !== 1 || infoPanelDismissed) return null;
-    return mediaById[selectedMediaIds[0]!] ?? null;
-  }, [selectedCompositionIds.length, selectedMediaIds, mediaById, infoPanelDismissed]);
 
   const marqueeItems: MarqueeItem[] = useMemo(
     () => [
@@ -902,15 +881,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </div>
           </div>
         </div>
-      )}
-
-      {/* Media info panel - slides up from bottom when single item selected */}
-      {selectedMediaForInfo && (
-        <MediaInfoPanel
-          key={selectedMediaForInfo.id}
-          media={selectedMediaForInfo}
-          onClose={() => setInfoPanelDismissed(true)}
-        />
       )}
 
       {/* Delete confirmation dialog */}

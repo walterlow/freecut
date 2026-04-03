@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { getMediaType, formatDuration } from '../utils/validation';
+import { MediaInfoPopover } from './media-info-popover';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
@@ -489,59 +490,65 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
 
         {/* Actions - hidden during upload */}
         {!isImporting && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-              >
-                <MoreVertical className="w-3 h-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-              {isBroken && onRelink && (
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
-                  <RefreshCw className="w-3 h-3 mr-2" />
-                  Relink File...
-                </DropdownMenuItem>
-              )}
-              {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
-                <DropdownMenuItem onClick={handleGenerateProxy}>
-                  <Zap className="w-3 h-3 mr-2" />
-                  Generate Proxy
-                </DropdownMenuItem>
-              )}
-              {isTranscribable && !isBroken && !isTranscribing && (
-                <DropdownMenuItem onClick={handleGenerateTranscript}>
-                  <FileText className="w-3 h-3 mr-2" />
-                  {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
-                </DropdownMenuItem>
-              )}
-              {isTranscribable && !isBroken && isTranscribing && (
-                <DropdownMenuItem disabled>
-                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                  {transcriptProgressLabel}
-                </DropdownMenuItem>
-              )}
-              {proxyStatus === 'generating' && (
-                <DropdownMenuItem disabled>
-                  <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                  Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
-                </DropdownMenuItem>
-              )}
-              {hasProxy && (
-                <DropdownMenuItem onClick={handleDeleteProxy} className="text-destructive focus:text-destructive">
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <MediaInfoPopover
+              media={media}
+              triggerClassName="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
+                >
+                  <MoreVertical className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                {isBroken && onRelink && (
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
+                    <RefreshCw className="w-3 h-3 mr-2" />
+                    Relink File...
+                  </DropdownMenuItem>
+                )}
+                {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
+                  <DropdownMenuItem onClick={handleGenerateProxy}>
+                    <Zap className="w-3 h-3 mr-2" />
+                    Generate Proxy
+                  </DropdownMenuItem>
+                )}
+                {isTranscribable && !isBroken && !isTranscribing && (
+                  <DropdownMenuItem onClick={handleGenerateTranscript}>
+                    <FileText className="w-3 h-3 mr-2" />
+                    {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+                  </DropdownMenuItem>
+                )}
+                {isTranscribable && !isBroken && isTranscribing && (
+                  <DropdownMenuItem disabled>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    {transcriptProgressLabel}
+                  </DropdownMenuItem>
+                )}
+                {proxyStatus === 'generating' && (
+                  <DropdownMenuItem disabled>
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
+                  </DropdownMenuItem>
+                )}
+                {hasProxy && (
+                  <DropdownMenuItem onClick={handleDeleteProxy} className="text-destructive focus:text-destructive">
+                    <Trash2 className="w-3 h-3 mr-2" />
+                    Delete Proxy
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                   <Trash2 className="w-3 h-3 mr-2" />
-                  Delete Proxy
+                  Delete
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
-                <Trash2 className="w-3 h-3 mr-2" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
       </div>
     );
@@ -605,22 +612,27 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
           </div>
         )}
 
-        {/* Broken file indicator */}
-        {isBroken && !isImporting && (
-          <div className="absolute top-1 right-1 p-1 rounded bg-destructive/90 text-destructive-foreground">
-            <Link2Off className="w-3 h-3" />
-          </div>
-        )}
-
-        {/* Proxy badge */}
-        {!isBroken && !isImporting && proxyStatus === 'generating' && (
-          <div className="absolute top-1 right-1 p-0.5 rounded bg-amber-500/90 text-black pointer-events-none">
-            <Loader2 className="w-2.5 h-2.5 animate-spin" />
-          </div>
-        )}
-        {!isBroken && !isImporting && hasProxy && (
-          <div className="absolute top-1 right-1 p-0.5 rounded bg-green-500/90 text-black pointer-events-none">
-            <Zap className="w-2.5 h-2.5" />
+        {/* Top-right badges & info */}
+        {!isImporting && (
+          <div className="absolute top-1 right-1 z-10 flex flex-col items-end gap-0.5">
+            {isBroken && (
+              <div className="p-1 rounded bg-destructive/90 text-destructive-foreground">
+                <Link2Off className="w-3 h-3" />
+              </div>
+            )}
+            {!isBroken && proxyStatus === 'generating' && (
+              <div className="p-0.5 rounded bg-amber-500/90 text-black pointer-events-none">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              </div>
+            )}
+            {!isBroken && hasProxy && (
+              <div className="p-0.5 rounded bg-green-500/90 text-black pointer-events-none">
+                <Zap className="w-2.5 h-2.5" />
+              </div>
+            )}
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <MediaInfoPopover media={media} />
+            </div>
           </div>
         )}
 
