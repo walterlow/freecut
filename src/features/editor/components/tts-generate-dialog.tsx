@@ -35,7 +35,6 @@ import {
   findNearestAvailableSpace,
   linkItems,
 } from '@/features/editor/deps/timeline-utils';
-import { useSelectionStore } from '@/shared/state/selection';
 import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
@@ -44,7 +43,7 @@ import {
   KITTEN_TTS_VOICE_OPTIONS,
   kittenTtsService,
   type KittenTtsVoice,
-} from '../services/kitten-tts-service';
+} from '@/features/editor/services/kitten-tts-service';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -107,9 +106,8 @@ function insertAndLinkAudioAtTextItem(
   const added = useTimelineStore.getState().items.some((i) => i.id === audioItemId);
   if (!added) return { inserted: false, audioItemId: null };
 
-  // Link the text item and audio item
+  // Link the text item and audio item (linkItems also updates selection)
   linkItems([sourceItemId, audioItemId]);
-  useSelectionStore.getState().selectItems([sourceItemId, audioItemId]);
 
   return { inserted: true, audioItemId };
 }
@@ -138,6 +136,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
     const onEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
+      el.currentTime = 0;
     };
 
     el.addEventListener('play', onPlay);
@@ -242,10 +241,17 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   const [inserted, setInserted] = useState(false);
 
   const resultUrlRef = useRef<string | null>(null);
+  const sessionIdRef = useRef(0);
 
   // Reset state when dialog opens
   useEffect(() => {
     if (isOpen) {
+      sessionIdRef.current++;
+      // Revoke previous result URL if not inserted
+      if (resultUrlRef.current && !inserted) {
+        URL.revokeObjectURL(resultUrlRef.current);
+        resultUrlRef.current = null;
+      }
       setText(initialText);
       setError(null);
       setProgress(null);
@@ -294,14 +300,23 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     setIsGenerating(true);
     setProgress('Preparing local TTS...');
 
+    const thisSession = sessionIdRef.current;
+
     try {
       const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
         text: trimmedText,
         voice,
         speed,
         model,
-        onProgress: setProgress,
+        onProgress: (msg) => {
+          if (sessionIdRef.current === thisSession) setProgress(msg);
+        },
       });
+
+      if (sessionIdRef.current !== thisSession) {
+        // Dialog was closed/reopened — discard stale result
+        return;
+      }
 
       const objectUrl = URL.createObjectURL(blob);
       resultUrlRef.current = objectUrl;
@@ -309,6 +324,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       setResult({ file, objectUrl, duration, voice, model });
       setProgress(null);
     } catch (generationError) {
+      if (sessionIdRef.current !== thisSession) return;
       setError(
         generationError instanceof Error
           ? generationError.message
@@ -316,7 +332,9 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       );
       setProgress(null);
     } finally {
-      setIsGenerating(false);
+      if (sessionIdRef.current === thisSession) {
+        setIsGenerating(false);
+      }
     }
   }, [currentProjectId, trimmedText, isWebGpuSupported, voice, speed, model, inserted]);
 

@@ -302,32 +302,53 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     };
   }, []);
 
+  const audioLoadingRef = useRef(false);
+
   const handleAudioToggle = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
 
     if (audioPlaying && audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       setAudioPlaying(false);
       return;
     }
 
     if (audioRef.current) {
+      audioRef.current.currentTime = 0;
       audioRef.current.play();
       setAudioPlaying(true);
       return;
     }
 
-    const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-    if (!blobUrl) return;
+    if (audioLoadingRef.current) return;
+    audioLoadingRef.current = true;
 
-    const audio = new Audio(blobUrl);
-    audio.addEventListener('ended', () => {
-      setAudioPlaying(false);
-    });
-    audioRef.current = audio;
-    audio.play();
-    setAudioPlaying(true);
+    try {
+      const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
+      if (!blobUrl) return;
+
+      // Another toggle may have created an element while we awaited
+      const existing = audioRef.current as HTMLAudioElement | null;
+      if (existing) {
+        URL.revokeObjectURL(blobUrl);
+        existing.currentTime = 0;
+        existing.play();
+        setAudioPlaying(true);
+        return;
+      }
+
+      const audio = new Audio(blobUrl);
+      audio.addEventListener('ended', () => {
+        setAudioPlaying(false);
+      });
+      audioRef.current = audio;
+      audio.play();
+      setAudioPlaying(true);
+    } finally {
+      audioLoadingRef.current = false;
+    }
   }, [audioPlaying, media.id]);
 
   const transcriptProgressLabel = transcriptProgress
@@ -419,6 +440,8 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
             <button
               type="button"
               onClick={handleAudioToggle}
+              aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+              aria-pressed={audioPlaying}
               className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors"
             >
               <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
@@ -606,6 +629,8 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
           <button
             type="button"
             onClick={handleAudioToggle}
+            aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+            aria-pressed={audioPlaying}
             className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group/play"
           >
             <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${

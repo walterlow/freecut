@@ -1479,10 +1479,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Generate audio from text
   const textContent = item.type === 'text' ? item.text : '';
+  const hasSpeakableText = textContent.trim().length > 0;
   const handleGenerateAudioFromText = useCallback(() => {
-    if (!textContent) return;
+    if (!hasSpeakableText) return;
     useTtsGenerateDialogStore.getState().open(textContent, item.id);
-  }, [item.id, textContent]);
+  }, [item.id, textContent, hasSpeakableText]);
 
   const handleCaptionGeneration = useCallback((
     model: MediaTranscriptModel,
@@ -2810,7 +2811,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           return frame > item.from && frame < item.from + item.durationInFrames;
         })()}
         onFreezeFrame={handleFreezeFrame}
-        isTextItem={item.type === 'text'}
+        isTextItem={item.type === 'text' && hasSpeakableText}
         onGenerateAudioFromText={handleGenerateAudioFromText}
         canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
         canRegenerateCaptions={hasGeneratedCaptions}

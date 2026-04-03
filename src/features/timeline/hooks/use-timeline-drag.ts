@@ -43,7 +43,7 @@ const DRAG_CURSOR_CLASSES = Object.values(DRAG_CURSOR_CLASS_BY_MODE);
 const TRACK_SECTION_DIVIDER_GAP = 0;
 const CROSS_TRACK_SNAP_THRESHOLD_PX = 18;
 
-function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): { videoItemId: string; audioItemId: string } | null {
+function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): { visualItemId: string; audioItemId: string } | null {
   if (draggedItemIds.length !== 2) {
     return null;
   }
@@ -68,7 +68,7 @@ function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): 
   }
 
   return {
-    videoItemId: visualItem.id,
+    visualItemId: visualItem.id,
     audioItemId: audioItem.id,
   };
 }
@@ -102,7 +102,7 @@ function resolveDraggedTrackTargets(params: {
     return {
       tracks: linkedTrackTargets.tracks,
       trackAssignments: new Map<string, string>([
-        [linkedPair.videoItemId, linkedTrackTargets.videoTrackId],
+        [linkedPair.visualItemId, linkedTrackTargets.videoTrackId],
         [linkedPair.audioItemId, linkedTrackTargets.audioTrackId],
       ]),
     };
