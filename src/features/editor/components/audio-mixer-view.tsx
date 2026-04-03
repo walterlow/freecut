@@ -413,6 +413,7 @@ const ChannelStrip = memo(function ChannelStrip({
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
   const leftBarRef = useRef<HTMLDivElement | null>(null);
   const rightBarRef = useRef<HTMLDivElement | null>(null);
+  const previewDbRef = useRef<number | null>(null);
   const leftPercentRef = useRef(0);
   const rightPercentRef = useRef(0);
   const showScanningFallbackRef = useRef(false);
@@ -445,6 +446,7 @@ const ChannelStrip = memo(function ChannelStrip({
       return;
     }
 
+    previewDbRef.current = previewDb;
     const baseLeftPercent = leftPercentRef.current;
     const baseRightPercent = rightPercentRef.current;
     const canPreview = showScanningFallbackRef.current || baseLeftPercent > 0 || baseRightPercent > 0;
@@ -460,8 +462,8 @@ const ChannelStrip = memo(function ChannelStrip({
   }, []);
 
   useEffect(() => {
-    applyMeterPreview(null);
-  }, [applyMeterPreview]);
+    applyMeterPreview(previewDbRef.current);
+  }, [applyMeterPreview, leftPercent, rightPercent, showScanningFallback, track.volume]);
 
   // dB readout color: green at unity, amber when boosted, dim when cut
   const dbColor = track.volume > 0.05
@@ -528,7 +530,7 @@ const ChannelStrip = memo(function ChannelStrip({
           {/* Segmented per-track level bars */}
           <div className={`flex ${meterBarGap} ${meterBarWidth} shrink-0`}>
             <SegmentedMeterBar
-              height={`${leftPercent}%`}
+              height="0%"
               scanning={showScanningFallback}
               fillRef={leftBarRef}
               fillProps={{
@@ -537,7 +539,7 @@ const ChannelStrip = memo(function ChannelStrip({
               }}
             />
             <SegmentedMeterBar
-              height={`${rightPercent}%`}
+              height="0%"
               scanning={showScanningFallback}
               fillRef={rightBarRef}
               fillProps={{
