@@ -14,6 +14,10 @@
  *   ← { type: 'error', message }                 — error
  */
 
+// TODO: Replace CDN imports with a bundled devDependency (`@huggingface/transformers`)
+// imported via a Vite worker entry. CDN fetches bypass npm audit and lack SRI hashes,
+// meaning a compromised CDN could execute arbitrary code in this Worker context.
+// See: https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
 const TRANSFORMERS_CDN_URL = 'https://esm.sh/@huggingface/transformers@4.0.1?bundle';
 const WASM_CDN_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.1/dist/';
 const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
@@ -126,7 +130,7 @@ async function verifyCandidate(
     const answer = (decoded[0] ?? '').trim().toUpperCase();
     post({ type: 'result', id, isSceneCut: answer.startsWith('CUT'), reason: answer });
   } catch (err) {
-    post({ type: 'result', id, isSceneCut: true, reason: `error: ${(err as Error).message}` });
+    post({ type: 'result', id, isSceneCut: false, reason: `error: ${(err as Error).message}` });
   }
 }
 

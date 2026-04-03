@@ -11,6 +11,9 @@ import { OpticalFlowAnalyzer } from './optical-flow-analyzer';
 import type { MotionResult } from './optical-flow-analyzer';
 import { ANALYSIS_WIDTH, ANALYSIS_HEIGHT } from './optical-flow-shaders';
 import { createGemmaSceneWorker } from './create-gemma-worker';
+import { createLogger } from '@/shared/logging/logger';
+
+const log = createLogger('SceneDetection');
 
 /** Default sampling interval in milliseconds (matches masterselects) */
 const SAMPLE_INTERVAL_MS = 500;
@@ -153,9 +156,7 @@ export async function detectScenes(
         stage: 'optical-flow',
       });
     }
-    // Diagnostic: log max motion seen across all samples
-    // eslint-disable-next-line no-console
-    console.info(`[SceneDetection] Analyzed ${totalSamples} samples, maxMotion=${maxMotionSeen.toFixed(4)}, rawCuts=${sceneCuts.length}`);
+    log.info('Optical flow pass complete', { totalSamples, maxMotion: maxMotionSeen.toFixed(4), rawCuts: sceneCuts.length });
   } finally {
     analyzer.destroy();
     device.destroy();
@@ -165,8 +166,7 @@ export async function detectScenes(
   // only the strongest cut within each MIN_CUT_GAP_SEC window.
   const deduped = deduplicateCuts(sceneCuts, MIN_CUT_GAP_SEC);
 
-  // eslint-disable-next-line no-console
-  console.info(`[SceneDetection] After dedup: ${deduped.length} cuts (min gap ${MIN_CUT_GAP_SEC}s)`);
+  log.info('Deduplication complete', { cuts: deduped.length, minGapSec: MIN_CUT_GAP_SEC });
 
   if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
     return deduped;
@@ -175,11 +175,11 @@ export async function detectScenes(
   // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
   try {
     const verified = await verifyWithGemma(video, deduped, onProgress, signal);
-    // eslint-disable-next-line no-console
-    console.info(`[SceneDetection] After Gemma verification: ${verified.length}/${deduped.length} confirmed`);
+    log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
     return verified;
   } catch (err) {
-    console.warn('[SceneDetection] Gemma verification failed, using optical flow results:', err);
+    resetGemmaWorker();
+    log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
     return deduped;
   }
 }
@@ -211,6 +211,13 @@ function getGemmaWorker(): Worker {
   return gemmaWorker;
 }
 
+function resetGemmaWorker(): void {
+  if (gemmaWorker) {
+    gemmaWorker.terminate();
+    gemmaWorker = null;
+  }
+}
+
 /**
  * Pass 2: Verify candidate cuts with Gemma-4 in a Web Worker so model loading
  * and inference do not block the main thread.
@@ -226,10 +233,12 @@ async function verifyWithGemma(
 
   // Wait for model to load (30s timeout for bootstrap + initial load handshake)
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    const INACTIVITY_MS = 30_000;
+    let timeout = setTimeout(onTimeout, INACTIVITY_MS);
+    function onTimeout() {
       worker.removeEventListener('message', onMsg);
-      reject(new Error('Gemma worker init timed out after 30s'));
-    }, 30_000);
+      reject(new Error('Gemma worker init timed out after 30s of inactivity'));
+    }
     const onMsg = (e: MessageEvent) => {
       const msg = e.data;
       if (msg.type === 'ready') {
@@ -241,8 +250,9 @@ async function verifyWithGemma(
         worker.removeEventListener('message', onMsg);
         reject(new Error(msg.message));
       } else if (msg.type === 'progress') {
-        // Model is downloading — extend timeout since this can take minutes
+        // Model is downloading — reset inactivity timeout
         clearTimeout(timeout);
+        timeout = setTimeout(onTimeout, INACTIVITY_MS);
         onProgress?.({
           percent: msg.percent,
           currentSample: 0,
@@ -290,8 +300,7 @@ async function verifyWithGemma(
       worker.postMessage({ type: 'verify', id: i, before: beforeBlob, after: afterBlob });
     });
 
-    // eslint-disable-next-line no-console
-    console.info(`[SceneDetection] Gemma #${i}: t=${cut.time.toFixed(1)}s → ${result.reason}`);
+    log.info('Gemma candidate result', { index: i, time: cut.time.toFixed(1), reason: result.reason });
 
     if (result.isSceneCut) {
       verified.push({ ...cut, verified: true });
