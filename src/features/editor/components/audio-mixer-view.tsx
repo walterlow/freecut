@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { linearLevelToPercent } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
@@ -541,11 +541,12 @@ interface BusMeterProps {
   isPlaying: boolean;
   volumeDb: number;
   muted: boolean;
+  allItemIds: string[];
   onVolumeChange: (volumeDb: number) => void;
   onMuteToggle: () => void;
 }
 
-const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, muted, onVolumeChange, onMuteToggle }: BusMeterProps) {
+const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, muted, allItemIds, onVolumeChange, onMuteToggle }: BusMeterProps) {
   const leftBarRef = useRef<HTMLDivElement | null>(null);
   const rightBarRef = useRef<HTMLDivElement | null>(null);
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
@@ -556,6 +557,8 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
   const isDraggingRef = useRef(false);
   const dragOffsetPercentRef = useRef(0);
   const latestDbRef = useRef(volumeDb);
+  const dragStartDbRef = useRef(volumeDb);
+  const dragStartGainsRef = useRef<Map<string, number>>(new Map());
 
   // Sync from props when not dragging
   if (!isDraggingRef.current) {
@@ -598,17 +601,26 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
         db > 0.05 ? 'text-amber-400/90' : db > -0.05 ? 'text-emerald-400/80' : 'text-muted-foreground/60'
       }`;
     }
-  }, []);
+    // Apply live gain to all items (bus = master gain offset)
+    const committedDb = dragStartDbRef.current;
+    const gainRatio = Math.pow(10, (db - committedDb) / 20);
+    setMixerLiveGains(allItemIds.map((id) => ({
+      itemId: id,
+      gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
+    })));
+  }, [allItemIds]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     isDraggingRef.current = true;
+    dragStartDbRef.current = latestDbRef.current;
+    dragStartGainsRef.current = new Map(allItemIds.map((id) => [id, getMixerLiveGain(id)]));
     dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent);
     const percent = percentFromPointerEvent(e.nativeEvent);
     const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
     applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
-  }, [applyBusDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent]);
+  }, [allItemIds, applyBusDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current) return;
@@ -669,7 +681,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
       : 'text-muted-foreground/60';
 
   return (
-    <div className="flex flex-col items-center h-full w-[52px] min-w-[52px] shrink-0">
+    <div className="flex flex-col items-center h-full w-[60px] min-w-[60px] shrink-0">
       {/* Inset panel */}
       <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
         {/* Label */}
@@ -732,47 +744,50 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
             </div>
           </div>
 
-          {/* Bus fader */}
-          <div
-            ref={trackRef}
-            className="relative flex-1 min-w-0 cursor-ns-resize select-none touch-none"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={() => {
-              if (!isDraggingRef.current) return;
-              isDraggingRef.current = false;
-              dragOffsetPercentRef.current = 0;
-              applyBusDragValue(volumeDb);
-            }}
-            onDoubleClick={handleDoubleClick}
-          >
-            {/* Fader track line */}
-            <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/70" />
-
-            {/* Unity (0 dB) notch */}
+          {/* Bus fader — same hit area structure as channel faders */}
+          <div className="min-w-[20px] w-[20px] shrink-0">
             <div
-              className="absolute left-0 right-0 flex items-center justify-center"
-              style={{ bottom: `${unityPercent}%`, transform: 'translateY(50%)' }}
-            >
-              <div className="w-full h-px bg-muted-foreground/25" />
-            </div>
-
-            {/* Fader knob */}
-            <div
-              ref={knobRef}
-              className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-              style={{
-                top: `${100 - knobPercent}%`,
-                width: '18px',
-                height: `${FADER_KNOB_HEIGHT_PX}px`,
+              ref={trackRef}
+              data-fader-root="true"
+              className="relative h-full cursor-ns-resize select-none touch-none"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={() => {
+                if (!isDraggingRef.current) return;
+                isDraggingRef.current = false;
+                dragOffsetPercentRef.current = 0;
+                applyBusDragValue(volumeDb);
               }}
+              onDoubleClick={handleDoubleClick}
             >
-              <div className="w-full h-full rounded-[4px] bg-gradient-to-b from-zinc-300 to-zinc-400 shadow-[0_1px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.3)] border border-zinc-500/40">
-                <div className="absolute inset-x-[3px] top-[7px] h-px bg-zinc-600/50" />
-                <div className="absolute inset-x-[3px] top-[10px] h-px bg-zinc-600/50" />
-                <div className="absolute inset-x-[3px] top-[13px] h-px bg-zinc-600/50" />
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-zinc-600/30 rounded-full mx-[2px]" />
+              {/* Fader track line */}
+              <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/70" />
+
+              {/* Unity (0 dB) notch */}
+              <div
+                className="absolute left-0 right-0 flex items-center justify-center"
+                style={{ bottom: `${unityPercent}%`, transform: 'translateY(50%)' }}
+              >
+                <div className="w-full h-px bg-muted-foreground/25" />
+              </div>
+
+              {/* Fader knob — gold tint to distinguish from channel faders */}
+              <div
+                ref={knobRef}
+                className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                style={{
+                  top: `${100 - knobPercent}%`,
+                  width: '18px',
+                  height: `${FADER_KNOB_HEIGHT_PX}px`,
+                }}
+              >
+                <div className="w-full h-full rounded-[4px] bg-gradient-to-b from-[#d4c9a8] to-[#b8ad8e] shadow-[0_1px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.25)] border border-[#9a9076]/50">
+                  <div className="absolute inset-x-[3px] top-[7px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute inset-x-[3px] top-[10px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute inset-x-[3px] top-[13px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-[#6b6350]/25 rounded-full mx-[2px]" />
+                </div>
               </div>
             </div>
           </div>
@@ -837,18 +852,19 @@ export const AudioMixerView = memo(function AudioMixerView({
   headerExtra,
   expanded,
 }: AudioMixerViewProps) {
-  // When expanded (floating), fill the panel; when docked, fit content up to max
+  // When expanded (floating), fill the panel; when docked, size to content
   const outerClassName = expanded
     ? 'panel-bg flex h-full flex-col overflow-hidden'
     : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit';
-  const outerStyle = expanded
-    ? undefined
-    : { maxWidth: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth };
+
+  const allItemIds = useMemo(
+    () => tracks.flatMap((track) => track.itemIds),
+    [tracks],
+  );
 
   return (
     <aside
       className={outerClassName}
-      style={outerStyle}
       aria-label="Audio mixer"
     >
       {/* Header — only shown when docked (floating panel has its own title bar) */}
@@ -904,7 +920,7 @@ export const AudioMixerView = memo(function AudioMixerView({
         </div>
 
         {/* Bus / master strip */}
-        <BusMeter masterEstimate={masterEstimate} isPlaying={isPlaying} volumeDb={masterVolumeDb} muted={masterMuted} onVolumeChange={onMasterVolumeChange} onMuteToggle={onMasterMuteToggle} />
+        <BusMeter masterEstimate={masterEstimate} isPlaying={isPlaying} volumeDb={masterVolumeDb} muted={masterMuted} allItemIds={allItemIds} onVolumeChange={onMasterVolumeChange} onMuteToggle={onMasterMuteToggle} />
       </div>
     </aside>
   );
