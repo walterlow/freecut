@@ -46,6 +46,7 @@ import {
 } from '../../utils/transition-edit-guards';
 import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
+import { TransitionAffectedOverlay } from './transition-affected-overlay';
 import { shouldSuppressLinkedSyncBadge } from './linked-sync-badge';
 import { shouldSuppressTimelineItemClickAfterDrag } from './post-drag-click-guard';
 import { TrimHandles } from './trim-handles';
@@ -133,6 +134,7 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
 import { detectScenes } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
+import { getTransitionBlockedRanges } from '../../deps/keyframes-contract';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
 const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
 const EMPTY_SEGMENT_OVERLAYS = [] as const;
@@ -258,6 +260,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     )
   );
   const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const itemTransitions = useTransitionsStore(
+    useShallow(
+      useCallback(
+        (s) => s.transitions
+          .filter((transition) => transition.leftClipId === item.id || transition.rightClipId === item.id),
+        [item.id],
+      ),
+    ),
+  );
   const isLinked = useItemsStore(
     useCallback((s) => hasLinkedItems(s.items, item.id), [item.id])
   );
@@ -2693,6 +2704,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     return contentPreviewItem;
   }, [contentPreviewItem, videoFadeEdit]);
+  const transitionAffectedRanges = useMemo(() => {
+    return getTransitionBlockedRanges(item.id, previewBaseItem, itemTransitions).map((range) => ({
+      key: `${range.transition.id}-${range.role}`,
+      start: range.start,
+      end: range.end,
+      role: range.role,
+      label: `${range.role === 'incoming' ? 'Incoming' : 'Outgoing'} transition range`,
+    }));
+  }, [item.id, itemTransitions, previewBaseItem]);
   const linkedSyncPreviewItem = useMemo<TimelineItemType>(() => {
     let fromOffset = slideFromOffset + rippleEditOffset + moveDragPreviewFromDelta;
 
@@ -3271,6 +3291,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               preferImmediateRendering={preferImmediateContentRendering}
               audioWaveformScale={audioVisualizationScale}
               linkedSyncOffsetFrames={linkedSyncOffsetFrames}
+            />
+            <TransitionAffectedOverlay
+              clipDurationInFrames={Math.max(1, previewBaseItem.durationInFrames)}
+              clipWidth={visualWidth}
+              ranges={transitionAffectedRanges}
             />
 
             {/* Status indicators */}
