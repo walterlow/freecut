@@ -74,7 +74,7 @@ export function TrackSectionDivider({ className, onMouseDown }: TrackSectionDivi
         data-testid="track-row-section-divider"
         className="pointer-events-none absolute inset-0 z-30"
       >
-        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border shadow-[0_1px_0_rgba(255,255,255,0.08)]" />
+        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/80 shadow-[0_1px_0_rgba(255,255,255,0.15)]" />
       </div>
       {onMouseDown && (
         <button

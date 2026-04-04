@@ -156,6 +156,12 @@ body.timeline-item-drag-cursor-not-allowed * {
   height: 0;
 }
 
+/* Track section vertical scrollbars overlay content instead of shrinking it,
+   so track backgrounds extend the full timeline width */
+[data-track-section-scroll] {
+  overflow-y: overlay !important;
+}
+
 /* Waveform gradient background - darker edges, dark center */
 .bg-waveform-gradient {
   background: linear-gradient(
