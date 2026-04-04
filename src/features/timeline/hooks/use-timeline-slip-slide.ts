@@ -165,7 +165,7 @@ export function useTimelineSlipSlide(
         useLinkedEditPreviewStore.getState().setUpdates(updates);
       }
     }
-  }, [findNeighbors, getItemFromStore, item.id, setDragState]);
+  }, [findNeighbors, getItemFromStore, item.id, setDragState, clampSlideDelta]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -193,7 +193,7 @@ export function useTimelineSlipSlide(
     }
 
     const allItems = useTimelineStore.getState().items;
-    const slidItemIds = new Set([item.id, leftNeighborId, rightNeighborId].filter(Boolean) as string[]);
+    const slideItemIds = new Set([item.id, leftNeighborId, rightNeighborId].filter(Boolean) as string[]);
 
     // Adjacent neighbors: clamp by source limits (standard slide behavior)
     if (leftNeighborId) {
@@ -203,7 +203,7 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
-        const adjacentClamped = clampToAdjacentItems(leftNeighbor, 'end', clamped, allItems, slidItemIds);
+        const adjacentClamped = clampToAdjacentItems(leftNeighbor, 'end', clamped, allItems, slideItemIds);
         if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
           clamped = adjacentClamped;
         }
@@ -217,7 +217,7 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
-        const adjacentClamped = clampToAdjacentItems(rightNeighbor, 'start', clamped, allItems, slidItemIds);
+        const adjacentClamped = clampToAdjacentItems(rightNeighbor, 'start', clamped, allItems, slideItemIds);
         if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
           clamped = adjacentClamped;
         }
@@ -235,7 +235,7 @@ export function useTimelineSlipSlide(
       if (participant.id === currentItem.id) continue; // primary already handled above
 
       const pEnd = participant.from + participant.durationInFrames;
-      const participantExcludeIds = new Set<string>(slidItemIds);
+      const participantExcludeIds = new Set<string>(slideItemIds);
       for (const p of participants) participantExcludeIds.add(p.id);
 
       // Find this companion's own adjacent neighbors and clamp by their source limits
@@ -274,12 +274,12 @@ export function useTimelineSlipSlide(
     {
       const primaryEnd = currentItem.from + currentItem.durationInFrames;
       const nearest = findNearestNeighbors(currentItem, allItems);
-      if (nearest.leftNeighbor && !slidItemIds.has(nearest.leftNeighbor.id)) {
+      if (nearest.leftNeighbor && !slideItemIds.has(nearest.leftNeighbor.id)) {
         const wallRight = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
         const maxLeft = -(currentItem.from - wallRight);
         if (clamped < maxLeft) clamped = maxLeft;
       }
-      if (nearest.rightNeighbor && !slidItemIds.has(nearest.rightNeighbor.id)) {
+      if (nearest.rightNeighbor && !slideItemIds.has(nearest.rightNeighbor.id)) {
         const wallLeft = nearest.rightNeighbor.from;
         const maxRight = wallLeft - primaryEnd;
         if (clamped > maxRight) clamped = maxRight;

@@ -571,10 +571,6 @@ export function closeAllGapsOnTrack(trackId: string): void {
 }
 
 /**
- * Track push: move a clip and all downstream items on the same track by a
- * frame delta, closing or opening the gap before the anchor clip.
- */
-/**
  * Track push: move ALL items at or after the anchor clip's position — across
  * every track — by the given frame delta.  This is a multi-track ripple
  * move that closes or opens a gap at the anchor point.
