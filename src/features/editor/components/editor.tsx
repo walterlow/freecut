@@ -39,8 +39,6 @@ import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layo
 import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
 import { ProjectMediaMatchDialog } from './project-media-match-dialog';
-import type { PreviewQuality } from '@/shared/state/playback';
-
 const logger = createLogger('Editor');
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId';
 const LazyExportDialog = lazy(() =>
@@ -60,20 +58,6 @@ function preloadExportDialog() {
 
 function preloadBundleExportDialog() {
   return importBundleExportDialog();
-}
-
-function mapPreviewSettingToPlaybackQuality(
-  quality: 'low' | 'medium' | 'high'
-): PreviewQuality {
-  switch (quality) {
-    case 'low':
-      return 0.33;
-    case 'medium':
-      return 0.5;
-    case 'high':
-    default:
-      return 1;
-  }
 }
 
 /** Project metadata passed from route loader (timeline loaded separately via loadTimeline) */
@@ -175,7 +159,6 @@ export const LoadedEditor = memo(function LoadedEditor({
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
   const editorDensity = useSettingsStore((s) => s.editorDensity);
-  const previewQuality = useSettingsStore((s) => s.previewQuality);
   const snapEnabledPreference = useSettingsStore((s) => s.snapEnabled);
   const editorLayout = getEditorLayout(editorDensity);
   const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
@@ -307,12 +290,6 @@ export const LoadedEditor = memo(function LoadedEditor({
   useEffect(() => {
     syncSidebarLayout(editorLayout);
   }, [editorLayout, syncSidebarLayout]);
-
-  useEffect(() => {
-    usePlaybackStore.getState().setPreviewQuality(
-      mapPreviewSettingToPlaybackQuality(previewQuality)
-    );
-  }, [previewQuality]);
 
   useEffect(() => {
     const timelineState = useTimelineStore.getState();

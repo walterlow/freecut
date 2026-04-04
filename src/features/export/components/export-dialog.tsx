@@ -28,7 +28,6 @@ import {
 import type { ExportSettings, ExportMode } from '@/types/export';
 import { useClientRender } from '../hooks/use-client-render';
 import { useProjectStore } from '@/features/export/deps/projects';
-import { useSettingsStore } from '@/features/export/deps/settings';
 import { useTimelineStore } from '@/features/export/deps/timeline';
 import { formatTimecode, framesToSeconds } from '@/utils/time-utils';
 import {
@@ -119,9 +118,6 @@ function getDefaultCodecForFormat(
 export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920);
   const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080);
-  const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
-  const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
-
   // Timeline state for in/out points and duration calculation
   const fps = useTimelineStore((s) => s.fps);
   const items = useTimelineStore((s) => s.items);
@@ -129,13 +125,13 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const outPoint = useTimelineStore((s) => s.outPoint);
 
   const [settings, setSettings] = useState<ExportSettings>({
-    codec: getDefaultCodecForFormat(defaultExportFormat),
-    quality: defaultExportQuality,
+    codec: getDefaultCodecForFormat('mp4'),
+    quality: 'high',
     resolution: { width: projectWidth, height: projectHeight },
   });
 
   const [exportMode, setExportMode] = useState<ExportMode>('video');
-  const [videoContainer, setVideoContainer] = useState<ClientVideoContainer>(defaultExportFormat);
+  const [videoContainer, setVideoContainer] = useState<ClientVideoContainer>('mp4');
   const [audioContainer, setAudioContainer] = useState<ClientAudioContainer>('mp3');
   const [view, setView] = useState<DialogView>('settings');
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -254,12 +250,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     if (open && !wasOpenRef.current) {
       setView('settings');
       setExportMode('video');
-      setVideoContainer(defaultExportFormat);
+      setVideoContainer('mp4');
       setAudioContainer('mp3');
       setRenderWholeProject(false);
       setSettings({
-        codec: getDefaultCodecForFormat(defaultExportFormat),
-        quality: defaultExportQuality,
+        codec: getDefaultCodecForFormat('mp4'),
+        quality: 'high',
         resolution: { width: projectWidth, height: projectHeight },
       });
       resetState();
@@ -275,7 +271,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     }
 
     wasOpenRef.current = open;
-  }, [defaultExportFormat, defaultExportQuality, open, projectHeight, projectWidth, resetState]);
+  }, [open, projectHeight, projectWidth, resetState]);
 
   const getAudioContainerOptions = () => [
     { value: 'mp3', label: 'MP3', description: 'Universal, small files' },

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Link } from '@tanstack/react-router';
-import { useSettingsStore } from '@/features/projects/deps/settings-contract';
 import {
   projectFormSchema,
   type ProjectFormData,
@@ -33,14 +32,12 @@ export function ProjectForm({
   isSubmitting = false,
   hideHeader = false,
 }: ProjectFormProps) {
-  const defaultFps = useSettingsStore((s) => s.defaultFps);
   const resolvedDefaultValues = useMemo(
     () => ({
       ...DEFAULT_PROJECT_VALUES,
-      fps: defaultFps,
       ...defaultValues,
     }),
-    [defaultFps, defaultValues]
+    [defaultValues]
   );
 
   const {

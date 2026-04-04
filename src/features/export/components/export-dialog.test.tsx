@@ -9,8 +9,6 @@ const mockDownloadVideo = vi.fn();
 const mockResetState = vi.fn();
 const mockGetSupportedCodecs = vi.fn<(...args: unknown[]) => Promise<ClientCodec[]>>();
 
-let defaultExportFormat: 'mp4' | 'webm' = 'mp4';
-
 vi.mock('../hooks/use-client-render', () => ({
   useClientRender: () => ({
     isExporting: false,
@@ -41,14 +39,6 @@ vi.mock('@/features/export/deps/projects', () => ({
     }),
 }));
 
-vi.mock('@/features/export/deps/settings', () => ({
-  useSettingsStore: (selector: (state: { defaultExportFormat: 'mp4' | 'webm'; defaultExportQuality: 'high' }) => unknown) =>
-    selector({
-      defaultExportFormat,
-      defaultExportQuality: 'high',
-    }),
-}));
-
 vi.mock('@/features/export/deps/timeline', () => ({
   useTimelineStore: (selector: (state: {
     fps: number;
@@ -70,7 +60,6 @@ vi.mock('./export-preview-player', () => ({
 
 describe('ExportDialog', () => {
   beforeEach(() => {
-    defaultExportFormat = 'mp4';
     mockStartExport.mockReset();
     mockCancelExport.mockReset();
     mockDownloadVideo.mockReset();
@@ -82,8 +71,7 @@ describe('ExportDialog', () => {
     }
   });
 
-  it('switches unsupported default video choices to a supported browser-safe fallback', async () => {
-    defaultExportFormat = 'webm';
+  it('defaults to mp4 with H.264 codec', async () => {
     mockGetSupportedCodecs.mockResolvedValue(['avc']);
 
     render(<ExportDialog open onClose={() => {}} />);
@@ -102,7 +90,6 @@ describe('ExportDialog', () => {
   });
 
   it('disables unsupported format and codec choices in the browser capability matrix', async () => {
-    defaultExportFormat = 'mp4';
     mockGetSupportedCodecs.mockResolvedValue(['avc']);
 
     render(<ExportDialog open onClose={() => {}} />);

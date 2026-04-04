@@ -29,7 +29,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RotateCcw, Trash2, Loader2, Check, ImagePlus, Film } from 'lucide-react';
+import {
+  RotateCcw, Trash2, Loader2, Check, ImagePlus, Film,
+  Settings2, Rows3, AudioLines, HardDrive,
+} from 'lucide-react';
 import {
   LocalInferenceUnloadControl,
   useSettingsStore,
@@ -48,6 +51,7 @@ import {
 } from '@/features/editor/deps/timeline-cache';
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
+import { cn } from '@/shared/ui/cn';
 import { EDITOR_DENSITY_OPTIONS } from '@/shared/ui/editor-layout';
 import {
   getWhisperQuantizationOption,
@@ -61,31 +65,14 @@ import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/
 
 const log = createLogger('SettingsDialog');
 
-const DEFAULT_FPS_OPTIONS = [
-  { value: 24, label: '24 fps (Film)' },
-  { value: 25, label: '25 fps (PAL)' },
-  { value: 30, label: '30 fps (Standard)' },
-  { value: 50, label: '50 fps (PAL High)' },
-  { value: 60, label: '60 fps (Smooth)' },
+const SETTINGS_SECTIONS = [
+  { id: 'general', label: 'General', icon: Settings2 },
+  { id: 'timeline', label: 'Timeline', icon: Rows3 },
+  { id: 'whisper', label: 'Whisper', icon: AudioLines },
+  { id: 'storage', label: 'Storage', icon: HardDrive },
 ] as const;
 
-const PREVIEW_QUALITY_OPTIONS = [
-  { value: 'low', label: 'Low', description: 'Fastest scrubbing with the softest preview.' },
-  { value: 'medium', label: 'Medium', description: 'Balanced preview speed and clarity.' },
-  { value: 'high', label: 'High', description: 'Full-quality preview when your machine can handle it.' },
-] as const;
-
-const EXPORT_FORMAT_OPTIONS = [
-  { value: 'mp4', label: 'MP4', description: 'Best default for compatibility.' },
-  { value: 'webm', label: 'WebM', description: 'Best default for VP8/VP9/AV1 web delivery.' },
-] as const;
-
-const EXPORT_QUALITY_OPTIONS = [
-  { value: 'low', label: 'Low (Faster, smaller files)' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High (Recommended)' },
-  { value: 'ultra', label: 'Ultra (Slower, larger files)' },
-] as const;
+type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
 interface SettingsDialogProps {
   open: boolean;
@@ -217,17 +204,12 @@ async function regenerateProjectThumbnails(
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
-  const defaultFps = useSettingsStore((s) => s.defaultFps);
   const snapEnabled = useSettingsStore((s) => s.snapEnabled);
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
-  const previewQuality = useSettingsStore((s) => s.previewQuality);
-  const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
-  const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
-  const dualDecoderTransitions = useSettingsStore((s) => s.dualDecoderTransitions);
   const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
   const defaultWhisperQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
   const defaultWhisperLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
@@ -236,6 +218,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
 
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
   const [clearState, setClearState] = useState<'idle' | 'clearing' | 'done'>('idle');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [regenState, setRegenState] = useState<'idle' | 'working' | 'done'>('idle');
@@ -292,7 +275,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0">
+      <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
         <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
           <DialogTitle>Editor Settings</DialogTitle>
           <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 shrink-0 gap-1.5">
@@ -300,350 +283,252 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             Reset
           </Button>
         </DialogHeader>
-        <ScrollArea className="max-h-[70vh]">
-          <div className="space-y-6 px-6 py-5 pr-7">
-            {/* Interface */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Interface</h3>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Editor Density</Label>
-                <Select
-                  value={editorDensity}
-                  onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
+        <div className="flex min-h-0">
+          {/* Sidebar */}
+          <nav className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-white/6 p-2">
+            {SETTINGS_SECTIONS.map((section) => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] transition-colors duration-150 ease-out motion-reduce:transition-none',
+                    activeSection === section.id
+                      ? 'bg-primary/15 text-primary'
+                      : 'text-muted-foreground hover:bg-white/5 hover:text-foreground/80'
+                  )}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EDITOR_DENSITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Compact fits more of the editor into a 1080p screen. Default restores the roomier layout.
-                </p>
-              </div>
-            </section>
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  {section.label}
+                </button>
+              );
+            })}
+          </nav>
 
-            {/* General */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">General</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Auto-save</Label>
-                  <Switch
-                    checked={autoSaveInterval > 0}
-                    onCheckedChange={(v) => setSetting('autoSaveInterval', v ? 5 : 0)}
-                  />
-                </div>
-                {autoSaveInterval > 0 && (
+          {/* Content */}
+          <ScrollArea className="max-h-[70vh] min-h-[360px] flex-1">
+            <div className="space-y-3 px-6 py-5 pr-7">
+              {activeSection === 'general' && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Editor Density</Label>
+                    <Select
+                      value={editorDensity}
+                      onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EDITOR_DENSITY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Compact fits more of the editor into a 1080p screen. Default restores the roomier layout.
+                    </p>
+                  </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm text-muted-foreground">Interval</Label>
+                    <Label className="text-sm">Auto-save</Label>
+                    <Switch
+                      checked={autoSaveInterval > 0}
+                      onCheckedChange={(v) => setSetting('autoSaveInterval', v ? 5 : 0)}
+                    />
+                  </div>
+                  {autoSaveInterval > 0 && (
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-muted-foreground">Interval</Label>
+                      <div className="w-32 flex items-center gap-2">
+                        <Slider
+                          value={[autoSaveInterval]}
+                          onValueChange={([v]) => setSetting('autoSaveInterval', v || 5)}
+                          min={5}
+                          max={30}
+                          step={5}
+                        />
+                        <span className="text-xs text-muted-foreground w-6">{autoSaveInterval}m</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Undo History Depth</Label>
                     <div className="w-32 flex items-center gap-2">
                       <Slider
-                        value={[autoSaveInterval]}
-                        onValueChange={([v]) => setSetting('autoSaveInterval', v || 5)}
-                        min={5}
-                        max={30}
-                        step={5}
+                        value={[maxUndoHistory]}
+                        onValueChange={([v]) => setSetting('maxUndoHistory', v || 10)}
+                        min={10}
+                        max={200}
+                        step={10}
                       />
-                      <span className="text-xs text-muted-foreground w-6">{autoSaveInterval}m</span>
+                      <span className="text-xs text-muted-foreground w-6">{maxUndoHistory}</span>
                     </div>
                   </div>
-                )}
-              </div>
-            </section>
-
-            {/* Timeline */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Timeline</h3>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Project FPS</Label>
-                  <Select
-                    value={String(defaultFps)}
-                    onValueChange={(value) => setSetting('defaultFps', Number(value))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEFAULT_FPS_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={String(option.value)}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Used as the starting frame rate for new projects before you change it in the create-project form.
-                  </p>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm">Snap by Default</Label>
-                    <p className="text-xs text-muted-foreground">Sets the initial snap state when a project opens.</p>
+              )}
+
+              {activeSection === 'timeline' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">Snap by Default</Label>
+                      <p className="text-xs text-muted-foreground">Sets the initial snap state when a project opens.</p>
+                    </div>
+                    <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
                   </div>
-                  <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Show Waveforms</Label>
+                    <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Show Filmstrips</Label>
+                    <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Show Waveforms</Label>
-                  <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Show Filmstrips</Label>
-                  <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
-                </div>
-              </div>
-            </section>
+              )}
 
-            {/* Preview */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Preview</h3>
-              <div className="space-y-1.5">
-                <Label className="text-sm">Preview Quality</Label>
-                <Select
-                  value={previewQuality}
-                  onValueChange={(value) => setSetting('previewQuality', value as typeof previewQuality)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PREVIEW_QUALITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {PREVIEW_QUALITY_OPTIONS.find((option) => option.value === previewQuality)?.description}
-                </p>
-              </div>
-            </section>
+              {activeSection === 'whisper' && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Default Model</Label>
+                    <Select
+                      value={defaultWhisperModel}
+                      onValueChange={(value) =>
+                        setSetting('defaultWhisperModel', value as MediaTranscriptModel)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WHISPER_MODEL_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Used when transcription starts without an explicit model override.
+                    </p>
+                  </div>
 
-            {/* Export */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Export</h3>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Video Format</Label>
-                  <Select
-                    value={defaultExportFormat}
-                    onValueChange={(value) => setSetting('defaultExportFormat', value as typeof defaultExportFormat)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPORT_FORMAT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {EXPORT_FORMAT_OPTIONS.find((option) => option.value === defaultExportFormat)?.description}
-                  </p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Quality</Label>
-                  <Select
-                    value={defaultExportQuality}
-                    onValueChange={(value) => setSetting('defaultExportQuality', value as typeof defaultExportQuality)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPORT_QUALITY_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </section>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Default Quantization</Label>
+                    <Select
+                      value={defaultWhisperQuantization}
+                      onValueChange={(value) =>
+                        setSetting('defaultWhisperQuantization', value as MediaTranscriptQuantization)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WHISPER_QUANTIZATION_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Pick based on memory first. {defaultWhisperQuantizationOption.description}
+                    </p>
+                  </div>
 
-            {/* Performance */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Performance</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Undo History Depth</Label>
-                  <div className="w-32 flex items-center gap-2">
-                    <Slider
-                      value={[maxUndoHistory]}
-                      onValueChange={([v]) => setSetting('maxUndoHistory', v || 10)}
-                      min={10}
-                      max={200}
-                      step={10}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Default Language</Label>
+                    <Combobox
+                      value={defaultWhisperLanguageValue}
+                      onValueChange={(value) =>
+                        setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
+                      }
+                      options={WHISPER_LANGUAGE_OPTIONS}
+                      placeholder="Auto-detect"
+                      searchPlaceholder="Search languages..."
+                      emptyMessage="No languages match that search."
                     />
-                    <span className="text-xs text-muted-foreground w-6">{maxUndoHistory}</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm">Dual decoder transitions</Label>
-                    <p className="text-xs text-muted-foreground">Extra decoder lane for variable-speed clips in transitions. Uses more memory.</p>
-                  </div>
-                  <Switch
-                    checked={dualDecoderTransitions}
-                    onCheckedChange={(v) => setSetting('dualDecoderTransitions', v)}
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Whisper */}            
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Whisper</h3>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Model</Label>
-                  <Select
-                    value={defaultWhisperModel}
-                    onValueChange={(value) =>
-                      setSetting('defaultWhisperModel', value as MediaTranscriptModel)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {WHISPER_MODEL_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Used when transcription starts without an explicit model override.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Quantization</Label>
-                  <Select
-                    value={defaultWhisperQuantization}
-                    onValueChange={(value) =>
-                      setSetting('defaultWhisperQuantization', value as MediaTranscriptQuantization)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {WHISPER_QUANTIZATION_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Pick based on memory first. {defaultWhisperQuantizationOption.description}
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="text-sm">Default Language</Label>
-                  <Combobox
-                    value={defaultWhisperLanguageValue}
-                    onValueChange={(value) =>
-                      setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
-                    }
-                    options={WHISPER_LANGUAGE_OPTIONS}
-                    placeholder="Auto-detect"
-                    searchPlaceholder="Search languages..."
-                    emptyMessage="No languages match that search."
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Choose Auto-detect to infer the language, or lock transcription to a known language for faster startup.
-                  </p>
-                </div>
-
-                <LocalInferenceUnloadControl />
-              </div>
-            </section>
-
-            {/* Storage */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground">Storage</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm">Clear Project Cache</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Waveforms, filmstrips, GIF frames, decoded audio
+                    <p className="text-xs text-muted-foreground">
+                      Choose Auto-detect to infer the language, or lock transcription to a known language for faster startup.
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-28 gap-1.5"
-                    onClick={() => setShowClearConfirm(true)}
-                    disabled={clearState !== 'idle'}
-                  >
-                    {clearState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {clearState === 'done' && <Check className="w-3.5 h-3.5" />}
-                    {clearState === 'idle' && <Trash2 className="w-3.5 h-3.5" />}
-                    {clearState === 'clearing' ? 'Clearing...' : clearState === 'done' ? 'Cleared' : 'Clear'}
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm">Regenerate Thumbnails</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Re-create media library thumbnails for this project
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-28 gap-1.5"
-                    onClick={handleRegenThumbnails}
-                    disabled={regenState !== 'idle'}
-                  >
-                    {regenState === 'working' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {regenState === 'done' && <Check className="w-3.5 h-3.5" />}
-                    {regenState === 'idle' && <ImagePlus className="w-3.5 h-3.5" />}
-                    {regenState === 'working' ? regenProgress : regenState === 'done' ? 'Done' : 'Regenerate'}
-                  </Button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm">Delete Proxies</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Remove generated proxy videos for this project
-                    </p>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 w-28 gap-1.5"
-                    onClick={handleClearProxies}
-                    disabled={proxyState !== 'idle'}
-                  >
-                    {proxyState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                    {proxyState === 'done' && <Check className="w-3.5 h-3.5" />}
-                    {proxyState === 'idle' && <Film className="w-3.5 h-3.5" />}
-                    {proxyState === 'clearing' ? 'Deleting...' : proxyState === 'done' ? 'Deleted' : 'Delete'}
-                  </Button>
-                </div>
-              </div>
-            </section>
 
-          </div>
-        </ScrollArea>
+                  <LocalInferenceUnloadControl />
+                </div>
+              )}
+
+              {activeSection === 'storage' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">Clear Project Cache</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Waveforms, filmstrips, GIF frames, decoded audio
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-28 gap-1.5"
+                      onClick={() => setShowClearConfirm(true)}
+                      disabled={clearState !== 'idle'}
+                    >
+                      {clearState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {clearState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {clearState === 'idle' && <Trash2 className="w-3.5 h-3.5" />}
+                      {clearState === 'clearing' ? 'Clearing...' : clearState === 'done' ? 'Cleared' : 'Clear'}
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">Regenerate Thumbnails</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Re-create media library thumbnails for this project
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-28 gap-1.5"
+                      onClick={handleRegenThumbnails}
+                      disabled={regenState !== 'idle'}
+                    >
+                      {regenState === 'working' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {regenState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {regenState === 'idle' && <ImagePlus className="w-3.5 h-3.5" />}
+                      {regenState === 'working' ? regenProgress : regenState === 'done' ? 'Done' : 'Regenerate'}
+                    </Button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">Delete Proxies</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Remove generated proxy videos for this project
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 w-28 gap-1.5"
+                      onClick={handleClearProxies}
+                      disabled={proxyState !== 'idle'}
+                    >
+                      {proxyState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      {proxyState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {proxyState === 'idle' && <Film className="w-3.5 h-3.5" />}
+                      {proxyState === 'clearing' ? 'Deleting...' : proxyState === 'done' ? 'Deleted' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       </DialogContent>
 
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>

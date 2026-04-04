@@ -21,24 +21,16 @@ import {
  */
 interface AppSettings {
   // Timeline defaults
-  defaultFps: number;
   snapEnabled: boolean;
   showWaveforms: boolean;
   showFilmstrips: boolean;
 
-  // Preview
-  previewQuality: 'low' | 'medium' | 'high';
+  // Interface
   editorDensity: EditorDensityPresetName;
-
-  // Export defaults
-  defaultExportFormat: 'mp4' | 'webm';
-  defaultExportQuality: 'low' | 'medium' | 'high' | 'ultra';
 
   // Performance
   maxUndoHistory: number;
   autoSaveInterval: number; // minutes (0 = disabled)
-  dualDecoderTransitions: boolean; // allocate extra decoder lane for variable-speed transition clips
-
   // Whisper defaults
   defaultWhisperModel: MediaTranscriptModel;
   defaultWhisperQuantization: MediaTranscriptQuantization;
@@ -75,24 +67,16 @@ function areHotkeyOverridesEqual(
 
 const DEFAULT_SETTINGS: AppSettings = {
   // Timeline defaults
-  defaultFps: 30,
   snapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
 
-  // Preview
-  previewQuality: 'high',
+  // Interface
   editorDensity: DEFAULT_EDITOR_DENSITY_PRESET,
-
-  // Export defaults
-  defaultExportFormat: 'mp4',
-  defaultExportQuality: 'high',
 
   // Performance
   maxUndoHistory: 50,
   autoSaveInterval: 0, // Auto-save disabled by default
-  dualDecoderTransitions: false,
-
   // Whisper defaults
   defaultWhisperModel: DEFAULT_WHISPER_MODEL,
   defaultWhisperQuantization: DEFAULT_WHISPER_QUANTIZATION,
