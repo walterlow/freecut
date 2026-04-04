@@ -12,6 +12,11 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
+import {
+  ensureAudioContextResumed,
+  ensureBufferedAudioContextResumed,
+  ensurePitchCorrectedAudioContextResumed,
+} from '@/features/preview/deps/composition-runtime';
 import { resolvePreviewTransitionDecision } from '../utils/preview-state-coordinator';
 import {
   PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS,
@@ -124,6 +129,9 @@ export function useCustomPlayer(
           ignorePlayerUpdatesRef.current = false;
           return;
         }
+        ensureAudioContextResumed();
+        ensureBufferedAudioContextResumed();
+        ensurePitchCorrectedAudioContextResumed();
         playerRef.current?.play();
         ignorePlayerUpdatesRef.current = false;
         return;

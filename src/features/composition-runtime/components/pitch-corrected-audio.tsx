@@ -4,23 +4,10 @@ import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
-
-let sharedAudioContext: AudioContext | null = null;
+import { getPitchCorrectedAudioContext } from './pitch-corrected-audio-context';
 
 function getSharedAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-
-  const webkitWindow = window as Window & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-  const AudioContextCtor = window.AudioContext ?? webkitWindow.webkitAudioContext;
-  if (!AudioContextCtor) return null;
-
-  if (sharedAudioContext === null || sharedAudioContext.state === 'closed') {
-    sharedAudioContext = new AudioContextCtor();
-  }
-
-  return sharedAudioContext;
+  return getPitchCorrectedAudioContext();
 }
 
 interface PitchCorrectedAudioProps extends AudioPlaybackProps {

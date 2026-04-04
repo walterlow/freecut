@@ -3957,13 +3957,13 @@ export const VideoPreview = memo(function VideoPreview({
         lastBackwardRequestedFrameRef.current = null;
         scrubPrewarmQueueRef.current = [];
         scrubPrewarmQueuedSetRef.current.clear();
-        const playStartedFromScrub = (
+        const handoffStartFrame = prev.previewFrame ?? prev.currentFrame;
+        const playStartedFromRenderedOverlay = (
           !prev.isPlaying
-          && prev.previewFrame !== null
           && showFastScrubOverlayRef.current
         );
-        if (playStartedFromScrub) {
-          beginFastScrubHandoff(prev.previewFrame);
+        if (playStartedFromRenderedOverlay) {
+          beginFastScrubHandoff(handoffStartFrame);
         }
         const playbackTransitionState = getPlaybackTransitionStateForFrame(state.currentFrame);
         if (playbackTransitionState.shouldPrewarm) {

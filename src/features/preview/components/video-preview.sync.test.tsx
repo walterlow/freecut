@@ -331,6 +331,9 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
   getBestDomVideoElementForItem: vi.fn(() => null),
+  ensureAudioContextResumed: vi.fn(),
+  ensureBufferedAudioContextResumed: vi.fn(),
+  ensurePitchCorrectedAudioContextResumed: vi.fn(),
 }));
 
 vi.mock('./gizmo-overlay', () => ({
@@ -1098,6 +1101,80 @@ describe('VideoPreview sync behavior', () => {
       expect(usePlaybackStore.getState().isPlaying).toBe(false);
       expect(scrubCanvas.style.visibility).toBe('visible');
       expect(usePlaybackStore.getState().displayedFrame).toBe(25);
+    });
+  });
+
+  it('keeps the paused fast-scrub overlay visible across play start until playback catches up', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-effected',
+        label: 'Effected',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:effected-video',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.8 },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(24);
+    });
+
+    playMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(playMock).toHaveBeenCalled();
     });
   });
 

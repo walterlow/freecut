@@ -8,6 +8,7 @@ import {
 import { createLogger } from '@/shared/logging/logger';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
+import { getCustomDecoderAudioContext } from './custom-decoder-audio-context';
 
 const log = createLogger('CustomDecoderBufferedAudio');
 const GAIN_RAMP_SECONDS = 0.008;
@@ -19,19 +20,8 @@ const DRIFT_RESYNC_NEGATIVE_THRESHOLD_SECONDS = -0.75;
 const BACKGROUND_RESYNC_GRACE_MS = 250;
 const WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK = true;
 
-let sharedCtx: AudioContext | null = null;
-
 function getSharedAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-
-  const Ctor = window.AudioContext ??
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctor) return null;
-
-  if (sharedCtx === null || sharedCtx.state === 'closed') {
-    sharedCtx = new Ctor();
-  }
-  return sharedCtx;
+  return getCustomDecoderAudioContext();
 }
 
 interface CustomDecoderBufferedAudioProps extends AudioPlaybackProps {
