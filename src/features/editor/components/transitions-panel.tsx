@@ -190,6 +190,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           info.suggestedDurationInFrames,
           presentation,
           direction,
+          info.alignment,
         );
       }
     },
@@ -207,7 +208,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           <div className="text-muted-foreground leading-relaxed">
             {hasValidClickTarget ? (
               <span className="text-primary">
-                Click to apply to the selected cut, or drag a transition onto any valid cut in the timeline.
+                Click to apply to the selected cut, or drag a transition onto any valid cut in the timeline. FreeCut prefers Center on Edit and falls back to End on Edit or Begin on Edit when handles are one-sided.
               </span>
             ) : adjacentInfo?.reason ? (
               <span>Drag a transition onto a valid cut. Click-to-apply is unavailable here: {adjacentInfo.reason}.</span>

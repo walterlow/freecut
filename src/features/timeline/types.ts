@@ -101,9 +101,9 @@ export interface TimelineActions {
   removeEffect: (itemId: string, effectId: string) => void;
   toggleEffect: (itemId: string, effectId: string) => void;
   // Transition actions
-  addTransition: (leftClipId: string, rightClipId: string, type?: TransitionType, durationInFrames?: number, presentation?: TransitionPresentation, direction?: WipeDirection | SlideDirection | FlipDirection) => boolean;
-  updateTransition: (id: string, updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>>) => void;
-  updateTransitions: (updates: Array<{ id: string; updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing'>> }>) => void;
+  addTransition: (leftClipId: string, rightClipId: string, type?: TransitionType, durationInFrames?: number, presentation?: TransitionPresentation, direction?: WipeDirection | SlideDirection | FlipDirection, alignment?: number) => boolean;
+  updateTransition: (id: string, updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'alignment'>>) => void;
+  updateTransitions: (updates: Array<{ id: string; updates: Partial<Pick<Transition, 'durationInFrames' | 'type' | 'presentation' | 'direction' | 'timing' | 'alignment'>> }>) => void;
   removeTransition: (id: string) => void;
   // Keyframe actions
   addKeyframe: (itemId: string, property: AnimatableProperty, frame: number, value: number, easing?: EasingType) => string;

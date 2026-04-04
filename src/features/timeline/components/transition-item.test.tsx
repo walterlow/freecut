@@ -57,7 +57,7 @@ describe('TransitionItem preview bridge motion', () => {
 
     render(<TransitionItem transition={transition} />);
 
-    const overlay = screen.getByTitle('Fade (0.7s)');
+    const overlay = screen.getByTitle(/Fade \(0\.7s\)/);
     const initialLeftPx = parseFloat(overlay.style.left);
 
     act(() => {
@@ -70,7 +70,7 @@ describe('TransitionItem preview bridge motion', () => {
       });
     });
 
-    const updatedLeftPx = parseFloat(screen.getByTitle('Fade (0.7s)').style.left);
+    const updatedLeftPx = parseFloat(screen.getByTitle(/Fade \(0\.7s\)/).style.left);
     expect(updatedLeftPx - initialLeftPx).toBe(30);
   });
 
@@ -81,7 +81,7 @@ describe('TransitionItem preview bridge motion', () => {
 
     render(<TransitionItem transition={transition} />);
 
-    const overlay = screen.getByTitle('Fade (0.7s)');
+    const overlay = screen.getByTitle(/Fade \(0\.7s\)/);
     const initialLeftPx = parseFloat(overlay.style.left);
 
     act(() => {
@@ -93,7 +93,7 @@ describe('TransitionItem preview bridge motion', () => {
       });
     });
 
-    const updatedLeftPx = parseFloat(screen.getByTitle('Fade (0.7s)').style.left);
+    const updatedLeftPx = parseFloat(screen.getByTitle(/Fade \(0\.7s\)/).style.left);
     expect(updatedLeftPx - initialLeftPx).toBe(-20);
   });
 
@@ -104,7 +104,8 @@ describe('TransitionItem preview bridge motion', () => {
 
     render(<TransitionItem transition={transition} />);
 
-    const overlay = screen.getByTitle('Fade (0.7s)');
+    const overlay = screen.getByTitle(/Fade \(0\.7s\)/);
+    expect(overlay).toHaveAttribute('title', expect.stringContaining('Center on Edit'));
     expect(overlay.className).toContain('inset-y-0');
     expect(overlay.style.top).toBe('calc(var(--editor-timeline-clip-label-row-height) + 1px)');
     expect(overlay.style.bottom).toBe('1px');
@@ -133,7 +134,7 @@ describe('TransitionItem preview bridge motion', () => {
       });
     });
 
-    const overlay = screen.getByTitle('Fade (0.1s)');
+    const overlay = screen.getByTitle(/Fade \(0\.1s\)/);
     const rightEdge = parseFloat(overlay.style.left) + parseFloat(overlay.style.width);
     const previewedRightClipEnd = ((right.from + right.durationInFrames) / 30) * 100;
 
@@ -161,7 +162,7 @@ describe('TransitionItem preview bridge motion', () => {
     useItemsStore.getState().setItems([left, right]);
 
     render(<TransitionItem transition={transition} />);
-    expect(screen.getByTitle('Fade (0.7s)')).toBeInTheDocument();
+    expect(screen.getByTitle(/Fade \(0\.7s\)/)).toBeInTheDocument();
 
     act(() => {
       useTransitionBreakPreviewStore.getState().setPreview({
@@ -171,6 +172,6 @@ describe('TransitionItem preview bridge motion', () => {
       });
     });
 
-    expect(screen.queryByTitle('Fade (0.7s)')).toBeNull();
+    expect(screen.queryByTitle(/Fade \(0\.7s\)/)).toBeNull();
   });
 });

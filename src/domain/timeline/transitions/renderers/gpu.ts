@@ -10,7 +10,7 @@
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
 import type { TransitionStyleCalculation } from '../engine';
-import type { TransitionDefinition, WipeDirection } from '@/types/transition';
+import { TRANSITION_DURATION_UI_MAX_FRAMES, type TransitionDefinition, type WipeDirection } from '@/types/transition';
 
 const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const;
 
@@ -322,9 +322,9 @@ const dissolveDef: TransitionDefinition = {
   icon: 'Sparkles',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -368,9 +368,9 @@ const sparklesDef: TransitionDefinition = {
   icon: 'Sparkles',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 24,
+  defaultDuration: 60,
   minDuration: 8,
-  maxDuration: 72,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -416,9 +416,9 @@ const glitchDef: TransitionDefinition = {
   icon: 'Zap',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 20,
+  defaultDuration: 60,
   minDuration: 5,
-  maxDuration: 60,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -483,9 +483,9 @@ const lightLeakDef: TransitionDefinition = {
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -517,9 +517,9 @@ const pixelateDef: TransitionDefinition = {
   icon: 'Grid3x3',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 20,
+  defaultDuration: 60,
   minDuration: 8,
-  maxDuration: 60,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -559,9 +559,9 @@ const chromaticDef: TransitionDefinition = {
   hasDirection: true,
   directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 25,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 60,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -603,9 +603,9 @@ const radialBlurDef: TransitionDefinition = {
   icon: 'CircleDot',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 25,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 60,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================

@@ -17,7 +17,7 @@ vi.mock('../components', () => ({
       {children}
     </label>
   ),
-  SliderInput: () => <div data-testid="slider-input" />,
+  SliderInput: ({ max }: { max: number }) => <div data-testid="slider-input" data-max={String(max)} />,
 }));
 
 const LEFT_CLIP: VideoItem = {
@@ -177,5 +177,36 @@ describe('TransitionPanel', () => {
       expect(screen.getByRole('combobox')).toHaveTextContent('Wipe right');
       expect(useTimelineStore.getState().transitions.find((transition) => transition.id === 'tr-1')?.direction).toBe('from-right');
     });
+  });
+
+  it('does not hard-cap transition duration at 3 seconds when the cut supports more', () => {
+    useTimelineStore.setState({
+      fps: 30,
+      items: [
+        {
+          ...LEFT_CLIP,
+          durationInFrames: 300,
+          sourceStart: 0,
+          sourceEnd: 400,
+          sourceDuration: 500,
+        },
+        {
+          ...RIGHT_CLIP,
+          from: 300,
+          durationInFrames: 300,
+          sourceStart: 200,
+          sourceEnd: 500,
+          sourceDuration: 700,
+        },
+      ],
+      transitions: [{
+        ...TRANSITION,
+        durationInFrames: 150,
+      }],
+    } as Partial<ReturnType<typeof useTimelineStore.getState>>);
+
+    render(<TransitionPanel />);
+
+    expect(Number(screen.getByTestId('slider-input').getAttribute('data-max'))).toBeGreaterThan(90);
   });
 });

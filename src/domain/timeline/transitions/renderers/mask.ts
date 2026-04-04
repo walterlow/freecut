@@ -6,7 +6,7 @@
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
 import type { TransitionStyleCalculation } from '../engine';
-import type { TransitionDefinition } from '@/types/transition';
+import { TRANSITION_DURATION_UI_MAX_FRAMES, type TransitionDefinition } from '@/types/transition';
 
 const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const;
 
@@ -94,9 +94,9 @@ const clockWipeDef: TransitionDefinition = {
   icon: 'Clock',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================
@@ -161,9 +161,9 @@ const irisDef: TransitionDefinition = {
   icon: 'Circle',
   hasDirection: false,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================

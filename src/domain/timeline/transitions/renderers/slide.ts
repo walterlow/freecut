@@ -6,7 +6,7 @@
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
 import type { TransitionStyleCalculation } from '../engine';
-import type { TransitionDefinition, SlideDirection } from '@/types/transition';
+import { TRANSITION_DURATION_UI_MAX_FRAMES, type TransitionDefinition, type SlideDirection } from '@/types/transition';
 
 const ALL_DIRECTIONS: SlideDirection[] = ['from-left', 'from-right', 'from-top', 'from-bottom'];
 const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const;
@@ -72,9 +72,9 @@ const slideDef: TransitionDefinition = {
   hasDirection: true,
   directions: ALL_DIRECTIONS,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 5,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================

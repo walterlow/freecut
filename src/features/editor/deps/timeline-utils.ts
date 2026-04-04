@@ -14,8 +14,11 @@ export {
   resolveEffectiveTrackStates,
   areFramesAligned,
   getMaxTransitionDurationForHandles,
+  getTransitionAlignmentMode,
+  getTransitionAlignmentOptions,
   resolveTransitionTargetFromSelection,
   timelineToSourceFrames,
   sourceToTimelineFrames,
   linkItems,
 } from './timeline-contract';
+export type { TransitionAlignmentMode } from './timeline-contract';

@@ -22,6 +22,7 @@ import {
   areFramesAligned,
   getMaxTransitionDurationForHandles,
 } from '../../utils/transition-utils';
+import { resolveAutomaticTransitionAlignment } from '../../utils/transition-alignment';
 import { execute, getLogger } from './shared';
 
 export function addTransition(
@@ -30,7 +31,8 @@ export function addTransition(
   type: TransitionType = 'crossfade',
   durationInFrames?: number,
   presentation?: TransitionPresentation,
-  direction?: WipeDirection | SlideDirection | FlipDirection
+  direction?: WipeDirection | SlideDirection | FlipDirection,
+  alignment?: number,
 ): boolean {
   return execute('ADD_TRANSITION', () => {
     const items = useItemsStore.getState().items;
@@ -53,11 +55,13 @@ export function addTransition(
     const config = TRANSITION_CONFIGS[type];
     const requestedDuration = durationInFrames ?? config.defaultDuration;
     let duration = Math.max(1, Math.min(Math.round(requestedDuration), maxByClipDuration));
+    const automaticAlignment = resolveAutomaticTransitionAlignment(leftClip, rightClip);
+    const resolvedAlignment = alignment ?? automaticAlignment?.alignment ?? 0.5;
 
     const leftEnd = leftClip.from + leftClip.durationInFrames;
     const isAdjacent = areFramesAligned(leftEnd, rightClip.from);
     if (isAdjacent) {
-      const maxHandleDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, 0.5);
+      const maxHandleDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, resolvedAlignment);
       if (maxHandleDuration < 1) {
         getLogger().warn('[addTransition] Cannot add transition: insufficient source handle at cut');
         return false;
@@ -66,7 +70,7 @@ export function addTransition(
     }
 
     // Validate that transition can be added (includes handle check)
-    const validation = canAddTransition(leftClip, rightClip, duration, 0.5);
+    const validation = canAddTransition(leftClip, rightClip, duration, resolvedAlignment);
     if (!validation.canAdd) {
       getLogger().warn('[addTransition] Cannot add transition:', validation.reason);
       return false;
@@ -89,7 +93,8 @@ export function addTransition(
       type,
       duration,
       presentation,
-      direction
+      direction,
+      resolvedAlignment,
     );
 
     useTimelineSettingsStore.getState().markDirty();

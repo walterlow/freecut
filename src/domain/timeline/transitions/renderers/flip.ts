@@ -6,7 +6,7 @@
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
 import type { TransitionStyleCalculation } from '../engine';
-import type { TransitionDefinition, FlipDirection } from '@/types/transition';
+import { TRANSITION_DURATION_UI_MAX_FRAMES, type TransitionDefinition, type FlipDirection } from '@/types/transition';
 
 const ALL_DIRECTIONS: FlipDirection[] = ['from-left', 'from-right', 'from-top', 'from-bottom'];
 const ALL_TIMINGS = ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'] as const;
@@ -77,9 +77,9 @@ const flipDef: TransitionDefinition = {
   hasDirection: true,
   directions: ALL_DIRECTIONS,
   supportedTimings: [...ALL_TIMINGS],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 10,
-  maxDuration: 60,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================

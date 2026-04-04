@@ -37,7 +37,8 @@ interface TransitionsActions {
     type?: TransitionType,
     durationInFrames?: number,
     presentation?: TransitionPresentation,
-    direction?: WipeDirection | SlideDirection | FlipDirection
+    direction?: WipeDirection | SlideDirection | FlipDirection,
+    alignment?: number,
   ) => string;
   _updateTransition: (
     id: string,
@@ -58,6 +59,7 @@ function normalizeTransition(transition: Transition): Transition {
     ...transition,
     durationInFrames: normalizeTransitionDuration(transition.durationInFrames),
     timing: transition.timing ?? 'linear',
+    alignment: Math.max(0, Math.min(1, transition.alignment ?? 0.5)),
   };
 }
 
@@ -157,7 +159,8 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
       type = 'crossfade',
       durationInFrames,
       presentation = 'fade',
-      direction
+      direction,
+      alignment = 0.5,
     ) => {
       const config = TRANSITION_CONFIGS[type];
       const duration = normalizeTransitionDuration(durationInFrames ?? config.defaultDuration);
@@ -174,6 +177,7 @@ export const useTransitionsStore = create<TransitionsState & TransitionsActions>
           presentation,
           timing: 'linear',
           direction,
+          alignment,
         };
 
       set((state) => {

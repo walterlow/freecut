@@ -150,6 +150,23 @@ describe('transition actions with linked audio companions', () => {
     ]);
   });
 
+  it('adds a side-aligned transition when centered placement is not possible but one-sided handles exist', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({ id: 'video-1', sourceEnd: 120, sourceDuration: 240 }),
+      makeVideoItem({ id: 'video-2', from: 60, sourceStart: 0, sourceEnd: 60, sourceDuration: 60, linkedGroupId: 'group-2', mediaId: 'media-2' }),
+    ]);
+
+    const added = addTransition('video-1', 'video-2', 'crossfade', 24);
+
+    expect(added).toBe(true);
+    expect(useTransitionsStore.getState().transitions).toEqual([
+      expect.objectContaining({
+        durationInFrames: 24,
+        alignment: 1,
+      }),
+    ]);
+  });
+
   it('does not move synchronized linked audio when transition duration changes', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', linkedGroupId: 'group-1' }),

@@ -79,6 +79,12 @@ export interface BezierPoints {
 }
 
 /**
+ * Fallback upper bound used only when clip-specific limits are unavailable.
+ * Real editable limits should come from clip duration and available handles.
+ */
+export const TRANSITION_DURATION_UI_MAX_FRAMES = 216000; // 2 hours at 30fps
+
+/**
  * A transition between two clips that meet at a cut.
  * The transition is centered around the cut according to `alignment` and
  * consumes hidden source handles from each side without moving clip positions.
@@ -192,9 +198,9 @@ export const TRANSITION_CONFIGS: Record<TransitionType, TransitionConfig> = {
   crossfade: {
     label: 'Crossfade',
     description: 'Smooth opacity blend between clips',
-    defaultDuration: 30, // 1 second at 30fps
-    minDuration: 30, // 1 second at 30fps
-    maxDuration: 90, // 3 seconds at 30fps
+    defaultDuration: 60, // 2 seconds at 30fps
+    minDuration: 1,
+    maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
   },
 };
 

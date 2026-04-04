@@ -23,16 +23,22 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { cn } from '@/shared/ui/cn';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import {
   applyPreviewGeometryToClip,
   getTransitionBridgeBounds,
 } from '../utils/transition-preview-geometry';
 import { useLinkedEditPreviewStore } from '../stores/linked-edit-preview-store';
+import {
+  getTransitionAlignmentLabel,
+  getTransitionAlignmentMode,
+  getTransitionAlignmentOptions,
+} from '../utils/transition-alignment';
 
 interface TransitionItemProps {
   transition: Transition;
@@ -395,6 +401,14 @@ export const TransitionItem = memo(function TransitionItem({
   const dragPreviewMatches = useTransitionDragStore(
     useCallback((s) => s.preview?.existingTransitionId === transition.id, [transition.id])
   );
+  const alignmentMode = useMemo(
+    () => getTransitionAlignmentMode(transition.alignment),
+    [transition.alignment],
+  );
+  const alignmentOptions = useMemo(() => {
+    if (!leftClip || !rightClip) return [];
+    return getTransitionAlignmentOptions(leftClip, rightClip, transition.durationInFrames);
+  }, [leftClip, rightClip, transition.durationInFrames]);
 
   // Handle click to select (only if not resizing)
   const handleClick = useCallback(
@@ -508,7 +522,7 @@ export const TransitionItem = memo(function TransitionItem({
             opacity: trackHidden ? 0.3 : undefined,
             cursor: isResizing ? 'ew-resize' : undefined,
           }}
-          title={`${presentationLabel} (${durationSec}s)`}
+          title={`${presentationLabel} (${durationSec}s) • ${getTransitionAlignmentLabel(transition.alignment)}`}
         >
           <div
             className={cn(
@@ -583,6 +597,21 @@ export const TransitionItem = memo(function TransitionItem({
       </ContextMenuTrigger>
 
       <ContextMenuContent>
+        {alignmentOptions.length > 0 && (
+          <>
+            {alignmentOptions.map((option) => (
+              <ContextMenuItem
+                key={option.mode}
+                disabled={!option.canApply}
+                onClick={() => updateTransition(transition.id, { alignment: option.alignment })}
+              >
+                <Check className={cn('w-4 h-4', alignmentMode === option.mode ? 'opacity-100' : 'opacity-0')} />
+                {option.label}
+              </ContextMenuItem>
+            ))}
+            <ContextMenuSeparator />
+          </>
+        )}
         <ContextMenuItem onClick={handleDelete} className="text-destructive">
           <Trash2 className="w-4 h-4 mr-2" />
           Remove Transition

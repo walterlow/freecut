@@ -4,6 +4,7 @@ import {
   areFramesAligned,
   getMaxTransitionDurationForHandles,
 } from './transition-utils';
+import { resolveAutomaticTransitionAlignment } from './transition-alignment';
 
 export interface ResolvedTransitionTarget {
   leftClipId: string;
@@ -34,7 +35,7 @@ function resolveTargetForPair(
   rightClip: TimelineItem,
   transitions: Transition[],
   preferredDurationInFrames: number,
-  alignment = 0.5,
+  alignment?: number,
 ): ResolvedTransitionTarget | null {
   if (!isTransitionableItem(leftClip) || !isTransitionableItem(rightClip)) return null;
   if (leftClip.trackId !== rightClip.trackId) return null;
@@ -54,11 +55,15 @@ function resolveTargetForPair(
       canApply: true,
       maxDurationInFrames: existingTransition.durationInFrames,
       suggestedDurationInFrames: existingTransition.durationInFrames,
-      alignment: existingTransition.alignment ?? alignment,
+      alignment: existingTransition.alignment ?? alignment ?? 0.5,
     };
   }
 
-  const maxDurationInFrames = getMaxTransitionDurationForHandles(leftClip, rightClip, alignment);
+  const resolvedAlignment = alignment === undefined
+    ? resolveAutomaticTransitionAlignment(leftClip, rightClip)
+    : null;
+  const nextAlignment = alignment ?? resolvedAlignment?.alignment ?? 0.5;
+  const maxDurationInFrames = getMaxTransitionDurationForHandles(leftClip, rightClip, nextAlignment);
   if (maxDurationInFrames < 1) {
     return {
       leftClipId: leftClip.id,
@@ -69,7 +74,7 @@ function resolveTargetForPair(
       canApply: false,
       maxDurationInFrames: 0,
       suggestedDurationInFrames: 0,
-      alignment,
+      alignment: nextAlignment,
       reason: 'Not enough source handle for a transition at this cut',
     };
   }
@@ -83,7 +88,7 @@ function resolveTargetForPair(
     canApply: true,
     maxDurationInFrames,
     suggestedDurationInFrames: Math.max(1, Math.min(preferredDurationInFrames, maxDurationInFrames)),
-    alignment,
+    alignment: nextAlignment,
   };
 }
 
@@ -101,7 +106,7 @@ export function resolveTransitionTargetForEdge(params: {
     items,
     transitions,
     preferredDurationInFrames = TRANSITION_CONFIGS.crossfade.defaultDuration,
-    alignment = 0.5,
+    alignment,
   } = params;
 
   const item = items.find((candidate) => candidate.id === itemId);
@@ -140,7 +145,7 @@ export function resolveTransitionTargetFromSelection(params: {
     items,
     transitions,
     preferredDurationInFrames = TRANSITION_CONFIGS.crossfade.defaultDuration,
-    alignment = 0.5,
+    alignment,
   } = params;
 
   if (selectedItemIds.length !== 1) return null;

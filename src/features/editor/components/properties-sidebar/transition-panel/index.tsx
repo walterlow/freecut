@@ -35,7 +35,12 @@ import {
   TRANSITION_CATEGORY_INFO,
   getTransitionConfigsByCategory,
 } from '@/features/editor/utils/transition-ui-config';
-import { getMaxTransitionDurationForHandles } from '@/features/editor/deps/timeline-utils';
+import {
+  areFramesAligned,
+  getMaxTransitionDurationForHandles,
+  getTransitionAlignmentMode,
+  getTransitionAlignmentOptions,
+} from '@/features/editor/deps/timeline-utils';
 
 function getPresentationOptionValue(config: Pick<PresentationConfig, 'id' | 'direction'>): string {
   return config.direction ? `${config.id}:${config.direction}` : config.id;
@@ -122,22 +127,34 @@ export function TransitionPanel() {
     () => getSupportedEaseOptions(transitionDefinition?.supportedTimings ?? []),
     [transitionDefinition],
   );
+  const isAdjacentCut = useMemo(() => {
+    if (!leftClip || !rightClip) return false;
+    return areFramesAligned(leftClip.from + leftClip.durationInFrames, rightClip.from);
+  }, [leftClip, rightClip]);
+  const alignmentMode = useMemo(
+    () => getTransitionAlignmentMode(selectedTransition?.alignment),
+    [selectedTransition?.alignment],
+  );
+  const alignmentOptions = useMemo(() => {
+    if (!leftClip || !rightClip) return [];
+    return getTransitionAlignmentOptions(leftClip, rightClip, selectedTransition?.durationInFrames ?? 1);
+  }, [leftClip, rightClip, selectedTransition?.durationInFrames]);
 
   const minDuration = 1;
   const maxDuration = useMemo(() => {
     if (!transitionConfig || !selectedTransition || !leftClip || !rightClip) {
-      return fps * 3;
+      return transitionConfig?.maxDuration ?? fps * 60;
     }
 
     const leftEnd = leftClip.from + leftClip.durationInFrames;
     const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1;
     if (!isAdjacent) {
       const legacyMax = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
-      return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, legacyMax)));
+      return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, legacyMax));
     }
 
     const handleMax = getMaxTransitionDurationForHandles(leftClip, rightClip, selectedTransition.alignment);
-    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, Math.min(fps * 3, handleMax)));
+    return Math.max(minDuration, Math.max(selectedTransition.durationInFrames, handleMax));
   }, [transitionConfig, selectedTransition, leftClip, rightClip, fps]);
 
   // Handle presentation change
@@ -186,10 +203,10 @@ export function TransitionPanel() {
     [selectedTransitionId, transitionConfig, updateTransition, minDuration, maxDuration]
   );
 
-  // Default duration is 1 second (fps frames)
-  const defaultDuration = Math.min(fps, maxDuration);
+  // Default duration is 2 seconds (2 * fps frames)
+  const defaultDuration = Math.min(fps * 2, maxDuration);
 
-  // Handle reset duration to default (1 second)
+  // Handle reset duration to default (2 seconds)
   const handleResetDuration = useCallback(() => {
     if (selectedTransitionId && transitionConfig) {
       const clamped = Math.max(
@@ -209,6 +226,12 @@ export function TransitionPanel() {
     },
     [selectedTransitionId, updateTransition]
   );
+
+  const handleAlignmentChange = useCallback((alignment: number) => {
+    if (selectedTransitionId) {
+      updateTransition(selectedTransitionId, { alignment });
+    }
+  }, [selectedTransitionId, updateTransition]);
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -303,12 +326,37 @@ export function TransitionPanel() {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetDuration}
-              title="Reset to 1s"
+              title="Reset to 2s"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
+
+        {isAdjacentCut && alignmentOptions.length > 0 && (
+          <PropertyRow label="Alignment" tooltip="Resolve-style position relative to the cut">
+            <div className="grid grid-cols-3 gap-1">
+              {alignmentOptions.map((option) => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => handleAlignmentChange(option.alignment)}
+                  disabled={!option.canApply}
+                  title={option.canApply ? option.label : `${option.label}: ${option.reason}`}
+                  className={cn(
+                    'min-h-10 rounded-md border px-2 py-1 text-[11px] leading-tight transition-colors text-center',
+                    alignmentMode === option.mode
+                      ? 'border-border bg-background text-foreground shadow-sm'
+                      : 'border-transparent bg-secondary text-muted-foreground hover:text-foreground',
+                    !option.canApply && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </PropertyRow>
+        )}
 
         {easeOptions.length > 0 && (
           <PropertyRow label="Ease" tooltip="Easing curve for the transition">

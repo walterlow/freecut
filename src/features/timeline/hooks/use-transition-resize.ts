@@ -48,11 +48,11 @@ export function useTransitionResize(transition: Transition) {
     const isAdjacent = Math.abs(leftEnd - rightClip.from) <= 1;
     if (!isAdjacent) {
       const legacyMax = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
-      return Math.max(1, Math.max(transition.durationInFrames, Math.min(config.maxDuration, legacyMax)));
+      return Math.max(1, Math.max(transition.durationInFrames, legacyMax));
     }
 
     const handleMax = getMaxTransitionDurationForHandles(leftClip, rightClip, transition.alignment);
-    return Math.max(1, Math.max(transition.durationInFrames, Math.min(config.maxDuration, handleMax)));
+    return Math.max(1, Math.max(transition.durationInFrames, handleMax));
   }, [config.maxDuration, leftClip, rightClip, transition.alignment, transition.durationInFrames]);
 
   const [resizeState, setResizeState] = useState<ResizeState>({

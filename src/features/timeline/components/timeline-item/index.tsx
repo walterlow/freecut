@@ -121,6 +121,7 @@ import { useRollHoverStore } from '../../stores/roll-hover-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry';
+import { getTransitionAlignmentLabel } from '../../utils/transition-alignment';
 import type { MediaTranscriptModel } from '@/types/storage';
 import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
@@ -2976,6 +2977,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       target.suggestedDurationInFrames,
       dragDescriptor.presentation,
       dragDescriptor.direction,
+      target.alignment,
     );
     useTransitionDragStore.getState().clearDrag();
   }, [item.id, trackLocked]);
@@ -3475,6 +3477,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             className="absolute top-0 bottom-0 w-px bg-slate-50/90"
             style={{ left: `${transitionDropGhost.cutOffset}px` }}
           />
+          <div className="absolute left-1.5 top-1 rounded bg-slate-950/80 px-1.5 py-0.5 text-[10px] font-medium text-slate-50">
+            {getTransitionAlignmentLabel(transitionDragPreview?.alignment)}
+          </div>
           <div className="absolute inset-x-0 top-0 h-px bg-white/60" />
           <div className="absolute inset-x-0 bottom-0 h-px bg-slate-900/20" />
         </div>

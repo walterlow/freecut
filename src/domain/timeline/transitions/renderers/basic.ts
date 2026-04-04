@@ -6,7 +6,7 @@
 
 import type { TransitionRegistry, TransitionRenderer } from '../registry';
 import type { TransitionStyleCalculation } from '../engine';
-import type { TransitionDefinition } from '@/types/transition';
+import { TRANSITION_DURATION_UI_MAX_FRAMES, type TransitionDefinition } from '@/types/transition';
 
 // ============================================================================
 // Fade
@@ -59,9 +59,9 @@ const fadeDef: TransitionDefinition = {
   icon: 'Blend',
   hasDirection: false,
   supportedTimings: ['linear', 'spring', 'ease-in', 'ease-out', 'ease-in-out', 'cubic-bezier'],
-  defaultDuration: 30,
+  defaultDuration: 60,
   minDuration: 5,
-  maxDuration: 90,
+  maxDuration: TRANSITION_DURATION_UI_MAX_FRAMES,
 };
 
 // ============================================================================

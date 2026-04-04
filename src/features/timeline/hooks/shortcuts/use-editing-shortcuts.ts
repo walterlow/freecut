@@ -16,6 +16,7 @@ import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { getNextTransitionAlignment } from '@/features/timeline/utils/transition-alignment';
 
 export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const hotkeys = useResolvedHotkeys();
@@ -26,11 +27,13 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
   const removeItems = useTimelineStore((s) => s.removeItems);
   const removeMarker = useTimelineStore((s) => s.removeMarker);
   const removeTransition = useTimelineStore((s) => s.removeTransition);
+  const updateTransition = useTimelineStore((s) => s.updateTransition);
   const rippleDeleteItems = useTimelineStore((s) => s.rippleDeleteItems);
   const updateItemsTransformMap = useTimelineStore((s) => s.updateItemsTransformMap);
   const joinItems = useTimelineStore((s) => s.joinItems);
   const splitItem = useTimelineStore((s) => s.splitItem);
   const items = useTimelineStore((s) => s.items);
+  const transitions = useTimelineStore((s) => s.transitions);
   const toggleLinkedSelectionEnabled = useEditorStore((s) => s.toggleLinkedSelectionEnabled);
 
   const nudgeSelectedVisualItems = useCallback((deltaX: number, deltaY: number) => {
@@ -82,6 +85,24 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, selectedMarkerId, selectedTransitionId, removeItems, removeMarker, removeTransition, clearSelection, callbacks]
+  );
+
+  // Editing: U - cycle selected transition alignment (Resolve-style start/center/end of edit)
+  useHotkeys(
+    hotkeys.SLIDE_TOOL,
+    (event) => {
+      if (!selectedTransitionId) return;
+
+      const transition = transitions.find((entry) => entry.id === selectedTransitionId);
+      if (!transition) return;
+
+      event.preventDefault();
+      updateTransition(selectedTransitionId, {
+        alignment: getNextTransitionAlignment(transition.alignment),
+      });
+    },
+    { ...HOTKEY_OPTIONS, enabled: selectedTransitionId !== null },
+    [selectedTransitionId, transitions, updateTransition]
   );
 
   // Editing: Backspace - Delete selected items, marker, or transition (alternative)

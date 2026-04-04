@@ -89,6 +89,31 @@ describe('transition-targets', () => {
     expect(target?.reason).toContain('Not enough source handle');
   });
 
+  it('falls back to a side-aligned target when centered placement is unavailable', () => {
+    const items = [
+      createVideoClip('left', 0, 60, 0, 90, 180),
+      createVideoClip('right', 60, 60, 0, 60, 60),
+    ];
+
+    const target = resolveTransitionTargetForEdge({
+      itemId: 'left',
+      edge: 'right',
+      items,
+      transitions: [],
+      preferredDurationInFrames: 24,
+    });
+
+    expect(target).toMatchObject({
+      leftClipId: 'left',
+      rightClipId: 'right',
+      canApply: true,
+      hasExisting: false,
+      alignment: 1,
+      maxDurationInFrames: 59,
+      suggestedDurationInFrames: 24,
+    });
+  });
+
   it('resolves an existing transition from single-clip selection', () => {
     const items = [
       createVideoClip('left', 0, 60, 0, 90, 120),

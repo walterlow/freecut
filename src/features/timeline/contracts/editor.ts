@@ -23,6 +23,11 @@ export { findNearestAvailableSpace } from '../utils/collision-utils';
 export { areFramesAligned, getMaxTransitionDurationForHandles } from '../utils/transition-utils';
 export { resolveTransitionTargetFromSelection } from '../utils/transition-targets';
 export {
+  getTransitionAlignmentMode,
+  getTransitionAlignmentOptions,
+} from '../utils/transition-alignment';
+export type { TransitionAlignmentMode } from '../utils/transition-alignment';
+export {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
   createDefaultTextItem,
