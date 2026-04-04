@@ -120,4 +120,186 @@ describe('transition scene', () => {
       lookbehindFrames: 3,
     })).toEqual(new Set(['left', 'right']));
   });
+
+  it('maps progress across the full duration of an end-on-edit transition window', () => {
+    const stateAtStart = resolveTransitionFrameState({
+      transitionWindows: [
+        {
+          transition: {
+            id: 'transition-left',
+            type: 'crossfade' as const,
+            trackId: 'track-1',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            durationInFrames: 60,
+            timing: 'linear' as const,
+            presentation: 'fade' as const,
+            alignment: 1,
+          },
+          leftClip: {
+            id: 'left',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 100,
+            src: 'left.mp4',
+            label: 'Left',
+          },
+          rightClip: {
+            id: 'right',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 100,
+            durationInFrames: 100,
+            src: 'right.mp4',
+            label: 'Right',
+          },
+          cutPoint: 100,
+          startFrame: 40,
+          endFrame: 100,
+          durationInFrames: 60,
+          leftPortion: 60,
+          rightPortion: 0,
+        },
+      ],
+      frame: 40,
+    });
+
+    const stateAtEnd = resolveTransitionFrameState({
+      transitionWindows: [
+        {
+          transition: {
+            id: 'transition-left',
+            type: 'crossfade' as const,
+            trackId: 'track-1',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            durationInFrames: 60,
+            timing: 'linear' as const,
+            presentation: 'fade' as const,
+            alignment: 1,
+          },
+          leftClip: {
+            id: 'left',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 100,
+            src: 'left.mp4',
+            label: 'Left',
+          },
+          rightClip: {
+            id: 'right',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 100,
+            durationInFrames: 100,
+            src: 'right.mp4',
+            label: 'Right',
+          },
+          cutPoint: 100,
+          startFrame: 40,
+          endFrame: 100,
+          durationInFrames: 60,
+          leftPortion: 60,
+          rightPortion: 0,
+        },
+      ],
+      frame: 99,
+    });
+
+    expect(stateAtStart.activeTransitions[0]?.progress).toBe(0);
+    expect(stateAtEnd.activeTransitions[0]?.progress).toBe(1);
+  });
+
+  it('maps progress across the full duration of a begin-on-edit transition window', () => {
+    const stateAtStart = resolveTransitionFrameState({
+      transitionWindows: [
+        {
+          transition: {
+            id: 'transition-right',
+            type: 'crossfade' as const,
+            trackId: 'track-1',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            durationInFrames: 60,
+            timing: 'linear' as const,
+            presentation: 'fade' as const,
+            alignment: 0,
+          },
+          leftClip: {
+            id: 'left',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 100,
+            src: 'left.mp4',
+            label: 'Left',
+          },
+          rightClip: {
+            id: 'right',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 100,
+            durationInFrames: 100,
+            src: 'right.mp4',
+            label: 'Right',
+          },
+          cutPoint: 100,
+          startFrame: 100,
+          endFrame: 160,
+          durationInFrames: 60,
+          leftPortion: 0,
+          rightPortion: 60,
+        },
+      ],
+      frame: 100,
+    });
+
+    const stateAtEnd = resolveTransitionFrameState({
+      transitionWindows: [
+        {
+          transition: {
+            id: 'transition-right',
+            type: 'crossfade' as const,
+            trackId: 'track-1',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            durationInFrames: 60,
+            timing: 'linear' as const,
+            presentation: 'fade' as const,
+            alignment: 0,
+          },
+          leftClip: {
+            id: 'left',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 100,
+            src: 'left.mp4',
+            label: 'Left',
+          },
+          rightClip: {
+            id: 'right',
+            type: 'video' as const,
+            trackId: 'track-1',
+            from: 100,
+            durationInFrames: 100,
+            src: 'right.mp4',
+            label: 'Right',
+          },
+          cutPoint: 100,
+          startFrame: 100,
+          endFrame: 160,
+          durationInFrames: 60,
+          leftPortion: 0,
+          rightPortion: 60,
+        },
+      ],
+      frame: 159,
+    });
+
+    expect(stateAtStart.activeTransitions[0]?.progress).toBe(0);
+    expect(stateAtEnd.activeTransitions[0]?.progress).toBe(1);
+  });
 });

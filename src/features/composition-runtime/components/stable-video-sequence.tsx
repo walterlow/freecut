@@ -60,6 +60,8 @@ interface StableVideoSequenceProps {
   renderItem: (item: StableVideoSequenceItem) => React.ReactNode;
   /** Number of frames to premount */
   premountFor?: number;
+  /** Number of frames to keep mounted after the group ends */
+  postmountFor?: number;
 }
 
 /**
@@ -437,24 +439,55 @@ export const StableVideoSequence: React.FC<StableVideoSequenceProps> = ({
   transitionWindows,
   renderItem,
   premountFor = 0,
+  postmountFor = 0,
 }) => {
   const { fps } = useVideoConfig();
   const defaultPremount = premountFor || Math.round(fps * 2);
 
   const groups = useMemo(() => groupStableVideoItems(items), [items]);
+  const groupMountWindows = useMemo(() => (
+    groups.map((group) => {
+      const groupItemIds = new Set(group.items.map((item) => item.id));
+      let earliestTransitionStart = group.minFrom;
+      let latestTransitionEnd = group.maxEnd;
+
+      for (const window of transitionWindows ?? []) {
+        if (
+          !groupItemIds.has(window.leftClip.id)
+          && !groupItemIds.has(window.rightClip.id)
+        ) {
+          continue;
+        }
+
+        earliestTransitionStart = Math.min(earliestTransitionStart, window.startFrame);
+        latestTransitionEnd = Math.max(latestTransitionEnd, window.endFrame);
+      }
+
+      return {
+        originKey: group.originKey,
+        premountFor: Math.max(defaultPremount, group.minFrom - earliestTransitionStart),
+        postmountFor: Math.max(postmountFor, latestTransitionEnd - group.maxEnd),
+      };
+    })
+  ), [defaultPremount, groups, postmountFor, transitionWindows]);
 
   return (
     <>
-      {groups.map((group) => (
-        <Sequence
-          key={group.originKey} // Stable key - doesn't change on split!
-          from={group.minFrom}
-          durationInFrames={group.maxEnd - group.minFrom}
-          premountFor={defaultPremount}
-        >
-          <GroupRenderer group={group} transitionWindows={transitionWindows} renderItem={renderItem} />
-        </Sequence>
-      ))}
+      {groups.map((group) => {
+        const mountWindow = groupMountWindows.find((entry) => entry.originKey === group.originKey);
+
+        return (
+          <Sequence
+            key={group.originKey} // Stable key - doesn't change on split!
+            from={group.minFrom}
+            durationInFrames={group.maxEnd - group.minFrom}
+            premountFor={mountWindow?.premountFor ?? defaultPremount}
+            postmountFor={mountWindow?.postmountFor ?? postmountFor}
+          >
+            <GroupRenderer group={group} transitionWindows={transitionWindows} renderItem={renderItem} />
+          </Sequence>
+        );
+      })}
     </>
   );
 };

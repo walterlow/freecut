@@ -42,6 +42,11 @@ interface SequenceProps {
    */
   premountFor?: number;
   /**
+   * Number of frames to keep the sequence mounted after it stops being visible.
+   * Used for transition hand-offs that still need the underlying media element.
+   */
+  postmountFor?: number;
+  /**
    * Show loop timestamps for debugging (Composition compat, ignored)
    */
   showLoopTimestamps?: boolean;
@@ -64,6 +69,7 @@ export const Sequence = memo<SequenceProps>(
     style,
     className,
     premountFor = 0,
+    postmountFor = 0,
     showLoopTimestamps,
   }) => {
     void showLoopTimestamps;
@@ -80,11 +86,12 @@ export const Sequence = memo<SequenceProps>(
     const absoluteFrom = parentFrom + from;
     const endFrame = absoluteFrom + durationInFrames;
     const premountStart = absoluteFrom - premountFor;
+    const postmountEnd = endFrame + postmountFor;
 
     // Calculate visibility using absolute frame positions
     const isVisible = globalFrame >= absoluteFrom && globalFrame < endFrame;
-    // Mount content if visible OR within premount range
-    const shouldMount = globalFrame >= premountStart && globalFrame < endFrame;
+    // Mount content if visible OR within the premount/postmount runway.
+    const shouldMount = globalFrame >= premountStart && globalFrame < postmountEnd;
 
     // Calculate local frame (0-based within this sequence)
     // NOTE: During premount, localFrame can be negative (before the sequence starts).

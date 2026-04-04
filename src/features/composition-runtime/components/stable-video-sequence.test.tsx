@@ -6,7 +6,26 @@ const sequenceContextValue = { localFrame: 28 };
 const ensureReadyLanesMock = vi.fn(() => Promise.resolve());
 
 vi.mock('@/features/composition-runtime/deps/player', () => ({
-  Sequence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  Sequence: ({
+    children,
+    from,
+    premountFor,
+    postmountFor,
+  }: {
+    children: React.ReactNode;
+    from?: number;
+    premountFor?: number;
+    postmountFor?: number;
+  }) => (
+    <div
+      data-testid={`sequence-${from ?? 0}`}
+      data-sequence-from={String(from ?? 0)}
+      data-premount-for={String(premountFor ?? 0)}
+      data-postmount-for={String(postmountFor ?? 0)}
+    >
+      {children}
+    </div>
+  ),
   useSequenceContext: () => sequenceContextValue,
   useVideoSourcePool: () => ({ ensureReadyLanes: ensureReadyLanesMock }),
 }));
@@ -301,5 +320,128 @@ describe('StableVideoSequence', () => {
 
     expect(screen.getByTestId('render-left')).toHaveAttribute('data-softness', '0.25');
     expect(screen.getByTestId('shadow-video-right')).toHaveAttribute('data-softness', '0.25');
+  });
+
+  it('extends premount for incoming groups when a transition starts before clip from', () => {
+    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+
+    render(
+      <StableVideoSequence
+        items={[
+          {
+            id: 'left',
+            label: 'Left',
+            mediaId: 'media-left',
+            originId: 'origin-left',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 90,
+            src: 'blob:left',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+          {
+            id: 'right',
+            label: 'Right',
+            mediaId: 'media-right',
+            originId: 'origin-right',
+            type: 'video',
+            trackId: 'track-1',
+            from: 90,
+            durationInFrames: 90,
+            src: 'blob:right',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+        ]}
+        transitionWindows={[{
+          startFrame: 30,
+          endFrame: 90,
+          durationInFrames: 60,
+          leftClip: { id: 'left' },
+          rightClip: { id: 'right' },
+          leftPortion: 60,
+          rightPortion: 0,
+          cutPoint: 90,
+          transition: {
+            id: 'transition-left-aligned',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            timing: 'linear',
+          },
+        } as never]}
+        premountFor={30}
+        renderItem={renderItem}
+      />,
+    );
+
+    expect(screen.getByTestId('sequence-90')).toHaveAttribute('data-premount-for', '60');
+    expect(screen.getByTestId('sequence-0')).toHaveAttribute('data-premount-for', '30');
+  });
+
+  it('extends postmount for outgoing groups when a transition ends after clip end', () => {
+    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+
+    render(
+      <StableVideoSequence
+        items={[
+          {
+            id: 'left',
+            label: 'Left',
+            mediaId: 'media-left',
+            originId: 'origin-left',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 90,
+            src: 'blob:left',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+          {
+            id: 'right',
+            label: 'Right',
+            mediaId: 'media-right',
+            originId: 'origin-right',
+            type: 'video',
+            trackId: 'track-1',
+            from: 90,
+            durationInFrames: 90,
+            src: 'blob:right',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+        ]}
+        transitionWindows={[{
+          startFrame: 90,
+          endFrame: 150,
+          durationInFrames: 60,
+          leftClip: { id: 'left' },
+          rightClip: { id: 'right' },
+          leftPortion: 0,
+          rightPortion: 60,
+          cutPoint: 90,
+          transition: {
+            id: 'transition-right-aligned',
+            leftClipId: 'left',
+            rightClipId: 'right',
+            timing: 'linear',
+          },
+        } as never]}
+        renderItem={renderItem}
+      />,
+    );
+
+    expect(screen.getByTestId('sequence-0')).toHaveAttribute('data-postmount-for', '60');
+    expect(screen.getByTestId('sequence-90')).toHaveAttribute('data-postmount-for', '0');
   });
 });

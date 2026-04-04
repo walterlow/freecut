@@ -67,6 +67,44 @@ describe('resolveTransitionWindows', () => {
     expect(windows[0]?.rightPortion).toBe(20);
   });
 
+  it('resolves an end-on-edit transition entirely before the cut', () => {
+    const left = createVideoClip('A', 0, 100);
+    const right = createVideoClip('B', 100, 100);
+    const transition = createTransition('T1', left.id, right.id, 60, 1);
+
+    const windows = resolveTransitionWindows([transition], new Map([
+      [left.id, left],
+      [right.id, right],
+    ]));
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0]?.cutPoint).toBe(100);
+    expect(windows[0]?.startFrame).toBe(40);
+    expect(windows[0]?.endFrame).toBe(100);
+    expect(windows[0]?.durationInFrames).toBe(60);
+    expect(windows[0]?.leftPortion).toBe(60);
+    expect(windows[0]?.rightPortion).toBe(0);
+  });
+
+  it('resolves a begin-on-edit transition entirely after the cut', () => {
+    const left = createVideoClip('A', 0, 100);
+    const right = createVideoClip('B', 100, 100);
+    const transition = createTransition('T1', left.id, right.id, 60, 0);
+
+    const windows = resolveTransitionWindows([transition], new Map([
+      [left.id, left],
+      [right.id, right],
+    ]));
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0]?.cutPoint).toBe(100);
+    expect(windows[0]?.startFrame).toBe(100);
+    expect(windows[0]?.endFrame).toBe(160);
+    expect(windows[0]?.durationInFrames).toBe(60);
+    expect(windows[0]?.leftPortion).toBe(0);
+    expect(windows[0]?.rightPortion).toBe(60);
+  });
+
   it('keeps both bridges when middle clip has enough room', () => {
     const a = createVideoClip('A', 0, 120);
     const b = createVideoClip('B', 120, 120);
