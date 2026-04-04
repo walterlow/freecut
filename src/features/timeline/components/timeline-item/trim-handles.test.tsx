@@ -15,7 +15,7 @@ describe('TrimHandles', () => {
     hoveredEdge: null as 'start' | 'end' | null,
     smartTrimIntent: null as import('../../utils/smart-trim-zones').SmartTrimIntent,
     rollHoverEdge: null as 'start' | 'end' | null,
-    activeEdges: null as import('./trim-handles').ActiveEdgeState | null,
+    activeEdges: null as import('./trim-constants').ActiveEdgeState | null,
     startCursorClass: 'cursor-trim-left',
     endCursorClass: 'cursor-trim-right',
     startTone: 'default' as const,
