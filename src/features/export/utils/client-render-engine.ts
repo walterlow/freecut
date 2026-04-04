@@ -316,7 +316,7 @@ export async function createCompositionRenderer(
   const videoItemsById = new Map<string, VideoItem>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
-  const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
+  const fallbackVideoPool = hasDom ? new VideoSourcePool() : null;
   const fallbackVideoBySrc = new Set<string>();
   const fallbackVideoClipIdByItem = new Map<string, string>();
   let fallbackVideoClipCounter = 0;
@@ -382,7 +382,7 @@ export async function createCompositionRenderer(
           registerVideoItem(item.id, videoItem.src);
 
           // Also create fallback video element in case mediabunny fails (main thread only).
-          if (hasDom && !previewStrictDecode) {
+          if (hasDom) {
             bindFallbackVideoElement(item.id, videoItem.src);
           }
         }
@@ -720,7 +720,7 @@ export async function createCompositionRenderer(
         throw new Error('WORKER_REQUIRES_MAIN_THREAD:video-fallback');
       }
 
-      if (hasDom && !previewStrictDecode && allVideoIds.length > 0) {
+      if (hasDom && allVideoIds.length > 0) {
         const uniqueVideoEntries = new Map<HTMLVideoElement, string>();
         for (const [itemId, video] of videoElements.entries()) {
           if (!uniqueVideoEntries.has(video)) {
@@ -911,7 +911,7 @@ export async function createCompositionRenderer(
           if (subItem.type === 'video' && !videoExtractors.has(subItem.id)) {
             registerVideoItem(subItem.id, src);
             subVideoItemIds.push(subItem.id);
-            if (hasDom && !previewStrictDecode) {
+            if (hasDom) {
               bindFallbackVideoElement(subItem.id, src);
             }
           }
@@ -932,7 +932,7 @@ export async function createCompositionRenderer(
         assertPreviewStrictDecode();
 
         // Load fallback video elements for sub-comp items that failed mediabunny init
-        if (hasDom && !previewStrictDecode) {
+        if (hasDom) {
           const subFallbackVideoIds = subCompMediaItems
             .filter(({ subItem }) => subItem.type === 'video' && !useMediabunny.has(subItem.id))
             .map(({ subItem }) => subItem.id);

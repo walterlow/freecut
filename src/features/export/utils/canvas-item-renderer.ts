@@ -467,6 +467,65 @@ async function tryDrawWorkerPredecodedBitmap(
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Black-frame detection for transition-held DOM video elements
+// ---------------------------------------------------------------------------
+
+// Cached 4×1 canvas for sampling video pixels without allocating per frame.
+let _blackCheckCanvas: OffscreenCanvas | null = null;
+let _blackCheckCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+/**
+ * Lightweight check whether a DOM video element is producing all-black frames.
+ * Samples 4 widely-spaced points from the video and checks if they're all black.
+ *
+ * Chrome's video decoder can enter a broken state where readyState=4 and
+ * buffered ranges are full, but drawImage only outputs black pixels (from
+ * decoder pipeline races during React mount/unmount lifecycle cycles at
+ * transition boundaries). This check detects that state so the renderer
+ * can fall through to mediabunny decode instead.
+ *
+ * ~0.1ms per call — only used for transition-held elements, not every frame.
+ */
+function isDomVideoProducingBlack(video: HTMLVideoElement): boolean {
+  if (!_blackCheckCanvas) {
+    _blackCheckCanvas = new OffscreenCanvas(4, 1);
+    _blackCheckCtx = _blackCheckCanvas.getContext('2d');
+  }
+  if (!_blackCheckCtx) return false;
+
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  if (w === 0 || h === 0) return true;
+
+  // Sample 4 points spread across the frame to reduce false positives
+  // from legitimately dark content (pure black at ALL 4 points is very
+  // unlikely for real video with compression noise).
+  const points: [number, number][] = [
+    [w * 0.5, h * 0.5],   // center
+    [w * 0.75, h * 0.25],  // top-right area
+    [w * 0.25, h * 0.75],  // bottom-left area
+    [w * 0.75, h * 0.75],  // bottom-right area
+  ];
+
+  for (let i = 0; i < points.length; i++) {
+    _blackCheckCtx.drawImage(
+      video,
+      Math.floor(points[i][0]), Math.floor(points[i][1]), 1, 1,
+      i, 0, 1, 1,
+    );
+  }
+
+  const pixels = _blackCheckCtx.getImageData(0, 0, 4, 1).data;
+  for (let i = 0; i < 4; i++) {
+    const off = i * 4;
+    if (pixels[off] !== 0 || pixels[off + 1] !== 0 || pixels[off + 2] !== 0) {
+      return false; // at least one point has visible content
+    }
+  }
+  return true; // all 4 sample points are pure black
+}
+
 /**
  * Render video item using mediabunny (fast) or HTML5 video element (fallback).
  */
@@ -478,6 +537,7 @@ async function renderVideoItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
 ): Promise<void> {
+
   const {
     fps,
     videoExtractors,
@@ -493,6 +553,8 @@ async function renderVideoItem(
   const hasFallbackVideoElement = videoElements.has(item.id);
   const extractor = videoExtractors.get(item.id);
   let mediabunnyFailedThisFrame = false;
+
+
 
   // Calculate source time
   const localFrame = frame - item.from;
@@ -530,6 +592,27 @@ async function renderVideoItem(
   // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
   // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
   if (domVideo && domVideoDecision.shouldDraw) {
+    // For transition-held DOM videos, validate the element actually produces
+    // visible content. Chrome's decoder can enter a broken state where
+    // readyState=4 and buffer ranges are full, but drawImage only outputs
+    // black pixels (from decoder pipeline races during React mount/unmount
+    // cycles at transition boundaries). Skip the element and fall through
+    // to mediabunny decode when detected.
+    if (
+      isPreviewMode
+      && rctx.isRenderingTransition
+      && domVideo.dataset.transitionHold === '1'
+      && isDomVideoProducingBlack(domVideo)
+    ) {
+      log.debug('Transition-held DOM video producing black frames, falling through to mediabunny', {
+        itemId: item.id,
+        frame,
+        sourceTime,
+        readyState: domVideo.readyState,
+        currentTime: domVideo.currentTime,
+      });
+      // Fall through to mediabunny / fallback paths below
+    } else {
     // Variable-speed clips naturally drift from their DOM video element
     // because the browser plays at 1x while sourceTime advances at speed.
     // Use a wider threshold proportional to speed to avoid falling back
@@ -560,6 +643,7 @@ async function renderVideoItem(
     // 400-500ms on the main thread, causing visible frame drops.
     // DOM video has slight timing drift at speed != 1, but no freezes.
     return;
+    }
   }
 
   const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({
@@ -834,11 +918,21 @@ async function renderVideoItem(
     mediabunnyFailedThisFrame,
   });
   if (!allowVideoElementFallback && !allowPreviewFallback) {
+    // Last resort for transition participants: use DOM video regardless of
+    // drift. A slightly wrong frame is better than black.
+    if (isPreviewMode && rctx.isRenderingTransition && domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+      drawContainedMediaSource(ctx, domVideo, domVideo.videoWidth, domVideo.videoHeight, transform, canvasSettings, item.crop, undefined, rctx.canvasPool);
+    }
     return;
   }
 
   const video = videoElements.get(item.id);
   if (!video) {
+    // Last resort for transition participants: use DOM video regardless of drift.
+    if (isPreviewMode && rctx.isRenderingTransition && domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+      drawContainedMediaSource(ctx, domVideo, domVideo.videoWidth, domVideo.videoHeight, transform, canvasSettings, item.crop, undefined, rctx.canvasPool);
+      return;
+    }
     log.warn('Video element not found', { itemId: item.id, frame });
     return;
   }
@@ -870,7 +964,13 @@ async function renderVideoItem(
 
   // Wait for video to have enough data to draw
   if (video.readyState < 2) {
-    if (isPreviewMode) return;
+    if (isPreviewMode) {
+      // Last resort for transition participants: use DOM video regardless of drift.
+      if (rctx.isRenderingTransition && domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+        drawContainedMediaSource(ctx, domVideo, domVideo.videoWidth, domVideo.videoHeight, transform, canvasSettings, item.crop, undefined, rctx.canvasPool);
+      }
+      return;
+    }
 
     await new Promise<void>((resolve) => {
       const checkReady = () => {
@@ -1581,7 +1681,9 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
 ): TransitionParticipantRenderState<TItem> {
   const currentClip = rctx.getCurrentItemSnapshot?.(clip) ?? clip;
   const itemKeyframes = rctx.getCurrentKeyframes?.(currentClip.id) ?? rctx.keyframesMap.get(currentClip.id);
-  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, rctx.canvasSettings);
+  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, rctx.canvasSettings, {
+    suppressOutOfRangeVisualFade: true,
+  });
 
   if (rctx.renderMode === 'preview') {
     const previewOverride = rctx.getPreviewTransformOverride?.(currentClip.id);

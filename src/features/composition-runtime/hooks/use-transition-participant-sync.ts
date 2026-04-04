@@ -52,27 +52,26 @@ export function useTransitionParticipantSync(
         if (!video) continue;
 
         const relativeFrame = sequenceLocalFrame - participant.sequenceFrameOffset;
+        const heldByTransition = video.dataset.transitionHold === '1';
         const startTime = participant.safeTrimBefore / participant.sourceFps;
         const videoDuration = video.duration || Infinity;
         const clampTime = (time: number) => Math.min(Math.max(0, time), videoDuration - 0.05);
 
-        if (relativeFrame < 0) {
+        if (relativeFrame < 0 && !heldByTransition) {
           // Skip premount pause/seek if the element is held by a transition
           // session — the canvas overlay needs it playing for frame reads.
-          if (video.dataset.transitionHold !== '1') {
-            const premountTarget = clampTime(startTime);
-            if (!video.paused) {
-              video.pause();
-            }
-            if (video.readyState >= 1 && Math.abs(video.currentTime - premountTarget) > 0.016) {
-              try {
-                video.currentTime = premountTarget;
-              } catch {
-                // Ignore transient seek failures while element is still settling.
-              }
-            }
-            video.playbackRate = participant.playbackRate;
+          const premountTarget = clampTime(startTime);
+          if (!video.paused) {
+            video.pause();
           }
+          if (video.readyState >= 1 && Math.abs(video.currentTime - premountTarget) > 0.016) {
+            try {
+              video.currentTime = premountTarget;
+            } catch {
+              // Ignore transient seek failures while element is still settling.
+            }
+          }
+          video.playbackRate = participant.playbackRate;
           continue;
         }
 

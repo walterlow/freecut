@@ -1415,6 +1415,57 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, []);
 
+  const primeVisiblePlaybackElements = useCallback((frame: number) => {
+    for (const track of combinedTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video') continue;
+        if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
+
+        const element = getBestDomVideoElementForItem(item.id);
+        if (!element) continue;
+
+        const clipSpeed = item.speed ?? 1;
+        const sourceFps = item.sourceFps ?? fps;
+        const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+        const localFrame = frame - item.from;
+        const targetTime = (sourceStart / sourceFps) + (localFrame / fps) * clipSpeed;
+        const duration = Number.isFinite(element.duration) ? element.duration : Infinity;
+        const clampedTargetTime = Math.min(Math.max(0, targetTime), Math.max(0, duration - 0.05));
+
+        if (element.readyState === 0) {
+          try {
+            element.load();
+          } catch {
+            // Best-effort only.
+          }
+          continue;
+        }
+
+        if (Math.abs(element.currentTime - clampedTargetTime) > 0.05) {
+          try {
+            element.currentTime = clampedTargetTime;
+          } catch {
+            // Best-effort only.
+          }
+        }
+
+        if (element.paused && element.readyState >= 2) {
+          transitionSafePlay(element, clipSpeed);
+        } else if (Math.abs(element.playbackRate - clipSpeed) > 0.01) {
+          element.playbackRate = clipSpeed;
+        }
+      }
+    }
+  }, [combinedTracks, fps]);
+
+  useEffect(() => {
+    return usePlaybackStore.subscribe((state, prev) => {
+      if (state.isPlaying && !prev.isPlaying) {
+        primeVisiblePlaybackElements(state.currentFrame);
+      }
+    });
+  }, [primeVisiblePlaybackElements]);
+
   // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
   // This avoids memory blowups on large projects while keeping nearby clips hot.
   useEffect(() => {
@@ -2043,6 +2094,7 @@ export const VideoPreview = memo(function VideoPreview({
       rightHasEffects,
     });
     const isPlaying = usePlaybackStore.getState().isPlaying;
+    const currentFrame = usePlaybackStore.getState().currentFrame;
     const pinnedElements = new Map<string, HTMLVideoElement | null>();
     for (const clip of [window.leftClip, window.rightClip]) {
       const el = getBestDomVideoElementForItem(clip.id);
@@ -2055,13 +2107,40 @@ export const VideoPreview = memo(function VideoPreview({
       if (el && isPlaying) {
         el.dataset.transitionHold = '1';
         const clipSpeed = clip.speed ?? 1;
+        const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+        const sourceFps = clip.sourceFps ?? fps;
+        const localFrame = currentFrame - clip.from;
+        const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
+        const videoDuration = el.duration || Infinity;
+        const clampedTargetTime = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
         if (el.readyState >= 2) {
+          if (Math.abs(el.currentTime - clampedTargetTime) > 0.016) {
+            try {
+              el.currentTime = clampedTargetTime;
+            } catch {
+              // Element may still be settling; best-effort only.
+            }
+          }
           transitionSafePlay(el, clipSpeed);
         } else {
           // Element not ready yet — listen for enough data to play.
           const onCanPlay = () => {
             el.removeEventListener('canplay', onCanPlay);
-            if (el.dataset.transitionHold === '1' && el.paused) {
+            if (el.dataset.transitionHold === '1') {
+              const liveFrame = usePlaybackStore.getState().currentFrame;
+              const liveLocalFrame = liveFrame - clip.from;
+              const liveTargetTime = (sourceStart / sourceFps) + (liveLocalFrame * clipSpeed / fps);
+              const liveClampedTargetTime = Math.min(
+                Math.max(0, liveTargetTime),
+                (el.duration || Infinity) - 0.05,
+              );
+              if (Math.abs(el.currentTime - liveClampedTargetTime) > 0.016) {
+                try {
+                  el.currentTime = liveClampedTargetTime;
+                } catch {
+                  // Element may still be stabilizing.
+                }
+              }
               transitionSafePlay(el, clipSpeed);
             }
           };
@@ -2511,7 +2590,34 @@ export const VideoPreview = memo(function VideoPreview({
         if (!renderer || !scrubMountedRef.current) return false;
 
         if ('setDomVideoElementProvider' in renderer) {
-          renderer.setDomVideoElementProvider(getPinnedTransitionElementForItem);
+          // During playback, use the pinned session elements (already warmed).
+          // When paused/scrubbing, fall back to the registry — the pinned
+          // session may not have the incoming clip's element yet (React hasn't
+          // rendered the premounted GroupRenderer by the time the session was
+          // pinned). getBestDomVideoElementForItem is a lazy registry lookup
+          // that finds the element whenever it exists.
+          const isPlayingNow = usePlaybackStore.getState().isPlaying;
+          renderer.setDomVideoElementProvider(
+            isPlayingNow ? getPinnedTransitionElementForItem : getBestDomVideoElementForItem,
+          );
+        }
+
+        // Wait for premounted transition participants to register their DOM
+        // video elements. For end-on-edit aligned transitions, the incoming
+        // clip's GroupRenderer renders during premount — but only after React
+        // commits the re-render triggered by the seek. Without this wait,
+        // the renderer runs before the DOM video element exists, producing
+        // black for the incoming clip.
+        {
+          const tw = getTransitionWindowByStartFrame(targetFrame);
+          const participantIds = tw ? [tw.leftClip.id, tw.rightClip.id] : [];
+          const missingIds = participantIds.filter((id) => !getBestDomVideoElementForItem(id));
+          if (missingIds.length > 0) {
+            const deadline = performance.now() + 500;
+            while (missingIds.some((id) => !getBestDomVideoElementForItem(id)) && performance.now() < deadline) {
+              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            }
+          }
         }
 
         const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame);
@@ -3260,7 +3366,29 @@ export const VideoPreview = memo(function VideoPreview({
               }
               renderer.setDomVideoElementProvider(getPinnedTransitionElementForItem);
             } else {
-              renderer.setDomVideoElementProvider(undefined);
+              // When paused/scrubbing inside a transition, provide DOM video
+              // elements directly from the registry. The pinned session may
+              // not have clip B's element yet (React hasn't rendered the
+              // premounted GroupRenderer by the time the session is pinned).
+              // getBestDomVideoElementForItem is a lazy registry lookup that
+              // finds the element whenever it exists — no timing dependency.
+              const pausedTransitionWindow = getTransitionWindowForFrame(frameToRender);
+              renderer.setDomVideoElementProvider(
+                pausedTransitionWindow ? getBestDomVideoElementForItem : undefined,
+              );
+              // For end-on-edit transitions, the incoming clip's video element
+              // may not be registered yet (React hasn't committed the premounted
+              // GroupRenderer). Wait for all participants to register before
+              // rendering to avoid caching a black frame.
+              if (pausedTransitionWindow) {
+                const ids = [pausedTransitionWindow.leftClip.id, pausedTransitionWindow.rightClip.id];
+                if (ids.some((id) => !getBestDomVideoElementForItem(id))) {
+                  const dl = performance.now() + 500;
+                  while (ids.some((id) => !getBestDomVideoElementForItem(id)) && performance.now() < dl) {
+                    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+                  }
+                }
+              }
             }
           }
 
@@ -3881,6 +4009,29 @@ export const VideoPreview = memo(function VideoPreview({
                   // multiple frames gives the render loop a head start so the
                   // first cold-rendered transition frame isn't frame 1.
                   if (!usePlaybackStore.getState().isPlaying && mainRenderer) {
+                    // Provide DOM video elements from the registry so the
+                    // renderer can use premounted transition participants.
+                    // Without this, end-on-edit transitions render black for
+                    // the incoming clip whose video element was just mounted.
+                    if ('setDomVideoElementProvider' in mainRenderer) {
+                      (mainRenderer as { setDomVideoElementProvider: (p: typeof getBestDomVideoElementForItem | undefined) => void })
+                        .setDomVideoElementProvider(getBestDomVideoElementForItem);
+                    }
+                    // Wait for premounted transition participants to register
+                    // their DOM video elements. For end-on-edit transitions,
+                    // the incoming clip's GroupRenderer mounts during premount
+                    // but needs a React commit cycle to register the element.
+                    const participantIds = [tw.leftClip.id, tw.rightClip.id];
+                    if (participantIds.some((id) => !getBestDomVideoElementForItem(id))) {
+                      const deadline = performance.now() + 500;
+                      while (
+                        participantIds.some((id) => !getBestDomVideoElementForItem(id))
+                        && performance.now() < deadline
+                        && !usePlaybackStore.getState().isPlaying
+                      ) {
+                        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+                      }
+                    }
                     const preRenderCount = Math.min(playbackTransitionPrerenderRunwayFrames, tw.endFrame - tw.startFrame);
                     for (let fi = 0; fi < preRenderCount; fi++) {
                       if (usePlaybackStore.getState().isPlaying) break;
@@ -3898,6 +4049,31 @@ export const VideoPreview = memo(function VideoPreview({
                         }
                       } catch { break; }
                     }
+                  }
+                  // After pre-render, trigger a fresh render. Wait for React
+                  // to mount premounted transition participants first.
+                  await new Promise<void>((r) => setTimeout(r, 1000));
+                  // eslint-disable-next-line no-console
+                  console.error('=== DELAYED RE-RENDER FIRED ===', getBestDomVideoElementForItem(tw.rightClip.id)?.readyState);
+                  (globalThis as Record<string, unknown>).__delayed_rerender = true;
+                  if (!usePlaybackStore.getState().isPlaying) {
+                    if ('setDomVideoElementProvider' in mainRenderer) {
+                      (mainRenderer as { setDomVideoElementProvider: (p: typeof getBestDomVideoElementForItem | undefined) => void })
+                        .setDomVideoElementProvider(getBestDomVideoElementForItem);
+                    }
+                    await mainRenderer.renderFrame(state.currentFrame);
+                    if ('getCanvas' in mainRenderer) {
+                      const srcCanvas = (mainRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
+                      const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
+                      const snapshotCtx = snapshot.getContext('2d');
+                      if (snapshotCtx) {
+                        snapshotCtx.drawImage(srcCanvas, 0, 0);
+                        transitionSessionBufferedFramesRef.current.set(state.currentFrame, snapshot);
+                      }
+                    }
+                    scrubRequestedFrameRef.current = state.currentFrame;
+                    scrubFrameDirtyRef.current = true;
+                    void pumpRenderLoop();
                   }
                 })();
               }

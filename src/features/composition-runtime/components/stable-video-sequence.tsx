@@ -207,9 +207,29 @@ const GroupRenderer: React.FC<{
   // Convert to global frame for comparison with item.from (which is global)
   const globalFrame = localFrame + group.minFrom;
 
-  // Find the active item ID for current frame
-  // During premount, don't find any active item - we shouldn't render.
-  const rawActiveItemIndex = isPremounted ? -1 : findActiveVideoItemIndex(group.items, globalFrame);
+  // Find the active item ID for current frame.
+  // During premount, normally don't find any active item. EXCEPT: when a
+  // transition overlaps the current frame and involves an item in this group,
+  // that item must be rendered (hidden) so its video pool element exists for
+  // the transition overlay. Without this, the incoming clip in a left-aligned
+  // transition has no DOM video element and renders as black.
+  let rawActiveItemIndex: number;
+  if (!isPremounted) {
+    rawActiveItemIndex = findActiveVideoItemIndex(group.items, globalFrame);
+  } else {
+    rawActiveItemIndex = -1;
+    for (const tw of transitionWindows) {
+      if (globalFrame >= tw.startFrame && globalFrame < tw.endFrame) {
+        const idx = group.items.findIndex(
+          (i) => i.id === tw.leftClip.id || i.id === tw.rightClip.id,
+        );
+        if (idx >= 0) {
+          rawActiveItemIndex = idx;
+          break;
+        }
+      }
+    }
+  }
 
   // Stabilize active index during same-origin transitions.
   // When two items in the same group participate in a transition (A→A clip,

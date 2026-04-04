@@ -69,14 +69,22 @@ export function resolvePreviewDomVideoDrawDecision(
   }
 
   const drift = Math.abs(domVideo.currentTime - sourceTime);
+  const isHeldTransitionFrame = isRenderingTransition && domVideo.dataset.transitionHold === '1';
   const driftThreshold = getPreviewDomVideoDriftThreshold(
     speed,
     isRenderingTransition || domVideo.dataset.transitionHold === '1',
   );
 
+  // During transition rendering (not playback), accept any ready DOM video
+  // frame regardless of drift. The incoming clip in an end-on-edit transition
+  // may have a large drift because its premounted video element hasn't been
+  // seeked to the exact transition position. A wrong-time frame is always
+  // better than rendering black.
+  const shouldDraw = isHeldTransitionFrame || isRenderingTransition || drift <= driftThreshold;
+
   return {
     hasReadyDomVideo: true,
-    shouldDraw: drift <= driftThreshold,
+    shouldDraw,
     drift,
     driftThreshold,
   };

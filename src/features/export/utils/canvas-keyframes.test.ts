@@ -68,6 +68,37 @@ describe('canvas-keyframes visual fades', () => {
     expect(transform.opacity).toBeCloseTo(0.4, 5);
   });
 
+  it('keeps transition-held preroll frames visible when out-of-range fade suppression is enabled', () => {
+    const item: VideoItem = {
+      id: 'video-transition-1',
+      type: 'video',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 90,
+      label: 'Video',
+      src: 'blob:test',
+      fadeIn: 1,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 1080,
+        rotation: 0,
+        opacity: 0.8,
+      },
+    };
+
+    const transform = getAnimatedTransform(item, undefined, 80, {
+      width: 1920,
+      height: 1080,
+      fps: 30,
+    }, {
+      suppressOutOfRangeVisualFade: true,
+    });
+
+    expect(transform.opacity).toBeCloseTo(0.8, 5);
+  });
+
   it('applies overlapping compound clip fades to export opacity', () => {
     const item: CompositionItem = {
       id: 'composition-1',

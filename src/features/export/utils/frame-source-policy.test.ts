@@ -48,6 +48,22 @@ describe('frame-source-policy', () => {
     expect(decision.driftThreshold).toBe(1.0);
   });
 
+  it('still draws a held DOM video during transition rendering even when drift is large', () => {
+    const decision = resolvePreviewDomVideoDrawDecision({
+      domVideo: makeDomVideo({
+        currentTime: 13,
+        dataset: { transitionHold: '1' } as DOMStringMap,
+      }),
+      sourceTime: 10,
+      speed: 1,
+      isRenderingTransition: true,
+    });
+
+    expect(decision.hasReadyDomVideo).toBe(true);
+    expect(decision.shouldDraw).toBe(true);
+    expect(decision.drift).toBe(3);
+  });
+
   it('warms mediabunny in the background for variable-speed preview playback', () => {
     expect(resolvePreviewMediabunnyInitAction({
       renderMode: 'preview',

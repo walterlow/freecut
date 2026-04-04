@@ -433,6 +433,7 @@ const NativePreviewVideo: React.FC<{
   useLayoutEffect(() => {
     const video = elementRef.current;
     if (!video) return;
+    const heldByTransition = video.dataset.transitionHold === '1';
 
     // Only set playbackRate from React when RVFC isn't managing drift correction.
     // During playback with RVFC, the callback owns video.playbackRate and applies
@@ -443,7 +444,7 @@ const NativePreviewVideo: React.FC<{
     }
 
     const relativeFrame = frame - sequenceFrameOffset;
-    const isPremounted = relativeFrame < 0;
+    const isPremounted = relativeFrame < 0 && !heldByTransition;
     const canSeek = video.readyState >= 1;
 
     const effectiveTargetTime = isPremounted
@@ -455,17 +456,14 @@ const NativePreviewVideo: React.FC<{
     if (!canSeek) return;
 
     if (isPremounted) {
-      const heldByTransition = video.dataset.transitionHold === '1';
-      if (!heldByTransition) {
-        if (!video.paused) {
-          video.pause();
-        }
-        if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
-          try {
-            video.currentTime = clampedTargetTime;
-          } catch {
-            // Seek failed - element may still be initializing
-          }
+      if (!video.paused) {
+        video.pause();
+      }
+      if (Math.abs(video.currentTime - clampedTargetTime) > 0.016) {
+        try {
+          video.currentTime = clampedTargetTime;
+        } catch {
+          // Seek failed - element may still be initializing
         }
       }
       return;
@@ -489,6 +487,7 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
+    const heldByTransition = video.dataset.transitionHold === '1';
 
     // Only set playbackRate from React when RVFC isn't active.
     // RVFC owns the rate during playback for smooth drift correction.
@@ -506,7 +505,7 @@ const NativePreviewVideo: React.FC<{
     // Check if we're in premount phase (frame < 0 means clip hasn't started yet)
     // During premount, we should NOT play - just prepare the video at the start position
     const relativeFrame = frame - sequenceFrameOffset;
-    const isPremounted = relativeFrame < 0;
+    const isPremounted = relativeFrame < 0 && !heldByTransition;
 
     // Guard: Only seek if video has enough data loaded
     const canSeek = video.readyState >= 1;
@@ -540,14 +539,11 @@ const NativePreviewVideo: React.FC<{
     // frame reads. Pausing it would cause a play/pause fight every frame that
     // disrupts Chrome's video decode pipeline and produces visible judder.
     if (isPremounted) {
-      const heldByTransition = video.dataset.transitionHold === '1';
-      if (!heldByTransition) {
-        if (!video.paused) {
-          video.pause();
-        }
-        if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
-          video.currentTime = clampedTargetTime;
-        }
+      if (!video.paused) {
+        video.pause();
+      }
+      if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
+        video.currentTime = clampedTargetTime;
       }
       return;
     }
@@ -690,8 +686,9 @@ const NativePreviewVideo: React.FC<{
       const localFrame = globalFrame - sequenceFromRef.current;
       const relativeFrame = localFrame - sequenceFrameOffsetRef.current;
 
-      // During premount, just keep listening
-      if (relativeFrame < 0) {
+      // During premount, just keep listening unless this element is pinned for
+      // a transition and needs preroll handle frames before its nominal `from`.
+      if (relativeFrame < 0 && v.dataset.transitionHold !== '1') {
         handle = v.requestVideoFrameCallback(onVideoFrame);
         return;
       }

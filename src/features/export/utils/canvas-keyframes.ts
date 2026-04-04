@@ -104,6 +104,18 @@ interface CanvasRenderSettings {
   fps: number;
 }
 
+interface AnimatedTransformOptions {
+  suppressOutOfRangeVisualFade?: boolean;
+}
+
+function clampFrameToItemSpan(item: TimelineItem, frame: number): number {
+  if (item.durationInFrames <= 0) {
+    return item.from;
+  }
+  const endFrame = item.from + item.durationInFrames - 1;
+  return Math.max(item.from, Math.min(frame, endFrame));
+}
+
 /**
  * Get the animated transform for an item at a specific frame.
  *
@@ -117,19 +129,27 @@ export function getAnimatedTransform(
   item: TimelineItem,
   keyframes: ItemKeyframes | undefined,
   frame: number,
-  canvas: CanvasRenderSettings
+  canvas: CanvasRenderSettings,
+  options?: AnimatedTransformOptions,
 ): ResolvedTransform {
+  const suppressOutOfRangeVisualFade = options?.suppressOutOfRangeVisualFade === true;
+  const isOutsideItemSpan = frame < item.from || frame >= item.from + item.durationInFrames;
+  const resolvedFrame = suppressOutOfRangeVisualFade && isOutsideItemSpan
+    ? clampFrameToItemSpan(item, frame)
+    : frame;
   const resolved = resolveItemTransformAtFrame(item, {
     canvas: {
       width: canvas.width,
       height: canvas.height,
       fps: canvas.fps,
     },
-    frame,
+    frame: resolvedFrame,
     keyframes,
   });
 
-  const fadeOpacity = getVisualFadeOpacity(item, frame, canvas.fps);
+  const fadeOpacity = suppressOutOfRangeVisualFade && isOutsideItemSpan
+    ? 1
+    : getVisualFadeOpacity(item, resolvedFrame, canvas.fps);
   if (fadeOpacity >= 1) {
     return resolved;
   }

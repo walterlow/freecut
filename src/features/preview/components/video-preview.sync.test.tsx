@@ -16,6 +16,11 @@ import { useMaskEditorStore } from '../stores/mask-editor-store';
 const seekToMock = vi.fn<(frame: number) => void>();
 const playMock = vi.fn();
 const pauseMock = vi.fn();
+const compositionRuntimeMockState = vi.hoisted(() => ({
+  getBestDomVideoElementForItemMock: vi.fn(() => null),
+  transitionSafePlayMock: vi.fn(),
+}));
+const { getBestDomVideoElementForItemMock, transitionSafePlayMock } = compositionRuntimeMockState;
 const mockState = vi.hoisted(() => {
   const blobUrls = new Map<string, string>();
   const listeners = new Set<() => void>();
@@ -330,7 +335,8 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
-  getBestDomVideoElementForItem: vi.fn(() => null),
+  getBestDomVideoElementForItem: compositionRuntimeMockState.getBestDomVideoElementForItemMock,
+  transitionSafePlay: compositionRuntimeMockState.transitionSafePlayMock,
   ensureAudioContextResumed: vi.fn(),
   ensureBufferedAudioContextResumed: vi.fn(),
   ensurePitchCorrectedAudioContextResumed: vi.fn(),
@@ -428,6 +434,9 @@ describe('VideoPreview sync behavior', () => {
     seekToMock.mockReset();
     playMock.mockReset();
     pauseMock.mockReset();
+    getBestDomVideoElementForItemMock.mockReset();
+    getBestDomVideoElementForItemMock.mockReturnValue(null);
+    transitionSafePlayMock.mockReset();
     lastCompositionKeyframes = [];
     lastCompositionMediaSources = [];
     mockBlobUrls.clear();
@@ -1175,6 +1184,72 @@ describe('VideoPreview sync behavior', () => {
       expect(usePlaybackStore.getState().isPlaying).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
       expect(playMock).toHaveBeenCalled();
+    });
+  });
+
+  it('primes the current visible dom video element on play start', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-video',
+        label: 'Visible',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:visible-video',
+        sourceFps: 30,
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const domElement = {
+      readyState: 2,
+      paused: true,
+      duration: 10,
+      currentTime: 0,
+      playbackRate: 1,
+      load: vi.fn(),
+    } as unknown as HTMLVideoElement;
+
+    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => (
+      itemId === 'item-video' ? domElement : null
+    ));
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-video');
+      expect(domElement.currentTime).toBeCloseTo(24 / 30, 3);
+      expect(transitionSafePlayMock).toHaveBeenCalledWith(domElement, 1);
     });
   });
 

@@ -93,4 +93,46 @@ describe('resolveTransitionParticipantRenderState', () => {
     expect(result.transform.cornerRadius).toBe(12);
     expect(result.effects).toEqual([previewEffect]);
   });
+
+  it('does not zero opacity for a transition participant rendered before its nominal start', () => {
+    const item: VideoItem = {
+      id: 'video-2',
+      type: 'video',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 90,
+      label: 'Clip',
+      src: 'video.mp4',
+      fadeIn: 1,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'preview',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    };
+
+    const result = resolveTransitionParticipantRenderState(item, 80, 0, rctx);
+
+    expect(result.transform.opacity).toBe(1);
+  });
 });
