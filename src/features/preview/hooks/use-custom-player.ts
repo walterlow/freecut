@@ -100,16 +100,21 @@ export function useCustomPlayer(
 
     try {
       if (isPlaying && !wasPlaying) {
-        // Always resume from the store playhead, not the hover-preview (gray) playhead.
-        const { currentFrame, setPreviewFrame } = usePlaybackStore.getState();
+        // Resume from the frame currently visible to the user. If hover-scrub
+        // is active, promote that frame to the real playhead before playback.
+        const { currentFrame, previewFrame, setCurrentFrame, setPreviewFrame } = usePlaybackStore.getState();
+        const startFrame = previewFrame ?? currentFrame;
+        if (previewFrame !== null && currentFrame !== previewFrame) {
+          setCurrentFrame(previewFrame);
+        }
         const playerFrame = getPlayerFrame();
-        const needsSeek = playerFrame === null || Math.abs(playerFrame - currentFrame) > 1;
+        const needsSeek = playerFrame === null || Math.abs(playerFrame - startFrame) > 1;
         if (needsSeek) {
           ignorePlayerUpdatesRef.current = true;
-          onPlayerSeek?.(currentFrame);
-          playerRef.current.seekTo(currentFrame);
-          lastSyncedFrameRef.current = currentFrame;
-          lastSeekTargetRef.current = currentFrame;
+          onPlayerSeek?.(startFrame);
+          playerRef.current.seekTo(startFrame);
+          lastSyncedFrameRef.current = startFrame;
+          lastSeekTargetRef.current = startFrame;
         }
         setPreviewFrame(null);
 

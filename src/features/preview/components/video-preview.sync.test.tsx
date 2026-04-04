@@ -2138,7 +2138,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('on play start, clears previewFrame and seeks to current playhead frame', async () => {
+  it('on play start, promotes the visible preview frame to playback', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -2167,7 +2167,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().previewFrame).toBeNull();
-      expect(seekToMock).toHaveBeenCalledWith(72);
+      expect(usePlaybackStore.getState().currentFrame).toBe(120);
       expect(playMock).toHaveBeenCalled();
     });
   });

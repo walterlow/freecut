@@ -455,7 +455,7 @@ export const VideoPreview = memo(function VideoPreview({
         clearPendingFastScrubHandoff();
         return;
       }
-      if (playbackState.isPlaying || shouldPreferPlayerForPreview(playbackState.previewFrame)) {
+      if (shouldPreferPlayerForPreview(playbackState.previewFrame)) {
         hideFastScrubOverlay();
         return;
       }
@@ -3957,6 +3957,14 @@ export const VideoPreview = memo(function VideoPreview({
         lastBackwardRequestedFrameRef.current = null;
         scrubPrewarmQueueRef.current = [];
         scrubPrewarmQueuedSetRef.current.clear();
+        const playStartedFromScrub = (
+          !prev.isPlaying
+          && prev.previewFrame !== null
+          && showFastScrubOverlayRef.current
+        );
+        if (playStartedFromScrub) {
+          beginFastScrubHandoff(prev.previewFrame);
+        }
         const playbackTransitionState = getPlaybackTransitionStateForFrame(state.currentFrame);
         if (playbackTransitionState.shouldPrewarm) {
           void ensureFastScrubRenderer();
@@ -3965,6 +3973,10 @@ export const VideoPreview = memo(function VideoPreview({
           }
         }
         if (!(playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)) {
+          if (pendingFastScrubHandoffFrameRef.current !== null && showFastScrubOverlayRef.current) {
+            scheduleFastScrubHandoffCheck();
+            return;
+          }
           if (!playbackTransitionState.shouldPrewarm) {
             clearTransitionPlaybackSession();
           }
