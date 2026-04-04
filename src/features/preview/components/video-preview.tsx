@@ -1718,7 +1718,20 @@ export const VideoPreview = memo(function VideoPreview({
   const playbackTransitionFingerprint = useMemo(() => (
     transitions
       .map((transition) => (
-        `${transition.id}:${transition.type}:${transition.leftClipId}:${transition.rightClipId}:${transition.trackId ?? ''}:${transition.durationInFrames}:${transition.presentation ?? ''}:${transition.timing ?? ''}`
+        [
+          transition.id,
+          transition.type,
+          transition.leftClipId,
+          transition.rightClipId,
+          transition.trackId ?? '',
+          transition.durationInFrames,
+          transition.presentation ?? '',
+          transition.direction ?? '',
+          transition.timing ?? '',
+          transition.alignment ?? 0.5,
+          JSON.stringify(transition.params ?? {}),
+          JSON.stringify(transition.bezierPoints ?? null),
+        ].join(':')
       ))
       .join('|')
   ), [transitions]);
