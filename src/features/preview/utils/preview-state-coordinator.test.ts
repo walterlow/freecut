@@ -42,25 +42,6 @@ describe('resolvePreviewTransitionDecision', () => {
     expect(decision.preloadBurstTrigger).toBe('scrub_enter');
   });
 
-  it('marks current-frame seek skip during active scrub updates', () => {
-    const decision = resolvePreviewTransitionDecision({
-      prev: {
-        isPlaying: false,
-        previewFrame: 47,
-        currentFrame: 47,
-        isGizmoInteracting: false,
-      },
-      next: {
-        isPlaying: false,
-        previewFrame: 48,
-        currentFrame: 48,
-        isGizmoInteracting: false,
-      },
-    });
-
-    expect(decision.shouldSkipCurrentFrameSeek).toBe(true);
-  });
-
   it('detects paused short-seek burst trigger', () => {
     const decision = resolvePreviewTransitionDecision({
       prev: {

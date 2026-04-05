@@ -4,7 +4,6 @@ import {
   type PreviewInteractionMode,
 } from './preview-interaction-mode';
 import { getPreloadBurstTrigger, type PreloadBurstTrigger } from './preload-burst';
-import { shouldSkipCurrentFrameSeek } from './player-seek-guard';
 
 export interface PreviewRuntimeState {
   isPlaying: boolean;
@@ -29,7 +28,6 @@ export interface PreviewTransitionDecision {
   exitedPlaying: boolean;
   enteredScrubbing: boolean;
   exitedScrubbing: boolean;
-  shouldSkipCurrentFrameSeek: boolean;
   preloadBurstTrigger: PreloadBurstTrigger;
 }
 
@@ -82,10 +80,6 @@ export function resolvePreviewTransitionDecision(input: {
     exitedPlaying: next.mode !== 'playing' && prev.mode === 'playing',
     enteredScrubbing: next.mode === 'scrubbing' && prev.mode !== 'scrubbing',
     exitedScrubbing: next.mode !== 'scrubbing' && prev.mode === 'scrubbing',
-    shouldSkipCurrentFrameSeek: shouldSkipCurrentFrameSeek({
-      interactionMode: next.mode,
-      previewFrameChanged,
-    }),
     preloadBurstTrigger,
   };
 }

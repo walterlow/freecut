@@ -1,5 +1,3 @@
-import type { PreviewTransitionDecision } from './preview-state-coordinator';
-
 export interface PreviewPlayerPlaybackCommandInput {
   isPlaying: boolean;
   wasPlaying: boolean;
@@ -14,8 +12,6 @@ export type PreviewPlayerPlaybackCommand =
   | {
     kind: 'play';
     startFrame: number;
-    syncFrame: number;
-    shouldPromotePreviewFrame: boolean;
     shouldClearPreviewFrame: boolean;
     shouldSeekBeforePlay: boolean;
   };
@@ -28,11 +24,6 @@ export function resolvePreviewPlayerPlaybackCommand(
     return {
       kind: 'play',
       startFrame,
-      syncFrame: startFrame,
-      shouldPromotePreviewFrame: (
-        input.previewFrame !== null
-        && input.currentFrame !== input.previewFrame
-      ),
       shouldClearPreviewFrame: input.previewFrame !== null,
       shouldSeekBeforePlay: (
         input.playerFrame === null
@@ -48,50 +39,52 @@ export function resolvePreviewPlayerPlaybackCommand(
   return { kind: 'none' };
 }
 
-export interface PreviewPlayerCurrentFrameSyncInput {
-  transition: PreviewTransitionDecision;
-  lastSyncedFrame: number;
+export interface PreviewPlayerTransportSyncInput {
+  prevCurrentFrame: number;
+  currentFrame: number;
+  prevPreviewFrame: number | null;
+  previewFrame: number | null;
+  isGizmoInteracting: boolean;
+  isPlaying: boolean;
   playerFrame: number | null;
 }
 
-export type PreviewPlayerCurrentFrameSyncDecision =
+export type PreviewPlayerTransportSyncDecision =
   | { kind: 'none' }
-  | { kind: 'update_synced_frame'; nextSyncedFrame: number }
   | { kind: 'seek'; targetFrame: number };
 
-export function resolvePreviewPlayerCurrentFrameSyncDecision(
-  input: PreviewPlayerCurrentFrameSyncInput,
-): PreviewPlayerCurrentFrameSyncDecision {
-  if (!input.transition.currentFrameChanged) {
+export function resolvePreviewPlayerTransportSyncDecision(
+  input: PreviewPlayerTransportSyncInput,
+): PreviewPlayerTransportSyncDecision {
+  if (input.isGizmoInteracting) {
     return { kind: 'none' };
   }
 
-  const currentFrame = input.transition.next.currentFrame;
-  if (Math.abs(currentFrame - input.lastSyncedFrame) === 0) {
+  const currentFrameChanged = input.currentFrame !== input.prevCurrentFrame;
+  if (!currentFrameChanged) {
     return { kind: 'none' };
   }
 
-  if (input.transition.next.mode === 'playing') {
-    if (
-      input.playerFrame !== null
-      && Math.abs(input.playerFrame - currentFrame) <= 2
-    ) {
-      return {
-        kind: 'update_synced_frame',
-        nextSyncedFrame: currentFrame,
-      };
-    }
+  const previewFrameChanged = input.previewFrame !== input.prevPreviewFrame;
+  const enteredAtomicScrub = (
+    previewFrameChanged
+    && input.previewFrame !== null
+    && input.previewFrame === input.currentFrame
+  );
+  if (enteredAtomicScrub) {
+    return { kind: 'none' };
   }
 
-  if (input.transition.shouldSkipCurrentFrameSeek) {
-    return {
-      kind: 'update_synced_frame',
-      nextSyncedFrame: currentFrame,
-    };
+  const toleranceFrames = input.isPlaying ? 2 : 0;
+  if (
+    input.playerFrame !== null
+    && Math.abs(input.playerFrame - input.currentFrame) <= toleranceFrames
+  ) {
+    return { kind: 'none' };
   }
 
   return {
     kind: 'seek',
-    targetFrame: currentFrame,
+    targetFrame: input.currentFrame,
   };
 }

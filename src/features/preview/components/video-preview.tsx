@@ -438,10 +438,10 @@ export const VideoPreview = memo(function VideoPreview({
     showRendererSurface();
   }, [showRendererSurface]);
 
-  // Custom Player integration (hook handles bidirectional sync)
+  // Player integration for transport/audio only.
   const { ignorePlayerUpdatesRef } = useCustomPlayer(
     playerRef,
-    isGizmoInteractingRef,
+    isGizmoInteracting,
     trackPlayerSeek,
   );
 
@@ -4554,14 +4554,6 @@ export const VideoPreview = memo(function VideoPreview({
     resolvePendingSeekLatency,
   ]);
 
-  // Handle play state change from player
-  const handlePlayStateChange = useCallback((playing: boolean) => {
-    if (playing) {
-      usePlaybackStore.getState().play();
-    } else {
-      usePlaybackStore.getState().pause();
-    }
-  }, []);
   const latestRenderSourceSwitch = perfPanelSnapshot?.renderSourceHistory[
     perfPanelSnapshot.renderSourceHistory.length - 1
   ] ?? null;
@@ -4614,7 +4606,6 @@ export const VideoPreview = memo(function VideoPreview({
                 height: '100%',
               }}
               onFrameChange={handleFrameChange}
-              onPlayStateChange={handlePlayStateChange}
             >
               <MainComposition {...inputProps} />
             </Player>

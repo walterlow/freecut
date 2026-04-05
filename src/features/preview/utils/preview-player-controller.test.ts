@@ -1,37 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { PreviewTransitionDecision } from './preview-state-coordinator';
 import {
-  resolvePreviewPlayerCurrentFrameSyncDecision,
   resolvePreviewPlayerPlaybackCommand,
+  resolvePreviewPlayerTransportSyncDecision,
 } from './preview-player-controller';
-
-function createTransitionDecision(
-  overrides?: Partial<PreviewTransitionDecision>,
-): PreviewTransitionDecision {
-  return {
-    prev: {
-      mode: 'paused',
-      anchorFrame: 100,
-      currentFrame: 100,
-      previewFrame: null,
-    },
-    next: {
-      mode: 'paused',
-      anchorFrame: 100,
-      currentFrame: 100,
-      previewFrame: null,
-    },
-    currentFrameChanged: false,
-    previewFrameChanged: false,
-    enteredPlaying: false,
-    exitedPlaying: false,
-    enteredScrubbing: false,
-    exitedScrubbing: false,
-    shouldSkipCurrentFrameSeek: false,
-    preloadBurstTrigger: 'none',
-    ...overrides,
-  };
-}
 
 describe('resolvePreviewPlayerPlaybackCommand', () => {
   it('promotes the hovered preview frame and seeks before playback when needed', () => {
@@ -44,8 +15,6 @@ describe('resolvePreviewPlayerPlaybackCommand', () => {
     })).toEqual({
       kind: 'play',
       startFrame: 100,
-      syncFrame: 100,
-      shouldPromotePreviewFrame: true,
       shouldClearPreviewFrame: true,
       shouldSeekBeforePlay: true,
     });
@@ -61,8 +30,6 @@ describe('resolvePreviewPlayerPlaybackCommand', () => {
     })).toEqual({
       kind: 'play',
       startFrame: 100,
-      syncFrame: 100,
-      shouldPromotePreviewFrame: true,
       shouldClearPreviewFrame: true,
       shouldSeekBeforePlay: false,
     });
@@ -79,64 +46,51 @@ describe('resolvePreviewPlayerPlaybackCommand', () => {
   });
 });
 
-describe('resolvePreviewPlayerCurrentFrameSyncDecision', () => {
-  it('updates the synced frame instead of seeking while active playback is already in tolerance', () => {
-    const transition = createTransitionDecision({
-      next: {
-        mode: 'playing',
-        anchorFrame: 120,
-        currentFrame: 120,
-        previewFrame: null,
-      },
-      currentFrameChanged: true,
-    });
-
-    expect(resolvePreviewPlayerCurrentFrameSyncDecision({
-      transition,
-      lastSyncedFrame: 100,
-      playerFrame: 119,
-    })).toEqual({
-      kind: 'update_synced_frame',
-      nextSyncedFrame: 120,
-    });
+describe('resolvePreviewPlayerTransportSyncDecision', () => {
+  it('skips transport seeks for the atomic scrub-frame update', () => {
+    expect(resolvePreviewPlayerTransportSyncDecision({
+      prevCurrentFrame: 100,
+      currentFrame: 120,
+      prevPreviewFrame: null,
+      previewFrame: 120,
+      isGizmoInteracting: false,
+      isPlaying: false,
+      playerFrame: 100,
+    })).toEqual({ kind: 'none' });
   });
 
-  it('updates the synced frame instead of seeking when the current-frame seek guard is active', () => {
-    const transition = createTransitionDecision({
-      next: {
-        mode: 'gizmo_dragging',
-        anchorFrame: 140,
-        currentFrame: 140,
-        previewFrame: 150,
-      },
-      currentFrameChanged: true,
-      shouldSkipCurrentFrameSeek: true,
-    });
-
-    expect(resolvePreviewPlayerCurrentFrameSyncDecision({
-      transition,
-      lastSyncedFrame: 120,
+  it('skips transport seeks while gizmo interaction is active', () => {
+    expect(resolvePreviewPlayerTransportSyncDecision({
+      prevCurrentFrame: 120,
+      currentFrame: 140,
+      prevPreviewFrame: null,
+      previewFrame: null,
+      isGizmoInteracting: true,
+      isPlaying: false,
       playerFrame: 80,
-    })).toEqual({
-      kind: 'update_synced_frame',
-      nextSyncedFrame: 140,
-    });
+    })).toEqual({ kind: 'none' });
   });
 
-  it('seeks to the new current frame when paused jumps are external', () => {
-    const transition = createTransitionDecision({
-      next: {
-        mode: 'paused',
-        anchorFrame: 180,
-        currentFrame: 180,
-        previewFrame: null,
-      },
-      currentFrameChanged: true,
-    });
+  it('skips playback seeks when the player is already within tolerance', () => {
+    expect(resolvePreviewPlayerTransportSyncDecision({
+      prevCurrentFrame: 100,
+      currentFrame: 120,
+      prevPreviewFrame: null,
+      previewFrame: null,
+      isGizmoInteracting: false,
+      isPlaying: true,
+      playerFrame: 119,
+    })).toEqual({ kind: 'none' });
+  });
 
-    expect(resolvePreviewPlayerCurrentFrameSyncDecision({
-      transition,
-      lastSyncedFrame: 100,
+  it('seeks to the committed transport frame when preview state is stale', () => {
+    expect(resolvePreviewPlayerTransportSyncDecision({
+      prevCurrentFrame: 120,
+      currentFrame: 180,
+      prevPreviewFrame: 140,
+      previewFrame: 140,
+      isGizmoInteracting: false,
+      isPlaying: false,
       playerFrame: 100,
     })).toEqual({
       kind: 'seek',
