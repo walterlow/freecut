@@ -100,6 +100,8 @@ describe('renderDirectVideoGpuFrame', () => {
     const ctx = {
       clearRect: vi.fn(),
       drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -112,7 +114,10 @@ describe('renderDirectVideoGpuFrame', () => {
       video,
       [createGpuEffect('effect-1', 0.5)],
       { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
       { width: 1280, height: 720 },
+      1,
       pipeline,
     );
 
@@ -132,6 +137,8 @@ describe('renderDirectVideoGpuFrame', () => {
           },
         ],
         { x: 10, y: 20, width: 300, height: 200 },
+        { x: 10, y: 20, width: 300, height: 200 },
+        { left: 0, right: 0, top: 0, bottom: 0 },
         1280,
         720,
       );
@@ -142,6 +149,8 @@ describe('renderDirectVideoGpuFrame', () => {
     const ctx = {
       clearRect: vi.fn(),
       drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -154,7 +163,10 @@ describe('renderDirectVideoGpuFrame', () => {
       video,
       [createGpuEffect('effect-1', 0.5)],
       { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
       { width: 1280, height: 720 },
+      1,
       pipeline,
     );
 
@@ -168,6 +180,8 @@ describe('renderDirectVideoGpuFrame', () => {
     const ctx = {
       clearRect: vi.fn(),
       drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -181,7 +195,10 @@ describe('renderDirectVideoGpuFrame', () => {
       video,
       [],
       { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
       { width: 1280, height: 720 },
+      1,
       pipeline,
     );
 
@@ -190,6 +207,8 @@ describe('renderDirectVideoGpuFrame', () => {
       .toHaveBeenCalledWith(
         video,
         { x: 10, y: 20, width: 300, height: 200 },
+        { x: 10, y: 20, width: 300, height: 200 },
+        { left: 0, right: 0, top: 0, bottom: 0 },
         1280,
         720,
       );
@@ -197,5 +216,117 @@ describe('renderDirectVideoGpuFrame', () => {
       .not.toHaveBeenCalled();
     expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
     expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
+  });
+
+  it('flattens opacity into the effect canvas when batching would otherwise defer', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      globalAlpha: 1,
+      canvas: { width: 1280, height: 720 },
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
+      { width: 1280, height: 720 },
+      0.5,
+      pipeline,
+    );
+
+    expect(deferred).toBeNull();
+    expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
+    expect(ctx.save).toHaveBeenCalled();
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
+    expect(ctx.restore).toHaveBeenCalled();
+  });
+
+  it('forwards a cropped visible rect without rescaling the media rect', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => false),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 100, y: 80, width: 400, height: 300 },
+      { x: 140, y: 110, width: 320, height: 240 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
+      { width: 1280, height: 720 },
+      1,
+      pipeline,
+    );
+
+    expect((pipeline as { renderVideoToCanvas: ReturnType<typeof vi.fn> }).renderVideoToCanvas)
+      .toHaveBeenCalledWith(
+        video,
+        { x: 100, y: 80, width: 400, height: 300 },
+        { x: 140, y: 110, width: 320, height: 240 },
+        { left: 0, right: 0, top: 0, bottom: 0 },
+        1280,
+        720,
+      );
+  });
+
+  it('forwards crop feather widths to the importExternalTexture path', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => false),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 100, y: 80, width: 400, height: 300 },
+      { x: 120, y: 96, width: 360, height: 268 },
+      { left: 20, right: 12, top: 16, bottom: 24 },
+      { width: 1280, height: 720 },
+      1,
+      pipeline,
+    );
+
+    expect((pipeline as { renderVideoToCanvas: ReturnType<typeof vi.fn> }).renderVideoToCanvas)
+      .toHaveBeenCalledWith(
+        video,
+        { x: 100, y: 80, width: 400, height: 300 },
+        { x: 120, y: 96, width: 360, height: 268 },
+        { left: 20, right: 12, top: 16, bottom: 24 },
+        1280,
+        720,
+      );
   });
 });

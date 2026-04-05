@@ -94,8 +94,11 @@ export function renderDirectVideoGpuFrame(
   ctx: OffscreenCanvasRenderingContext2D,
   video: HTMLVideoElement,
   effects: ItemEffect[],
-  destRect: { x: number; y: number; width: number; height: number },
+  mediaRect: { x: number; y: number; width: number; height: number },
+  visibleRect: { x: number; y: number; width: number; height: number },
+  featherInsets: { left: number; right: number; top: number; bottom: number },
   canvas: EffectCanvasSettings,
+  opacity: number,
   gpuPipeline?: EffectsPipeline | null,
 ): OffscreenCanvas | null {
   if (!gpuPipeline) return null;
@@ -107,24 +110,35 @@ export function renderDirectVideoGpuFrame(
       ? gpuPipeline.applyEffectsToVideo(
         video,
         gpuInstances,
-        destRect,
+        mediaRect,
+        visibleRect,
+        featherInsets,
         canvas.width,
         canvas.height,
       )
       : gpuPipeline.renderVideoToCanvas(
         video,
-        destRect,
+        mediaRect,
+        visibleRect,
+        featherInsets,
         canvas.width,
         canvas.height,
       );
     if (!result) {
       return null;
     }
-    if (gpuPipeline.isBatching()) {
+    if (gpuPipeline.isBatching() && opacity === 1) {
       return result;
     }
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(result, 0, 0);
+    if (opacity !== 1) {
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(result, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(result, 0, 0);
+    }
     return null;
   } catch (error) {
     log.warn('GPU video importExternalTexture path failed, falling back', error);

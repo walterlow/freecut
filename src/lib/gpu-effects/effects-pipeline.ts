@@ -42,25 +42,53 @@ fn blitFragment(input: VertexOutput) -> @location(0) vec4f {
  * ping texture with positioning. Uses importExternalTexture for zero-copy
  * GPU access to the video decoder's output buffer.
  *
- * destRect uniform: (left, top, right, bottom) in UV space [0..1].
- * Pixels outside the rect are transparent; pixels inside sample the video.
+ * mediaRect uniform: (left, top, right, bottom) in UV space [0..1].
+ * visibleRect uniform: cropped visible region in UV space [0..1].
+ * featherInsets uniform: left/right/top/bottom feather widths in UV space.
+ * Pixels outside the visible rect are transparent; pixels inside sample the
+ * video using mediaRect for placement so crop does not rescale the content.
+ * Feathered crop edges fade alpha inside visibleRect without stretching.
  */
 const IMPORT_EXTERNAL_SHADER = /* wgsl */ `
 ${FULLSCREEN_VERTEX}
+struct ImportUniforms {
+  mediaRect: vec4f,
+  visibleRect: vec4f,
+  featherInsets: vec4f,
+};
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var videoTex: texture_external;
-@group(0) @binding(2) var<uniform> destRect: vec4f;
+@group(0) @binding(2) var<uniform> u: ImportUniforms;
 @fragment
 fn importFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = input.uv;
-  let r = destRect;
-  if (uv.x < r.x || uv.x > r.z || uv.y < r.y || uv.y > r.w) {
-    return vec4f(0.0);
+  let mediaRect = u.mediaRect;
+  let visibleRect = u.visibleRect;
+  let featherInsets = u.featherInsets;
+  let mediaSize = max(mediaRect.zw - mediaRect.xy, vec2f(0.0001, 0.0001));
+  let rawVideoUv = (uv - mediaRect.xy) / mediaSize;
+  let videoUv = clamp(rawVideoUv, vec2f(0.0), vec2f(1.0));
+  let inMedia = uv.x >= mediaRect.x && uv.x <= mediaRect.z && uv.y >= mediaRect.y && uv.y <= mediaRect.w;
+  let inVisible = uv.x >= visibleRect.x && uv.x <= visibleRect.z && uv.y >= visibleRect.y && uv.y <= visibleRect.w;
+  var featherMask = 1.0;
+  if (featherInsets.x > 0.0) {
+    featherMask = featherMask * smoothstep(visibleRect.x, min(visibleRect.x + featherInsets.x, visibleRect.z), uv.x);
   }
-  let videoUv = (uv - r.xy) / (r.zw - r.xy);
-  return textureSampleBaseClampToEdge(videoTex, texSampler, videoUv);
+  if (featherInsets.y > 0.0) {
+    featherMask = featherMask * (1.0 - smoothstep(max(visibleRect.z - featherInsets.y, visibleRect.x), visibleRect.z, uv.x));
+  }
+  if (featherInsets.z > 0.0) {
+    featherMask = featherMask * smoothstep(visibleRect.y, min(visibleRect.y + featherInsets.z, visibleRect.w), uv.y);
+  }
+  if (featherInsets.w > 0.0) {
+    featherMask = featherMask * (1.0 - smoothstep(max(visibleRect.w - featherInsets.w, visibleRect.y), visibleRect.w, uv.y));
+  }
+  let visibleMask = select(0.0, featherMask, inMedia && inVisible);
+  return textureSampleBaseClampToEdge(videoTex, texSampler, videoUv) * visibleMask;
 }
 `;
+
+const IMPORT_UNIFORM_BYTE_SIZE = 48;
 
 export class EffectsPipeline {
   private device: GPUDevice;
@@ -205,6 +233,13 @@ export class EffectsPipeline {
         size: 16, // vec4f = 4 floats × 4 bytes
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
       });
+      if (this.importUniformBuffer.size !== IMPORT_UNIFORM_BYTE_SIZE) {
+        this.importUniformBuffer.destroy();
+        this.importUniformBuffer = this.device.createBuffer({
+          size: IMPORT_UNIFORM_BYTE_SIZE,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+      }
     } catch {
       // importExternalTexture may not be supported — fall back to copyExternalImageToTexture path
       this.importPipeline = null;
@@ -645,14 +680,17 @@ export class EffectsPipeline {
   /**
    * Apply effects directly from an HTMLVideoElement via importExternalTexture.
    * Zero-copy: the GPU reads directly from the video decoder's output buffer.
-   * Positions the video at `destRect` on a canvas of `canvasWidth × canvasHeight`.
+   * Positions the video using `mediaRect` and `visibleRect` on a canvas of
+   * `canvasWidth × canvasHeight`.
    *
    * Falls back to null if importExternalTexture is not supported or fails.
    */
   private renderImportedVideo(
     video: HTMLVideoElement,
     enabledEffects: GpuEffectInstance[],
-    destRect: { x: number; y: number; width: number; height: number },
+    mediaRect: { x: number; y: number; width: number; height: number },
+    visibleRect: { x: number; y: number; width: number; height: number },
+    featherInsets: { left: number; right: number; top: number; bottom: number },
     canvasWidth: number,
     canvasHeight: number,
   ): OffscreenCanvas | null {
@@ -695,14 +733,21 @@ export class EffectsPipeline {
       return null; // importExternalTexture failed — caller should fall back
     }
 
-    // Compute destination rect in UV space [0..1]
-    const uvRect = new Float32Array([
-      destRect.x / w,
-      destRect.y / h,
-      (destRect.x + destRect.width) / w,
-      (destRect.y + destRect.height) / h,
+    const importUniforms = new Float32Array([
+      mediaRect.x / w,
+      mediaRect.y / h,
+      (mediaRect.x + mediaRect.width) / w,
+      (mediaRect.y + mediaRect.height) / h,
+      visibleRect.x / w,
+      visibleRect.y / h,
+      (visibleRect.x + visibleRect.width) / w,
+      (visibleRect.y + visibleRect.height) / h,
+      featherInsets.left / w,
+      featherInsets.right / w,
+      featherInsets.top / h,
+      featherInsets.bottom / h,
     ]);
-    this.device.queue.writeBuffer(this.importUniformBuffer, 0, uvRect.buffer);
+    this.device.queue.writeBuffer(this.importUniformBuffer, 0, importUniforms.buffer);
 
     const commandEncoder = this.device.createCommandEncoder();
 
@@ -776,29 +821,34 @@ export class EffectsPipeline {
    */
   renderVideoToCanvas(
     video: HTMLVideoElement,
-    destRect: { x: number; y: number; width: number; height: number },
+    mediaRect: { x: number; y: number; width: number; height: number },
+    visibleRect: { x: number; y: number; width: number; height: number },
+    featherInsets: { left: number; right: number; top: number; bottom: number },
     canvasWidth: number,
     canvasHeight: number,
   ): OffscreenCanvas | null {
-    return this.renderImportedVideo(video, [], destRect, canvasWidth, canvasHeight);
+    return this.renderImportedVideo(video, [], mediaRect, visibleRect, featherInsets, canvasWidth, canvasHeight);
   }
 
   /**
    * Apply effects directly from an HTMLVideoElement via importExternalTexture.
    * Zero-copy: the GPU reads directly from the video decoder's output buffer.
-   * Positions the video at `destRect` on a canvas of `canvasWidth Ã— canvasHeight`.
+   * Positions the video using `mediaRect` and `visibleRect` on a canvas of
+   * `canvasWidth × canvasHeight`.
    *
    * Falls back to null if importExternalTexture is not supported or fails.
    */
   applyEffectsToVideo(
     video: HTMLVideoElement,
     effects: GpuEffectInstance[],
-    destRect: { x: number; y: number; width: number; height: number },
+    mediaRect: { x: number; y: number; width: number; height: number },
+    visibleRect: { x: number; y: number; width: number; height: number },
+    featherInsets: { left: number; right: number; top: number; bottom: number },
     canvasWidth: number,
     canvasHeight: number,
   ): OffscreenCanvas | null {
     const enabled = effects.filter(e => e.enabled);
-    return this.renderImportedVideo(video, enabled, destRect, canvasWidth, canvasHeight);
+    return this.renderImportedVideo(video, enabled, mediaRect, visibleRect, featherInsets, canvasWidth, canvasHeight);
   }
 
   getDevice(): GPUDevice {

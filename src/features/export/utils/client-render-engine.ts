@@ -26,7 +26,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
-import { calculateContainedRect, hasMediaCrop } from '@/shared/utils/media-crop';
+import { calculateMediaCropLayout, hasMediaCrop } from '@/shared/utils/media-crop';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveMediaUrl } from '@/features/export/deps/media-library';
 import { VideoSourcePool } from '@/features/export/deps/player-contract';
@@ -1304,13 +1304,13 @@ export async function createCompositionRenderer(
             return null;
           }
 
-          // Keep the direct importExternalTexture path on the narrowest safe
-          // geometry for now. This avoids reintroducing the edge/crop/rotation
-          // mismatches we saw when trying to generalize it across all video cases.
-          if (transform.rotation !== 0 || transform.opacity !== 1 || transform.cornerRadius !== 0) {
+          // Keep the direct importExternalTexture path on a narrow, well-tested
+          // geometry envelope. Crop and feather are safe now, but rotation,
+          // corner shaping, and perspective still fall back to the general path.
+          if (transform.rotation !== 0 || transform.cornerRadius !== 0) {
             return null;
           }
-          if (effectiveItem.cornerPin || hasMediaCrop(effectiveItem.crop)) {
+          if (effectiveItem.cornerPin) {
             return null;
           }
 
@@ -1368,28 +1368,47 @@ export async function createCompositionRenderer(
             return null;
           }
 
-          const containedRect = calculateContainedRect(
+          const cropLayout = calculateMediaCropLayout(
             video.videoWidth,
             video.videoHeight,
             transform.width,
             transform.height,
+            effectiveItem.crop,
           );
           const containerLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
           const containerTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
-          const destRect = {
-            x: containerLeft + containedRect.x,
-            y: containerTop + containedRect.y,
-            width: containedRect.width,
-            height: containedRect.height,
+          const mediaRect = {
+            x: containerLeft + cropLayout.mediaRect.x,
+            y: containerTop + cropLayout.mediaRect.y,
+            width: cropLayout.mediaRect.width,
+            height: cropLayout.mediaRect.height,
           };
+          const visibleRect = {
+            x: containerLeft + cropLayout.viewportRect.x,
+            y: containerTop + cropLayout.viewportRect.y,
+            width: cropLayout.viewportRect.width,
+            height: cropLayout.viewportRect.height,
+          };
+          const featherInsets = {
+            left: cropLayout.featherPixels.left,
+            right: cropLayout.featherPixels.right,
+            top: cropLayout.featherPixels.top,
+            bottom: cropLayout.featherPixels.bottom,
+          };
+          if (visibleRect.width <= 0 || visibleRect.height <= 0) {
+            return null;
+          }
 
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
           const deferredGpuCanvas = renderDirectVideoGpuFrame(
             effectCtx,
             video,
             combinedEffects,
-            destRect,
+            mediaRect,
+            visibleRect,
+            featherInsets,
             canvasSettings,
+            transform.opacity,
             itemRenderContext.gpuPipeline,
           );
           const source = deferredGpuCanvas ?? effectCanvas;
