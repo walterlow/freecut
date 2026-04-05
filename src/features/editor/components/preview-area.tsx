@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { ErrorBoundary } from '@/components/error-boundary';
 
 const LazyFlowStage = lazy(() =>
-  import('@/features/generative/contracts/editor').then((m) => ({ default: m.FlowStage }))
+  import('@/features/editor/deps/generative').then((m) => ({ default: m.FlowStage }))
 );
 
 interface PreviewAreaProps {

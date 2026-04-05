@@ -1,7 +1,7 @@
 import { useCallback, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Circle, Square } from 'lucide-react';
-import { useLiveSessionStore } from '@/features/live-ai/stores/live-session-store';
+import { useLiveSessionStore } from '../deps/live-ai';
 
 /**
  * "Record AI Video" button positioned above the timeline.

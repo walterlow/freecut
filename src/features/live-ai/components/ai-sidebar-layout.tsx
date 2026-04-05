@@ -3,15 +3,13 @@ import { Separator } from '@/components/ui/separator';
 import { Cpu, Wifi, WifiOff } from 'lucide-react';
 import { AudioWaveformMonitor } from './audio-waveform-monitor';
 import { ScopeDynamicParams } from './scope-dynamic-params';
-import { MasterPromptBox } from '@/features/prompt-engine/contracts/editor';
-import { PromptSnapButton } from '@/features/prompt-engine/contracts/editor';
-import { usePromptStore } from '@/features/prompt-engine/contracts/editor';
+import { MasterPromptBox, PromptSnapButton, usePromptStore } from '../deps/prompt-engine';
 import { useLiveSessionStore } from '../stores/live-session-store';
 import { checkScopeHealth, getScopeHardwareInfo } from '../api/scope-health';
 import { getScopePipelineSchemas, type PipelineParamSchema } from '../api/scope-pipeline';
 import { updateScopePrompt, updateScopePromptThrottled } from '../api/scope-parameters';
 import { updateDaydreamPrompt } from '../api/daydream-update-prompt';
-import { generatePromptFromScope } from '@/features/prompt-engine/services/scope-prompt';
+import { generatePromptFromScope } from '../deps/prompt-engine';
 
 interface AiSidebarLayoutProps {
   localStream: MediaStream | null;

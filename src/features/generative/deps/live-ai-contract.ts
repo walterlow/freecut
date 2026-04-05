@@ -1,1 +1,1 @@
-export { useLiveSessionStore } from '@/features/live-ai/stores/live-session-store';
+export { useLiveSessionStore } from '@/features/live-ai/deps/generative-public';

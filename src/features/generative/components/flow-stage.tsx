@@ -3,7 +3,7 @@ import { NodeStart } from './node-start';
 import { NodeBridge } from './node-bridge';
 import { NodeEnd } from './node-end';
 import { RenderControls } from './render-controls';
-import { useLiveSessionStore } from '@/features/live-ai/stores/live-session-store';
+import { useLiveSessionStore } from '../deps/live-ai';
 
 /**
  * Flow Keyframe Stage (Zone 2).
