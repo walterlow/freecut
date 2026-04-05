@@ -71,10 +71,6 @@ vi.mock('@/features/composition-runtime/deps/player', async () => {
   };
 });
 
-vi.mock('../hooks/use-transition-participant-sync', () => ({
-  useTransitionParticipantSync: vi.fn(),
-}));
-
 vi.mock('./item', async () => {
   const { useItemKeyframesFromContext } = await import('../contexts/keyframes-context');
 

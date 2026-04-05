@@ -33,27 +33,21 @@ describe('frame-source-policy', () => {
     expect(decision.driftThreshold).toBe(0.2);
   });
 
-  it('widens DOM video tolerance when transition hold is active', () => {
+  it('widens DOM video tolerance during transition rendering', () => {
     const decision = resolvePreviewDomVideoDrawDecision({
-      domVideo: makeDomVideo({
-        currentTime: 10.8,
-        dataset: { transitionHold: '1' } as DOMStringMap,
-      }),
+      domVideo: makeDomVideo({ currentTime: 10.8 }),
       sourceTime: 10,
       speed: 1,
-      isRenderingTransition: false,
+      isRenderingTransition: true,
     });
 
     expect(decision.shouldDraw).toBe(true);
     expect(decision.driftThreshold).toBe(1.0);
   });
 
-  it('still draws a held DOM video during transition rendering even when drift is large', () => {
+  it('still draws a ready DOM video during transition rendering even when drift is large', () => {
     const decision = resolvePreviewDomVideoDrawDecision({
-      domVideo: makeDomVideo({
-        currentTime: 13,
-        dataset: { transitionHold: '1' } as DOMStringMap,
-      }),
+      domVideo: makeDomVideo({ currentTime: 13 }),
       sourceTime: 10,
       speed: 1,
       isRenderingTransition: true,

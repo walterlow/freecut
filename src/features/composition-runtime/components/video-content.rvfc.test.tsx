@@ -158,7 +158,7 @@ vi.mock('./video-audio-context', () => ({
   ensureAudioContextResumed: testState.ensureAudioContextResumedMock,
 }));
 
-describe('VideoContent RVFC handoff', () => {
+describe('VideoContent RVFC playback', () => {
   beforeEach(() => {
     vi.resetModules();
     installRvfcMocks();
@@ -182,13 +182,13 @@ describe('VideoContent RVFC handoff', () => {
     testState.clockState.currentFrame = 0;
   });
 
-  it('starts RVFC when shared transition sync releases without a synchronous reseek', async () => {
+  it('starts RVFC during playback without a synchronous reseek', async () => {
     const pooledElement = createMockVideoElement(0);
     testState.acquireForClipMock.mockReturnValue(pooledElement);
 
     const { VideoContent } = await import('./video-content');
 
-    const { rerender } = render(
+    render(
       <VideoContent
         item={{
           id: 'clip-a',
@@ -198,7 +198,6 @@ describe('VideoContent RVFC handoff', () => {
           durationInFrames: 90,
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
-          _sharedTransitionSync: true,
         }}
         muted={false}
         safeTrimBefore={0}
@@ -210,44 +209,20 @@ describe('VideoContent RVFC handoff', () => {
     await waitFor(() => {
       expect(testState.acquireForClipMock).toHaveBeenCalledTimes(1);
       expect(pooledElement.play).toHaveBeenCalled();
-    });
-
-    testState.rvfcRequestMock.mockClear();
-    pooledElement.__currentTimeAssignments = [];
-
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-a',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          src: 'blob:test',
-          _poolClipId: 'group-origin-1',
-          _sharedTransitionSync: false,
-        }}
-        muted={false}
-        safeTrimBefore={0}
-        playbackRate={1.5}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
       expect(testState.rvfcRequestMock).toHaveBeenCalledTimes(1);
     });
 
+    expect(testState.ensureAudioContextResumedMock).toHaveBeenCalled();
     expect(pooledElement.__currentTimeAssignments).toEqual([]);
   });
 
-  it('uses RVFC rate correction after transition sync handoff for moderate drift', async () => {
+  it('uses RVFC rate correction for moderate drift without a hard seek', async () => {
     const pooledElement = createMockVideoElement(0);
     testState.acquireForClipMock.mockReturnValue(pooledElement);
 
     const { VideoContent } = await import('./video-content');
 
-    const { rerender } = render(
+    render(
       <VideoContent
         item={{
           id: 'clip-a',
@@ -257,7 +232,6 @@ describe('VideoContent RVFC handoff', () => {
           durationInFrames: 90,
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
-          _sharedTransitionSync: true,
         }}
         muted={false}
         safeTrimBefore={0}
@@ -267,33 +241,6 @@ describe('VideoContent RVFC handoff', () => {
     );
 
     await waitFor(() => {
-      expect(pooledElement.play).toHaveBeenCalled();
-    });
-
-    testState.rvfcRequestMock.mockClear();
-    pooledElement.__currentTimeAssignments = [];
-
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-a',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          src: 'blob:test',
-          _poolClipId: 'group-origin-1',
-          _sharedTransitionSync: false,
-        }}
-        muted={false}
-        safeTrimBefore={0}
-        playbackRate={1.5}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(testState.rvfcRequestMock).toHaveBeenCalledTimes(1);
       expect(testState.lastRvfcCallback).not.toBeNull();
     });
 

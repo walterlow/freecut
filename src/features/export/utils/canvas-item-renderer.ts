@@ -505,7 +505,7 @@ async function renderVideoItem(
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
   // Preview rendering now stays on decoded renderer inputs instead of sampling
   // live DOM video elements. That keeps scrub, paused, and playback visuals on
-  // the same composition path and avoids bridge-only mismatches.
+  // the same composition path and avoids transition-specific mismatches.
   const hasDomVideo = false;
 
   const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({

@@ -10,14 +10,14 @@ import type { VideoItem } from '@/types/timeline';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 import { useMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
 
-// Track video elements that have been connected to Web Audio API
-// A video element can only be connected to ONE MediaElementSourceNode ever
+// Track video elements that have been connected to Web Audio API.
+// A video element can only be connected to ONE MediaElementSourceNode ever.
 const connectedVideoElements = new WeakSet<HTMLVideoElement>();
-// Store gain nodes by video element for volume updates
+// Store gain nodes by video element for volume updates.
 const videoGainNodes = new WeakMap<HTMLVideoElement, GainNode>();
 const videoAudioContexts = new WeakMap<HTMLVideoElement, AudioContext>();
 
-// Short ramp to prevent audio clicks/pops on gain changes (matches custom decoder)
+// Short ramp to prevent audio clicks/pops on gain changes (matches custom decoder).
 const GAIN_RAMP_SECONDS = 0.008;
 let sharedVideoAudioContext: AudioContext | null = null;
 
@@ -51,7 +51,7 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
       gainNode.gain.setValueAtTime(gainNode.gain.value, now);
       gainNode.gain.linearRampToValueAtTime(Math.max(0, audioVolume), now + GAIN_RAMP_SECONDS);
     } else if (gainNode) {
-      // Context not running yet — direct assignment is safe (no audio output)
+      // Context not running yet — direct assignment is safe (no audio output).
       gainNode.gain.value = audioVolume;
     }
     if (audioContext?.state === 'suspended') {
@@ -75,7 +75,7 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
     }
 
     const gainNode = audioContext.createGain();
-    // Start at 0 and ramp to target to prevent click on initial connection
+    // Start at 0 and ramp to target to prevent click on initial connection.
     gainNode.gain.value = 0;
     const sourceNode = audioContext.createMediaElementSource(video);
     sourceNode.connect(gainNode);
@@ -88,7 +88,7 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
     if (audioContext.state === 'suspended') {
       audioContext.resume();
     }
-    // Ramp gain after connection is established and context is resuming
+    // Ramp gain after connection is established and context is resuming.
     const now = audioContext.currentTime;
     gainNode.gain.setValueAtTime(0, now);
     gainNode.gain.linearRampToValueAtTime(Math.max(0, audioVolume), now + GAIN_RAMP_SECONDS);
@@ -114,66 +114,6 @@ export function ensureAudioContextResumed(): void {
 export { connectedVideoElements, videoAudioContexts };
 
 /**
- * Mute a video element's audio via Web Audio gain node. Called when pinning
- * elements for a transition — the composition's crossfade audio handles mixing,
- * so the DOM element must be silent to prevent doubling.
- * Operates directly on the gain node, bypassing React state for zero latency.
- */
-export function muteTransitionElement(video: HTMLVideoElement): void {
-  const gainNode = videoGainNodes.get(video);
-  const audioContext = videoAudioContexts.get(video);
-  if (gainNode && audioContext && audioContext.state === 'running') {
-    const now = audioContext.currentTime;
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-    gainNode.gain.linearRampToValueAtTime(0, now + GAIN_RAMP_SECONDS);
-  } else if (gainNode) {
-    gainNode.gain.value = 0;
-  } else {
-    video.volume = 0;
-  }
-}
-
-/**
- * Restore a video element's audio after a transition ends. Ramps gain to the
- * target volume over GAIN_RAMP_SECONDS to prevent a click.
- */
-export function unmuteTransitionElement(video: HTMLVideoElement, targetVolume: number): void {
-  const gainNode = videoGainNodes.get(video);
-  const audioContext = videoAudioContexts.get(video);
-  if (gainNode && audioContext && audioContext.state === 'running') {
-    const now = audioContext.currentTime;
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(Math.max(0, targetVolume), now + GAIN_RAMP_SECONDS);
-  } else if (gainNode) {
-    gainNode.gain.value = targetVolume;
-  } else {
-    video.volume = Math.min(1, Math.max(0, targetVolume));
-  }
-}
-
-/**
- * Set playback rate and play a paused element with gain at 0 (kept muted).
- * The composition's crossfade audio handles transition mixing. The DOM element
- * must play so the render loop can read pixels, but its audio stays silent.
- */
-export function transitionSafePlay(video: HTMLVideoElement, targetRate: number): void {
-  if (Math.abs(video.playbackRate - targetRate) > 0.01) {
-    video.playbackRate = targetRate;
-  }
-
-  if (!video.paused) {
-    muteTransitionElement(video);
-    return;
-  }
-
-  // Mute before play — the element will stay muted for the duration of the transition
-  muteTransitionElement(video);
-  video.play().catch(() => {});
-}
-
-/**
  * Hook to calculate video audio volume with fades and preview support.
  * Returns the final volume (0-1) to apply to the video component.
  * Applies master preview volume from playback controls.
@@ -183,26 +123,22 @@ export function useVideoAudioVolume(
   muted: boolean
 ): number {
   const { fps } = useVideoConfig();
-  // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
   const sequenceFrame = sequenceContext?.localFrame ?? 0;
 
-  // Adjust frame for shared Sequences (split clips)
   // In a shared Sequence, localFrame is relative to the shared Sequence start,
   // not relative to this specific item. _sequenceFrameOffset corrects this.
   const frame = sequenceFrame - (item._sequenceFrameOffset ?? 0);
 
-  // Read preview values from unified preview system
   const itemPreview = useGizmoStore(
     useCallback((s) => s.preview?.[item.id], [item.id])
   );
   const preview = itemPreview?.properties;
 
-  // Read master preview volume from playback store (only used during preview, not render)
   const previewMasterVolume = usePlaybackStore((s) => s.volume);
   const previewMasterMuted = usePlaybackStore((s) => s.muted);
 
-  // Get keyframes for this item (context-first for render mode, store-fallback for preview)
+  // Context-first for render mode, store-fallback for preview.
   const contextKeyframes = useItemKeyframesFromContext(item.id);
   const storeKeyframes = useTimelineStore(
     useCallback(
@@ -212,7 +148,6 @@ export function useVideoAudioVolume(
   );
   const itemKeyframes = contextKeyframes ?? storeKeyframes;
 
-  // Interpolate volume from keyframes if they exist, otherwise use static value
   const volumeKeyframes = getPropertyKeyframes(itemKeyframes, 'volume');
   const staticVolumeDb = preview?.volume ?? item.volume ?? 0;
   const itemVolumeDb = volumeKeyframes.length > 0
@@ -220,7 +155,6 @@ export function useVideoAudioVolume(
     : staticVolumeDb;
   const volumeDb = itemVolumeDb + (item.trackVolumeDb ?? 0);
 
-  // Use preview values if available, otherwise use item's stored values
   const audioFadeIn = preview?.audioFadeIn ?? item.audioFadeIn ?? 0;
   const audioFadeOut = preview?.audioFadeOut ?? item.audioFadeOut ?? 0;
   const audioFadeInCurve = preview?.audioFadeInCurve ?? item.audioFadeInCurve ?? 0;
@@ -230,7 +164,6 @@ export function useVideoAudioVolume(
 
   if (muted) return 0;
 
-  // Calculate fade multiplier
   const fadeInFrames = Math.min(audioFadeIn * fps, item.durationInFrames);
   const fadeOutFrames = Math.min(audioFadeOut * fps, item.durationInFrames);
 
@@ -243,7 +176,6 @@ export function useVideoAudioVolume(
 
     if (hasFadeIn && hasFadeOut) {
       if (fadeInFrames >= fadeOutStart) {
-        // Overlapping fades
         const midPoint = item.durationInFrames / 2;
         const peakVolume = Math.min(1, midPoint / Math.max(fadeInFrames, 1));
         fadeMultiplier = interpolate(
@@ -267,20 +199,19 @@ export function useVideoAudioVolume(
     }
   }
 
-  // Convert dB to linear (0 dB = unity gain = 1.0)
-  // +20dB = 10x, -20dB = 0.1x, -60dB ≈ 0.001x
+  // Convert dB to linear. 0 dB = 1.0, +20 dB = 10x, -20 dB = 0.1x.
   const linearVolume = Math.pow(10, volumeDb / 20);
-  // Item volume with fades - allow values > 1 for volume boost (Web Audio API handles this)
   const itemVolume = Math.max(0, linearVolume * fadeMultiplier);
 
-  // Apply master preview volume from playback controls
   const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
 
-  // Mixer fader live gain — updated during drag without re-rendering the composition.
-  // Clear when the composition re-renders with updated track volume (trackVolumeDb changes).
+  // Mixer fader live gain — updated during drag without re-rendering.
+  // Clear when the composition re-renders with updated track volume.
   const mixerGain = useMixerLiveGain(item.id);
   const trackVolumeDb = item.trackVolumeDb;
-  useEffect(() => { clearMixerLiveGain(item.id); }, [trackVolumeDb, item.id]);
+  useEffect(() => {
+    clearMixerLiveGain(item.id);
+  }, [trackVolumeDb, item.id]);
 
   return itemVolume * effectiveMasterVolume * mixerGain;
 }

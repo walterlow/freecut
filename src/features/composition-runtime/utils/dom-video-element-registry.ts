@@ -23,34 +23,6 @@ export function unregisterDomVideoElement(itemId: string, element: HTMLVideoElem
   }
 }
 
-export function getBestDomVideoElementForItem(itemId: string): HTMLVideoElement | null {
-  const itemElements = videoElementsByItemId.get(itemId);
-  if (!itemElements || itemElements.size === 0) {
-    return null;
-  }
-
-  let best: HTMLVideoElement | null = null;
-  let bestReadyState = 0;
-
-  for (const element of itemElements) {
-    if (!element.isConnected) {
-      itemElements.delete(element);
-      continue;
-    }
-
-    if (element.readyState > bestReadyState && element.videoWidth > 0) {
-      best = element;
-      bestReadyState = element.readyState;
-    }
-  }
-
-  if (itemElements.size === 0) {
-    videoElementsByItemId.delete(itemId);
-  }
-
-  return best;
-}
-
 export function clearDomVideoElementRegistry(): void {
   videoElementsByItemId.clear();
 }

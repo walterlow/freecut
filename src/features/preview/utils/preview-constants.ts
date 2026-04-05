@@ -121,7 +121,7 @@ export type PreviewPerfSnapshot = {
   adaptiveQualityDowngrades: number;
   adaptiveQualityRecovers: number;
   transitionSessionActive: boolean;
-  transitionSessionBackend: 'none' | 'bridge' | 'renderer';
+  transitionSessionBackend: 'none' | 'renderer';
   transitionSessionComplex: boolean;
   transitionSessionStartFrame: number;
   transitionSessionEndFrame: number;

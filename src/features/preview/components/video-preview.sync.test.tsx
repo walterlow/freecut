@@ -16,11 +16,6 @@ import { useMaskEditorStore } from '../stores/mask-editor-store';
 const seekToMock = vi.fn<(frame: number) => void>();
 const playMock = vi.fn();
 const pauseMock = vi.fn();
-const compositionRuntimeMockState = vi.hoisted(() => ({
-  getBestDomVideoElementForItemMock: vi.fn(() => null),
-  transitionSafePlayMock: vi.fn(),
-}));
-const { getBestDomVideoElementForItemMock, transitionSafePlayMock } = compositionRuntimeMockState;
 const decoderPrewarmMockState = vi.hoisted(() => ({
   backgroundPreseekMock: vi.fn(async () => {}),
   backgroundBatchPreseekMock: vi.fn(async () => {}),
@@ -368,8 +363,6 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
-  getBestDomVideoElementForItem: compositionRuntimeMockState.getBestDomVideoElementForItemMock,
-  transitionSafePlay: compositionRuntimeMockState.transitionSafePlayMock,
   ensureAudioContextResumed: vi.fn(),
   ensureBufferedAudioContextResumed: vi.fn(),
   ensurePitchCorrectedAudioContextResumed: vi.fn(),
@@ -520,9 +513,6 @@ describe('VideoPreview sync behavior', () => {
     seekToMock.mockReset();
     playMock.mockReset();
     pauseMock.mockReset();
-    getBestDomVideoElementForItemMock.mockReset();
-    getBestDomVideoElementForItemMock.mockReturnValue(null);
-    transitionSafePlayMock.mockReset();
     backgroundPreseekMock.mockReset();
     backgroundBatchPreseekMock.mockReset();
     getDecoderPrewarmMetricsSnapshotMock.mockClear();
@@ -1356,72 +1346,6 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('primes the current visible dom video element on play start', async () => {
-    useItemsStore.getState().setTracks([
-      {
-        id: 'track-video',
-        name: 'Video',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-    ]);
-    useItemsStore.getState().setItems([
-      {
-        id: 'item-video',
-        label: 'Visible',
-        type: 'video',
-        trackId: 'track-video',
-        from: 0,
-        durationInFrames: 60,
-        src: 'blob:visible-video',
-        sourceFps: 30,
-      } as TimelineItem,
-    ]);
-    act(() => {
-      usePlaybackStore.getState().setCurrentFrame(24);
-    });
-
-    const domElement = {
-      readyState: 2,
-      paused: true,
-      duration: 10,
-      currentTime: 0,
-      playbackRate: 1,
-      load: vi.fn(),
-    } as unknown as HTMLVideoElement;
-
-    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => (
-      itemId === 'item-video' ? domElement : null
-    ));
-
-    render(
-      <VideoPreview
-        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
-        containerSize={{ width: 1280, height: 720 }}
-      />
-    );
-
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
-    seekToMock.mockClear();
-
-    act(() => {
-      usePlaybackStore.getState().play();
-    });
-
-    await waitFor(() => {
-      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-video');
-      expect(domElement.currentTime).toBeCloseTo(24 / 30, 3);
-      expect(transitionSafePlayMock).toHaveBeenCalledWith(domElement, 1);
-    });
-  });
-
   it('warms the first playback runway across a near-cut play start', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -1460,29 +1384,6 @@ describe('VideoPreview sync behavior', () => {
       } as TimelineItem,
     ]);
 
-    const leftDomElement = {
-      readyState: 2,
-      paused: true,
-      duration: 10,
-      currentTime: 0,
-      playbackRate: 1,
-      load: vi.fn(),
-    } as unknown as HTMLVideoElement;
-    const rightDomElement = {
-      readyState: 2,
-      paused: true,
-      duration: 10,
-      currentTime: 0,
-      playbackRate: 1,
-      load: vi.fn(),
-    } as unknown as HTMLVideoElement;
-
-    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
-      if (itemId === 'item-left') return leftDomElement;
-      if (itemId === 'item-right') return rightDomElement;
-      return null;
-    });
-
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1502,12 +1403,6 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-left');
-      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-right');
-      expect(leftDomElement.currentTime).toBeCloseTo(58 / 30, 3);
-      expect(rightDomElement.currentTime).toBeCloseTo(0, 3);
-      expect(rightDomElement.playbackRate).toBeCloseTo(1.5, 3);
-      expect(transitionSafePlayMock).toHaveBeenCalledWith(leftDomElement, 1);
       expect(backgroundBatchPreseekMock).toHaveBeenCalled();
     });
 
@@ -2252,7 +2147,7 @@ describe('VideoPreview sync behavior', () => {
     expect(warmedFrames.some((frame) => frame < 68)).toBe(true);
   });
 
-  it('prewarms masked adjustment-layer transitions without the paused DOM bridge', async () => {
+  it('prewarms masked adjustment-layer transitions on the renderer path', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-mask',
@@ -2352,14 +2247,6 @@ describe('VideoPreview sync behavior', () => {
       },
     ]);
 
-    const leftDomElement = { readyState: 2 } as HTMLVideoElement;
-    const rightDomElement = { readyState: 2 } as HTMLVideoElement;
-    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
-      if (itemId === 'clip-left') return leftDomElement;
-      if (itemId === 'clip-right') return rightDomElement;
-      return null;
-    });
-
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(20);
     });
@@ -2414,71 +2301,40 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('activates a paused DOM transition session when playback resumes inside the same window', async () => {
+  it('keeps the renderer transition session active when playback resumes inside the same window', async () => {
     seedAlignedTransitionProject(1);
-
-    const leftDomElement = {
-      readyState: 2,
-      paused: true,
-      duration: 10,
-      currentTime: 0,
-      playbackRate: 1,
-      load: vi.fn(),
-      play: vi.fn(() => Promise.resolve()),
-      dataset: {},
-    } as unknown as HTMLVideoElement;
-    const rightDomElement = {
-      readyState: 2,
-      paused: true,
-      duration: 10,
-      currentTime: 0,
-      playbackRate: 1,
-      load: vi.fn(),
-      play: vi.fn(() => Promise.resolve()),
-      dataset: {},
-    } as unknown as HTMLVideoElement;
-
-    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
-      if (itemId === 'clip-left') return leftDomElement;
-      if (itemId === 'clip-right') return rightDomElement;
-      return null;
-    });
 
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(48);
     });
 
-    render(
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />
     );
 
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
     await waitFor(() => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
       expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
-
-    transitionSafePlayMock.mockClear();
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    const preResumeRenderCount = countRendererCalls('renderFrame', 48);
 
     act(() => {
       usePlaybackStore.getState().play();
     });
 
     await waitFor(() => {
-      expect(
-        transitionSafePlayMock.mock.calls.some(
-          ([element, speed]) => element === leftDomElement && speed === 1,
-        ),
-      ).toBe(true);
-      expect(
-        transitionSafePlayMock.mock.calls.some(
-          ([element, speed]) => element === rightDomElement && speed === 1,
-        ),
-      ).toBe(true);
-      expect(leftDomElement.currentTime).toBeGreaterThan(0);
-      expect(rightDomElement.currentTime).toBeGreaterThanOrEqual(0);
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+      expect(usePlaybackStore.getState().displayedFrame).toBeGreaterThanOrEqual(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(countRendererCalls('renderFrame', 48)).toBeGreaterThanOrEqual(preResumeRenderCount);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
     });
   });
 

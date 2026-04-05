@@ -211,7 +211,7 @@ describe('VideoContent pooled handoff', () => {
     expect(releaseClipMock).not.toHaveBeenCalled();
   });
 
-  it('keeps transition-synced variable-speed pool lanes hot longer on release', async () => {
+  it('keeps variable-speed pool lanes hot longer on release', async () => {
     const pooledElement = createMockVideoElement();
     acquireForClipMock.mockReturnValue(pooledElement);
 
@@ -225,7 +225,6 @@ describe('VideoContent pooled handoff', () => {
           durationInFrames: 90,
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
-          _sharedTransitionSync: true,
         }}
         muted={false}
         safeTrimBefore={0}
@@ -240,6 +239,6 @@ describe('VideoContent pooled handoff', () => {
 
     unmount();
 
-    expect(releaseClipMock).toHaveBeenCalledWith('group-origin-1', { delayMs: 1200 });
+    expect(releaseClipMock).toHaveBeenCalledWith('group-origin-1', { delayMs: 900 });
   });
 });

@@ -63,7 +63,6 @@ import {
   createPreviewMediaScheduleIndex,
   scanPreloadMediaPriorities,
 } from '../utils/preview-media-schedule';
-import { resolvePlaybackTransitionComplexStartFrames } from '../utils/preview-transition-complexity';
 import {
   pushRenderSourceSwitchHistory,
   recordSeekLatency,
@@ -95,7 +94,6 @@ import {
   shouldForceContinuousPreviewOverlay,
 } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
-import { getBestDomVideoElementForItem, transitionSafePlay } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
@@ -173,7 +171,7 @@ type TransitionPreviewSessionTrace = {
   startedAtMs: number;
   startFrame: number;
   endFrame: number;
-  backend: 'bridge' | 'renderer';
+  backend: 'renderer';
   complex: boolean;
   leftClipId: string;
   rightClipId: string;
@@ -263,9 +261,6 @@ export const VideoPreview = memo(function VideoPreview({
   const deferredPlaybackTransitionPrepareFrameRef = useRef<number | null>(null);
   const transitionPrepareTimeoutRef = useRef<number | null>(null);
   const transitionSessionWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
-  const transitionSessionPinnedElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const transitionExitElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const retainedTransitionExitWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
   const retainedTransitionExitBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
@@ -1322,61 +1317,6 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, []);
 
-  const primePlaybackElementAtFrame = useCallback((
-    item: TimelineItem,
-    targetFrame: number,
-    options?: { shouldPlay?: boolean },
-  ) => {
-    if (item.type !== 'video') return;
-    const itemStart = item.from;
-    const itemEnd = item.from + item.durationInFrames;
-    if (targetFrame < itemStart || targetFrame >= itemEnd) return;
-
-    const element = getBestDomVideoElementForItem(item.id);
-    if (!element) return;
-
-    const clipSpeed = item.speed ?? 1;
-    const sourceFps = item.sourceFps ?? fps;
-    const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-    const localFrame = targetFrame - item.from;
-    const targetTime = (sourceStart / sourceFps) + (localFrame / fps) * clipSpeed;
-    const duration = Number.isFinite(element.duration) ? element.duration : Infinity;
-    const clampedTargetTime = Math.min(Math.max(0, targetTime), Math.max(0, duration - 0.05));
-
-    if (element.readyState === 0) {
-      try {
-        element.load();
-      } catch {
-        // Best-effort only.
-      }
-      return;
-    }
-
-    if (Math.abs(element.currentTime - clampedTargetTime) > 0.05) {
-      try {
-        element.currentTime = clampedTargetTime;
-      } catch {
-        // Best-effort only.
-      }
-    }
-
-    if (options?.shouldPlay && element.paused && element.readyState >= 2) {
-      transitionSafePlay(element, clipSpeed);
-    } else if (Math.abs(element.playbackRate - clipSpeed) > 0.01) {
-      element.playbackRate = clipSpeed;
-    }
-  }, [fps]);
-
-  const primeVisiblePlaybackElements = useCallback((frame: number) => {
-    for (const track of combinedTracks) {
-      for (const item of track.items) {
-        if (item.type !== 'video') continue;
-        if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-        primePlaybackElementAtFrame(item, frame, { shouldPlay: true });
-      }
-    }
-  }, [combinedTracks, primePlaybackElementAtFrame]);
-
   // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
   // This avoids memory blowups on large projects while keeping nearby clips hot.
   usePreviewSourceWarmController({
@@ -1583,17 +1523,6 @@ export const VideoPreview = memo(function VideoPreview({
     [fps, playbackTransitionLookaheadFrames],
   );
   const playbackTransitionPrerenderRunwayFrames = 8;
-  // Only plain 1x video transitions stay on the DOM-safe bridge path.
-  // Anything else in the visual stack gets treated as complex.
-  const playbackTransitionComplexStartFrames = useMemo(() => {
-    return resolvePlaybackTransitionComplexStartFrames(playbackTransitionWindows, previewRendererScaledTracks);
-  }, [previewRendererScaledTracks, playbackTransitionWindows]);
-
-  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
-    if (!window) return true;
-    return !playbackTransitionComplexStartFrames.has(window.startFrame);
-  }, [playbackTransitionComplexStartFrames]);
-
   const getTransitionWindowByStartFrame = useCallback((startFrame: number | null) => {
     if (startFrame === null) return null;
     return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
@@ -1712,7 +1641,6 @@ export const VideoPreview = memo(function VideoPreview({
 
   const primePlaybackStartRunway = useCallback((frame: number) => {
     lastPlayStartWarmFrameRef.current = frame;
-    primeVisiblePlaybackElements(frame);
 
     const runwayFrames = Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 0.75));
     const runwayEndFrame = frame + runwayFrames;
@@ -1741,12 +1669,6 @@ export const VideoPreview = memo(function VideoPreview({
         if (itemEnd <= frame || itemStart > runwayEndFrame) continue;
 
         const primeFrame = Math.max(frame, itemStart);
-        if (primeFrame < itemEnd) {
-          primePlaybackElementAtFrame(item, primeFrame, {
-            shouldPlay: frame >= itemStart && frame < itemEnd,
-          });
-        }
-
         const sampleFrames = new Set<number>([Math.min(itemEnd - 1, primeFrame)]);
         if (frame >= itemStart && frame < itemEnd) {
           sampleFrames.add(Math.min(itemEnd - 1, frame + Math.min(2, runwayFrames)));
@@ -1798,8 +1720,6 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
     preseekTransitionSources,
-    primePlaybackElementAtFrame,
-    primeVisiblePlaybackElements,
   ]);
 
   const playbackTransitionOverlayWindows = useMemo(
@@ -1851,22 +1771,6 @@ export const VideoPreview = memo(function VideoPreview({
     retainedTransitionExitBufferedFramesRef.current.clear();
   }, []);
 
-  const setTransitionHoldFlag = useCallback((element: HTMLVideoElement | null | undefined) => {
-    if (element?.dataset) {
-      element.dataset.transitionHold = '1';
-    }
-  }, []);
-
-  const clearTransitionHoldFlag = useCallback((element: HTMLVideoElement | null | undefined) => {
-    if (element?.dataset) {
-      delete element.dataset.transitionHold;
-    }
-  }, []);
-
-  const hasTransitionHoldFlag = useCallback((element: HTMLVideoElement | null | undefined) => {
-    return element?.dataset?.transitionHold === '1';
-  }, []);
-
   const clearTransitionPlaybackSession = useCallback((options?: { retainHotExitFrames?: boolean }) => {
     const activeTrace = transitionSessionTraceRef.current;
     if (activeTrace) {
@@ -1914,66 +1818,8 @@ export const VideoPreview = memo(function VideoPreview({
       transitionSessionTraceRef.current = null;
     }
 
-    // Before releasing the hold, re-position each video element to the
-    // correct source time for the current frame.  The per-frame drift
-    // correction during the transition keeps elements within ~60ms of
-    // target.  Only hard-seek here for drifts > 150ms (safety net for
-    // edge cases).  Smaller drifts are left for RVFC to correct smoothly
-    // — a hard seek pauses the browser decode pipeline for 100ms+ and
-    // causes a visible freeze.
     const tw = transitionSessionWindowRef.current;
-    if (tw) {
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      const variableSpeedRelease = isVariableSpeedTransitionWindow(tw);
-      for (const clip of [tw.leftClip, tw.rightClip]) {
-        if (clip.type !== 'video') continue;
-        const el = transitionSessionPinnedElementsRef.current.get(clip.id);
-        if (!el) continue;
-        const localFrame = currentFrame - clip.from;
-        if (localFrame < 0) continue;
-        const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-        const sourceFps = clip.sourceFps ?? fps;
-        const clipSpeed = clip.speed ?? 1;
-        const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
-        const videoDuration = el.duration || Infinity;
-        const clamped = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
-        const drift = Math.abs(el.currentTime - clamped);
-        const hardSeekThreshold = variableSpeedRelease ? 0.75 : 0.15;
-        const softRateThreshold = variableSpeedRelease ? 0.05 : 0.016;
-        if (drift > hardSeekThreshold) {
-          // Variable-speed exits are especially sensitive to release-time seeks:
-          // the browser decode pipeline is already resuming normal RVFC sync,
-          // and an eager hard seek here can turn the handoff into a visible
-          // stall. Only force a seek when drift is truly large.
-          try {
-            el.currentTime = clamped;
-          } catch {
-            // Element may be settling — ignore transient seek failures.
-          }
-        } else if (drift > softRateThreshold || Math.abs(el.playbackRate - clipSpeed) > 0.01) {
-          // Small drift — nudge playbackRate so RVFC absorbs it smoothly
-          // over the next few frames without a decode pipeline stall.
-          el.playbackRate = clipSpeed;
-        }
-      }
-    }
-
     transitionSessionWindowRef.current = null;
-    // Remove transition-hold marks so video-content resumes normal premount behavior.
-    // Audio gain stays at 0 here — the React volume effect in NativePreviewVideo
-    // restores the correct gain when _sharedTransitionSync flips back to false.
-    // Eagerly unmuting to 1.0 here would cause a brief volume spike between
-    // back-to-back transitions (e.g. B→A→A) before React corrects it.
-    for (const el of transitionSessionPinnedElementsRef.current.values()) {
-      clearTransitionHoldFlag(el);
-    }
-    // Keep exit elements as a fallback for the DOM provider for a few frames.
-    // After the session clears, shadow elements may unmount before the normal
-    // rendering path registers new elements — causing a mediabunny fallback
-    // gap with 50-300ms stalls.  The exit elements bridge this gap.
-    transitionExitElementsRef.current = new Map(transitionSessionPinnedElementsRef.current);
-    transitionSessionPinnedElementsRef.current.clear();
-    transitionSessionStallCountRef.current.clear();
     const shouldRetainHotExitFrames = (
       options?.retainHotExitFrames !== false
       && tw !== null
@@ -1991,78 +1837,7 @@ export const VideoPreview = memo(function VideoPreview({
     }
     transitionSessionBufferedFramesRef.current.clear();
     transitionPrewarmPromiseRef.current = null;
-  }, [clearRetainedTransitionExitBuffer, fps, isVariableSpeedTransitionWindow, pushTransitionTrace]);
-
-  const ensureTransitionPlaybackSessionActivated = useCallback((
-    window: ResolvedTransitionWindow<TimelineItem>,
-    currentFrame: number,
-  ) => {
-    for (const clip of [window.leftClip, window.rightClip]) {
-      if (clip.type !== 'video') continue;
-
-      const previous = transitionSessionPinnedElementsRef.current.get(clip.id) ?? null;
-      const element = (
-        previous && previous.isConnected
-          ? previous
-          : getBestDomVideoElementForItem(clip.id)
-      ) ?? null;
-
-      if (previous && previous !== element) {
-        clearTransitionHoldFlag(previous);
-      }
-      transitionSessionPinnedElementsRef.current.set(clip.id, element);
-
-      if (!element) {
-        continue;
-      }
-
-      if (!hasTransitionHoldFlag(element)) {
-        setTransitionHoldFlag(element);
-      }
-      const clipSpeed = clip.speed ?? 1;
-      const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-      const sourceFps = clip.sourceFps ?? fps;
-      const localFrame = currentFrame - clip.from;
-      const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
-      const clampedTargetTime = Math.min(
-        Math.max(0, targetTime),
-        (element.duration || Infinity) - 0.05,
-      );
-
-      if (element.readyState >= 2) {
-        if (Math.abs(element.currentTime - clampedTargetTime) > 0.016) {
-          try {
-            element.currentTime = clampedTargetTime;
-          } catch {
-            // Element may still be stabilizing; best-effort only.
-          }
-        }
-        transitionSafePlay(element, clipSpeed);
-        continue;
-      }
-
-      const onCanPlay = () => {
-        element.removeEventListener('canplay', onCanPlay);
-        if (!hasTransitionHoldFlag(element)) return;
-        const liveFrame = usePlaybackStore.getState().currentFrame;
-        const liveLocalFrame = liveFrame - clip.from;
-        const liveTargetTime = (sourceStart / sourceFps) + (liveLocalFrame * clipSpeed / fps);
-        const liveClampedTargetTime = Math.min(
-          Math.max(0, liveTargetTime),
-          (element.duration || Infinity) - 0.05,
-        );
-        if (Math.abs(element.currentTime - liveClampedTargetTime) > 0.016) {
-          try {
-            element.currentTime = liveClampedTargetTime;
-          } catch {
-            // Element may still be stabilizing.
-          }
-        }
-        transitionSafePlay(element, clipSpeed);
-      };
-      element.addEventListener('canplay', onCanPlay, { once: true });
-    }
-  }, [clearTransitionHoldFlag, fps, hasTransitionHoldFlag, setTransitionHoldFlag]);
+  }, [clearRetainedTransitionExitBuffer, isVariableSpeedTransitionWindow, pushTransitionTrace]);
 
   const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
     if (!window) {
@@ -2072,9 +1847,6 @@ export const VideoPreview = memo(function VideoPreview({
 
     const activeWindow = transitionSessionWindowRef.current;
     if (activeWindow?.transition.id === window.transition.id && activeWindow.startFrame === window.startFrame) {
-      if (usePlaybackStore.getState().isPlaying) {
-        ensureTransitionPlaybackSessionActivated(window, usePlaybackStore.getState().currentFrame);
-      }
       return activeWindow;
     }
 
@@ -2087,8 +1859,8 @@ export const VideoPreview = memo(function VideoPreview({
     const rightSpeed = window.rightClip.speed ?? 1;
     const leftHasEffects = Boolean(window.leftClip.effects?.some((effect) => effect.enabled));
     const rightHasEffects = Boolean(window.rightClip.effects?.some((effect) => effect.enabled));
-    const backend = transitionWindowUsesDomProvider(window) ? 'bridge' : 'renderer';
-    const complex = backend === 'renderer';
+    const backend = 'renderer' as const;
+    const complex = true;
     transitionTelemetryRef.current.sessionCount += 1;
     transitionSessionTraceRef.current = {
       opId,
@@ -2127,17 +1899,6 @@ export const VideoPreview = memo(function VideoPreview({
       leftHasEffects,
       rightHasEffects,
     });
-    const isPlaying = usePlaybackStore.getState().isPlaying;
-    const currentFrame = usePlaybackStore.getState().currentFrame;
-    transitionSessionPinnedElementsRef.current = new Map(
-      [window.leftClip, window.rightClip].map((clip) => [
-        clip.id,
-        getBestDomVideoElementForItem(clip.id),
-      ]),
-    );
-    if (isPlaying) {
-      ensureTransitionPlaybackSessionActivated(window, currentFrame);
-    }
     transitionSessionBufferedFramesRef.current.clear();
     const retainedWindow = retainedTransitionExitWindowRef.current;
     if (
@@ -2154,9 +1915,7 @@ export const VideoPreview = memo(function VideoPreview({
   }, [
     clearRetainedTransitionExitBuffer,
     clearTransitionPlaybackSession,
-    ensureTransitionPlaybackSessionActivated,
     pushTransitionTrace,
-    transitionWindowUsesDomProvider,
   ]);
 
   const restoreRetainedTransitionExitBufferForFrame = useCallback((frame: number) => {
@@ -2196,23 +1955,16 @@ export const VideoPreview = memo(function VideoPreview({
   const getUpcomingTransitionStartFrame = useCallback((
     frame: number,
     maxLookaheadFrames: number,
-    options?: { complexOnly?: boolean },
   ) => {
     const nextWindow = playbackTransitionWindows.find((window) => {
-      if (frame > window.startFrame) {
-        return false;
-      }
-      if (options?.complexOnly && !playbackTransitionComplexStartFrames.has(window.startFrame)) {
-        return false;
-      }
-      return true;
+      return frame <= window.startFrame;
     });
     if (!nextWindow) return null;
     if ((nextWindow.startFrame - frame) > maxLookaheadFrames) {
       return null;
     }
     return nextWindow.startFrame;
-  }, [playbackTransitionComplexStartFrames, playbackTransitionWindows]);
+  }, [playbackTransitionWindows]);
 
   const getPausedTransitionPrewarmStartFrame = useCallback((frame: number) => {
     return getUpcomingTransitionStartFrame(frame, pausedTransitionPrearmFrames);
@@ -2545,24 +2297,16 @@ export const VideoPreview = memo(function VideoPreview({
         const renderer = await ensurePreviewRenderer();
         if (!renderer || !scrubMountedRef.current) return false;
 
-        const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame);
-        const shouldRenderFullTargetFrame = rendererOwnsPresentation || isComplexTransitionStart;
-        if (shouldRenderFullTargetFrame) {
-          await renderer.renderFrame(targetFrame);
-          cacheTransitionSessionFrame(targetFrame);
-        }
+        await renderer.renderFrame(targetFrame);
+        cacheTransitionSessionFrame(targetFrame);
         for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
           const runwayFrame = targetFrame + offset;
-          if (rendererOwnsPresentation && !isComplexTransitionStart) {
+          if (rendererOwnsPresentation) {
             await renderer.renderFrame(runwayFrame);
             cacheTransitionSessionFrame(runwayFrame);
           } else {
             await renderer.prewarmFrame(runwayFrame);
           }
-        }
-        if (!shouldRenderFullTargetFrame) {
-          await renderer.renderFrame(targetFrame);
-          cacheTransitionSessionFrame(targetFrame);
         }
         if (!scrubMountedRef.current) return false;
         scrubOffscreenRenderedFrameRef.current = targetFrame;
@@ -2603,10 +2347,8 @@ export const VideoPreview = memo(function VideoPreview({
     pinTransitionPlaybackSession,
     cacheTransitionSessionFrame,
     rendererOwnsPresentation,
-    playbackTransitionComplexStartFrames,
     playbackTransitionPrerenderRunwayFrames,
     pushTransitionTrace,
-    transitionWindowUsesDomProvider,
   ]);
 
   // Dispose/recreate the preview renderer when composition inputs change.
@@ -3689,66 +3431,8 @@ export const VideoPreview = memo(function VideoPreview({
           }
         }
 
-        // Per-frame drift correction for held video elements during an active
-        // transition session.  Without this, elements play freely and drift
-        // seconds away from their expected position, causing a hard backward
-        // seek (and visible freeze) when the hold is released at exit.
-        // Uses gentle playbackRate adjustment (same pattern as RVFC) so the
-        // element never drifts far — making the exit-time pre-seek a no-op.
-        const sessionWindow = transitionSessionWindowRef.current;
-        if (sessionWindow && transitionSessionPinnedElementsRef.current.size > 0) {
-          for (const clip of [sessionWindow.leftClip, sessionWindow.rightClip]) {
-            if (clip.type !== 'video') continue;
-            const el = transitionSessionPinnedElementsRef.current.get(clip.id);
-            if (!el || !hasTransitionHoldFlag(el)) continue;
-            const localFrame = state.currentFrame - clip.from;
-            if (localFrame < 0) continue;
-            const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-            const sourceFps = clip.sourceFps ?? fps;
-            const clipSpeed = clip.speed ?? 1;
-            const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
-
-            // Detect stalled decode: if currentTime hasn't changed for 3+
-            // frames, the browser's decode pipeline is stuck. Re-trigger
-            // play() and seek to unstick it.
-            const stallEntry = transitionSessionStallCountRef.current.get(clip.id);
-            if (stallEntry && Math.abs(el.currentTime - stallEntry.ct) < 0.001) {
-              const newCount = stallEntry.count + 1;
-              transitionSessionStallCountRef.current.set(clip.id, { ct: stallEntry.ct, count: newCount });
-              if (newCount >= 3) {
-                // Unstick: seek to target and re-trigger play.
-                try { el.currentTime = targetTime; } catch { /* settling */ }
-                el.playbackRate = clipSpeed;
-                el.play().catch(() => { /* best effort */ });
-                transitionSessionStallCountRef.current.set(clip.id, { ct: targetTime, count: 0 });
-                continue;
-              }
-            } else {
-              transitionSessionStallCountRef.current.set(clip.id, { ct: el.currentTime, count: 0 });
-            }
-
-            const drift = el.currentTime - targetTime;
-            if (Math.abs(drift) > 0.2) {
-              // Large drift — hard seek to prevent runaway divergence.
-              try { el.currentTime = targetTime; } catch { /* settling */ }
-              el.playbackRate = clipSpeed;
-            } else if (Math.abs(drift) > 0.016) {
-              // Small drift — gentle rate correction (±6% of nominal speed).
-              const correction = -drift * 0.25;
-              const maxAdj = Math.max(0.03, clipSpeed * 0.06);
-              el.playbackRate = Math.max(
-                clipSpeed - maxAdj,
-                Math.min(clipSpeed + maxAdj, clipSpeed + correction),
-              );
-            }
-          }
-        } else if (transitionSessionStallCountRef.current.size > 0) {
-          transitionSessionStallCountRef.current.clear();
-        }
-
         // Only prearm an upcoming transition if no active session is pinned.
-        // Prearming while inside a transition would evict the active session
-        // and disrupt the current transition bridge clips.
+        // Prearming while inside a transition would evict the active session.
         const prearmStartFrame = (!activeTransitionWindow && !transitionSessionWindowRef.current)
           ? getPlayingAnyTransitionPrewarmStartFrame(state.currentFrame)
           : null;
@@ -4362,7 +4046,6 @@ export const VideoPreview = memo(function VideoPreview({
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
     getTransitionWindowForFrame,
-    transitionWindowUsesDomProvider,
     hideRenderedOverlays,
     isPausedTransitionOverlayActive,
     pinTransitionPlaybackSession,
@@ -4370,7 +4053,6 @@ export const VideoPreview = memo(function VideoPreview({
     preparePlaybackTransitionFrame,
     showRendererSurface,
     showTransitionOverlaySurface,
-    playbackTransitionComplexStartFrames,
     playbackTransitionCooldownFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
@@ -4962,8 +4644,7 @@ export const VideoPreview = memo(function VideoPreview({
               const qualOk = p.effectivePreviewQuality >= p.userPreviewQuality;
               const frameOk = p.frameTimeEmaMs <= p.frameTimeBudgetMs * 1.2;
               const trActive = p.transitionSessionActive;
-              const trMode = p.transitionSessionBackend === 'none' ? null
-                : p.transitionSessionBackend === 'bridge' ? 'Bridge' : 'Renderer';
+              const trMode = p.transitionSessionBackend === 'none' ? null : 'Renderer';
               const lastSw = latestRenderSourceSwitch;
               const fmtSrc = (s: string) => s === 'transition_overlay' ? 'Transition' : 'Renderer';
               return (

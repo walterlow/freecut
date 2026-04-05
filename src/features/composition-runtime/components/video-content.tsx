@@ -26,7 +26,6 @@ const contentLog = createLogger('VideoContent');
 videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
 const POOL_RELEASE_STICKY_MS = 400;
 const VARIABLE_SPEED_POOL_RELEASE_STICKY_MS = 900;
-const TRANSITION_SYNC_POOL_RELEASE_STICKY_MS = 1200;
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
 const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
@@ -51,7 +50,6 @@ const NativePreviewVideo: React.FC<{
   containerRef: React.RefObject<HTMLDivElement | null>;
   fitMode?: 'contain' | 'fill';
   forceCssComposite?: boolean;
-  sharedTransitionSync?: boolean;
 }> = ({
   poolClipId,
   itemId,
@@ -65,7 +63,6 @@ const NativePreviewVideo: React.FC<{
   containerRef,
   fitMode = 'contain',
   forceCssComposite = false,
-  sharedTransitionSync = false,
 }) => {
   // Get local frame from Sequence context (not global frame from Clock)
   // The Sequence provides localFrame which is 0-based within this sequence
@@ -104,13 +101,11 @@ const NativePreviewVideo: React.FC<{
   sequenceFrameOffsetRef.current = sequenceFrameOffset;
 
   useEffect(() => {
-    const nextDelayMs = sharedTransitionSync
-      ? TRANSITION_SYNC_POOL_RELEASE_STICKY_MS
-      : Math.abs(playbackRate - 1) >= 0.01
-        ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
-        : POOL_RELEASE_STICKY_MS;
+    const nextDelayMs = Math.abs(playbackRate - 1) >= 0.01
+      ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
+      : POOL_RELEASE_STICKY_MS;
     releaseStickyDelayMsRef.current = Math.max(releaseStickyDelayMsRef.current, nextDelayMs);
-  }, [playbackRate, sharedTransitionSync]);
+  }, [playbackRate]);
 
   // Get playing state from our clock
   const isPlaying = useIsPlaying();
@@ -181,11 +176,9 @@ const NativePreviewVideo: React.FC<{
     }
 
     let cancelled = false;
-    releaseStickyDelayMsRef.current = sharedTransitionSync
-      ? TRANSITION_SYNC_POOL_RELEASE_STICKY_MS
-      : Math.abs(playbackRateRef.current - 1) >= 0.01
-        ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
-        : POOL_RELEASE_STICKY_MS;
+    releaseStickyDelayMsRef.current = Math.abs(playbackRateRef.current - 1) >= 0.01
+      ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
+      : POOL_RELEASE_STICKY_MS;
 
     // Reset sync state for the new clip. The component doesn't unmount when
     // crossing split boundaries (React reconciles with new props), so refs
@@ -450,18 +443,17 @@ const NativePreviewVideo: React.FC<{
   useLayoutEffect(() => {
     const video = elementRef.current;
     if (!video) return;
-    const heldByTransition = video.dataset.transitionHold === '1';
 
     // Only set playbackRate from React when RVFC isn't managing drift correction.
     // During playback with RVFC, the callback owns video.playbackRate and applies
     // small rate adjustments for smooth drift correction. Overwriting here would
     // undo those adjustments every frame.
-    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
+    if (!isPlaying || !supportsRVFC) {
       video.playbackRate = playbackRate;
     }
 
     const relativeFrame = frame - sequenceFrameOffset;
-    const isPremounted = relativeFrame < 0 && !heldByTransition;
+    const isPremounted = relativeFrame < 0;
     const canSeek = video.readyState >= 1;
 
     const effectiveTargetTime = isPremounted
@@ -498,17 +490,16 @@ const NativePreviewVideo: React.FC<{
         // Seek failed - element may still be initializing
       }
     }
-  }, [frame, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
 
   // Runtime playback control + drift correction
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
-    const heldByTransition = video.dataset.transitionHold === '1';
 
     // Only set playbackRate from React when RVFC isn't active.
     // RVFC owns the rate during playback for smooth drift correction.
-    if (!isPlaying || (!supportsRVFC && !sharedTransitionSync)) {
+    if (!isPlaying || !supportsRVFC) {
       video.playbackRate = playbackRate;
     }
 
@@ -522,7 +513,7 @@ const NativePreviewVideo: React.FC<{
     // Check if we're in premount phase (frame < 0 means clip hasn't started yet)
     // During premount, we should NOT play - just prepare the video at the start position
     const relativeFrame = frame - sequenceFrameOffset;
-    const isPremounted = relativeFrame < 0 && !heldByTransition;
+    const isPremounted = relativeFrame < 0;
 
     // Guard: Only seek if video has enough data loaded
     const canSeek = video.readyState >= 1;
@@ -551,13 +542,9 @@ const NativePreviewVideo: React.FC<{
     }
 
     // During premount, always pause - don't play until clip is actually visible.
-    // Exception: if the element is held by a transition session (marked via
-    // data-transition-hold), the canvas overlay needs it playing for zero-copy
-    // frame reads. Pausing it would cause a play/pause fight every frame that
-    // disrupts Chrome's video decode pipeline and produces visible judder.
-    if (isPremounted) {
-      if (!video.paused) {
-        video.pause();
+      if (isPremounted) {
+        if (!video.paused) {
+          video.pause();
       }
       if (canSeek && Math.abs(video.currentTime - clampedTargetTime) > 0.1) {
         video.currentTime = clampedTargetTime;
@@ -593,7 +580,7 @@ const NativePreviewVideo: React.FC<{
       // When rVFC is supported, the callback below handles drift correction
       // directly from the video's presentation callback, avoiding per-frame
       // React scheduling overhead.
-      if (!supportsRVFC && !sharedTransitionSync) {
+      if (!supportsRVFC) {
         const currentTime = video.currentTime;
         const now = Date.now();
         const drift = currentTime - clampedTargetTime;
@@ -674,7 +661,7 @@ const NativePreviewVideo: React.FC<{
         }
       }
     }
-  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sourceFps, targetTime, sequenceFrameOffset]);
 
   // requestVideoFrameCallback-based drift correction.
   // Runs outside React's render cycle — the browser calls us exactly when a
@@ -684,7 +671,7 @@ const NativePreviewVideo: React.FC<{
   // jitter pattern that hard-seek-only correction causes.
   useEffect(() => {
     const video = elementRef.current;
-    if (!video || !isPlaying || !supportsRVFC || sharedTransitionSync) return;
+    if (!video || !isPlaying || !supportsRVFC) return;
 
     // Pre-resume AudioContext so audio starts immediately with video.
     // Without this, suspended AudioContext adds 50-100ms audio delay on cold resume.
@@ -703,9 +690,7 @@ const NativePreviewVideo: React.FC<{
       const localFrame = globalFrame - sequenceFromRef.current;
       const relativeFrame = localFrame - sequenceFrameOffsetRef.current;
 
-      // During premount, just keep listening unless this element is pinned for
-      // a transition and needs preroll handle frames before its nominal `from`.
-      if (relativeFrame < 0 && v.dataset.transitionHold !== '1') {
+      if (relativeFrame < 0) {
         handle = v.requestVideoFrameCallback(onVideoFrame);
         return;
       }
@@ -763,7 +748,7 @@ const NativePreviewVideo: React.FC<{
         elementRef.current.playbackRate = playbackRateRef.current;
       }
     };
-  }, [clock, isPlaying, poolClipId, sharedTransitionSync]);
+  }, [clock, isPlaying, poolClipId]);
 
   // Keep volume/gain in sync for pooled element.
   useEffect(() => {
@@ -815,7 +800,7 @@ const NativePreviewVideo: React.FC<{
  * Uses native HTML5 video for both preview and export (via Canvas + WebCodecs).
  */
 export const VideoContent: React.FC<{
-  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string; _sharedTransitionSync?: boolean };
+  item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
   muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
@@ -823,11 +808,7 @@ export const VideoContent: React.FC<{
   forceCssComposite?: boolean;
 }> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
   const baseAudioVolume = useVideoAudioVolume(item, muted);
-  // During transition overlaps, the composition's audio crossfade system
-  // (CustomDecoderAudio) handles audio mixing. Mute the DOM video element
-  // to prevent doubling — one audio stream from the element and another
-  // from the crossfade renderer.
-  const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume;
+  const audioVolume = baseAudioVolume;
   const [hasError, setHasError] = useState(false);
 
   // NativePreviewVideo mounts pooled <video> into this container.
@@ -873,7 +854,6 @@ export const VideoContent: React.FC<{
       containerRef={containerRef}
       fitMode="fill"
       forceCssComposite={forceCssComposite}
-      sharedTransitionSync={item._sharedTransitionSync === true}
     />
   );
 };
