@@ -17,7 +17,7 @@ import { useSlipEditPreviewStore } from '../../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { useSourceMonitorStore } from '@/shared/state/source-monitor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
   TRANSITION_DRAG_MIME,
@@ -1361,7 +1361,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (!item.mediaId) return;
 
     // Pre-set currentMediaId so SourceMonitor's useEffect is a no-op
-    const sourceStore = useSourcePlayerStore.getState();
+    const sourceStore = useSourceMonitorStore.getState();
     sourceStore.setCurrentMediaId(item.mediaId);
 
     // Clear any existing I/O then transfer the clip's source range

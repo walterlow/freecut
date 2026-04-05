@@ -7,7 +7,7 @@ import {
 import { useBridgedTimelineContext } from './clock';
 import { usePlayer } from './use-player';
 
-export interface BasePlayerTransportProps {
+export interface BaseTransportProps {
   children: React.ReactNode;
   durationInFrames: number;
   fps: number;
@@ -23,7 +23,7 @@ export interface BasePlayerTransportProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
-export interface PlayerTransportRef {
+export interface TransportRef {
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -34,8 +34,8 @@ export interface PlayerTransportRef {
   removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
 }
 
-interface UsePlayerTransportBridgeOptions {
-  ref: React.ForwardedRef<PlayerTransportRef>;
+interface UseTransportBridgeOptions {
+  ref: React.ForwardedRef<TransportRef>;
   durationInFrames: number;
   initialFrame?: number;
   loop?: boolean;
@@ -45,7 +45,7 @@ interface UsePlayerTransportBridgeOptions {
   onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
-export function usePlayerTransportBridge({
+export function useTransportBridge({
   ref,
   durationInFrames,
   initialFrame = 0,
@@ -54,23 +54,23 @@ export function usePlayerTransportBridge({
   onEnded,
   onFrameChange,
   onPlayStateChange,
-}: UsePlayerTransportBridgeOptions) {
-  const player = usePlayer(durationInFrames, { loop, onEnded });
+}: UseTransportBridgeOptions) {
+  const transport = usePlayer(durationInFrames, { loop, onEnded });
   const timeline = useBridgedTimelineContext();
   const { frame: currentFrame, playing } = timeline;
   const emitter = usePlayerEmitter();
 
   useEffect(() => {
     if (initialFrame > 0 && currentFrame === 0) {
-      player.seek(initialFrame);
+      transport.seek(initialFrame);
     }
-  }, [currentFrame, initialFrame, player]);
+  }, [currentFrame, initialFrame, transport]);
 
   useEffect(() => {
     if (autoPlay && !playing) {
-      player.play();
+      transport.play();
     }
-  }, [autoPlay, playing, player]);
+  }, [autoPlay, playing, transport]);
 
   useEffect(() => {
     onFrameChange?.(currentFrame);
@@ -83,12 +83,12 @@ export function usePlayerTransportBridge({
   useImperativeHandle(
     ref,
     () => ({
-      play: () => player.play(),
-      pause: () => player.pause(),
-      toggle: () => player.toggle(),
-      seekTo: (frame: number) => player.seek(frame),
-      getCurrentFrame: () => player.getCurrentFrame(),
-      isPlaying: () => player.isPlaying(),
+      play: () => transport.play(),
+      pause: () => transport.pause(),
+      toggle: () => transport.toggle(),
+      seekTo: (frame: number) => transport.seek(frame),
+      getCurrentFrame: () => transport.getCurrentFrame(),
+      isPlaying: () => transport.isPlaying(),
       addEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => {
         emitter.addEventListener(event, callback);
       },
@@ -96,11 +96,11 @@ export function usePlayerTransportBridge({
         emitter.removeEventListener(event, callback);
       },
     }),
-    [emitter, player],
+    [emitter, transport],
   );
 
   return {
-    player,
+    transport,
     currentFrame,
     ...timeline,
   };

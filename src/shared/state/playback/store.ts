@@ -28,7 +28,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       zoom: -1, // -1 = auto-fit, positive values = specific zoom percentage
       previewFrame: null,
       previewItemId: null,
-      captureFrame: null, // Set by VideoPreview when Player is mounted
+      captureFrame: null, // Set by VideoPreview when the transport surface is mounted
       captureFrameImageData: null,
       captureCanvasSource: null,
       useProxy: true,

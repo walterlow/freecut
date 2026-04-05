@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   AbsoluteFill,
-  HeadlessPlayerTransport,
+  HeadlessTransport,
   Player,
 } from './transport-core';
 
 describe('preview transport seam exports', () => {
   it('re-exports both transport surfaces through the preview seam', () => {
     expect(Player).toBeTruthy();
-    expect(HeadlessPlayerTransport).toBeTruthy();
+    expect(HeadlessTransport).toBeTruthy();
     expect(AbsoluteFill).toBeTruthy();
   });
 });

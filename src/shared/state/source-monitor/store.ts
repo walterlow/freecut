@@ -1,16 +1,16 @@
 import { create } from 'zustand';
-import type { SourcePlayerState } from './types';
+import type { SourceMonitorState } from './types';
 
-export const useSourcePlayerStore = create<SourcePlayerState>((set) => ({
+export const useSourceMonitorStore = create<SourceMonitorState>((set) => ({
   hoveredPanel: null,
-  playerMethods: null,
+  transportMethods: null,
   currentMediaId: null,
   currentSourceFrame: 0,
   inPoint: null,
   outPoint: null,
   pendingSeekFrame: null,
   setHoveredPanel: (panel) => set({ hoveredPanel: panel }),
-  setPlayerMethods: (methods) => set({ playerMethods: methods }),
+  setTransportMethods: (methods) => set({ transportMethods: methods }),
   setCurrentMediaId: (id) => set((state) => {
     if (id === state.currentMediaId) return state;
     return { currentMediaId: id, inPoint: null, outPoint: null, currentSourceFrame: 0 };

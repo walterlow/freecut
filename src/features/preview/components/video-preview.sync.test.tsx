@@ -345,7 +345,7 @@ vi.mock('@/features/preview/deps/transport-core', async () => {
 
   return {
     Player: MockPlayer,
-    HeadlessPlayerTransport: MockHeadlessTransport,
+    HeadlessTransport: MockHeadlessTransport,
     AbsoluteFill: ({ children }: React.PropsWithChildren<Record<string, unknown>>) => <div>{children}</div>,
   };
 });

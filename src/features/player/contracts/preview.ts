@@ -5,8 +5,8 @@
 export { AbsoluteFill } from '../composition';
 export {
   Player,
-  HeadlessPlayerTransport,
-  type PlayerTransportRef,
+  HeadlessTransport,
+  type TransportRef,
 } from '..';
 export { PlayerEmitterProvider } from '../event-emitter';
 export {

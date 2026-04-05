@@ -23,7 +23,7 @@ export interface PlaybackState {
   previewFrame: number | null;
   /** Item ID under the cursor when previewing (null when not over an item) */
   previewItemId: string | null;
-  /** Function to capture the current Player frame as a data URL (set by VideoPreview) */
+  /** Function to capture the current presented frame as a data URL (set by VideoPreview) */
   captureFrame: ((options?: CaptureOptions) => Promise<string | null>) | null;
   /** Optional raw capture path that returns ImageData directly (avoids encode/decode overhead) */
   captureFrameImageData?: ((options?: CaptureOptions) => Promise<ImageData | null>) | null;
@@ -31,7 +31,7 @@ export interface PlaybackState {
   captureCanvasSource?: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null;
   /** Whether to use proxy videos for preview playback (true = use 720p proxies when available) */
   useProxy: boolean;
-  /** Fast-scrub render resolution multiplier (1 = full, 0.5 = half, 0.33 = third, 0.25 = quarter) */
+  /** Preview renderer resolution multiplier (1 = full, 0.5 = half, 0.33 = third, 0.25 = quarter) */
   previewQuality: PreviewQuality;
 }
 
@@ -55,7 +55,7 @@ export interface PlaybackActions {
   setZoom: (zoom: number) => void;
   setPreviewFrame: (frame: number | null, itemId?: string | null) => void;
   setDisplayedFrame: (frame: number | null) => void;
-  /** Register a frame capture function (called by VideoPreview on mount) */
+  /** Register the presented-frame capture function (called by VideoPreview on mount) */
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
   /** Register raw frame capture function for scopes (optional) */
   setCaptureFrameImageData?: (fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null) => void;

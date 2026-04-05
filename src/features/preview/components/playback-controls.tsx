@@ -100,14 +100,14 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
 
-  // Note: Automatic playback loop is now handled by Composition Player
-  // The Player controls frame advancement via frameupdate events
+  // Note: Automatic playback loop is now handled by the transport clock.
+  // The transport drives frame advancement via frame update events.
 
   // Note: totalFrames is the count, so valid frame indices are [0, totalFrames - 1]
   const lastValidFrame = Math.max(0, totalFrames - 1);
 
   const commitTimelineSeek = (frame: number) => {
-    // Transport seeks should exit hover-scrub state so Player rendering
+    // Transport seeks should exit hover-scrub state so preview rendering
     // follows the actual playhead immediately.
     seekTimelineFrame(frame);
   };

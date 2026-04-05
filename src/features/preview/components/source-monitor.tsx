@@ -21,7 +21,7 @@ import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/medi
 import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useSettingsStore } from '@/features/preview/deps/settings';
 import { useEditorStore } from '@/shared/state/editor';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { useSourceMonitorStore } from '@/shared/state/source-monitor';
 import { useSelectionStore } from '@/shared/state/selection';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { formatTimecodeCompact } from '@/utils/time-utils';
@@ -46,12 +46,12 @@ export const SourceMonitor = memo(function SourceMonitor({
   const [blobUrl, setBlobUrl] = useState<string>('');
   const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId));
 
-  // Sync current media ID into source player store for I/O points
+  // Sync current media ID into source monitor state for I/O points.
   useEffect(() => {
     if (!interactive) return;
-    useSourcePlayerStore.getState().setCurrentMediaId(mediaId);
+    useSourceMonitorStore.getState().setCurrentMediaId(mediaId);
     return () => {
-      useSourcePlayerStore.getState().setCurrentMediaId(null);
+      useSourceMonitorStore.getState().setCurrentMediaId(null);
     };
   }, [interactive, mediaId]);
 
@@ -249,17 +249,17 @@ function SourceMonitorInner({
     };
   }, [src, updateLayout]);
 
-  const setHoveredPanel = useSourcePlayerStore((s) => s.setHoveredPanel);
-  const setPlayerMethods = useSourcePlayerStore((s) => s.setPlayerMethods);
+  const setHoveredPanel = useSourceMonitorStore((s) => s.setHoveredPanel);
+  const setTransportMethods = useSourceMonitorStore((s) => s.setTransportMethods);
 
   // Reset hover and transport methods on unmount.
   useEffect(() => {
     if (!interactive) return;
     return () => {
       setHoveredPanel(null);
-      setPlayerMethods(null);
+      setTransportMethods(null);
     };
-  }, [interactive, setHoveredPanel, setPlayerMethods]);
+  }, [interactive, setHoveredPanel, setTransportMethods]);
 
   // Handle I/O shortcuts locally on this element (not global useHotkeys)
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -267,7 +267,7 @@ function SourceMonitorInner({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!interactive) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    const { currentSourceFrame, setInPoint, setOutPoint, clearInOutPoints } = useSourcePlayerStore.getState();
+    const { currentSourceFrame, setInPoint, setOutPoint, clearInOutPoints } = useSourceMonitorStore.getState();
     if (e.key === 'i' || e.key === 'I') {
       e.preventDefault();
       e.stopPropagation();
@@ -407,7 +407,7 @@ function SourcePlaybackControls({
   const currentFrameRef = useRef(clock.currentFrame);
   const progressRef = useRef<HTMLDivElement>(null);
   const currentTimeRef = useRef<HTMLSpanElement>(null);
-  const outPointRef = useRef<number | null>(useSourcePlayerStore.getState().outPoint);
+  const outPointRef = useRef<number | null>(useSourceMonitorStore.getState().outPoint);
   const [showFrames, setShowFrames] = useState(false);
   const showFramesRef = useRef(showFrames);
   showFramesRef.current = showFrames;
@@ -427,7 +427,7 @@ function SourcePlaybackControls({
   const updateFrameDisplay = useCallback((frame: number) => {
     currentFrameRef.current = frame;
     if (interactive) {
-      useSourcePlayerStore.getState().setCurrentSourceFrame(frame);
+      useSourceMonitorStore.getState().setCurrentSourceFrame(frame);
     }
     if (progressRef.current) {
       const progress = lastFrame > 0 ? (frame / lastFrame) * 100 : 0;
@@ -440,11 +440,11 @@ function SourcePlaybackControls({
     }
   }, [fps, formatFrameNumber, interactive, lastFrame]);
 
-  // Bridge transport methods into the source player store for keyboard shortcuts.
+  // Bridge transport methods into the source monitor store for keyboard shortcuts.
   useEffect(() => {
     if (!interactive) return;
-    const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods;
-    setPlayerMethods({
+    const setTransportMethods = useSourceMonitorStore.getState().setTransportMethods;
+    setTransportMethods({
       toggle: transport.toggle,
       seek: transport.seek,
       frameBack: transport.frameBack,
@@ -452,7 +452,7 @@ function SourcePlaybackControls({
       getDurationInFrames: () => durationInFrames,
     });
     return () => {
-      useSourcePlayerStore.getState().setPlayerMethods(null);
+      useSourceMonitorStore.getState().setTransportMethods(null);
     };
   }, [durationInFrames, interactive, transport.toggle, transport.seek, transport.frameBack, transport.frameForward]);
 
@@ -469,12 +469,12 @@ function SourcePlaybackControls({
   }, [clock, transport, updateFrameDisplay]);
 
   // Consume pending seek (e.g. double-click opens clip at its In point)
-  const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame);
+  const pendingSeekFrame = useSourceMonitorStore((s) => s.pendingSeekFrame);
   useEffect(() => {
     if (!interactive) return;
     if (pendingSeekFrame !== null) {
       transport.seek(pendingSeekFrame);
-      useSourcePlayerStore.getState().setPendingSeekFrame(null);
+      useSourceMonitorStore.getState().setPendingSeekFrame(null);
     }
   }, [interactive, pendingSeekFrame, transport]);
 
@@ -484,8 +484,8 @@ function SourcePlaybackControls({
   }, [seekFrame, transport]);
 
   // Read I/O points from store
-  const inPoint = useSourcePlayerStore((s) => s.inPoint);
-  const outPoint = useSourcePlayerStore((s) => s.outPoint);
+  const inPoint = useSourceMonitorStore((s) => s.inPoint);
+  const outPoint = useSourceMonitorStore((s) => s.outPoint);
   useEffect(() => {
     outPointRef.current = outPoint;
   }, [outPoint]);
@@ -576,7 +576,7 @@ function SourcePlaybackControls({
       const originalCursor = document.body.style.cursor;
       document.body.style.cursor = 'col-resize';
 
-      const store = useSourcePlayerStore.getState;
+      const store = useSourceMonitorStore.getState;
       const onMove = (ev: MouseEvent) => {
         const frame = frameFromStripX(ev.clientX);
         if (type === 'in') {
@@ -604,7 +604,7 @@ function SourcePlaybackControls({
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const store = useSourcePlayerStore.getState;
+      const store = useSourceMonitorStore.getState;
       const startIn = store().inPoint;
       const startOut = store().outPoint;
       if (startIn === null || startOut === null) return;
@@ -644,15 +644,15 @@ function SourcePlaybackControls({
     : null;
 
   const handleMarkIn = useCallback(() => {
-    useSourcePlayerStore.getState().setInPoint(currentFrameRef.current);
+    useSourceMonitorStore.getState().setInPoint(currentFrameRef.current);
   }, []);
 
   const handleMarkOut = useCallback(() => {
-    useSourcePlayerStore.getState().setOutPoint(currentFrameRef.current);
+    useSourceMonitorStore.getState().setOutPoint(currentFrameRef.current);
   }, []);
 
   const handleClearIO = useCallback(() => {
-    useSourcePlayerStore.getState().clearInOutPoints();
+    useSourceMonitorStore.getState().clearInOutPoints();
   }, []);
 
   // Auto-stop playback at out point
@@ -665,7 +665,7 @@ function SourcePlaybackControls({
   }, [playing]);
 
   const handleReplaySegment = useCallback(() => {
-    const { inPoint: ip, outPoint: op } = useSourcePlayerStore.getState();
+    const { inPoint: ip, outPoint: op } = useSourceMonitorStore.getState();
     if (ip === null && op === null) return;
     replayingRef.current = true;
     transport.seek(ip ?? 0);

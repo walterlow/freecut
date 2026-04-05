@@ -39,4 +39,4 @@ modules or route modules.
 - `state/clipboard/*`: timeline copy/paste clipboard state
 - `state/clear-keyframes-dialog/*`: clear keyframes dialog state
 - `state/playback/*`: shared transport/playhead state (frame, play/pause, zoom, quality)
-- `state/source-player/*`: shared source monitor state (in/out points, source frame, player methods)
+- `state/source-monitor/*`: shared source monitor state (in/out points, source frame, transport methods)

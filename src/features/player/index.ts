@@ -1,8 +1,8 @@
 // Main player component exports.
 export { Player } from './Player';
-export { HeadlessPlayerTransport } from './HeadlessPlayerTransport';
+export { HeadlessTransport } from './HeadlessTransport';
 export type { PlayerProps } from './Player';
 export type {
-  BasePlayerTransportProps,
-  PlayerTransportRef,
-} from './player-transport-shared';
+  BaseTransportProps,
+  TransportRef,
+} from './transport-shared';

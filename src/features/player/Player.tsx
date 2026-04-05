@@ -1,7 +1,7 @@
 /**
  * Player.tsx - Main Player Component for FreeCut
  * 
- * A customizable video player component inspired by Composition Player
+ * A customizable video player component
  * with support for:
  * - Frame-accurate playback
  * - Custom controls
@@ -16,17 +16,17 @@ import React, {
   useCallback,
   useEffect,
 } from 'react';
-import { PlayerTransportProviders } from './PlayerTransportProviders';
+import { TransportProviders } from './TransportProviders';
 import {
-  usePlayerTransportBridge,
-  type BasePlayerTransportProps,
-  type PlayerTransportRef,
-} from './player-transport-shared';
+  useTransportBridge,
+  type BaseTransportProps,
+  type TransportRef,
+} from './transport-shared';
 
-export type { PlayerTransportRef } from './player-transport-shared';
+export type { TransportRef } from './transport-shared';
 
 // Types
-export interface PlayerProps extends BasePlayerTransportProps {
+export interface PlayerProps extends BaseTransportProps {
   /** The component to render as video content */
   children: React.ReactNode;
 
@@ -250,7 +250,7 @@ const DefaultControls: React.FC<{
 /**
  * Inner Player Component
  */
-const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
+const PlayerInner = forwardRef<TransportRef, PlayerProps>(
   (
     {
       children,
@@ -336,12 +336,12 @@ const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
     void initialPlaybackRate;
 
     const {
-      player,
+      transport,
       currentFrame,
       playing,
       playbackRate,
       setPlaybackRate,
-    } = usePlayerTransportBridge({
+    } = useTransportBridge({
       ref,
       durationInFrames,
       initialFrame,
@@ -418,7 +418,7 @@ const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
             {/* Click to play/pause overlay - behind controls */}
             <div
               className="absolute inset-0 cursor-pointer"
-              onClick={() => player.toggle()}
+              onClick={() => transport.toggle()}
             />
 
             {/* Controls - on top so scrubber/buttons receive clicks */}
@@ -429,8 +429,8 @@ const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
               fps={fps}
               playbackRate={playbackRate}
               isFullscreen={isFullscreen}
-              onTogglePlay={player.toggle}
-              onSeek={player.seek}
+              onTogglePlay={transport.toggle}
+              onSeek={transport.seek}
               onPlaybackRateChange={setPlaybackRate}
               onToggleFullscreen={toggleFullscreen}
             />
@@ -448,7 +448,7 @@ const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
  * The ClockBridgeProvider maintains backwards compatibility with
  * existing code that uses useTimelineContext().
  */
-export const Player = forwardRef<PlayerTransportRef, PlayerProps>(
+export const Player = forwardRef<TransportRef, PlayerProps>(
   (props, ref) => {
     const {
       durationInFrames,
@@ -461,7 +461,7 @@ export const Player = forwardRef<PlayerTransportRef, PlayerProps>(
     } = props;
 
     return (
-      <PlayerTransportProviders
+      <TransportProviders
         fps={fps}
         durationInFrames={durationInFrames}
         initialFrame={initialFrame}
@@ -473,7 +473,7 @@ export const Player = forwardRef<PlayerTransportRef, PlayerProps>(
         height={props.height}
       >
         <PlayerInner {...props} ref={ref} />
-      </PlayerTransportProviders>
+      </TransportProviders>
     );
   },
 );

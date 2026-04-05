@@ -4,7 +4,7 @@ import {
   backgroundBatchPreseek as workerBackgroundBatchPreseek,
   getDecoderPrewarmMetricsSnapshot,
 } from '../utils/decoder-prewarm';
-import { HeadlessPlayerTransport, type PlayerTransportRef } from '@/features/preview/deps/transport-core';
+import { HeadlessTransport, type TransportRef } from '@/features/preview/deps/transport-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
@@ -225,7 +225,7 @@ export const VideoPreview = memo(function VideoPreview({
   containerSize,
   suspendOverlay = false,
 }: VideoPreviewProps) {
-  const transportRef = useRef<PlayerTransportRef>(null);
+  const transportRef = useRef<TransportRef>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
   const scrubFrameDirtyRef = useRef(false);
@@ -4562,7 +4562,7 @@ export const VideoPreview = memo(function VideoPreview({
               </div>
             )}
 
-            <HeadlessPlayerTransport
+            <HeadlessTransport
               ref={transportRef}
               durationInFrames={totalFrames}
               fps={fps}
@@ -4573,7 +4573,7 @@ export const VideoPreview = memo(function VideoPreview({
               onFrameChange={handleTransportFrameChange}
             >
               <MainComposition {...inputProps} renderMode="audio-only" />
-            </HeadlessPlayerTransport>
+            </HeadlessTransport>
 
             {PREVIEW_RENDERER_ENABLED && (
               <canvas

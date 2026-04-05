@@ -13,7 +13,7 @@ export const VideoConfigContext = createContext<VideoConfig | null>(null);
 export function useVideoConfig(): VideoConfig {
   const config = useContext(VideoConfigContext);
   if (!config) {
-    throw new Error('No video config found. Make sure to use this component within a player transport.');
+    throw new Error('No video config found. Make sure to use this component within a transport surface.');
   }
   return config;
 }

@@ -1,6 +1,6 @@
 export {
   AbsoluteFill,
-  HeadlessPlayerTransport,
+  HeadlessTransport,
   Player,
-  type PlayerTransportRef,
+  type TransportRef,
 } from './transport-contract';

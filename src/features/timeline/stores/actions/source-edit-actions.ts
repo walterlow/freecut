@@ -7,7 +7,7 @@ import { useItemsStore } from '../items-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { useSourceMonitorStore } from '@/shared/state/source-monitor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
@@ -49,7 +49,7 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
     return null;
   }
 
-  const { inPoint, outPoint } = useSourcePlayerStore.getState();
+  const { inPoint, outPoint } = useSourceMonitorStore.getState();
   const { activeTrackId } = useSelectionStore.getState();
   if (!activeTrackId) {
     toast.warning('Select a target track in the timeline first');

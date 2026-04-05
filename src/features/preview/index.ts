@@ -3,5 +3,5 @@
 
 export { usePlaybackStore } from './stores/playback-store';
 export { useGizmoStore } from './stores/gizmo-store';
-export { useSourcePlayerStore } from './stores/source-player-store';
+export { useSourceMonitorStore } from './stores/source-monitor-store';
 export { resolveMediaUrl } from './utils/media-resolver';

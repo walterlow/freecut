@@ -599,7 +599,7 @@ export function GizmoOverlay({
       {/* Marquee selection rectangle - hidden during corner pin / mask editing */}
       {!isCornerPinEditing && !isMaskEditing && <MarqueeOverlay marqueeState={marqueeState} />}
 
-      {/* Player area - receives clicks for deselection and contains gizmos */}
+      {/* Preview area - receives clicks for deselection and contains gizmos */}
       {/* Disabled entirely during corner pin / mask editing so the overlay gets exclusive input */}
       <div
         className="absolute"

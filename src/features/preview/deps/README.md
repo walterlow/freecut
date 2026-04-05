@@ -17,8 +17,8 @@ Preview-local adapters for external feature dependencies.
   above. Prefer importing the more specific module directly in new code.
 - `media-library.ts`: the only allowed entry point for preview modules that
   need media-library stores, services, or media resolution utilities.
-- `transport-core.ts`: player/transport component exports (`Player`,
-  `HeadlessPlayerTransport`, `PlayerTransportRef`, `AbsoluteFill`) used by
+- `transport-core.ts`: transport component exports (`Player`,
+  `HeadlessTransport`, `TransportRef`, `AbsoluteFill`) used by
   preview.
 - `transport-context.ts`: transport context/providers/hooks used by preview.
 - `transport-pool.ts`: video source pool access used by preview.

@@ -3,7 +3,7 @@ import { PlayerEmitterProvider } from './event-emitter';
 import { ClockBridgeProvider } from './clock';
 import { VideoConfigProvider } from './video-config-context';
 
-interface PlayerTransportProvidersProps {
+interface TransportProvidersProps {
   children: React.ReactNode;
   durationInFrames: number;
   fps: number;
@@ -16,7 +16,7 @@ interface PlayerTransportProvidersProps {
   height?: number;
 }
 
-export function PlayerTransportProviders({
+export function TransportProviders({
   children,
   durationInFrames,
   fps,
@@ -27,7 +27,7 @@ export function PlayerTransportProviders({
   onEnded,
   width = 1280,
   height = 720,
-}: PlayerTransportProvidersProps): React.ReactElement {
+}: TransportProvidersProps): React.ReactElement {
   return (
     <PlayerEmitterProvider>
       <ClockBridgeProvider

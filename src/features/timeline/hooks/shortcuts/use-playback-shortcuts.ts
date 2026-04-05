@@ -10,7 +10,7 @@ import { useMarkersStore } from '../../stores/markers-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
-import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { useSourceMonitorStore } from '@/shared/state/source-monitor';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
@@ -49,9 +49,9 @@ export function usePlaybackShortcuts(
     hotkeys.PLAY_PAUSE,
     (event) => {
       event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
-      if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.toggle();
+      const { hoveredPanel, transportMethods } = useSourceMonitorStore.getState();
+      if (hoveredPanel === 'source' && transportMethods) {
+        transportMethods.toggle();
         return;
       }
       togglePlayPause();
@@ -70,9 +70,9 @@ export function usePlaybackShortcuts(
     hotkeys.PREVIOUS_FRAME,
     (event) => {
       event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
-      if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.frameBack(1);
+      const { hoveredPanel, transportMethods } = useSourceMonitorStore.getState();
+      if (hoveredPanel === 'source' && transportMethods) {
+        transportMethods.frameBack(1);
         return;
       }
       const currentFrame = usePlaybackStore.getState().currentFrame;
@@ -87,9 +87,9 @@ export function usePlaybackShortcuts(
     hotkeys.NEXT_FRAME,
     (event) => {
       event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
-      if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.frameForward(1);
+      const { hoveredPanel, transportMethods } = useSourceMonitorStore.getState();
+      if (hoveredPanel === 'source' && transportMethods) {
+        transportMethods.frameForward(1);
         return;
       }
       const currentFrame = usePlaybackStore.getState().currentFrame;
@@ -104,9 +104,9 @@ export function usePlaybackShortcuts(
     hotkeys.GO_TO_START,
     (event) => {
       event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
-      if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.seek(0);
+      const { hoveredPanel, transportMethods } = useSourceMonitorStore.getState();
+      if (hoveredPanel === 'source' && transportMethods) {
+        transportMethods.seek(0);
         return;
       }
       commitTimelineSeek(0);
@@ -120,9 +120,9 @@ export function usePlaybackShortcuts(
     hotkeys.GO_TO_END,
     (event) => {
       event.preventDefault();
-      const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
-      if (hoveredPanel === 'source' && playerMethods) {
-        playerMethods.seek(playerMethods.getDurationInFrames() - 1);
+      const { hoveredPanel, transportMethods } = useSourceMonitorStore.getState();
+      if (hoveredPanel === 'source' && transportMethods) {
+        transportMethods.seek(transportMethods.getDurationInFrames() - 1);
         return;
       }
       const currentItems = useItemsStore.getState().items;

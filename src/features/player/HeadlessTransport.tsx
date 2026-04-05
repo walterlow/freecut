@@ -1,16 +1,16 @@
 import React, {
   forwardRef,
 } from 'react';
-import { PlayerTransportProviders } from './PlayerTransportProviders';
+import { TransportProviders } from './TransportProviders';
 import {
-  usePlayerTransportBridge,
-  type BasePlayerTransportProps,
-  type PlayerTransportRef,
-} from './player-transport-shared';
+  useTransportBridge,
+  type BaseTransportProps,
+  type TransportRef,
+} from './transport-shared';
 
-export type HeadlessPlayerTransportProps = BasePlayerTransportProps;
+export type HeadlessTransportProps = BaseTransportProps;
 
-const HeadlessPlayerTransportInner = forwardRef<PlayerTransportRef, HeadlessPlayerTransportProps>(
+const HeadlessTransportInner = forwardRef<TransportRef, HeadlessTransportProps>(
   (
     {
       children,
@@ -24,7 +24,7 @@ const HeadlessPlayerTransportInner = forwardRef<PlayerTransportRef, HeadlessPlay
     },
     ref,
   ) => {
-    usePlayerTransportBridge({
+    useTransportBridge({
       ref,
       durationInFrames,
       initialFrame,
@@ -38,7 +38,7 @@ const HeadlessPlayerTransportInner = forwardRef<PlayerTransportRef, HeadlessPlay
     return (
       <div
         aria-hidden="true"
-        data-player-transport-host
+        data-transport-host
         style={{
           position: 'absolute',
           width: 0,
@@ -53,9 +53,9 @@ const HeadlessPlayerTransportInner = forwardRef<PlayerTransportRef, HeadlessPlay
     );
   },
 );
-HeadlessPlayerTransportInner.displayName = 'HeadlessPlayerTransportInner';
+HeadlessTransportInner.displayName = 'HeadlessTransportInner';
 
-export const HeadlessPlayerTransport = forwardRef<PlayerTransportRef, HeadlessPlayerTransportProps>(
+export const HeadlessTransport = forwardRef<TransportRef, HeadlessTransportProps>(
   (props, ref) => {
     const {
       durationInFrames,
@@ -70,7 +70,7 @@ export const HeadlessPlayerTransport = forwardRef<PlayerTransportRef, HeadlessPl
     } = props;
 
     return (
-      <PlayerTransportProviders
+      <TransportProviders
         fps={fps}
         durationInFrames={durationInFrames}
         initialFrame={initialFrame}
@@ -81,9 +81,9 @@ export const HeadlessPlayerTransport = forwardRef<PlayerTransportRef, HeadlessPl
         width={width}
         height={height}
       >
-        <HeadlessPlayerTransportInner ref={ref} {...props} />
-      </PlayerTransportProviders>
+        <HeadlessTransportInner ref={ref} {...props} />
+      </TransportProviders>
     );
   },
 );
-HeadlessPlayerTransport.displayName = 'HeadlessPlayerTransport';
+HeadlessTransport.displayName = 'HeadlessTransport';
