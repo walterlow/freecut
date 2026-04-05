@@ -4,7 +4,7 @@ import {
   ClockBridgeProvider,
   VideoConfigProvider,
   useClock,
-} from '@/features/preview/deps/player-context';
+} from '@/features/preview/deps/transport-context';
 import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { SourceComposition } from './source-composition';

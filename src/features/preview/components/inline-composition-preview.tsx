@@ -5,7 +5,7 @@ import {
   ClockBridgeProvider,
   VideoConfigProvider,
   useClock,
-} from '@/features/preview/deps/player-context';
+} from '@/features/preview/deps/transport-context';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {

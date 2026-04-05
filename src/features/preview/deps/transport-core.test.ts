@@ -3,7 +3,7 @@ import {
   AbsoluteFill,
   HeadlessPlayerTransport,
   Player,
-} from './player-core';
+} from './transport-core';
 
 describe('preview transport seam exports', () => {
   it('re-exports both transport surfaces through the preview seam', () => {

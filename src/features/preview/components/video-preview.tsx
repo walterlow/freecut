@@ -4,7 +4,7 @@ import {
   backgroundBatchPreseek as workerBackgroundBatchPreseek,
   getDecoderPrewarmMetricsSnapshot,
 } from '../utils/decoder-prewarm';
-import { HeadlessPlayerTransport, type PlayerTransportRef } from '@/features/preview/deps/player-core';
+import { HeadlessPlayerTransport, type PlayerTransportRef } from '@/features/preview/deps/transport-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
@@ -25,7 +25,7 @@ import { MainComposition } from '@/features/preview/deps/composition-runtime';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore, proxyService } from '@/features/preview/deps/media-library';
 import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/transport-pool';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
 import { CornerPinContainer } from './corner-pin-container';

@@ -24,7 +24,7 @@ export function getEffectiveScale(params: CoordinateParams): number {
 
 /**
  * Convert screen coordinates (from mouse events) to canvas coordinates.
- * Accounts for: container position, player centering, zoom level.
+ * Accounts for: container position, preview centering, and zoom level.
  */
 export function screenToCanvas(
   screenX: number,

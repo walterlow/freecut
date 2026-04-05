@@ -34,14 +34,14 @@ interface GizmoOverlayProps {
   zoom: number;
   /** Ref to the hit area element for marquee bounds checking */
   hitAreaRef?: React.RefObject<HTMLDivElement>;
-  /** Padding around player for marquee display when starting from outside */
+  /** Padding around the preview surface for marquee display when starting from outside */
   overlayPadding?: number;
 }
 
 /**
  * Overlay that renders transform gizmos for selected items
  * and clickable hit areas for all visible items.
- * Positioned absolutely over the video player.
+ * Positioned absolutely over the preview surface.
  */
 export function GizmoOverlay({
   containerRect,

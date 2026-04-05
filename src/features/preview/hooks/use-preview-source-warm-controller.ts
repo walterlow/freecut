@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/transport-pool';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { SOURCE_WARM_TICK_MS, type VideoSourceSpan } from '../utils/preview-constants';
 import { resolvePreviewSourceWarmPlan } from '../utils/preview-source-warm-controller';

@@ -3,7 +3,7 @@ import {
   SharedVideoExtractorPool,
   type VideoFrameSource,
 } from '@/features/preview/deps/export';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
+import { getGlobalVideoSourcePool } from '@/features/preview/deps/transport-pool';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';

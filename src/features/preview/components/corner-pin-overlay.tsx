@@ -2,7 +2,7 @@
  * Corner Pin Overlay
  *
  * Interactive canvas overlay for dragging the 4 corner pin handles.
- * Renders on top of the preview player when corner pin editing is active.
+ * Renders on top of the preview surface when corner pin editing is active.
  *
  * Uses preview pattern: during drag, updates are written to the corner pin
  * store's previewCornerPin (lightweight, no undo history). On mouse up,

@@ -265,7 +265,7 @@ vi.mock('../utils/decoder-prewarm', () => ({
   getDecoderPrewarmMetricsSnapshot: decoderPrewarmMockState.getDecoderPrewarmMetricsSnapshotMock,
 }));
 
-vi.mock('@/features/preview/deps/player-core', async () => {
+vi.mock('@/features/preview/deps/transport-core', async () => {
   const React = await import('react');
 
   const createMockTransport = (testId: string) => React.forwardRef<

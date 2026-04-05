@@ -1,16 +1,16 @@
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   AbsoluteFill,
-} from '@/features/preview/deps/player-core';
+} from '@/features/preview/deps/transport-core';
 import {
   useClock,
   useClockIsPlaying,
   useClockPlaybackRate,
   useVideoConfig,
-} from '@/features/preview/deps/player-context';
+} from '@/features/preview/deps/transport-context';
 import {
   getGlobalVideoSourcePool,
-} from '@/features/preview/deps/player-pool';
+} from '@/features/preview/deps/transport-pool';
 import {
   SharedVideoExtractorPool,
   type VideoFrameSource,

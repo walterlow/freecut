@@ -5,8 +5,8 @@ Preview-local adapters for external feature dependencies.
 - `timeline-contract.ts`: internal preview->timeline seam binding. Other
   timeline adapter files re-export from this contract to keep cross-feature
   coupling centralized.
-- `player-contract.ts`: internal preview->player transport seam binding.
-  Player adapter
+- `transport-contract.ts`: internal preview->transport seam binding.
+  Transport adapter
   files re-export from this contract to keep cross-feature coupling
   centralized.
 - `timeline-store.ts`: timeline stores/types used by preview rendering.
@@ -17,12 +17,12 @@ Preview-local adapters for external feature dependencies.
   above. Prefer importing the more specific module directly in new code.
 - `media-library.ts`: the only allowed entry point for preview modules that
   need media-library stores, services, or media resolution utilities.
-- `player-core.ts`: player/transport component exports (`Player`,
-  `HeadlessPlayerTransport`, `PlayerTransportRef`, the `PlayerRef`
-  compatibility alias, `AbsoluteFill`) used by preview.
-- `player-context.ts`: player context/providers/hooks used by preview.
-- `player-pool.ts`: video source pool access used by preview.
-- `player.ts`: compatibility barrel that re-exports the player adapters above.
+- `transport-core.ts`: player/transport component exports (`Player`,
+  `HeadlessPlayerTransport`, `PlayerTransportRef`, `AbsoluteFill`) used by
+  preview.
+- `transport-context.ts`: transport context/providers/hooks used by preview.
+- `transport-pool.ts`: video source pool access used by preview.
+- `transport.ts`: barrel that re-exports the transport adapters above.
   Prefer importing the more specific module directly in new code.
 - `export.ts`: the only allowed entry point for preview modules that need
   export rendering or frame extraction utilities.

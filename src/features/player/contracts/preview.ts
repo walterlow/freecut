@@ -1,12 +1,11 @@
 /**
- * Player contract consumed by preview feature adapters.
+ * Transport contract consumed by preview feature adapters.
  */
 
 export { AbsoluteFill } from '../composition';
 export {
   Player,
   HeadlessPlayerTransport,
-  type PlayerRef,
   type PlayerTransportRef,
 } from '..';
 export { PlayerEmitterProvider } from '../event-emitter';

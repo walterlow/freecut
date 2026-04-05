@@ -34,8 +34,6 @@ export interface PlayerTransportRef {
   removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
 }
 
-export type PlayerRef = PlayerTransportRef;
-
 interface UsePlayerTransportBridgeOptions {
   ref: React.ForwardedRef<PlayerTransportRef>;
   durationInFrames: number;

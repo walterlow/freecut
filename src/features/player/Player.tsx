@@ -23,7 +23,7 @@ import {
   type PlayerTransportRef,
 } from './player-transport-shared';
 
-export type { PlayerRef, PlayerTransportRef } from './player-transport-shared';
+export type { PlayerTransportRef } from './player-transport-shared';
 
 // Types
 export interface PlayerProps extends BasePlayerTransportProps {

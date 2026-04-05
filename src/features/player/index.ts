@@ -4,6 +4,5 @@ export { HeadlessPlayerTransport } from './HeadlessPlayerTransport';
 export type { PlayerProps } from './Player';
 export type {
   BasePlayerTransportProps,
-  PlayerRef,
   PlayerTransportRef,
 } from './player-transport-shared';

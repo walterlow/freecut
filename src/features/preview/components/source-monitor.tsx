@@ -14,7 +14,7 @@ import {
   useClockIsPlaying,
   VideoConfigProvider,
   usePlayer,
-} from '@/features/preview/deps/player-context';
+} from '@/features/preview/deps/transport-context';
 import { SourceComposition } from './source-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
@@ -252,7 +252,7 @@ function SourceMonitorInner({
   const setHoveredPanel = useSourcePlayerStore((s) => s.setHoveredPanel);
   const setPlayerMethods = useSourcePlayerStore((s) => s.setPlayerMethods);
 
-  // Reset hover and player methods on unmount
+  // Reset hover and transport methods on unmount.
   useEffect(() => {
     if (!interactive) return;
     return () => {
@@ -395,7 +395,7 @@ function SourcePlaybackControls({
   seekFrame: number | null;
 }) {
   const clock = useClock();
-  const player = usePlayer(durationInFrames);
+  const transport = usePlayer(durationInFrames);
   const playing = useClockIsPlaying();
   const lastFrame = Math.max(0, durationInFrames - 1);
   const tracks = useItemsStore((s) => s.tracks);
@@ -440,21 +440,21 @@ function SourcePlaybackControls({
     }
   }, [fps, formatFrameNumber, interactive, lastFrame]);
 
-  // Bridge player methods into the source player store for keyboard shortcuts
+  // Bridge transport methods into the source player store for keyboard shortcuts.
   useEffect(() => {
     if (!interactive) return;
     const setPlayerMethods = useSourcePlayerStore.getState().setPlayerMethods;
     setPlayerMethods({
-      toggle: player.toggle,
-      seek: player.seek,
-      frameBack: player.frameBack,
-      frameForward: player.frameForward,
+      toggle: transport.toggle,
+      seek: transport.seek,
+      frameBack: transport.frameBack,
+      frameForward: transport.frameForward,
       getDurationInFrames: () => durationInFrames,
     });
     return () => {
       useSourcePlayerStore.getState().setPlayerMethods(null);
     };
-  }, [durationInFrames, interactive, player.toggle, player.seek, player.frameBack, player.frameForward]);
+  }, [durationInFrames, interactive, transport.toggle, transport.seek, transport.frameBack, transport.frameForward]);
 
   useEffect(() => {
     updateFrameDisplay(clock.currentFrame);
@@ -462,26 +462,26 @@ function SourcePlaybackControls({
       updateFrameDisplay(frame);
 
       if (replayingRef.current && clock.isPlaying && outPointRef.current !== null && frame >= outPointRef.current) {
-        player.pause();
+        transport.pause();
         replayingRef.current = false;
       }
     });
-  }, [clock, player, updateFrameDisplay]);
+  }, [clock, transport, updateFrameDisplay]);
 
   // Consume pending seek (e.g. double-click opens clip at its In point)
   const pendingSeekFrame = useSourcePlayerStore((s) => s.pendingSeekFrame);
   useEffect(() => {
     if (!interactive) return;
     if (pendingSeekFrame !== null) {
-      player.seek(pendingSeekFrame);
+      transport.seek(pendingSeekFrame);
       useSourcePlayerStore.getState().setPendingSeekFrame(null);
     }
-  }, [interactive, pendingSeekFrame, player]);
+  }, [interactive, pendingSeekFrame, transport]);
 
   useEffect(() => {
     if (seekFrame === null) return;
-    player.seek(seekFrame);
-  }, [player, seekFrame]);
+    transport.seek(seekFrame);
+  }, [seekFrame, transport]);
 
   // Read I/O points from store
   const inPoint = useSourcePlayerStore((s) => s.inPoint);
@@ -502,9 +502,9 @@ function SourcePlaybackControls({
       if (!bar) return;
       const rect = bar.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      player.seek(Math.round(pct * lastFrame));
+      transport.seek(Math.round(pct * lastFrame));
     },
-    [player, lastFrame],
+    [lastFrame, transport],
   );
 
   const handleBarMouseDown = useCallback(
@@ -668,9 +668,9 @@ function SourcePlaybackControls({
     const { inPoint: ip, outPoint: op } = useSourcePlayerStore.getState();
     if (ip === null && op === null) return;
     replayingRef.current = true;
-    player.seek(ip ?? 0);
-    player.play();
-  }, [player]);
+    transport.seek(ip ?? 0);
+    transport.play();
+  }, [transport]);
 
   const activeTrack = useMemo(
     () => (activeTrackId ? tracks.find((track) => track.id === activeTrackId) ?? null : null),
@@ -917,7 +917,7 @@ function SourcePlaybackControls({
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(0)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => transport.seek(0)}>
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -925,7 +925,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameBack(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => transport.frameBack(1)}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -933,7 +933,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.toggle()}>
+              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => transport.toggle()}>
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
@@ -941,7 +941,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameForward(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => transport.frameForward(1)}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -949,7 +949,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(lastFrame)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => transport.seek(lastFrame)}>
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
