@@ -323,6 +323,7 @@ export const VideoPreview = memo(function VideoPreview({
   });
   const lastPausedPrearmTargetRef = useRef<number | null>(null);
   const lastPlayingPrearmTargetRef = useRef<number | null>(null);
+  const lastScrubTransitionWarmStartRef = useRef<number | null>(null);
   const presenterState = createPreviewPresenterState(presenterModelRef.current);
   const isRenderedOverlayVisible = presenterState.isRenderedOverlayVisible;
 
@@ -456,6 +457,7 @@ export const VideoPreview = memo(function VideoPreview({
     scrubDirectionRef.current = 0;
     suppressScrubBackgroundPrewarmRef.current = false;
     fallbackToPlayerScrubRef.current = false;
+    lastScrubTransitionWarmStartRef.current = null;
     lastBackwardScrubPreloadAtRef.current = 0;
     lastBackwardScrubRenderAtRef.current = 0;
     lastBackwardRequestedFrameRef.current = null;
@@ -3494,14 +3496,18 @@ export const VideoPreview = memo(function VideoPreview({
               // getBestDomVideoElementForItem is a lazy registry lookup that
               // finds the element whenever it exists — no timing dependency.
               const pausedTransitionWindow = getTransitionWindowForFrame(frameToRender);
-              renderer.setDomVideoElementProvider(
-                pausedTransitionWindow ? getBestDomVideoElementForItem : undefined,
+              const shouldUsePausedDomTransitionProvider = (
+                pausedTransitionWindow !== null
+                && playbackNow.previewFrame === null
               );
-              // For end-on-edit transitions, the incoming clip's video element
-              // may not be registered yet (React hasn't committed the premounted
-              // GroupRenderer). Wait for all participants to register before
-              // rendering to avoid caching a black frame.
-              if (pausedTransitionWindow) {
+              renderer.setDomVideoElementProvider(
+                shouldUsePausedDomTransitionProvider ? getBestDomVideoElementForItem : undefined,
+              );
+              // Active skim previews are safer on decoded sources than paused
+              // DOM video elements. Asymmetric transitions can require handle
+              // frames from a clip that is visually out-of-range, and the
+              // paused DOM path can show the raw side until the preview settles.
+              if (shouldUsePausedDomTransitionProvider) {
                 const ids = [pausedTransitionWindow.leftClip.id, pausedTransitionWindow.rightClip.id];
                 if (ids.some((id) => !getBestDomVideoElementForItem(id))) {
                   const dl = performance.now() + 500;
@@ -3597,6 +3603,17 @@ export const VideoPreview = memo(function VideoPreview({
               frameToRender === playbackState.currentFrame
               && isPausedTransitionOverlayActive(frameToRender, playbackState)
             );
+            const activeScrubTransitionWindow = playbackState.previewFrame !== null
+              ? getActiveTransitionWindowForFrame(playbackState.previewFrame)
+              : null;
+            const renderedTransitionWindow = getActiveTransitionWindowForFrame(frameToRender);
+            const shouldKeepStaleTransitionScrubOverlay = (
+              !playbackState.isPlaying
+              && playbackState.previewFrame !== null
+              && activeScrubTransitionWindow !== null
+              && renderedTransitionWindow !== null
+              && activeScrubTransitionWindow.transition.id === renderedTransitionWindow.transition.id
+            );
             const presenterPriorityDecision = resolvePreviewPresenterPriorityFrameDecision({
               fallbackToPlayerScrub: fallbackToPlayerScrubRef.current,
               shouldShowPlaybackTransitionOverlay,
@@ -3611,6 +3628,7 @@ export const VideoPreview = memo(function VideoPreview({
                   renderedFrame: frameToRender,
                 })
               ),
+              shouldKeepStaleFastScrubOverlayVisible: shouldKeepStaleTransitionScrubOverlay,
             });
             if (presenterPriorityDecision.shouldDropStaleOverlay) {
               previewPerfRef.current.staleScrubOverlayDrops += 1;
@@ -4289,6 +4307,32 @@ export const VideoPreview = memo(function VideoPreview({
           pushTransitionTrace('paused_prearm', {
             targetFrame: pausedTransitionDecision.targetStartFrame,
           });
+        }
+      }
+
+      if (!state.isPlaying && state.previewFrame !== null) {
+        const scrubTransitionWindow = getTransitionWindowForFrame(state.previewFrame);
+        if (scrubTransitionWindow) {
+          pinTransitionPlaybackSession(scrubTransitionWindow);
+          if (lastScrubTransitionWarmStartRef.current !== scrubTransitionWindow.startFrame) {
+            lastScrubTransitionWarmStartRef.current = scrubTransitionWindow.startFrame;
+            void (async () => {
+              const renderer = await ensureFastScrubRenderer();
+              if (!renderer || !('prewarmItems' in renderer)) return;
+              const playback = usePlaybackStore.getState();
+              const livePreviewFrame = playback.previewFrame;
+              if (playback.isPlaying || livePreviewFrame === null) return;
+              const liveWindow = getTransitionWindowForFrame(livePreviewFrame);
+              if (!liveWindow || liveWindow.startFrame !== scrubTransitionWindow.startFrame) return;
+              await renderer.prewarmItems(
+                [scrubTransitionWindow.leftClip.id, scrubTransitionWindow.rightClip.id],
+                livePreviewFrame,
+              );
+            })();
+          }
+        } else {
+          lastScrubTransitionWarmStartRef.current = null;
+          clearTransitionPlaybackSession();
         }
       }
 

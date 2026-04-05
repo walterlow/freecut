@@ -2026,6 +2026,51 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('uses decoded transition sources while skimming backward into a begin-on-edit transition', async () => {
+    seedAlignedTransitionProject(0);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    renderer.renderFrame.mockClear();
+    renderer.setDomVideoElementProvider.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(84);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(84);
+    });
+
+    renderer.renderFrame.mockClear();
+    renderer.setDomVideoElementProvider.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(68);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(68);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    const providerCalls = renderer.setDomVideoElementProvider.mock.calls;
+    expect(providerCalls.at(-1)?.[0]).toBeUndefined();
+  });
+
   it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {
     seedAlignedTransitionProject(1);
 

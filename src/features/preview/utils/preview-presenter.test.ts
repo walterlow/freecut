@@ -506,6 +506,19 @@ describe('preview presenter decisions', () => {
     });
   });
 
+  it('keeps the fast-scrub overlay visible for stale transition renders during scrub', () => {
+    expect(resolvePreviewPresenterPriorityFrameDecision({
+      fallbackToPlayerScrub: false,
+      shouldShowPlaybackTransitionOverlay: false,
+      shouldShowFastScrubOverlay: false,
+      shouldKeepStaleFastScrubOverlayVisible: true,
+    })).toEqual({
+      surface: 'fast_scrub_overlay',
+      shouldDropStaleOverlay: false,
+      shouldPrewarmAroundFrame: false,
+    });
+  });
+
   it('skips queued prewarm frames when backward scrub suppression is active', () => {
     expect(resolvePreviewPresenterRenderLoopDecision({
       shouldPreferPlayer: false,

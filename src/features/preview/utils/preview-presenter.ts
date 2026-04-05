@@ -321,6 +321,7 @@ export function resolvePreviewPresenterPriorityFrameDecision(input: {
   fallbackToPlayerScrub: boolean;
   shouldShowPlaybackTransitionOverlay: boolean;
   shouldShowFastScrubOverlay: boolean;
+  shouldKeepStaleFastScrubOverlayVisible?: boolean;
 }): PreviewPresenterPriorityFrameDecision {
   if (input.fallbackToPlayerScrub) {
     return {
@@ -333,6 +334,14 @@ export function resolvePreviewPresenterPriorityFrameDecision(input: {
   if (input.shouldShowPlaybackTransitionOverlay) {
     return {
       surface: 'playback_transition_overlay',
+      shouldDropStaleOverlay: false,
+      shouldPrewarmAroundFrame: false,
+    };
+  }
+
+  if (input.shouldKeepStaleFastScrubOverlayVisible) {
+    return {
+      surface: 'fast_scrub_overlay',
       shouldDropStaleOverlay: false,
       shouldPrewarmAroundFrame: false,
     };
