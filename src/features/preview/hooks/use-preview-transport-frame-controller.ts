@@ -7,7 +7,7 @@ import {
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import { ADAPTIVE_PREVIEW_QUALITY_ENABLED } from '../utils/preview-constants';
-import { resolvePreviewPlayerFrameChangeDecision } from '../utils/preview-player-controller';
+import { resolvePreviewTransportFrameChangeDecision } from '../utils/preview-transport-controller';
 
 type AdaptiveFrameSample = { frame: number; tsMs: number };
 
@@ -60,20 +60,20 @@ export function usePreviewTransportFrameController(
 
   return useCallback((frame: number) => {
     const playbackState = usePlaybackStore.getState();
-    const decision = resolvePreviewPlayerFrameChangeDecision({
+    const decision = resolvePreviewTransportFrameChangeDecision({
       frame,
       currentFrame: playbackState.currentFrame,
       previewFrame: playbackState.previewFrame,
       isPlaying: playbackState.isPlaying,
       isGizmoInteracting: isGizmoInteractingRef.current,
-      shouldIgnorePlayerUpdates: ignoreTransportUpdatesRef.current,
+      shouldIgnoreTransportUpdates: ignoreTransportUpdatesRef.current,
     });
 
     resolvePendingSeekLatency(decision.nextFrame);
 
     if (
       decision.kind === 'ignore'
-      && (decision.reason === 'player_sync' || decision.reason === 'scrubbing')
+      && (decision.reason === 'transport_sync' || decision.reason === 'scrubbing')
     ) {
       return;
     }

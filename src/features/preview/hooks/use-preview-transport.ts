@@ -18,13 +18,13 @@ import {
 } from '@/features/preview/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
 import {
-  resolvePreviewPlayerPlaybackCommand,
-  resolvePreviewPlayerTransportSyncDecision,
-} from '../utils/preview-player-controller';
+  resolvePreviewTransportPlaybackCommand,
+  resolvePreviewTransportSyncDecision,
+} from '../utils/preview-transport-controller';
 
-const logger = createLogger('useCustomPlayer');
+const logger = createLogger('usePreviewTransport');
 
-export function useCustomPlayer(
+export function usePreviewTransport(
   transportRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
   isGizmoInteracting = false,
   onTransportSeek?: (targetFrame: number) => void,
@@ -72,12 +72,12 @@ export function useCustomPlayer(
 
     try {
       const playbackState = usePlaybackStore.getState();
-      const playbackCommand = resolvePreviewPlayerPlaybackCommand({
+      const playbackCommand = resolvePreviewTransportPlaybackCommand({
         isPlaying,
         wasPlaying,
         currentFrame: playbackState.currentFrame,
         previewFrame: playbackState.previewFrame,
-        playerFrame: getTransportFrame(),
+        transportFrame: getTransportFrame(),
       });
 
       if (playbackCommand.kind === 'play') {
@@ -133,14 +133,14 @@ export function useCustomPlayer(
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!transportRef.current) return;
 
-      const syncDecision = resolvePreviewPlayerTransportSyncDecision({
+      const syncDecision = resolvePreviewTransportSyncDecision({
         prevCurrentFrame: prevState.currentFrame,
         currentFrame: state.currentFrame,
         prevPreviewFrame: prevState.previewFrame,
         previewFrame: state.previewFrame,
         isGizmoInteracting,
         isPlaying: state.isPlaying,
-        playerFrame: getTransportFrame(),
+        transportFrame: getTransportFrame(),
       });
 
       if (syncDecision.kind === 'none') return;

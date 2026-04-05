@@ -84,12 +84,12 @@ const {
   resolveProxyUrlMock,
   setBlobUrl: setMockBlobUrl,
 } = mockState;
-let mockedPlayerFrame = 0;
-let mockedPlayerIsPlaying = false;
-let deferPlayerSeekCompletion = false;
-let completeDeferredPlayerSeek: ((frameOverride?: number) => void) | null = null;
-let lastPlayerDimensions: { width: number; height: number } | null = null;
-let playerDimensionsHistory: Array<{ width: number; height: number }> = [];
+let mockedTransportFrame = 0;
+let mockedTransportIsPlaying = false;
+let deferTransportSeekCompletion = false;
+let completeDeferredTransportSeek: ((frameOverride?: number) => void) | null = null;
+let lastTransportDimensions: { width: number; height: number } | null = null;
+let transportDimensionsHistory: Array<{ width: number; height: number }> = [];
 let canvasGetContextSpy: ReturnType<typeof vi.spyOn> | null = null;
 let lastCompositionKeyframes: Array<{
   itemId: string;
@@ -286,8 +286,8 @@ vi.mock('@/features/preview/deps/player-core', async () => {
     const onFrameChangeRef = React.useRef(onFrameChange);
     const safeWidth = Number.isFinite(width) ? Number(width) : 0;
     const safeHeight = Number.isFinite(height) ? Number(height) : 0;
-    lastPlayerDimensions = { width: safeWidth, height: safeHeight };
-    playerDimensionsHistory.push(lastPlayerDimensions);
+    lastTransportDimensions = { width: safeWidth, height: safeHeight };
+    transportDimensionsHistory.push(lastTransportDimensions);
 
     React.useEffect(() => {
       onFrameChangeRef.current = onFrameChange;
@@ -297,41 +297,41 @@ vi.mock('@/features/preview/deps/player-core', async () => {
       seekTo: (frame: number) => {
         const nextFrame = Math.round(frame);
         seekToMock(nextFrame);
-        if (deferPlayerSeekCompletion) {
-          completeDeferredPlayerSeek = (frameOverride) => {
+        if (deferTransportSeekCompletion) {
+          completeDeferredTransportSeek = (frameOverride) => {
             const resolvedFrame = frameOverride ?? nextFrame;
-            mockedPlayerFrame = resolvedFrame;
+            mockedTransportFrame = resolvedFrame;
             setRenderTick((value) => value + 1);
             onFrameChangeRef.current?.(resolvedFrame);
             if (resolvedFrame === nextFrame) {
-              completeDeferredPlayerSeek = null;
+              completeDeferredTransportSeek = null;
             }
           };
           return;
         }
-        mockedPlayerFrame = nextFrame;
+        mockedTransportFrame = nextFrame;
         setRenderTick((value) => value + 1);
         onFrameChangeRef.current?.(nextFrame);
       },
       play: () => {
-        mockedPlayerIsPlaying = true;
+        mockedTransportIsPlaying = true;
         playMock();
         setRenderTick((value) => value + 1);
       },
       pause: () => {
-        mockedPlayerIsPlaying = false;
+        mockedTransportIsPlaying = false;
         pauseMock();
         setRenderTick((value) => value + 1);
       },
-      getCurrentFrame: () => mockedPlayerFrame,
-      isPlaying: () => mockedPlayerIsPlaying,
+      getCurrentFrame: () => mockedTransportFrame,
+      isPlaying: () => mockedTransportIsPlaying,
     }), []);
 
     const syncedChildren = React.Children.map(children, (child) => {
       if (!React.isValidElement(child)) return child;
       return React.cloneElement(
         child as React.ReactElement<Record<string, unknown>>,
-        { __playerFrameTick: renderTick }
+        { __transportFrameTick: renderTick }
       );
     });
 
@@ -366,7 +366,7 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .flatMap((track) => track.items ?? [])
       .map((item) => item.src ?? '')
       .filter((src) => src.length > 0);
-    return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
+    return <div data-testid="mock-transport-frame">{String(mockedTransportFrame)}</div>;
   },
   ensureAudioContextResumed: vi.fn(),
   ensureBufferedAudioContextResumed: vi.fn(),
@@ -506,12 +506,12 @@ function seedAlignedTransitionProject(alignment: number = 0.5) {
 
 describe('VideoPreview sync behavior', () => {
   beforeEach(() => {
-    mockedPlayerFrame = 0;
-    mockedPlayerIsPlaying = false;
-    deferPlayerSeekCompletion = false;
-    completeDeferredPlayerSeek = null;
-    lastPlayerDimensions = null;
-    playerDimensionsHistory = [];
+    mockedTransportFrame = 0;
+    mockedTransportIsPlaying = false;
+    deferTransportSeekCompletion = false;
+    completeDeferredTransportSeek = null;
+    lastTransportDimensions = null;
+    transportDimensionsHistory = [];
     seekToMock.mockReset();
     playMock.mockReset();
     pauseMock.mockReset();
@@ -1327,7 +1327,7 @@ describe('VideoPreview sync behavior', () => {
     });
     seekToMock.mockClear();
 
-    deferPlayerSeekCompletion = true;
+    deferTransportSeekCompletion = true;
     act(() => {
       usePlaybackStore.getState().setPreviewFrame(24);
     });
@@ -1351,7 +1351,7 @@ describe('VideoPreview sync behavior', () => {
     seekToMock.mockClear();
 
     act(() => {
-      completeDeferredPlayerSeek?.(25);
+      completeDeferredTransportSeek?.(25);
     });
 
     await waitFor(() => {
@@ -1971,7 +1971,7 @@ describe('VideoPreview sync behavior', () => {
     });
     seekToMock.mockClear();
 
-    deferPlayerSeekCompletion = true;
+    deferTransportSeekCompletion = true;
     act(() => {
       usePlaybackStore.getState().setPreviewFrame(null);
     });
@@ -1980,7 +1980,7 @@ describe('VideoPreview sync behavior', () => {
     expect(scrubCanvas.style.visibility).toBe('visible');
 
     act(() => {
-      completeDeferredPlayerSeek?.(47);
+      completeDeferredTransportSeek?.(47);
     });
 
     await waitFor(() => {
@@ -1990,7 +1990,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     act(() => {
-      completeDeferredPlayerSeek?.(48);
+      completeDeferredTransportSeek?.(48);
     });
 
     await waitFor(() => {
@@ -3113,7 +3113,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(48);
-      expect(screen.getByTestId('mock-player-frame')).toHaveTextContent('48');
+      expect(screen.getByTestId('mock-transport-frame')).toHaveTextContent('48');
     });
     seekToMock.mockClear();
 
@@ -3125,7 +3125,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(72);
-      expect(screen.getByTestId('mock-player-frame')).toHaveTextContent('72');
+      expect(screen.getByTestId('mock-transport-frame')).toHaveTextContent('72');
       const keyframesForItem = lastCompositionKeyframes.find((entry) => entry.itemId === 'item-1');
       const xProperty = keyframesForItem?.properties.find((property) => property.property === 'x');
       expect(xProperty?.keyframes.some((keyframe) => keyframe.frame === 48 && keyframe.value === 148)).toBe(true);
@@ -3142,7 +3142,7 @@ describe('VideoPreview sync behavior', () => {
     );
 
     await waitFor(() => {
-      expect(lastPlayerDimensions).toEqual({ width: 1920, height: 1080 });
+      expect(lastTransportDimensions).toEqual({ width: 1920, height: 1080 });
     });
 
     act(() => {
@@ -3150,7 +3150,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(lastPlayerDimensions).toEqual({ width: 1920, height: 1080 });
+      expect(lastTransportDimensions).toEqual({ width: 1920, height: 1080 });
     });
 
     act(() => {
@@ -3158,11 +3158,11 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(lastPlayerDimensions).toEqual({ width: 1920, height: 1080 });
+      expect(lastTransportDimensions).toEqual({ width: 1920, height: 1080 });
     });
 
     expect(
-      playerDimensionsHistory.every(
+      transportDimensionsHistory.every(
         (entry) => entry.width === 1920 && entry.height === 1080
       )
     ).toBe(true);

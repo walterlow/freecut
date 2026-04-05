@@ -90,7 +90,7 @@ import {
 import {
   shouldForceContinuousPreviewOverlay,
 } from '../hooks/use-gpu-effects-overlay';
-import { useCustomPlayer } from '../hooks/use-custom-player';
+import { usePreviewTransport } from '../hooks/use-preview-transport';
 import { usePreviewTransportFrameController } from '../hooks/use-preview-transport-frame-controller';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
@@ -450,7 +450,7 @@ export const VideoPreview = memo(function VideoPreview({
   }, []);
 
   // Transport integration for audio/clock only.
-  const { ignoreTransportUpdatesRef } = useCustomPlayer(
+  const { ignoreTransportUpdatesRef } = usePreviewTransport(
     transportRef,
     isGizmoInteracting,
     trackTransportSeek,

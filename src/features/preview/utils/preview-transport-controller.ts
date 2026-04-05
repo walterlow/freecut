@@ -3,15 +3,15 @@ import {
   type PreviewInteractionMode,
 } from './preview-interaction-mode';
 
-export interface PreviewPlayerPlaybackCommandInput {
+export interface PreviewTransportPlaybackCommandInput {
   isPlaying: boolean;
   wasPlaying: boolean;
   currentFrame: number;
   previewFrame: number | null;
-  playerFrame: number | null;
+  transportFrame: number | null;
 }
 
-export type PreviewPlayerPlaybackCommand =
+export type PreviewTransportPlaybackCommand =
   | { kind: 'none' }
   | { kind: 'pause' }
   | {
@@ -21,9 +21,9 @@ export type PreviewPlayerPlaybackCommand =
     shouldSeekBeforePlay: boolean;
   };
 
-export function resolvePreviewPlayerPlaybackCommand(
-  input: PreviewPlayerPlaybackCommandInput,
-): PreviewPlayerPlaybackCommand {
+export function resolvePreviewTransportPlaybackCommand(
+  input: PreviewTransportPlaybackCommandInput,
+): PreviewTransportPlaybackCommand {
   if (input.isPlaying && !input.wasPlaying) {
     const startFrame = input.previewFrame ?? input.currentFrame;
     return {
@@ -31,8 +31,8 @@ export function resolvePreviewPlayerPlaybackCommand(
       startFrame,
       shouldClearPreviewFrame: input.previewFrame !== null,
       shouldSeekBeforePlay: (
-        input.playerFrame === null
-        || Math.abs(input.playerFrame - startFrame) > 1
+        input.transportFrame === null
+        || Math.abs(input.transportFrame - startFrame) > 1
       ),
     };
   }
@@ -44,23 +44,23 @@ export function resolvePreviewPlayerPlaybackCommand(
   return { kind: 'none' };
 }
 
-export interface PreviewPlayerTransportSyncInput {
+export interface PreviewTransportSyncInput {
   prevCurrentFrame: number;
   currentFrame: number;
   prevPreviewFrame: number | null;
   previewFrame: number | null;
   isGizmoInteracting: boolean;
   isPlaying: boolean;
-  playerFrame: number | null;
+  transportFrame: number | null;
 }
 
-export type PreviewPlayerTransportSyncDecision =
+export type PreviewTransportSyncDecision =
   | { kind: 'none' }
   | { kind: 'seek'; targetFrame: number };
 
-export function resolvePreviewPlayerTransportSyncDecision(
-  input: PreviewPlayerTransportSyncInput,
-): PreviewPlayerTransportSyncDecision {
+export function resolvePreviewTransportSyncDecision(
+  input: PreviewTransportSyncInput,
+): PreviewTransportSyncDecision {
   if (input.isGizmoInteracting) {
     return { kind: 'none' };
   }
@@ -82,8 +82,8 @@ export function resolvePreviewPlayerTransportSyncDecision(
 
   const toleranceFrames = input.isPlaying ? 2 : 0;
   if (
-    input.playerFrame !== null
-    && Math.abs(input.playerFrame - input.currentFrame) <= toleranceFrames
+    input.transportFrame !== null
+    && Math.abs(input.transportFrame - input.currentFrame) <= toleranceFrames
   ) {
     return { kind: 'none' };
   }
@@ -94,19 +94,19 @@ export function resolvePreviewPlayerTransportSyncDecision(
   };
 }
 
-export interface PreviewPlayerFrameChangeInput {
+export interface PreviewTransportFrameChangeInput {
   frame: number;
   currentFrame: number;
   previewFrame: number | null;
   isPlaying: boolean;
   isGizmoInteracting: boolean;
-  shouldIgnorePlayerUpdates: boolean;
+  shouldIgnoreTransportUpdates: boolean;
 }
 
-export type PreviewPlayerFrameChangeDecision =
+export type PreviewTransportFrameChangeDecision =
   | {
     kind: 'ignore';
-    reason: 'player_sync' | 'scrubbing' | 'redundant_frame';
+    reason: 'transport_sync' | 'scrubbing' | 'redundant_frame';
     nextFrame: number;
     interactionMode: PreviewInteractionMode;
   }
@@ -116,9 +116,9 @@ export type PreviewPlayerFrameChangeDecision =
     interactionMode: PreviewInteractionMode;
   };
 
-export function resolvePreviewPlayerFrameChangeDecision(
-  input: PreviewPlayerFrameChangeInput,
-): PreviewPlayerFrameChangeDecision {
+export function resolvePreviewTransportFrameChangeDecision(
+  input: PreviewTransportFrameChangeInput,
+): PreviewTransportFrameChangeDecision {
   const nextFrame = Math.round(input.frame);
   const interactionMode = getPreviewInteractionMode({
     isPlaying: input.isPlaying,
@@ -126,10 +126,10 @@ export function resolvePreviewPlayerFrameChangeDecision(
     isGizmoInteracting: input.isGizmoInteracting,
   });
 
-  if (input.shouldIgnorePlayerUpdates) {
+  if (input.shouldIgnoreTransportUpdates) {
     return {
       kind: 'ignore',
-      reason: 'player_sync',
+      reason: 'transport_sync',
       nextFrame,
       interactionMode,
     };
