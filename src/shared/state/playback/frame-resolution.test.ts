@@ -8,8 +8,6 @@ describe('getResolvedPlaybackFrame', () => {
       previewFrame: 90,
       displayedFrame: 80,
       isPlaying: true,
-      currentFrameEpoch: 4,
-      previewFrameEpoch: 5,
     })).toBe(120);
   });
 
@@ -19,27 +17,24 @@ describe('getResolvedPlaybackFrame', () => {
       previewFrame: 140,
       displayedFrame: 132,
       isPlaying: false,
-      currentFrameEpoch: 4,
-      previewFrameEpoch: 5,
     })).toBe(132);
   });
 
-  it('falls back to previewFrame/currentFrame ordering when displayedFrame is null', () => {
+  it('uses previewFrame when paused and displayedFrame is null', () => {
     expect(getResolvedPlaybackFrame({
       currentFrame: 120,
       previewFrame: 140,
       displayedFrame: null,
       isPlaying: false,
-      currentFrameEpoch: 4,
-      previewFrameEpoch: 5,
     })).toBe(140);
+  });
+
+  it('falls back to currentFrame when paused and previewFrame is null', () => {
     expect(getResolvedPlaybackFrame({
       currentFrame: 120,
-      previewFrame: 140,
+      previewFrame: null,
       displayedFrame: null,
       isPlaying: false,
-      currentFrameEpoch: 6,
-      previewFrameEpoch: 5,
     })).toBe(120);
   });
 });

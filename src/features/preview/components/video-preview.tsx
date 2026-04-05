@@ -3758,16 +3758,12 @@ export const VideoPreview = memo(function VideoPreview({
         state: {
           isPlaying: state.isPlaying,
           currentFrame: state.currentFrame,
-          currentFrameEpoch: state.currentFrameEpoch,
           previewFrame: state.previewFrame,
-          previewFrameEpoch: state.previewFrameEpoch,
         },
         prev: {
           isPlaying: prev.isPlaying,
           currentFrame: prev.currentFrame,
-          currentFrameEpoch: prev.currentFrameEpoch,
           previewFrame: prev.previewFrame,
-          previewFrameEpoch: prev.previewFrameEpoch,
         },
         playbackTransitionState,
         hasPreparedTransitionFrame: hasPreparedPlaybackTransitionFrame(state.currentFrame),

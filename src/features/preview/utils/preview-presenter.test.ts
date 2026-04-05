@@ -65,16 +65,12 @@ describe('resolvePreviewPresenterStoreDecision', () => {
       state: {
         isPlaying: true,
         currentFrame: 20,
-        currentFrameEpoch: 2,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       prev: {
         isPlaying: false,
         currentFrame: 19,
-        currentFrameEpoch: 1,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       playbackTransitionState: {
         hasActiveTransition: false,
@@ -91,16 +87,12 @@ describe('resolvePreviewPresenterStoreDecision', () => {
       state: {
         isPlaying: false,
         currentFrame: 20,
-        currentFrameEpoch: 2,
         previewFrame: 24,
-        previewFrameEpoch: 2,
       },
       prev: {
         isPlaying: false,
         currentFrame: 20,
-        currentFrameEpoch: 1,
         previewFrame: 22,
-        previewFrameEpoch: 1,
       },
     })).toEqual({
       kind: 'target_frame',

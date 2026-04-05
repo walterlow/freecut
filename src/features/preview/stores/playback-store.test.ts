@@ -5,7 +5,6 @@ describe('playback-store', () => {
   beforeEach(() => {
     usePlaybackStore.setState({
       currentFrame: 0,
-      currentFrameEpoch: 0,
       displayedFrame: null,
       isPlaying: false,
       playbackRate: 1,
@@ -14,8 +13,6 @@ describe('playback-store', () => {
       muted: false,
       zoom: -1,
       previewFrame: null,
-      previewFrameEpoch: 0,
-      frameUpdateEpoch: 0,
       previewItemId: null,
       captureFrame: null,
       captureFrameImageData: null,
@@ -202,7 +199,6 @@ describe('playback-store', () => {
       expect(state.currentFrame).toBe(42);
       expect(state.previewFrame).toBe(42);
       expect(state.previewItemId).toBe('item-1');
-      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
 
     it('commits previewFrame into currentFrame and clears preview state atomically', () => {
@@ -213,7 +209,6 @@ describe('playback-store', () => {
       expect(state.currentFrame).toBe(42);
       expect(state.previewFrame).toBe(null);
       expect(state.previewItemId).toBe(null);
-      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
 
     it('clears preview state without disturbing the current or displayed frame', () => {
@@ -238,7 +233,6 @@ describe('playback-store', () => {
       expect(state.currentFrame).toBe(42);
       expect(state.previewFrame).toBe(null);
       expect(state.previewItemId).toBe(null);
-      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
 
     it('performs transport seeks atomically and clears preview/presented state', () => {
@@ -251,7 +245,6 @@ describe('playback-store', () => {
       expect(state.previewFrame).toBe(null);
       expect(state.displayedFrame).toBe(null);
       expect(state.previewItemId).toBe(null);
-      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
 
     it('normalizes transport seek frames', () => {

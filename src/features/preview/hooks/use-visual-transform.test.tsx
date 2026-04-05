@@ -43,7 +43,6 @@ function resetStores() {
 
   usePlaybackStore.setState({
     currentFrame: 10,
-    currentFrameEpoch: 0,
     displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
@@ -52,8 +51,6 @@ function resetStores() {
     muted: false,
     zoom: -1,
     previewFrame: null,
-    previewFrameEpoch: 0,
-    frameUpdateEpoch: 0,
     previewItemId: null,
     captureFrame: null,
     useProxy: true,
@@ -136,7 +133,7 @@ describe('useVisualTransforms skimming frame resolution', () => {
     });
   });
 
-  it('falls back to currentFrame when previewFrame is stale', async () => {
+  it('keeps previewFrame active while paused until preview mode clears', async () => {
     render(<VisualTransformsProbe />);
 
     act(() => {
@@ -146,7 +143,7 @@ describe('useVisualTransforms skimming frame resolution', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '330');
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '220');
     });
   });
 });

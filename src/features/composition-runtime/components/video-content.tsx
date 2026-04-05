@@ -10,10 +10,6 @@ import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/playe
 import { createLogger } from '@/shared/logging/logger';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
-  registerDomVideoElement,
-  unregisterDomVideoElement,
-} from '../utils/dom-video-element-registry';
-import {
   applyVideoElementAudioVolume,
   useVideoAudioVolume,
   connectedVideoElements,
@@ -79,8 +75,6 @@ const NativePreviewVideo: React.FC<{
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
-  const registeredElementRef = useRef<HTMLVideoElement | null>(null);
-  const registeredItemIdRef = useRef<string | null>(null);
   audioVolumeRef.current = audioVolume;
   onErrorRef.current = onError;
 
@@ -136,36 +130,6 @@ const NativePreviewVideo: React.FC<{
     needsInitialSyncRef.current = true;
     lastSyncTimeRef.current = 0;
   }, [itemId]);
-
-  const syncRegisteredVideoElement = useCallback((nextItemId: string, nextElement: HTMLVideoElement | null) => {
-    const prevElement = registeredElementRef.current;
-    const prevItemId = registeredItemIdRef.current;
-
-    if (prevElement && prevItemId && (prevElement !== nextElement || prevItemId !== nextItemId)) {
-      unregisterDomVideoElement(prevItemId, prevElement);
-    }
-
-    if (nextElement && (prevElement !== nextElement || prevItemId !== nextItemId)) {
-      registerDomVideoElement(nextItemId, nextElement);
-    }
-
-    registeredElementRef.current = nextElement;
-    registeredItemIdRef.current = nextElement ? nextItemId : null;
-  }, []);
-
-  const clearRegisteredVideoElement = useCallback(() => {
-    const prevElement = registeredElementRef.current;
-    const prevItemId = registeredItemIdRef.current;
-    if (prevElement && prevItemId) {
-      unregisterDomVideoElement(prevItemId, prevElement);
-    }
-    registeredElementRef.current = null;
-    registeredItemIdRef.current = null;
-  }, []);
-
-  useLayoutEffect(() => {
-    syncRegisteredVideoElement(itemId, elementRef.current);
-  }, [itemId, syncRegisteredVideoElement]);
 
   // Acquire element from pool on mount
   useEffect(() => {
@@ -241,7 +205,6 @@ const NativePreviewVideo: React.FC<{
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
     elementRef.current = element;
-    syncRegisteredVideoElement(itemId, element);
     applyVideoElementAudioVolume(element, audioVolumeRef.current);
 
     if (isContinuousPlayback) {
@@ -411,7 +374,6 @@ const NativePreviewVideo: React.FC<{
       }
 
       // Release back to pool
-      clearRegisteredVideoElement();
       pool.releaseClip(poolClipId, { delayMs: releaseStickyDelayMsRef.current });
       elementRef.current = null;
 
@@ -419,9 +381,8 @@ const NativePreviewVideo: React.FC<{
     };
     // Note: frame, fps, targetTime intentionally NOT in deps - we only want to acquire once per lane/source
     // Ongoing seeking is handled by the separate sync effect, and itemId-only
-    // handoffs are handled by the registration + sync refs without tearing down
-    // the element across split-boundary transitions.
-  }, [poolClipId, src, pool, containerRef, shortId, syncRegisteredVideoElement, clearRegisteredVideoElement, fitMode]);
+    // handoffs reuse the same acquired element without tearing down the pool lane.
+  }, [poolClipId, src, pool, containerRef, shortId, fitMode]);
 
   useEffect(() => {
     const element = elementRef.current;

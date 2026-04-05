@@ -7,16 +7,12 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       state: {
         isPlaying: true,
         currentFrame: 20,
-        currentFrameEpoch: 2,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       prev: {
         isPlaying: true,
         currentFrame: 19,
-        currentFrameEpoch: 1,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       playbackTransitionState: {
         hasActiveTransition: false,
@@ -51,16 +47,12 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       state: {
         isPlaying: true,
         currentFrame: 40,
-        currentFrameEpoch: 2,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       prev: {
         isPlaying: true,
         currentFrame: 39,
-        currentFrameEpoch: 1,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       playbackTransitionState: {
         hasActiveTransition: true,
@@ -94,16 +86,12 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       state: {
         isPlaying: false,
         currentFrame: 20,
-        currentFrameEpoch: 2,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       prev: {
         isPlaying: false,
         currentFrame: 20,
-        currentFrameEpoch: 1,
         previewFrame: null,
-        previewFrameEpoch: 0,
       },
       playbackTransitionState: null,
       hasPreparedTransitionFrame: false,
@@ -125,16 +113,12 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       state: {
         isPlaying: false,
         currentFrame: 30,
-        currentFrameEpoch: 2,
         previewFrame: 32,
-        previewFrameEpoch: 2,
       },
       prev: {
         isPlaying: false,
         currentFrame: 30,
-        currentFrameEpoch: 1,
         previewFrame: 28,
-        previewFrameEpoch: 1,
       },
       playbackTransitionState: null,
       hasPreparedTransitionFrame: false,

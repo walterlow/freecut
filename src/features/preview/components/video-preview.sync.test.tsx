@@ -393,7 +393,6 @@ import { VideoPreview } from './video-preview';
 function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
-    currentFrameEpoch: 0,
     displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
@@ -402,8 +401,6 @@ function resetStores() {
     muted: false,
     zoom: -1,
     previewFrame: null,
-    previewFrameEpoch: 0,
-    frameUpdateEpoch: 0,
     previewItemId: null,
     captureFrame: null,
     useProxy: true,

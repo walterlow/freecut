@@ -8,7 +8,6 @@ function resetPlaybackStore() {
 
   usePlaybackStore.setState({
     currentFrame: 12,
-    currentFrameEpoch: 0,
     displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
@@ -17,8 +16,6 @@ function resetPlaybackStore() {
     muted: false,
     zoom: -1,
     previewFrame: null,
-    previewFrameEpoch: 0,
-    frameUpdateEpoch: 0,
     previewItemId: null,
     captureFrame: null,
     captureFrameImageData: null,
@@ -39,13 +36,13 @@ describe('TimecodeDisplay', () => {
     const button = screen.getByRole('button');
     const [currentTime, , totalTime] = button.querySelectorAll('span');
 
-    expect(button).toHaveStyle({ width: 'calc(23ch + 1rem)' });
-    expect(button).toHaveTextContent('00:00:00:12');
-    expect(button).toHaveTextContent('00:00:33:09');
+    expect(button).toHaveStyle({ width: 'calc(17ch + 0.75rem)' });
+    expect(button).toHaveTextContent('00:00:12');
+    expect(button).toHaveTextContent('00:33:09');
 
     fireEvent.click(button);
 
-    expect(button).toHaveStyle({ width: 'calc(23ch + 1rem)' });
+    expect(button).toHaveStyle({ width: 'calc(17ch + 0.75rem)' });
     expect(currentTime).not.toHaveStyle({ width: '11ch' });
     expect(totalTime).not.toHaveStyle({ width: '11ch' });
     expect(button).toHaveTextContent('0012');

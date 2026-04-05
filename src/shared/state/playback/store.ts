@@ -19,7 +19,6 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
     (set) => ({
       // State
       currentFrame: 0,
-      currentFrameEpoch: 0,
       displayedFrame: null,
       isPlaying: false,
       playbackRate: 1,
@@ -28,8 +27,6 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
       muted: false,
       zoom: -1, // -1 = auto-fit, positive values = specific zoom percentage
       previewFrame: null,
-      previewFrameEpoch: 0,
-      frameUpdateEpoch: 0,
       previewItemId: null,
       captureFrame: null, // Set by VideoPreview when Player is mounted
       captureFrameImageData: null,
@@ -42,12 +39,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
         set((state) => {
           const nextFrame = normalizeFrame(frame);
           if (state.currentFrame === nextFrame) return state;
-          const nextEpoch = state.frameUpdateEpoch + 1;
-          return {
-            currentFrame: nextFrame,
-            currentFrameEpoch: nextEpoch,
-            frameUpdateEpoch: nextEpoch,
-          };
+          return { currentFrame: nextFrame };
         }),
       setScrubFrame: (frame, itemId) =>
         set((state) => {
@@ -60,14 +52,10 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           ) {
             return state;
           }
-          const nextEpoch = state.frameUpdateEpoch + 1;
           return {
             currentFrame: nextFrame,
-            currentFrameEpoch: nextEpoch,
             previewFrame: nextFrame,
             previewItemId: nextItemId,
-            previewFrameEpoch: nextEpoch,
-            frameUpdateEpoch: nextEpoch,
           };
         }),
       clearPreviewFrame: () =>
@@ -75,25 +63,18 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           if (state.previewFrame === null && state.previewItemId === null) {
             return state;
           }
-          const nextEpoch = state.frameUpdateEpoch + 1;
           return {
             previewFrame: null,
             previewItemId: null,
-            previewFrameEpoch: nextEpoch,
-            frameUpdateEpoch: nextEpoch,
           };
         }),
       commitPreviewFrame: () =>
         set((state) => {
           if (state.previewFrame === null) return state;
-          const nextEpoch = state.frameUpdateEpoch + 1;
           return {
             currentFrame: state.previewFrame,
-            currentFrameEpoch: nextEpoch,
             previewFrame: null,
             previewItemId: null,
-            previewFrameEpoch: nextEpoch,
-            frameUpdateEpoch: nextEpoch,
           };
         }),
       seekTimelineFrame: (frame) =>
@@ -107,15 +88,11 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           ) {
             return state;
           }
-          const nextEpoch = state.frameUpdateEpoch + 1;
           return {
             currentFrame: nextFrame,
-            currentFrameEpoch: nextEpoch,
             previewFrame: null,
             previewItemId: null,
-            previewFrameEpoch: nextEpoch,
             displayedFrame: null,
-            frameUpdateEpoch: nextEpoch,
           };
         }),
       play: () => set((state) => (state.isPlaying ? state : { isPlaying: true })),
@@ -133,12 +110,9 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
           if (state.previewFrame === nextFrame && state.previewItemId === nextItemId) {
             return state;
           }
-          const nextEpoch = state.frameUpdateEpoch + 1;
           return {
             previewFrame: nextFrame,
             previewItemId: nextItemId,
-            previewFrameEpoch: nextEpoch,
-            frameUpdateEpoch: nextEpoch,
           };
         }),
       setDisplayedFrame: (frame) =>

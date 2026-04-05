@@ -7,8 +7,6 @@ const testState = vi.hoisted(() => ({
   preloadSourceMock: vi.fn(() => Promise.resolve()),
   acquireForClipMock: vi.fn(),
   releaseClipMock: vi.fn(),
-  registerDomVideoElementMock: vi.fn(),
-  unregisterDomVideoElementMock: vi.fn(),
   pool: null as {
     preloadSource: ReturnType<typeof vi.fn>;
     acquireForClip: ReturnType<typeof vi.fn>;
@@ -40,8 +38,6 @@ const {
   preloadSourceMock,
   acquireForClipMock,
   releaseClipMock,
-  registerDomVideoElementMock,
-  unregisterDomVideoElementMock,
   playbackState,
   gizmoState,
   timelineState,
@@ -127,11 +123,6 @@ vi.mock('@/features/composition-runtime/deps/keyframes', () => ({
   interpolatePropertyValue: (_keyframes: unknown, _frame: number, fallback: number) => fallback,
 }));
 
-vi.mock('@/features/composition-runtime/utils/dom-video-element-registry', () => ({
-  registerDomVideoElement: testState.registerDomVideoElementMock,
-  unregisterDomVideoElement: testState.unregisterDomVideoElementMock,
-}));
-
 vi.mock('./video-audio-context', () => ({
   applyVideoElementAudioVolume: vi.fn(),
   useVideoAudioVolume: vi.fn(() => 1),
@@ -145,8 +136,6 @@ describe('VideoContent pooled handoff', () => {
     preloadSourceMock.mockClear();
     acquireForClipMock.mockClear();
     releaseClipMock.mockClear();
-    registerDomVideoElementMock.mockClear();
-    unregisterDomVideoElementMock.mockClear();
     playbackState.currentFrame = 0;
     playbackState.isPlaying = true;
     playbackState.previewFrame = null;
@@ -181,7 +170,6 @@ describe('VideoContent pooled handoff', () => {
 
     await waitFor(() => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
     });
 
     rerender(
@@ -203,8 +191,7 @@ describe('VideoContent pooled handoff', () => {
     );
 
     await waitFor(() => {
-      expect(unregisterDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-b', pooledElement);
+      expect(pooledElement.parentElement).toBeTruthy();
     });
 
     expect(acquireForClipMock).toHaveBeenCalledTimes(1);

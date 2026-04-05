@@ -6,8 +6,6 @@ const testState = vi.hoisted(() => ({
   preloadSourceMock: vi.fn(() => Promise.resolve()),
   acquireForClipMock: vi.fn(),
   releaseClipMock: vi.fn(),
-  registerDomVideoElementMock: vi.fn(),
-  unregisterDomVideoElementMock: vi.fn(),
   ensureAudioContextResumedMock: vi.fn(),
   pool: null as {
     preloadSource: ReturnType<typeof vi.fn>;
@@ -145,11 +143,6 @@ vi.mock('@/features/composition-runtime/deps/keyframes', () => ({
   interpolatePropertyValue: (_keyframes: unknown, _frame: number, fallback: number) => fallback,
 }));
 
-vi.mock('@/features/composition-runtime/utils/dom-video-element-registry', () => ({
-  registerDomVideoElement: testState.registerDomVideoElementMock,
-  unregisterDomVideoElement: testState.unregisterDomVideoElementMock,
-}));
-
 vi.mock('./video-audio-context', () => ({
   applyVideoElementAudioVolume: vi.fn(),
   useVideoAudioVolume: vi.fn(() => 1),
@@ -165,8 +158,6 @@ describe('VideoContent RVFC playback', () => {
     testState.preloadSourceMock.mockClear();
     testState.acquireForClipMock.mockClear();
     testState.releaseClipMock.mockClear();
-    testState.registerDomVideoElementMock.mockClear();
-    testState.unregisterDomVideoElementMock.mockClear();
     testState.ensureAudioContextResumedMock.mockClear();
     testState.rvfcRequestMock.mockClear();
     testState.rvfcCancelMock.mockClear();

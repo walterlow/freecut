@@ -17,9 +17,7 @@ export interface PreviewPresenterState {
 export interface PreviewPresenterFrameSnapshot {
   isPlaying: boolean;
   currentFrame: number;
-  currentFrameEpoch: number;
   previewFrame: number | null;
-  previewFrameEpoch: number;
 }
 
 export type PreviewPresenterPlayingDecision =
@@ -201,7 +199,6 @@ export function resolvePreviewPresenterStoreDecision(input: {
     isAtomicScrubTarget: (
       input.state.previewFrame !== null
       && input.state.currentFrame === input.state.previewFrame
-      && input.state.currentFrameEpoch === input.state.previewFrameEpoch
     ),
   };
 }

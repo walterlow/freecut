@@ -2,7 +2,7 @@ import type { PlaybackState } from './types';
 
 type FrameResolutionInput = Pick<
   PlaybackState,
-  'currentFrame' | 'previewFrame' | 'displayedFrame' | 'isPlaying' | 'currentFrameEpoch' | 'previewFrameEpoch'
+  'currentFrame' | 'previewFrame' | 'displayedFrame' | 'isPlaying'
 >;
 
 /**
@@ -12,14 +12,12 @@ type FrameResolutionInput = Pick<
  * - Playing always follows currentFrame.
  * - When renderer surface is visible, follow displayedFrame to stay in sync
  *   with what is actually on screen.
- * - If previewFrame is null, follow currentFrame.
- * - While paused, follow whichever source was updated most recently.
+ * - While paused without a visible renderer frame, follow previewFrame when present.
+ * - Otherwise fall back to currentFrame.
  */
 export function getResolvedPlaybackFrame(input: FrameResolutionInput): number {
   if (input.isPlaying) return input.currentFrame;
   if (input.displayedFrame !== null) return input.displayedFrame;
-  if (input.previewFrame === null) return input.currentFrame;
-  return input.previewFrameEpoch >= input.currentFrameEpoch
-    ? input.previewFrame
-    : input.currentFrame;
+  if (input.previewFrame !== null) return input.previewFrame;
+  return input.currentFrame;
 }
