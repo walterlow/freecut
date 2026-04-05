@@ -3,6 +3,10 @@
 
 set -e
 
+# Ensure nvm-managed node/npm is in PATH
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
 echo "Running quality checks before push..."
 
 echo "  [1/6] check:boundaries"
