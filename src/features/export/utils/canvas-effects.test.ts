@@ -1,4 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mockFns = vi.hoisted(() => ({
+  drawCornerPinImageMock: vi.fn(),
+}));
+
+vi.mock('@/features/export/deps/composition-runtime', async () => {
+  const actual = await vi.importActual<typeof import('@/features/export/deps/composition-runtime')>(
+    '@/features/export/deps/composition-runtime'
+  );
+  return {
+    ...actual,
+    drawCornerPinImage: mockFns.drawCornerPinImageMock,
+  };
+});
+
 import {
   renderDirectVideoGpuFrame,
   getAdjustmentLayerEffects,
@@ -38,6 +53,10 @@ function createAdjustmentLayer(
 }
 
 describe('getAdjustmentLayerEffects', () => {
+  beforeEach(() => {
+    mockFns.drawCornerPinImageMock.mockReset();
+  });
+
   it('prefers preview overrides for active adjustment layers in preview mode', () => {
     const committedEffect = createGpuEffect('effect-1', 0.25);
     const previewEffect = createGpuEffect('effect-1', 0.8);
@@ -95,6 +114,10 @@ describe('getAdjustmentLayerEffects', () => {
 });
 
 describe('renderDirectVideoGpuFrame', () => {
+  beforeEach(() => {
+    mockFns.drawCornerPinImageMock.mockReset();
+  });
+
   it('returns a deferred canvas when the gpu pipeline is batching', () => {
     const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
     const ctx = {
@@ -126,6 +149,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -183,6 +208,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -223,6 +250,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -276,6 +305,8 @@ describe('renderDirectVideoGpuFrame', () => {
       0.5,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -318,6 +349,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -364,6 +397,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -411,6 +446,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       24,
       0,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -453,6 +490,8 @@ describe('renderDirectVideoGpuFrame', () => {
       1,
       0,
       15,
+      undefined,
+      undefined,
       pipeline,
     );
 
@@ -461,5 +500,94 @@ describe('renderDirectVideoGpuFrame', () => {
     expect(ctx.rotate).toHaveBeenCalledWith((15 * Math.PI) / 180);
     expect(ctx.translate).toHaveBeenNthCalledWith(2, -160, -120);
     expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
+  });
+
+  it('reuses the shared corner-pin warp helper after zero-copy video ingest', () => {
+    const resultCanvas = { width: 300, height: 200 } as OffscreenCanvas;
+    const itemCanvas = {
+      width: 300,
+      height: 200,
+      getContext: vi.fn(() => ({
+        clearRect: vi.fn(),
+        drawImage: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        beginPath: vi.fn(),
+        roundRect: vi.fn(),
+        fill: vi.fn(),
+        globalCompositeOperation: 'source-over',
+      })),
+    } as unknown as OffscreenCanvas;
+    class MockOffscreenCanvas {
+      constructor(width: number, height: number) {
+        void width;
+        void height;
+        return itemCanvas;
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+    const cornerPin = {
+      topLeft: [0, 0],
+      topRight: [24, -12],
+      bottomRight: [10, 16],
+      bottomLeft: [-18, 8],
+    } as const;
+
+    try {
+      const deferred = renderDirectVideoGpuFrame(
+        ctx,
+        video,
+        [],
+        { x: 20, y: 10, width: 260, height: 180 },
+        { x: 30, y: 20, width: 240, height: 160 },
+        { left: 8, right: 4, top: 6, bottom: 10 },
+        { x: 100, y: 80, width: 300, height: 200 },
+        { width: 1280, height: 720 },
+        1,
+        0,
+        0,
+        cornerPin,
+        undefined,
+        pipeline,
+      );
+
+      expect(deferred).toBeNull();
+      expect((pipeline as { renderVideoToCanvas: ReturnType<typeof vi.fn> }).renderVideoToCanvas)
+        .toHaveBeenCalledWith(
+          video,
+          { x: 20, y: 10, width: 260, height: 180 },
+          { x: 30, y: 20, width: 240, height: 160 },
+          { left: 8, right: 4, top: 6, bottom: 10 },
+          300,
+          200,
+        );
+      expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
+      expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.slice(2)).toEqual([
+        300,
+        200,
+        100,
+        80,
+        cornerPin,
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -1305,11 +1305,8 @@ export async function createCompositionRenderer(
           }
 
           // Keep the direct importExternalTexture path on a narrow, well-tested
-          // geometry envelope. Crop, feather, rounded corners, and plain 2D
-          // rotation are safe now, but perspective still falls back.
-          if (effectiveItem.cornerPin) {
-            return null;
-          }
+          // geometry envelope. Plain transforms are handled in-place, and
+          // corner pin reuses the shared warp helper after zero-copy ingest.
 
           const shouldAllowDirectVideoPath = renderMode !== 'preview'
             || (
@@ -1374,6 +1371,7 @@ export async function createCompositionRenderer(
           );
           const containerLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
           const containerTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
+          const shouldWarpCornerPin = Boolean(effectiveItem.cornerPin);
           const itemRect = {
             x: containerLeft,
             y: containerTop,
@@ -1381,14 +1379,14 @@ export async function createCompositionRenderer(
             height: transform.height,
           };
           const mediaRect = {
-            x: containerLeft + cropLayout.mediaRect.x,
-            y: containerTop + cropLayout.mediaRect.y,
+            x: shouldWarpCornerPin ? cropLayout.mediaRect.x : containerLeft + cropLayout.mediaRect.x,
+            y: shouldWarpCornerPin ? cropLayout.mediaRect.y : containerTop + cropLayout.mediaRect.y,
             width: cropLayout.mediaRect.width,
             height: cropLayout.mediaRect.height,
           };
           const visibleRect = {
-            x: containerLeft + cropLayout.viewportRect.x,
-            y: containerTop + cropLayout.viewportRect.y,
+            x: shouldWarpCornerPin ? cropLayout.viewportRect.x : containerLeft + cropLayout.viewportRect.x,
+            y: shouldWarpCornerPin ? cropLayout.viewportRect.y : containerTop + cropLayout.viewportRect.y,
             width: cropLayout.viewportRect.width,
             height: cropLayout.viewportRect.height,
           };
@@ -1415,6 +1413,8 @@ export async function createCompositionRenderer(
             transform.opacity,
             transform.cornerRadius,
             transform.rotation,
+            effectiveItem.cornerPin ?? undefined,
+            canvasPool,
             itemRenderContext.gpuPipeline,
           );
           const source = deferredGpuCanvas ?? effectCanvas;
@@ -1640,6 +1640,8 @@ export async function createCompositionRenderer(
 
       // === PERFORMANCE: Use pooled canvas instead of creating new one each frame ===
       const { canvas: contentCanvas, ctx: contentCtx } = canvasPool.acquire();
+      contentCtx.fillStyle = backgroundColor;
+      contentCtx.fillRect(0, 0, contentCanvas.width, contentCanvas.height);
 
       // Render tracks in order (bottom to top), with transitions at their track position
       // Track order: higher values render first (behind), lower values render last (on top)
@@ -1707,10 +1709,6 @@ export async function createCompositionRenderer(
         const gpuCompositeOutput = useGpuCompositor
           ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
           : null;
-        const gpuPresentationOutput = gpuPipeline && ensureGpuCompositor()
-          ? ensureGpuPresentationContext(canvasSettings.width, canvasSettings.height)
-          : null;
-
         if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
           const device = gpuPipeline!.getDevice();
@@ -1751,10 +1749,6 @@ export async function createCompositionRenderer(
 
           const compositedToGpuCanvas = layers.length > 0
             && gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx);
-          const compositedToPresentationCanvas = layers.length > 0
-            && gpuPresentationOutput !== null
-            && gpuCompositor.compositeToCanvas(layers, w, h, gpuPresentationOutput);
-
           if (compositedToGpuCanvas) {
             finalCompositeSource = gpuCompositeOutput.canvas;
           } else {
@@ -1776,11 +1770,6 @@ export async function createCompositionRenderer(
               }
             }
           }
-          lastFramePresentedDirectly = compositedToPresentationCanvas;
-          if (compositedToPresentationCanvas) {
-            directGpuPresentationCount += 1;
-          }
-
           for (const { result } of compositedResults) {
             for (const c of result.poolCanvases) canvasPool.release(c);
           }
@@ -1817,9 +1806,13 @@ export async function createCompositionRenderer(
         getLog().debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
+      ctx.drawImage(finalCompositeSource, 0, 0);
+
       if (!lastFramePresentedDirectly) {
+        // Present the fully composed work canvas so the GPU surface matches
+        // the fallback 2D surface, including the project background color.
         lastFramePresentedDirectly = presentSourceToGpuCanvas(
-          finalCompositeSource,
+          canvas,
           canvasSettings.width,
           canvasSettings.height,
         );
@@ -1827,8 +1820,6 @@ export async function createCompositionRenderer(
           directGpuPresentationCount += 1;
         }
       }
-
-      ctx.drawImage(finalCompositeSource, 0, 0);
 
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);

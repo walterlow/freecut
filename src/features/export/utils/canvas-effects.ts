@@ -5,9 +5,11 @@
  */
 
 import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { AdjustmentItem } from '@/types/timeline';
+import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
+import type { CanvasPool } from './canvas-pool';
+import { drawCornerPinImage } from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasEffects');
 
@@ -109,11 +111,15 @@ export function renderDirectVideoGpuFrame(
   opacity: number,
   cornerRadius: number,
   rotation: number,
+  cornerPin?: NonNullable<TimelineItem['cornerPin']>,
+  canvasPool?: CanvasPool | null,
   gpuPipeline?: EffectsPipeline | null,
 ): OffscreenCanvas | null {
   if (!gpuPipeline) return null;
 
   const gpuInstances = getGpuEffectInstances(effects);
+  const renderWidth = cornerPin ? Math.max(1, Math.ceil(itemRect.width)) : canvas.width;
+  const renderHeight = cornerPin ? Math.max(1, Math.ceil(itemRect.height)) : canvas.height;
 
   try {
     const result = gpuInstances.length > 0
@@ -123,18 +129,92 @@ export function renderDirectVideoGpuFrame(
         mediaRect,
         visibleRect,
         featherInsets,
-        canvas.width,
-        canvas.height,
+        renderWidth,
+        renderHeight,
       )
       : gpuPipeline.renderVideoToCanvas(
         video,
         mediaRect,
         visibleRect,
         featherInsets,
-        canvas.width,
-        canvas.height,
+        renderWidth,
+        renderHeight,
       );
     if (!result) {
+      return null;
+    }
+    if (cornerPin) {
+      const itemCanvasWidth = renderWidth;
+      const itemCanvasHeight = renderHeight;
+      const itemCanvas = new OffscreenCanvas(itemCanvasWidth, itemCanvasHeight);
+      const itemCtx = itemCanvas.getContext('2d');
+      if (!itemCtx) {
+        return null;
+      }
+      itemCtx.clearRect(0, 0, itemCanvasWidth, itemCanvasHeight);
+      itemCtx.drawImage(result, 0, 0);
+      if (cornerRadius > 0) {
+        itemCtx.save();
+        itemCtx.globalCompositeOperation = 'destination-in';
+        itemCtx.beginPath();
+        itemCtx.roundRect(0, 0, itemRect.width, itemRect.height, cornerRadius);
+        itemCtx.fill();
+        itemCtx.restore();
+      }
+
+      const centerX = itemRect.x + itemRect.width / 2;
+      const centerY = itemRect.y + itemRect.height / 2;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      if (rotation !== 0) {
+        ctx.translate(centerX, centerY);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.translate(-centerX, -centerY);
+      }
+      try {
+        if (opacity !== 1) {
+          const flattenedEntry = canvasPool?.acquire();
+          const flattenedCanvas = flattenedEntry?.canvas ?? new OffscreenCanvas(canvas.width, canvas.height);
+          const flattenedCtx = flattenedEntry?.ctx ?? flattenedCanvas.getContext('2d');
+          if (!flattenedCtx) {
+            return null;
+          }
+          try {
+            if (flattenedCanvas.width !== canvas.width || flattenedCanvas.height !== canvas.height) {
+              flattenedCanvas.width = canvas.width;
+              flattenedCanvas.height = canvas.height;
+            }
+            flattenedCtx.clearRect(0, 0, flattenedCanvas.width, flattenedCanvas.height);
+            drawCornerPinImage(
+              flattenedCtx,
+              itemCanvas,
+              itemCanvasWidth,
+              itemCanvasHeight,
+              itemRect.x,
+              itemRect.y,
+              cornerPin,
+            );
+            ctx.globalAlpha = opacity;
+            ctx.drawImage(flattenedCanvas, 0, 0);
+          } finally {
+            if (flattenedEntry) {
+              canvasPool?.release(flattenedCanvas);
+            }
+          }
+        } else {
+          drawCornerPinImage(
+            ctx,
+            itemCanvas,
+            itemCanvasWidth,
+            itemCanvasHeight,
+            itemRect.x,
+            itemRect.y,
+            cornerPin,
+          );
+        }
+      } finally {
+        ctx.restore();
+      }
       return null;
     }
     if (gpuPipeline.isBatching() && opacity === 1 && cornerRadius === 0 && rotation === 0) {
