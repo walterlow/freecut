@@ -21,6 +21,21 @@ const compositionRuntimeMockState = vi.hoisted(() => ({
   transitionSafePlayMock: vi.fn(),
 }));
 const { getBestDomVideoElementForItemMock, transitionSafePlayMock } = compositionRuntimeMockState;
+const decoderPrewarmMockState = vi.hoisted(() => ({
+  backgroundPreseekMock: vi.fn(async () => {}),
+  backgroundBatchPreseekMock: vi.fn(async () => {}),
+  getDecoderPrewarmMetricsSnapshotMock: vi.fn(() => ({
+    inFlight: 0,
+    queued: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+  })),
+}));
+const {
+  backgroundPreseekMock,
+  backgroundBatchPreseekMock,
+  getDecoderPrewarmMetricsSnapshotMock,
+} = decoderPrewarmMockState;
 const mockState = vi.hoisted(() => {
   const blobUrls = new Map<string, string>();
   const listeners = new Set<() => void>();
@@ -237,6 +252,12 @@ vi.mock('../utils/media-resolver', () => ({
 
 vi.mock('@/features/preview/deps/export', () => ({
   createCompositionRenderer: rendererMockState.create,
+}));
+
+vi.mock('../utils/decoder-prewarm', () => ({
+  backgroundPreseek: decoderPrewarmMockState.backgroundPreseekMock,
+  backgroundBatchPreseek: decoderPrewarmMockState.backgroundBatchPreseekMock,
+  getDecoderPrewarmMetricsSnapshot: decoderPrewarmMockState.getDecoderPrewarmMetricsSnapshotMock,
 }));
 
 vi.mock('@/features/preview/deps/player-core', async () => {
@@ -492,6 +513,9 @@ describe('VideoPreview sync behavior', () => {
     getBestDomVideoElementForItemMock.mockReset();
     getBestDomVideoElementForItemMock.mockReturnValue(null);
     transitionSafePlayMock.mockReset();
+    backgroundPreseekMock.mockReset();
+    backgroundBatchPreseekMock.mockReset();
+    getDecoderPrewarmMetricsSnapshotMock.mockClear();
     lastCompositionKeyframes = [];
     lastCompositionMediaSources = [];
     mockBlobUrls.clear();
@@ -1390,6 +1414,103 @@ describe('VideoPreview sync behavior', () => {
       expect(domElement.currentTime).toBeCloseTo(24 / 30, 3);
       expect(transitionSafePlayMock).toHaveBeenCalledWith(domElement, 1);
     });
+  });
+
+  it('warms the first playback runway across a near-cut play start', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+        sourceFps: 30,
+      } as TimelineItem,
+      {
+        id: 'item-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 60,
+        durationInFrames: 60,
+        src: 'blob:right',
+        sourceFps: 30,
+        speed: 1.5,
+      } as TimelineItem,
+    ]);
+
+    const leftDomElement = {
+      readyState: 2,
+      paused: true,
+      duration: 10,
+      currentTime: 0,
+      playbackRate: 1,
+      load: vi.fn(),
+    } as unknown as HTMLVideoElement;
+    const rightDomElement = {
+      readyState: 2,
+      paused: true,
+      duration: 10,
+      currentTime: 0,
+      playbackRate: 1,
+      load: vi.fn(),
+    } as unknown as HTMLVideoElement;
+
+    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
+      if (itemId === 'item-left') return leftDomElement;
+      if (itemId === 'item-right') return rightDomElement;
+      return null;
+    });
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+    backgroundBatchPreseekMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(58);
+    });
+
+    await waitFor(() => {
+      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-left');
+      expect(getBestDomVideoElementForItemMock).toHaveBeenCalledWith('item-right');
+      expect(leftDomElement.currentTime).toBeCloseTo(58 / 30, 3);
+      expect(rightDomElement.currentTime).toBeCloseTo(0, 3);
+      expect(rightDomElement.playbackRate).toBeCloseTo(1.5, 3);
+      expect(transitionSafePlayMock).toHaveBeenCalledWith(leftDomElement, 1);
+      expect(backgroundBatchPreseekMock).toHaveBeenCalled();
+    });
+
+    const preseekCalls = backgroundBatchPreseekMock.mock.calls as Array<[string, number[]]>;
+    expect(preseekCalls.some(([src]) => src === 'blob:left')).toBe(true);
+    expect(preseekCalls.some(([src]) => src === 'blob:right')).toBe(true);
+
+    const rightPreseek = preseekCalls.find(([src]) => src === 'blob:right')?.[1] ?? [];
+    expect(rightPreseek.some((timestamp) => timestamp >= 0)).toBe(true);
   });
 
   it('switches a paused ruler seek onto the fast-scrub overlay when landing on a gpu-effect clip', async () => {

@@ -323,6 +323,8 @@ export const VideoPreview = memo(function VideoPreview({
     lastEntryMisses: 0,
     lastSessionDurationMs: 0,
   });
+  const playStartWarmUntilRef = useRef(0);
+  const lastPlayStartWarmFrameRef = useRef<number | null>(null);
   const lastPausedPrearmTargetRef = useRef<number | null>(null);
   const lastPlayingPrearmTargetRef = useRef<number | null>(null);
   const lastScrubTransitionWarmStartRef = useRef<number | null>(null);
@@ -1544,56 +1546,60 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, []);
 
+  const primePlaybackElementAtFrame = useCallback((
+    item: TimelineItem,
+    targetFrame: number,
+    options?: { shouldPlay?: boolean },
+  ) => {
+    if (item.type !== 'video') return;
+    const itemStart = item.from;
+    const itemEnd = item.from + item.durationInFrames;
+    if (targetFrame < itemStart || targetFrame >= itemEnd) return;
+
+    const element = getBestDomVideoElementForItem(item.id);
+    if (!element) return;
+
+    const clipSpeed = item.speed ?? 1;
+    const sourceFps = item.sourceFps ?? fps;
+    const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+    const localFrame = targetFrame - item.from;
+    const targetTime = (sourceStart / sourceFps) + (localFrame / fps) * clipSpeed;
+    const duration = Number.isFinite(element.duration) ? element.duration : Infinity;
+    const clampedTargetTime = Math.min(Math.max(0, targetTime), Math.max(0, duration - 0.05));
+
+    if (element.readyState === 0) {
+      try {
+        element.load();
+      } catch {
+        // Best-effort only.
+      }
+      return;
+    }
+
+    if (Math.abs(element.currentTime - clampedTargetTime) > 0.05) {
+      try {
+        element.currentTime = clampedTargetTime;
+      } catch {
+        // Best-effort only.
+      }
+    }
+
+    if (options?.shouldPlay && element.paused && element.readyState >= 2) {
+      transitionSafePlay(element, clipSpeed);
+    } else if (Math.abs(element.playbackRate - clipSpeed) > 0.01) {
+      element.playbackRate = clipSpeed;
+    }
+  }, [fps]);
+
   const primeVisiblePlaybackElements = useCallback((frame: number) => {
     for (const track of combinedTracks) {
       for (const item of track.items) {
         if (item.type !== 'video') continue;
         if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-
-        const element = getBestDomVideoElementForItem(item.id);
-        if (!element) continue;
-
-        const clipSpeed = item.speed ?? 1;
-        const sourceFps = item.sourceFps ?? fps;
-        const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-        const localFrame = frame - item.from;
-        const targetTime = (sourceStart / sourceFps) + (localFrame / fps) * clipSpeed;
-        const duration = Number.isFinite(element.duration) ? element.duration : Infinity;
-        const clampedTargetTime = Math.min(Math.max(0, targetTime), Math.max(0, duration - 0.05));
-
-        if (element.readyState === 0) {
-          try {
-            element.load();
-          } catch {
-            // Best-effort only.
-          }
-          continue;
-        }
-
-        if (Math.abs(element.currentTime - clampedTargetTime) > 0.05) {
-          try {
-            element.currentTime = clampedTargetTime;
-          } catch {
-            // Best-effort only.
-          }
-        }
-
-        if (element.paused && element.readyState >= 2) {
-          transitionSafePlay(element, clipSpeed);
-        } else if (Math.abs(element.playbackRate - clipSpeed) > 0.01) {
-          element.playbackRate = clipSpeed;
-        }
+        primePlaybackElementAtFrame(item, frame, { shouldPlay: true });
       }
     }
-  }, [combinedTracks, fps]);
-
-  useEffect(() => {
-    return usePlaybackStore.subscribe((state, prev) => {
-      if (state.isPlaying && !prev.isPlaying) {
-        primeVisiblePlaybackElements(state.currentFrame);
-      }
-    });
-  }, [primeVisiblePlaybackElements]);
+  }, [combinedTracks, primePlaybackElementAtFrame]);
 
   // Keep a capped moving warm set in VideoSourcePool instead of preloading all sources.
   // This avoids memory blowups on large projects while keeping nearby clips hot.
@@ -2126,6 +2132,98 @@ export const VideoPreview = memo(function VideoPreview({
     }
   }, [fps]);
 
+  const primePlaybackStartRunway = useCallback((frame: number) => {
+    lastPlayStartWarmFrameRef.current = frame;
+    primeVisiblePlaybackElements(frame);
+
+    const runwayFrames = Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 0.75));
+    const runwayEndFrame = frame + runwayFrames;
+    const timestampsBySource = new Map<string, number[]>();
+
+    const queuePreseekFrame = (item: TimelineItem, targetFrame: number) => {
+      if (item.type !== 'video' || !('src' in item) || !item.src || !item.sourceFps) return;
+      if (targetFrame < item.from || targetFrame >= item.from + item.durationInFrames) return;
+
+      const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+      const speed = item.speed ?? 1;
+      const sourceTime = (sourceStart / item.sourceFps) + ((targetFrame - item.from) / fps) * speed;
+      const existing = timestampsBySource.get(item.src);
+      if (existing) {
+        existing.push(sourceTime);
+      } else {
+        timestampsBySource.set(item.src, [sourceTime]);
+      }
+    };
+
+    for (const track of combinedTracks) {
+      for (const item of track.items) {
+        if (item.type !== 'video') continue;
+        const itemStart = item.from;
+        const itemEnd = item.from + item.durationInFrames;
+        if (itemEnd <= frame || itemStart > runwayEndFrame) continue;
+
+        const primeFrame = Math.max(frame, itemStart);
+        if (primeFrame < itemEnd) {
+          primePlaybackElementAtFrame(item, primeFrame, {
+            shouldPlay: frame >= itemStart && frame < itemEnd,
+          });
+        }
+
+        const sampleFrames = new Set<number>([Math.min(itemEnd - 1, primeFrame)]);
+        if (frame >= itemStart && frame < itemEnd) {
+          sampleFrames.add(Math.min(itemEnd - 1, frame + Math.min(2, runwayFrames)));
+          sampleFrames.add(Math.min(itemEnd - 1, frame + Math.min(runwayFrames, Math.max(4, Math.round(fps * 0.25)))));
+        } else {
+          sampleFrames.add(itemStart);
+          sampleFrames.add(Math.min(itemEnd - 1, itemStart + Math.min(4, runwayFrames)));
+        }
+
+        if (Math.abs((item.speed ?? 1) - 1) >= 0.01) {
+          sampleFrames.add(Math.min(itemEnd - 1, primeFrame + Math.min(runwayFrames, Math.max(6, Math.round(fps * 0.4)))));
+        }
+
+        for (const sampleFrame of sampleFrames) {
+          queuePreseekFrame(item, sampleFrame);
+        }
+      }
+    }
+
+    for (const [src, timestamps] of timestampsBySource) {
+      const uniqueTimestamps = [...new Set(timestamps)].sort((a, b) => a - b);
+      void workerBackgroundBatchPreseek(src, uniqueTimestamps);
+    }
+
+    const activeTransitionWindow = getActiveTransitionWindowForFrame(frame);
+    if (activeTransitionWindow) {
+      preseekTransitionSources(
+        activeTransitionWindow,
+        getTransitionWarmFrames(activeTransitionWindow, frame, 1),
+      );
+      return;
+    }
+
+    const upcomingTransitionWindow = playbackTransitionWindows.find((window) => (
+      window.startFrame >= frame
+      && window.startFrame <= runwayEndFrame
+    ));
+    if (upcomingTransitionWindow) {
+      preseekTransitionSources(
+        upcomingTransitionWindow,
+        getTransitionWarmFrames(upcomingTransitionWindow, upcomingTransitionWindow.startFrame, 1),
+      );
+    }
+  }, [
+    combinedTracks,
+    fps,
+    getActiveTransitionWindowForFrame,
+    getTransitionWarmFrames,
+    playbackTransitionLookaheadFrames,
+    playbackTransitionWindows,
+    preseekTransitionSources,
+    primePlaybackElementAtFrame,
+    primeVisiblePlaybackElements,
+  ]);
+
   const playbackTransitionOverlayWindows = useMemo(
     () => playbackTransitionWindows.map((window) => ({
       startFrame: window.startFrame,
@@ -2141,6 +2239,34 @@ export const VideoPreview = memo(function VideoPreview({
     }
     return shouldForceContinuousPreviewOverlay(fastScrubPreviewItems, transitions.length, frame);
   }, [fastScrubPreviewItems, getTransitionWindowForFrame, transitions.length]);
+
+  useEffect(() => {
+    return usePlaybackStore.subscribe((state, prev) => {
+      const now = performance.now();
+
+      if (state.isPlaying && !prev.isPlaying) {
+        playStartWarmUntilRef.current = now + 180;
+        lastPlayStartWarmFrameRef.current = null;
+        primePlaybackStartRunway(state.previewFrame ?? state.currentFrame);
+        return;
+      }
+
+      if (!state.isPlaying && prev.isPlaying) {
+        playStartWarmUntilRef.current = 0;
+        lastPlayStartWarmFrameRef.current = null;
+        return;
+      }
+
+      if (
+        state.isPlaying
+        && state.currentFrame !== prev.currentFrame
+        && now <= playStartWarmUntilRef.current
+        && lastPlayStartWarmFrameRef.current !== state.currentFrame
+      ) {
+        primePlaybackStartRunway(state.currentFrame);
+      }
+    });
+  }, [primePlaybackStartRunway]);
 
   const clearRetainedTransitionExitBuffer = useCallback(() => {
     retainedTransitionExitWindowRef.current = null;
@@ -4789,6 +4915,9 @@ export const VideoPreview = memo(function VideoPreview({
     });
 
     const initialPlaybackState = usePlaybackStore.getState();
+    if (initialPlaybackState.isPlaying) {
+      primePlaybackStartRunway(initialPlaybackState.previewFrame ?? initialPlaybackState.currentFrame);
+    }
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
       // Check if playback starts inside an active transition — pin that
       // session immediately so the render pump has the DOM video provider.
@@ -4964,6 +5093,8 @@ export const VideoPreview = memo(function VideoPreview({
       fallbackToPlayerScrubRef.current = false;
       lastBackwardScrubRenderAtRef.current = 0;
       lastBackwardRequestedFrameRef.current = null;
+      playStartWarmUntilRef.current = 0;
+      lastPlayStartWarmFrameRef.current = null;
       clearPendingFastScrubHandoff();
       clearScheduledTransitionPrepare();
       clearTransitionPlaybackSession();
@@ -4996,6 +5127,7 @@ export const VideoPreview = memo(function VideoPreview({
     hidePlaybackTransitionOverlay,
     isPausedTransitionOverlayActive,
     pinTransitionPlaybackSession,
+    primePlaybackStartRunway,
     preparePlaybackTransitionFrame,
     showPlaybackTransitionOverlayForFrame,
     beginFastScrubHandoff,
