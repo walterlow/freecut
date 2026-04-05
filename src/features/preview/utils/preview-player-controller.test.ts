@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolvePreviewPlayerFrameChangeDecision,
   resolvePreviewPlayerPlaybackCommand,
   resolvePreviewPlayerTransportSyncDecision,
 } from './preview-player-controller';
@@ -95,6 +96,71 @@ describe('resolvePreviewPlayerTransportSyncDecision', () => {
     })).toEqual({
       kind: 'seek',
       targetFrame: 180,
+    });
+  });
+});
+
+describe('resolvePreviewPlayerFrameChangeDecision', () => {
+  it('ignores player callbacks while store-driven seeks are in flight', () => {
+    expect(resolvePreviewPlayerFrameChangeDecision({
+      frame: 100.4,
+      currentFrame: 96,
+      previewFrame: null,
+      isPlaying: true,
+      isGizmoInteracting: false,
+      shouldIgnorePlayerUpdates: true,
+    })).toEqual({
+      kind: 'ignore',
+      reason: 'player_sync',
+      nextFrame: 100,
+      interactionMode: 'playing',
+    });
+  });
+
+  it('ignores player callbacks while scrub preview is active', () => {
+    expect(resolvePreviewPlayerFrameChangeDecision({
+      frame: 48,
+      currentFrame: 24,
+      previewFrame: 48,
+      isPlaying: false,
+      isGizmoInteracting: false,
+      shouldIgnorePlayerUpdates: false,
+    })).toEqual({
+      kind: 'ignore',
+      reason: 'scrubbing',
+      nextFrame: 48,
+      interactionMode: 'scrubbing',
+    });
+  });
+
+  it('allows player callbacks to advance transport during gizmo interaction', () => {
+    expect(resolvePreviewPlayerFrameChangeDecision({
+      frame: 73.6,
+      currentFrame: 70,
+      previewFrame: null,
+      isPlaying: false,
+      isGizmoInteracting: true,
+      shouldIgnorePlayerUpdates: false,
+    })).toEqual({
+      kind: 'sync',
+      nextFrame: 74,
+      interactionMode: 'gizmo_dragging',
+    });
+  });
+
+  it('ignores redundant frame callbacks once transport is already aligned', () => {
+    expect(resolvePreviewPlayerFrameChangeDecision({
+      frame: 120.2,
+      currentFrame: 120,
+      previewFrame: null,
+      isPlaying: false,
+      isGizmoInteracting: false,
+      shouldIgnorePlayerUpdates: false,
+    })).toEqual({
+      kind: 'ignore',
+      reason: 'redundant_frame',
+      nextFrame: 120,
+      interactionMode: 'paused',
     });
   });
 });

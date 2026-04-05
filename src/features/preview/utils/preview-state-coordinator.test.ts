@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getPreviewRuntimeSnapshot,
+  getPreviewTargetFrame,
   resolvePreviewTransitionDecision,
 } from './preview-state-coordinator';
 
@@ -15,6 +16,22 @@ describe('getPreviewRuntimeSnapshot', () => {
 
     expect(snapshot.mode).toBe('scrubbing');
     expect(snapshot.anchorFrame).toBe(42);
+  });
+});
+
+describe('getPreviewTargetFrame', () => {
+  it('prefers the preview frame when one is active', () => {
+    expect(getPreviewTargetFrame({
+      currentFrame: 10,
+      previewFrame: 42,
+    })).toBe(42);
+  });
+
+  it('falls back to the committed transport frame otherwise', () => {
+    expect(getPreviewTargetFrame({
+      currentFrame: 10,
+      previewFrame: null,
+    })).toBe(10);
   });
 });
 

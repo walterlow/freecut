@@ -19,6 +19,12 @@ export interface PreviewRuntimeSnapshot {
   previewFrame: number | null;
 }
 
+export function getPreviewTargetFrame(
+  state: Pick<PreviewRuntimeState, 'currentFrame' | 'previewFrame'>,
+): number {
+  return state.previewFrame ?? state.currentFrame;
+}
+
 export interface PreviewTransitionDecision {
   prev: PreviewRuntimeSnapshot;
   next: PreviewRuntimeSnapshot;

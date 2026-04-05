@@ -50,12 +50,10 @@ import { getDirectionalPrewarmOffsets } from '../utils/preview-renderer-prewarm'
 import { usePreviewDisplayedFrameController } from '../hooks/use-preview-displayed-frame-controller';
 import { usePreviewSourceWarmController } from '../hooks/use-preview-source-warm-controller';
 import { resolvePlaybackTransitionOverlayState } from '../utils/playback-transition-overlay';
-import {
-  getPreviewAnchorFrame,
-  getPreviewInteractionMode,
-} from '../utils/preview-interaction-mode';
 import { getPreloadWindowRange } from '../utils/preload-window';
 import {
+  getPreviewRuntimeSnapshot,
+  getPreviewTargetFrame,
   resolvePreviewTransitionDecision,
 } from '../utils/preview-state-coordinator';
 import {
@@ -88,12 +86,12 @@ import {
   createAdaptivePreviewQualityState,
   getEffectivePreviewQuality,
   getFrameBudgetMs,
-  updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import {
   shouldForceContinuousPreviewOverlay,
 } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
+import { usePreviewTransportFrameController } from '../hooks/use-preview-transport-frame-controller';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
@@ -283,6 +281,7 @@ export const VideoPreview = memo(function VideoPreview({
   const [presenterSurface, setPresenterSurface] = useState<PreviewPresenterSurface>(
     presenterModelRef.current.surface,
   );
+  const [rendererFailureMessage, setRendererFailureMessage] = useState<string | null>(null);
   const renderSourceRef = useRef<PreviewRenderSource>('renderer');
   const renderSourceSwitchCountRef = useRef(0);
   const renderSourceHistoryRef = useRef<RenderSourceSwitchEntry[]>([]);
@@ -310,7 +309,10 @@ export const VideoPreview = memo(function VideoPreview({
   const lastScrubTransitionWarmStartRef = useRef<number | null>(null);
   const lastScrubTransitionWarmFrameRef = useRef<number | null>(null);
   const presenterState = createPreviewPresenterState(presenterModelRef.current);
-  const isRenderedOverlayVisible = presenterState.isRenderedOverlayVisible;
+  const isRenderedOverlayVisible = (
+    presenterState.isRenderedOverlayVisible
+    && rendererFailureMessage === null
+  );
 
   const pushTransitionTrace = useCallback((phase: string, data: Record<string, unknown> = {}) => {
     if (!import.meta.env.DEV) return;
@@ -434,9 +436,19 @@ export const VideoPreview = memo(function VideoPreview({
     dispatchPresenterAction({ kind: 'show_transition_overlay' });
   }, [dispatchPresenterAction, readPresenterState]);
 
-  const hideRenderedOverlays = useCallback(() => {
-    showRendererSurface();
-  }, [showRendererSurface]);
+  const clearPreviewRendererFailure = useCallback(() => {
+    setRendererFailureMessage((current) => (current === null ? current : null));
+  }, []);
+
+  const reportPreviewRendererFailure = useCallback((phase: 'init' | 'render', error: unknown) => {
+    logger.warn(
+      phase === 'init'
+        ? 'Preview renderer initialization failed:'
+        : 'Preview renderer frame render failed:',
+      error,
+    );
+    setRendererFailureMessage('Preview renderer unavailable');
+  }, []);
 
   // Player integration for transport/audio only.
   const { ignorePlayerUpdatesRef } = useCustomPlayer(
@@ -544,6 +556,16 @@ export const VideoPreview = memo(function VideoPreview({
     adaptiveQualityRecovers: 0,
   });
   const lastSyncedMediaDependencyVersionRef = useRef<number>(-1);
+  const handleFrameChange = usePreviewTransportFrameController({
+    fps,
+    ignorePlayerUpdatesRef,
+    isGizmoInteractingRef,
+    adaptiveQualityStateRef,
+    adaptiveFrameSampleRef,
+    previewPerfRef,
+    setAdaptiveQualityCap,
+    resolvePendingSeekLatency,
+  });
 
   useEffect(() => {
     const nextSource: PreviewRenderSource = presenterState.renderSource;
@@ -1001,15 +1023,14 @@ export const VideoPreview = memo(function VideoPreview({
       const now = Date.now();
       let earliestRetryAt: number | null = null;
       const playbackState = usePlaybackStore.getState();
-      const interactionMode = getPreviewInteractionMode({
+      const runtimeSnapshot = getPreviewRuntimeSnapshot({
         isPlaying: playbackState.isPlaying,
         previewFrame: playbackState.previewFrame,
+        currentFrame: playbackState.currentFrame,
         isGizmoInteracting: isGizmoInteractingRef.current,
       });
-      const anchorFrame = getPreviewAnchorFrame(interactionMode, {
-        currentFrame: playbackState.currentFrame,
-        previewFrame: playbackState.previewFrame,
-      });
+      const interactionMode = runtimeSnapshot.mode;
+      const anchorFrame = runtimeSnapshot.anchorFrame;
       if (
         interactionMode === 'scrubbing'
         && effectiveResolvedUrls.size > 0
@@ -1745,7 +1766,7 @@ export const VideoPreview = memo(function VideoPreview({
       if (state.isPlaying && !prev.isPlaying) {
         playStartWarmUntilRef.current = now + 180;
         lastPlayStartWarmFrameRef.current = null;
-        primePlaybackStartRunway(state.previewFrame ?? state.currentFrame);
+        primePlaybackStartRunway(getPreviewTargetFrame(state));
         return;
       }
 
@@ -2133,15 +2154,13 @@ export const VideoPreview = memo(function VideoPreview({
           getLiveKeyframes,
         });
         const playbackState = usePlaybackStore.getState();
-        const interactionMode = getPreviewInteractionMode({
+        const runtimeSnapshot = getPreviewRuntimeSnapshot({
           isPlaying: playbackState.isPlaying,
           previewFrame: playbackState.previewFrame,
+          currentFrame: playbackState.currentFrame,
           isGizmoInteracting: isGizmoInteractingRef.current,
         });
-        const preloadPriorityFrame = getPreviewAnchorFrame(interactionMode, {
-          currentFrame: playbackState.currentFrame,
-          previewFrame: playbackState.previewFrame,
-        });
+        const preloadPriorityFrame = runtimeSnapshot.anchorFrame;
         const preloadPromise = renderer.preload({
           priorityFrame: preloadPriorityFrame,
           priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
@@ -2175,7 +2194,7 @@ export const VideoPreview = memo(function VideoPreview({
         }
         return renderer;
       } catch (error) {
-        logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
+        reportPreviewRendererFailure('init', error);
         scrubRendererRef.current = null;
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
@@ -2199,6 +2218,7 @@ export const VideoPreview = memo(function VideoPreview({
     getPreviewCornerPinOverride,
     getPreviewPathVerticesOverride,
     isResolving,
+    reportPreviewRendererFailure,
     renderSize.height,
     renderSize.width,
   ]);
@@ -2215,11 +2235,12 @@ export const VideoPreview = memo(function VideoPreview({
 
     if (scrubOffscreenRenderedFrameRef.current !== targetFrame) {
       await renderer.renderFrame(targetFrame);
+      clearPreviewRendererFailure();
       scrubOffscreenRenderedFrameRef.current = targetFrame;
     }
 
     return nextOffscreen;
-  }, [ensurePreviewRenderer]);
+  }, [clearPreviewRendererFailure, ensurePreviewRenderer]);
 
   const cacheTransitionSessionFrame = useCallback((frame: number) => {
     const offscreen = scrubOffscreenCanvasRef.current;
@@ -2398,7 +2419,7 @@ export const VideoPreview = memo(function VideoPreview({
     }
 
     const playbackState = usePlaybackStore.getState();
-    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const targetFrame = getPreviewTargetFrame(playbackState);
     const currentFrameInvalidated = isFrameInRanges(targetFrame, visualInvalidationRanges);
 
     if (
@@ -2455,7 +2476,7 @@ export const VideoPreview = memo(function VideoPreview({
     const task = (async () => {
       try {
         const playback = usePlaybackStore.getState();
-        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        const targetFrame = getPreviewTargetFrame(playback);
         const offscreen = await renderOffscreenFrame(targetFrame);
         if (!offscreen) return null;
 
@@ -2506,7 +2527,7 @@ export const VideoPreview = memo(function VideoPreview({
     const task = (async () => {
       try {
         const playback = usePlaybackStore.getState();
-        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        const targetFrame = getPreviewTargetFrame(playback);
         const offscreen = await renderOffscreenFrame(targetFrame);
         if (!offscreen) return null;
 
@@ -2557,7 +2578,7 @@ export const VideoPreview = memo(function VideoPreview({
     const task = (async () => {
       try {
         const playback = usePlaybackStore.getState();
-        const targetFrame = playback.previewFrame ?? playback.currentFrame;
+        const targetFrame = getPreviewTargetFrame(playback);
         return await renderOffscreenFrame(targetFrame);
       } catch (error) {
         logger.warn('Failed to capture canvas source:', error);
@@ -3026,6 +3047,7 @@ export const VideoPreview = memo(function VideoPreview({
             // Visible scrub targets still use full composition rendering.
             const renderStartMs = performance.now();
             await renderer.renderFrame(frameToRender);
+            clearPreviewRendererFailure();
             // Don't check isStale() here — the priority frame is fully rendered
             // and should always be displayed. Discarding it wastes the decode work
             // and reduces scrub hit rate.
@@ -3123,8 +3145,8 @@ export const VideoPreview = memo(function VideoPreview({
           }
         }
       } catch (error) {
-        logger.warn('Render failed, using Player seek fallback:', error);
-        hideRenderedOverlays();
+        reportPreviewRendererFailure('render', error);
+        scrubRequestedFrameRef.current = null;
         disposePreviewRenderer();
       } finally {
         if (scrubRenderGenerationRef.current === generation) {
@@ -3887,7 +3909,7 @@ export const VideoPreview = memo(function VideoPreview({
       if (!previewVerticesChanged && !editingItemChanged) return;
 
       const playbackState = usePlaybackStore.getState();
-      const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+      const targetFrame = getPreviewTargetFrame(playbackState);
 
       if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache({ frames: [targetFrame] });
@@ -3898,7 +3920,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     const initialPlaybackState = usePlaybackStore.getState();
     if (initialPlaybackState.isPlaying) {
-      primePlaybackStartRunway(initialPlaybackState.previewFrame ?? initialPlaybackState.currentFrame);
+      primePlaybackStartRunway(getPreviewTargetFrame(initialPlaybackState));
     }
     if (initialPlaybackState.isPlaying && rendererOwnsPresentation) {
       // Check if playback starts inside an active transition — pin that
@@ -4033,6 +4055,7 @@ export const VideoPreview = memo(function VideoPreview({
       unsubscribeMaskEditor();
     };
   }, [
+    clearPreviewRendererFailure,
     disposePreviewRenderer,
     ensurePreviewRenderer,
     previewRendererBoundaryFrames,
@@ -4042,11 +4065,11 @@ export const VideoPreview = memo(function VideoPreview({
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
     getTransitionWindowForFrame,
-    hideRenderedOverlays,
     isPausedTransitionOverlayActive,
     pinTransitionPlaybackSession,
     primePlaybackStartRunway,
     preparePlaybackTransitionFrame,
+    reportPreviewRendererFailure,
     showRendererSurface,
     showTransitionOverlaySurface,
     playbackTransitionCooldownFrames,
@@ -4082,15 +4105,14 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       const playbackState = usePlaybackStore.getState();
-      const interactionMode = getPreviewInteractionMode({
+      const runtimeSnapshot = getPreviewRuntimeSnapshot({
         isPlaying: playbackState.isPlaying,
         previewFrame: playbackState.previewFrame,
+        currentFrame: playbackState.currentFrame,
         isGizmoInteracting: isGizmoInteractingRef.current,
       });
-      const anchorFrame = getPreviewAnchorFrame(interactionMode, {
-        currentFrame: playbackState.currentFrame,
-        previewFrame: playbackState.previewFrame,
-      });
+      const interactionMode = runtimeSnapshot.mode;
+      const anchorFrame = runtimeSnapshot.anchorFrame;
       const previousAnchorFrame = preloadLastAnchorFrameRef.current;
       preloadLastAnchorFrameRef.current = anchorFrame;
       const scrubDirection: -1 | 0 | 1 = interactionMode === 'scrubbing' && previousAnchorFrame !== null
@@ -4491,69 +4513,6 @@ export const VideoPreview = memo(function VideoPreview({
     useSelectionStore.getState().clearItemSelection();
   }, [isMaskEditingActive]);
 
-  // Handle frame change from player
-  // Skip when in preview mode to keep primary playhead stationary
-  const handleFrameChange = useCallback((frame: number) => {
-    const nextFrame = Math.round(frame);
-    resolvePendingSeekLatency(nextFrame);
-    if (ignorePlayerUpdatesRef.current) return;
-    const playbackState = usePlaybackStore.getState();
-    const interactionMode = getPreviewInteractionMode({
-      isPlaying: playbackState.isPlaying,
-      previewFrame: playbackState.previewFrame,
-      isGizmoInteracting: isGizmoInteractingRef.current,
-    });
-    if (interactionMode === 'scrubbing') return;
-
-    if (ADAPTIVE_PREVIEW_QUALITY_ENABLED && interactionMode === 'playing') {
-      const nowMs = performance.now();
-      const previousSample = adaptiveFrameSampleRef.current;
-      if (previousSample && nextFrame !== previousSample.frame) {
-        const frameDelta = Math.max(1, Math.abs(nextFrame - previousSample.frame));
-        const elapsedMs = nowMs - previousSample.tsMs;
-        if (elapsedMs > 0) {
-          const result = updateAdaptivePreviewQuality({
-            state: adaptiveQualityStateRef.current,
-            sampleMsPerFrame: elapsedMs / frameDelta,
-            frameBudgetMs: getFrameBudgetMs(fps, playbackState.playbackRate),
-            userQuality: playbackState.previewQuality,
-            nowMs,
-            allowRecovery: false,
-          });
-          adaptiveQualityStateRef.current = result.state;
-          if (result.qualityChanged) {
-            if (result.qualityChangeDirection === 'degrade') {
-              previewPerfRef.current.adaptiveQualityDowngrades += 1;
-            } else if (result.qualityChangeDirection === 'recover') {
-              previewPerfRef.current.adaptiveQualityRecovers += 1;
-            }
-            setAdaptiveQualityCap(result.state.qualityCap);
-          }
-        }
-      }
-      adaptiveFrameSampleRef.current = { frame: nextFrame, tsMs: nowMs };
-    } else {
-      adaptiveFrameSampleRef.current = null;
-      if (
-        adaptiveQualityStateRef.current.overBudgetSamples !== 0
-        || adaptiveQualityStateRef.current.underBudgetSamples !== 0
-      ) {
-        adaptiveQualityStateRef.current = {
-          ...adaptiveQualityStateRef.current,
-          overBudgetSamples: 0,
-          underBudgetSamples: 0,
-        };
-      }
-    }
-
-    const { currentFrame, setCurrentFrame } = playbackState;
-    if (currentFrame === nextFrame) return;
-    setCurrentFrame(nextFrame);
-  }, [
-    fps,
-    resolvePendingSeekLatency,
-  ]);
-
   const latestRenderSourceSwitch = perfPanelSnapshot?.renderSourceHistory[
     perfPanelSnapshot.renderSourceHistory.length - 1
   ] ?? null;
@@ -4589,6 +4548,18 @@ export const VideoPreview = memo(function VideoPreview({
             {isResolving && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
                 <p className="text-white text-sm">Loading media...</p>
+              </div>
+            )}
+
+            {rendererFailureMessage && (
+              <div
+                className="absolute inset-0 flex items-center justify-center bg-black/90 z-30"
+                data-testid="preview-renderer-error"
+              >
+                <div className="text-center px-6">
+                  <p className="text-white text-sm font-medium">{rendererFailureMessage}</p>
+                  <p className="text-white/70 text-xs mt-2">Retrying automatically.</p>
+                </div>
               </div>
             )}
 
