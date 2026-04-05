@@ -423,6 +423,59 @@ function setDocumentVisibility(hidden: boolean) {
   });
 }
 
+function seedAlignedTransitionProject(alignment: number = 0.5) {
+  useItemsStore.getState().setTracks([
+    {
+      id: 'track-video',
+      name: 'Video',
+      height: 60,
+      locked: false,
+      visible: true,
+      muted: false,
+      solo: false,
+      order: 0,
+      items: [],
+    },
+  ]);
+  useItemsStore.getState().setItems([
+    {
+      id: 'clip-left',
+      label: 'Left',
+      type: 'video',
+      trackId: 'track-video',
+      from: 0,
+      durationInFrames: 60,
+      src: 'blob:left',
+      sourceDuration: 180,
+      sourceStart: 0,
+    } as TimelineItem,
+    {
+      id: 'clip-right',
+      label: 'Right',
+      type: 'video',
+      trackId: 'track-video',
+      from: 60,
+      durationInFrames: 60,
+      src: 'blob:right',
+      sourceDuration: 180,
+      sourceStart: 30,
+    } as TimelineItem,
+  ]);
+  useTransitionsStore.getState().setTransitions([
+    {
+      id: 'transition-1',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'clip-left',
+      rightClipId: 'clip-right',
+      trackId: 'track-video',
+      durationInFrames: 20,
+      alignment,
+    },
+  ]);
+}
+
 describe('VideoPreview sync behavior', () => {
   beforeEach(() => {
     mockedPlayerFrame = 0;
@@ -1187,6 +1240,90 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('drops the play-start handoff overlay when the first player frame lands past the overlay frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-video',
+        label: 'Plain Video',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:plain-video',
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(20);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(20);
+    });
+    seekToMock.mockClear();
+
+    deferPlayerSeekCompletion = true;
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(24);
+      expect(usePlaybackStore.getState().previewFrame).toBe(24);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      completeDeferredPlayerSeek?.(25);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
   it('primes the current visible dom video element on play start', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -1830,6 +1967,92 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(usePlaybackStore.getState().displayedFrame).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
+  it('renders a paused end-on-edit transition frame on mount', async () => {
+    seedAlignedTransitionProject(1);
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('renders a paused begin-on-edit transition frame on mount', async () => {
+    seedAlignedTransitionProject(0);
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(68);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(68);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(68);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {
+    seedAlignedTransitionProject(1);
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(48);
+      usePlaybackStore.getState().play();
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().isPlaying).toBe(true);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
