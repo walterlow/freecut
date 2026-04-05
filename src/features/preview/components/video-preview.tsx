@@ -75,6 +75,7 @@ import {
   resolvePreviewPresenterPlayingDecision,
   resolvePreviewPresenterPriorityFrameDecision,
   resolvePreviewPresenterReleaseDecision,
+  resolvePreviewPresenterRenderLoopDecision,
   resolvePreviewPresenterScrubTargetDecision,
   resolvePreviewPresenterStoreDecision,
   resolvePreviewPresenterTransitionPlaybackDecision,
@@ -3401,49 +3402,43 @@ export const VideoPreview = memo(function VideoPreview({
 
         let prewarmBudgetStart = 0;
         while (scrubMountedRef.current) {
-          if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) {
-            hideRenderedOverlays();
-            scrubRequestedFrameRef.current = null;
-            break;
-          }
-          if (fallbackToPlayerScrubRef.current) {
-            scrubRequestedFrameRef.current = null;
-            scrubPrewarmQueueRef.current = [];
-            scrubPrewarmQueuedSetRef.current.clear();
-            hideRenderedOverlays();
-            break;
-          }
-
           const targetFrame = scrubRequestedFrameRef.current;
-          const isPriorityFrame = targetFrame !== null;
-          const frameToRender = isPriorityFrame
-            ? targetFrame
-            : (scrubPrewarmQueueRef.current.shift() ?? null);
+          const renderLoopDecision = resolvePreviewPresenterRenderLoopDecision({
+            shouldPreferPlayer: shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame),
+            fallbackToPlayerScrub: fallbackToPlayerScrubRef.current,
+            targetFrame,
+            nextPrewarmFrame: scrubPrewarmQueueRef.current[0] ?? null,
+            suppressBackgroundPrewarm: suppressScrubBackgroundPrewarmRef.current,
+            isPlaying: usePlaybackStore.getState().isPlaying,
+            prewarmBudgetStart,
+            nowMs: performance.now(),
+            prewarmBudgetMs: FAST_SCRUB_PREWARM_RENDER_BUDGET_MS,
+          });
+          if (renderLoopDecision.kind === 'hide_overlays_and_stop') {
+            if (renderLoopDecision.shouldClearRequestedFrame) {
+              scrubRequestedFrameRef.current = null;
+            }
+            if (renderLoopDecision.shouldClearQueuedPrewarm) {
+              scrubPrewarmQueueRef.current = [];
+              scrubPrewarmQueuedSetRef.current.clear();
+            }
+            hideRenderedOverlays();
+            break;
+          }
+          if (renderLoopDecision.kind === 'stop' || renderLoopDecision.kind === 'yield') {
+            break;
+          }
 
-          if (frameToRender === null) break;
-
+          const isPriorityFrame = renderLoopDecision.kind === 'render_priority';
+          const frameToRender = renderLoopDecision.frameToRender;
           if (isPriorityFrame) {
             scrubRequestedFrameRef.current = null;
             prewarmBudgetStart = 0; // Reset budget for prewarm after this priority frame
           } else {
+            scrubPrewarmQueueRef.current.shift();
             scrubPrewarmQueuedSetRef.current.delete(frameToRender);
-            // Skip stale prewarm if a newer scrub frame is pending.
-            if (scrubRequestedFrameRef.current !== null) {
+            if (renderLoopDecision.kind === 'skip_prewarm') {
               continue;
-            }
-            if (suppressScrubBackgroundPrewarmRef.current) {
-              continue;
-            }
-            // Skip prewarm during playback — WASM decode prewarm renders
-            // (40-80ms each) block the loop from processing priority frames,
-            // causing the overlay to fall behind and show stale content.
-            if (usePlaybackStore.getState().isPlaying) {
-              break;
-            }
-            // Time-budget prewarm renders to keep scrubbing responsive.
-            // After exhausting the budget, yield so new priority frames aren't delayed.
-            if (prewarmBudgetStart > 0 && performance.now() - prewarmBudgetStart > FAST_SCRUB_PREWARM_RENDER_BUDGET_MS) {
-              break;
             }
           }
 

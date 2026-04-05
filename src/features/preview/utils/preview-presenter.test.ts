@@ -11,6 +11,7 @@ import {
   resolvePreviewPresenterHandoffCheckDecision,
   resolvePreviewPresenterPriorityFrameDecision,
   resolvePreviewPresenterReleaseDecision,
+  resolvePreviewPresenterRenderLoopDecision,
   resolvePreviewPresenterScrubTargetDecision,
   resolvePreviewPresenterStoreDecision,
   resolvePreviewPresenterTransitionPlaybackDecision,
@@ -467,6 +468,74 @@ describe('preview presenter decisions', () => {
       nextFallbackToPlayer: false,
       nextBackwardRequestedFrame: 84,
       nextBackwardRenderAtMs: 5100,
+    });
+  });
+
+  it('stops the render loop and hides overlays when player ownership resumes', () => {
+    expect(resolvePreviewPresenterRenderLoopDecision({
+      shouldPreferPlayer: true,
+      fallbackToPlayerScrub: false,
+      targetFrame: 96,
+      nextPrewarmFrame: 92,
+      suppressBackgroundPrewarm: false,
+      isPlaying: false,
+      prewarmBudgetStart: 0,
+      nowMs: 1000,
+      prewarmBudgetMs: 8,
+    })).toEqual({
+      kind: 'hide_overlays_and_stop',
+      shouldClearRequestedFrame: true,
+      shouldClearQueuedPrewarm: false,
+    });
+  });
+
+  it('renders the current scrub target before any queued prewarm frame', () => {
+    expect(resolvePreviewPresenterRenderLoopDecision({
+      shouldPreferPlayer: false,
+      fallbackToPlayerScrub: false,
+      targetFrame: 96,
+      nextPrewarmFrame: 92,
+      suppressBackgroundPrewarm: false,
+      isPlaying: false,
+      prewarmBudgetStart: 0,
+      nowMs: 1000,
+      prewarmBudgetMs: 8,
+    })).toEqual({
+      kind: 'render_priority',
+      frameToRender: 96,
+    });
+  });
+
+  it('skips queued prewarm frames when backward scrub suppression is active', () => {
+    expect(resolvePreviewPresenterRenderLoopDecision({
+      shouldPreferPlayer: false,
+      fallbackToPlayerScrub: false,
+      targetFrame: null,
+      nextPrewarmFrame: 92,
+      suppressBackgroundPrewarm: true,
+      isPlaying: false,
+      prewarmBudgetStart: 0,
+      nowMs: 1000,
+      prewarmBudgetMs: 8,
+    })).toEqual({
+      kind: 'skip_prewarm',
+      frameToRender: 92,
+    });
+  });
+
+  it('yields queued prewarm work while playback owns the clock', () => {
+    expect(resolvePreviewPresenterRenderLoopDecision({
+      shouldPreferPlayer: false,
+      fallbackToPlayerScrub: false,
+      targetFrame: null,
+      nextPrewarmFrame: 92,
+      suppressBackgroundPrewarm: false,
+      isPlaying: true,
+      prewarmBudgetStart: 0,
+      nowMs: 1000,
+      prewarmBudgetMs: 8,
+    })).toEqual({
+      kind: 'yield',
     });
   });
 

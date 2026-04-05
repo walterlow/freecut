@@ -88,6 +88,18 @@ export type PreviewPresenterScrubTargetDecision =
     requestedFrame: number;
   });
 
+export type PreviewPresenterRenderLoopDecision =
+  | {
+    kind: 'hide_overlays_and_stop';
+    shouldClearRequestedFrame: boolean;
+    shouldClearQueuedPrewarm: boolean;
+  }
+  | { kind: 'stop' }
+  | { kind: 'yield' }
+  | { kind: 'render_priority'; frameToRender: number }
+  | { kind: 'render_prewarm'; frameToRender: number }
+  | { kind: 'skip_prewarm'; frameToRender: number };
+
 export type PreviewPresenterTransitionPlaybackDecision =
   | {
     kind: 'player';
@@ -553,6 +565,68 @@ export function resolvePreviewPresenterScrubTargetDecision(input: {
     ...baseDecision,
     nextBackwardRequestedFrame: null,
     nextBackwardRenderAtMs: 0,
+  };
+}
+
+export function resolvePreviewPresenterRenderLoopDecision(input: {
+  shouldPreferPlayer: boolean;
+  fallbackToPlayerScrub: boolean;
+  targetFrame: number | null;
+  nextPrewarmFrame: number | null;
+  suppressBackgroundPrewarm: boolean;
+  isPlaying: boolean;
+  prewarmBudgetStart: number;
+  nowMs: number;
+  prewarmBudgetMs: number;
+}): PreviewPresenterRenderLoopDecision {
+  if (input.shouldPreferPlayer) {
+    return {
+      kind: 'hide_overlays_and_stop',
+      shouldClearRequestedFrame: true,
+      shouldClearQueuedPrewarm: false,
+    };
+  }
+
+  if (input.fallbackToPlayerScrub) {
+    return {
+      kind: 'hide_overlays_and_stop',
+      shouldClearRequestedFrame: true,
+      shouldClearQueuedPrewarm: true,
+    };
+  }
+
+  if (input.targetFrame !== null) {
+    return {
+      kind: 'render_priority',
+      frameToRender: input.targetFrame,
+    };
+  }
+
+  if (input.nextPrewarmFrame === null) {
+    return { kind: 'stop' };
+  }
+
+  if (input.suppressBackgroundPrewarm) {
+    return {
+      kind: 'skip_prewarm',
+      frameToRender: input.nextPrewarmFrame,
+    };
+  }
+
+  if (input.isPlaying) {
+    return { kind: 'yield' };
+  }
+
+  if (
+    input.prewarmBudgetStart > 0
+    && input.nowMs - input.prewarmBudgetStart > input.prewarmBudgetMs
+  ) {
+    return { kind: 'yield' };
+  }
+
+  return {
+    kind: 'render_prewarm',
+    frameToRender: input.nextPrewarmFrame,
   };
 }
 
