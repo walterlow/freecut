@@ -333,6 +333,50 @@ export async function createCompositionRenderer(
     return gpuPresentationCtx;
   }
 
+  function presentSourceToGpuCanvas(
+    source: OffscreenCanvas | HTMLCanvasElement,
+    width: number,
+    height: number,
+  ): boolean {
+    if (!gpuPipeline || !ensureGpuCompositor() || !gpuCompositor || !gpuTexturePool || !gpuMaskManager) {
+      return false;
+    }
+
+    const outputCtx = ensureGpuPresentationContext(width, height);
+    if (!outputCtx) return false;
+
+    const device = gpuPipeline.getDevice();
+    const texture = gpuTexturePool.acquire(width, height);
+    try {
+      device.queue.copyExternalImageToTexture(
+        { source, flipY: false },
+        { texture },
+        { width, height },
+      );
+
+      return gpuCompositor.compositeToCanvas(
+        [
+          {
+            params: {
+              ...DEFAULT_LAYER_PARAMS,
+              sourceAspect: width / height,
+              outputAspect: width / height,
+            },
+            textureView: texture.createView(),
+            maskView: gpuMaskManager.getFallbackView(),
+          },
+        ],
+        width,
+        height,
+        outputCtx,
+      );
+    } catch {
+      return false;
+    } finally {
+      gpuTexturePool.release(texture);
+    }
+  }
+
   // Build lookup maps
   const keyframesMap = buildKeyframesMap(keyframes);
   const getCurrentKeyframes = (itemId: string): ItemKeyframes | undefined => (
@@ -1530,7 +1574,7 @@ export async function createCompositionRenderer(
         const gpuCompositeOutput = useGpuCompositor
           ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
           : null;
-        const gpuPresentationOutput = useGpuCompositor
+        const gpuPresentationOutput = gpuPipeline && ensureGpuCompositor()
           ? ensureGpuPresentationContext(canvasSettings.width, canvasSettings.height)
           : null;
 
@@ -1635,6 +1679,14 @@ export async function createCompositionRenderer(
       // Log occlusion culling stats periodically (only in development)
       if (import.meta.env.DEV && skippedTracks > 0 && frame % 30 === 0) {
         getLog().debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
+      }
+
+      if (!lastFramePresentedDirectly) {
+        lastFramePresentedDirectly = presentSourceToGpuCanvas(
+          finalCompositeSource,
+          canvasSettings.width,
+          canvasSettings.height,
+        );
       }
 
       ctx.drawImage(finalCompositeSource, 0, 0);
