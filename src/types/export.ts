@@ -39,4 +39,5 @@ export interface CompositionInputProps {
   transitions?: Transition[]; // Transitions between clips
   backgroundColor?: string; // Hex color for canvas background
   keyframes?: ItemKeyframes[]; // Keyframe animations for items
+  renderMode?: 'full' | 'visual-only' | 'audio-only';
 }

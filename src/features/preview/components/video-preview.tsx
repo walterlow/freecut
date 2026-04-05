@@ -4,7 +4,7 @@ import {
   backgroundBatchPreseek as workerBackgroundBatchPreseek,
   getDecoderPrewarmMetricsSnapshot,
 } from '../utils/decoder-prewarm';
-import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
+import { HeadlessPlayerTransport, type PlayerRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
@@ -212,21 +212,20 @@ interface VideoPreviewProps {
 /**
  * Video Preview Component
  *
- * Displays the custom Player with:
- * - Real-time video rendering
- * - Bidirectional sync with timeline
- * - Responsive sizing based on zoom and container
- * - Frame counter
- * - Fullscreen toggle
+ * Displays the renderer-owned preview surface with:
+ * - Real-time composition rendering
+ * - transport/audio sync with the timeline
+ * - responsive sizing based on zoom and container
+ * - editing overlays and interaction chrome
  *
- * Memoized to prevent expensive Player re-renders.
+ * Memoized to prevent expensive preview re-renders.
  */
 export const VideoPreview = memo(function VideoPreview({
   project,
   containerSize,
   suspendOverlay = false,
 }: VideoPreviewProps) {
-  const playerRef = useRef<PlayerRef>(null);
+  const transportRef = useRef<PlayerRef>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
   const scrubFrameDirtyRef = useRef(false);
@@ -374,7 +373,7 @@ export const VideoPreview = memo(function VideoPreview({
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
 
-  const trackPlayerSeek = useCallback((targetFrame: number) => {
+  const trackTransportSeek = useCallback((targetFrame: number) => {
     if (!import.meta.env.DEV) return;
     pendingSeekLatencyRef.current = {
       targetFrame,
@@ -450,11 +449,11 @@ export const VideoPreview = memo(function VideoPreview({
     setRendererFailureMessage('Preview renderer unavailable');
   }, []);
 
-  // Player integration for transport/audio only.
-  const { ignorePlayerUpdatesRef } = useCustomPlayer(
-    playerRef,
+  // Transport integration for audio/clock only.
+  const { ignoreTransportUpdatesRef } = useCustomPlayer(
+    transportRef,
     isGizmoInteracting,
-    trackPlayerSeek,
+    trackTransportSeek,
   );
 
   useEffect(() => {
@@ -556,9 +555,9 @@ export const VideoPreview = memo(function VideoPreview({
     adaptiveQualityRecovers: 0,
   });
   const lastSyncedMediaDependencyVersionRef = useRef<number>(-1);
-  const handleFrameChange = usePreviewTransportFrameController({
+  const handleTransportFrameChange = usePreviewTransportFrameController({
     fps,
-    ignorePlayerUpdatesRef,
+    ignoreTransportUpdatesRef,
     isGizmoInteractingRef,
     adaptiveQualityStateRef,
     adaptiveFrameSampleRef,
@@ -1349,7 +1348,7 @@ export const VideoPreview = memo(function VideoPreview({
     previewPerfRef,
   });
 
-  // Memoize inputProps to prevent Player from re-rendering
+  // Memoize inputProps to prevent transport-only composition churn.
   const inputProps: CompositionInputProps = useMemo(() => ({
     fps,
     width: project.width,
@@ -1360,10 +1359,10 @@ export const VideoPreview = memo(function VideoPreview({
     keyframes,
   }), [fps, project.width, project.height, resolvedTracks, transitions, project.backgroundColor, keyframes]);
 
-  // Keep main Player geometry fixed at project resolution.
+  // Keep transport render geometry fixed at project resolution.
   // This prevents quality toggles from changing the live preview sampling path,
   // which can look like layout drift on certain source aspect ratios.
-  const playerRenderSize = useMemo(() => {
+  const transportRenderSize = useMemo(() => {
     const w = Math.max(2, project.width);
     const h = Math.max(2, project.height);
     return { width: w, height: h };
@@ -1997,8 +1996,8 @@ export const VideoPreview = memo(function VideoPreview({
     return getUpcomingTransitionStartFrame(frame, playingComplexTransitionPrearmFrames);
   }, [getUpcomingTransitionStartFrame, playingComplexTransitionPrearmFrames]);
 
-  // The renderer owns visual presentation. The Player stays mounted for
-  // transport, audio, and media-element lifecycle only.
+  // The renderer owns visual presentation. The headless transport stays
+  // mounted for clock, audio, and media-element lifecycle only.
   const rendererOwnsPresentation = PREVIEW_RENDERER_ENABLED;
 
   /**
@@ -2019,9 +2018,9 @@ export const VideoPreview = memo(function VideoPreview({
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current;
     if (!canvas) return;
-    if (canvas.width !== playerRenderSize.width) canvas.width = playerRenderSize.width;
-    if (canvas.height !== playerRenderSize.height) canvas.height = playerRenderSize.height;
-  }, [playerRenderSize.width, playerRenderSize.height]);
+    if (canvas.width !== transportRenderSize.width) canvas.width = transportRenderSize.width;
+    if (canvas.height !== transportRenderSize.height) canvas.height = transportRenderSize.height;
+  }, [transportRenderSize.width, transportRenderSize.height]);
 
   const disposePreviewRenderer = useCallback(() => {
     scrubInitPromiseRef.current = null;
@@ -4079,7 +4078,7 @@ export const VideoPreview = memo(function VideoPreview({
     readPresenterState,
     resetTransientScrubState,
     publishDisplayedFrame,
-    trackPlayerSeek,
+    trackTransportSeek,
   ]);
 
   // Preload media files ahead of the current playhead to reduce buffering
@@ -4563,23 +4562,18 @@ export const VideoPreview = memo(function VideoPreview({
               </div>
             )}
 
-            <Player
-              ref={playerRef}
+            <HeadlessPlayerTransport
+              ref={transportRef}
               durationInFrames={totalFrames}
               fps={fps}
-              width={playerRenderSize.width}
-              height={playerRenderSize.height}
+              width={transportRenderSize.width}
+              height={transportRenderSize.height}
               autoPlay={false}
               loop={false}
-              controls={false}
-              style={{
-                width: '100%',
-                height: '100%',
-              }}
-              onFrameChange={handleFrameChange}
+              onFrameChange={handleTransportFrameChange}
             >
-              <MainComposition {...inputProps} />
-            </Player>
+              <MainComposition {...inputProps} renderMode="audio-only" />
+            </HeadlessPlayerTransport>
 
             {PREVIEW_RENDERER_ENABLED && (
               <canvas

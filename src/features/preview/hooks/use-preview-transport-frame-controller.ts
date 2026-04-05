@@ -18,7 +18,7 @@ interface PreviewAdaptiveQualityPerfCounters {
 
 export interface UsePreviewTransportFrameControllerInput {
   fps: number;
-  ignorePlayerUpdatesRef: MutableRefObject<boolean>;
+  ignoreTransportUpdatesRef: MutableRefObject<boolean>;
   isGizmoInteractingRef: MutableRefObject<boolean>;
   adaptiveQualityStateRef: MutableRefObject<AdaptivePreviewQualityState>;
   adaptiveFrameSampleRef: MutableRefObject<AdaptiveFrameSample | null>;
@@ -49,7 +49,7 @@ export function usePreviewTransportFrameController(
 ): (frame: number) => void {
   const {
     fps,
-    ignorePlayerUpdatesRef,
+    ignoreTransportUpdatesRef,
     isGizmoInteractingRef,
     adaptiveQualityStateRef,
     adaptiveFrameSampleRef,
@@ -66,7 +66,7 @@ export function usePreviewTransportFrameController(
       previewFrame: playbackState.previewFrame,
       isPlaying: playbackState.isPlaying,
       isGizmoInteracting: isGizmoInteractingRef.current,
-      shouldIgnorePlayerUpdates: ignorePlayerUpdatesRef.current,
+      shouldIgnorePlayerUpdates: ignoreTransportUpdatesRef.current,
     });
 
     resolvePendingSeekLatency(decision.nextFrame);
@@ -116,7 +116,7 @@ export function usePreviewTransportFrameController(
     adaptiveFrameSampleRef,
     adaptiveQualityStateRef,
     fps,
-    ignorePlayerUpdatesRef,
+    ignoreTransportUpdatesRef,
     isGizmoInteractingRef,
     previewPerfRef,
     resolvePendingSeekLatency,

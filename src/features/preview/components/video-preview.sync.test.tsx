@@ -268,7 +268,7 @@ vi.mock('../utils/decoder-prewarm', () => ({
 vi.mock('@/features/preview/deps/player-core', async () => {
   const React = await import('react');
 
-  const MockPlayer = React.forwardRef<
+  const createMockTransport = (testId: string) => React.forwardRef<
     {
       seekTo: (frame: number) => void;
       play: () => void;
@@ -335,12 +335,17 @@ vi.mock('@/features/preview/deps/player-core', async () => {
       );
     });
 
-    return <div data-testid="mock-player">{syncedChildren}</div>;
+    return <div data-testid={testId}>{syncedChildren}</div>;
   });
+
+  const MockPlayer = createMockTransport('mock-player');
   MockPlayer.displayName = 'MockPlayer';
+  const MockHeadlessTransport = createMockTransport('mock-headless-transport');
+  MockHeadlessTransport.displayName = 'MockHeadlessTransport';
 
   return {
     Player: MockPlayer,
+    HeadlessPlayerTransport: MockHeadlessTransport,
     AbsoluteFill: ({ children }: React.PropsWithChildren<Record<string, unknown>>) => <div>{children}</div>,
   };
 });
@@ -542,6 +547,18 @@ describe('VideoPreview sync behavior', () => {
       return canvas as unknown as HTMLCanvasElement;
     } as unknown as typeof HTMLCanvasElement;
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock;
+  });
+
+  it('mounts the headless transport instead of the visual player shell', () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    expect(screen.getByTestId('mock-headless-transport')).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-player')).toBeNull();
   });
 
   it('seeks to currentFrame when previewFrame is stale and unchanged (ruler click path)', async () => {
@@ -3116,7 +3133,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('keeps Player render geometry fixed when preview quality changes', async () => {
+  it('keeps transport render geometry fixed when preview quality changes', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}

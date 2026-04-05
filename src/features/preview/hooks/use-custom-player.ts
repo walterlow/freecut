@@ -1,11 +1,11 @@
 /**
- * Hook for integrating the transport Player with timeline playback state.
+ * Hook for integrating the headless transport with timeline playback state.
  *
- * The renderer owns preview presentation. The Player is transport/audio only:
- * - committed transport seeks trigger Player seeks
- * - scrub and gizmo preview do not seek the Player
- * - play/pause state is synced from the store to the Player
- * - Player frame callbacks feed transport progress back into the store
+ * The renderer owns preview presentation. The transport is audio/clock only:
+ * - committed transport seeks trigger transport seeks
+ * - scrub and gizmo preview do not seek the transport
+ * - play/pause state is synced from the store to the transport
+ * - transport frame callbacks feed committed progress back into the store
  */
 
 import { useRef, useEffect, useCallback } from 'react';
@@ -25,47 +25,47 @@ import {
 const logger = createLogger('useCustomPlayer');
 
 export function useCustomPlayer(
-  playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
+  transportRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
   isGizmoInteracting = false,
-  onPlayerSeek?: (targetFrame: number) => void,
+  onTransportSeek?: (targetFrame: number) => void,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
 
   const lastSeekTargetRef = useRef<number | null>(null);
-  const ignorePlayerUpdatesRef = useRef<boolean>(false);
+  const ignoreTransportUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
 
-  const getPlayerFrame = useCallback(() => {
-    const frame = playerRef.current?.getCurrentFrame();
+  const getTransportFrame = useCallback(() => {
+    const frame = transportRef.current?.getCurrentFrame();
     return Number.isFinite(frame) ? Math.round(frame!) : null;
-  }, [playerRef]);
+  }, [transportRef]);
 
-  const seekPlayerToFrame = useCallback((targetFrame: number) => {
-    if (!playerRef.current) return;
+  const seekTransportToFrame = useCallback((targetFrame: number) => {
+    if (!transportRef.current) return;
     if (lastSeekTargetRef.current === targetFrame) return;
 
-    const playerFrame = getPlayerFrame();
-    if (playerFrame !== null && playerFrame === targetFrame) {
+    const transportFrame = getTransportFrame();
+    if (transportFrame !== null && transportFrame === targetFrame) {
       lastSeekTargetRef.current = targetFrame;
       return;
     }
 
-    ignorePlayerUpdatesRef.current = true;
+    ignoreTransportUpdatesRef.current = true;
     try {
-      onPlayerSeek?.(targetFrame);
-      playerRef.current.seekTo(targetFrame);
+      onTransportSeek?.(targetFrame);
+      transportRef.current.seekTo(targetFrame);
       lastSeekTargetRef.current = targetFrame;
     } catch (error) {
-      logger.error('Failed to seek Player:', error);
+      logger.error('Failed to seek transport:', error);
     }
 
     requestAnimationFrame(() => {
-      ignorePlayerUpdatesRef.current = false;
+      ignoreTransportUpdatesRef.current = false;
     });
-  }, [playerRef, getPlayerFrame, onPlayerSeek]);
+  }, [transportRef, getTransportFrame, onTransportSeek]);
 
   useEffect(() => {
-    if (!playerRef.current) return;
+    if (!transportRef.current) return;
 
     const wasPlaying = wasPlayingRef.current;
     wasPlayingRef.current = isPlaying;
@@ -77,13 +77,13 @@ export function useCustomPlayer(
         wasPlaying,
         currentFrame: playbackState.currentFrame,
         previewFrame: playbackState.previewFrame,
-        playerFrame: getPlayerFrame(),
+        playerFrame: getTransportFrame(),
       });
 
       if (playbackCommand.kind === 'play') {
         const { commitPreviewFrame } = playbackState;
         if (playbackCommand.shouldSeekBeforePlay) {
-          seekPlayerToFrame(playbackCommand.startFrame);
+          seekTransportToFrame(playbackCommand.startFrame);
         } else {
           lastSeekTargetRef.current = playbackCommand.startFrame;
         }
@@ -92,46 +92,46 @@ export function useCustomPlayer(
         }
 
         if (!usePlaybackStore.getState().isPlaying) {
-          ignorePlayerUpdatesRef.current = false;
+          ignoreTransportUpdatesRef.current = false;
           return;
         }
         ensureAudioContextResumed();
         ensureBufferedAudioContextResumed();
         ensurePitchCorrectedAudioContextResumed();
-        playerRef.current?.play();
-        ignorePlayerUpdatesRef.current = false;
+        transportRef.current?.play();
+        ignoreTransportUpdatesRef.current = false;
         return;
       }
 
       if (playbackCommand.kind === 'pause') {
-        playerRef.current.pause();
+        transportRef.current.pause();
       }
     } catch (error) {
       logger.error('Failed to control playback:', error);
     }
-  }, [isPlaying, playerRef, getPlayerFrame, seekPlayerToFrame]);
+  }, [isPlaying, transportRef, getTransportFrame, seekTransportToFrame]);
 
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
   useEffect(() => {
-    if (!playerRef.current || isTimelineLoading) return;
+    if (!transportRef.current || isTimelineLoading) return;
 
     const initialFrame = usePlaybackStore.getState().currentFrame;
-    ignorePlayerUpdatesRef.current = true;
+    ignoreTransportUpdatesRef.current = true;
     try {
-      onPlayerSeek?.(initialFrame);
-      playerRef.current.seekTo(initialFrame);
+      onTransportSeek?.(initialFrame);
+      transportRef.current.seekTo(initialFrame);
       lastSeekTargetRef.current = initialFrame;
     } catch (error) {
-      logger.error('Failed to initialize Player frame:', error);
+      logger.error('Failed to initialize transport frame:', error);
     }
 
     requestAnimationFrame(() => {
-      ignorePlayerUpdatesRef.current = false;
+      ignoreTransportUpdatesRef.current = false;
     });
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
-      if (!playerRef.current) return;
+      if (!transportRef.current) return;
 
       const syncDecision = resolvePreviewPlayerTransportSyncDecision({
         prevCurrentFrame: prevState.currentFrame,
@@ -140,15 +140,15 @@ export function useCustomPlayer(
         previewFrame: state.previewFrame,
         isGizmoInteracting,
         isPlaying: state.isPlaying,
-        playerFrame: getPlayerFrame(),
+        playerFrame: getTransportFrame(),
       });
 
       if (syncDecision.kind === 'none') return;
-      seekPlayerToFrame(syncDecision.targetFrame);
+      seekTransportToFrame(syncDecision.targetFrame);
     });
 
     return unsubscribe;
-  }, [isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteracting]);
+  }, [isTimelineLoading, transportRef, getTransportFrame, seekTransportToFrame, isGizmoInteracting, onTransportSeek]);
 
-  return { ignorePlayerUpdatesRef };
+  return { ignoreTransportUpdatesRef };
 }

@@ -6,7 +6,7 @@ export const PlayerEventEmitterContext = createContext<PlayerEmitter | undefined
 export function usePlayerEmitter(): PlayerEmitter {
   const emitter = useContext(PlayerEventEmitterContext);
   if (!emitter) {
-    throw new Error('usePlayerEmitter must be used within a Player component');
+    throw new Error('usePlayerEmitter must be used within a player transport component');
   }
   return emitter;
 }

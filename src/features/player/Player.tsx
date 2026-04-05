@@ -11,85 +11,33 @@
 
 import React, {
   forwardRef,
-  useImperativeHandle,
   useRef,
   useState,
   useCallback,
   useEffect,
 } from 'react';
+import { PlayerTransportProviders } from './PlayerTransportProviders';
 import {
-  PlayerEmitterProvider,
-  usePlayerEmitter,
-  type PlayerEventTypes,
-  type CallbackListener,
-} from './event-emitter';
-import {
-  ClockBridgeProvider,
-  useBridgedTimelineContext,
-} from './clock';
-import { usePlayer } from './use-player';
-import { VideoConfigProvider } from './video-config-context';
+  usePlayerTransportBridge,
+  type BasePlayerTransportProps,
+  type PlayerRef,
+} from './player-transport-shared';
+
+export type { PlayerRef } from './player-transport-shared';
 
 // Types
-interface PlayerProps {
+export interface PlayerProps extends BasePlayerTransportProps {
   /** The component to render as video content */
   children: React.ReactNode;
-  
-  /** Duration in frames */
-  durationInFrames: number;
-  
-  /** Frames per second */
-  fps: number;
-  
-  /** Initial frame to start at */
-  initialFrame?: number;
-  
-  /** Whether to loop playback */
-  loop?: boolean;
-  
+
   /** Whether to show controls */
   controls?: boolean;
-  
-  /** Whether to auto-play on mount */
-  autoPlay?: boolean;
-  
-  /** Whether to start muted */
-  initiallyMuted?: boolean;
-  
-  /** Playback rate (0.25 - 4) */
-  playbackRate?: number;
-  
+
   /** Custom class name */
   className?: string;
-  
+
   /** Custom styles */
   style?: React.CSSProperties;
-  
-  /** Width of the player */
-  width?: number;
-  
-  /** Height of the player */
-  height?: number;
-  
-  /** Callback when playback ends */
-  onEnded?: () => void;
-  
-  /** Callback when frame changes */
-  onFrameChange?: (frame: number) => void;
-  
-  /** Callback when play state changes */
-  onPlayStateChange?: (isPlaying: boolean) => void;
-}
-
-export interface PlayerRef {
-  play: () => void;
-  pause: () => void;
-  toggle: () => void;
-  seekTo: (frame: number) => void;
-  getCurrentFrame: () => number;
-  isPlaying: () => boolean;
-  addEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
-  removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
 }
 
 /**
@@ -324,11 +272,6 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
     },
     ref,
   ) => {
-    // Consume unused props to avoid lint warnings
-    void initiallyMuted;
-    void initialPlaybackRate;
-    void onEnded;
-
     // State
     const [isFullscreen, setIsFullscreen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -389,41 +332,25 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
       };
     }, [updateScaledLayout]);
     
-    // Get player methods
-    const player = usePlayer(durationInFrames, { loop, onEnded });
-    
-    // Get context values
+    void initiallyMuted;
+    void initialPlaybackRate;
+
     const {
-      frame: currentFrame,
+      player,
+      currentFrame,
       playing,
       playbackRate,
       setPlaybackRate,
-    } = useBridgedTimelineContext();
-    const emitter = usePlayerEmitter();
-    
-    // Sync initial frame
-    useEffect(() => {
-      if (initialFrame > 0 && currentFrame === 0) {
-        player.seek(initialFrame);
-      }
-    }, [initialFrame, currentFrame, player]);
-    
-    // Sync autoPlay
-    useEffect(() => {
-      if (autoPlay && !playing) {
-        player.play();
-      }
-    }, [autoPlay, playing, player]);
-    
-    // Handle frame changes
-    useEffect(() => {
-      onFrameChange?.(currentFrame);
-    }, [currentFrame, onFrameChange]);
-    
-    // Handle play state changes
-    useEffect(() => {
-      onPlayStateChange?.(playing);
-    }, [playing, onPlayStateChange]);
+    } = usePlayerTransportBridge({
+      ref,
+      durationInFrames,
+      initialFrame,
+      loop,
+      autoPlay,
+      onEnded,
+      onFrameChange,
+      onPlayStateChange,
+    });
     
     // Fullscreen handling
     const toggleFullscreen = useCallback(async () => {
@@ -447,26 +374,6 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
         document.removeEventListener('fullscreenchange', handleFullscreenChange);
       };
     }, []);
-    
-    // Expose imperative API
-    useImperativeHandle(
-      ref,
-      () => ({
-        play: () => player.play(),
-        pause: () => player.pause(),
-        toggle: () => player.toggle(),
-        seekTo: (frame: number) => player.seek(frame),
-        getCurrentFrame: () => player.getCurrentFrame(),
-        isPlaying: () => player.isPlaying(),
-        addEventListener: (event, callback) => {
-          emitter.addEventListener(event, callback);
-        },
-        removeEventListener: (event, callback) => {
-          emitter.removeEventListener(event, callback);
-        },
-      }),
-      [player, emitter],
-    );
     
     return (
       <div
@@ -554,27 +461,19 @@ export const Player = forwardRef<PlayerRef, PlayerProps>(
     } = props;
 
     return (
-      <PlayerEmitterProvider>
-        <ClockBridgeProvider
-          fps={fps}
-          durationInFrames={durationInFrames}
-          initialFrame={initialFrame}
-          initiallyMuted={initiallyMuted}
-          initialPlaybackRate={playbackRate}
-          loop={loop}
-          onEnded={onEnded}
-          onVolumeChange={() => {}}
-        >
-          <VideoConfigProvider
-            fps={fps}
-            width={props.width ?? 1280}
-            height={props.height ?? 720}
-            durationInFrames={durationInFrames}
-          >
-            <PlayerInner {...props} ref={ref} />
-          </VideoConfigProvider>
-        </ClockBridgeProvider>
-      </PlayerEmitterProvider>
+      <PlayerTransportProviders
+        fps={fps}
+        durationInFrames={durationInFrames}
+        initialFrame={initialFrame}
+        initiallyMuted={initiallyMuted}
+        playbackRate={playbackRate}
+        loop={loop}
+        onEnded={onEnded}
+        width={props.width}
+        height={props.height}
+      >
+        <PlayerInner {...props} ref={ref} />
+      </PlayerTransportProviders>
     );
   },
 );

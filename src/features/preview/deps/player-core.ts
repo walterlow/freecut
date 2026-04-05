@@ -1,1 +1,6 @@
-export { AbsoluteFill, Player, type PlayerRef } from './player-contract';
+export {
+  AbsoluteFill,
+  HeadlessPlayerTransport,
+  Player,
+  type PlayerRef,
+} from './player-contract';

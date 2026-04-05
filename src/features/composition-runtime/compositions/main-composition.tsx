@@ -127,6 +127,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   keyframes,
   width: compositionWidth,
   height: compositionHeight,
+  renderMode = 'full',
 }) => {
   const { fps, width: renderWidth, height: renderHeight } = useVideoConfig();
   const projectWidth = compositionWidth ?? renderWidth;
@@ -309,9 +310,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
   // via ItemEffectWrapper. This prevents remounts when adjustment layers are added/removed.
 
   React.useEffect(() => {
+    if (renderMode === 'audio-only') return;
     const fontFamilies = renderPlan.visibleTextFontFamilies;
     if (fontFamilies.length > 0) loadFonts(fontFamilies);
-  }, [renderPlan.visibleTextFontFamilies]);
+  }, [renderMode, renderPlan.visibleTextFontFamilies]);
 
 
   // Stable render function for video items - prevents re-renders on every frame
@@ -354,16 +356,20 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
         renderHeight={renderHeight}
       >
         <AbsoluteFill>
-          {/* SVG MASK DEFINITIONS - kept for backward compat with feather/invert that need SVG mask */}
-          {/* Shape mask animation is now handled per-item via ActiveMasksProvider + MaskedItem */}
+          {renderMode !== 'audio-only' && (
+            <>
+              {/* SVG MASK DEFINITIONS - kept for backward compat with feather/invert that need SVG mask */}
+              {/* Shape mask animation is now handled per-item via ActiveMasksProvider + MaskedItem */}
 
-          {/* BACKGROUND LAYER */}
-          <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
+              {/* BACKGROUND LAYER */}
+              <AbsoluteFill style={{ backgroundColor: effectiveBackgroundColor, zIndex: -1 }} />
+            </>
+          )}
 
           {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
           {/* Video audio is decoupled from visual video elements for transition stability */}
           {/* Custom-decoded segments (AC-3/E-AC-3, PCM endian variants) use mediabunny instead of native <audio>. */}
-          {transitionAudioSegments.map((segment) => {
+          {renderMode !== 'visual-only' && transitionAudioSegments.map((segment) => {
             const useCustomDecoder = shouldUseCustomDecoder(segment);
             const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
             return (
@@ -428,7 +434,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
           })}
 
           {/* Standalone audio items - merged across split boundaries for stable playback */}
-          {audioSegments.map((segment) => {
+          {renderMode !== 'visual-only' && audioSegments.map((segment) => {
             const useCustomDecoder = shouldUseCustomDecoder(segment);
             const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
             return (
@@ -480,7 +486,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
             );
           })}
 
-          {managedCompoundAudioSegments.map((segment) => {
+          {renderMode !== 'visual-only' && managedCompoundAudioSegments.map((segment) => {
             const compoundItem = managedCompoundAudioItemsById.get(segment.itemId);
             if (!compoundItem) return null;
 
@@ -517,7 +523,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
             );
           })}
 
-          {standaloneCompoundAudioItems.map((item) => (
+          {renderMode !== 'visual-only' && standaloneCompoundAudioItems.map((item) => (
             <Sequence
               key={`compound-audio-${item.id}`}
               from={item.from}
@@ -535,58 +541,60 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
 
           {/* ALL VISUAL LAYERS - videos and non-media in SINGLE wrapper for proper z-index stacking */}
           {/* This ensures items from different tracks respect z-index across all types */}
-          <FrameActiveMasksProvider
-            masks={visibleShapeMasks}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-          >
-            <AbsoluteFill>
-              {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
-              {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
-              <StableVideoSequence
-                items={videoItems}
-                transitionWindows={renderPlan.transitionWindows}
-                premountFor={Math.round(fps * 1)}
-                renderItem={renderVideoItem}
-              />
+          {renderMode !== 'audio-only' && (
+            <FrameActiveMasksProvider
+              masks={visibleShapeMasks}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+            >
+              <AbsoluteFill>
+                {/* VIDEO LAYER - all videos rendered via StableVideoSequence */}
+                {/* ALL effects (CSS, glitch, halftone) applied per-item via ItemEffectWrapper */}
+                <StableVideoSequence
+                  items={videoItems}
+                  transitionWindows={renderPlan.transitionWindows}
+                  premountFor={Math.round(fps * 1)}
+                  renderItem={renderVideoItem}
+                />
 
-              {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
-              {/* No more above/below split - items never move between DOM parents */}
-              {nonMediaByTrack
-                .filter((track) => track.items.length > 0)
-                .map((track) => {
-                  const trackOrder = track.order ?? 0;
-                  return (
-                    <AbsoluteFill
-                      key={track.id}
-                      style={{
-                        // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
-                        zIndex: (maxOrder - trackOrder) * 1000 + 100,
-                        visibility: track.trackVisible ? 'visible' : 'hidden',
-                      }}
-                    >
-                      {track.items.map((item) => (
-                        <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
-                          <ItemEffectWrapper
-                            itemTrackOrder={trackOrder}
-                            adjustmentLayers={visibleAdjustmentLayers}
-                            sequenceFrom={item.from}
-                          >
-                            <MaskedItem
-                              item={item}
-                              muted={track.muted || !track.trackVisible || (item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item))}
-                              visible={track.trackVisible}
+                {/* NON-MEDIA LAYERS - text, shapes, etc. with per-item effects via ItemEffectWrapper */}
+                {/* No more above/below split - items never move between DOM parents */}
+                {nonMediaByTrack
+                  .filter((track) => track.items.length > 0)
+                  .map((track) => {
+                    const trackOrder = track.order ?? 0;
+                    return (
+                      <AbsoluteFill
+                        key={track.id}
+                        style={{
+                          // Non-media z-index: base + 100 (videos use base, transitions use base + 200)
+                          zIndex: (maxOrder - trackOrder) * 1000 + 100,
+                          visibility: track.trackVisible ? 'visible' : 'hidden',
+                        }}
+                      >
+                        {track.items.map((item) => (
+                          <Sequence key={item.id} from={item.from} durationInFrames={item.durationInFrames}>
+                            <ItemEffectWrapper
                               itemTrackOrder={trackOrder}
-                              compositionRenderMode={item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item) ? 'visual-only' : 'full'}
-                            />
-                          </ItemEffectWrapper>
-                        </Sequence>
-                      ))}
-                    </AbsoluteFill>
-                  );
-                })}
-            </AbsoluteFill>
-          </FrameActiveMasksProvider>
+                              adjustmentLayers={visibleAdjustmentLayers}
+                              sequenceFrom={item.from}
+                            >
+                              <MaskedItem
+                                item={item}
+                                muted={track.muted || !track.trackVisible || (item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item))}
+                                visible={track.trackVisible}
+                                itemTrackOrder={trackOrder}
+                                compositionRenderMode={item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item) ? 'visual-only' : 'full'}
+                              />
+                            </ItemEffectWrapper>
+                          </Sequence>
+                        ))}
+                      </AbsoluteFill>
+                    );
+                  })}
+              </AbsoluteFill>
+            </FrameActiveMasksProvider>
+          )}
         </AbsoluteFill>
       </CompositionSpaceProvider>
     </KeyframesProvider>
