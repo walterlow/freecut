@@ -16,7 +16,10 @@ export const NodeEnd = memo(function NodeEnd() {
     (file: File) => {
       if (!file.type.startsWith('image/')) return;
       setEndImage(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
     },
     [setEndImage],
   );
