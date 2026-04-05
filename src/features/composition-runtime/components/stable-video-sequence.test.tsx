@@ -192,6 +192,71 @@ describe('StableVideoSequence', () => {
     expect(screen.queryByTestId('render-right')).not.toBeInTheDocument();
   });
 
+  it('keeps variable-speed transition participants mounted longer after transition exit', () => {
+    sequenceContextValue.localFrame = 57;
+    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+
+    render(
+      <StableVideoSequence
+        items={[
+          {
+            id: 'left',
+            label: 'Left',
+            mediaId: 'media-1',
+            originId: 'origin-1',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 60,
+            src: 'blob:left',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+          {
+            id: 'right',
+            label: 'Right',
+            mediaId: 'media-1',
+            originId: 'origin-1',
+            type: 'video',
+            trackId: 'track-1',
+            from: 30,
+            durationInFrames: 60,
+            src: 'blob:right',
+            speed: 1.5,
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+        ]}
+        transitionWindows={[
+          {
+            startFrame: 30,
+            endFrame: 50,
+            durationInFrames: 20,
+            leftClip: { id: 'left', speed: 1 },
+            rightClip: { id: 'right', speed: 1.5 },
+            leftPortion: 0.5,
+            rightPortion: 0.5,
+            cutPoint: 40,
+            transition: {
+              id: 'transition-1',
+              leftClipId: 'left',
+              rightClipId: 'right',
+              timing: 'linear',
+            },
+          } as never,
+        ]}
+        renderItem={renderItem}
+      />,
+    );
+
+    expect(screen.getByTestId('render-right')).toBeInTheDocument();
+    expect(screen.getByTestId('render-left')).toBeInTheDocument();
+  });
+
   it('updates transition participant crop softness when the clip crop changes', () => {
     const renderItem = vi.fn((item: { id: string; crop?: { softness?: number } }) => (
       <div data-testid={`render-${item.id}`} data-softness={item.crop?.softness ?? ''}>

@@ -121,6 +121,63 @@ describe('transition scene', () => {
     })).toEqual(new Set(['left', 'right']));
   });
 
+  it('supports per-window lookbehind cooldowns', () => {
+    const transitionWindows = [
+      {
+        transition: {
+          id: 'transition-1',
+          type: 'crossfade' as const,
+          trackId: 'track-1',
+          leftClipId: 'left',
+          rightClipId: 'right',
+          durationInFrames: 10,
+          timing: 'linear' as const,
+          presentation: 'fade' as const,
+        },
+        leftClip: {
+          id: 'left',
+          type: 'video' as const,
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 30,
+          src: 'left.mp4',
+          label: 'Left',
+          speed: 1,
+        },
+        rightClip: {
+          id: 'right',
+          type: 'video' as const,
+          trackId: 'track-1',
+          from: 20,
+          durationInFrames: 30,
+          src: 'right.mp4',
+          label: 'Right',
+          speed: 1.5,
+        },
+        cutPoint: 30,
+        startFrame: 20,
+        endFrame: 30,
+        durationInFrames: 10,
+        leftPortion: 10,
+        rightPortion: 10,
+      },
+    ];
+
+    expect(collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: 35,
+      lookaheadFrames: 0,
+      lookbehindFrames: () => 6,
+    })).toEqual(new Set(['left', 'right']));
+
+    expect(collectTransitionParticipantClipIds({
+      transitionWindows,
+      frame: 36,
+      lookaheadFrames: 0,
+      lookbehindFrames: () => 6,
+    })).toEqual(new Set());
+  });
+
   it('maps progress across the full duration of an end-on-edit transition window', () => {
     const stateAtStart = resolveTransitionFrameState({
       transitionWindows: [

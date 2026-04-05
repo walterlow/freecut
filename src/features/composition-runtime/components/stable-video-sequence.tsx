@@ -10,7 +10,7 @@
  * of item.id, split clips reuse the same Sequence/video element.
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import {
@@ -256,6 +256,15 @@ const GroupRenderer: React.FC<{
 
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
+  const isVariableSpeedTransitionWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem>) => {
+    const leftSpeed = window.leftClip.speed ?? DEFAULT_SPEED;
+    const rightSpeed = window.rightClip.speed ?? DEFAULT_SPEED;
+    return Math.abs(leftSpeed - DEFAULT_SPEED) >= 0.01 || Math.abs(rightSpeed - DEFAULT_SPEED) >= 0.01;
+  }, []);
+  const variableSpeedShadowUnmountCooldownFrames = useMemo(
+    () => Math.max(SHADOW_UNMOUNT_COOLDOWN_FRAMES, Math.round(fps * 0.35)),
+    [fps],
+  );
 
   const transitionWarmupClipIds = useMemo(() => {
     if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
@@ -281,14 +290,26 @@ const GroupRenderer: React.FC<{
       transitionWindows,
       frame: globalFrame,
       lookaheadFrames: shadowMountLookaheadFrames,
-      lookbehindFrames: SHADOW_UNMOUNT_COOLDOWN_FRAMES,
+      lookbehindFrames: (window) => (
+        isVariableSpeedTransitionWindow(window)
+          ? variableSpeedShadowUnmountCooldownFrames
+          : SHADOW_UNMOUNT_COOLDOWN_FRAMES
+      ),
     });
     return group.items
       .map((item, index) => ({ item, index }))
       .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
       .map(({ index }) => index)
       .join(',');
-  }, [isPremounted, activeItemIndex, group.items, transitionWindows, globalFrame, fps]);
+  }, [
+    activeItemIndex,
+    globalFrame,
+    group.items,
+    isPremounted,
+    isVariableSpeedTransitionWindow,
+    transitionWindows,
+    variableSpeedShadowUnmountCooldownFrames,
+  ]);
 
   // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.

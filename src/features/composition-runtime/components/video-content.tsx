@@ -25,6 +25,8 @@ const videoLog = createLogger('NativePreviewVideo');
 const contentLog = createLogger('VideoContent');
 videoLog.setLevel(2); // WARN â€” suppress noisy per-frame debug logs
 const POOL_RELEASE_STICKY_MS = 400;
+const VARIABLE_SPEED_POOL_RELEASE_STICKY_MS = 900;
+const TRANSITION_SYNC_POOL_RELEASE_STICKY_MS = 1200;
 
 // Feature detection for requestVideoFrameCallback (avoids per-frame React sync)
 const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
@@ -94,11 +96,21 @@ const NativePreviewVideo: React.FC<{
   const playbackRateRef = useRef(playbackRate);
   const fpsRef = useRef(fps);
   const sequenceFrameOffsetRef = useRef(sequenceFrameOffset);
+  const releaseStickyDelayMsRef = useRef(POOL_RELEASE_STICKY_MS);
   safeTrimBeforeRef.current = safeTrimBefore;
   sourceFpsRef.current = sourceFps;
   playbackRateRef.current = playbackRate;
   fpsRef.current = fps;
   sequenceFrameOffsetRef.current = sequenceFrameOffset;
+
+  useEffect(() => {
+    const nextDelayMs = sharedTransitionSync
+      ? TRANSITION_SYNC_POOL_RELEASE_STICKY_MS
+      : Math.abs(playbackRate - 1) >= 0.01
+        ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
+        : POOL_RELEASE_STICKY_MS;
+    releaseStickyDelayMsRef.current = Math.max(releaseStickyDelayMsRef.current, nextDelayMs);
+  }, [playbackRate, sharedTransitionSync]);
 
   // Get playing state from our clock
   const isPlaying = useIsPlaying();
@@ -169,6 +181,11 @@ const NativePreviewVideo: React.FC<{
     }
 
     let cancelled = false;
+    releaseStickyDelayMsRef.current = sharedTransitionSync
+      ? TRANSITION_SYNC_POOL_RELEASE_STICKY_MS
+      : Math.abs(playbackRateRef.current - 1) >= 0.01
+        ? VARIABLE_SPEED_POOL_RELEASE_STICKY_MS
+        : POOL_RELEASE_STICKY_MS;
 
     // Reset sync state for the new clip. The component doesn't unmount when
     // crossing split boundaries (React reconciles with new props), so refs
@@ -402,7 +419,7 @@ const NativePreviewVideo: React.FC<{
 
       // Release back to pool
       clearRegisteredVideoElement();
-      pool.releaseClip(poolClipId, { delayMs: POOL_RELEASE_STICKY_MS });
+      pool.releaseClip(poolClipId, { delayMs: releaseStickyDelayMsRef.current });
       elementRef.current = null;
 
       videoLog.debug(`[${shortId}] released`);

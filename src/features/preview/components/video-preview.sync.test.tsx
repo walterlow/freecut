@@ -2258,6 +2258,94 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('does not hold the playback transition overlay past exit for variable-speed transitions', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+        speed: 1.5,
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(60);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
   it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {
     useItemsStore.getState().setTracks([
       {

@@ -1,7 +1,6 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { VideoContent } from './video-content';
 
 const testState = vi.hoisted(() => ({
   preloadSourceMock: vi.fn(() => Promise.resolve()),
@@ -9,6 +8,7 @@ const testState = vi.hoisted(() => ({
   releaseClipMock: vi.fn(),
   registerDomVideoElementMock: vi.fn(),
   unregisterDomVideoElementMock: vi.fn(),
+  ensureAudioContextResumedMock: vi.fn(),
   pool: null as {
     preloadSource: ReturnType<typeof vi.fn>;
     acquireForClip: ReturnType<typeof vi.fn>;
@@ -28,6 +28,12 @@ const testState = vi.hoisted(() => ({
   timelineState: {
     keyframes: [] as unknown[],
   },
+  clockState: {
+    currentFrame: 0,
+  },
+  rvfcRequestMock: vi.fn(),
+  rvfcCancelMock: vi.fn(),
+  lastRvfcCallback: null as FrameRequestCallback | null,
 }));
 
 testState.pool = {
@@ -35,17 +41,6 @@ testState.pool = {
   acquireForClip: testState.acquireForClipMock,
   releaseClip: testState.releaseClipMock,
 };
-
-const {
-  preloadSourceMock,
-  acquireForClipMock,
-  releaseClipMock,
-  registerDomVideoElementMock,
-  unregisterDomVideoElementMock,
-  playbackState,
-  gizmoState,
-  timelineState,
-} = testState;
 
 function createStoreHook<TState extends object>(state: TState) {
   const hook = ((selector?: (value: TState) => unknown) => (
@@ -57,10 +52,31 @@ function createStoreHook<TState extends object>(state: TState) {
   return hook;
 }
 
-function createMockVideoElement(): HTMLVideoElement {
-  const element = document.createElement('video');
-  let currentTimeValue = 0;
+function installRvfcMocks() {
+  testState.lastRvfcCallback = null;
+  testState.rvfcRequestMock.mockImplementation((callback: FrameRequestCallback) => {
+    testState.lastRvfcCallback = callback;
+    return 1;
+  });
+  testState.rvfcCancelMock.mockImplementation(() => {});
+
+  Object.defineProperty(HTMLVideoElement.prototype, 'requestVideoFrameCallback', {
+    configurable: true,
+    writable: true,
+    value: testState.rvfcRequestMock,
+  });
+  Object.defineProperty(HTMLVideoElement.prototype, 'cancelVideoFrameCallback', {
+    configurable: true,
+    writable: true,
+    value: testState.rvfcCancelMock,
+  });
+}
+
+function createMockVideoElement(initialCurrentTime = 0): HTMLVideoElement & { __currentTimeAssignments: number[] } {
+  const element = document.createElement('video') as HTMLVideoElement & { __currentTimeAssignments: number[] };
+  let currentTimeValue = initialCurrentTime;
   let pausedValue = true;
+  element.__currentTimeAssignments = [];
 
   Object.defineProperty(element, 'readyState', {
     configurable: true,
@@ -79,6 +95,7 @@ function createMockVideoElement(): HTMLVideoElement {
     get: () => currentTimeValue,
     set: (value: number) => {
       currentTimeValue = value;
+      element.__currentTimeAssignments.push(value);
     },
   });
   Object.defineProperty(element, 'paused', {
@@ -86,6 +103,7 @@ function createMockVideoElement(): HTMLVideoElement {
     get: () => pausedValue,
   });
 
+  element.playbackRate = 1;
   element.play = vi.fn(async () => {
     pausedValue = false;
   });
@@ -100,7 +118,7 @@ vi.mock('@/features/composition-runtime/deps/player', () => ({
   useSequenceContext: () => ({ localFrame: 0, from: 0, durationInFrames: 120, parentFrom: 0 }),
   useVideoSourcePool: () => testState.pool!,
   useClock: () => ({
-    currentFrame: 0,
+    currentFrame: testState.clockState.currentFrame,
     onFrameChange: () => () => {},
   }),
   interpolate: () => 0,
@@ -137,85 +155,40 @@ vi.mock('./video-audio-context', () => ({
   useVideoAudioVolume: vi.fn(() => 1),
   connectedVideoElements: new WeakSet<HTMLVideoElement>(),
   videoAudioContexts: new WeakMap<HTMLVideoElement, AudioContext>(),
-  ensureAudioContextResumed: vi.fn(),
+  ensureAudioContextResumed: testState.ensureAudioContextResumedMock,
 }));
 
-describe('VideoContent pooled handoff', () => {
+describe('VideoContent RVFC handoff', () => {
   beforeEach(() => {
-    preloadSourceMock.mockClear();
-    acquireForClipMock.mockClear();
-    releaseClipMock.mockClear();
-    registerDomVideoElementMock.mockClear();
-    unregisterDomVideoElementMock.mockClear();
-    playbackState.currentFrame = 0;
-    playbackState.isPlaying = true;
-    playbackState.previewFrame = null;
-    playbackState.volume = 1;
-    playbackState.muted = false;
-    gizmoState.activeGizmo = null;
-    gizmoState.preview = null;
-    timelineState.keyframes = [];
+    vi.resetModules();
+    installRvfcMocks();
+    testState.preloadSourceMock.mockClear();
+    testState.acquireForClipMock.mockClear();
+    testState.releaseClipMock.mockClear();
+    testState.registerDomVideoElementMock.mockClear();
+    testState.unregisterDomVideoElementMock.mockClear();
+    testState.ensureAudioContextResumedMock.mockClear();
+    testState.rvfcRequestMock.mockClear();
+    testState.rvfcCancelMock.mockClear();
+    testState.lastRvfcCallback = null;
+    testState.playbackState.currentFrame = 0;
+    testState.playbackState.isPlaying = true;
+    testState.playbackState.previewFrame = null;
+    testState.playbackState.volume = 1;
+    testState.playbackState.muted = false;
+    testState.gizmoState.activeGizmo = null;
+    testState.gizmoState.preview = null;
+    testState.timelineState.keyframes = [];
+    testState.clockState.currentFrame = 0;
   });
 
-  it('keeps the acquired pool element when only itemId changes on the same pool lane', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
+  it('starts RVFC when shared transition sync releases without a synchronous reseek', async () => {
+    const pooledElement = createMockVideoElement(0);
+    testState.acquireForClipMock.mockReturnValue(pooledElement);
+
+    const { VideoContent } = await import('./video-content');
 
     const { rerender } = render(
-      <VideoContent
-        item={{
-          id: 'clip-a',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          src: 'blob:test',
-          _poolClipId: 'group-origin-1',
-        }}
-        muted={false}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
-    });
-
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-b',
-          type: 'video',
-          trackId: 'track-1',
-          from: 30,
-          durationInFrames: 60,
-          src: 'blob:test',
-          _poolClipId: 'group-origin-1',
-        }}
-        muted={false}
-        safeTrimBefore={30}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(unregisterDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-b', pooledElement);
-    });
-
-    expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    expect(releaseClipMock).not.toHaveBeenCalled();
-  });
-
-  it('keeps transition-synced variable-speed pool lanes hot longer on release', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
-
-    const { unmount } = render(
       <VideoContent
         item={{
           id: 'clip-a',
@@ -235,11 +208,103 @@ describe('VideoContent pooled handoff', () => {
     );
 
     await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+      expect(testState.acquireForClipMock).toHaveBeenCalledTimes(1);
+      expect(pooledElement.play).toHaveBeenCalled();
     });
 
-    unmount();
+    testState.rvfcRequestMock.mockClear();
+    pooledElement.__currentTimeAssignments = [];
 
-    expect(releaseClipMock).toHaveBeenCalledWith('group-origin-1', { delayMs: 1200 });
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-a',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          src: 'blob:test',
+          _poolClipId: 'group-origin-1',
+          _sharedTransitionSync: false,
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1.5}
+        sourceFps={30}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(testState.rvfcRequestMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(pooledElement.__currentTimeAssignments).toEqual([]);
+  });
+
+  it('uses RVFC rate correction after transition sync handoff for moderate drift', async () => {
+    const pooledElement = createMockVideoElement(0);
+    testState.acquireForClipMock.mockReturnValue(pooledElement);
+
+    const { VideoContent } = await import('./video-content');
+
+    const { rerender } = render(
+      <VideoContent
+        item={{
+          id: 'clip-a',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          src: 'blob:test',
+          _poolClipId: 'group-origin-1',
+          _sharedTransitionSync: true,
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1.5}
+        sourceFps={30}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(pooledElement.play).toHaveBeenCalled();
+    });
+
+    testState.rvfcRequestMock.mockClear();
+    pooledElement.__currentTimeAssignments = [];
+
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-a',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          src: 'blob:test',
+          _poolClipId: 'group-origin-1',
+          _sharedTransitionSync: false,
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1.5}
+        sourceFps={30}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(testState.rvfcRequestMock).toHaveBeenCalledTimes(1);
+      expect(testState.lastRvfcCallback).not.toBeNull();
+    });
+
+    pooledElement.currentTime = 0.05;
+    pooledElement.__currentTimeAssignments = [];
+
+    await act(async () => {
+      testState.lastRvfcCallback?.(16, {} as VideoFrameCallbackMetadata);
+    });
+
+    expect(pooledElement.__currentTimeAssignments).toEqual([]);
+    expect(pooledElement.playbackRate).not.toBe(1.5);
   });
 });

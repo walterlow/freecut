@@ -2015,11 +2015,21 @@ export const VideoPreview = memo(function VideoPreview({
   const getTransitionCooldownForWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem>) => {
     const leftOriginId = window.leftClip.originId;
     const rightOriginId = window.rightClip.originId;
+    const leftSpeed = window.leftClip.speed ?? 1;
+    const rightSpeed = window.rightClip.speed ?? 1;
 
     // Split/same-origin handoffs keep the primary lane alive across the exit,
     // so extra post-overlap overlay frames just prolong the stale handoff path
     // and can leak a visible 1-2 frame hitch.
     if (leftOriginId && rightOriginId && leftOriginId === rightOriginId) {
+      return 0;
+    }
+
+    // Variable-speed clips already pay more sync/decoder cost at the exact
+    // transition exit. Holding the overlay past the active span keeps the
+    // expensive renderer alive while the DOM player path is also trying to
+    // resume RVFC drift correction, which shows up as exit churn.
+    if (Math.abs(leftSpeed - 1) >= 0.01 || Math.abs(rightSpeed - 1) >= 0.01) {
       return 0;
     }
 
@@ -2187,6 +2197,7 @@ export const VideoPreview = memo(function VideoPreview({
     const tw = transitionSessionWindowRef.current;
     if (tw) {
       const currentFrame = usePlaybackStore.getState().currentFrame;
+      const variableSpeedRelease = isVariableSpeedTransitionWindow(tw);
       for (const clip of [tw.leftClip, tw.rightClip]) {
         if (clip.type !== 'video') continue;
         const el = transitionSessionPinnedElementsRef.current.get(clip.id);
@@ -2200,14 +2211,19 @@ export const VideoPreview = memo(function VideoPreview({
         const videoDuration = el.duration || Infinity;
         const clamped = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
         const drift = Math.abs(el.currentTime - clamped);
-        if (drift > 0.15) {
-          // Large drift — hard seek (RVFC can't absorb this smoothly).
+        const hardSeekThreshold = variableSpeedRelease ? 0.75 : 0.15;
+        const softRateThreshold = variableSpeedRelease ? 0.05 : 0.016;
+        if (drift > hardSeekThreshold) {
+          // Variable-speed exits are especially sensitive to release-time seeks:
+          // the browser decode pipeline is already resuming normal RVFC sync,
+          // and an eager hard seek here can turn the handoff into a visible
+          // stall. Only force a seek when drift is truly large.
           try {
             el.currentTime = clamped;
           } catch {
             // Element may be settling — ignore transient seek failures.
           }
-        } else if (drift > 0.016) {
+        } else if (drift > softRateThreshold || Math.abs(el.playbackRate - clipSpeed) > 0.01) {
           // Small drift — nudge playbackRate so RVFC absorbs it smoothly
           // over the next few frames without a decode pipeline stall.
           el.playbackRate = clipSpeed;
@@ -2233,7 +2249,7 @@ export const VideoPreview = memo(function VideoPreview({
     transitionSessionStallCountRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
     transitionPrewarmPromiseRef.current = null;
-  }, [fps, pushTransitionTrace]);
+  }, [fps, isVariableSpeedTransitionWindow, pushTransitionTrace]);
 
   const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
     if (!window) {

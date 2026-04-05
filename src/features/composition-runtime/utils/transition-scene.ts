@@ -29,12 +29,15 @@ export function collectTransitionParticipantClipIds<TItem extends TimelineItem>(
   transitionWindows: ResolvedTransitionWindow<TItem>[];
   frame: number;
   lookaheadFrames: number;
-  lookbehindFrames?: number;
+  lookbehindFrames?: number | ((window: ResolvedTransitionWindow<TItem>) => number);
 }): Set<string> {
   const transitionClipIds = new Set<string>();
 
   for (const window of transitionWindows) {
-    if (frame >= window.endFrame + Math.max(0, lookbehindFrames)) continue;
+    const resolvedLookbehindFrames = typeof lookbehindFrames === 'function'
+      ? lookbehindFrames(window)
+      : lookbehindFrames;
+    if (frame >= window.endFrame + Math.max(0, resolvedLookbehindFrames)) continue;
     if (frame + lookaheadFrames < window.startFrame) continue;
     transitionClipIds.add(window.transition.leftClipId);
     transitionClipIds.add(window.transition.rightClipId);
