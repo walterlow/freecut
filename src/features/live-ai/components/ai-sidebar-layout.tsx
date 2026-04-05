@@ -27,14 +27,19 @@ export const AiSidebarLayout = memo(function AiSidebarLayout({
   const scopeSession = useLiveSessionStore((s) => s.scopeSession);
   const streamActive = useLiveSessionStore((s) => s.streamActive);
   const streamId = useLiveSessionStore((s) => s.streamId);
+  const scopePipeline = useLiveSessionStore((s) => s.scopePipeline);
   const setScopeConnected = useLiveSessionStore((s) => s.setScopeConnected);
   const setScopeHardwareInfo = useLiveSessionStore((s) => s.setScopeHardwareInfo);
 
   const autoApply = usePromptStore((s) => s.autoApply);
 
-  const [pipelineSchema, setPipelineSchema] = useState<PipelineParamSchema[]>([]);
+  const [allSchemas, setAllSchemas] = useState<Record<string, PipelineParamSchema[]>>({});
+  // Select schema matching the active pipeline; fall back to first available
+  const pipelineSchema = (scopePipeline && allSchemas[scopePipeline])
+    ? allSchemas[scopePipeline]
+    : (Object.values(allSchemas)[0] ?? []);
 
-  // Probe Scope health on mount
+  // Probe Scope health on mount and refresh schemas when pipeline changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -46,13 +51,16 @@ export const AiSidebarLayout = memo(function AiSidebarLayout({
         if (!cancelled && info) setScopeHardwareInfo({ vram: info.vram, spout: info.spoutAvailable });
         const schemas = await getScopePipelineSchemas();
         if (!cancelled) {
-          const firstSchema = Object.values(schemas)[0];
-          setPipelineSchema(Array.isArray(firstSchema) ? firstSchema : []);
+          const normalized: Record<string, PipelineParamSchema[]> = {};
+          for (const [name, rawSchema] of Object.entries(schemas)) {
+            if (Array.isArray(rawSchema)) normalized[name] = rawSchema;
+          }
+          setAllSchemas(normalized);
         }
       }
     })();
     return () => { cancelled = true; };
-  }, [setScopeConnected, setScopeHardwareInfo]);
+  }, [setScopeConnected, setScopeHardwareInfo, scopePipeline]);
 
   // Handle prompt application to active stream
   const handleApplyPrompt = useCallback(

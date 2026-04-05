@@ -183,13 +183,19 @@ function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number): Promise<
       return;
     }
 
-    const timeout = setTimeout(resolve, timeoutMs);
+    const timeout = setTimeout(() => {
+      pc.removeEventListener('icegatheringstatechange', handleStateChange);
+      resolve();
+    }, timeoutMs);
 
-    pc.onicegatheringstatechange = () => {
+    function handleStateChange() {
       if (pc.iceGatheringState === 'complete') {
         clearTimeout(timeout);
+        pc.removeEventListener('icegatheringstatechange', handleStateChange);
         resolve();
       }
-    };
+    }
+
+    pc.addEventListener('icegatheringstatechange', handleStateChange);
   });
 }
