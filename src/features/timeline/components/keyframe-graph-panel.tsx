@@ -1080,7 +1080,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   );
 
   const handleScrubEnd = useCallback(() => {
-    usePlaybackStore.getState().setPreviewFrame(null);
+    usePlaybackStore.getState().clearPreviewFrame();
   }, []);
 
   // Handle adding a keyframe at the current frame
@@ -1235,7 +1235,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     (clipRelativeFrame: number) => {
       if (!selectedItemForEditor) return;
       const absoluteFrame = selectedItemForEditor.from + clipRelativeFrame;
-      usePlaybackStore.getState().setCurrentFrame(absoluteFrame);
+      usePlaybackStore.getState().seekTimelineFrame(absoluteFrame);
     },
     [selectedItemForEditor]
   );

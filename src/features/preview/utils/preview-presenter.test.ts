@@ -173,7 +173,6 @@ describe('preview presenter handoff model', () => {
 describe('preview presenter decisions', () => {
   it('prefers playback transition overlay over fast scrub presentation for a priority frame', () => {
     expect(resolvePreviewPresenterPriorityFrameDecision({
-      fallbackToPlayerScrub: false,
       shouldShowPlaybackTransitionOverlay: true,
       shouldShowFastScrubOverlay: true,
     })).toEqual({
@@ -185,7 +184,6 @@ describe('preview presenter decisions', () => {
 
   it('drops stale overlay presentation when neither overlay should remain visible', () => {
     expect(resolvePreviewPresenterPriorityFrameDecision({
-      fallbackToPlayerScrub: false,
       shouldShowPlaybackTransitionOverlay: false,
       shouldShowFastScrubOverlay: false,
     })).toEqual({
@@ -360,11 +358,9 @@ describe('preview presenter decisions', () => {
       prevTargetFrame: 101,
       previewFrame: null,
       prevPreviewFrame: 101,
-      forceFastScrubOverlay: false,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: false,
       disableBackgroundPrewarmOnBackward: true,
-      fallbackToPlayerOnBackward: true,
       lastBackwardRequestedFrame: 96,
       lastBackwardRenderAtMs: 5000,
       nowMs: 5100,
@@ -377,23 +373,20 @@ describe('preview presenter decisions', () => {
       scrubUpdates: 0,
       scrubDroppedFrames: 0,
       nextSuppressBackgroundPrewarm: false,
-      nextFallbackToPlayer: false,
       nextBackwardRequestedFrame: null,
       nextBackwardRenderAtMs: 0,
     });
   });
 
-  it('routes backward scrubs to player fallback when overlay scrub should yield', () => {
+  it('keeps backward scrubs on the renderer path when overlay scrub should yield', () => {
     expect(resolvePreviewPresenterScrubTargetDecision({
       targetFrame: 96,
       prevTargetFrame: 108,
       previewFrame: 96,
       prevPreviewFrame: 108,
-      forceFastScrubOverlay: false,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: false,
       disableBackgroundPrewarmOnBackward: true,
-      fallbackToPlayerOnBackward: true,
       lastBackwardRequestedFrame: null,
       lastBackwardRenderAtMs: 0,
       nowMs: 5100,
@@ -401,14 +394,14 @@ describe('preview presenter decisions', () => {
       backwardRenderThrottleMs: 50,
       backwardForceJumpFrames: 8,
     })).toEqual({
-      kind: 'use_player_fallback',
+      kind: 'request_frame',
+      requestedFrame: 96,
       scrubDirection: -1,
       scrubUpdates: 1,
       scrubDroppedFrames: 11,
       nextSuppressBackgroundPrewarm: true,
-      nextFallbackToPlayer: true,
-      nextBackwardRequestedFrame: null,
-      nextBackwardRenderAtMs: 0,
+      nextBackwardRequestedFrame: 96,
+      nextBackwardRenderAtMs: 5100,
     });
   });
 
@@ -418,11 +411,9 @@ describe('preview presenter decisions', () => {
       prevTargetFrame: 98,
       previewFrame: 86,
       prevPreviewFrame: 98,
-      forceFastScrubOverlay: true,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: true,
       disableBackgroundPrewarmOnBackward: true,
-      fallbackToPlayerOnBackward: true,
       lastBackwardRequestedFrame: 96,
       lastBackwardRenderAtMs: 5000,
       nowMs: 5100,
@@ -436,7 +427,6 @@ describe('preview presenter decisions', () => {
       scrubUpdates: 1,
       scrubDroppedFrames: 11,
       nextSuppressBackgroundPrewarm: false,
-      nextFallbackToPlayer: false,
       nextBackwardRequestedFrame: null,
       nextBackwardRenderAtMs: 0,
     });
@@ -448,11 +438,9 @@ describe('preview presenter decisions', () => {
       prevTargetFrame: 98,
       previewFrame: 94,
       prevPreviewFrame: 98,
-      forceFastScrubOverlay: true,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: false,
       disableBackgroundPrewarmOnBackward: true,
-      fallbackToPlayerOnBackward: true,
       lastBackwardRequestedFrame: 92,
       lastBackwardRenderAtMs: 5000,
       nowMs: 5020,
@@ -465,7 +453,6 @@ describe('preview presenter decisions', () => {
       scrubUpdates: 1,
       scrubDroppedFrames: 3,
       nextSuppressBackgroundPrewarm: true,
-      nextFallbackToPlayer: false,
       nextBackwardRequestedFrame: 92,
       nextBackwardRenderAtMs: 5000,
     });
@@ -477,11 +464,9 @@ describe('preview presenter decisions', () => {
       prevTargetFrame: 98,
       previewFrame: 86,
       prevPreviewFrame: 98,
-      forceFastScrubOverlay: true,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: false,
       disableBackgroundPrewarmOnBackward: true,
-      fallbackToPlayerOnBackward: true,
       lastBackwardRequestedFrame: 96,
       lastBackwardRenderAtMs: 5000,
       nowMs: 5100,
@@ -495,7 +480,6 @@ describe('preview presenter decisions', () => {
       scrubUpdates: 1,
       scrubDroppedFrames: 11,
       nextSuppressBackgroundPrewarm: true,
-      nextFallbackToPlayer: false,
       nextBackwardRequestedFrame: 84,
       nextBackwardRenderAtMs: 5100,
     });
@@ -504,7 +488,6 @@ describe('preview presenter decisions', () => {
   it('stops the render loop and hides overlays when player ownership resumes', () => {
     expect(resolvePreviewPresenterRenderLoopDecision({
       shouldPreferPlayer: true,
-      fallbackToPlayerScrub: false,
       targetFrame: 96,
       nextPrewarmFrame: 92,
       suppressBackgroundPrewarm: false,
@@ -515,14 +498,12 @@ describe('preview presenter decisions', () => {
     })).toEqual({
       kind: 'hide_overlays_and_stop',
       shouldClearRequestedFrame: true,
-      shouldClearQueuedPrewarm: false,
     });
   });
 
   it('renders the current scrub target before any queued prewarm frame', () => {
     expect(resolvePreviewPresenterRenderLoopDecision({
       shouldPreferPlayer: false,
-      fallbackToPlayerScrub: false,
       targetFrame: 96,
       nextPrewarmFrame: 92,
       suppressBackgroundPrewarm: false,
@@ -538,7 +519,6 @@ describe('preview presenter decisions', () => {
 
   it('keeps the fast-scrub overlay visible for stale transition renders during scrub', () => {
     expect(resolvePreviewPresenterPriorityFrameDecision({
-      fallbackToPlayerScrub: false,
       shouldShowPlaybackTransitionOverlay: false,
       shouldShowFastScrubOverlay: false,
       shouldKeepStaleFastScrubOverlayVisible: true,
@@ -552,7 +532,6 @@ describe('preview presenter decisions', () => {
   it('skips queued prewarm frames when backward scrub suppression is active', () => {
     expect(resolvePreviewPresenterRenderLoopDecision({
       shouldPreferPlayer: false,
-      fallbackToPlayerScrub: false,
       targetFrame: null,
       nextPrewarmFrame: 92,
       suppressBackgroundPrewarm: true,
@@ -569,7 +548,6 @@ describe('preview presenter decisions', () => {
   it('yields queued prewarm work while playback owns the clock', () => {
     expect(resolvePreviewPresenterRenderLoopDecision({
       shouldPreferPlayer: false,
-      fallbackToPlayerScrub: false,
       targetFrame: null,
       nextPrewarmFrame: 92,
       suppressBackgroundPrewarm: false,

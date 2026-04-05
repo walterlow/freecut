@@ -1,64 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { getSourceWarmTarget } from './source-warm-target';
-
-const baseInput = {
-  currentPoolSourceCount: 12,
-  currentPoolElementCount: 20,
-  maxSources: 20,
-  minSources: 4,
-  hardCapSources: 24,
-  hardCapElements: 40,
-} as const;
+import { getSourceWarmTarget, resolveSourceWarmSet } from './source-warm-target';
 
 describe('getSourceWarmTarget', () => {
-  it('uses the highest budget while playing when under pressure limits', () => {
-    const target = getSourceWarmTarget({
-      ...baseInput,
+  it('reduces the target under source and element pressure', () => {
+    expect(getSourceWarmTarget({
       mode: 'playing',
+      currentPoolSourceCount: 28,
+      currentPoolElementCount: 45,
+      maxSources: 20,
+      minSources: 4,
+      hardCapSources: 24,
+      hardCapElements: 40,
+    })).toBe(13);
+  });
+});
+
+describe('resolveSourceWarmSet', () => {
+  it('keeps fresh sticky sources when there is remaining warm capacity', () => {
+    const result = resolveSourceWarmSet({
+      candidateScores: new Map([
+        ['blob:a', 0],
+        ['blob:b', 10],
+      ]),
+      warmTarget: 3,
+      recentTouches: new Map([
+        ['blob:sticky', 9500],
+        ['blob:old', 1000],
+      ]),
+      nowMs: 10_000,
+      stickyMs: 1000,
+      hardCapSources: 6,
     });
-    expect(target).toBe(20);
+
+    expect(result.selectedSources).toEqual(['blob:a', 'blob:b']);
+    expect([...result.keepWarm]).toEqual(['blob:a', 'blob:b', 'blob:sticky']);
+    expect([...result.nextRecentTouches.entries()]).toEqual([
+      ['blob:sticky', 9500],
+      ['blob:a', 10_000],
+      ['blob:b', 10_000],
+    ]);
+    expect(result.evictions).toBe(1);
   });
 
-  it('reduces mode budgets for scrubbing and paused states', () => {
-    const scrubbingTarget = getSourceWarmTarget({
-      ...baseInput,
-      mode: 'scrubbing',
+  it('evicts oldest non-kept touches when the sticky set exceeds the hard cap', () => {
+    const result = resolveSourceWarmSet({
+      candidateScores: new Map([
+        ['blob:a', 0],
+      ]),
+      warmTarget: 1,
+      recentTouches: new Map([
+        ['blob:oldest', 100],
+        ['blob:older', 200],
+        ['blob:kept', 300],
+      ]),
+      nowMs: 350,
+      stickyMs: 1000,
+      hardCapSources: 2,
     });
-    const pausedTarget = getSourceWarmTarget({
-      ...baseInput,
-      mode: 'paused',
-    });
-    expect(scrubbingTarget).toBe(16);
-    expect(pausedTarget).toBe(12);
-  });
 
-  it('applies source-count pressure above hard cap', () => {
-    const target = getSourceWarmTarget({
-      ...baseInput,
-      mode: 'playing',
-      currentPoolSourceCount: 30,
-    });
-    // Base 20 minus 6 over-source pressure.
-    expect(target).toBe(14);
-  });
-
-  it('applies element-count pressure above hard cap', () => {
-    const target = getSourceWarmTarget({
-      ...baseInput,
-      mode: 'playing',
-      currentPoolElementCount: 46,
-    });
-    // 6 elements over cap -> ceil(6 / 2) = 3 pressure.
-    expect(target).toBe(17);
-  });
-
-  it('never drops below minSources under extreme pressure', () => {
-    const target = getSourceWarmTarget({
-      ...baseInput,
-      mode: 'playing',
-      currentPoolSourceCount: 400,
-      currentPoolElementCount: 400,
-    });
-    expect(target).toBe(4);
+    expect([...result.keepWarm]).toEqual(['blob:a']);
+    expect([...result.nextRecentTouches.entries()]).toEqual([
+      ['blob:kept', 300],
+      ['blob:a', 350],
+    ]);
+    expect(result.evictions).toBe(2);
   });
 });

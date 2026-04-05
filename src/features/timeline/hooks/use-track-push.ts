@@ -137,7 +137,7 @@ export function useTrackPush(item: TimelineItem, timelineDuration: number, track
     if (e.button !== 0 || trackLocked) return;
     e.stopPropagation();
     e.preventDefault();
-    usePlaybackStore.getState().setPreviewFrame(null);
+    usePlaybackStore.getState().clearPreviewFrame();
 
     const { items: allItems, itemsByTrackId } = useItemsStore.getState();
     const cutFrame = item.from;

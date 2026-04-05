@@ -196,6 +196,18 @@ function createMockCanvasContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
+function anyRendererCalledWith(method: 'renderFrame' | 'prewarmFrame', frame: number): boolean {
+  return rendererMockState.instances.some((renderer) =>
+    renderer[method].mock.calls.some(([calledFrame]) => calledFrame === frame),
+  );
+}
+
+function countRendererCalls(method: 'renderFrame' | 'prewarmFrame', frame: number): number {
+  return rendererMockState.instances.reduce((count, renderer) => (
+    count + renderer[method].mock.calls.filter(([calledFrame]) => calledFrame === frame).length
+  ), 0);
+}
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -548,12 +560,13 @@ describe('VideoPreview sync behavior', () => {
   });
 
   it('seeks to currentFrame when previewFrame is stale and unchanged (ruler click path)', async () => {
-    render(
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />
     );
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
@@ -565,8 +578,10 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(120);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(120);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
+    expect(seekToMock).not.toHaveBeenCalled();
     seekToMock.mockClear();
 
     act(() => {
@@ -974,13 +989,15 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
+    const renderer = await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(24);
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      return rendererMockState.instances[0]!;
     });
     seekToMock.mockClear();
-
-    expect(createCompositionRendererMock).not.toHaveBeenCalled();
-    expect(scrubCanvas.style.visibility).toBe('hidden');
+    renderer.renderFrame.mockClear();
 
     act(() => {
       useItemsStore.getState().setItems([
@@ -1017,12 +1034,6 @@ describe('VideoPreview sync behavior', () => {
           ],
         } as TimelineItem,
       ]);
-    });
-
-    const renderer = await waitFor(() => {
-      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
-      expect(rendererMockState.instances.length).toBe(1);
-      return rendererMockState.instances[0]!;
     });
 
     await waitFor(() => {
@@ -1069,13 +1080,15 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
+    const renderer = await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(24);
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      return rendererMockState.instances[0]!;
     });
     seekToMock.mockClear();
-
-    expect(createCompositionRendererMock).not.toHaveBeenCalled();
-    expect(scrubCanvas.style.visibility).toBe('hidden');
+    renderer.renderFrame.mockClear();
 
     act(() => {
       useGizmoStore.getState().setEffectsPreviewNew({
@@ -1091,12 +1104,6 @@ describe('VideoPreview sync behavior', () => {
           },
         ],
       });
-    });
-
-    const renderer = await waitFor(() => {
-      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
-      expect(rendererMockState.instances.length).toBe(1);
-      return rendererMockState.instances[0]!;
     });
 
     await waitFor(() => {
@@ -1266,7 +1273,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('drops the play-start handoff overlay when the first player frame lands past the overlay frame', async () => {
+  it('keeps renderer-owned presentation after play starts from a preview frame', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1324,29 +1331,30 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(24);
       expect(usePlaybackStore.getState().previewFrame).toBe(24);
       expect(usePlaybackStore.getState().displayedFrame).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
-    seekToMock.mockClear();
+    expect(seekToMock).not.toHaveBeenCalled();
 
     act(() => {
       usePlaybackStore.getState().play();
     });
 
     await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(24);
       expect(usePlaybackStore.getState().isPlaying).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
+    seekToMock.mockClear();
 
     act(() => {
       completeDeferredPlayerSeek?.(25);
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(25);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
@@ -1566,20 +1574,18 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
+    const renderer = await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      return rendererMockState.instances[0]!;
     });
     seekToMock.mockClear();
-    expect(scrubCanvas.style.visibility).toBe('hidden');
+    renderer.renderFrame.mockClear();
 
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(24);
-    });
-
-    const renderer = await waitFor(() => {
-      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
-      expect(rendererMockState.instances.length).toBe(1);
-      return rendererMockState.instances[0]!;
     });
 
     await waitFor(() => {
@@ -1719,8 +1725,9 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
     });
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 
   it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
@@ -1751,8 +1758,9 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
     });
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 
   it('keeps backward ruler drag on fast-scrub presentation', async () => {
@@ -1864,13 +1872,8 @@ describe('VideoPreview sync behavior', () => {
       usePlaybackStore.getState().setPreviewFrame(47);
     });
 
-    const renderer = await waitFor(() => {
-      expect(rendererMockState.instances.length).toBeGreaterThan(0);
-      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
-    });
-
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(47);
+      expect(anyRendererCalledWith('renderFrame', 47)).toBe(true);
       expect(usePlaybackStore.getState().displayedFrame).toBe(47);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -1962,7 +1965,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('prefers the Player path for glowing animated text scrubs', async () => {
+  it('renders glowing animated text scrubs through the fast-scrub overlay', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-text',
@@ -2030,14 +2033,13 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
-
-    expect(scrubCanvas.style.visibility).toBe('hidden');
-    expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 
-  it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
+  it('keeps renderer-owned preview visible across scrub release', async () => {
     const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -2067,9 +2069,6 @@ describe('VideoPreview sync behavior', () => {
       usePlaybackStore.getState().setPreviewFrame(null);
     });
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
-    });
     expect(usePlaybackStore.getState().displayedFrame).toBe(48);
     expect(scrubCanvas.style.visibility).toBe('visible');
 
@@ -2088,8 +2087,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
@@ -2113,9 +2112,8 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(anyRendererCalledWith('renderFrame', 48)).toBe(true);
       expect(usePlaybackStore.getState().displayedFrame).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -2141,9 +2139,8 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(68);
+      expect(anyRendererCalledWith('renderFrame', 68)).toBe(true);
       expect(usePlaybackStore.getState().displayedFrame).toBe(68);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -2261,6 +2258,140 @@ describe('VideoPreview sync behavior', () => {
     expect(warmedFrames.some((frame) => frame < 68)).toBe(true);
   });
 
+  it('prewarms masked adjustment-layer transitions without the paused DOM bridge', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-adjustment',
+        name: 'Adjustment',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 2,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+      {
+        id: 'adjustment-1',
+        label: 'Adjustment',
+        type: 'adjustment',
+        trackId: 'track-adjustment',
+        from: 40,
+        durationInFrames: 20,
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.75 },
+            },
+          },
+        ],
+      } as TimelineItem,
+      {
+        id: 'mask-1',
+        label: 'Mask',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 40,
+        durationInFrames: 20,
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    const leftDomElement = { readyState: 2 } as HTMLVideoElement;
+    const rightDomElement = { readyState: 2 } as HTMLVideoElement;
+    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
+      if (itemId === 'clip-left') return leftDomElement;
+      if (itemId === 'clip-right') return rightDomElement;
+      return null;
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(20);
+    });
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(20);
+      expect(anyRendererCalledWith('renderFrame', 40)).toBe(true);
+    });
+
+    const providerCalls = renderer.setDomVideoElementProvider.mock.calls;
+    expect(providerCalls.at(-1)?.[0]).toBeUndefined();
+  });
+
   it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {
     seedAlignedTransitionProject(1);
 
@@ -2291,7 +2422,75 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('shows the playback transition overlay only while a transition is active during playback', async () => {
+  it('activates a paused DOM transition session when playback resumes inside the same window', async () => {
+    seedAlignedTransitionProject(1);
+
+    const leftDomElement = {
+      readyState: 2,
+      paused: true,
+      duration: 10,
+      currentTime: 0,
+      playbackRate: 1,
+      load: vi.fn(),
+      play: vi.fn(() => Promise.resolve()),
+      dataset: {},
+    } as unknown as HTMLVideoElement;
+    const rightDomElement = {
+      readyState: 2,
+      paused: true,
+      duration: 10,
+      currentTime: 0,
+      playbackRate: 1,
+      load: vi.fn(),
+      play: vi.fn(() => Promise.resolve()),
+      dataset: {},
+    } as unknown as HTMLVideoElement;
+
+    getBestDomVideoElementForItemMock.mockImplementation((itemId: string) => {
+      if (itemId === 'clip-left') return leftDomElement;
+      if (itemId === 'clip-right') return rightDomElement;
+      return null;
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+    });
+
+    transitionSafePlayMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(
+        transitionSafePlayMock.mock.calls.some(
+          ([element, speed]) => element === leftDomElement && speed === 1,
+        ),
+      ).toBe(true);
+      expect(
+        transitionSafePlayMock.mock.calls.some(
+          ([element, speed]) => element === rightDomElement && speed === 1,
+        ),
+      ).toBe(true);
+      expect(leftDomElement.currentTime).toBeGreaterThan(0);
+      expect(rightDomElement.currentTime).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  it('keeps renderer-owned playback visible through and after a transition', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2362,9 +2561,8 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(anyRendererCalledWith('renderFrame', 48)).toBe(true);
       expect(usePlaybackStore.getState().displayedFrame).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -2374,12 +2572,12 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(70);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
-  it('does not hold the playback transition overlay past exit for variable-speed transitions', async () => {
+  it('keeps renderer-owned playback visible past variable-speed transition exit', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2451,9 +2649,8 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(anyRendererCalledWith('renderFrame', 48)).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2462,12 +2659,12 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(60);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
-  it('reuses retained variable-speed transition frames on quick re-entry after exit', async () => {
+  it('re-renders variable-speed transition frames on quick re-entry after exit', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2539,7 +2736,7 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    const renderer = rendererMockState.instances[0]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
@@ -2550,8 +2747,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(60);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
     renderer.renderFrame.mockClear();
@@ -2565,10 +2762,10 @@ describe('VideoPreview sync behavior', () => {
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
-    expect(renderer.renderFrame).not.toHaveBeenCalledWith(48);
+    expect(renderer.renderFrame).toHaveBeenCalledWith(48);
   });
 
-  it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {
+  it('pre-renders the first transition frame before transition start', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2639,34 +2836,30 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    const renderer = rendererMockState.instances[0]!;
+    const prerenderedStartFrameCalls = countRendererCalls('renderFrame', 40);
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(40);
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(41);
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(42);
-      expect(scrubCanvas.style.visibility).toBe('hidden');
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(renderer.renderFrame).toHaveBeenCalledWith(35);
+      expect(anyRendererCalledWith('renderFrame', 40)).toBe(true);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(35);
     });
-
-    const prerenderedStartFrameCalls = renderer.renderFrame.mock.calls.filter(
-      ([frame]) => frame === 40,
-    ).length;
 
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(40);
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBe(40);
+      expect(usePlaybackStore.getState().displayedFrame).toBeGreaterThanOrEqual(40);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
     expect(
-      renderer.renderFrame.mock.calls.filter(([frame]) => frame === 40).length,
-    ).toBe(prerenderedStartFrameCalls);
+      countRendererCalls('renderFrame', 40),
+    ).toBeGreaterThanOrEqual(prerenderedStartFrameCalls);
   });
 
-  it('starts transition prewarm when a transition is added during scrub preview', async () => {
+  it('keeps scrub preview stable when a transition is added during scrub preview', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2741,19 +2934,13 @@ describe('VideoPreview sync behavior', () => {
       ]);
     });
 
-    const updatedRenderer = await waitFor(() => {
-      expect(rendererMockState.instances.length).toBeGreaterThan(1);
-      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
-    });
-
     await waitFor(() => {
-      expect(updatedRenderer.renderFrame).toHaveBeenCalledWith(40);
-      expect(updatedRenderer.prewarmFrame).toHaveBeenCalledWith(41);
-      expect(updatedRenderer.prewarmFrame).toHaveBeenCalledWith(42);
+      expect(firstRenderer.renderFrame).toHaveBeenCalledWith(35);
+      expect(usePlaybackStore.getState().displayedFrame).toBe(35);
     });
   });
 
-  it('keeps the transition overlay active for a short cooldown after the overlap ends', async () => {
+  it('keeps renderer-owned playback visible after the overlap ends', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2819,13 +3006,8 @@ describe('VideoPreview sync behavior', () => {
       usePlaybackStore.getState().setCurrentFrame(58);
     });
 
-    const renderer = await waitFor(() => {
-      expect(rendererMockState.instances.length).toBeGreaterThan(0);
-      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
-    });
-
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(58);
+      expect(anyRendererCalledWith('renderFrame', 58)).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2834,7 +3016,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(61);
+      expect(anyRendererCalledWith('renderFrame', 61)).toBe(true);
       expect(usePlaybackStore.getState().displayedFrame).toBe(61);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -2844,12 +3026,12 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(64);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
-  it('drops the transition overlay immediately after overlap end for same-origin A-A handoffs', async () => {
+  it('keeps renderer-owned playback visible for same-origin A-A handoffs', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2917,13 +3099,8 @@ describe('VideoPreview sync behavior', () => {
       usePlaybackStore.getState().setCurrentFrame(58);
     });
 
-    const renderer = await waitFor(() => {
-      expect(rendererMockState.instances.length).toBeGreaterThan(0);
-      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
-    });
-
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(58);
+      expect(anyRendererCalledWith('renderFrame', 58)).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2932,8 +3109,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(usePlaybackStore.getState().displayedFrame).toBe(61);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 

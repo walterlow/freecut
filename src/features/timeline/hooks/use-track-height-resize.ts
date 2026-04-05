@@ -99,7 +99,7 @@ export function useTrackHeightResize() {
 
     event.preventDefault();
     event.stopPropagation();
-    usePlaybackStore.getState().setPreviewFrame(null);
+    usePlaybackStore.getState().clearPreviewFrame();
 
     setResizeState({
       trackId,
@@ -134,7 +134,7 @@ export function useTrackHeightResize() {
       return;
     }
 
-    usePlaybackStore.getState().setPreviewFrame(null);
+    usePlaybackStore.getState().clearPreviewFrame();
     useItemsStore.getState().setTracks(nextTracks);
 
     useTimelineCommandStore.getState().addUndoEntry(

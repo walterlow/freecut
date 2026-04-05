@@ -45,6 +45,12 @@ export interface PlaybackActions {
   setCurrentFrame: (frame: number) => void;
   /** Update the authoritative playhead and transient scrub preview atomically. */
   setScrubFrame: (frame: number, itemId?: string | null) => void;
+  /** Clear transient scrub preview state while preserving the current timeline frame. */
+  clearPreviewFrame: () => void;
+  /** Promote previewFrame into currentFrame and clear preview mode atomically. */
+  commitPreviewFrame: () => void;
+  /** Perform a transport/timeline seek and clear preview + presented overlay state atomically. */
+  seekTimelineFrame: (frame: number) => void;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;

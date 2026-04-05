@@ -105,7 +105,7 @@ export function useTimelineSlipSlide(
   }, [getItemFromStore]);
 
   const beginSlipSlideGesture = useCallback((startX: number, mode: 'slip' | 'slide') => {
-    usePlaybackStore.getState().setPreviewFrame(null);
+    usePlaybackStore.getState().clearPreviewFrame();
 
     const { leftNeighbor, rightNeighbor } = findNeighbors();
     const currentItem = getItemFromStore();

@@ -74,14 +74,12 @@ interface PreviewPresenterScrubTargetDecisionBase {
   scrubUpdates: number;
   scrubDroppedFrames: number;
   nextSuppressBackgroundPrewarm: boolean;
-  nextFallbackToPlayer: boolean;
   nextBackwardRequestedFrame: number | null;
   nextBackwardRenderAtMs: number;
 }
 
 export type PreviewPresenterScrubTargetDecision =
   | (PreviewPresenterScrubTargetDecisionBase & { kind: 'release_to_player' })
-  | (PreviewPresenterScrubTargetDecisionBase & { kind: 'use_player_fallback' })
   | (PreviewPresenterScrubTargetDecisionBase & { kind: 'skip_frame_request' })
   | (PreviewPresenterScrubTargetDecisionBase & {
     kind: 'request_frame';
@@ -92,7 +90,6 @@ export type PreviewPresenterRenderLoopDecision =
   | {
     kind: 'hide_overlays_and_stop';
     shouldClearRequestedFrame: boolean;
-    shouldClearQueuedPrewarm: boolean;
   }
   | { kind: 'stop' }
   | { kind: 'yield' }
@@ -318,19 +315,10 @@ export function resolvePreviewPresenterHandoff(
 }
 
 export function resolvePreviewPresenterPriorityFrameDecision(input: {
-  fallbackToPlayerScrub: boolean;
   shouldShowPlaybackTransitionOverlay: boolean;
   shouldShowFastScrubOverlay: boolean;
   shouldKeepStaleFastScrubOverlayVisible?: boolean;
 }): PreviewPresenterPriorityFrameDecision {
-  if (input.fallbackToPlayerScrub) {
-    return {
-      surface: null,
-      shouldDropStaleOverlay: false,
-      shouldPrewarmAroundFrame: false,
-    };
-  }
-
   if (input.shouldShowPlaybackTransitionOverlay) {
     return {
       surface: 'playback_transition_overlay',
@@ -471,11 +459,9 @@ export function resolvePreviewPresenterScrubTargetDecision(input: {
   prevTargetFrame: number | null;
   previewFrame: number | null;
   prevPreviewFrame: number | null;
-  forceFastScrubOverlay: boolean;
   isAtomicScrubTarget: boolean;
   preserveHighFidelityBackwardPreview: boolean;
   disableBackgroundPrewarmOnBackward: boolean;
-  fallbackToPlayerOnBackward: boolean;
   lastBackwardRequestedFrame: number | null;
   lastBackwardRenderAtMs: number;
   nowMs: number;
@@ -502,34 +488,17 @@ export function resolvePreviewPresenterScrubTargetDecision(input: {
     && scrubDirection < 0
     && !input.preserveHighFidelityBackwardPreview
   );
-  const nextFallbackToPlayer = (
-    !input.forceFastScrubOverlay
-    && input.fallbackToPlayerOnBackward
-    && scrubDirection < 0
-    && !input.isAtomicScrubTarget
-    && !input.preserveHighFidelityBackwardPreview
-  );
 
   const baseDecision = {
     scrubDirection,
     scrubUpdates,
     scrubDroppedFrames,
     nextSuppressBackgroundPrewarm,
-    nextFallbackToPlayer,
   };
 
   if (input.targetFrame === null) {
     return {
       kind: 'release_to_player',
-      ...baseDecision,
-      nextBackwardRequestedFrame: null,
-      nextBackwardRenderAtMs: 0,
-    };
-  }
-
-  if (nextFallbackToPlayer) {
-    return {
-      kind: 'use_player_fallback',
       ...baseDecision,
       nextBackwardRequestedFrame: null,
       nextBackwardRenderAtMs: 0,
@@ -580,7 +549,6 @@ export function resolvePreviewPresenterScrubTargetDecision(input: {
 
 export function resolvePreviewPresenterRenderLoopDecision(input: {
   shouldPreferPlayer: boolean;
-  fallbackToPlayerScrub: boolean;
   targetFrame: number | null;
   nextPrewarmFrame: number | null;
   suppressBackgroundPrewarm: boolean;
@@ -593,15 +561,6 @@ export function resolvePreviewPresenterRenderLoopDecision(input: {
     return {
       kind: 'hide_overlays_and_stop',
       shouldClearRequestedFrame: true,
-      shouldClearQueuedPrewarm: false,
-    };
-  }
-
-  if (input.fallbackToPlayerScrub) {
-    return {
-      kind: 'hide_overlays_and_stop',
-      shouldClearRequestedFrame: true,
-      shouldClearQueuedPrewarm: true,
     };
   }
 

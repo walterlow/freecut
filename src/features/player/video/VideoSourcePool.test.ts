@@ -135,4 +135,54 @@ describe('VideoSourcePool', () => {
     pool.releaseClip('clip-1');
     expect(pool.getClipElement('clip-1')).toBeNull();
   });
+
+  it('shrinks extra overflow lanes after burst overlap releases', async () => {
+    vi.useFakeTimers();
+    const pool = new VideoSourcePool();
+
+    const clips = ['clip-1', 'clip-2', 'clip-3', 'clip-4', 'clip-5'];
+    for (const clipId of clips) {
+      expect(pool.acquireForClip(clipId, 'blob:test-video')).not.toBeNull();
+    }
+
+    expect(pool.getStats()).toEqual({
+      sourceCount: 1,
+      totalElements: 5,
+      activeClips: 5,
+    });
+
+    pool.releaseClip('clip-5');
+    expect(pool.getStats()).toEqual({
+      sourceCount: 1,
+      totalElements: 5,
+      activeClips: 4,
+    });
+
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(pool.getStats()).toEqual({
+      sourceCount: 1,
+      totalElements: 4,
+      activeClips: 4,
+    });
+  });
+
+  it('keeps baseline pooled lanes hot after releases', async () => {
+    vi.useFakeTimers();
+    const pool = new VideoSourcePool();
+
+    const clips = ['clip-1', 'clip-2', 'clip-3', 'clip-4'];
+    for (const clipId of clips) {
+      expect(pool.acquireForClip(clipId, 'blob:test-video')).not.toBeNull();
+    }
+
+    pool.releaseClip('clip-4');
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(pool.getStats()).toEqual({
+      sourceCount: 1,
+      totalElements: 3,
+      activeClips: 3,
+    });
+  });
 });

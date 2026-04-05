@@ -854,9 +854,9 @@ async function loadTimeline(
         useZoomStore.getState().setZoomLevel(1);
       }
       if (t.currentFrame !== undefined) {
-        usePlaybackStore.getState().setCurrentFrame(t.currentFrame);
+        usePlaybackStore.getState().seekTimelineFrame(t.currentFrame);
       } else {
-        usePlaybackStore.getState().setCurrentFrame(0);
+        usePlaybackStore.getState().seekTimelineFrame(0);
       }
     } else {
       logger.debug('loadTimeline: initializing new project with default track');
@@ -873,7 +873,7 @@ async function loadTimeline(
       useCompositionNavigationStore.getState().resetToRoot();
       useTimelineSettingsStore.getState().setScrollPosition(0);
       useZoomStore.getState().setZoomLevel(1);
-      usePlaybackStore.getState().setCurrentFrame(0);
+      usePlaybackStore.getState().seekTimelineFrame(0);
     }
 
     // Common setup for both cases

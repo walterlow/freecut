@@ -76,7 +76,7 @@ function restoreTimeline(stash: StashedTimeline) {
   useTransitionsStore.getState().setTransitions(stash.transitions);
   useKeyframesStore.getState().setKeyframes(stash.keyframes);
   useSelectionStore.getState().clearSelection();
-  usePlaybackStore.getState().setCurrentFrame(stash.currentFrame);
+  usePlaybackStore.getState().seekTimelineFrame(stash.currentFrame);
 }
 
 /** Save current timeline data back to the compositions store (for sub-comps only). */
@@ -180,7 +180,7 @@ export const useCompositionNavigationStore = create<
         localFrame = relativeFrame;
       }
     }
-    usePlaybackStore.getState().setCurrentFrame(localFrame);
+    usePlaybackStore.getState().seekTimelineFrame(localFrame);
 
     set({
       breadcrumbs: [...state.breadcrumbs, { compositionId, label, ...(compItem?.id && { entryItemId: compItem.id }) }],

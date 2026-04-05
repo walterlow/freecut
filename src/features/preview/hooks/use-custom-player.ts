@@ -18,20 +18,16 @@ import {
   ensurePitchCorrectedAudioContextResumed,
 } from '@/features/preview/deps/composition-runtime';
 import { resolvePreviewTransitionDecision } from '../utils/preview-state-coordinator';
-import {
-  PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS,
-  PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES,
-  PLAYER_BACKWARD_SCRUB_FORCE_JUMP_FRAMES,
-  getFrameDirection,
-} from '../utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
+import {
+  resolvePreviewPlayerCurrentFrameSyncDecision,
+  resolvePreviewPlayerPlaybackCommand,
+} from '../utils/preview-player-controller';
 
 const logger = createLogger('useCustomPlayer');
 
 export function useCustomPlayer(
   playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
-  bypassPreviewSeekRef?: React.RefObject<boolean>,
-  preferPlayerForStyledTextScrubRef?: React.RefObject<boolean>,
   isGizmoInteractingRef?: React.RefObject<boolean>,
   onPlayerSeek?: (targetFrame: number) => void,
 ) {
@@ -40,8 +36,6 @@ export function useCustomPlayer(
   const [playerReady, setPlayerReady] = useState(false);
   const lastSyncedFrameRef = useRef<number>(0);
   const lastSeekTargetRef = useRef<number | null>(null);
-  const lastBackwardScrubSeekAtRef = useRef(0);
-  const lastBackwardScrubSeekFrameRef = useRef<number | null>(null);
   const ignorePlayerUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
 
@@ -104,24 +98,29 @@ export function useCustomPlayer(
     wasPlayingRef.current = isPlaying;
 
     try {
-      if (isPlaying && !wasPlaying) {
+      const playbackState = usePlaybackStore.getState();
+      const playbackCommand = resolvePreviewPlayerPlaybackCommand({
+        isPlaying,
+        wasPlaying,
+        currentFrame: playbackState.currentFrame,
+        previewFrame: playbackState.previewFrame,
+        playerFrame: getPlayerFrame(),
+      });
+
+      if (playbackCommand.kind === 'play') {
         // Resume from the frame currently visible to the user. If hover-scrub
         // is active, promote that frame to the real playhead before playback.
-        const { currentFrame, previewFrame, setCurrentFrame, setPreviewFrame } = usePlaybackStore.getState();
-        const startFrame = previewFrame ?? currentFrame;
-        if (previewFrame !== null && currentFrame !== previewFrame) {
-          setCurrentFrame(previewFrame);
-        }
-        const playerFrame = getPlayerFrame();
-        const needsSeek = playerFrame === null || Math.abs(playerFrame - startFrame) > 1;
-        if (needsSeek) {
+        const { commitPreviewFrame } = playbackState;
+        lastSyncedFrameRef.current = playbackCommand.syncFrame;
+        lastSeekTargetRef.current = playbackCommand.syncFrame;
+        if (playbackCommand.shouldSeekBeforePlay) {
           ignorePlayerUpdatesRef.current = true;
-          onPlayerSeek?.(startFrame);
-          playerRef.current.seekTo(startFrame);
-          lastSyncedFrameRef.current = startFrame;
-          lastSeekTargetRef.current = startFrame;
+          onPlayerSeek?.(playbackCommand.startFrame);
+          playerRef.current.seekTo(playbackCommand.startFrame);
         }
-        setPreviewFrame(null);
+        if (playbackCommand.shouldClearPreviewFrame) {
+          commitPreviewFrame();
+        }
 
         // Start playback immediately after optional seek. Deferring to rAF adds
         // an extra frame of latency every time playback resumes.
@@ -135,7 +134,9 @@ export function useCustomPlayer(
         playerRef.current?.play();
         ignorePlayerUpdatesRef.current = false;
         return;
-      } else if (!isPlaying && wasPlaying) {
+      }
+
+      if (playbackCommand.kind === 'pause') {
         playerRef.current.pause();
       }
     } catch (error) {
@@ -179,116 +180,25 @@ export function useCustomPlayer(
         },
       });
 
-      if (!transition.currentFrameChanged) return;
-      const currentFrame = state.currentFrame;
+      const syncDecision = resolvePreviewPlayerCurrentFrameSyncDecision({
+        transition,
+        lastSyncedFrame: lastSyncedFrameRef.current,
+        playerFrame: getPlayerFrame(),
+      });
 
-      const frameDiff = Math.abs(currentFrame - lastSyncedFrameRef.current);
-      if (frameDiff === 0) return;
-
-      if (transition.next.mode === 'playing') {
-        const playerFrame = getPlayerFrame();
-        // While actively playing, most store frame updates originate from the Player itself.
-        // Only seek when there is real drift, which indicates an external timeline seek.
-        if (playerFrame !== null && Math.abs(playerFrame - currentFrame) <= 2) {
-          lastSyncedFrameRef.current = currentFrame;
-          return;
-        }
-      }
-
-      // During active gizmo interactions, don't seek from currentFrame updates.
-      // Gizmo mode prioritizes real-time transform updates from Player output.
-      if (transition.shouldSkipCurrentFrameSeek) {
-        lastSyncedFrameRef.current = currentFrame;
+      if (syncDecision.kind === 'none') {
         return;
       }
 
-      seekPlayerToFrame(currentFrame);
+      if (syncDecision.kind === 'update_synced_frame') {
+        lastSyncedFrameRef.current = syncDecision.nextSyncedFrame;
+        return;
+      }
+
+      seekPlayerToFrame(syncDecision.targetFrame);
     });
 
     return unsubscribe;
   }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek]);
-
-  // Preview frame seeking: seek to hovered position on timeline
-  useEffect(() => {
-    if (!playerReady || !playerRef.current) return;
-
-    return usePlaybackStore.subscribe((state, prev) => {
-      if (!playerRef.current) return;
-      const transition = resolvePreviewTransitionDecision({
-        prev: {
-          isPlaying: prev.isPlaying,
-          previewFrame: prev.previewFrame,
-          currentFrame: prev.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
-        next: {
-          isPlaying: state.isPlaying,
-          previewFrame: state.previewFrame,
-          currentFrame: state.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
-      });
-      if (!transition.previewFrameChanged) return;
-      const interactionMode = transition.next.mode;
-      if (interactionMode === 'playing' || interactionMode === 'gizmo_dragging') {
-        lastBackwardScrubSeekAtRef.current = 0;
-        lastBackwardScrubSeekFrameRef.current = null;
-        return;
-      }
-      if (interactionMode === 'scrubbing' && bypassPreviewSeekRef?.current) {
-        lastBackwardScrubSeekAtRef.current = 0;
-        lastBackwardScrubSeekFrameRef.current = null;
-        return;
-      }
-      const shouldUseFastScrubOnly = (
-        !preferPlayerForStyledTextScrubRef?.current
-        &&
-        interactionMode === 'scrubbing'
-        && state.previewFrame !== null
-        && state.currentFrame === state.previewFrame
-        && state.currentFrameEpoch === state.previewFrameEpoch
-      );
-      if (shouldUseFastScrubOnly) {
-        lastBackwardScrubSeekAtRef.current = 0;
-        lastBackwardScrubSeekFrameRef.current = null;
-        return;
-      }
-
-      const targetFrame = transition.next.anchorFrame;
-      const scrubDirection = interactionMode === 'scrubbing'
-        ? getFrameDirection(transition.prev.anchorFrame, transition.next.anchorFrame)
-        : 0;
-
-      if (scrubDirection < 0) {
-        const nowMs = performance.now();
-        const quantizedFrame = Math.floor(
-          targetFrame / PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES
-        ) * PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES;
-        const lastRequestedFrame = lastBackwardScrubSeekFrameRef.current;
-        const withinThrottle = (
-          (nowMs - lastBackwardScrubSeekAtRef.current) < PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS
-        );
-        const jumpDistance = lastRequestedFrame === null
-          ? Number.POSITIVE_INFINITY
-          : Math.abs(quantizedFrame - lastRequestedFrame);
-        if (
-          withinThrottle
-          && jumpDistance < PLAYER_BACKWARD_SCRUB_FORCE_JUMP_FRAMES
-        ) {
-          return;
-        }
-
-        lastBackwardScrubSeekAtRef.current = nowMs;
-        lastBackwardScrubSeekFrameRef.current = quantizedFrame;
-        seekPlayerToFrame(quantizedFrame);
-        return;
-      }
-
-      lastBackwardScrubSeekAtRef.current = 0;
-      lastBackwardScrubSeekFrameRef.current = null;
-      seekPlayerToFrame(targetFrame);
-    });
-  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef]);
-
   return { ignorePlayerUpdatesRef };
 }

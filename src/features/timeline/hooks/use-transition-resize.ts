@@ -132,7 +132,7 @@ export function useTransitionResize(transition: Transition) {
     (e: React.MouseEvent, handle: ResizeHandle) => {
       e.preventDefault();
       e.stopPropagation();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      usePlaybackStore.getState().clearPreviewFrame();
 
       setResizeState({
         isResizing: true,

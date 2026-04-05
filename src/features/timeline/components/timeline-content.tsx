@@ -188,14 +188,14 @@ export const TimelineContent = memo(function TimelineContent({
   useEffect(() => {
     return usePlaybackStore.subscribe((state, prev) => {
       if (state.isPlaying && !prev.isPlaying) {
-        state.setPreviewFrame(null);
+        state.clearPreviewFrame();
       }
     });
   }, []);
 
   useEffect(() => {
     if (isDragging && usePlaybackStore.getState().previewFrame !== null) {
-      usePlaybackStore.getState().setPreviewFrame(null);
+      usePlaybackStore.getState().clearPreviewFrame();
     }
   }, [isDragging]);
 

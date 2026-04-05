@@ -137,7 +137,7 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
   useTimelineSettingsStore.getState().setSnapEnabled(snapshot.snapEnabled);
 
   // Restore playhead position
-  usePlaybackStore.getState().setCurrentFrame(snapshot.currentFrame);
+  usePlaybackStore.getState().seekTimelineFrame(snapshot.currentFrame);
 
   // Restore current project metadata so canvas/project changes undo with the editor history.
   restoreProjectMetadata(snapshot);

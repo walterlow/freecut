@@ -70,6 +70,54 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>()(
             frameUpdateEpoch: nextEpoch,
           };
         }),
+      clearPreviewFrame: () =>
+        set((state) => {
+          if (state.previewFrame === null && state.previewItemId === null) {
+            return state;
+          }
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            previewFrame: null,
+            previewItemId: null,
+            previewFrameEpoch: nextEpoch,
+            frameUpdateEpoch: nextEpoch,
+          };
+        }),
+      commitPreviewFrame: () =>
+        set((state) => {
+          if (state.previewFrame === null) return state;
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            currentFrame: state.previewFrame,
+            currentFrameEpoch: nextEpoch,
+            previewFrame: null,
+            previewItemId: null,
+            previewFrameEpoch: nextEpoch,
+            frameUpdateEpoch: nextEpoch,
+          };
+        }),
+      seekTimelineFrame: (frame) =>
+        set((state) => {
+          const nextFrame = normalizeFrame(frame);
+          if (
+            state.currentFrame === nextFrame
+            && state.previewFrame === null
+            && state.displayedFrame === null
+            && state.previewItemId === null
+          ) {
+            return state;
+          }
+          const nextEpoch = state.frameUpdateEpoch + 1;
+          return {
+            currentFrame: nextFrame,
+            currentFrameEpoch: nextEpoch,
+            previewFrame: null,
+            previewItemId: null,
+            previewFrameEpoch: nextEpoch,
+            displayedFrame: null,
+            frameUpdateEpoch: nextEpoch,
+          };
+        }),
       play: () => set((state) => (state.isPlaying ? state : { isPlaying: true })),
       pause: () => set((state) => (state.isPlaying ? { isPlaying: false } : state)),
       togglePlayPause: () => set((state) => ({ isPlaying: !state.isPlaying })),

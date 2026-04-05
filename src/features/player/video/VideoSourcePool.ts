@@ -54,6 +54,7 @@ class SourceController {
   // Element being loaded by ensureLoaded() but not yet promoted to primary.
   // Allows acquire() to reuse it instead of creating a redundant overflow element.
   private _pendingPrimary: HTMLVideoElement | null = null;
+  private _overflowShrinkTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   // Callbacks
   private onElementReady?: (element: HTMLVideoElement) => void;
@@ -64,6 +65,7 @@ class SourceController {
   // left main clip + right main clip + transition left + transition right = 4 total.
   private static readonly MAX_OVERFLOW_ELEMENTS = 3;
   private static readonly LOAD_TIMEOUT_MS = 15_000;
+  private static readonly OVERFLOW_SHRINK_IDLE_MS = 750;
 
   // Stored so dispose() can cancel a pending load timeout
   private _loadTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -213,6 +215,8 @@ class SourceController {
    * Returns an element seeked to the correct source time
    */
   acquire(clipId: string): HTMLVideoElement | null {
+    this.cancelOverflowShrink();
+
     // Check if clip already has an assignment
     const existing = this.assignments.get(clipId);
     if (existing) {
@@ -269,6 +273,7 @@ class SourceController {
    */
   release(clipId: string): void {
     this.assignments.delete(clipId);
+    this.scheduleOverflowShrink();
   }
 
   /**
@@ -341,6 +346,7 @@ class SourceController {
       clearTimeout(this._loadTimeoutId);
       this._loadTimeoutId = null;
     }
+    this.cancelOverflowShrink();
 
     // Pause and clear all elements
     if (this.primary) {
@@ -475,6 +481,49 @@ class SourceController {
     });
 
     return element;
+  }
+
+  private scheduleOverflowShrink(): void {
+    if (this.overflow.length <= SourceController.MAX_OVERFLOW_ELEMENTS) {
+      return;
+    }
+    if (this._overflowShrinkTimeoutId !== null) {
+      return;
+    }
+    this._overflowShrinkTimeoutId = setTimeout(() => {
+      this._overflowShrinkTimeoutId = null;
+      this.pruneIdleOverflow();
+    }, SourceController.OVERFLOW_SHRINK_IDLE_MS);
+  }
+
+  private cancelOverflowShrink(): void {
+    if (this._overflowShrinkTimeoutId === null) {
+      return;
+    }
+    clearTimeout(this._overflowShrinkTimeoutId);
+    this._overflowShrinkTimeoutId = null;
+  }
+
+  private pruneIdleOverflow(): void {
+    if (this.overflow.length <= SourceController.MAX_OVERFLOW_ELEMENTS) {
+      return;
+    }
+
+    for (let index = this.overflow.length - 1; index >= 0; index -= 1) {
+      if (this.overflow.length <= SourceController.MAX_OVERFLOW_ELEMENTS) {
+        break;
+      }
+
+      const element = this.overflow[index]!;
+      if (this.isElementInUse(element)) {
+        continue;
+      }
+
+      element.pause();
+      element.src = '';
+      element.load();
+      this.overflow.splice(index, 1);
+    }
   }
 
 }

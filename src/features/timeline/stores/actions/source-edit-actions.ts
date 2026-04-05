@@ -307,7 +307,7 @@ export async function performInsertEdit(): Promise<void> {
   }, { trackIds: targetTrackIds, insertFrame, clipDurationFrames });
 
   // Advance playhead to end of inserted clip
-  usePlaybackStore.getState().setCurrentFrame(insertFrame + clipDurationFrames);
+  usePlaybackStore.getState().seekTimelineFrame(insertFrame + clipDurationFrames);
   toast.success('Insert edit applied');
 }
 
@@ -381,6 +381,6 @@ export async function performOverwriteEdit(): Promise<void> {
   }, { trackIds: targetTrackIds, overwriteStart, overwriteEnd });
 
   // Advance playhead to end of overwritten clip
-  usePlaybackStore.getState().setCurrentFrame(overwriteEnd);
+  usePlaybackStore.getState().seekTimelineFrame(overwriteEnd);
   toast.success('Overwrite edit applied');
 }

@@ -96,10 +96,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   // Read from store directly when needed to avoid re-renders every frame
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const useProxy = usePlaybackStore((s) => s.useProxy);
+  const seekTimelineFrame = usePlaybackStore((s) => s.seekTimelineFrame);
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
-  const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
 
   // Note: Automatic playback loop is now handled by Composition Player
@@ -111,9 +109,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const commitTimelineSeek = (frame: number) => {
     // Transport seeks should exit hover-scrub state so Player rendering
     // follows the actual playhead immediately.
-    setPreviewFrame(null);
-    setDisplayedFrame(null);
-    setCurrentFrame(frame);
+    seekTimelineFrame(frame);
   };
 
   const handleGoToStart = () => commitTimelineSeek(0);

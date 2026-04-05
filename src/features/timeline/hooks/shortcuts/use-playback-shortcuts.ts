@@ -38,15 +38,11 @@ export function usePlaybackShortcuts(
 ) {
   const hotkeys = useResolvedHotkeys();
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
-  const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
-  const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
+  const seekTimelineFrame = usePlaybackStore((s) => s.seekTimelineFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const commitTimelineSeek = useCallback((frame: number) => {
-    setPreviewFrame(null);
-    setDisplayedFrame(null);
-    setCurrentFrame(frame);
-  }, [setPreviewFrame, setDisplayedFrame, setCurrentFrame]);
+    seekTimelineFrame(frame);
+  }, [seekTimelineFrame]);
 
   // Playback: Space - Play/Pause
   useHotkeys(

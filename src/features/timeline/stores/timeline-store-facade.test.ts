@@ -10,9 +10,11 @@ const indexedDbMocks = vi.hoisted(() => ({
 const playbackMocks = vi.hoisted(() => ({
   currentFrame: 0,
   setCurrentFrame: vi.fn(),
+  seekTimelineFrame: vi.fn(),
   pause: vi.fn(),
   play: vi.fn(),
   setPreviewFrame: vi.fn(),
+  clearPreviewFrame: vi.fn(),
 }));
 
 const zoomMocks = vi.hoisted(() => ({
@@ -97,6 +99,9 @@ describe('TimelineStoreFacade', () => {
     vi.clearAllMocks();
     playbackMocks.currentFrame = 0;
     playbackMocks.setCurrentFrame.mockImplementation((frame: number) => {
+      playbackMocks.currentFrame = frame;
+    });
+    playbackMocks.seekTimelineFrame.mockImplementation((frame: number) => {
       playbackMocks.currentFrame = frame;
     });
     zoomMocks.level = 1;
@@ -804,7 +809,7 @@ describe('TimelineStoreFacade', () => {
       expect(itemsState.items).toHaveLength(1);
       expect(itemsState.items[0]!.id).toBe('i1');
       expect(useTimelineSettingsStore.getState().fps).toBe(24);
-      expect(playbackMocks.setCurrentFrame).toHaveBeenCalledWith(50);
+      expect(playbackMocks.seekTimelineFrame).toHaveBeenCalledWith(50);
     });
 
     it('throws when project not found', async () => {

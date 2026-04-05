@@ -2,6 +2,7 @@
  * Marker shortcuts: M (add), Shift+M (remove), [ ] (navigate).
  */
 
+import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMarkersStore } from '../../stores/markers-store';
@@ -12,8 +13,11 @@ import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 export function useMarkerShortcuts() {
   const hotkeys = useResolvedHotkeys();
-  const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const seekTimelineFrame = usePlaybackStore((s) => s.seekTimelineFrame);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const commitTimelineSeek = useCallback((frame: number) => {
+    seekTimelineFrame(frame);
+  }, [seekTimelineFrame]);
 
   // Markers: M - Add marker at playhead
   useHotkeys(
@@ -59,11 +63,11 @@ export function useMarkerShortcuts() {
         }
       }
       if (previousFrame !== undefined) {
-        setCurrentFrame(previousFrame);
+        commitTimelineSeek(previousFrame);
       }
     },
     HOTKEY_OPTIONS,
-    [setCurrentFrame]
+    [commitTimelineSeek]
   );
 
   // Markers: ] - Jump to next marker
@@ -83,10 +87,10 @@ export function useMarkerShortcuts() {
         }
       }
       if (nextFrame !== undefined) {
-        setCurrentFrame(nextFrame);
+        commitTimelineSeek(nextFrame);
       }
     },
     HOTKEY_OPTIONS,
-    [setCurrentFrame]
+    [commitTimelineSeek]
   );
 }

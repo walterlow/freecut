@@ -209,7 +209,7 @@ export const LoadedEditor = memo(function LoadedEditor({
     // Clear stale scrub preview from previous editor sessions.
     // A non-null previewFrame puts preview into "scrubbing" mode, which can
     // defer media URL resolution during project open.
-    playbackStore.setPreviewFrame(null);
+    playbackStore.clearPreviewFrame();
 
     // Set current project context for media library (v3: project-scoped media)
     setMediaProject(projectId);
@@ -264,7 +264,7 @@ export const LoadedEditor = memo(function LoadedEditor({
     return () => {
       cancelled = true;
       const cleanupPlaybackStore = usePlaybackStore.getState();
-      cleanupPlaybackStore.setPreviewFrame(null);
+      cleanupPlaybackStore.clearPreviewFrame();
       useMediaLibraryStore.getState().setCurrentProject(null);
       useProjectStore.getState().setCurrentProject(null);
       cleanupPlaybackStore.pause();

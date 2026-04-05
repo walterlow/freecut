@@ -692,7 +692,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // including guardrail early returns.
       e.stopPropagation();
       e.preventDefault();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      usePlaybackStore.getState().clearPreviewFrame();
 
       const forcedMode = options?.forcedMode ?? null;
       const destroyTransitionAtHandle = options?.destroyTransitionAtHandle ?? false;

@@ -204,5 +204,59 @@ describe('playback-store', () => {
       expect(state.previewItemId).toBe('item-1');
       expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
     });
+
+    it('commits previewFrame into currentFrame and clears preview state atomically', () => {
+      usePlaybackStore.getState().setScrubFrame(42, 'item-1');
+      usePlaybackStore.getState().commitPreviewFrame();
+
+      const state = usePlaybackStore.getState();
+      expect(state.currentFrame).toBe(42);
+      expect(state.previewFrame).toBe(null);
+      expect(state.previewItemId).toBe(null);
+      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
+    });
+
+    it('clears preview state without disturbing the current or displayed frame', () => {
+      usePlaybackStore.getState().setCurrentFrame(42);
+      usePlaybackStore.getState().setDisplayedFrame(41);
+      usePlaybackStore.getState().setPreviewFrame(48, 'item-1');
+      usePlaybackStore.getState().clearPreviewFrame();
+
+      const state = usePlaybackStore.getState();
+      expect(state.currentFrame).toBe(42);
+      expect(state.displayedFrame).toBe(41);
+      expect(state.previewFrame).toBe(null);
+      expect(state.previewItemId).toBe(null);
+    });
+
+    it('clears preview state even when currentFrame already matches the preview frame', () => {
+      usePlaybackStore.getState().setCurrentFrame(42);
+      usePlaybackStore.getState().setPreviewFrame(42, 'item-1');
+      usePlaybackStore.getState().commitPreviewFrame();
+
+      const state = usePlaybackStore.getState();
+      expect(state.currentFrame).toBe(42);
+      expect(state.previewFrame).toBe(null);
+      expect(state.previewItemId).toBe(null);
+      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
+    });
+
+    it('performs transport seeks atomically and clears preview/presented state', () => {
+      usePlaybackStore.getState().setScrubFrame(42, 'item-1');
+      usePlaybackStore.getState().setDisplayedFrame(41);
+      usePlaybackStore.getState().seekTimelineFrame(90);
+
+      const state = usePlaybackStore.getState();
+      expect(state.currentFrame).toBe(90);
+      expect(state.previewFrame).toBe(null);
+      expect(state.displayedFrame).toBe(null);
+      expect(state.previewItemId).toBe(null);
+      expect(state.currentFrameEpoch).toBe(state.previewFrameEpoch);
+    });
+
+    it('normalizes transport seek frames', () => {
+      usePlaybackStore.getState().seekTimelineFrame(-5);
+      expect(usePlaybackStore.getState().currentFrame).toBe(0);
+    });
   });
 });

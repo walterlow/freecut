@@ -570,7 +570,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
 
       e.stopPropagation();
       e.preventDefault();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      usePlaybackStore.getState().clearPreviewFrame();
 
       setDragState({
         isDragging: true,
