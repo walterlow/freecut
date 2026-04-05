@@ -75,7 +75,7 @@ class GpuTextureCache {
     return entry;
   }
 
-  put(frame: number, source: ImageBitmap | OffscreenCanvas): GpuCacheEntry | null {
+  put(frame: number, source: ImageBitmap | OffscreenCanvas | HTMLCanvasElement): GpuCacheEntry | null {
     if (!this.device || this.texW < 2 || this.texH < 2) return null;
 
     // Already cached
@@ -459,7 +459,7 @@ export class ScrubbingCache {
    * Try all tiers. Returns an ImageBitmap or OffscreenCanvas on hit, null on miss.
    * Tier 2 (per-video) is NOT checked here — it's item-level, not frame-level.
    */
-  getFrame(frame: number): ImageBitmap | OffscreenCanvas | null {
+  getFrame(frame: number): ImageBitmap | OffscreenCanvas | HTMLCanvasElement | null {
     // Tier 1 — GPU texture (fastest: ~0.1ms blit)
     const gpuResult = this.getGpuFrame(frame);
     if (gpuResult) return gpuResult;
@@ -485,7 +485,7 @@ export class ScrubbingCache {
    *   sequential forward playback to avoid createImageBitmap overhead
    *   while still building GPU cache for backward scrub coverage.
    */
-  cacheFrame(frame: number, canvas: OffscreenCanvas, gpuOnly = false): void {
+  cacheFrame(frame: number, canvas: OffscreenCanvas | HTMLCanvasElement, gpuOnly = false): void {
     // Tier 1: GPU upload directly from canvas (near-free)
     if (!this.tier1.has(frame)) {
       this.tier1.put(frame, canvas);

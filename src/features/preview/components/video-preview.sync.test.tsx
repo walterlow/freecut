@@ -108,6 +108,7 @@ const rendererMockState = vi.hoisted(() => {
     prewarmItems: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
+    wasLastFramePresentedDirectly: ReturnType<typeof vi.fn<() => boolean>>;
     dispose: ReturnType<typeof vi.fn>;
   };
 
@@ -128,6 +129,7 @@ const rendererMockState = vi.hoisted(() => {
       prewarmItems: vi.fn(async () => {}),
       invalidateFrameCache: vi.fn(),
       getScrubbingCache: () => null,
+      wasLastFramePresentedDirectly: vi.fn(() => false),
       dispose: vi.fn(),
     };
     instances.push(renderer);
@@ -559,6 +561,34 @@ describe('VideoPreview sync behavior', () => {
 
     expect(screen.getByTestId('mock-headless-transport')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-player')).toBeNull();
+  });
+
+  it('renders scrub preview through a detached work canvas and wires a dedicated presentation surface', async () => {
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+    const gpuCanvas = container.querySelectorAll('canvas')[1] as HTMLCanvasElement;
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const renderCanvas = createCompositionRendererMock.mock.calls[0]?.[1];
+    const renderOptions = createCompositionRendererMock.mock.calls[0]?.[3] as
+      | { presentationCanvas?: HTMLCanvasElement }
+      | undefined;
+    expect(renderCanvas).toBeTruthy();
+    expect(renderCanvas).not.toBe(scrubCanvas);
+    expect(renderOptions?.presentationCanvas).toBe(gpuCanvas);
   });
 
   it('seeks to currentFrame when previewFrame is stale and unchanged (ruler click path)', async () => {

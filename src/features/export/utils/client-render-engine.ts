@@ -123,10 +123,11 @@ function isGifFormat(item: ImageItem): boolean {
  */
 export async function createCompositionRenderer(
   composition: CompositionInputProps,
-  canvas: OffscreenCanvas,
-  ctx: OffscreenCanvasRenderingContext2D,
+  canvas: OffscreenCanvas | HTMLCanvasElement,
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
   options: {
     mode?: 'export' | 'preview';
+    presentationCanvas?: HTMLCanvasElement | OffscreenCanvas;
     getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined;
     getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
     getPreviewCornerPinOverride?: (itemId: string) => TimelineItem['cornerPin'] | undefined;
@@ -143,6 +144,7 @@ export async function createCompositionRenderer(
     keyframes = [],
   } = composition;
   const renderMode = options.mode ?? 'export';
+  const presentationCanvas = options.presentationCanvas;
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
@@ -237,6 +239,11 @@ export async function createCompositionRenderer(
   let gpuCompositeW = 0;
   let gpuCompositeH = 0;
   let gpuCompositeConfigureFailed = false;
+  let gpuPresentationCtx: GPUCanvasContext | null = null;
+  let gpuPresentationW = 0;
+  let gpuPresentationH = 0;
+  let gpuPresentationConfigureFailed = false;
+  let lastFramePresentedDirectly = false;
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -283,6 +290,47 @@ export async function createCompositionRenderer(
     }
 
     return { canvas: gpuCompositeCanvas, ctx: gpuCompositeCtx };
+  }
+
+  function ensureGpuPresentationContext(
+    width: number,
+    height: number,
+  ): GPUCanvasContext | null {
+    if (!gpuPipeline || !presentationCanvas) return null;
+
+    const dimensionsChanged = gpuPresentationW !== width || gpuPresentationH !== height;
+    if (dimensionsChanged) {
+      gpuPresentationConfigureFailed = false;
+    }
+
+    if (
+      gpuPresentationConfigureFailed
+      && gpuPresentationW === width
+      && gpuPresentationH === height
+    ) {
+      return null;
+    }
+
+    if (
+      presentationCanvas.width !== width
+      || presentationCanvas.height !== height
+    ) {
+      presentationCanvas.width = width;
+      presentationCanvas.height = height;
+    }
+
+    if (!gpuPresentationCtx || dimensionsChanged) {
+      gpuPresentationCtx = gpuPipeline.configureCanvas(presentationCanvas);
+      gpuPresentationW = width;
+      gpuPresentationH = height;
+      if (!gpuPresentationCtx) {
+        gpuPresentationConfigureFailed = true;
+        return null;
+      }
+      gpuPresentationConfigureFailed = false;
+    }
+
+    return gpuPresentationCtx;
   }
 
   // Build lookup maps
@@ -1078,6 +1126,7 @@ export async function createCompositionRenderer(
     },
 
     async renderFrame(frame: number) {
+      lastFramePresentedDirectly = false;
       // 3-tier cache lookup (preview only)
       // Tier 1 (GPU texture) → Tier 3 (RAM ImageBitmap) → miss → full render
       if (scrubbingCache) {
@@ -1481,6 +1530,9 @@ export async function createCompositionRenderer(
         const gpuCompositeOutput = useGpuCompositor
           ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
           : null;
+        const gpuPresentationOutput = useGpuCompositor
+          ? ensureGpuPresentationContext(canvasSettings.width, canvasSettings.height)
+          : null;
 
         if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
@@ -1522,6 +1574,9 @@ export async function createCompositionRenderer(
 
           const compositedToGpuCanvas = layers.length > 0
             && gpuCompositor.compositeToCanvas(layers, w, h, gpuCompositeOutput.ctx);
+          const compositedToPresentationCanvas = layers.length > 0
+            && gpuPresentationOutput !== null
+            && gpuCompositor.compositeToCanvas(layers, w, h, gpuPresentationOutput);
 
           if (compositedToGpuCanvas) {
             finalCompositeSource = gpuCompositeOutput.canvas;
@@ -1544,6 +1599,7 @@ export async function createCompositionRenderer(
               }
             }
           }
+          lastFramePresentedDirectly = compositedToPresentationCanvas;
 
           for (const { result } of compositedResults) {
             for (const c of result.poolCanvases) canvasPool.release(c);
@@ -1827,8 +1883,12 @@ export async function createCompositionRenderer(
     },
 
     /** Get the offscreen canvas this renderer draws into. */
-    getCanvas(): OffscreenCanvas {
+    getCanvas(): OffscreenCanvas | HTMLCanvasElement {
       return canvas;
+    },
+
+    wasLastFramePresentedDirectly(): boolean {
+      return lastFramePresentedDirectly;
     },
 
     /**
@@ -1901,6 +1961,11 @@ export async function createCompositionRenderer(
       gpuCompositeW = 0;
       gpuCompositeH = 0;
       gpuCompositeConfigureFailed = false;
+      gpuPresentationCtx = null;
+      gpuPresentationW = 0;
+      gpuPresentationH = 0;
+      gpuPresentationConfigureFailed = false;
+      lastFramePresentedDirectly = false;
       gpuTransitionPipeline?.destroy();
       gpuTransitionPipeline = null;
       gpuPipeline?.destroy();

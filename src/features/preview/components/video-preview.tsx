@@ -162,6 +162,7 @@ import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalida
 const logger = createLogger('VideoPreview');
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
+type PreviewRenderCanvas = OffscreenCanvas | HTMLCanvasElement;
 
 type TransitionPreviewSessionTrace = {
   opId: string;
@@ -228,12 +229,13 @@ export const VideoPreview = memo(function VideoPreview({
   const transportRef = useRef<TransportRef>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
+  const scrubGpuCanvasRef = useRef<HTMLCanvasElement>(null);
   const scrubFrameDirtyRef = useRef(false);
   const scrubRendererRef = useRef<CompositionRenderer | null>(null);
   const scrubInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
   const scrubPreloadPromiseRef = useRef<Promise<void> | null>(null);
-  const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
-  const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
+  const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | HTMLCanvasElement | null>(null);
+  const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null>(null);
   const scrubRendererStructureKeyRef = useRef<string | null>(null);
   const scrubRenderInFlightRef = useRef(false);
   const scrubRenderGenerationRef = useRef(0);
@@ -2016,10 +2018,12 @@ export const VideoPreview = memo(function VideoPreview({
   // Keep the on-screen scrub canvas at project resolution so quality toggles
   // only change offscreen sampling, not display buffer geometry.
   useLayoutEffect(() => {
-    const canvas = scrubCanvasRef.current;
-    if (!canvas) return;
-    if (canvas.width !== transportRenderSize.width) canvas.width = transportRenderSize.width;
-    if (canvas.height !== transportRenderSize.height) canvas.height = transportRenderSize.height;
+    const canvases = [scrubCanvasRef.current, scrubGpuCanvasRef.current];
+    for (const canvas of canvases) {
+      if (!canvas) continue;
+      if (canvas.width !== transportRenderSize.width) canvas.width = transportRenderSize.width;
+      if (canvas.height !== transportRenderSize.height) canvas.height = transportRenderSize.height;
+    }
   }, [transportRenderSize.width, transportRenderSize.height]);
 
   const disposePreviewRenderer = useCallback(() => {
@@ -2126,7 +2130,6 @@ export const VideoPreview = memo(function VideoPreview({
 
   const ensurePreviewRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!PREVIEW_RENDERER_ENABLED) return null;
-    if (typeof OffscreenCanvas === 'undefined') return null;
     if (isResolving) return null;
     if (
       scrubRendererRef.current
@@ -2139,12 +2142,17 @@ export const VideoPreview = memo(function VideoPreview({
 
     scrubInitPromiseRef.current = (async () => {
       try {
-        const offscreen = new OffscreenCanvas(renderSize.width, renderSize.height);
-        const offscreenCtx = offscreen.getContext('2d');
-        if (!offscreenCtx) return null;
+        const renderCanvas: PreviewRenderCanvas = typeof OffscreenCanvas !== 'undefined'
+          ? new OffscreenCanvas(renderSize.width, renderSize.height)
+          : document.createElement('canvas');
+        if (renderCanvas.width !== renderSize.width) renderCanvas.width = renderSize.width;
+        if (renderCanvas.height !== renderSize.height) renderCanvas.height = renderSize.height;
+        const renderCtx = renderCanvas.getContext('2d');
+        if (!renderCtx) return null;
 
-        const renderer = await createCompositionRenderer(previewRendererInputProps, offscreen, offscreenCtx, {
+        const renderer = await createCompositionRenderer(previewRendererInputProps, renderCanvas, renderCtx, {
           mode: 'preview',
+          presentationCanvas: scrubGpuCanvasRef.current ?? undefined,
           getPreviewTransformOverride,
           getPreviewEffectsOverride,
           getPreviewCornerPinOverride,
@@ -2181,8 +2189,8 @@ export const VideoPreview = memo(function VideoPreview({
           }),
         ]);
 
-        scrubOffscreenCanvasRef.current = offscreen;
-        scrubOffscreenCtxRef.current = offscreenCtx;
+        scrubOffscreenCanvasRef.current = renderCanvas;
+        scrubOffscreenCtxRef.current = renderCtx;
         scrubOffscreenRenderedFrameRef.current = null;
         scrubRendererRef.current = renderer;
         scrubRendererStructureKeyRef.current = previewRendererStructureKey;
@@ -2222,15 +2230,15 @@ export const VideoPreview = memo(function VideoPreview({
     renderSize.width,
   ]);
 
-  const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<OffscreenCanvas | null> => {
-    const offscreen = scrubOffscreenCanvasRef.current;
-    if (offscreen && scrubOffscreenRenderedFrameRef.current === targetFrame) {
-      return offscreen;
+  const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<PreviewRenderCanvas | null> => {
+    const renderCanvas = scrubOffscreenCanvasRef.current;
+    if (renderCanvas && scrubOffscreenRenderedFrameRef.current === targetFrame) {
+      return renderCanvas;
     }
 
     const renderer = await ensurePreviewRenderer();
-    const nextOffscreen = scrubOffscreenCanvasRef.current;
-    if (!renderer || !nextOffscreen) return null;
+    const nextRenderCanvas = scrubOffscreenCanvasRef.current;
+    if (!renderer || !nextRenderCanvas) return null;
 
     if (scrubOffscreenRenderedFrameRef.current !== targetFrame) {
       await renderer.renderFrame(targetFrame);
@@ -2238,7 +2246,7 @@ export const VideoPreview = memo(function VideoPreview({
       scrubOffscreenRenderedFrameRef.current = targetFrame;
     }
 
-    return nextOffscreen;
+    return nextRenderCanvas;
   }, [clearPreviewRendererFailure, ensurePreviewRenderer]);
 
   const cacheTransitionSessionFrame = useCallback((frame: number) => {
@@ -2476,21 +2484,25 @@ export const VideoPreview = memo(function VideoPreview({
       try {
         const playback = usePlaybackStore.getState();
         const targetFrame = getPreviewTargetFrame(playback);
-        const offscreen = await renderOffscreenFrame(targetFrame);
-        if (!offscreen) return null;
+        const renderCanvas = await renderOffscreenFrame(targetFrame);
+        if (!renderCanvas) return null;
 
         const format = options?.format ?? 'image/jpeg';
         const quality = options?.quality ?? 0.9;
-        const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width));
-        const targetHeight = Math.max(2, Math.round(options?.height ?? offscreen.height));
+        const targetWidth = Math.max(2, Math.round(options?.width ?? renderCanvas.width));
+        const targetHeight = Math.max(2, Math.round(options?.height ?? renderCanvas.height));
         const shouldScale = !options?.fullResolution
-          && (targetWidth !== offscreen.width || targetHeight !== offscreen.height);
+          && (targetWidth !== renderCanvas.width || targetHeight !== renderCanvas.height);
 
         if (!shouldScale) {
-          const blob = await offscreen.convertToBlob({
-            type: format,
-            quality,
-          });
+          const blob = await (
+            typeof OffscreenCanvas !== 'undefined' && renderCanvas instanceof OffscreenCanvas
+              ? renderCanvas.convertToBlob({ type: format, quality })
+              : new Promise<Blob | null>((resolve) => {
+                  renderCanvas.toBlob(resolve, format, quality);
+                })
+          );
+          if (!blob) return null;
           return blobToDataUrl(blob);
         }
 
@@ -2500,7 +2512,7 @@ export const VideoPreview = memo(function VideoPreview({
         const ctx2d = canvas.getContext('2d');
         if (!ctx2d) return null;
 
-        ctx2d.drawImage(offscreen, 0, 0, targetWidth, targetHeight);
+        ctx2d.drawImage(renderCanvas, 0, 0, targetWidth, targetHeight);
         const blob = await new Promise<Blob | null>((resolve) => {
           canvas.toBlob(resolve, format, quality);
         });
@@ -2527,19 +2539,19 @@ export const VideoPreview = memo(function VideoPreview({
       try {
         const playback = usePlaybackStore.getState();
         const targetFrame = getPreviewTargetFrame(playback);
-        const offscreen = await renderOffscreenFrame(targetFrame);
-        if (!offscreen) return null;
+        const renderCanvas = await renderOffscreenFrame(targetFrame);
+        if (!renderCanvas) return null;
 
-        const targetWidth = Math.max(2, Math.round(options?.width ?? offscreen.width));
-        const targetHeight = Math.max(2, Math.round(options?.height ?? offscreen.height));
+        const targetWidth = Math.max(2, Math.round(options?.width ?? renderCanvas.width));
+        const targetHeight = Math.max(2, Math.round(options?.height ?? renderCanvas.height));
         const shouldScale = !options?.fullResolution
-          && (targetWidth !== offscreen.width || targetHeight !== offscreen.height);
+          && (targetWidth !== renderCanvas.width || targetHeight !== renderCanvas.height);
 
         if (!shouldScale) {
           const offscreenCtx = scrubOffscreenCtxRef.current
-            ?? offscreen.getContext('2d', { willReadFrequently: true });
+            ?? renderCanvas.getContext('2d', { willReadFrequently: true });
           if (!offscreenCtx) return null;
-          return offscreenCtx.getImageData(0, 0, offscreen.width, offscreen.height);
+          return offscreenCtx.getImageData(0, 0, renderCanvas.width, renderCanvas.height);
         }
 
         let scaleCanvas = captureScaleCanvasRef.current;
@@ -2555,7 +2567,7 @@ export const VideoPreview = memo(function VideoPreview({
         if (!scaleCtx) return null;
 
         scaleCtx.clearRect(0, 0, targetWidth, targetHeight);
-        scaleCtx.drawImage(offscreen, 0, 0, targetWidth, targetHeight);
+        scaleCtx.drawImage(renderCanvas, 0, 0, targetWidth, targetHeight);
         return scaleCtx.getImageData(0, 0, targetWidth, targetHeight);
       } catch (error) {
         logger.warn('Failed to capture raw frame:', error);
@@ -2677,9 +2689,21 @@ export const VideoPreview = memo(function VideoPreview({
   useEffect(() => {
     scrubMountedRef.current = true;
 
-    const drawSourceToDisplay = (source: OffscreenCanvas | HTMLCanvasElement, renderedFrame: number) => {
+    const clearFallbackDisplayCanvas = () => {
       const displayCanvas = scrubCanvasRef.current;
       if (!displayCanvas) return;
+      const displayCtx = displayCanvas.getContext('2d');
+      if (!displayCtx) return;
+      displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+    };
+
+    const drawSourceToDisplay = (source: PreviewRenderCanvas, renderedFrame: number) => {
+      const displayCanvas = scrubCanvasRef.current;
+      if (!displayCanvas) return;
+      if (source === displayCanvas) {
+        publishDisplayedFrame(renderedFrame);
+        return;
+      }
       const displayCtx = displayCanvas.getContext('2d');
       if (!displayCtx) return;
       displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
@@ -2688,9 +2712,14 @@ export const VideoPreview = memo(function VideoPreview({
     };
 
     const drawToDisplay = (renderedFrame: number) => {
-      const offscreen = scrubOffscreenCanvasRef.current;
-      if (!offscreen) return;
-      drawSourceToDisplay(offscreen, renderedFrame);
+      if (scrubRendererRef.current?.wasLastFramePresentedDirectly?.()) {
+        clearFallbackDisplayCanvas();
+        publishDisplayedFrame(renderedFrame);
+        return;
+      }
+      const renderCanvas = scrubOffscreenCanvasRef.current;
+      if (!renderCanvas) return;
+      drawSourceToDisplay(renderCanvas, renderedFrame);
     };
 
     const getPlaybackTransitionStateForFrame = (frame: number) => (
@@ -3651,7 +3680,7 @@ export const VideoPreview = memo(function VideoPreview({
                     try {
                       await mainRenderer.renderFrame(frame);
                       if ('getCanvas' in mainRenderer) {
-                        const srcCanvas = (mainRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
+                        const srcCanvas = (mainRenderer as { getCanvas: () => PreviewRenderCanvas }).getCanvas();
                         const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
                         const snapshotCtx = snapshot.getContext('2d');
                         if (snapshotCtx) {
@@ -3668,7 +3697,7 @@ export const VideoPreview = memo(function VideoPreview({
                 if (!usePlaybackStore.getState().isPlaying) {
                   await mainRenderer.renderFrame(state.currentFrame);
                   if ('getCanvas' in mainRenderer) {
-                    const srcCanvas = (mainRenderer as { getCanvas: () => OffscreenCanvas }).getCanvas();
+                    const srcCanvas = (mainRenderer as { getCanvas: () => PreviewRenderCanvas }).getCanvas();
                     const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
                     const snapshotCtx = snapshot.getContext('2d');
                     if (snapshotCtx) {
@@ -4583,6 +4612,19 @@ export const VideoPreview = memo(function VideoPreview({
                   width: '100%',
                   height: '100%',
                   zIndex: 4,
+                  visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
+                }}
+              />
+            )}
+
+            {PREVIEW_RENDERER_ENABLED && (
+              <canvas
+                ref={scrubGpuCanvasRef}
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  zIndex: 3,
                   visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
                 }}
               />
