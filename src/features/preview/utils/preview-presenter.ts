@@ -500,6 +500,7 @@ export function resolvePreviewPresenterScrubTargetDecision(input: {
   const nextSuppressBackgroundPrewarm = (
     input.disableBackgroundPrewarmOnBackward
     && scrubDirection < 0
+    && !input.preserveHighFidelityBackwardPreview
   );
   const nextFallbackToPlayer = (
     !input.forceFastScrubOverlay

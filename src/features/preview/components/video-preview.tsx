@@ -324,6 +324,7 @@ export const VideoPreview = memo(function VideoPreview({
   const lastPausedPrearmTargetRef = useRef<number | null>(null);
   const lastPlayingPrearmTargetRef = useRef<number | null>(null);
   const lastScrubTransitionWarmStartRef = useRef<number | null>(null);
+  const lastScrubTransitionWarmFrameRef = useRef<number | null>(null);
   const presenterState = createPreviewPresenterState(presenterModelRef.current);
   const isRenderedOverlayVisible = presenterState.isRenderedOverlayVisible;
 
@@ -458,6 +459,7 @@ export const VideoPreview = memo(function VideoPreview({
     suppressScrubBackgroundPrewarmRef.current = false;
     fallbackToPlayerScrubRef.current = false;
     lastScrubTransitionWarmStartRef.current = null;
+    lastScrubTransitionWarmFrameRef.current = null;
     lastBackwardScrubPreloadAtRef.current = 0;
     lastBackwardScrubRenderAtRef.current = 0;
     lastBackwardRequestedFrameRef.current = null;
@@ -2036,6 +2038,81 @@ export const VideoPreview = memo(function VideoPreview({
       frame >= window.startFrame && frame < window.endFrame
     )) ?? null;
   }, [playbackTransitionWindows]);
+
+  const isVariableSpeedTransitionWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
+    if (!window) return false;
+    const leftSpeed = window.leftClip.speed ?? 1;
+    const rightSpeed = window.rightClip.speed ?? 1;
+    return Math.abs(leftSpeed - 1) >= 0.01 || Math.abs(rightSpeed - 1) >= 0.01;
+  }, []);
+
+  const getTransitionWarmFrames = useCallback((
+    window: ResolvedTransitionWindow<TimelineItem>,
+    anchorFrame: number,
+    direction: -1 | 0 | 1,
+  ) => {
+    const directionalOffsets = getDirectionalPrewarmOffsets(
+      direction,
+      isVariableSpeedTransitionWindow(window)
+        ? {
+            forwardSteps: 6,
+            backwardSteps: 6,
+            oppositeSteps: 2,
+            neutralRadius: 2,
+          }
+        : {
+            forwardSteps: 3,
+            backwardSteps: 2,
+            oppositeSteps: 0,
+            neutralRadius: 1,
+          },
+    );
+
+    const uniqueFrames = new Set<number>([anchorFrame]);
+    for (const offset of directionalOffsets) {
+      const frame = anchorFrame + offset;
+      if (frame >= window.startFrame && frame < window.endFrame) {
+        uniqueFrames.add(frame);
+      }
+    }
+
+    return [...uniqueFrames];
+  }, [isVariableSpeedTransitionWindow]);
+
+  const prewarmTransitionFrameStrip = useCallback(async (
+    renderer: CompositionRenderer,
+    window: ResolvedTransitionWindow<TimelineItem>,
+    anchorFrame: number,
+    direction: -1 | 0 | 1,
+  ) => {
+    if (!('prewarmFrames' in renderer) || !isVariableSpeedTransitionWindow(window)) return;
+    const frames = getTransitionWarmFrames(window, anchorFrame, direction);
+    if (frames.length <= 1) return;
+    await renderer.prewarmFrames(frames);
+  }, [getTransitionWarmFrames, isVariableSpeedTransitionWindow]);
+
+  const preseekTransitionSources = useCallback((
+    window: ResolvedTransitionWindow<TimelineItem>,
+    frames: number[],
+  ) => {
+    if (frames.length === 0) return;
+    const timestampsBySource = new Map<string, number[]>();
+    for (const clip of [window.leftClip, window.rightClip]) {
+      if (clip.type !== 'video' || !('src' in clip) || !clip.src || !clip.sourceFps) continue;
+      const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+      const clipSpeed = clip.speed ?? 1;
+      const timestamps = frames.map((frame) => (
+        (sourceStart / clip.sourceFps) + ((frame - clip.from) / fps) * clipSpeed
+      ));
+      const existing = timestampsBySource.get(clip.src);
+      if (existing) existing.push(...timestamps);
+      else timestampsBySource.set(clip.src, timestamps);
+    }
+
+    for (const [src, timestamps] of timestampsBySource) {
+      void workerBackgroundBatchPreseek(src, timestamps);
+    }
+  }, [fps]);
 
   const playbackTransitionOverlayWindows = useMemo(
     () => playbackTransitionWindows.map((window) => ({
@@ -3952,24 +4029,18 @@ export const VideoPreview = memo(function VideoPreview({
               [activeTransitionWindow.leftClip.id, activeTransitionWindow.rightClip.id],
               state.currentFrame,
             );
+            void prewarmTransitionFrameStrip(
+              renderer,
+              activeTransitionWindow,
+              state.currentFrame,
+              1,
+            );
           }
           {
-            const transClips = [activeTransitionWindow.leftClip, activeTransitionWindow.rightClip];
-            const transBySource = new Map<string, number[]>();
-            for (const clip of transClips) {
-              if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
-                const localFrame = state.currentFrame - clip.from;
-                const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                const clipSpeed = clip.speed ?? 1;
-                const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
-                const existing = transBySource.get(clip.src);
-                if (existing) existing.push(sourceTime);
-                else transBySource.set(clip.src, [sourceTime]);
-              }
-            }
-            for (const [src, timestamps] of transBySource) {
-              void workerBackgroundBatchPreseek(src, timestamps);
-            }
+            const currentFrames = isVariableSpeedTransitionWindow(activeTransitionWindow)
+              ? getTransitionWarmFrames(activeTransitionWindow, state.currentFrame, 1)
+              : [state.currentFrame];
+            preseekTransitionSources(activeTransitionWindow, currentFrames);
           }
         }
 
@@ -4046,34 +4117,33 @@ export const VideoPreview = memo(function VideoPreview({
             if (transitionWindow) {
               const renderer = scrubRendererRef.current;
               if (renderer && 'prewarmItems' in renderer) {
-                transitionPrewarmPromiseRef.current = renderer.prewarmItems(
-                  [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
-                  transitionWindow.startFrame,
-                );
+                transitionPrewarmPromiseRef.current = (async () => {
+                  await renderer.prewarmItems(
+                    [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
+                    transitionWindow.startFrame,
+                  );
+                  await prewarmTransitionFrameStrip(
+                    renderer,
+                    transitionWindow,
+                    transitionWindow.startFrame,
+                    1,
+                  );
+                })();
               }
               // Fire background worker batch preseek for the first several
               // transition frames per clip. Pre-decoding a batch gives the
               // render loop cached bitmaps as fallback — reduces the 100-300ms
               // cold decode stall at transition entry.
               {
-                const preseekCount = Math.min(8, transitionWindow.endFrame - transitionWindow.startFrame);
-                const transBySource = new Map<string, number[]>();
-                for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
-                  if (clip.type !== 'video' || !('src' in clip) || !clip.src || !clip.sourceFps) continue;
-                  const timestamps: number[] = [];
-                  for (let i = 0; i < preseekCount; i++) {
-                    const localFrame = (transitionWindow.startFrame + i) - clip.from;
-                    const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                    const clipSpeed = clip.speed ?? 1;
-                    timestamps.push((sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed);
-                  }
-                  const existing = transBySource.get(clip.src);
-                  if (existing) existing.push(...timestamps);
-                  else transBySource.set(clip.src, timestamps);
-                }
-                for (const [src, timestamps] of transBySource) {
-                  void workerBackgroundBatchPreseek(src, timestamps);
-                }
+                const preseekCount = Math.min(
+                  isVariableSpeedTransitionWindow(transitionWindow) ? 16 : 8,
+                  transitionWindow.endFrame - transitionWindow.startFrame,
+                );
+                const frames = Array.from(
+                  { length: preseekCount },
+                  (_, index) => transitionWindow.startFrame + index,
+                );
+                preseekTransitionSources(transitionWindow, frames);
               }
             }
             pushTransitionTrace('playing_prearm', {
@@ -4188,19 +4258,32 @@ export const VideoPreview = memo(function VideoPreview({
                     [tw.leftClip.id, tw.rightClip.id],
                     tw.startFrame,
                   );
+                  await prewarmTransitionFrameStrip(
+                    mainRenderer,
+                    tw,
+                    tw.startFrame,
+                    1,
+                  );
                 }
                 // Pre-seed worker bitmap cache for transition clips (same as
                 // playing prearm). Positions the worker decoder so cached
                 // bitmaps are ready as a fallback if DOM video / mediabunny
                 // can't deliver the first transition frame fast enough.
-                for (const clip of [tw.leftClip, tw.rightClip]) {
-                  if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
-                    const localFrame = tw.startFrame - clip.from;
-                    const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                    const clipSpeed = clip.speed ?? 1;
-                    const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
-                    void workerBackgroundPreseek(clip.src, sourceTime);
+                const warmFrames = isVariableSpeedTransitionWindow(tw)
+                  ? getTransitionWarmFrames(tw, tw.startFrame, 1)
+                  : [tw.startFrame];
+                if (warmFrames.length === 1) {
+                  for (const clip of [tw.leftClip, tw.rightClip]) {
+                    if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
+                      const localFrame = tw.startFrame - clip.from;
+                      const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+                      const clipSpeed = clip.speed ?? 1;
+                      const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
+                      void workerBackgroundPreseek(clip.src, sourceTime);
+                    }
                   }
+                } else {
+                  preseekTransitionSources(tw, warmFrames);
                 }
                 // Pre-render the first few transition frames using the MAIN
                 // renderer (whose decoders are already at tw.startFrame from
@@ -4314,8 +4397,21 @@ export const VideoPreview = memo(function VideoPreview({
         const scrubTransitionWindow = getTransitionWindowForFrame(state.previewFrame);
         if (scrubTransitionWindow) {
           pinTransitionPlaybackSession(scrubTransitionWindow);
-          if (lastScrubTransitionWarmStartRef.current !== scrubTransitionWindow.startFrame) {
+          const isNewScrubTransitionWindow = (
+            lastScrubTransitionWarmStartRef.current !== scrubTransitionWindow.startFrame
+          );
+          const shouldWarmVariableSpeedStrip = (
+            isVariableSpeedTransitionWindow(scrubTransitionWindow)
+            && (
+              lastScrubTransitionWarmFrameRef.current === null
+              || Math.abs(lastScrubTransitionWarmFrameRef.current - state.previewFrame) >= 4
+            )
+          );
+          if (isNewScrubTransitionWindow) {
             lastScrubTransitionWarmStartRef.current = scrubTransitionWindow.startFrame;
+            lastScrubTransitionWarmFrameRef.current = null;
+          }
+          if (isNewScrubTransitionWindow || shouldWarmVariableSpeedStrip) {
             void (async () => {
               const renderer = await ensureFastScrubRenderer();
               if (!renderer || !('prewarmItems' in renderer)) return;
@@ -4328,10 +4424,31 @@ export const VideoPreview = memo(function VideoPreview({
                 [scrubTransitionWindow.leftClip.id, scrubTransitionWindow.rightClip.id],
                 livePreviewFrame,
               );
+              const shouldWarmStrip = (
+                isVariableSpeedTransitionWindow(liveWindow)
+                && (
+                  lastScrubTransitionWarmFrameRef.current === null
+                  || Math.abs(lastScrubTransitionWarmFrameRef.current - livePreviewFrame) >= 4
+                )
+              );
+              if (shouldWarmStrip) {
+                lastScrubTransitionWarmFrameRef.current = livePreviewFrame;
+                await prewarmTransitionFrameStrip(
+                  renderer,
+                  liveWindow,
+                  livePreviewFrame,
+                  scrubDirectionRef.current,
+                );
+                preseekTransitionSources(
+                  liveWindow,
+                  getTransitionWarmFrames(liveWindow, livePreviewFrame, scrubDirectionRef.current),
+                );
+              }
             })();
           }
         } else {
           lastScrubTransitionWarmStartRef.current = null;
+          lastScrubTransitionWarmFrameRef.current = null;
           clearTransitionPlaybackSession();
         }
       }

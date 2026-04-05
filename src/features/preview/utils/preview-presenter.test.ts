@@ -412,6 +412,36 @@ describe('preview presenter decisions', () => {
     });
   });
 
+  it('keeps background prewarm enabled for backward high-fidelity transition scrubs', () => {
+    expect(resolvePreviewPresenterScrubTargetDecision({
+      targetFrame: 86,
+      prevTargetFrame: 98,
+      previewFrame: 86,
+      prevPreviewFrame: 98,
+      forceFastScrubOverlay: true,
+      isAtomicScrubTarget: false,
+      preserveHighFidelityBackwardPreview: true,
+      disableBackgroundPrewarmOnBackward: true,
+      fallbackToPlayerOnBackward: true,
+      lastBackwardRequestedFrame: 96,
+      lastBackwardRenderAtMs: 5000,
+      nowMs: 5100,
+      backwardRenderQuantizeFrames: 4,
+      backwardRenderThrottleMs: 50,
+      backwardForceJumpFrames: 8,
+    })).toEqual({
+      kind: 'request_frame',
+      requestedFrame: 86,
+      scrubDirection: -1,
+      scrubUpdates: 1,
+      scrubDroppedFrames: 11,
+      nextSuppressBackgroundPrewarm: false,
+      nextFallbackToPlayer: false,
+      nextBackwardRequestedFrame: null,
+      nextBackwardRenderAtMs: 0,
+    });
+  });
+
   it('throttles quantized backward renders when the jump is too small', () => {
     expect(resolvePreviewPresenterScrubTargetDecision({
       targetFrame: 94,

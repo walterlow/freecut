@@ -95,6 +95,7 @@ const rendererMockState = vi.hoisted(() => {
     renderFrame: ReturnType<typeof vi.fn>;
     prewarmFrame: ReturnType<typeof vi.fn>;
     prewarmFrames: ReturnType<typeof vi.fn>;
+    prewarmItems: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
     setDomVideoElementProvider: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
@@ -115,6 +116,7 @@ const rendererMockState = vi.hoisted(() => {
           await prewarmFrame(frame);
         }
       }),
+      prewarmItems: vi.fn(async () => {}),
       invalidateFrameCache: vi.fn(),
       setDomVideoElementProvider: vi.fn(),
       getScrubbingCache: () => null,
@@ -2069,6 +2071,73 @@ describe('VideoPreview sync behavior', () => {
 
     const providerCalls = renderer.setDomVideoElementProvider.mock.calls;
     expect(providerCalls.at(-1)?.[0]).toBeUndefined();
+  });
+
+  it('warms a wider decoded frame strip for variable-speed backward transition scrubs', async () => {
+    seedAlignedTransitionProject(0);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+        sourceDuration: 180,
+        sourceStart: 0,
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 60,
+        durationInFrames: 60,
+        src: 'blob:right',
+        sourceDuration: 180,
+        sourceStart: 30,
+        speed: 1.5,
+      } as TimelineItem,
+    ]);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    renderer.prewarmFrames.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(84);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(84);
+    });
+
+    renderer.prewarmFrames.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(68);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(68);
+      expect(renderer.prewarmFrames).toHaveBeenCalled();
+    });
+
+    const warmedFrames = renderer.prewarmFrames.mock.calls.flatMap(([frames]) => frames as number[]);
+    expect(warmedFrames).toContain(68);
+    expect(warmedFrames.some((frame) => frame < 68)).toBe(true);
   });
 
   it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {
