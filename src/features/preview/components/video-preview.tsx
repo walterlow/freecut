@@ -282,6 +282,8 @@ export const VideoPreview = memo(function VideoPreview({
   const transitionExitElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
   const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
+  const retainedTransitionExitWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
+  const retainedTransitionExitBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const transitionPrewarmPromiseRef = useRef<Promise<void> | null>(null);
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
@@ -2140,7 +2142,12 @@ export const VideoPreview = memo(function VideoPreview({
     return shouldForceContinuousPreviewOverlay(fastScrubPreviewItems, transitions.length, frame);
   }, [fastScrubPreviewItems, getTransitionWindowForFrame, transitions.length]);
 
-  const clearTransitionPlaybackSession = useCallback(() => {
+  const clearRetainedTransitionExitBuffer = useCallback(() => {
+    retainedTransitionExitWindowRef.current = null;
+    retainedTransitionExitBufferedFramesRef.current.clear();
+  }, []);
+
+  const clearTransitionPlaybackSession = useCallback((options?: { retainHotExitFrames?: boolean }) => {
     const activeTrace = transitionSessionTraceRef.current;
     if (activeTrace) {
       const finishedAtMs = performance.now();
@@ -2247,9 +2254,24 @@ export const VideoPreview = memo(function VideoPreview({
     transitionExitElementsRef.current = new Map(transitionSessionPinnedElementsRef.current);
     transitionSessionPinnedElementsRef.current.clear();
     transitionSessionStallCountRef.current.clear();
+    const shouldRetainHotExitFrames = (
+      options?.retainHotExitFrames !== false
+      && tw !== null
+      && isVariableSpeedTransitionWindow(tw)
+      && transitionSessionBufferedFramesRef.current.size > 0
+    );
+    if (shouldRetainHotExitFrames) {
+      retainedTransitionExitWindowRef.current = tw;
+      retainedTransitionExitBufferedFramesRef.current = new Map(
+        [...transitionSessionBufferedFramesRef.current.entries()]
+          .filter(([frame]) => frame >= tw.startFrame && frame < tw.endFrame),
+      );
+    } else {
+      clearRetainedTransitionExitBuffer();
+    }
     transitionSessionBufferedFramesRef.current.clear();
     transitionPrewarmPromiseRef.current = null;
-  }, [fps, isVariableSpeedTransitionWindow, pushTransitionTrace]);
+  }, [clearRetainedTransitionExitBuffer, fps, isVariableSpeedTransitionWindow, pushTransitionTrace]);
 
   const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
     if (!window) {
@@ -2368,8 +2390,59 @@ export const VideoPreview = memo(function VideoPreview({
     }
     transitionSessionPinnedElementsRef.current = pinnedElements;
     transitionSessionBufferedFramesRef.current.clear();
+    const retainedWindow = retainedTransitionExitWindowRef.current;
+    if (
+      retainedWindow
+      && retainedWindow.transition.id === window.transition.id
+      && retainedWindow.startFrame === window.startFrame
+    ) {
+      transitionSessionBufferedFramesRef.current = new Map(retainedTransitionExitBufferedFramesRef.current);
+      clearRetainedTransitionExitBuffer();
+    } else if (retainedWindow) {
+      clearRetainedTransitionExitBuffer();
+    }
     return window;
-  }, [clearTransitionPlaybackSession, pushTransitionTrace, transitionWindowUsesDomProvider]);
+  }, [
+    clearRetainedTransitionExitBuffer,
+    clearTransitionPlaybackSession,
+    pushTransitionTrace,
+    transitionWindowUsesDomProvider,
+  ]);
+
+  const restoreRetainedTransitionExitBufferForFrame = useCallback((frame: number) => {
+    const retainedWindow = retainedTransitionExitWindowRef.current;
+    if (
+      !retainedWindow
+      || frame < retainedWindow.startFrame
+      || frame >= retainedWindow.endFrame
+      || !retainedTransitionExitBufferedFramesRef.current.has(frame)
+    ) {
+      return false;
+    }
+
+    const activeWindow = getActiveTransitionWindowForFrame(frame);
+    if (
+      !activeWindow
+      || activeWindow.transition.id !== retainedWindow.transition.id
+      || activeWindow.startFrame !== retainedWindow.startFrame
+    ) {
+      return false;
+    }
+
+    pinTransitionPlaybackSession(activeWindow);
+    return transitionSessionBufferedFramesRef.current.has(frame);
+  }, [getActiveTransitionWindowForFrame, pinTransitionPlaybackSession]);
+
+  const getPreparedTransitionBufferedFrame = useCallback((frame: number) => {
+    const liveBuffer = transitionSessionBufferedFramesRef.current.get(frame);
+    if (liveBuffer) {
+      return liveBuffer;
+    }
+    if (restoreRetainedTransitionExitBufferForFrame(frame)) {
+      return transitionSessionBufferedFramesRef.current.get(frame) ?? null;
+    }
+    return retainedTransitionExitBufferedFramesRef.current.get(frame) ?? null;
+  }, [restoreRetainedTransitionExitBufferForFrame]);
 
   const getPinnedTransitionElementForItem = useCallback((itemId: string) => {
     const sessionWindow = transitionSessionWindowRef.current;
@@ -2532,7 +2605,8 @@ export const VideoPreview = memo(function VideoPreview({
       clearTimeout(transitionPrepareTimeoutRef.current);
       transitionPrepareTimeoutRef.current = null;
     }
-    clearTransitionPlaybackSession();
+    clearTransitionPlaybackSession({ retainHotExitFrames: false });
+    clearRetainedTransitionExitBuffer();
     captureCanvasSourceInFlightRef.current = null;
     previewPerfRef.current.fastScrubPrewarmedSources = 0;
     bypassPreviewSeekRef.current = false;
@@ -2557,7 +2631,7 @@ export const VideoPreview = memo(function VideoPreview({
     bgTransitionRendererStructureKeyRef.current = null;
     bgTransitionInitPromiseRef.current = null;
     bgTransitionRenderInFlightRef.current = false;
-  }, [clearPendingFastScrubHandoff, clearTransitionPlaybackSession]);
+  }, [clearPendingFastScrubHandoff, clearRetainedTransitionExitBuffer, clearTransitionPlaybackSession]);
 
   // Background transition renderer — independent instance for pre-rendering
   // transition frames without conflicting with the main rAF pump renderer.
@@ -2964,6 +3038,14 @@ export const VideoPreview = memo(function VideoPreview({
       transitionSessionBufferedFramesRef.current.delete(frame);
       removedBufferedFrame = true;
     }
+    for (const frame of [...retainedTransitionExitBufferedFramesRef.current.keys()]) {
+      if (!isFrameInRanges(frame, visualInvalidationRanges)) continue;
+      retainedTransitionExitBufferedFramesRef.current.delete(frame);
+      removedBufferedFrame = true;
+    }
+    if (retainedTransitionExitBufferedFramesRef.current.size === 0) {
+      retainedTransitionExitWindowRef.current = null;
+    }
     if (removedBufferedFrame) {
       lastPausedPrearmTargetRef.current = null;
     }
@@ -3229,11 +3311,12 @@ export const VideoPreview = memo(function VideoPreview({
 
     const hasPreparedPlaybackTransitionFrame = (frame: number) => (
       transitionSessionBufferedFramesRef.current.has(frame)
+      || retainedTransitionExitBufferedFramesRef.current.has(frame)
       || scrubOffscreenRenderedFrameRef.current === frame
     );
 
     const tryShowPreparedPlaybackTransitionOverlay = (frame: number) => {
-      const bufferedFrame = transitionSessionBufferedFramesRef.current.get(frame);
+      const bufferedFrame = getPreparedTransitionBufferedFrame(frame);
       if (bufferedFrame) {
         const trace = transitionSessionTraceRef.current;
         if (trace && trace.enteredAtMs === null) {
@@ -3242,7 +3325,8 @@ export const VideoPreview = memo(function VideoPreview({
             opId: trace.opId,
             frame,
             via: 'buffer',
-            bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+            bufferedFrames: transitionSessionBufferedFramesRef.current.size
+              || retainedTransitionExitBufferedFramesRef.current.size,
           });
         }
         drawSourceToDisplay(bufferedFrame, frame);
@@ -3259,7 +3343,8 @@ export const VideoPreview = memo(function VideoPreview({
           opId: trace.opId,
           frame,
           via: 'offscreen',
-          bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+          bufferedFrames: transitionSessionBufferedFramesRef.current.size
+            || retainedTransitionExitBufferedFramesRef.current.size,
         });
       }
       drawToDisplay(frame);
@@ -3853,7 +3938,7 @@ export const VideoPreview = memo(function VideoPreview({
         // If so, present it immediately (0ms) instead of going through the
         // async pumpRenderLoop (which would take 180-240ms for the first
         // transition frame due to mediabunny decode).
-        const buffered = transitionSessionBufferedFramesRef.current.get(currentFrame);
+        const buffered = getPreparedTransitionBufferedFrame(currentFrame);
         if (buffered) {
           drawSourceToDisplay(buffered, currentFrame);
           scrubOffscreenRenderedFrameRef.current = currentFrame;
@@ -3862,7 +3947,7 @@ export const VideoPreview = memo(function VideoPreview({
           // GPU + decode pipeline is already warm when the buffer runs out.
           // Without this, the first post-cache frame stalls 100-200ms.
           const nextFrame = currentFrame + 1;
-          if (!transitionSessionBufferedFramesRef.current.has(nextFrame)
+          if (!getPreparedTransitionBufferedFrame(nextFrame)
             && !scrubRenderInFlightRef.current) {
             scrubRequestedFrameRef.current = nextFrame;
             void pumpRenderLoop();
