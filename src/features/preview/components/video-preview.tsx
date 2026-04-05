@@ -49,7 +49,7 @@ import {
 import { getDirectionalPrewarmOffsets } from '../utils/preview-renderer-prewarm';
 import { usePreviewDisplayedFrameController } from '../hooks/use-preview-displayed-frame-controller';
 import { usePreviewSourceWarmController } from '../hooks/use-preview-source-warm-controller';
-import { resolvePlaybackTransitionOverlayState } from '../utils/playback-transition-overlay';
+import { resolvePlaybackTransitionState } from '../utils/playback-transition-state';
 import { getPreloadWindowRange } from '../utils/preload-window';
 import {
   getPreviewRuntimeSnapshot,
@@ -116,7 +116,6 @@ import {
   PRELOAD_BURST_MAX_IDS_PER_TICK,
   PRELOAD_BURST_PASSES,
   PREVIEW_RENDERER_ENABLED,
-  PREVIEW_RENDERER_PRELOAD_BUDGET_MS,
   PREVIEW_RENDERER_BOUNDARY_PREWARM_WINDOW_SECONDS,
   PREVIEW_RENDERER_MAX_PREWARM_FRAMES,
   PREVIEW_RENDERER_MAX_PREWARM_SOURCES,
@@ -163,6 +162,74 @@ const logger = createLogger('VideoPreview');
 
 type CompositionRenderer = Awaited<ReturnType<typeof createCompositionRenderer>>;
 type PreviewRenderCanvas = OffscreenCanvas | HTMLCanvasElement;
+type PreviewRendererInstance = {
+  renderer: CompositionRenderer;
+  renderCanvas: PreviewRenderCanvas;
+  renderCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  hardKey: string;
+  sceneKey: string;
+  renderSize: { width: number; height: number };
+  preloadPromise: Promise<void> | null;
+};
+const PREVIEW_RENDERER_RESIZE_COMMIT_DELAY_MS = 80;
+
+function toTrackStateFingerprint(tracks: CompositionInputProps['tracks']): string {
+  const parts: string[] = [];
+  for (const track of tracks) {
+    parts.push(
+      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}:${track.volume ?? 0}`,
+    );
+  }
+  return parts.join('|');
+}
+
+function toTrackContentFingerprint(tracks: CompositionInputProps['tracks']): string {
+  const parts: string[] = [];
+  for (const track of tracks) {
+    parts.push(`t:${track.id}`);
+    for (const item of track.items) {
+      const src = 'src' in item ? (item.src ?? '') : '';
+      parts.push(
+        `i:${track.id}:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}`,
+      );
+    }
+  }
+  return parts.join('|');
+}
+
+function resolvePreviewSurfaceSize(
+  projectWidth: number,
+  projectHeight: number,
+  zoom: number,
+  containerSize: { width: number; height: number },
+): { width: number; height: number } {
+  const aspectRatio = projectWidth / projectHeight;
+
+  if (zoom === -1) {
+    if (containerSize.width > 0 && containerSize.height > 0) {
+      const containerAspectRatio = containerSize.width / containerSize.height;
+
+      let width: number;
+      let height: number;
+
+      if (containerAspectRatio > aspectRatio) {
+        height = containerSize.height;
+        width = height * aspectRatio;
+      } else {
+        width = containerSize.width;
+        height = width / aspectRatio;
+      }
+
+      return { width, height };
+    }
+    return { width: projectWidth, height: projectHeight };
+  }
+
+  return {
+    width: projectWidth * zoom,
+    height: projectHeight * zoom,
+  };
+}
 
 type TransitionPreviewSessionTrace = {
   opId: string;
@@ -184,7 +251,6 @@ type TransitionPreviewSessionTrace = {
   exitedAtMs: number | null;
   lastPrepareMs: number;
   lastPreparedFrame: number;
-  bufferedFramesPeak: number;
   entryMisses: number;
   lastEntryMissFrame: number | null;
 };
@@ -233,20 +299,19 @@ export const VideoPreview = memo(function VideoPreview({
   const scrubFrameDirtyRef = useRef(false);
   const scrubRendererRef = useRef<CompositionRenderer | null>(null);
   const scrubInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
+  const scrubRefreshPromiseRef = useRef<Promise<void> | null>(null);
+  const scrubRefreshKeyRef = useRef<string | null>(null);
   const scrubPreloadPromiseRef = useRef<Promise<void> | null>(null);
   const scrubOffscreenCanvasRef = useRef<OffscreenCanvas | HTMLCanvasElement | null>(null);
   const scrubOffscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null>(null);
   const scrubRendererStructureKeyRef = useRef<string | null>(null);
+  const scrubRendererSceneKeyRef = useRef<string | null>(null);
+  const scrubRendererRenderSizeRef = useRef<{ width: number; height: number } | null>(null);
+  const pendingPreviewRendererSyncRef = useRef(false);
   const scrubRenderInFlightRef = useRef(false);
   const scrubRenderGenerationRef = useRef(0);
   const scrubRequestedFrameRef = useRef<number | null>(null);
-  // Dedicated background renderer for transition pre-rendering.
-  // Separate from the main scrub renderer so pre-renders don't conflict
-  // with the rAF pump's render loop (different canvas, different decoders).
-  const bgTransitionRendererRef = useRef<CompositionRenderer | null>(null);
-  const bgTransitionInitPromiseRef = useRef<Promise<CompositionRenderer | null> | null>(null);
-  const bgTransitionRendererStructureKeyRef = useRef<string | null>(null);
-  const bgTransitionRenderInFlightRef = useRef(false);
+  const pendingScrubRendererSwapRef = useRef<PreviewRendererInstance | null>(null);
   const scrubPrewarmQueueRef = useRef<number[]>([]);
   const scrubPrewarmQueuedSetRef = useRef<Set<number>>(new Set());
   const scrubPrewarmedFramesRef = useRef<number[]>([]);
@@ -258,12 +323,7 @@ export const VideoPreview = memo(function VideoPreview({
   const playbackTransitionPreparePromiseRef = useRef<Promise<boolean> | null>(null);
   const playbackTransitionPreparingFrameRef = useRef<number | null>(null);
   const deferredPlaybackTransitionPrepareFrameRef = useRef<number | null>(null);
-  const transitionPrepareTimeoutRef = useRef<number | null>(null);
   const transitionSessionWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
-  const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
-  const retainedTransitionExitWindowRef = useRef<ResolvedTransitionWindow<TimelineItem> | null>(null);
-  const retainedTransitionExitBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
-  const transitionPrewarmPromiseRef = useRef<Promise<void> | null>(null);
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
@@ -360,6 +420,7 @@ export const VideoPreview = memo(function VideoPreview({
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const zoom = usePlaybackStore((s) => s.zoom);
   const useProxy = usePlaybackStore((s) => s.useProxy);
+  const userPreviewQuality = usePlaybackStore((s) => s.previewQuality);
   // Derive a stable count of ready proxies to avoid recomputing resolvedTracks
   // on every proxyStatus Map recreation (e.g. during progress updates)
   const proxyReadyCount = useMediaLibraryStore((s) => {
@@ -374,6 +435,14 @@ export const VideoPreview = memo(function VideoPreview({
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
+  const effectivePreviewQuality = useMemo(
+    () => getEffectivePreviewQuality(userPreviewQuality, adaptiveQualityCap),
+    [adaptiveQualityCap, userPreviewQuality],
+  );
+
+  const previewSize = useMemo(() => (
+    resolvePreviewSurfaceSize(project.width, project.height, zoom, containerSize)
+  ), [containerSize, project.height, project.width, zoom]);
 
   const trackTransportSeek = useCallback((targetFrame: number) => {
     if (!import.meta.env.DEV) return;
@@ -430,11 +499,6 @@ export const VideoPreview = memo(function VideoPreview({
   const showRendererSurface = useCallback(() => {
     if (readPresenterState().surface === 'renderer') return;
     dispatchPresenterAction({ kind: 'show_renderer' });
-  }, [dispatchPresenterAction, readPresenterState]);
-
-  const showTransitionOverlaySurface = useCallback(() => {
-    if (readPresenterState().surface === 'transition_overlay') return;
-    dispatchPresenterAction({ kind: 'show_transition_overlay' });
   }, [dispatchPresenterAction, readPresenterState]);
 
   const clearPreviewRendererFailure = useCallback(() => {
@@ -1260,7 +1324,6 @@ export const VideoPreview = memo(function VideoPreview({
         transitionSessionComplex: activeTransitionTrace?.complex ?? false,
         transitionSessionStartFrame: activeTransitionTrace?.startFrame ?? -1,
         transitionSessionEndFrame: activeTransitionTrace?.endFrame ?? -1,
-        transitionBufferedFrames: transitionSessionBufferedFramesRef.current.size,
         transitionPreparedFrame: activeTransitionTrace?.lastPreparedFrame ?? -1,
         transitionLastPrepareMs: activeTransitionTrace?.lastPrepareMs ?? transitionTelemetry.lastPrepareMs,
         transitionLastReadyLeadMs: activeTransitionTrace && activeTransitionTrace.enteredAtMs !== null && activeTransitionTrace.firstPreparedAtMs !== null
@@ -1374,13 +1437,36 @@ export const VideoPreview = memo(function VideoPreview({
     return { width: w, height: h };
   }, [project.width, project.height]);
 
-  // Keep preview renderer at project resolution until the renderer
-  // separates logical composition space from physical canvas size.
-  const renderSize = useMemo(() => {
+  // Preview now renders in project-space coordinates into a smaller physical
+  // surface sized for the visible preview box and preview-quality cap.
+  const desiredRenderSize = useMemo(() => {
     const projectWidth = Math.max(1, Math.round(project.width));
     const projectHeight = Math.max(1, Math.round(project.height));
-    return { width: Math.max(2, projectWidth), height: Math.max(2, projectHeight) };
-  }, [project.width, project.height]);
+    const devicePixelRatio = typeof window !== 'undefined'
+      ? Math.max(1, window.devicePixelRatio || 1)
+      : 1;
+    const targetWidth = Math.max(
+      2,
+      Math.round(previewSize.width * devicePixelRatio * effectivePreviewQuality),
+    );
+    const targetHeight = Math.max(
+      2,
+      Math.round(previewSize.height * devicePixelRatio * effectivePreviewQuality),
+    );
+    return {
+      width: Math.min(projectWidth, targetWidth),
+      height: Math.min(projectHeight, targetHeight),
+    };
+  }, [
+    effectivePreviewQuality,
+    previewSize.height,
+    previewSize.width,
+    project.height,
+    project.width,
+  ]);
+  const [committedRenderSize, setCommittedRenderSize] = useState(desiredRenderSize);
+  const [activeRenderSize, setActiveRenderSize] = useState(desiredRenderSize);
+  const resizeCommitTimeoutRef = useRef<number | null>(null);
 
   // Provide live gizmo preview transforms to preview renderer so dragged
   // items move with LUT preview instead of freezing at committed transforms.
@@ -1479,6 +1565,74 @@ export const VideoPreview = memo(function VideoPreview({
     previewRendererScaledKeyframes,
   ]);
 
+  const previewRendererSceneInput = useMemo(() => ({
+    tracks: previewRendererScaledTracks,
+    transitions,
+    backgroundColor: project.backgroundColor,
+    keyframes: previewRendererScaledKeyframes,
+    width: project.width,
+    height: project.height,
+  }), [
+    previewRendererScaledTracks,
+    transitions,
+    project.backgroundColor,
+    previewRendererScaledKeyframes,
+    project.width,
+    project.height,
+  ]);
+
+  useEffect(() => {
+    const sizesMatch = (
+      committedRenderSize.width === desiredRenderSize.width
+      && committedRenderSize.height === desiredRenderSize.height
+    );
+    if (sizesMatch) {
+      if (resizeCommitTimeoutRef.current !== null) {
+        clearTimeout(resizeCommitTimeoutRef.current);
+        resizeCommitTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const hasLiveRenderer = (
+      PREVIEW_RENDERER_ENABLED
+      && (
+        scrubRendererRef.current !== null
+        || scrubInitPromiseRef.current !== null
+        || scrubRefreshPromiseRef.current !== null
+      )
+    );
+
+    if (!hasLiveRenderer) {
+      setCommittedRenderSize(desiredRenderSize);
+      return;
+    }
+
+    if (resizeCommitTimeoutRef.current !== null) {
+      clearTimeout(resizeCommitTimeoutRef.current);
+    }
+
+    resizeCommitTimeoutRef.current = window.setTimeout(() => {
+      resizeCommitTimeoutRef.current = null;
+      setCommittedRenderSize((current) => {
+        if (
+          current.width === desiredRenderSize.width
+          && current.height === desiredRenderSize.height
+        ) {
+          return current;
+        }
+        return desiredRenderSize;
+      });
+    }, PREVIEW_RENDERER_RESIZE_COMMIT_DELAY_MS);
+
+    return () => {
+      if (resizeCommitTimeoutRef.current !== null) {
+        clearTimeout(resizeCommitTimeoutRef.current);
+        resizeCommitTimeoutRef.current = null;
+      }
+    };
+  }, [committedRenderSize.height, committedRenderSize.width, desiredRenderSize]);
+
   const playbackTransitionFingerprint = useMemo(() => (
     transitions
       .map((transition) => (
@@ -1500,23 +1654,43 @@ export const VideoPreview = memo(function VideoPreview({
       .join('|')
   ), [transitions]);
 
+  const previewRendererTrackStateFingerprint = useMemo(
+    () => toTrackStateFingerprint(previewRendererScaledTracks),
+    [previewRendererScaledTracks],
+  );
+
+  const previewRendererContentFingerprint = useMemo(
+    () => toTrackContentFingerprint(previewRendererScaledTracks),
+    [previewRendererScaledTracks],
+  );
+
+  const previewRendererSceneKey = useMemo(() => (
+    [
+      project.backgroundColor ?? '',
+      previewRendererTrackStateFingerprint,
+      playbackTransitionFingerprint,
+    ].join('::')
+  ), [
+    playbackTransitionFingerprint,
+    project.backgroundColor,
+    previewRendererTrackStateFingerprint,
+  ]);
+
   const previewRendererStructureKey = useMemo(() => (
     [
       fps,
       project.width,
       project.height,
-      project.backgroundColor ?? '',
-      previewRendererTracksFingerprint,
-      playbackTransitionFingerprint,
+      previewRendererContentFingerprint,
     ].join('::')
   ), [
-    previewRendererTracksFingerprint,
     fps,
-    playbackTransitionFingerprint,
-    project.backgroundColor,
+    previewRendererContentFingerprint,
     project.height,
     project.width,
   ]);
+  const desiredPreviewRendererStructureKeyRef = useRef(previewRendererStructureKey);
+  desiredPreviewRendererStructureKeyRef.current = previewRendererStructureKey;
 
   const playbackTransitionWindows = useMemo(() => {
     const clipMap = new Map<string, TimelineItem>();
@@ -1548,7 +1722,6 @@ export const VideoPreview = memo(function VideoPreview({
     () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
     [fps, playbackTransitionLookaheadFrames],
   );
-  const playbackTransitionPrerenderRunwayFrames = 8;
   const getTransitionWindowByStartFrame = useCallback((startFrame: number | null) => {
     if (startFrame === null) return null;
     return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
@@ -1792,12 +1965,7 @@ export const VideoPreview = memo(function VideoPreview({
     });
   }, [primePlaybackStartRunway]);
 
-  const clearRetainedTransitionExitBuffer = useCallback(() => {
-    retainedTransitionExitWindowRef.current = null;
-    retainedTransitionExitBufferedFramesRef.current.clear();
-  }, []);
-
-  const clearTransitionPlaybackSession = useCallback((options?: { retainHotExitFrames?: boolean }) => {
+  const clearTransitionPlaybackSession = useCallback(() => {
     const activeTrace = transitionSessionTraceRef.current;
     if (activeTrace) {
       const finishedAtMs = performance.now();
@@ -1823,7 +1991,6 @@ export const VideoPreview = memo(function VideoPreview({
         rightHasEffects: activeTrace.rightHasEffects,
         prepareMs: activeTrace.lastPrepareMs,
         preparedFrame: activeTrace.lastPreparedFrame,
-        bufferedFramesPeak: activeTrace.bufferedFramesPeak,
         entryMisses: activeTrace.entryMisses,
         readyLeadMs: transitionTelemetryRef.current.lastReadyLeadMs,
         sessionDurationMs: transitionTelemetryRef.current.lastSessionDurationMs,
@@ -1836,7 +2003,6 @@ export const VideoPreview = memo(function VideoPreview({
         endFrame: activeTrace.endFrame,
         prepareMs: activeTrace.lastPrepareMs,
         preparedFrame: activeTrace.lastPreparedFrame,
-        bufferedFramesPeak: activeTrace.bufferedFramesPeak,
         entryMisses: activeTrace.entryMisses,
         readyLeadMs: transitionTelemetryRef.current.lastReadyLeadMs,
         sessionDurationMs: transitionTelemetryRef.current.lastSessionDurationMs,
@@ -1844,26 +2010,8 @@ export const VideoPreview = memo(function VideoPreview({
       transitionSessionTraceRef.current = null;
     }
 
-    const tw = transitionSessionWindowRef.current;
     transitionSessionWindowRef.current = null;
-    const shouldRetainHotExitFrames = (
-      options?.retainHotExitFrames !== false
-      && tw !== null
-      && isVariableSpeedTransitionWindow(tw)
-      && transitionSessionBufferedFramesRef.current.size > 0
-    );
-    if (shouldRetainHotExitFrames) {
-      retainedTransitionExitWindowRef.current = tw;
-      retainedTransitionExitBufferedFramesRef.current = new Map(
-        [...transitionSessionBufferedFramesRef.current.entries()]
-          .filter(([frame]) => frame >= tw.startFrame && frame < tw.endFrame),
-      );
-    } else {
-      clearRetainedTransitionExitBuffer();
-    }
-    transitionSessionBufferedFramesRef.current.clear();
-    transitionPrewarmPromiseRef.current = null;
-  }, [clearRetainedTransitionExitBuffer, isVariableSpeedTransitionWindow, pushTransitionTrace]);
+  }, [pushTransitionTrace]);
 
   const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
     if (!window) {
@@ -1908,7 +2056,6 @@ export const VideoPreview = memo(function VideoPreview({
       exitedAtMs: null,
       lastPrepareMs: 0,
       lastPreparedFrame: -1,
-      bufferedFramesPeak: 0,
       entryMisses: 0,
       lastEntryMissFrame: null,
     };
@@ -1925,59 +2072,11 @@ export const VideoPreview = memo(function VideoPreview({
       leftHasEffects,
       rightHasEffects,
     });
-    transitionSessionBufferedFramesRef.current.clear();
-    const retainedWindow = retainedTransitionExitWindowRef.current;
-    if (
-      retainedWindow
-      && retainedWindow.transition.id === window.transition.id
-      && retainedWindow.startFrame === window.startFrame
-    ) {
-      transitionSessionBufferedFramesRef.current = new Map(retainedTransitionExitBufferedFramesRef.current);
-      clearRetainedTransitionExitBuffer();
-    } else if (retainedWindow) {
-      clearRetainedTransitionExitBuffer();
-    }
     return window;
   }, [
-    clearRetainedTransitionExitBuffer,
     clearTransitionPlaybackSession,
     pushTransitionTrace,
   ]);
-
-  const restoreRetainedTransitionExitBufferForFrame = useCallback((frame: number) => {
-    const retainedWindow = retainedTransitionExitWindowRef.current;
-    if (
-      !retainedWindow
-      || frame < retainedWindow.startFrame
-      || frame >= retainedWindow.endFrame
-      || !retainedTransitionExitBufferedFramesRef.current.has(frame)
-    ) {
-      return false;
-    }
-
-    const activeWindow = getActiveTransitionWindowForFrame(frame);
-    if (
-      !activeWindow
-      || activeWindow.transition.id !== retainedWindow.transition.id
-      || activeWindow.startFrame !== retainedWindow.startFrame
-    ) {
-      return false;
-    }
-
-    pinTransitionPlaybackSession(activeWindow);
-    return transitionSessionBufferedFramesRef.current.has(frame);
-  }, [getActiveTransitionWindowForFrame, pinTransitionPlaybackSession]);
-
-  const getPreparedTransitionBufferedFrame = useCallback((frame: number) => {
-    const liveBuffer = transitionSessionBufferedFramesRef.current.get(frame);
-    if (liveBuffer) {
-      return liveBuffer;
-    }
-    if (restoreRetainedTransitionExitBufferForFrame(frame)) {
-      return transitionSessionBufferedFramesRef.current.get(frame) ?? null;
-    }
-    return retainedTransitionExitBufferedFramesRef.current.get(frame) ?? null;
-  }, [restoreRetainedTransitionExitBufferForFrame]);
   const getUpcomingTransitionStartFrame = useCallback((
     frame: number,
     maxLookaheadFrames: number,
@@ -2019,16 +2118,247 @@ export const VideoPreview = memo(function VideoPreview({
     );
   }, [getActiveTransitionWindowForFrame]);
 
-  // Keep the on-screen scrub canvas at project resolution so quality toggles
-  // only change offscreen sampling, not display buffer geometry.
+  // Keep the visible renderer surfaces pinned to the size of the ACTIVE
+  // renderer. During live resize/track-visibility changes we keep presenting
+  // with the warm renderer until the replacement is ready, then flip both the
+  // offscreen renderer and the visible GPU/2D canvases together.
   useLayoutEffect(() => {
     const canvases = [scrubCanvasRef.current, scrubGpuCanvasRef.current];
     for (const canvas of canvases) {
       if (!canvas) continue;
-      if (canvas.width !== transportRenderSize.width) canvas.width = transportRenderSize.width;
-      if (canvas.height !== transportRenderSize.height) canvas.height = transportRenderSize.height;
+      if (canvas.width !== activeRenderSize.width) canvas.width = activeRenderSize.width;
+      if (canvas.height !== activeRenderSize.height) canvas.height = activeRenderSize.height;
     }
-  }, [transportRenderSize.width, transportRenderSize.height]);
+  }, [activeRenderSize.height, activeRenderSize.width]);
+
+  const resetPreviewRendererFrameState = useCallback((options?: { resetWarmSources?: boolean }) => {
+    scrubOffscreenRenderedFrameRef.current = null;
+    scrubRequestedFrameRef.current = null;
+    scrubPrewarmQueueRef.current = [];
+    scrubPrewarmQueuedSetRef.current.clear();
+    scrubPrewarmedFramesRef.current = [];
+    scrubPrewarmedFrameSetRef.current.clear();
+    playbackTransitionPreparePromiseRef.current = null;
+    playbackTransitionPreparingFrameRef.current = null;
+    deferredPlaybackTransitionPrepareFrameRef.current = null;
+    pendingPreviewRendererSyncRef.current = false;
+    clearTransitionPlaybackSession();
+    captureCanvasSourceInFlightRef.current = null;
+
+    if (options?.resetWarmSources) {
+      scrubPrewarmedSourcesRef.current.clear();
+      scrubPrewarmedSourceOrderRef.current = [];
+      scrubPrewarmedSourceTouchFrameRef.current.clear();
+      previewPerfRef.current.previewRendererPrewarmedSources = 0;
+    }
+  }, [clearTransitionPlaybackSession]);
+
+  const syncPreviewRendererState = useCallback((renderer: CompositionRenderer): boolean => {
+    let changed = false;
+    const currentSize = scrubRendererRenderSizeRef.current;
+    if (
+      !currentSize
+      || currentSize.width !== committedRenderSize.width
+      || currentSize.height !== committedRenderSize.height
+    ) {
+      renderer.resize(
+        committedRenderSize.width,
+        committedRenderSize.height,
+        scrubGpuCanvasRef.current ?? undefined,
+      );
+      scrubRendererRenderSizeRef.current = {
+        width: committedRenderSize.width,
+        height: committedRenderSize.height,
+      };
+      setActiveRenderSize({
+        width: committedRenderSize.width,
+        height: committedRenderSize.height,
+      });
+      changed = true;
+    }
+
+    if (scrubRendererSceneKeyRef.current !== previewRendererSceneKey) {
+      renderer.updateScene(previewRendererSceneInput);
+      scrubRendererSceneKeyRef.current = previewRendererSceneKey;
+      changed = true;
+    }
+
+    if (changed) {
+      resetPreviewRendererFrameState();
+    }
+
+    return changed;
+  }, [
+    previewRendererSceneInput,
+    previewRendererSceneKey,
+    committedRenderSize.height,
+    committedRenderSize.width,
+    resetPreviewRendererFrameState,
+  ]);
+
+  const syncPreviewRendererStateRef = useRef(syncPreviewRendererState);
+  syncPreviewRendererStateRef.current = syncPreviewRendererState;
+
+  const applyPendingScrubRendererSwap = useCallback(() => {
+    if (scrubRenderInFlightRef.current) {
+      return false;
+    }
+
+    const pending = pendingScrubRendererSwapRef.current;
+    if (!pending) {
+      return false;
+    }
+
+    pendingScrubRendererSwapRef.current = null;
+    const previousRenderer = scrubRendererRef.current;
+    scrubRendererRef.current = pending.renderer;
+    scrubOffscreenCanvasRef.current = pending.renderCanvas;
+    scrubOffscreenCtxRef.current = pending.renderCtx;
+    scrubRendererStructureKeyRef.current = pending.hardKey;
+    scrubRendererSceneKeyRef.current = pending.sceneKey;
+    scrubRendererRenderSizeRef.current = pending.renderSize;
+    scrubPreloadPromiseRef.current = pending.preloadPromise;
+    scrubRenderGenerationRef.current += 1;
+    scrubRenderInFlightRef.current = false;
+    resetPreviewRendererFrameState({ resetWarmSources: true });
+    setActiveRenderSize(pending.renderSize);
+    if (previousRenderer) {
+      try {
+        previousRenderer.dispose();
+      } catch (error) {
+        logger.warn('Failed to dispose replaced renderer:', error);
+      }
+    }
+    return true;
+  }, [resetPreviewRendererFrameState]);
+
+  const createPreviewRendererInstance = useCallback(async (
+    presentationCanvas?: HTMLCanvasElement,
+  ): Promise<PreviewRendererInstance | null> => {
+    const targetWidth = committedRenderSize.width;
+    const targetHeight = committedRenderSize.height;
+    const targetStructureKey = previewRendererStructureKey;
+    const renderCanvas: PreviewRenderCanvas = typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(targetWidth, targetHeight)
+      : document.createElement('canvas');
+    if (renderCanvas.width !== targetWidth) renderCanvas.width = targetWidth;
+    if (renderCanvas.height !== targetHeight) renderCanvas.height = targetHeight;
+    const renderCtx = renderCanvas.getContext('2d');
+    if (!renderCtx) return null;
+
+    const renderer = await createCompositionRenderer(previewRendererInputProps, renderCanvas, renderCtx, {
+      mode: 'preview',
+      presentationCanvas,
+      getPreviewTransformOverride,
+      getPreviewEffectsOverride,
+      getPreviewCornerPinOverride,
+      getPreviewPathVerticesOverride,
+      getLiveItemSnapshot,
+      getLiveKeyframes,
+    });
+
+    if ('warmGpuPipeline' in renderer) {
+      void renderer.warmGpuPipeline();
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const runtimeSnapshot = getPreviewRuntimeSnapshot({
+      isPlaying: playbackState.isPlaying,
+      previewFrame: playbackState.previewFrame,
+      currentFrame: playbackState.currentFrame,
+      isGizmoInteracting: isGizmoInteractingRef.current,
+    });
+    const preloadPriorityFrame = runtimeSnapshot.anchorFrame;
+    const preloadPromise = renderer.preload({
+      priorityFrame: preloadPriorityFrame,
+      priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
+    })
+      .catch((error) => {
+        logger.warn('Renderer preload failed:', error);
+      })
+      .finally(() => {
+        if (scrubPreloadPromiseRef.current === preloadPromise) {
+          scrubPreloadPromiseRef.current = null;
+        }
+      });
+
+    return {
+      renderer,
+      renderCanvas,
+      renderCtx,
+      hardKey: targetStructureKey,
+      sceneKey: previewRendererSceneKey,
+      renderSize: {
+        width: targetWidth,
+        height: targetHeight,
+      },
+      preloadPromise,
+    };
+  }, [
+    fps,
+    getLiveItemSnapshot,
+    getLiveKeyframes,
+    getPreviewCornerPinOverride,
+    getPreviewEffectsOverride,
+    getPreviewPathVerticesOverride,
+    getPreviewTransformOverride,
+    previewRendererInputProps,
+    previewRendererSceneKey,
+    previewRendererStructureKey,
+    committedRenderSize.height,
+    committedRenderSize.width,
+  ]);
+
+  const schedulePreviewRendererRefresh = useCallback(() => {
+    if (!PREVIEW_RENDERER_ENABLED || isResolving || !scrubRendererRef.current) return;
+    if (scrubRendererStructureKeyRef.current === previewRendererStructureKey) return;
+    if (
+      scrubRefreshPromiseRef.current
+      && scrubRefreshKeyRef.current === previewRendererStructureKey
+    ) {
+      return;
+    }
+
+    const requestedKey = previewRendererStructureKey;
+    scrubRefreshKeyRef.current = requestedKey;
+    scrubRefreshPromiseRef.current = (async () => {
+      try {
+        const nextInstance = await createPreviewRendererInstance(scrubGpuCanvasRef.current ?? undefined);
+        if (!nextInstance) return;
+        if (
+          !scrubMountedRef.current
+          || desiredPreviewRendererStructureKeyRef.current !== requestedKey
+        ) {
+          nextInstance.preloadPromise?.catch(() => {});
+          try {
+            nextInstance.renderer.dispose();
+          } catch {
+            // Ignore stale replacement cleanup failures.
+          }
+          return;
+        }
+
+        pendingScrubRendererSwapRef.current = nextInstance;
+        if (applyPendingScrubRendererSwap()) {
+          scrubRequestedFrameRef.current = getPreviewTargetFrame(usePlaybackStore.getState());
+          void resumeScrubLoopRef.current();
+        }
+      } catch (error) {
+        reportPreviewRendererFailure('init', error);
+      } finally {
+        if (scrubRefreshKeyRef.current === requestedKey) {
+          scrubRefreshPromiseRef.current = null;
+          scrubRefreshKeyRef.current = null;
+        }
+      }
+    })();
+  }, [
+    applyPendingScrubRendererSwap,
+    createPreviewRendererInstance,
+    isResolving,
+    previewRendererStructureKey,
+    reportPreviewRendererFailure,
+  ]);
 
   const disposePreviewRenderer = useCallback(() => {
     scrubInitPromiseRef.current = null;
@@ -2046,12 +2376,7 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionPreparePromiseRef.current = null;
     playbackTransitionPreparingFrameRef.current = null;
     deferredPlaybackTransitionPrepareFrameRef.current = null;
-    if (transitionPrepareTimeoutRef.current !== null) {
-      clearTimeout(transitionPrepareTimeoutRef.current);
-      transitionPrepareTimeoutRef.current = null;
-    }
-    clearTransitionPlaybackSession({ retainHotExitFrames: false });
-    clearRetainedTransitionExitBuffer();
+    clearTransitionPlaybackSession();
     captureCanvasSourceInFlightRef.current = null;
     previewPerfRef.current.previewRendererPrewarmedSources = 0;
 
@@ -2064,73 +2389,14 @@ export const VideoPreview = memo(function VideoPreview({
       scrubRendererRef.current = null;
     }
     scrubRendererStructureKeyRef.current = null;
+    scrubRendererSceneKeyRef.current = null;
+    scrubRendererRenderSizeRef.current = null;
+    pendingPreviewRendererSyncRef.current = false;
 
     scrubOffscreenCanvasRef.current = null;
     scrubOffscreenCtxRef.current = null;
 
-    if (bgTransitionRendererRef.current) {
-      try { bgTransitionRendererRef.current.dispose(); } catch { /* */ }
-      bgTransitionRendererRef.current = null;
-    }
-    bgTransitionRendererStructureKeyRef.current = null;
-    bgTransitionInitPromiseRef.current = null;
-    bgTransitionRenderInFlightRef.current = false;
-  }, [clearRetainedTransitionExitBuffer, clearTransitionPlaybackSession]);
-
-  // Background transition renderer — independent instance for pre-rendering
-  // transition frames without conflicting with the main rAF pump renderer.
-  const ensureBgTransitionRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
-    if (!PREVIEW_RENDERER_ENABLED || typeof OffscreenCanvas === 'undefined' || isResolving) return null;
-    if (
-      bgTransitionRendererRef.current
-      && bgTransitionRendererStructureKeyRef.current !== previewRendererStructureKey
-    ) {
-      disposePreviewRenderer();
-    }
-    if (bgTransitionRendererRef.current) return bgTransitionRendererRef.current;
-    if (bgTransitionInitPromiseRef.current) return bgTransitionInitPromiseRef.current;
-
-    bgTransitionInitPromiseRef.current = (async () => {
-      try {
-        const canvas = new OffscreenCanvas(renderSize.width, renderSize.height);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return null;
-        const renderer = await createCompositionRenderer(previewRendererInputProps, canvas, ctx, {
-          mode: 'preview',
-          getPreviewTransformOverride,
-          getPreviewEffectsOverride,
-          getPreviewCornerPinOverride,
-          getPreviewPathVerticesOverride,
-          getLiveItemSnapshot,
-          getLiveKeyframes,
-        });
-        if ('warmGpuPipeline' in renderer) {
-          void renderer.warmGpuPipeline();
-        }
-        bgTransitionRendererRef.current = renderer;
-        bgTransitionRendererStructureKeyRef.current = previewRendererStructureKey;
-        return renderer;
-      } catch {
-        return null;
-      } finally {
-        bgTransitionInitPromiseRef.current = null;
-      }
-    })();
-    return bgTransitionInitPromiseRef.current;
-  }, [
-    disposePreviewRenderer,
-    previewRendererInputProps,
-    previewRendererStructureKey,
-    getLiveItemSnapshot,
-    getLiveKeyframes,
-    getPreviewCornerPinOverride,
-    getPreviewEffectsOverride,
-    getPreviewPathVerticesOverride,
-    getPreviewTransformOverride,
-    isResolving,
-    renderSize.width,
-    renderSize.height,
-  ]);
+  }, [clearTransitionPlaybackSession]);
 
   const ensurePreviewRenderer = useCallback(async (): Promise<CompositionRenderer | null> => {
     if (!PREVIEW_RENDERER_ENABLED) return null;
@@ -2139,71 +2405,29 @@ export const VideoPreview = memo(function VideoPreview({
       scrubRendererRef.current
       && scrubRendererStructureKeyRef.current !== previewRendererStructureKey
     ) {
-      disposePreviewRenderer();
+      schedulePreviewRendererRefresh();
+      return scrubRendererRef.current;
     }
-    if (scrubRendererRef.current) return scrubRendererRef.current;
+    if (scrubRendererRef.current) {
+      syncPreviewRendererState(scrubRendererRef.current);
+      return scrubRendererRef.current;
+    }
     if (scrubInitPromiseRef.current) return scrubInitPromiseRef.current;
 
     scrubInitPromiseRef.current = (async () => {
       try {
-        const renderCanvas: PreviewRenderCanvas = typeof OffscreenCanvas !== 'undefined'
-          ? new OffscreenCanvas(renderSize.width, renderSize.height)
-          : document.createElement('canvas');
-        if (renderCanvas.width !== renderSize.width) renderCanvas.width = renderSize.width;
-        if (renderCanvas.height !== renderSize.height) renderCanvas.height = renderSize.height;
-        const renderCtx = renderCanvas.getContext('2d');
-        if (!renderCtx) return null;
-
-        const renderer = await createCompositionRenderer(previewRendererInputProps, renderCanvas, renderCtx, {
-          mode: 'preview',
-          presentationCanvas: scrubGpuCanvasRef.current ?? undefined,
-          getPreviewTransformOverride,
-          getPreviewEffectsOverride,
-          getPreviewCornerPinOverride,
-          getPreviewPathVerticesOverride,
-          getLiveItemSnapshot,
-          getLiveKeyframes,
-        });
-        const playbackState = usePlaybackStore.getState();
-        const runtimeSnapshot = getPreviewRuntimeSnapshot({
-          isPlaying: playbackState.isPlaying,
-          previewFrame: playbackState.previewFrame,
-          currentFrame: playbackState.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef.current,
-        });
-        const preloadPriorityFrame = runtimeSnapshot.anchorFrame;
-        const preloadPromise = renderer.preload({
-          priorityFrame: preloadPriorityFrame,
-          priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
-        })
-          .catch((error) => {
-            logger.warn('Renderer preload failed:', error);
-          })
-          .finally(() => {
-            if (scrubPreloadPromiseRef.current === preloadPromise) {
-              scrubPreloadPromiseRef.current = null;
-            }
-          });
-        scrubPreloadPromiseRef.current = preloadPromise;
-
-        await Promise.race([
-          preloadPromise,
-          new Promise<void>((resolve) => {
-            setTimeout(resolve, PREVIEW_RENDERER_PRELOAD_BUDGET_MS);
-          }),
-        ]);
-
-        scrubOffscreenCanvasRef.current = renderCanvas;
-        scrubOffscreenCtxRef.current = renderCtx;
+        const nextInstance = await createPreviewRendererInstance(scrubGpuCanvasRef.current ?? undefined);
+        if (!nextInstance) return null;
+        scrubOffscreenCanvasRef.current = nextInstance.renderCanvas;
+        scrubOffscreenCtxRef.current = nextInstance.renderCtx;
         scrubOffscreenRenderedFrameRef.current = null;
-        scrubRendererRef.current = renderer;
-        scrubRendererStructureKeyRef.current = previewRendererStructureKey;
-        // Eagerly warm the GPU pipeline in the background so the first
-        // transition frame doesn't pay the ~100-150ms WebGPU init cost.
-        if ('warmGpuPipeline' in renderer) {
-          void renderer.warmGpuPipeline();
-        }
-        return renderer;
+        scrubRendererRef.current = nextInstance.renderer;
+        scrubRendererStructureKeyRef.current = nextInstance.hardKey;
+        scrubRendererSceneKeyRef.current = nextInstance.sceneKey;
+        scrubRendererRenderSizeRef.current = nextInstance.renderSize;
+        scrubPreloadPromiseRef.current = nextInstance.preloadPromise;
+        setActiveRenderSize(nextInstance.renderSize);
+        return nextInstance.renderer;
       } catch (error) {
         reportPreviewRendererFailure('init', error);
         scrubRendererRef.current = null;
@@ -2218,20 +2442,12 @@ export const VideoPreview = memo(function VideoPreview({
 
     return scrubInitPromiseRef.current;
   }, [
-    disposePreviewRenderer,
-    previewRendererInputProps,
-    previewRendererStructureKey,
-    fps,
-    getLiveItemSnapshot,
-    getLiveKeyframes,
-    getPreviewTransformOverride,
-    getPreviewEffectsOverride,
-    getPreviewCornerPinOverride,
-    getPreviewPathVerticesOverride,
+    createPreviewRendererInstance,
     isResolving,
     reportPreviewRendererFailure,
-    renderSize.height,
-    renderSize.width,
+    previewRendererStructureKey,
+    schedulePreviewRendererRefresh,
+    syncPreviewRendererState,
   ]);
 
   const renderOffscreenFrame = useCallback(async (targetFrame: number): Promise<PreviewRenderCanvas | null> => {
@@ -2253,45 +2469,20 @@ export const VideoPreview = memo(function VideoPreview({
     return nextRenderCanvas;
   }, [clearPreviewRendererFailure, ensurePreviewRenderer]);
 
-  const cacheTransitionSessionFrame = useCallback((frame: number) => {
-    const offscreen = scrubOffscreenCanvasRef.current;
-    if (!offscreen || !transitionSessionWindowRef.current) return;
-
-    const snapshot = new OffscreenCanvas(offscreen.width, offscreen.height);
-    const snapshotCtx = snapshot.getContext('2d');
-    if (!snapshotCtx) return;
-
-    snapshotCtx.drawImage(offscreen, 0, 0);
-    transitionSessionBufferedFramesRef.current.set(frame, snapshot);
-    const trace = transitionSessionTraceRef.current;
-    if (trace) {
-      trace.lastPreparedFrame = frame;
-      trace.bufferedFramesPeak = Math.max(
-        trace.bufferedFramesPeak,
-        transitionSessionBufferedFramesRef.current.size,
-      );
-      if (trace.firstPreparedAtMs === null) {
-        trace.firstPreparedAtMs = performance.now();
-        pushTransitionTrace('prepare_ready', {
-          opId: trace.opId,
-          preparedFrame: frame,
-          bufferedFrames: transitionSessionBufferedFramesRef.current.size,
-        });
-      }
-    }
-
-    const maxBufferedFrames = playbackTransitionPrerenderRunwayFrames + playbackTransitionCooldownFrames + 2;
-    while (transitionSessionBufferedFramesRef.current.size > maxBufferedFrames) {
-      const oldestFrame = transitionSessionBufferedFramesRef.current.keys().next().value;
-      if (oldestFrame === undefined) break;
-      transitionSessionBufferedFramesRef.current.delete(oldestFrame);
-    }
-  }, [playbackTransitionCooldownFrames, playbackTransitionPrerenderRunwayFrames, pushTransitionTrace]);
-
   const preparePlaybackTransitionFrame = useCallback(async (targetFrame: number): Promise<boolean> => {
     if (targetFrame < 0) return false;
-    if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
-      return true;
+    if (
+      playbackTransitionPreparePromiseRef.current
+      && playbackTransitionPreparingFrameRef.current !== null
+    ) {
+      if (playbackTransitionPreparingFrameRef.current === targetFrame) {
+        return playbackTransitionPreparePromiseRef.current;
+      }
+      const queuedFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+      if (queuedFrame === null || targetFrame > queuedFrame) {
+        deferredPlaybackTransitionPrepareFrameRef.current = targetFrame;
+      }
+      return playbackTransitionPreparePromiseRef.current;
     }
     if (
       playbackTransitionPreparingFrameRef.current === targetFrame
@@ -2299,22 +2490,16 @@ export const VideoPreview = memo(function VideoPreview({
     ) {
       return playbackTransitionPreparePromiseRef.current;
     }
-    if (scrubRenderInFlightRef.current) {
-      return false;
-    }
 
     playbackTransitionPreparingFrameRef.current = targetFrame;
-    // During playback with rAF pump active, don't hold scrubRenderInFlightRef
-    // while pre-rendering transition frames. Holding the lock blocks the rAF
-    // pump from calling pumpRenderLoop, causing 500-1200ms presentation gaps.
-    // Instead, use a separate flag so prepares and the pump can run concurrently.
-    const isPlaybackPrepare = usePlaybackStore.getState().isPlaying && rendererOwnsPresentation;
     const task = (async () => {
-      if (!isPlaybackPrepare) {
-        scrubRenderInFlightRef.current = true;
-      }
       try {
-        pinTransitionPlaybackSession(getTransitionWindowByStartFrame(targetFrame));
+        const transitionWindow = getTransitionWindowByStartFrame(targetFrame)
+          ?? getTransitionWindowForFrame(targetFrame);
+        if (!transitionWindow) {
+          return false;
+        }
+        pinTransitionPlaybackSession(transitionWindow);
         const prepareStartedAtMs = performance.now();
         const trace = transitionSessionTraceRef.current;
         if (trace) {
@@ -2328,45 +2513,62 @@ export const VideoPreview = memo(function VideoPreview({
         }
         const renderer = await ensurePreviewRenderer();
         if (!renderer || !scrubMountedRef.current) return false;
-
-        await renderer.renderFrame(targetFrame);
-        cacheTransitionSessionFrame(targetFrame);
-        for (let offset = 1; offset < playbackTransitionPrerenderRunwayFrames; offset += 1) {
-          const runwayFrame = targetFrame + offset;
-          if (rendererOwnsPresentation) {
-            await renderer.renderFrame(runwayFrame);
-            cacheTransitionSessionFrame(runwayFrame);
-          } else {
-            await renderer.prewarmFrame(runwayFrame);
-          }
+        const playbackState = usePlaybackStore.getState();
+        const warmDirection = playbackState.isPlaying ? 1 : scrubDirectionRef.current;
+        if ('prewarmItems' in renderer) {
+          await renderer.prewarmItems(
+            [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
+            targetFrame,
+          );
         }
+        await prewarmTransitionFrameStrip(
+          renderer,
+          transitionWindow,
+          targetFrame,
+          warmDirection,
+        );
+        preseekTransitionSources(
+          transitionWindow,
+          getTransitionWarmFrames(transitionWindow, targetFrame, warmDirection),
+        );
         if (!scrubMountedRef.current) return false;
-        scrubOffscreenRenderedFrameRef.current = targetFrame;
         const finishedAtMs = performance.now();
         if (trace) {
           trace.lastPrepareMs = Math.max(0, finishedAtMs - prepareStartedAtMs);
+          trace.lastPreparedFrame = targetFrame;
+          if (trace.firstPreparedAtMs === null) {
+            trace.firstPreparedAtMs = finishedAtMs;
+            pushTransitionTrace('prepare_ready', {
+              opId: trace.opId,
+              preparedFrame: targetFrame,
+              bufferedFrames: 0,
+            });
+          }
           pushTransitionTrace('prepare_done', {
             opId: trace.opId,
             targetFrame,
             prepareMs: trace.lastPrepareMs,
             preparedFrame: trace.lastPreparedFrame,
-            bufferedFrames: transitionSessionBufferedFramesRef.current.size,
+            bufferedFrames: 0,
           });
         }
         return true;
       } catch (error) {
-        logger.debug('Hidden transition prerender failed:', targetFrame, error);
+        logger.debug('Transition warm-up failed:', targetFrame, error);
         return false;
       } finally {
-        if (!isPlaybackPrepare) {
-          scrubRenderInFlightRef.current = false;
-        }
         if (playbackTransitionPreparingFrameRef.current === targetFrame) {
           playbackTransitionPreparingFrameRef.current = null;
           playbackTransitionPreparePromiseRef.current = null;
         }
-        if (scrubRequestedFrameRef.current !== null) {
-          resumeScrubLoopRef.current();
+        const deferredFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+        if (
+          deferredFrame !== null
+          && deferredFrame !== targetFrame
+          && scrubMountedRef.current
+        ) {
+          deferredPlaybackTransitionPrepareFrameRef.current = null;
+          void preparePlaybackTransitionFrame(deferredFrame);
         }
       }
     })();
@@ -2375,18 +2577,50 @@ export const VideoPreview = memo(function VideoPreview({
     return task;
   }, [
     ensurePreviewRenderer,
+    getTransitionWarmFrames,
+    getTransitionWindowForFrame,
     getTransitionWindowByStartFrame,
     pinTransitionPlaybackSession,
-    cacheTransitionSessionFrame,
-    rendererOwnsPresentation,
-    playbackTransitionPrerenderRunwayFrames,
+    preseekTransitionSources,
+    prewarmTransitionFrameStrip,
     pushTransitionTrace,
   ]);
 
-  // Dispose/recreate the preview renderer when composition inputs change.
   useEffect(() => {
-    disposePreviewRenderer();
-  }, [disposePreviewRenderer, previewRendererStructureKey, renderSize.height, renderSize.width]);
+    if (
+      !scrubRendererRef.current
+      && !scrubInitPromiseRef.current
+      && !scrubRefreshPromiseRef.current
+    ) {
+      setActiveRenderSize(committedRenderSize);
+      return;
+    }
+
+    if (
+      scrubRendererRef.current
+      && scrubRendererStructureKeyRef.current !== previewRendererStructureKey
+    ) {
+      schedulePreviewRendererRefresh();
+      return;
+    }
+
+    const scrubRenderer = scrubRendererRef.current;
+    if (scrubRenderer) {
+      if (scrubRenderInFlightRef.current) {
+        pendingPreviewRendererSyncRef.current = true;
+        scrubRequestedFrameRef.current = getPreviewTargetFrame(usePlaybackStore.getState());
+      } else if (syncPreviewRendererState(scrubRenderer)) {
+        scrubRequestedFrameRef.current = getPreviewTargetFrame(usePlaybackStore.getState());
+        void resumeScrubLoopRef.current();
+      }
+    }
+
+  }, [
+    previewRendererStructureKey,
+    committedRenderSize,
+    schedulePreviewRendererRefresh,
+    syncPreviewRendererState,
+  ]);
 
   // Visual-only edits should keep the warm renderer alive. Invalidate cached
   // frames and ask the renderer surface to repaint instead of rebuilding
@@ -2409,24 +2643,17 @@ export const VideoPreview = memo(function VideoPreview({
     }
 
     const scrubRenderer = scrubRendererRef.current;
-    const bgRenderer = bgTransitionRendererRef.current;
     const scrubRendererMatchesStructure = (
       scrubRendererStructureKeyRef.current === previewRendererStructureKey
     );
-    const bgRendererMatchesStructure = (
-      bgTransitionRendererStructureKeyRef.current === previewRendererStructureKey
-    );
 
-    if (!scrubRendererMatchesStructure && !bgRendererMatchesStructure) {
+    if (!scrubRendererMatchesStructure) {
       return;
     }
 
     const invalidationRequest = { ranges: visualInvalidationRanges };
     if (scrubRenderer && scrubRendererMatchesStructure) {
       scrubRenderer.invalidateFrameCache(invalidationRequest);
-    }
-    if (bgRenderer && bgRendererMatchesStructure) {
-      bgRenderer.invalidateFrameCache(invalidationRequest);
     }
 
     const playbackState = usePlaybackStore.getState();
@@ -2438,24 +2665,6 @@ export const VideoPreview = memo(function VideoPreview({
       && isFrameInRanges(scrubOffscreenRenderedFrameRef.current, visualInvalidationRanges)
     ) {
       scrubOffscreenRenderedFrameRef.current = null;
-    }
-
-    let removedBufferedFrame = false;
-    for (const frame of [...transitionSessionBufferedFramesRef.current.keys()]) {
-      if (!isFrameInRanges(frame, visualInvalidationRanges)) continue;
-      transitionSessionBufferedFramesRef.current.delete(frame);
-      removedBufferedFrame = true;
-    }
-    for (const frame of [...retainedTransitionExitBufferedFramesRef.current.keys()]) {
-      if (!isFrameInRanges(frame, visualInvalidationRanges)) continue;
-      retainedTransitionExitBufferedFramesRef.current.delete(frame);
-      removedBufferedFrame = true;
-    }
-    if (retainedTransitionExitBufferedFramesRef.current.size === 0) {
-      retainedTransitionExitWindowRef.current = null;
-    }
-    if (removedBufferedFrame) {
-      lastPausedPrearmTargetRef.current = null;
     }
 
     if (
@@ -2661,32 +2870,7 @@ export const VideoPreview = memo(function VideoPreview({
   useEffect(() => {
     if (!PREVIEW_RENDERER_ENABLED || isResolving) return;
     if (scrubRendererRef.current || scrubInitPromiseRef.current) return;
-
-    let cancelled = false;
-    const warmup = () => {
-      if (cancelled || scrubRendererRef.current || scrubInitPromiseRef.current) return;
-      void ensurePreviewRenderer();
-    };
-
-    let idleId: number | null = null;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      idleId = (window as Window & { requestIdleCallback: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number })
-        .requestIdleCallback(() => warmup(), { timeout: 400 });
-    } else {
-      timeoutId = setTimeout(warmup, 120);
-    }
-
-    return () => {
-      cancelled = true;
-      if (idleId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-        (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
-      }
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-    };
+    void ensurePreviewRenderer();
   }, [ensurePreviewRenderer, isResolving]);
 
   // Drive full-composition fast renderer from preview/scrub frames.
@@ -2727,7 +2911,7 @@ export const VideoPreview = memo(function VideoPreview({
     };
 
     const getPlaybackTransitionStateForFrame = (frame: number) => (
-      resolvePlaybackTransitionOverlayState(
+      resolvePlaybackTransitionState(
         playbackTransitionOverlayWindows,
         frame,
         playbackTransitionLookaheadFrames,
@@ -2735,109 +2919,23 @@ export const VideoPreview = memo(function VideoPreview({
       )
     );
 
-    const hasPreparedPlaybackTransitionFrame = (frame: number) => (
-      transitionSessionBufferedFramesRef.current.has(frame)
-      || retainedTransitionExitBufferedFramesRef.current.has(frame)
-      || scrubOffscreenRenderedFrameRef.current === frame
-    );
-
-    const tryShowPreparedPlaybackTransitionOverlay = (frame: number) => {
-      const bufferedFrame = getPreparedTransitionBufferedFrame(frame);
-      if (bufferedFrame) {
-        const trace = transitionSessionTraceRef.current;
-        if (trace && trace.enteredAtMs === null) {
-          trace.enteredAtMs = performance.now();
-          pushTransitionTrace('entry_show', {
-            opId: trace.opId,
-            frame,
-            via: 'buffer',
-            bufferedFrames: transitionSessionBufferedFramesRef.current.size
-              || retainedTransitionExitBufferedFramesRef.current.size,
-          });
-        }
-        drawSourceToDisplay(bufferedFrame, frame);
-        showTransitionOverlaySurface();
-        return true;
-      }
-      if (scrubOffscreenRenderedFrameRef.current !== frame) {
-        return false;
-      }
-      const trace = transitionSessionTraceRef.current;
-      if (trace && trace.enteredAtMs === null) {
-        trace.enteredAtMs = performance.now();
-        pushTransitionTrace('entry_show', {
-          opId: trace.opId,
-          frame,
-          via: 'offscreen',
-          bufferedFrames: transitionSessionBufferedFramesRef.current.size
-            || retainedTransitionExitBufferedFramesRef.current.size,
-        });
-      }
-      drawToDisplay(frame);
-      showTransitionOverlaySurface();
-      return true;
-    };
-
     const schedulePlaybackTransitionPrepare = (frame: number | null) => {
       if (frame === null) {
         deferredPlaybackTransitionPrepareFrameRef.current = null;
-        if (transitionPrepareTimeoutRef.current !== null) {
-          clearTimeout(transitionPrepareTimeoutRef.current);
-          transitionPrepareTimeoutRef.current = null;
-        }
         return;
       }
-      deferredPlaybackTransitionPrepareFrameRef.current = frame;
-      if (!scrubRenderInFlightRef.current) {
-        void preparePlaybackTransitionFrame(frame);
+      const queuedFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+      if (queuedFrame === null || frame > queuedFrame) {
+        deferredPlaybackTransitionPrepareFrameRef.current = frame;
       }
-    };
-
-    const clearScheduledTransitionPrepare = () => {
-      if (transitionPrepareTimeoutRef.current !== null) {
-        clearTimeout(transitionPrepareTimeoutRef.current);
-        transitionPrepareTimeoutRef.current = null;
-      }
-    };
-
-    const scheduleOpportunisticTransitionPrepare = () => {
-      const deferredFrame = deferredPlaybackTransitionPrepareFrameRef.current;
-      if (deferredFrame === null) {
-        clearScheduledTransitionPrepare();
+      if (playbackTransitionPreparePromiseRef.current) {
         return;
       }
-      if (transitionPrepareTimeoutRef.current !== null) {
-        return;
-      }
-
-      transitionPrepareTimeoutRef.current = window.setTimeout(() => {
-        transitionPrepareTimeoutRef.current = null;
-        if (!scrubMountedRef.current) return;
-
-        const playbackState = usePlaybackStore.getState();
-        if (!playbackState.isPlaying) return;
-
-        const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
-        if (!playbackTransitionState.shouldPrewarm || playbackTransitionState.nextTransitionStartFrame !== deferredFrame) {
-          return;
-        }
-
-        if (scrubRenderInFlightRef.current) {
-          scheduleOpportunisticTransitionPrepare();
-          return;
-        }
-
-        const trace = transitionSessionTraceRef.current;
-        if (trace) {
-          pushTransitionTrace('prepare_opportunistic', {
-            opId: trace.opId,
-            targetFrame: deferredFrame,
-          });
-        }
-
+      const nextFrame = deferredPlaybackTransitionPrepareFrameRef.current;
+      if (nextFrame !== null) {
         deferredPlaybackTransitionPrepareFrameRef.current = null;
-        void preparePlaybackTransitionFrame(deferredFrame);
-      }, 0);
+        void preparePlaybackTransitionFrame(nextFrame);
+      }
     };
 
     const pumpRenderLoop = async () => {
@@ -3046,31 +3144,13 @@ export const VideoPreview = memo(function VideoPreview({
 
           const playbackNow = usePlaybackStore.getState();
           if (playbackNow.isPlaying) {
-            // Only pin/clear the transition session when the rendered frame is
-            // actually inside a transition window. Passing null for pre-transition
-            // frames would destroy sessions that the prearm subscription just
-            // pinned, causing churn and leaving the entry runway cold.
             const windowForFrame = getTransitionWindowForFrame(frameToRender);
             if (windowForFrame) {
               const prevSession = transitionSessionWindowRef.current;
               const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
               pinTransitionPlaybackSession(windowForFrame);
-              // Await the prearm prewarm so mediabunny decoders are positioned
-              // at the correct source time before rendering. The prearm fires
-              // ~2s ahead so this resolves near-instantly in the common case.
-              // Without this, decoders may be at a stale position from a prior
-              // playback, causing 100-300ms backward keyframe seeks per frame.
-              if (transitionPrewarmPromiseRef.current) {
-                await transitionPrewarmPromiseRef.current;
-                transitionPrewarmPromiseRef.current = null;
-              }
-              // When entering a transition mid-playback (no prearm happened),
-              // await the prewarm synchronously to position decoders.
-              if (isNewSession && 'prewarmItems' in renderer) {
-                await renderer.prewarmItems(
-                  [windowForFrame.leftClip.id, windowForFrame.rightClip.id],
-                  frameToRender,
-                );
+              if (isNewSession) {
+                schedulePlaybackTransitionPrepare(windowForFrame.startFrame);
               }
             }
           }
@@ -3143,10 +3223,13 @@ export const VideoPreview = memo(function VideoPreview({
 
             const playbackState = usePlaybackStore.getState();
             const playbackTransitionState = getPlaybackTransitionStateForFrame(frameToRender);
-            const shouldShowPlaybackTransitionOverlay = (
+            const shouldHoldTransitionFrame = (
               playbackState.isPlaying
               && playbackState.previewFrame === null
-              && (playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)
+              && (
+                playbackTransitionState.hasActiveTransition
+                || playbackTransitionState.shouldHoldTransitionFrame
+              )
             );
             const isPausedOnTransitionFrame = (
               frameToRender === playbackState.currentFrame
@@ -3154,22 +3237,27 @@ export const VideoPreview = memo(function VideoPreview({
             );
 
             drawToDisplay(frameToRender);
-            if (shouldShowPlaybackTransitionOverlay || isPausedOnTransitionFrame) {
-              showTransitionOverlaySurface();
-            } else {
-              showRendererSurface();
+            if (shouldHoldTransitionFrame || isPausedOnTransitionFrame) {
+              const trace = transitionSessionTraceRef.current;
+              if (trace && trace.enteredAtMs === null) {
+                trace.enteredAtMs = performance.now();
+                pushTransitionTrace('entry_show', {
+                  opId: trace.opId,
+                  frame: frameToRender,
+                  via: 'renderer',
+                  bufferedFrames: 0,
+                });
+              }
             }
+            showRendererSurface();
             if (
-              !shouldShowPlaybackTransitionOverlay
+              !shouldHoldTransitionFrame
               && !isPausedOnTransitionFrame
               && !suppressScrubBackgroundPrewarmRef.current
             ) {
               enqueueDirectionalPrewarm(frameToRender);
               enqueueBoundaryPrewarm(frameToRender);
               enqueueBoundarySourcePrewarm(frameToRender);
-            }
-            if (deferredPlaybackTransitionPrepareFrameRef.current !== null) {
-              scheduleOpportunisticTransitionPrepare();
             }
             prewarmBudgetStart = performance.now();
           } else {
@@ -3184,9 +3272,15 @@ export const VideoPreview = memo(function VideoPreview({
         if (scrubRenderGenerationRef.current === generation) {
           // Current generation — this pump owns the lock. Release normally.
           scrubRenderInFlightRef.current = false;
-          const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
-          if (deferredPrepareFrame !== null) {
-            scheduleOpportunisticTransitionPrepare();
+          const swappedRenderer = applyPendingScrubRendererSwap();
+          if (!swappedRenderer && pendingPreviewRendererSyncRef.current && scrubRendererRef.current) {
+            const synced = syncPreviewRendererStateRef.current(scrubRendererRef.current);
+            if (synced) {
+              scrubRequestedFrameRef.current = getPreviewTargetFrame(usePlaybackStore.getState());
+            }
+          }
+          if (swappedRenderer) {
+            scrubRequestedFrameRef.current = getPreviewTargetFrame(usePlaybackStore.getState());
           }
           if (scrubRequestedFrameRef.current !== null) {
             void pumpRenderLoop();
@@ -3203,42 +3297,18 @@ export const VideoPreview = memo(function VideoPreview({
       void pumpRenderLoop();
     };
 
-    const recordTransitionEntryMiss = (frame: number) => {
-      const trace = transitionSessionTraceRef.current;
-      if (!trace || trace.lastEntryMissFrame === frame) {
-        return;
-      }
-      trace.entryMisses += 1;
-      trace.lastEntryMissFrame = frame;
-      pushTransitionTrace('entry_miss', {
-        opId: trace.opId,
-        frame,
-        bufferedFrames: transitionSessionBufferedFramesRef.current.size,
-      });
-    };
-
     const applyTransitionPlaybackOverlayDecision = (
       frame: number,
       decision: PreviewPresenterTransitionPlaybackDecision,
     ) => {
-      if (decision.kind === 'show_prepared_transition_overlay') {
-        tryShowPreparedPlaybackTransitionOverlay(frame);
-        return;
-      }
-
-      if (decision.kind === 'render_transition_overlay') {
-        if (decision.shouldRecordEntryMiss) {
-          recordTransitionEntryMiss(frame);
-        }
-        scrubRequestedFrameRef.current = frame;
-        void pumpRenderLoop();
-        return;
-      }
-
       if (decision.shouldClearTransitionSession) {
         clearTransitionPlaybackSession();
       }
       showRendererSurface();
+      if (decision.shouldRenderFrame) {
+        scrubRequestedFrameRef.current = frame;
+        void pumpRenderLoop();
+      }
     };
 
     // rAF-driven render pump for playback — fires at display vsync (60Hz+),
@@ -3247,7 +3317,6 @@ export const VideoPreview = memo(function VideoPreview({
     // frame drop rate during playback to near zero.
     let playbackRafId: number | null = null;
     let lastRafRenderedFrame = -1;
-    let playbackPrewarmInFlight = false;
     const pausePrewarmedItemIds = new Set<string>();
 
     let lastRafPresentedFrame = -1;
@@ -3261,29 +3330,13 @@ export const VideoPreview = memo(function VideoPreview({
 
       if (currentFrame !== lastRafRenderedFrame) {
         lastRafRenderedFrame = currentFrame;
-        // Check if this frame was pre-rendered by the transition prepare.
-        // If so, present it immediately (0ms) instead of going through the
-        // async pumpRenderLoop (which would take 180-240ms for the first
-        // transition frame due to mediabunny decode).
-        const buffered = getPreparedTransitionBufferedFrame(currentFrame);
-        if (buffered) {
-          drawSourceToDisplay(buffered, currentFrame);
-          scrubOffscreenRenderedFrameRef.current = currentFrame;
-          lastRafPresentedFrame = currentFrame;
-          // Pre-start the render loop for the next uncached frame so the
-          // GPU + decode pipeline is already warm when the buffer runs out.
-          // Without this, the first post-cache frame stalls 100-200ms.
-          const nextFrame = currentFrame + 1;
-          if (!getPreparedTransitionBufferedFrame(nextFrame)
-            && !scrubRenderInFlightRef.current) {
-            scrubRequestedFrameRef.current = nextFrame;
-            void pumpRenderLoop();
-          }
-        } else {
-          scrubRequestedFrameRef.current = currentFrame;
-          if (!scrubRenderInFlightRef.current) {
-            void pumpRenderLoop();
-          }
+        const activeTransitionWindow = getTransitionWindowForFrame(currentFrame);
+        if (activeTransitionWindow) {
+          schedulePlaybackTransitionPrepare(currentFrame);
+        }
+        scrubRequestedFrameRef.current = currentFrame;
+        if (!scrubRenderInFlightRef.current) {
+          void pumpRenderLoop();
         }
       } else if (
         lastRafPresentedFrame !== currentFrame
@@ -3405,12 +3458,12 @@ export const VideoPreview = memo(function VideoPreview({
             }
           }
 
+          playbackRafId = requestAnimationFrame(playbackRafPump);
+
           if (prewarmItemIds.length > 0) {
-            // Prewarm first, then start rAF pump — avoids 150ms+ first-frame stall.
-            // Set flag to prevent subscription from pumping render loop during prewarm.
-            // SKIP items already pre-seeked by the paused occlusion prewarm — re-seeking
-            // to the current frame would undo the precise visibility-frame positioning.
-            playbackPrewarmInFlight = true;
+            // Keep playback start responsive by warming variable-speed decoders
+            // in the background instead of holding the first rAF behind prewarm.
+            // The paused frame stays on screen until fresh playback frames land.
             void (async () => {
               const renderer = await ensurePreviewRenderer();
               if (renderer && 'prewarmItems' in renderer) {
@@ -3423,14 +3476,7 @@ export const VideoPreview = memo(function VideoPreview({
                 }
               }
               pausePrewarmedItemIds.clear();
-              playbackPrewarmInFlight = false;
-              if (playbackRafId === null && usePlaybackStore.getState().isPlaying) {
-                playbackRafId = requestAnimationFrame(playbackRafPump);
-              }
             })();
-          } else {
-            // No prewarm needed — start immediately
-            playbackRafId = requestAnimationFrame(playbackRafPump);
           }
         }
       } else if (!state.isPlaying && playbackRafId !== null) {
@@ -3500,7 +3546,7 @@ export const VideoPreview = memo(function VideoPreview({
             if (transitionWindow) {
               const renderer = scrubRendererRef.current;
               if (renderer && 'prewarmItems' in renderer) {
-                transitionPrewarmPromiseRef.current = (async () => {
+                void (async () => {
                   await renderer.prewarmItems(
                     [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
                     transitionWindow.startFrame,
@@ -3513,6 +3559,7 @@ export const VideoPreview = memo(function VideoPreview({
                   );
                 })();
               }
+              void preparePlaybackTransitionFrame(transitionWindow.startFrame);
               // Fire background worker batch preseek for the first several
               // transition frames per clip. Pre-decoding a batch gives the
               // render loop cached bitmaps as fallback — reduces the 100-300ms
@@ -3676,39 +3723,8 @@ export const VideoPreview = memo(function VideoPreview({
                 // is fast because everything is already warm.  Pre-rendering
                 // multiple frames gives the render loop a head start so the
                 // first cold-rendered transition frame isn't frame 1.
-                if (!usePlaybackStore.getState().isPlaying && mainRenderer) {
-                  const preRenderCount = Math.min(playbackTransitionPrerenderRunwayFrames, tw.endFrame - tw.startFrame);
-                  for (let fi = 0; fi < preRenderCount; fi++) {
-                    if (usePlaybackStore.getState().isPlaying) break;
-                    const frame = tw.startFrame + fi;
-                    try {
-                      await mainRenderer.renderFrame(frame);
-                      if ('getCanvas' in mainRenderer) {
-                        const srcCanvas = (mainRenderer as { getCanvas: () => PreviewRenderCanvas }).getCanvas();
-                        const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
-                        const snapshotCtx = snapshot.getContext('2d');
-                        if (snapshotCtx) {
-                          snapshotCtx.drawImage(srcCanvas, 0, 0);
-                          transitionSessionBufferedFramesRef.current.set(frame, snapshot);
-                        }
-                      }
-                    } catch { break; }
-                  }
-                }
-                // After pre-render, trigger a fresh render. Wait for React
-                // to mount premounted transition participants first.
-                await new Promise<void>((r) => setTimeout(r, 1000));
                 if (!usePlaybackStore.getState().isPlaying) {
-                  await mainRenderer.renderFrame(state.currentFrame);
-                  if ('getCanvas' in mainRenderer) {
-                    const srcCanvas = (mainRenderer as { getCanvas: () => PreviewRenderCanvas }).getCanvas();
-                    const snapshot = new OffscreenCanvas(srcCanvas.width, srcCanvas.height);
-                    const snapshotCtx = snapshot.getContext('2d');
-                    if (snapshotCtx) {
-                      snapshotCtx.drawImage(srcCanvas, 0, 0);
-                      transitionSessionBufferedFramesRef.current.set(state.currentFrame, snapshot);
-                    }
-                  }
+                  schedulePlaybackTransitionPrepare(tw.startFrame);
                   scrubRequestedFrameRef.current = state.currentFrame;
                   scrubFrameDirtyRef.current = true;
                   void pumpRenderLoop();
@@ -3716,17 +3732,13 @@ export const VideoPreview = memo(function VideoPreview({
               })();
             }
           }
-        } else if (pausedTransitionDecision.kind === 'show_transition_overlay') {
-          // Paused inside a transition. Pin the session and render the current
-          // frame so the composed transition stays visible on the renderer.
-          const tw = pausedActiveWindow;
-          if (tw) {
-            pinTransitionPlaybackSession(tw);
-            scrubRequestedFrameRef.current = state.currentFrame;
-            void pumpRenderLoop();
-          }
         } else if (pausedTransitionDecision.kind === 'schedule_prepare') {
+          if (pausedActiveWindow) {
+            pinTransitionPlaybackSession(pausedActiveWindow);
+          }
           schedulePlaybackTransitionPrepare(pausedTransitionDecision.targetStartFrame);
+          scrubRequestedFrameRef.current = state.currentFrame;
+          void pumpRenderLoop();
         } else if (pausedTransitionDecision.kind === 'clear') {
           // No nearby transition while paused — clean up.
           lastPausedPrearmTargetRef.current = null;
@@ -3820,7 +3832,6 @@ export const VideoPreview = memo(function VideoPreview({
           previewFrame: prev.previewFrame,
         },
         playbackTransitionState,
-        hasPreparedTransitionFrame: hasPreparedPlaybackTransitionFrame(state.currentFrame),
         shouldPreserveHighFidelityBackwardPreview,
         lastBackwardRequestedFrame: lastBackwardRequestedFrameRef.current,
         lastBackwardRenderAtMs: lastBackwardScrubRenderAtRef.current,
@@ -3890,9 +3901,9 @@ export const VideoPreview = memo(function VideoPreview({
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
       scrubRequestedFrameRef.current = presenterSyncPlan.requestedFrame;
-      // During playback with rAF pump active or prewarm in flight, let
-      // rAF drive the render loop to avoid contention and first-frame stalls.
-      if (playbackRafId === null && !playbackPrewarmInFlight) {
+      // During playback with the rAF pump active, let rAF drive the render
+      // loop to avoid contention and preserve a single playback presenter.
+      if (playbackRafId === null) {
         void pumpRenderLoop();
       }
     });
@@ -3989,16 +4000,10 @@ export const VideoPreview = memo(function VideoPreview({
       ) {
         lastPausedPrearmTargetRef.current = initialPausedTransitionDecision.targetStartFrame;
         if (initialPausedTransitionDecision.kind === 'prewarm_transition_entry') {
-          // Pre-render the transition start frame using a DEDICATED background
-          // renderer (separate canvas + decoders). This doesn't hold
-          // scrubRenderInFlightRef and doesn't conflict with the rAF pump.
-          // The rAF pump checks transitionSessionBufferedFramesRef and presents
-          // the pre-rendered frame instantly (0ms vs 180-240ms first-frame stall).
           const tw = getTransitionWindowByStartFrame(initialPausedTransitionDecision.targetStartFrame);
           if (tw) {
             pinTransitionPlaybackSession(tw);
             void (async () => {
-              // Warm main renderer's decoders
               const mainRenderer = await ensurePreviewRenderer();
               if (mainRenderer && 'prewarmItems' in mainRenderer) {
                 await mainRenderer.prewarmItems(
@@ -4006,30 +4011,15 @@ export const VideoPreview = memo(function VideoPreview({
                   tw.startFrame,
                 );
               }
-              // Pre-render via background renderer (separate instance)
-              if (bgTransitionRenderInFlightRef.current) return;
-              bgTransitionRenderInFlightRef.current = true;
-              try {
-                const bgRenderer = await ensureBgTransitionRenderer();
-                if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
-                  await bgRenderer.renderFrame(tw.startFrame);
-                  cacheTransitionSessionFrame(tw.startFrame);
-                  pushTransitionTrace('bg_prerender', { frame: tw.startFrame });
-                }
-              } catch (error) {
-                logger.debug('Background transition pre-render failed:', error);
-              } finally {
-                bgTransitionRenderInFlightRef.current = false;
+              if (!usePlaybackStore.getState().isPlaying) {
+                schedulePlaybackTransitionPrepare(tw.startFrame);
               }
             })();
           }
-        } else if (initialPausedTransitionDecision.kind === 'show_transition_overlay') {
-          // Paused inside a transition on initial mount. Pin the session so
-          // the renderer can present the composed transition immediately.
+        } else if (initialPausedTransitionDecision.kind === 'schedule_prepare') {
           if (initialPausedActiveWindow) {
             pinTransitionPlaybackSession(initialPausedActiveWindow);
           }
-        } else if (initialPausedTransitionDecision.kind === 'schedule_prepare') {
           schedulePlaybackTransitionPrepare(initialPausedTransitionDecision.targetStartFrame);
         }
         pushTransitionTrace('paused_prearm', {
@@ -4073,7 +4063,6 @@ export const VideoPreview = memo(function VideoPreview({
       lastBackwardRequestedFrameRef.current = null;
       playStartWarmUntilRef.current = 0;
       lastPlayStartWarmFrameRef.current = null;
-      clearScheduledTransitionPrepare();
       clearTransitionPlaybackSession();
       showRendererSurface();
       if (playbackRafId !== null) {
@@ -4103,7 +4092,6 @@ export const VideoPreview = memo(function VideoPreview({
     preparePlaybackTransitionFrame,
     reportPreviewRendererFailure,
     showRendererSurface,
-    showTransitionOverlaySurface,
     playbackTransitionCooldownFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionWindows,
@@ -4459,35 +4447,6 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [disposePreviewRenderer, resetResolveRetryState]);
 
-  // Calculate preview surface size based on zoom mode.
-  const previewSize = useMemo(() => {
-    const aspectRatio = project.width / project.height;
-
-    if (zoom === -1) {
-      if (containerSize.width > 0 && containerSize.height > 0) {
-        const containerAspectRatio = containerSize.width / containerSize.height;
-
-        let width: number;
-        let height: number;
-
-        if (containerAspectRatio > aspectRatio) {
-          height = containerSize.height;
-          width = height * aspectRatio;
-        } else {
-          width = containerSize.width;
-          height = width / aspectRatio;
-        }
-
-        return { width, height };
-      }
-      return { width: project.width, height: project.height };
-    }
-
-    const targetWidth = project.width * zoom;
-    const targetHeight = project.height * zoom;
-    return { width: targetWidth, height: targetHeight };
-  }, [project.width, project.height, zoom, containerSize]);
-
   // Check if overflow is needed when the preview surface exceeds the container.
   const needsOverflow = useMemo(() => {
     if (zoom === -1) return false;
@@ -4611,6 +4570,8 @@ export const VideoPreview = memo(function VideoPreview({
             {PREVIEW_RENDERER_ENABLED && (
               <canvas
                 ref={scrubCanvasRef}
+                width={activeRenderSize.width}
+                height={activeRenderSize.height}
                 className="absolute inset-0 pointer-events-none"
                 style={{
                   width: '100%',
@@ -4624,6 +4585,8 @@ export const VideoPreview = memo(function VideoPreview({
             {PREVIEW_RENDERER_ENABLED && (
               <canvas
                 ref={scrubGpuCanvasRef}
+                width={activeRenderSize.width}
+                height={activeRenderSize.height}
                 className="absolute inset-0 pointer-events-none"
                 style={{
                   width: '100%',
@@ -4636,15 +4599,15 @@ export const VideoPreview = memo(function VideoPreview({
 
             {import.meta.env.DEV && showPerfPanel && perfPanelSnapshot && (() => {
               const p = perfPanelSnapshot;
-              const srcLabel = p.renderSource === 'transition_overlay' ? 'Transition' : 'Renderer';
-              const srcColor = p.renderSource === 'renderer' ? '#4ade80' : '#60a5fa';
+              const srcLabel = 'Renderer';
+              const srcColor = '#4ade80';
               const seekOk = p.seekLatencyAvgMs < 50;
               const qualOk = p.effectivePreviewQuality >= p.userPreviewQuality;
               const frameOk = p.frameTimeEmaMs <= p.frameTimeBudgetMs * 1.2;
               const trActive = p.transitionSessionActive;
               const trMode = p.transitionSessionBackend === 'none' ? null : 'Renderer';
               const lastSw = latestRenderSourceSwitch;
-              const fmtSrc = (s: string) => s === 'transition_overlay' ? 'Transition' : 'Renderer';
+              const fmtSrc = () => 'Renderer';
               return (
                 <div
                   className="absolute right-2 bottom-2 z-30 bg-black/80 text-white/90 rounded-md text-[10px] leading-[14px] font-mono pointer-events-none select-none backdrop-blur-sm"
@@ -4750,7 +4713,6 @@ export const VideoPreview = memo(function VideoPreview({
                         {trActive && (
                           <span style={{ color: '#a1a1aa' }}>
                             {' '}{p.transitionSessionStartFrame}{'\u2192'}{p.transitionSessionEndFrame}
-                            {' '}buf:{p.transitionBufferedFrames}
                           </span>
                         )}
                       </div>

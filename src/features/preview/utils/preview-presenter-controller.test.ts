@@ -16,11 +16,10 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       },
       playbackTransitionState: {
         hasActiveTransition: false,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
         shouldPrewarm: true,
         nextTransitionStartFrame: 40,
       },
-      hasPreparedTransitionFrame: false,
       shouldPreserveHighFidelityBackwardPreview: () => false,
       lastBackwardRequestedFrame: null,
       lastBackwardRenderAtMs: 0,
@@ -38,11 +37,12 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       overlayDecision: {
         kind: 'show_renderer',
         shouldClearTransitionSession: false,
+        shouldRenderFrame: false,
       },
     });
   });
 
-  it('returns a prepared transition overlay plan during playback', () => {
+  it('returns a renderer-owned transition playback plan during playback', () => {
     expect(resolvePreviewPresenterStoreSyncPlan({
       state: {
         isPlaying: true,
@@ -56,11 +56,10 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       },
       playbackTransitionState: {
         hasActiveTransition: true,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
         shouldPrewarm: true,
         nextTransitionStartFrame: null,
       },
-      hasPreparedTransitionFrame: true,
       shouldPreserveHighFidelityBackwardPreview: () => false,
       lastBackwardRequestedFrame: null,
       lastBackwardRenderAtMs: 0,
@@ -76,7 +75,9 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
       shouldEnsurePreviewRenderer: true,
       transitionPrepareStartFrame: null,
       overlayDecision: {
-        kind: 'show_prepared_transition_overlay',
+        kind: 'show_renderer',
+        shouldClearTransitionSession: false,
+        shouldRenderFrame: true,
       },
     });
   });
@@ -94,7 +95,6 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
         previewFrame: null,
       },
       playbackTransitionState: null,
-      hasPreparedTransitionFrame: false,
       shouldPreserveHighFidelityBackwardPreview: () => false,
       lastBackwardRequestedFrame: null,
       lastBackwardRenderAtMs: 0,
@@ -121,7 +121,6 @@ describe('resolvePreviewPresenterStoreSyncPlan', () => {
         previewFrame: 28,
       },
       playbackTransitionState: null,
-      hasPreparedTransitionFrame: false,
       shouldPreserveHighFidelityBackwardPreview: () => false,
       lastBackwardRequestedFrame: null,
       lastBackwardRenderAtMs: 0,

@@ -74,7 +74,8 @@ export function renderShape(
   ctx: OffscreenCanvasRenderingContext2D,
   shape: ShapeItem,
   transform: ResolvedTransform,
-  canvas: ShapeCanvasSettings
+  canvas: ShapeCanvasSettings,
+  renderScale: number = 1,
 ): void {
   // Don't render masks as shapes - they're handled by the mask system
   if (shape.isMask) return;
@@ -97,7 +98,7 @@ export function renderShape(
     // Stroke the shape
     if (shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor) {
       ctx.strokeStyle = shape.strokeColor;
-      ctx.lineWidth = shape.strokeWidth;
+      ctx.lineWidth = shape.strokeWidth * renderScale;
       ctx.stroke(path);
     }
 
@@ -114,4 +115,3 @@ export function renderShape(
     ctx.restore();
   }
 }
-

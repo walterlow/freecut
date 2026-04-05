@@ -102,8 +102,8 @@ describe('canvas mask animation', () => {
   it('recomputes mask geometry from the current frame transform', () => {
     const index = buildMaskFrameIndex([track], canvas);
 
-    const frame10Masks = getActiveMasksForFrame(index, 10, canvas, new Map());
-    const frame12Masks = getActiveMasksForFrame(index, 12, canvas, new Map());
+    const frame10Masks = getActiveMasksForFrame(index, 10, canvas, canvas, new Map());
+    const frame12Masks = getActiveMasksForFrame(index, 12, canvas, canvas, new Map());
 
     expect(frame10Masks).toHaveLength(1);
     expect(frame12Masks).toHaveLength(1);
@@ -128,6 +128,7 @@ describe('canvas mask animation', () => {
     const activeMasks = getActiveMasksForFrame(
       index,
       10,
+      canvas,
       canvas,
       new Map(),
       () => ({ x: 99 })
@@ -161,6 +162,7 @@ describe('canvas mask animation', () => {
       index,
       10,
       canvas,
+      canvas,
       new Map(),
       undefined,
       () => [
@@ -182,6 +184,7 @@ describe('canvas mask animation', () => {
     const activeMasks = getActiveMasksForFrame(
       index,
       10,
+      canvas,
       canvas,
       () => ({ itemId: 'mask-1', properties: [] }),
     );

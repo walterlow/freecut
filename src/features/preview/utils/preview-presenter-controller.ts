@@ -1,4 +1,4 @@
-import type { PlaybackTransitionOverlayState } from './playback-transition-overlay';
+import type { PlaybackTransitionState } from './playback-transition-state';
 import {
   resolvePreviewPresenterScrubTargetDecision,
   resolvePreviewPresenterStoreDecision,
@@ -41,8 +41,7 @@ export type PreviewPresenterStoreSyncPlan =
 export interface ResolvePreviewPresenterStoreSyncPlanInput {
   state: PreviewPresenterFrameSnapshot;
   prev: PreviewPresenterFrameSnapshot;
-  playbackTransitionState: PlaybackTransitionOverlayState | null;
-  hasPreparedTransitionFrame: boolean;
+  playbackTransitionState: PlaybackTransitionState | null;
   shouldPreserveHighFidelityBackwardPreview: (targetFrame: number) => boolean;
   lastBackwardRequestedFrame: number | null;
   lastBackwardRenderAtMs: number;
@@ -62,14 +61,13 @@ export function resolvePreviewPresenterStoreSyncPlan(
   if (presenterStoreDecision.kind === 'playing') {
     const transitionState = input.playbackTransitionState ?? {
       hasActiveTransition: false,
-      shouldHoldOverlay: false,
+      shouldHoldTransitionFrame: false,
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
     };
     const overlayDecision = resolvePreviewPresenterTransitionPlaybackDecision({
       action: presenterStoreDecision.action,
       transitionState,
-      hasPreparedTransitionFrame: input.hasPreparedTransitionFrame,
     });
 
     return {

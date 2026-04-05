@@ -79,6 +79,7 @@ import {
   type WorkerLoadedImage,
   type ItemRenderContext,
   type SubCompRenderData,
+  scaleTransformToCanvas,
 } from './canvas-item-renderer';
 import { ScrubbingCache } from '@/features/export/deps/preview';
 import { resolveFrameRenderOptimization } from './render-path-optimizer';
@@ -137,15 +138,13 @@ export async function createCompositionRenderer(
     getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined;
   } = {},
 ) {
-  const {
-    fps,
-    tracks = [],
-    transitions = [],
-    backgroundColor = '#000000',
-    keyframes = [],
-  } = composition;
+  const fps = composition.fps;
+  let currentTracks = composition.tracks ?? [];
+  let currentTransitions = composition.transitions ?? [];
+  let currentBackgroundColor = composition.backgroundColor ?? '#000000';
+  let currentKeyframes = composition.keyframes ?? [];
   const renderMode = options.mode ?? 'export';
-  const presentationCanvas = options.presentationCanvas;
+  let currentPresentationCanvas = options.presentationCanvas;
   const getPreviewTransformOverride = options.getPreviewTransformOverride;
   const getPreviewEffectsOverride = options.getPreviewEffectsOverride;
   const getPreviewCornerPinOverride = options.getPreviewCornerPinOverride;
@@ -160,17 +159,19 @@ export async function createCompositionRenderer(
     height: canvas.height,
     fps,
   };
+  const logicalCanvasSettings: CanvasSettings = {
+    width: Math.max(1, Math.round(composition.width ?? canvas.width)),
+    height: Math.max(1, Math.round(composition.height ?? canvas.height)),
+    fps,
+  };
   const frameSceneCache = createFrameCompositionSceneCache();
   let frameSceneRevision = 0;
 
-  const renderPlan = resolveCompositionRenderPlan({ tracks, transitions });
-  const { trackRenderState } = renderPlan;
-  const {
-    visibleTrackIds,
-    visibleTracksByOrderDesc: sortedTracks,
-    visibleTracksByOrderAsc: tracksTopToBottom,
-    trackOrderMap,
-  } = trackRenderState;
+  let renderPlan = resolveCompositionRenderPlan({ tracks: currentTracks, transitions: currentTransitions });
+  let visibleTrackIds = renderPlan.trackRenderState.visibleTrackIds;
+  let sortedTracks = renderPlan.trackRenderState.visibleTracksByOrderDesc;
+  let tracksTopToBottom = renderPlan.trackRenderState.visibleTracksByOrderAsc;
+  let trackOrderMap = renderPlan.trackRenderState.trackOrderMap;
 
   // === PERFORMANCE OPTIMIZATION: Canvas Pool ===
   // Pre-allocate reusable canvases instead of creating new ones per frame
@@ -299,7 +300,7 @@ export async function createCompositionRenderer(
     width: number,
     height: number,
   ): GPUCanvasContext | null {
-    if (!gpuPipeline || !presentationCanvas) return null;
+    if (!gpuPipeline || !currentPresentationCanvas) return null;
 
     const dimensionsChanged = gpuPresentationW !== width || gpuPresentationH !== height;
     if (dimensionsChanged) {
@@ -315,15 +316,15 @@ export async function createCompositionRenderer(
     }
 
     if (
-      presentationCanvas.width !== width
-      || presentationCanvas.height !== height
+      currentPresentationCanvas.width !== width
+      || currentPresentationCanvas.height !== height
     ) {
-      presentationCanvas.width = width;
-      presentationCanvas.height = height;
+      currentPresentationCanvas.width = width;
+      currentPresentationCanvas.height = height;
     }
 
     if (!gpuPresentationCtx || dimensionsChanged) {
-      gpuPresentationCtx = gpuPipeline.configureCanvas(presentationCanvas);
+      gpuPresentationCtx = gpuPipeline.configureCanvas(currentPresentationCanvas);
       gpuPresentationW = width;
       gpuPresentationH = height;
       if (!gpuPresentationCtx) {
@@ -381,7 +382,7 @@ export async function createCompositionRenderer(
   }
 
   // Build lookup maps
-  const keyframesMap = buildKeyframesMap(keyframes);
+  let keyframesMap = buildKeyframesMap(currentKeyframes);
   const getCurrentKeyframes = (itemId: string): ItemKeyframes | undefined => (
     getLiveKeyframes?.(itemId) ?? keyframesMap.get(itemId)
   );
@@ -460,7 +461,7 @@ export async function createCompositionRenderer(
     videoElements.set(itemId, element);
   };
 
-  for (const track of tracks) {
+  for (const track of currentTracks) {
     for (const item of track.items ?? []) {
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
@@ -492,7 +493,7 @@ export async function createCompositionRenderer(
   const webpItems: ImageItem[] = [];
   const gifFramesMap = new Map<string, CachedGifFrames>();
 
-  for (const track of tracks) {
+  for (const track of currentTracks) {
     for (const item of track.items ?? []) {
       if (item.type === 'image' && (item as ImageItem).src) {
         const imageItem = item as ImageItem;
@@ -547,19 +548,23 @@ export async function createCompositionRenderer(
   }
 
   // Collect adjustment layers
-  const adjustmentLayers = renderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[];
-
-  const transitionTrackOrderById = new Map<string, number>();
-  for (const window of renderPlan.transitionWindows) {
-    const transitionTrackId = window.transition.trackId;
-    const trackOrder = transitionTrackId
-      ? (trackOrderMap.get(transitionTrackId) ?? 0)
-      : 0;
-    transitionTrackOrderById.set(window.transition.id, trackOrder);
-  }
+  let adjustmentLayers = renderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[];
+  const buildTransitionTrackOrderById = () => {
+    const nextMap = new Map<string, number>();
+    for (const window of renderPlan.transitionWindows) {
+      const transitionTrackId = window.transition.trackId;
+      const trackOrder = transitionTrackId
+        ? (trackOrderMap.get(transitionTrackId) ?? 0)
+        : 0;
+      nextMap.set(window.transition.id, trackOrder);
+    }
+    return nextMap;
+  };
+  let transitionTrackOrderById = buildTransitionTrackOrderById();
 
   const maskSettings: MaskCanvasSettings = canvasSettings;
-  const maskFrameIndex = buildMaskFrameIndex(tracks, maskSettings);
+  const logicalMaskSettings: MaskCanvasSettings = logicalCanvasSettings;
+  let maskFrameIndex = buildMaskFrameIndex(currentTracks, maskSettings);
 
   // Track which videos successfully use mediabunny (for render decisions)
   const useMediabunny = new Set<string>();
@@ -583,6 +588,7 @@ export async function createCompositionRenderer(
   const itemRenderContext: ItemRenderContext = {
     fps,
     canvasSettings,
+    logicalCanvasSettings,
     canvasPool,
     textMeasureCache,
     renderMode,
@@ -605,6 +611,52 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
+  };
+
+  const refreshDerivedSceneState = (next: {
+    tracks?: CompositionInputProps['tracks'];
+    transitions?: CompositionInputProps['transitions'];
+    backgroundColor?: string;
+    keyframes?: CompositionInputProps['keyframes'];
+    width?: number;
+    height?: number;
+  } = {}) => {
+    if (next.tracks) {
+      currentTracks = next.tracks;
+    }
+    if (next.transitions) {
+      currentTransitions = next.transitions;
+    }
+    if (next.backgroundColor !== undefined) {
+      currentBackgroundColor = next.backgroundColor;
+    }
+    if (next.keyframes) {
+      currentKeyframes = next.keyframes;
+    }
+    if (next.width !== undefined) {
+      logicalCanvasSettings.width = Math.max(1, Math.round(next.width));
+    }
+    if (next.height !== undefined) {
+      logicalCanvasSettings.height = Math.max(1, Math.round(next.height));
+    }
+
+    renderPlan = resolveCompositionRenderPlan({
+      tracks: currentTracks,
+      transitions: currentTransitions,
+    });
+    visibleTrackIds = renderPlan.trackRenderState.visibleTrackIds;
+    sortedTracks = renderPlan.trackRenderState.visibleTracksByOrderDesc;
+    tracksTopToBottom = renderPlan.trackRenderState.visibleTracksByOrderAsc;
+    trackOrderMap = renderPlan.trackRenderState.trackOrderMap;
+    keyframesMap = buildKeyframesMap(currentKeyframes);
+    adjustmentLayers = renderPlan.visibleAdjustmentLayers as AdjustmentLayerWithTrackOrder[];
+    transitionTrackOrderById = buildTransitionTrackOrderById();
+    maskFrameIndex = buildMaskFrameIndex(currentTracks, maskSettings);
+    itemRenderContext.keyframesMap = keyframesMap;
+    itemRenderContext.adjustmentLayers = adjustmentLayers;
+    frameSceneRevision += 1;
+    frameSceneCache.invalidate();
+    scrubbingCache?.invalidate();
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
@@ -677,7 +729,7 @@ export async function createCompositionRenderer(
     const maxFrame = targetFrame + windowFrames;
     const ids: string[] = [];
 
-    for (const track of tracks) {
+    for (const track of currentTracks) {
       if (!visibleTrackIds.has(track.id)) continue;
       for (const item of track.items ?? []) {
         if (item.type !== 'video') continue;
@@ -750,7 +802,7 @@ export async function createCompositionRenderer(
       // Composition items require the compositions store which only exists on main thread.
       // Workers get a fresh, empty Zustand store, so sub-comp data can never be resolved.
       // Bail early to trigger the main-thread fallback path.
-      const hasCompositionItems = tracks.some(
+      const hasCompositionItems = currentTracks.some(
         t => (t.items ?? []).some(i => i.type === 'composition')
       );
       if (!hasDom && hasCompositionItems) {
@@ -906,7 +958,7 @@ export async function createCompositionRenderer(
       const compositionById = useCompositionsStore.getState().compositionById;
       // Collect priority video item IDs from all depths of nested compositions
       // whose root-level wrapper falls within the priority scrub window.
-      for (const track of tracks) {
+      for (const track of currentTracks) {
         for (const item of track.items ?? []) {
           if (item.type !== 'composition') continue;
           const compItem = item as CompositionItem;
@@ -928,7 +980,7 @@ export async function createCompositionRenderer(
         }
       }
 
-      const reachableCompositionIds = collectReachableCompositionIdsFromTracks(tracks, compositionById);
+      const reachableCompositionIds = collectReachableCompositionIdsFromTracks(currentTracks, compositionById);
       for (const compositionId of reachableCompositionIds) {
         const subComp = compositionById[compositionId];
         if (!subComp) {
@@ -1186,7 +1238,7 @@ export async function createCompositionRenderer(
       }
 
       // Clear canvas
-      ctx.fillStyle = backgroundColor;
+      ctx.fillStyle = currentBackgroundColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Prepare masks for this frame
@@ -1194,6 +1246,7 @@ export async function createCompositionRenderer(
         maskFrameIndex,
         frame,
         maskSettings,
+        logicalMaskSettings,
         getCurrentKeyframes,
         renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
@@ -1203,7 +1256,7 @@ export async function createCompositionRenderer(
       const frameScene = frameSceneCache.resolve({
         renderPlan,
         frame,
-        canvas: canvasSettings,
+        canvas: logicalCanvasSettings,
         getKeyframes: getCurrentKeyframes,
         getPreviewTransform: renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         getPreviewPathVertices: renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
@@ -1266,7 +1319,7 @@ export async function createCompositionRenderer(
         const item = getCurrentItem(baseItem);
         // Get animated transform
         const itemKeyframes = getCurrentKeyframes(item.id);
-        let transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
+        let transform = getAnimatedTransform(item, itemKeyframes, frame, logicalCanvasSettings);
         if (renderMode === 'preview') {
           const previewOverride = getPreviewTransformOverride?.(item.id);
           if (previewOverride) {
@@ -1277,6 +1330,7 @@ export async function createCompositionRenderer(
             };
           }
         }
+        transform = scaleTransformToCanvas(transform, logicalCanvasSettings, canvasSettings);
 
         // Apply corner pin preview override during interactive drag
         let effectiveItem = item;
@@ -1526,7 +1580,8 @@ export async function createCompositionRenderer(
 
         // Get animated transform at current frame
         const itemKeyframes = getCurrentKeyframes(item.id);
-        const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
+        const logicalTransform = getAnimatedTransform(item, itemKeyframes, frame, logicalCanvasSettings);
+        const transform = scaleTransformToCanvas(logicalTransform, logicalCanvasSettings, canvasSettings);
 
         // Check opacity (must be 1.0)
         if (transform.opacity < 1) return false;
@@ -1640,7 +1695,7 @@ export async function createCompositionRenderer(
 
       // === PERFORMANCE: Use pooled canvas instead of creating new one each frame ===
       const { canvas: contentCanvas, ctx: contentCtx } = canvasPool.acquire();
-      contentCtx.fillStyle = backgroundColor;
+      contentCtx.fillStyle = currentBackgroundColor;
       contentCtx.fillRect(0, 0, contentCanvas.width, contentCanvas.height);
 
       // Render tracks in order (bottom to top), with transitions at their track position
@@ -2049,6 +2104,65 @@ export async function createCompositionRenderer(
           }
         }));
       }
+    },
+
+    resize(
+      width: number,
+      height: number,
+      presentationCanvas?: HTMLCanvasElement | OffscreenCanvas,
+    ) {
+      const nextWidth = Math.max(2, Math.round(width));
+      const nextHeight = Math.max(2, Math.round(height));
+      const presentationCanvasChanged = (
+        presentationCanvas !== undefined
+        && presentationCanvas !== currentPresentationCanvas
+      );
+
+      currentPresentationCanvas = presentationCanvas ?? currentPresentationCanvas;
+
+      if (
+        canvas.width === nextWidth
+        && canvas.height === nextHeight
+        && !presentationCanvasChanged
+      ) {
+        return;
+      }
+
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      canvasSettings.width = nextWidth;
+      canvasSettings.height = nextHeight;
+      canvasPool.resize(nextWidth, nextHeight);
+      textMeasureCache.clear();
+      scrubbingCache?.invalidate();
+      lastRenderedFrame = -1;
+      lastFramePresentedDirectly = false;
+      directGpuPresentationCount = 0;
+      if (scrubbingCache && gpuPipeline) {
+        scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), nextWidth, nextHeight);
+      }
+      gpuCompositeCtx = null;
+      gpuCompositeW = 0;
+      gpuCompositeH = 0;
+      gpuCompositeConfigureFailed = false;
+      gpuPresentationCtx = null;
+      gpuPresentationW = 0;
+      gpuPresentationH = 0;
+      gpuPresentationConfigureFailed = false;
+    },
+
+    updateScene(next: {
+      tracks?: CompositionInputProps['tracks'];
+      transitions?: CompositionInputProps['transitions'];
+      backgroundColor?: string;
+      keyframes?: CompositionInputProps['keyframes'];
+      width?: number;
+      height?: number;
+    }) {
+      refreshDerivedSceneState(next);
+      lastRenderedFrame = -1;
+      lastFramePresentedDirectly = false;
+      directGpuPresentationCount = 0;
     },
 
 

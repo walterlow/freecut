@@ -42,34 +42,34 @@ describe('pushRenderSourceSwitchHistory', () => {
   it('appends when under capacity', () => {
     const next = pushRenderSourceSwitchHistory(
       [],
-      { ts: 1, atFrame: 10, from: 'renderer', to: 'transition_overlay' },
+      { ts: 1, atFrame: 10, from: 'renderer', to: 'renderer' },
       3
     );
     expect(next).toHaveLength(1);
-    expect(next[0]).toEqual({ ts: 1, atFrame: 10, from: 'renderer', to: 'transition_overlay' });
+    expect(next[0]).toEqual({ ts: 1, atFrame: 10, from: 'renderer', to: 'renderer' });
   });
 
   it('keeps only the most recent entries at capacity', () => {
     const next = pushRenderSourceSwitchHistory(
       [
-        { ts: 1, atFrame: 0, from: 'renderer', to: 'transition_overlay' },
-        { ts: 2, atFrame: 1, from: 'transition_overlay', to: 'renderer' },
-        { ts: 3, atFrame: 2, from: 'renderer', to: 'transition_overlay' },
+        { ts: 1, atFrame: 0, from: 'renderer', to: 'renderer' },
+        { ts: 2, atFrame: 1, from: 'renderer', to: 'renderer' },
+        { ts: 3, atFrame: 2, from: 'renderer', to: 'renderer' },
       ],
-      { ts: 4, atFrame: 3, from: 'transition_overlay', to: 'renderer' },
+      { ts: 4, atFrame: 3, from: 'renderer', to: 'renderer' },
       3
     );
     expect(next).toEqual([
-      { ts: 2, atFrame: 1, from: 'transition_overlay', to: 'renderer' },
-      { ts: 3, atFrame: 2, from: 'renderer', to: 'transition_overlay' },
-      { ts: 4, atFrame: 3, from: 'transition_overlay', to: 'renderer' },
+      { ts: 2, atFrame: 1, from: 'renderer', to: 'renderer' },
+      { ts: 3, atFrame: 2, from: 'renderer', to: 'renderer' },
+      { ts: 4, atFrame: 3, from: 'renderer', to: 'renderer' },
     ]);
   });
 
   it('returns empty when maxEntries is not positive', () => {
     const next = pushRenderSourceSwitchHistory(
-      [{ ts: 1, atFrame: 0, from: 'renderer', to: 'transition_overlay' }],
-      { ts: 2, atFrame: 1, from: 'transition_overlay', to: 'renderer' },
+      [{ ts: 1, atFrame: 0, from: 'renderer', to: 'renderer' }],
+      { ts: 2, atFrame: 1, from: 'renderer', to: 'renderer' },
       0
     );
     expect(next).toEqual([]);

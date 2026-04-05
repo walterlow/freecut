@@ -76,6 +76,22 @@ export class CanvasPool {
   }
 
   /**
+   * Resize pooled canvases to a new physical render target.
+   * In-use canvases are resized lazily on next acquire.
+   */
+  resize(width: number, height: number): void {
+    if (this.width === width && this.height === height) {
+      return;
+    }
+    this.width = width;
+    this.height = height;
+    for (const canvas of this.available) {
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+    }
+  }
+
+  /**
    * Release all canvases and clear the pool
    */
   dispose(): void {
@@ -132,4 +148,3 @@ export class TextMeasurementCache {
     this.cache.clear();
   }
 }
-

@@ -106,6 +106,8 @@ const rendererMockState = vi.hoisted(() => {
     prewarmFrame: ReturnType<typeof vi.fn>;
     prewarmFrames: ReturnType<typeof vi.fn>;
     prewarmItems: ReturnType<typeof vi.fn>;
+    resize: ReturnType<typeof vi.fn>;
+    updateScene: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
     wasLastFramePresentedDirectly: ReturnType<typeof vi.fn<() => boolean>>;
@@ -127,6 +129,8 @@ const rendererMockState = vi.hoisted(() => {
         }
       }),
       prewarmItems: vi.fn(async () => {}),
+      resize: vi.fn(),
+      updateScene: vi.fn(),
       invalidateFrameCache: vi.fn(),
       getScrubbingCache: () => null,
       wasLastFramePresentedDirectly: vi.fn(() => false),
@@ -201,6 +205,48 @@ function countRendererCalls(method: 'renderFrame' | 'prewarmFrame', frame: numbe
   return rendererMockState.instances.reduce((count, renderer) => (
     count + renderer[method].mock.calls.filter(([calledFrame]) => calledFrame === frame).length
   ), 0);
+}
+
+type StandaloneRendererMock = {
+  preload: ReturnType<typeof vi.fn>;
+  renderFrame: ReturnType<typeof vi.fn>;
+  prewarmFrame: ReturnType<typeof vi.fn>;
+  prewarmFrames: ReturnType<typeof vi.fn>;
+  prewarmItems: ReturnType<typeof vi.fn>;
+  resize: ReturnType<typeof vi.fn>;
+  updateScene: ReturnType<typeof vi.fn>;
+  invalidateFrameCache: ReturnType<typeof vi.fn>;
+  getScrubbingCache: () => null;
+  wasLastFramePresentedDirectly: ReturnType<typeof vi.fn<() => boolean>>;
+  dispose: ReturnType<typeof vi.fn>;
+  warmGpuPipeline?: ReturnType<typeof vi.fn>;
+};
+
+function createStandaloneRendererMock(
+  overrides: Partial<StandaloneRendererMock> = {},
+): StandaloneRendererMock {
+  const prewarmFrame = vi.fn(async (frame: number) => {
+    void frame;
+  });
+
+  return {
+    preload: vi.fn(async () => {}),
+    renderFrame: vi.fn(async () => {}),
+    prewarmFrame,
+    prewarmFrames: vi.fn(async (frames: number[]) => {
+      for (const frame of frames) {
+        await prewarmFrame(frame);
+      }
+    }),
+    prewarmItems: vi.fn(async () => {}),
+    resize: vi.fn(),
+    updateScene: vi.fn(),
+    invalidateFrameCache: vi.fn(),
+    getScrubbingCache: () => null,
+    wasLastFramePresentedDirectly: vi.fn(() => false),
+    dispose: vi.fn(),
+    ...overrides,
+  };
 }
 
 class ResizeObserverMock {
@@ -551,7 +597,7 @@ describe('VideoPreview sync behavior', () => {
     (globalThis as unknown as { ResizeObserver: typeof ResizeObserverMock }).ResizeObserver = ResizeObserverMock;
   });
 
-  it('mounts the headless transport instead of the visual player shell', () => {
+  it('mounts the headless transport instead of the visual player shell', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -561,6 +607,10 @@ describe('VideoPreview sync behavior', () => {
 
     expect(screen.getByTestId('mock-headless-transport')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-player')).toBeNull();
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
   });
 
   it('renders scrub preview through a detached work canvas and wires a dedicated presentation surface', async () => {
@@ -589,6 +639,245 @@ describe('VideoPreview sync behavior', () => {
     expect(renderCanvas).toBeTruthy();
     expect(renderCanvas).not.toBe(scrubCanvas);
     expect(renderOptions?.presentationCanvas).toBe(gpuCanvas);
+  });
+
+  it('sizes the preview renderer to the fitted preview surface instead of full project resolution', async () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    const renderCanvas = createCompositionRendererMock.mock.calls[0]?.[1] as
+      | HTMLCanvasElement
+      | undefined;
+
+    expect(renderCanvas).toBeTruthy();
+    expect(renderCanvas?.width).toBe(1280);
+    expect(renderCanvas?.height).toBe(720);
+    expect(lastTransportDimensions).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it('resizes the preview renderer when preview quality changes while keeping transport geometry fixed', async () => {
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewQuality(0.33);
+    });
+
+    await waitFor(() => {
+      expect(rendererMockState.instances[0]?.resize).toHaveBeenCalled();
+    });
+
+    expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    expect(rendererMockState.instances[0]?.resize).toHaveBeenCalledWith(
+      422,
+      238,
+      expect.any(HTMLCanvasElement),
+    );
+    expect(lastTransportDimensions).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it('resizes the warm preview renderer in place instead of replacing it', async () => {
+    const firstRenderer = createStandaloneRendererMock();
+    createCompositionRendererMock.mockImplementationOnce(async () => firstRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewQuality(0.33);
+    });
+
+    await waitFor(() => {
+      expect(firstRenderer.resize).toHaveBeenCalledWith(
+        422,
+        238,
+        expect.any(HTMLCanvasElement),
+      );
+    });
+
+    expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    expect(firstRenderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it('updates track visibility in place instead of replacing the renderer', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:track-visibility',
+      } as TimelineItem,
+    ]);
+
+    const firstRenderer = createStandaloneRendererMock();
+    createCompositionRendererMock.mockImplementationOnce(async () => firstRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-video',
+          name: 'Video',
+          height: 60,
+          locked: false,
+          visible: false,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(firstRenderer.updateScene).toHaveBeenCalled();
+    });
+
+    expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+    expect(firstRenderer.dispose).not.toHaveBeenCalled();
+  });
+
+  it('does not wait for preload to settle before rendering the first preview frame', async () => {
+    const stalledPreloadRenderer = createStandaloneRendererMock({
+      preload: vi.fn(() => new Promise<void>(() => {})),
+    });
+    createCompositionRendererMock.mockImplementationOnce(async () => stalledPreloadRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(stalledPreloadRenderer.renderFrame).toHaveBeenCalledWith(24);
+    });
+  });
+
+  it('starts playback rendering before variable-speed prewarm settles', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-var',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:var-speed',
+        speed: 1.5,
+      } as TimelineItem,
+    ]);
+
+    let resolvePrewarm: (() => void) | null = null;
+    const prewarmGate = new Promise<void>((resolve) => {
+      resolvePrewarm = resolve;
+    });
+    const stalledPrewarmRenderer = createStandaloneRendererMock({
+      prewarmItems: vi.fn(() => prewarmGate),
+    });
+    createCompositionRendererMock.mockImplementationOnce(async () => stalledPrewarmRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().play();
+    });
+
+    await waitFor(() => {
+      expect(stalledPrewarmRenderer.prewarmItems).toHaveBeenCalledWith(['clip-var'], 0);
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(1);
+    });
+
+    await waitFor(() => {
+      expect(stalledPrewarmRenderer.renderFrame).toHaveBeenCalledWith(1);
+    });
+
+    await act(async () => {
+      resolvePrewarm?.();
+      await prewarmGate;
+    });
   });
 
   it('seeks to currentFrame when previewFrame is stale and unchanged (ruler click path)', async () => {
@@ -2191,7 +2480,7 @@ describe('VideoPreview sync behavior', () => {
     expect(warmedFrames.some((frame) => frame < 68)).toBe(true);
   });
 
-  it('prewarms masked adjustment-layer transitions on the renderer path', async () => {
+  it('warms masked adjustment-layer transitions on the renderer path', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-mask',
@@ -2310,12 +2599,12 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(20);
-      expect(anyRendererCalledWith('renderFrame', 40)).toBe(true);
+      expect(renderer.prewarmItems).toHaveBeenCalledWith(['clip-left', 'clip-right'], 40);
     });
 
   });
 
-  it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {
+  it('keeps the renderer surface visible when playback boots inside an end-on-edit transition', async () => {
     seedAlignedTransitionProject(1);
 
     act(() => {
@@ -2657,7 +2946,7 @@ describe('VideoPreview sync behavior', () => {
     expect(renderer.renderFrame).toHaveBeenCalledWith(48);
   });
 
-  it('pre-renders the first transition frame before transition start', async () => {
+  it('warms the first transition frame before transition start on the main renderer', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2729,10 +3018,12 @@ describe('VideoPreview sync behavior', () => {
     });
 
     const renderer = rendererMockState.instances[0]!;
-    const prerenderedStartFrameCalls = countRendererCalls('renderFrame', 40);
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(35);
-      expect(anyRendererCalledWith('renderFrame', 40)).toBe(true);
+      expect(renderer.prewarmItems).toHaveBeenCalledWith(
+        ['clip-left', 'clip-right'],
+        40,
+      );
       expect(scrubCanvas.style.visibility).toBe('visible');
       expect(usePlaybackStore.getState().displayedFrame).toBe(35);
     });
@@ -2745,10 +3036,296 @@ describe('VideoPreview sync behavior', () => {
       expect(usePlaybackStore.getState().displayedFrame).toBeGreaterThanOrEqual(40);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
+  });
 
-    expect(
-      countRendererCalls('renderFrame', 40),
-    ).toBeGreaterThanOrEqual(prerenderedStartFrameCalls);
+  it('keeps the renderer surface visible while transition warm-up runs ahead of entry', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    let resolveEntryRender: (() => void) | null = null;
+    const entryRenderGate = new Promise<void>((resolve) => {
+      resolveEntryRender = resolve;
+    });
+    const mainRenderer = createStandaloneRendererMock({
+      renderFrame: vi.fn((frame: number) => {
+        if (frame >= 41 && frame < 60) {
+          return entryRenderGate;
+        }
+        return Promise.resolve();
+      }),
+    });
+    createCompositionRendererMock
+      .mockImplementationOnce(async () => mainRenderer);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(35);
+    });
+
+    await waitFor(() => {
+      expect(mainRenderer.renderFrame).toHaveBeenCalledWith(35);
+      expect(mainRenderer.prewarmItems).toHaveBeenCalledWith(
+        ['clip-left', 'clip-right'],
+        40,
+      );
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(41);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBe(35);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+    expect(mainRenderer.renderFrame).toHaveBeenCalledWith(41);
+
+    await act(async () => {
+      resolveEntryRender?.();
+      await entryRenderGate;
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeGreaterThanOrEqual(41);
+    });
+  });
+
+  it('does not block transition entry playback on a stalled transition prearm', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    let resolvePrewarm: (() => void) | null = null;
+    const prewarmGate = new Promise<void>((resolve) => {
+      resolvePrewarm = resolve;
+    });
+    const stalledPrewarmRenderer = createStandaloneRendererMock({
+      prewarmItems: vi.fn(() => prewarmGate),
+    });
+    createCompositionRendererMock.mockImplementationOnce(async () => stalledPrewarmRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(35);
+    });
+
+    await waitFor(() => {
+      expect(stalledPrewarmRenderer.prewarmItems).toHaveBeenCalledWith(
+        ['clip-left', 'clip-right'],
+        40,
+      );
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(40);
+    });
+
+    await waitFor(() => {
+      expect(usePlaybackStore.getState().displayedFrame).toBeGreaterThanOrEqual(40);
+    });
+
+    await act(async () => {
+      resolvePrewarm?.();
+      await prewarmGate;
+    });
+  });
+
+  it('does not block mid-transition playback entry on a stalled decoder prewarm', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    let resolvePrewarm: (() => void) | null = null;
+    const prewarmGate = new Promise<void>((resolve) => {
+      resolvePrewarm = resolve;
+    });
+    const stalledPrewarmRenderer = createStandaloneRendererMock({
+      prewarmItems: vi.fn(() => prewarmGate),
+    });
+    createCompositionRendererMock.mockImplementationOnce(async () => stalledPrewarmRenderer);
+
+    render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(stalledPrewarmRenderer.prewarmItems).toHaveBeenCalledWith(
+        ['clip-left', 'clip-right'],
+        48,
+      );
+    });
+
+    await waitFor(() => {
+      expect(stalledPrewarmRenderer.renderFrame).toHaveBeenCalledWith(48);
+    });
+
+    await act(async () => {
+      resolvePrewarm?.();
+      await prewarmGate;
+    });
   });
 
   it('keeps scrub preview stable when a transition is added during scrub preview', async () => {

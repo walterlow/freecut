@@ -15,6 +15,43 @@ import {
   resolveActiveShapeMasksAtFrame,
 } from '@/features/export/deps/composition-runtime';
 
+function getMaskCanvasScale(
+  logicalCanvas: MaskCanvasSettings,
+  renderCanvas: MaskCanvasSettings,
+): { scaleX: number; scaleY: number; uniformScale: number } {
+  const scaleX = logicalCanvas.width > 0 ? renderCanvas.width / logicalCanvas.width : 1;
+  const scaleY = logicalCanvas.height > 0 ? renderCanvas.height / logicalCanvas.height : 1;
+  return {
+    scaleX,
+    scaleY,
+    uniformScale: Math.min(scaleX, scaleY),
+  };
+}
+
+function scaleMaskTransformToCanvas(
+  transform: ResolvedTransform,
+  logicalCanvas: MaskCanvasSettings,
+  renderCanvas: MaskCanvasSettings,
+): ResolvedTransform {
+  const { scaleX, scaleY, uniformScale } = getMaskCanvasScale(logicalCanvas, renderCanvas);
+  if (
+    scaleX === 1
+    && scaleY === 1
+    && uniformScale === 1
+  ) {
+    return transform;
+  }
+
+  return {
+    ...transform,
+    x: transform.x * scaleX,
+    y: transform.y * scaleY,
+    width: transform.width * scaleX,
+    height: transform.height * scaleY,
+    cornerRadius: transform.cornerRadius * uniformScale,
+  };
+}
+
 interface MaskEntry {
   mask: ShapeItem;
   trackOrder: number;
@@ -334,6 +371,7 @@ export function getActiveMasksForFrame(
   index: MaskFrameIndex,
   frame: number,
   canvas: MaskCanvasSettings,
+  logicalCanvas: MaskCanvasSettings = canvas,
   keyframes: MaskKeyframeResolver,
   getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined,
   getPreviewPathVerticesOverride?: PreviewPathVerticesOverride,
@@ -359,17 +397,21 @@ export function getActiveMasksForFrame(
   const activeMaskShapes = resolveActiveShapeMasksAtFrame(
     liveMasks,
     {
-      canvas,
+      canvas: logicalCanvas,
       frame,
       getKeyframes: (itemId) => resolveMaskKeyframes(keyframes, itemId),
       getPreviewTransform: getPreviewTransformOverride,
       getPreviewPathVertices: getPreviewPathVerticesOverride,
     }
   );
+  const { uniformScale } = getMaskCanvasScale(logicalCanvas, canvas);
 
   for (const mask of activeMaskShapes) {
+    const scaledTransform = scaleMaskTransformToCanvas(mask.transform, logicalCanvas, canvas);
+    const preparedMask = getMaskPath(mask.shape, scaledTransform, canvas);
     activeMasks.push({
-      ...getMaskPath(mask.shape, mask.transform, canvas),
+      ...preparedMask,
+      feather: preparedMask.feather * uniformScale,
       trackOrder: mask.trackOrder,
     });
   }
@@ -389,6 +431,7 @@ export function prepareMasks(
   tracks: TimelineTrack[],
   frame: number,
   canvas: MaskCanvasSettings,
+  logicalCanvas: MaskCanvasSettings = canvas,
   keyframes: MaskKeyframeResolver = new Map(),
   getPreviewTransformOverride?: (itemId: string) => Partial<ResolvedTransform> | undefined,
   getPreviewPathVerticesOverride?: PreviewPathVerticesOverride,
@@ -404,6 +447,7 @@ export function prepareMasks(
     index,
     frame,
     canvas,
+    logicalCanvas,
     keyframes,
     getPreviewTransformOverride,
     getPreviewPathVerticesOverride,

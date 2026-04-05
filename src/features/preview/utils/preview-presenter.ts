@@ -20,9 +20,7 @@ export interface PreviewPresenterFrameSnapshot {
   previewFrame: number | null;
 }
 
-export type PreviewPresenterPlayingDecision =
-  | 'show_renderer'
-  | 'show_transition_overlay';
+export type PreviewPresenterPlayingDecision = 'show_renderer';
 
 export type PreviewPresenterStoreDecision =
   | {
@@ -61,16 +59,10 @@ export type PreviewPresenterRenderLoopDecision =
   | { kind: 'skip_prewarm'; frameToRender: number };
 
 export type PreviewPresenterTransitionPlaybackDecision =
-  | {
+  {
     kind: 'show_renderer';
     shouldClearTransitionSession: boolean;
-  }
-  | {
-    kind: 'show_prepared_transition_overlay';
-  }
-  | {
-    kind: 'render_transition_overlay';
-    shouldRecordEntryMiss: boolean;
+    shouldRenderFrame: boolean;
   };
 
 export type PreviewPresenterPausedTransitionDecision =
@@ -78,10 +70,6 @@ export type PreviewPresenterPausedTransitionDecision =
   | { kind: 'clear' }
   | {
     kind: 'prewarm_transition_entry';
-    targetStartFrame: number;
-  }
-  | {
-    kind: 'show_transition_overlay';
     targetStartFrame: number;
   }
   | {
@@ -96,7 +84,6 @@ export interface PreviewPresenterBootstrapDecision {
 
 export type PreviewPresenterAction =
   | { kind: 'show_renderer' }
-  | { kind: 'show_transition_overlay' }
   | { kind: 'set_surface'; surface: PreviewPresenterSurface };
 
 export function createPreviewPresenterModel(
@@ -112,8 +99,6 @@ export function updatePreviewPresenterModel(
   switch (action.kind) {
     case 'show_renderer':
       return { surface: 'renderer' };
-    case 'show_transition_overlay':
-      return { surface: 'transition_overlay' };
     case 'set_surface':
       return { surface: action.surface };
     default: {
@@ -127,14 +112,13 @@ export function createPreviewPresenterState(
   model: PreviewPresenterModel,
 ): PreviewPresenterState {
   const showRenderer = model.surface === 'renderer';
-  const showTransitionOverlay = model.surface === 'transition_overlay';
 
   return {
     surface: model.surface,
     renderSource: model.surface,
     showRenderer,
-    showTransitionOverlay,
-    isRenderedOverlayVisible: showRenderer || showTransitionOverlay,
+    showTransitionOverlay: false,
+    isRenderedOverlayVisible: showRenderer,
   };
 }
 
@@ -151,16 +135,10 @@ export function setPreviewPresenterSurface(
 export function resolvePreviewPresenterPlayingDecision(input: {
   playbackTransitionState: {
     hasActiveTransition: boolean;
-    shouldHoldOverlay: boolean;
+    shouldHoldTransitionFrame: boolean;
   };
 }): PreviewPresenterPlayingDecision {
-  if (
-    input.playbackTransitionState.hasActiveTransition
-    || input.playbackTransitionState.shouldHoldOverlay
-  ) {
-    return 'show_transition_overlay';
-  }
-
+  void input;
   return 'show_renderer';
 }
 
@@ -169,7 +147,7 @@ export function resolvePreviewPresenterStoreDecision(input: {
   prev: PreviewPresenterFrameSnapshot;
   playbackTransitionState?: {
     hasActiveTransition: boolean;
-    shouldHoldOverlay: boolean;
+    shouldHoldTransitionFrame: boolean;
   };
 }): PreviewPresenterStoreDecision {
   if (input.state.isPlaying) {
@@ -178,7 +156,7 @@ export function resolvePreviewPresenterStoreDecision(input: {
       action: resolvePreviewPresenterPlayingDecision({
         playbackTransitionState: input.playbackTransitionState ?? {
           hasActiveTransition: false,
-          shouldHoldOverlay: false,
+          shouldHoldTransitionFrame: false,
         },
       }),
     };
@@ -335,27 +313,18 @@ export function resolvePreviewPresenterTransitionPlaybackDecision(input: {
   action: PreviewPresenterPlayingDecision;
   transitionState: {
     hasActiveTransition: boolean;
-    shouldHoldOverlay: boolean;
+    shouldHoldTransitionFrame: boolean;
     shouldPrewarm: boolean;
   };
-  hasPreparedTransitionFrame: boolean;
 }): PreviewPresenterTransitionPlaybackDecision {
-  if (input.action === 'show_renderer') {
-    return {
-      kind: 'show_renderer',
-      shouldClearTransitionSession: !input.transitionState.shouldPrewarm,
-    };
-  }
-
-  if (input.hasPreparedTransitionFrame) {
-    return {
-      kind: 'show_prepared_transition_overlay',
-    };
-  }
-
+  void input.action;
   return {
-    kind: 'render_transition_overlay',
-    shouldRecordEntryMiss: input.transitionState.hasActiveTransition,
+    kind: 'show_renderer',
+    shouldClearTransitionSession: !input.transitionState.shouldPrewarm,
+    shouldRenderFrame: (
+      input.transitionState.hasActiveTransition
+      || input.transitionState.shouldHoldTransitionFrame
+    ),
   };
 }
 
@@ -386,17 +355,15 @@ export function resolvePreviewPresenterPausedTransitionDecision(input: {
     return { kind: 'ignore' };
   }
 
-  if (input.pausedActiveWindowStartFrame !== null) {
-    return {
-      kind: 'show_transition_overlay',
+  return input.pausedActiveWindowStartFrame !== null
+    ? {
+      kind: 'schedule_prepare',
       targetStartFrame: input.pausedActiveWindowStartFrame,
+    }
+    : {
+      kind: 'prewarm_transition_entry',
+      targetStartFrame: input.pausedPrewarmStartFrame,
     };
-  }
-
-  return {
-    kind: 'prewarm_transition_entry',
-    targetStartFrame: input.pausedPrewarmStartFrame,
-  };
 }
 
 export function resolvePreviewPresenterBootstrapDecision(input: {

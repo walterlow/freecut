@@ -1,4 +1,4 @@
-export type PreviewRenderSource = 'renderer' | 'transition_overlay';
+export type PreviewRenderSource = 'renderer';
 
 export interface RenderSourceSwitchEntry {
   ts: number;

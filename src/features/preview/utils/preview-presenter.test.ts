@@ -23,37 +23,37 @@ describe('preview presenter model', () => {
     });
   });
 
-  it('switches to the transition surface', () => {
+  it('keeps the renderer surface when asked to show renderer', () => {
     const next = updatePreviewPresenterModel(
       createPreviewPresenterModel(),
-      { kind: 'show_transition_overlay' },
+      { kind: 'show_renderer' },
     );
 
     expect(createPreviewPresenterState(next)).toEqual({
-      surface: 'transition_overlay',
-      renderSource: 'transition_overlay',
-      showRenderer: false,
-      showTransitionOverlay: true,
+      surface: 'renderer',
+      renderSource: 'renderer',
+      showRenderer: true,
+      showTransitionOverlay: false,
       isRenderedOverlayVisible: true,
     });
   });
 });
 
 describe('resolvePreviewPresenterPlayingDecision', () => {
-  it('chooses the transition surface when playback is inside an overlap', () => {
+  it('keeps playback on the renderer surface inside an overlap', () => {
     expect(resolvePreviewPresenterPlayingDecision({
       playbackTransitionState: {
         hasActiveTransition: true,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
       },
-    })).toBe('show_transition_overlay');
+    })).toBe('show_renderer');
   });
 
   it('keeps steady playback on the renderer surface otherwise', () => {
     expect(resolvePreviewPresenterPlayingDecision({
       playbackTransitionState: {
         hasActiveTransition: false,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
       },
     })).toBe('show_renderer');
   });
@@ -74,7 +74,7 @@ describe('resolvePreviewPresenterStoreDecision', () => {
       },
       playbackTransitionState: {
         hasActiveTransition: false,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
       },
     })).toEqual({
       kind: 'playing',
@@ -176,38 +176,39 @@ describe('render loop decisions', () => {
 });
 
 describe('transition playback decisions', () => {
-  it('shows the steady renderer when no transition overlay is needed', () => {
+  it('keeps the renderer visible and clears stale sessions when no transition warmup is needed', () => {
     expect(resolvePreviewPresenterTransitionPlaybackDecision({
       action: 'show_renderer',
       transitionState: {
         hasActiveTransition: false,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
         shouldPrewarm: false,
       },
-      hasPreparedTransitionFrame: false,
     })).toEqual({
       kind: 'show_renderer',
       shouldClearTransitionSession: true,
+      shouldRenderFrame: false,
     });
   });
 
-  it('reuses prepared transition frames when available', () => {
+  it('requests a renderer frame while playback is inside or near a transition', () => {
     expect(resolvePreviewPresenterTransitionPlaybackDecision({
-      action: 'show_transition_overlay',
+      action: 'show_renderer',
       transitionState: {
         hasActiveTransition: true,
-        shouldHoldOverlay: false,
+        shouldHoldTransitionFrame: false,
         shouldPrewarm: true,
       },
-      hasPreparedTransitionFrame: true,
     })).toEqual({
-      kind: 'show_prepared_transition_overlay',
+      kind: 'show_renderer',
+      shouldClearTransitionSession: false,
+      shouldRenderFrame: true,
     });
   });
 });
 
 describe('paused transition decisions', () => {
-  it('requests an immediate transition render when paused inside the overlap', () => {
+  it('schedules prepare work when paused inside the overlap', () => {
     expect(resolvePreviewPresenterPausedTransitionDecision({
       isPlaying: false,
       previewFrame: null,
@@ -215,7 +216,7 @@ describe('paused transition decisions', () => {
       pausedActiveWindowStartFrame: 40,
       pausedPrewarmStartFrame: 40,
     })).toEqual({
-      kind: 'show_transition_overlay',
+      kind: 'schedule_prepare',
       targetStartFrame: 40,
     });
   });

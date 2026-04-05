@@ -1,26 +1,26 @@
-export interface PlaybackTransitionOverlayWindow {
+export interface PlaybackTransitionWindow {
   startFrame: number;
   endFrame: number;
   cooldownFrames?: number;
 }
 
-export interface PlaybackTransitionOverlayState {
+export interface PlaybackTransitionState {
   hasActiveTransition: boolean;
-  shouldHoldOverlay: boolean;
+  shouldHoldTransitionFrame: boolean;
   shouldPrewarm: boolean;
   nextTransitionStartFrame: number | null;
 }
 
-export function resolvePlaybackTransitionOverlayState(
-  transitionWindows: PlaybackTransitionOverlayWindow[],
+export function resolvePlaybackTransitionState(
+  transitionWindows: PlaybackTransitionWindow[],
   frame: number,
   lookaheadFrames: number,
   cooldownFrames = 0,
-): PlaybackTransitionOverlayState {
+): PlaybackTransitionState {
   const safeLookaheadFrames = Math.max(0, lookaheadFrames);
   const safeCooldownFrames = Math.max(0, cooldownFrames);
   let nextTransitionStartFrame: number | null = null;
-  let shouldHoldOverlay = false;
+  let shouldHoldTransitionFrame = false;
 
   for (const window of transitionWindows) {
     const windowCooldownFrames = Math.max(0, window.cooldownFrames ?? safeCooldownFrames);
@@ -28,14 +28,14 @@ export function resolvePlaybackTransitionOverlayState(
     if (frame >= window.startFrame && frame < window.endFrame) {
       return {
         hasActiveTransition: true,
-        shouldHoldOverlay: true,
+        shouldHoldTransitionFrame: true,
         shouldPrewarm: true,
         nextTransitionStartFrame: window.startFrame,
       };
     }
 
     if (frame >= window.endFrame && frame < window.endFrame + windowCooldownFrames) {
-      shouldHoldOverlay = true;
+      shouldHoldTransitionFrame = true;
     }
 
     if (frame < window.startFrame) {
@@ -46,7 +46,7 @@ export function resolvePlaybackTransitionOverlayState(
 
   return {
     hasActiveTransition: false,
-    shouldHoldOverlay,
+    shouldHoldTransitionFrame,
     shouldPrewarm: nextTransitionStartFrame !== null
       && (nextTransitionStartFrame - frame) <= safeLookaheadFrames,
     nextTransitionStartFrame,

@@ -74,6 +74,43 @@ export interface CanvasSettings {
   fps: number;
 }
 
+export function getCanvasScale(
+  logicalCanvas: CanvasSettings,
+  renderCanvas: CanvasSettings,
+): { scaleX: number; scaleY: number; uniformScale: number } {
+  const scaleX = logicalCanvas.width > 0 ? renderCanvas.width / logicalCanvas.width : 1;
+  const scaleY = logicalCanvas.height > 0 ? renderCanvas.height / logicalCanvas.height : 1;
+  return {
+    scaleX,
+    scaleY,
+    uniformScale: Math.min(scaleX, scaleY),
+  };
+}
+
+export function scaleTransformToCanvas(
+  transform: ResolvedTransform,
+  logicalCanvas: CanvasSettings,
+  renderCanvas: CanvasSettings,
+): ItemTransform {
+  const { scaleX, scaleY, uniformScale } = getCanvasScale(logicalCanvas, renderCanvas);
+  if (
+    scaleX === 1
+    && scaleY === 1
+    && uniformScale === 1
+  ) {
+    return transform;
+  }
+
+  return {
+    ...transform,
+    x: transform.x * scaleX,
+    y: transform.y * scaleY,
+    width: transform.width * scaleX,
+    height: transform.height * scaleY,
+    cornerRadius: transform.cornerRadius * uniformScale,
+  };
+}
+
 /**
  * Resolved transform for a single item at a specific frame.
  */
@@ -110,6 +147,7 @@ const WORKER_PRESEEK_WAIT_MS = 12;
 export interface ItemRenderContext {
   fps: number;
   canvasSettings: CanvasSettings;
+  logicalCanvasSettings?: CanvasSettings;
   canvasPool: CanvasPool;
   textMeasureCache: TextMeasurementCache;
   renderMode: 'export' | 'preview';
@@ -268,7 +306,10 @@ async function renderItemContent(
       renderShape(ctx, effectiveItem as ShapeItem, transform, {
         width: rctx.canvasSettings.width,
         height: rctx.canvasSettings.height,
-      });
+      }, getCanvasScale(
+        rctx.logicalCanvasSettings ?? rctx.canvasSettings,
+        rctx.canvasSettings,
+      ).uniformScale);
       break;
     case 'composition':
       await renderCompositionItem(ctx, effectiveItem as CompositionItem, transform, frame, rctx);
@@ -306,6 +347,7 @@ async function renderItemWithCornerPin(
   const tempRctx: ItemRenderContext = {
     ...rctx,
     canvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
+    logicalCanvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
   };
 
   // Render content to temp canvas
@@ -929,18 +971,20 @@ function renderTextItem(
   rctx: ItemRenderContext,
 ): void {
   const { canvasSettings, textMeasureCache } = rctx;
+  const logicalCanvasSettings = rctx.logicalCanvasSettings ?? canvasSettings;
+  const { scaleX, scaleY, uniformScale } = getCanvasScale(logicalCanvasSettings, canvasSettings);
 
-  const fontSize = item.fontSize ?? 60;
+  const fontSize = (item.fontSize ?? 60) * uniformScale;
   const fontFamily = item.fontFamily ?? 'Inter';
   const fontStyle = item.fontStyle ?? 'normal';
   const fontWeightName = item.fontWeight ?? 'normal';
   const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? 400;
   const underline = item.underline ?? false;
   const lineHeight = item.lineHeight ?? 1.2;
-  const letterSpacing = item.letterSpacing ?? 0;
+  const letterSpacing = (item.letterSpacing ?? 0) * scaleX;
   const textAlign = item.textAlign ?? 'center';
   const verticalAlign = item.verticalAlign ?? 'middle';
-  const padding = 16;
+  const padding = 16 * uniformScale;
 
   const itemLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
   const itemTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
@@ -993,9 +1037,9 @@ function renderTextItem(
 
   if (item.textShadow) {
     ctx.shadowColor = item.textShadow.color;
-    ctx.shadowBlur = item.textShadow.blur;
-    ctx.shadowOffsetX = item.textShadow.offsetX;
-    ctx.shadowOffsetY = item.textShadow.offsetY;
+    ctx.shadowBlur = item.textShadow.blur * uniformScale;
+    ctx.shadowOffsetX = item.textShadow.offsetX * scaleX;
+    ctx.shadowOffsetY = item.textShadow.offsetY * scaleY;
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -1286,6 +1330,7 @@ async function renderCompositionItem(
       ...rctx,
       fps: subData.fps,
       canvasSettings: subCanvasSettings,
+      logicalCanvasSettings: subCanvasSettings,
     };
 
     // Resolve all active masks up front so each item can be masked only by
@@ -1529,7 +1574,8 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
 ): TransitionParticipantRenderState<TItem> {
   const currentClip = rctx.getCurrentItemSnapshot?.(clip) ?? clip;
   const itemKeyframes = rctx.getCurrentKeyframes?.(currentClip.id) ?? rctx.keyframesMap.get(currentClip.id);
-  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, rctx.canvasSettings, {
+  const logicalCanvasSettings = rctx.logicalCanvasSettings ?? rctx.canvasSettings;
+  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, logicalCanvasSettings, {
     suppressOutOfRangeVisualFade: true,
   });
 
@@ -1554,6 +1600,8 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
       } as TItem;
     }
   }
+
+  transform = scaleTransformToCanvas(transform, logicalCanvasSettings, rctx.canvasSettings);
 
   const itemEffects = (
     rctx.renderMode === 'preview'

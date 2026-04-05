@@ -37,6 +37,7 @@ export const PREVIEW_RENDERER_BACKWARD_RENDER_THROTTLE_MS = 24;
 export const PREVIEW_RENDERER_BACKWARD_RENDER_QUANTIZE_FRAMES = 2;
 export const PREVIEW_RENDERER_BACKWARD_FORCE_JUMP_FRAMES = 8;
 export const PREVIEW_RENDERER_PREWARM_RENDER_BUDGET_MS = 16;
+export const PREVIEW_RENDERER_PLAYBACK_TRANSITION_WAIT_BUDGET_MS = 6;
 export const SOURCE_WARM_PLAYHEAD_WINDOW_SECONDS = 8;
 export const SOURCE_WARM_SCRUB_WINDOW_SECONDS = 3;
 export const SOURCE_WARM_MAX_SOURCES = 20;
@@ -127,7 +128,6 @@ export type PreviewPerfSnapshot = {
   transitionSessionComplex: boolean;
   transitionSessionStartFrame: number;
   transitionSessionEndFrame: number;
-  transitionBufferedFrames: number;
   transitionPreparedFrame: number;
   transitionLastPrepareMs: number;
   transitionLastReadyLeadMs: number;
