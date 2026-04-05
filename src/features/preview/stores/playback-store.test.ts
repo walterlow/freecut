@@ -156,7 +156,7 @@ describe('playback-store', () => {
       expect(usePlaybackStore.getState().previewQuality).toBe(1);
     });
 
-    it('stores user-selected fast scrub quality', () => {
+    it('stores user-selected preview quality', () => {
       usePlaybackStore.getState().setPreviewQuality(0.5);
       expect(usePlaybackStore.getState().previewQuality).toBe(0.5);
 

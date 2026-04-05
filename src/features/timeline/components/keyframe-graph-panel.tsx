@@ -1073,7 +1073,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       const absoluteFrame = selectedItemForEditor.from + clipRelativeFrame;
       
       // Route editor scrubbing through the preview scrub path so the preview
-      // can stay on its fast-scrub presentation instead of doing full seeks.
+      // can stay on its renderer presentation instead of doing full seeks.
       usePlaybackStore.getState().setScrubFrame(absoluteFrame, selectedItemForEditor.id);
     },
     [selectedItemForEditor]

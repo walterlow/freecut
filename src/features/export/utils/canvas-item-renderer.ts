@@ -153,11 +153,6 @@ export interface ItemRenderContext {
   // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
   gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
 
-  // Legacy DOM video provider retained while transport still keeps transition
-  // bridge elements alive. Preview rendering no longer samples these elements
-  // directly; it stays on decoded renderer inputs for consistent composition.
-  domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
-
   // Set to true when rendering transition participant clips. Widens the
   // DOM video drift threshold to prefer stale zero-copy frames over
   // 170ms mediabunny stalls during transition ramp-up / exit.
@@ -537,7 +532,7 @@ async function renderVideoItem(
     }
   }
 
-  // Preview fast-scrub runs in strict decode mode (no HTML video fallbacks).
+  // Preview renderer runs in strict decode mode (no HTML video fallbacks).
   // During startup/resolution races, mediabunny may not be ready for this frame yet.
   // In that window, skip drawing this item for the frame instead of logging a
   // misleading "Video element not found" warning.

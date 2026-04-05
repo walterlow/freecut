@@ -10,7 +10,7 @@ type FrameResolutionInput = Pick<
  *
  * Rules:
  * - Playing always follows currentFrame.
- * - When fast-scrub overlay is visible, follow displayedFrame to stay in sync
+ * - When renderer surface is visible, follow displayedFrame to stay in sync
  *   with what is actually on screen.
  * - If previewFrame is null, follow currentFrame.
  * - While paused, follow whichever source was updated most recently.

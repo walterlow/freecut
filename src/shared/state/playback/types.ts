@@ -69,6 +69,6 @@ export interface PlaybackActions {
   setCaptureCanvasSource?: (fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null) => void;
   /** Toggle proxy playback mode */
   toggleUseProxy: () => void;
-  /** Set fast-scrub render quality */
+  /** Set preview render quality */
   setPreviewQuality: (quality: PreviewQuality) => void;
 }

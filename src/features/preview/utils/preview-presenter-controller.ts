@@ -4,7 +4,6 @@ import {
   resolvePreviewPresenterStoreDecision,
   resolvePreviewPresenterTransitionPlaybackDecision,
   type PreviewPresenterFrameSnapshot,
-  type PreviewPresenterState,
   type PreviewPresenterTransitionPlaybackDecision,
 } from './preview-presenter';
 
@@ -16,7 +15,7 @@ export interface PreviewPresenterStoreSyncPlanConfig {
 }
 
 interface PreviewPresenterScrubSyncPlanBase {
-  targetFrame: number | null;
+  targetFrame: number;
   scrubDirection: -1 | 0 | 1;
   scrubUpdates: number;
   scrubDroppedFrames: number;
@@ -26,18 +25,13 @@ interface PreviewPresenterScrubSyncPlanBase {
 }
 
 export type PreviewPresenterStoreSyncPlan =
-  | { kind: 'prefer_player' }
   | { kind: 'unchanged' }
   | {
     kind: 'playing';
-    shouldBeginFastScrubHandoff: boolean;
-    handoffStartFrame: number;
-    shouldEnsureFastScrubRenderer: boolean;
+    shouldEnsurePreviewRenderer: boolean;
     transitionPrepareStartFrame: number | null;
     overlayDecision: PreviewPresenterTransitionPlaybackDecision;
-    shouldClearPendingFastScrubHandoffBeforeOverlay: boolean;
   }
-  | (PreviewPresenterScrubSyncPlanBase & { kind: 'release_to_player' })
   | (PreviewPresenterScrubSyncPlanBase & { kind: 'skip_frame_request' })
   | (PreviewPresenterScrubSyncPlanBase & {
     kind: 'request_frame';
@@ -45,17 +39,11 @@ export type PreviewPresenterStoreSyncPlan =
   });
 
 export interface ResolvePreviewPresenterStoreSyncPlanInput {
-  presenter: PreviewPresenterState;
   state: PreviewPresenterFrameSnapshot;
   prev: PreviewPresenterFrameSnapshot;
-  forceFastScrubOverlay: boolean;
-  shouldPreferPlayer: boolean;
-  isPausedInsideTransition: boolean;
-  prevIsPausedInsideTransition: boolean;
   playbackTransitionState: PlaybackTransitionOverlayState | null;
   hasPreparedTransitionFrame: boolean;
-  hasPendingFastScrubHandoff: boolean;
-  shouldPreserveHighFidelityBackwardPreview: (targetFrame: number | null) => boolean;
+  shouldPreserveHighFidelityBackwardPreview: (targetFrame: number) => boolean;
   lastBackwardRequestedFrame: number | null;
   lastBackwardRenderAtMs: number;
   nowMs: number;
@@ -66,19 +54,10 @@ export function resolvePreviewPresenterStoreSyncPlan(
   input: ResolvePreviewPresenterStoreSyncPlanInput,
 ): PreviewPresenterStoreSyncPlan {
   const presenterStoreDecision = resolvePreviewPresenterStoreDecision({
-    presenter: input.presenter,
     state: input.state,
     prev: input.prev,
-    forceFastScrubOverlay: input.forceFastScrubOverlay,
-    shouldPreferPlayer: input.shouldPreferPlayer,
-    isPausedInsideTransition: input.isPausedInsideTransition,
-    prevIsPausedInsideTransition: input.prevIsPausedInsideTransition,
     playbackTransitionState: input.playbackTransitionState ?? undefined,
   });
-
-  if (presenterStoreDecision.kind === 'prefer_player') {
-    return { kind: 'prefer_player' };
-  }
 
   if (presenterStoreDecision.kind === 'playing') {
     const transitionState = input.playbackTransitionState ?? {
@@ -87,31 +66,19 @@ export function resolvePreviewPresenterStoreSyncPlan(
       shouldPrewarm: false,
       nextTransitionStartFrame: null,
     };
-    const hasPendingFastScrubHandoff = (
-      input.hasPendingFastScrubHandoff
-      || presenterStoreDecision.shouldBeginFastScrubHandoff
-    );
     const overlayDecision = resolvePreviewPresenterTransitionPlaybackDecision({
       action: presenterStoreDecision.action,
       transitionState,
       hasPreparedTransitionFrame: input.hasPreparedTransitionFrame,
-      hasPendingFastScrubHandoff,
-      showFastScrubOverlay: input.presenter.showFastScrubOverlay,
     });
 
     return {
       kind: 'playing',
-      shouldBeginFastScrubHandoff: presenterStoreDecision.shouldBeginFastScrubHandoff,
-      handoffStartFrame: presenterStoreDecision.handoffStartFrame,
-      shouldEnsureFastScrubRenderer: transitionState.shouldPrewarm,
+      shouldEnsurePreviewRenderer: transitionState.shouldPrewarm,
       transitionPrepareStartFrame: transitionState.hasActiveTransition
         ? null
         : transitionState.nextTransitionStartFrame,
       overlayDecision,
-      shouldClearPendingFastScrubHandoffBeforeOverlay: (
-        overlayDecision.kind !== 'player'
-        && overlayDecision.kind !== 'await_fast_scrub_handoff'
-      ),
     };
   }
 
@@ -119,22 +86,15 @@ export function resolvePreviewPresenterStoreSyncPlan(
     return { kind: 'unchanged' };
   }
 
-  const targetFrame = presenterStoreDecision.kind === 'target_frame'
-    ? presenterStoreDecision.targetFrame
-    : null;
-  const prevTargetFrame = presenterStoreDecision.kind === 'target_frame'
-    ? presenterStoreDecision.prevTargetFrame
-    : null;
-  const isAtomicScrubTarget = presenterStoreDecision.kind === 'target_frame'
-    ? presenterStoreDecision.isAtomicScrubTarget
-    : false;
   const scrubTargetDecision = resolvePreviewPresenterScrubTargetDecision({
-    targetFrame,
-    prevTargetFrame,
+    targetFrame: presenterStoreDecision.targetFrame,
+    prevTargetFrame: presenterStoreDecision.prevTargetFrame,
     previewFrame: input.state.previewFrame,
     prevPreviewFrame: input.prev.previewFrame,
-    isAtomicScrubTarget,
-    preserveHighFidelityBackwardPreview: input.shouldPreserveHighFidelityBackwardPreview(targetFrame),
+    isAtomicScrubTarget: presenterStoreDecision.isAtomicScrubTarget,
+    preserveHighFidelityBackwardPreview: input.shouldPreserveHighFidelityBackwardPreview(
+      presenterStoreDecision.targetFrame,
+    ),
     disableBackgroundPrewarmOnBackward: input.config.disableBackgroundPrewarmOnBackward,
     lastBackwardRequestedFrame: input.lastBackwardRequestedFrame,
     lastBackwardRenderAtMs: input.lastBackwardRenderAtMs,
@@ -145,7 +105,7 @@ export function resolvePreviewPresenterStoreSyncPlan(
   });
 
   const scrubPlanBase: PreviewPresenterScrubSyncPlanBase = {
-    targetFrame,
+    targetFrame: presenterStoreDecision.targetFrame,
     scrubDirection: scrubTargetDecision.scrubDirection,
     scrubUpdates: scrubTargetDecision.scrubUpdates,
     scrubDroppedFrames: scrubTargetDecision.scrubDroppedFrames,
@@ -163,7 +123,7 @@ export function resolvePreviewPresenterStoreSyncPlan(
   }
 
   return {
-    kind: scrubTargetDecision.kind,
+    kind: 'skip_frame_request',
     ...scrubPlanBase,
   };
 }

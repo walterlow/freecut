@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDirectionalPrewarmOffsets } from './fast-scrub-prewarm';
+import { getDirectionalPrewarmOffsets } from './preview-renderer-prewarm';
 
 describe('getDirectionalPrewarmOffsets', () => {
   it('biases forward offsets for forward direction', () => {

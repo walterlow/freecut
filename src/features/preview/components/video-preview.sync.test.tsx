@@ -112,7 +112,6 @@ const rendererMockState = vi.hoisted(() => {
     prewarmFrames: ReturnType<typeof vi.fn>;
     prewarmItems: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
-    setDomVideoElementProvider: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
     dispose: ReturnType<typeof vi.fn>;
   };
@@ -133,7 +132,6 @@ const rendererMockState = vi.hoisted(() => {
       }),
       prewarmItems: vi.fn(async () => {}),
       invalidateFrameCache: vi.fn(),
-      setDomVideoElementProvider: vi.fn(),
       getScrubbingCache: () => null,
       dispose: vi.fn(),
     };
@@ -634,7 +632,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('invalidates the current fast-scrub frame when single-item gizmo preview changes', async () => {
+  it('invalidates the current preview renderer frame when single-item gizmo preview changes', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -738,7 +736,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('invalidates the current fast-scrub frame when mask point preview vertices change', async () => {
+  it('invalidates the current preview renderer frame when mask point preview vertices change', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -808,7 +806,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('reuses the active fast-scrub renderer for committed transform updates on gpu-effect clips', async () => {
+  it('reuses the active preview renderer for committed transform updates on gpu-effect clips', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -952,7 +950,7 @@ describe('VideoPreview sync behavior', () => {
     expect(renderer.dispose).not.toHaveBeenCalled();
   });
 
-  it('renders a paused currentFrame through the fast-scrub overlay when a gpu effect is added', async () => {
+  it('renders a paused currentFrame through the renderer surface when a gpu effect is added', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1043,7 +1041,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('renders a paused currentFrame through the fast-scrub overlay for live gpu effect previews', async () => {
+  it('renders a paused currentFrame through the renderer surface for live gpu effect previews', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1113,7 +1111,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('keeps the fast-scrub overlay visible when playback pauses on a gpu-effect clip', async () => {
+  it('keeps the renderer surface visible when playback pauses on a gpu-effect clip', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1199,7 +1197,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('keeps the paused fast-scrub overlay visible across play start until playback catches up', async () => {
+  it('keeps the paused renderer surface visible across play start until playback catches up', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1521,7 +1519,7 @@ describe('VideoPreview sync behavior', () => {
     expect(rightPreseek.some((timestamp) => timestamp >= 0)).toBe(true);
   });
 
-  it('switches a paused ruler seek onto the fast-scrub overlay when landing on a gpu-effect clip', async () => {
+  it('switches a paused ruler seek onto the renderer surface when landing on a gpu-effect clip', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1595,7 +1593,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('keeps the fast-scrub overlay active after scrub release on a gpu-effect clip', async () => {
+  it('keeps the renderer surface active after scrub release on a gpu-effect clip', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1730,7 +1728,7 @@ describe('VideoPreview sync behavior', () => {
     expect(seekToMock).not.toHaveBeenCalled();
   });
 
-  it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
+  it('keeps ruler drag on renderer presentation until previewFrame is cleared', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1763,7 +1761,7 @@ describe('VideoPreview sync behavior', () => {
     expect(seekToMock).not.toHaveBeenCalled();
   });
 
-  it('keeps backward ruler drag on fast-scrub presentation', async () => {
+  it('keeps backward ruler drag on renderer presentation', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1965,7 +1963,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('renders glowing animated text scrubs through the fast-scrub overlay', async () => {
+  it('renders glowing animated text scrubs through the renderer surface', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-text',
@@ -2165,7 +2163,6 @@ describe('VideoPreview sync behavior', () => {
     });
 
     renderer.renderFrame.mockClear();
-    renderer.setDomVideoElementProvider.mockClear();
 
     act(() => {
       usePlaybackStore.getState().setScrubFrame(84);
@@ -2176,7 +2173,6 @@ describe('VideoPreview sync behavior', () => {
     });
 
     renderer.renderFrame.mockClear();
-    renderer.setDomVideoElementProvider.mockClear();
 
     act(() => {
       usePlaybackStore.getState().setScrubFrame(68);
@@ -2187,8 +2183,6 @@ describe('VideoPreview sync behavior', () => {
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
-    const providerCalls = renderer.setDomVideoElementProvider.mock.calls;
-    expect(providerCalls.at(-1)?.[0]).toBeUndefined();
   });
 
   it('warms a wider decoded frame strip for variable-speed backward transition scrubs', async () => {
@@ -2388,8 +2382,6 @@ describe('VideoPreview sync behavior', () => {
       expect(anyRendererCalledWith('renderFrame', 40)).toBe(true);
     });
 
-    const providerCalls = renderer.setDomVideoElementProvider.mock.calls;
-    expect(providerCalls.at(-1)?.[0]).toBeUndefined();
   });
 
   it('shows the transition overlay when playback boots inside an end-on-edit transition', async () => {

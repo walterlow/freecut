@@ -133,7 +133,6 @@ export async function createCompositionRenderer(
     getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
     getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined;
     getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined;
-    domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
   const {
@@ -150,7 +149,6 @@ export async function createCompositionRenderer(
   const getPreviewPathVerticesOverride = options.getPreviewPathVerticesOverride;
   const getLiveItemSnapshot = options.getLiveItemSnapshot;
   const getLiveKeyframes = options.getLiveKeyframes;
-  const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
 
@@ -512,7 +510,6 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
-    domVideoElementProvider,
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
@@ -1766,10 +1763,6 @@ export async function createCompositionRenderer(
           } catch { /* best-effort fallback */ }
         }
       }
-    },
-
-    setDomVideoElementProvider(provider: ((itemId: string) => HTMLVideoElement | null) | undefined) {
-      itemRenderContext.domVideoElementProvider = provider;
     },
 
     /**
