@@ -75,6 +75,7 @@ import {
   resolvePreviewPresenterPlayingDecision,
   resolvePreviewPresenterPriorityFrameDecision,
   resolvePreviewPresenterReleaseDecision,
+  resolvePreviewPresenterScrubTargetDecision,
   resolvePreviewPresenterStoreDecision,
   resolvePreviewPresenterTransitionPlaybackDecision,
   resolvePreviewPresenterHandoff,
@@ -4381,21 +4382,29 @@ export const VideoPreview = memo(function VideoPreview({
       const isAtomicScrubTarget = presenterStoreDecision.kind === 'target_frame'
         ? presenterStoreDecision.isAtomicScrubTarget
         : false;
-
-      if (state.previewFrame !== null && prev.previewFrame !== null) {
-        const previewDelta = state.previewFrame - prev.previewFrame;
-        scrubDirectionRef.current = previewDelta > 0 ? 1 : previewDelta < 0 ? -1 : 0;
-        const deltaFrames = Math.abs(previewDelta);
-        previewPerfRef.current.scrubUpdates += 1;
-        if (deltaFrames > 1) {
-          previewPerfRef.current.scrubDroppedFrames += (deltaFrames - 1);
-        }
-      } else if (targetFrame !== null && prevTargetFrame !== null) {
-        const targetDelta = targetFrame - prevTargetFrame;
-        scrubDirectionRef.current = targetDelta > 0 ? 1 : targetDelta < 0 ? -1 : 0;
-      } else if (targetFrame !== null) {
-        scrubDirectionRef.current = 0;
-      }
+      const preserveHighFidelityBackwardPreview = shouldPreserveHighFidelityBackwardPreview(
+        targetFrame,
+      );
+      const scrubTargetDecision = resolvePreviewPresenterScrubTargetDecision({
+        targetFrame,
+        prevTargetFrame,
+        previewFrame: state.previewFrame,
+        prevPreviewFrame: prev.previewFrame,
+        forceFastScrubOverlay,
+        isAtomicScrubTarget,
+        preserveHighFidelityBackwardPreview,
+        disableBackgroundPrewarmOnBackward: FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD,
+        fallbackToPlayerOnBackward: FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD,
+        lastBackwardRequestedFrame: lastBackwardRequestedFrameRef.current,
+        lastBackwardRenderAtMs: lastBackwardScrubRenderAtRef.current,
+        nowMs: performance.now(),
+        backwardRenderQuantizeFrames: FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES,
+        backwardRenderThrottleMs: FAST_SCRUB_BACKWARD_RENDER_THROTTLE_MS,
+        backwardForceJumpFrames: FAST_SCRUB_BACKWARD_FORCE_JUMP_FRAMES,
+      });
+      scrubDirectionRef.current = scrubTargetDecision.scrubDirection;
+      previewPerfRef.current.scrubUpdates += scrubTargetDecision.scrubUpdates;
+      previewPerfRef.current.scrubDroppedFrames += scrubTargetDecision.scrubDroppedFrames;
 
       // Update cache eviction hint so Tier 1/3 prefer evicting frames in the
       // opposite scrub direction — preserves frames the user is moving toward.
@@ -4406,37 +4415,27 @@ export const VideoPreview = memo(function VideoPreview({
         );
       }
 
-      const nextSuppressBackgroundPrewarm = FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD
-        && scrubDirectionRef.current < 0;
-      const preserveHighFidelityBackwardPreview = shouldPreserveHighFidelityBackwardPreview(
-        targetFrame,
-      );
-      const nextFallbackToPlayer = !forceFastScrubOverlay
-        && FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD
-        && scrubDirectionRef.current < 0
-        && !isAtomicScrubTarget
-        && !preserveHighFidelityBackwardPreview;
-      if (nextSuppressBackgroundPrewarm !== suppressScrubBackgroundPrewarmRef.current) {
-        suppressScrubBackgroundPrewarmRef.current = nextSuppressBackgroundPrewarm;
+      if (scrubTargetDecision.nextSuppressBackgroundPrewarm !== suppressScrubBackgroundPrewarmRef.current) {
+        suppressScrubBackgroundPrewarmRef.current = scrubTargetDecision.nextSuppressBackgroundPrewarm;
         scrubPrewarmQueueRef.current = [];
         scrubPrewarmQueuedSetRef.current.clear();
       }
-      if (nextFallbackToPlayer !== fallbackToPlayerScrubRef.current) {
-        fallbackToPlayerScrubRef.current = nextFallbackToPlayer;
+      if (scrubTargetDecision.nextFallbackToPlayer !== fallbackToPlayerScrubRef.current) {
+        fallbackToPlayerScrubRef.current = scrubTargetDecision.nextFallbackToPlayer;
         scrubRequestedFrameRef.current = null;
         scrubPrewarmQueueRef.current = [];
         scrubPrewarmQueuedSetRef.current.clear();
-        if (nextFallbackToPlayer) {
+        if (scrubTargetDecision.nextFallbackToPlayer) {
           hideRenderedOverlays();
         }
       }
-      if (fallbackToPlayerScrubRef.current && targetFrame !== null) {
+      if (scrubTargetDecision.kind === 'use_player_fallback') {
         // Let Player seek path handle backward scrubbing directly.
         hideRenderedOverlays();
         return;
       }
 
-      if (targetFrame === null) {
+      if (scrubTargetDecision.kind === 'release_to_player') {
         resetTransientScrubState();
         clearPendingFastScrubHandoff();
         bypassPreviewSeekRef.current = false;
@@ -4449,34 +4448,10 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
-      let nextRequestedFrame = targetFrame;
-      if (
-        scrubDirectionRef.current < 0
-        && !isAtomicScrubTarget
-        && !preserveHighFidelityBackwardPreview
-      ) {
-        const nowMs = performance.now();
-        const quantizedFrame = Math.floor(
-          targetFrame / FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES
-        ) * FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES;
-        const lastRequested = lastBackwardRequestedFrameRef.current;
-        const withinThrottle = (
-          (nowMs - lastBackwardScrubRenderAtRef.current) < FAST_SCRUB_BACKWARD_RENDER_THROTTLE_MS
-        );
-        const jumpDistance = lastRequested === null
-          ? Number.POSITIVE_INFINITY
-          : Math.abs(quantizedFrame - lastRequested);
-
-        if (withinThrottle && jumpDistance < FAST_SCRUB_BACKWARD_FORCE_JUMP_FRAMES) {
-          return;
-        }
-
-        lastBackwardScrubRenderAtRef.current = nowMs;
-        lastBackwardRequestedFrameRef.current = quantizedFrame;
-        nextRequestedFrame = quantizedFrame;
-      } else {
-        lastBackwardScrubRenderAtRef.current = 0;
-        lastBackwardRequestedFrameRef.current = null;
+      lastBackwardScrubRenderAtRef.current = scrubTargetDecision.nextBackwardRenderAtMs;
+      lastBackwardRequestedFrameRef.current = scrubTargetDecision.nextBackwardRequestedFrame;
+      if (scrubTargetDecision.kind === 'skip_frame_request') {
+        return;
       }
 
       // Clear stale prewarm queue so the pump processes the new target
@@ -4485,7 +4460,7 @@ export const VideoPreview = memo(function VideoPreview({
       // the in-flight pump picks up the new target on its next iteration.
       scrubPrewarmQueueRef.current = [];
       scrubPrewarmQueuedSetRef.current.clear();
-      scrubRequestedFrameRef.current = nextRequestedFrame;
+      scrubRequestedFrameRef.current = scrubTargetDecision.requestedFrame;
       // During playback with rAF pump active or prewarm in flight, let
       // rAF drive the render loop to avoid contention and first-frame stalls.
       if (playbackRafId === null && !playbackPrewarmInFlight) {

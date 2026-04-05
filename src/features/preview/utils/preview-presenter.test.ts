@@ -11,6 +11,7 @@ import {
   resolvePreviewPresenterHandoffCheckDecision,
   resolvePreviewPresenterPriorityFrameDecision,
   resolvePreviewPresenterReleaseDecision,
+  resolvePreviewPresenterScrubTargetDecision,
   resolvePreviewPresenterStoreDecision,
   resolvePreviewPresenterTransitionPlaybackDecision,
   resolvePreviewPresenterHandoff,
@@ -349,6 +350,123 @@ describe('preview presenter decisions', () => {
       shouldTrackPlayerSeek: true,
       shouldBeginFastScrubHandoff: false,
       shouldHideImmediately: false,
+    });
+  });
+
+  it('routes a missing scrub target back to player release', () => {
+    expect(resolvePreviewPresenterScrubTargetDecision({
+      targetFrame: null,
+      prevTargetFrame: 101,
+      previewFrame: null,
+      prevPreviewFrame: 101,
+      forceFastScrubOverlay: false,
+      isAtomicScrubTarget: false,
+      preserveHighFidelityBackwardPreview: false,
+      disableBackgroundPrewarmOnBackward: true,
+      fallbackToPlayerOnBackward: true,
+      lastBackwardRequestedFrame: 96,
+      lastBackwardRenderAtMs: 5000,
+      nowMs: 5100,
+      backwardRenderQuantizeFrames: 4,
+      backwardRenderThrottleMs: 50,
+      backwardForceJumpFrames: 8,
+    })).toEqual({
+      kind: 'release_to_player',
+      scrubDirection: 0,
+      scrubUpdates: 0,
+      scrubDroppedFrames: 0,
+      nextSuppressBackgroundPrewarm: false,
+      nextFallbackToPlayer: false,
+      nextBackwardRequestedFrame: null,
+      nextBackwardRenderAtMs: 0,
+    });
+  });
+
+  it('routes backward scrubs to player fallback when overlay scrub should yield', () => {
+    expect(resolvePreviewPresenterScrubTargetDecision({
+      targetFrame: 96,
+      prevTargetFrame: 108,
+      previewFrame: 96,
+      prevPreviewFrame: 108,
+      forceFastScrubOverlay: false,
+      isAtomicScrubTarget: false,
+      preserveHighFidelityBackwardPreview: false,
+      disableBackgroundPrewarmOnBackward: true,
+      fallbackToPlayerOnBackward: true,
+      lastBackwardRequestedFrame: null,
+      lastBackwardRenderAtMs: 0,
+      nowMs: 5100,
+      backwardRenderQuantizeFrames: 4,
+      backwardRenderThrottleMs: 50,
+      backwardForceJumpFrames: 8,
+    })).toEqual({
+      kind: 'use_player_fallback',
+      scrubDirection: -1,
+      scrubUpdates: 1,
+      scrubDroppedFrames: 11,
+      nextSuppressBackgroundPrewarm: true,
+      nextFallbackToPlayer: true,
+      nextBackwardRequestedFrame: null,
+      nextBackwardRenderAtMs: 0,
+    });
+  });
+
+  it('throttles quantized backward renders when the jump is too small', () => {
+    expect(resolvePreviewPresenterScrubTargetDecision({
+      targetFrame: 94,
+      prevTargetFrame: 98,
+      previewFrame: 94,
+      prevPreviewFrame: 98,
+      forceFastScrubOverlay: true,
+      isAtomicScrubTarget: false,
+      preserveHighFidelityBackwardPreview: false,
+      disableBackgroundPrewarmOnBackward: true,
+      fallbackToPlayerOnBackward: true,
+      lastBackwardRequestedFrame: 92,
+      lastBackwardRenderAtMs: 5000,
+      nowMs: 5020,
+      backwardRenderQuantizeFrames: 4,
+      backwardRenderThrottleMs: 50,
+      backwardForceJumpFrames: 8,
+    })).toEqual({
+      kind: 'skip_frame_request',
+      scrubDirection: -1,
+      scrubUpdates: 1,
+      scrubDroppedFrames: 3,
+      nextSuppressBackgroundPrewarm: true,
+      nextFallbackToPlayer: false,
+      nextBackwardRequestedFrame: 92,
+      nextBackwardRenderAtMs: 5000,
+    });
+  });
+
+  it('quantizes backward scrub renders when a new frame request should proceed', () => {
+    expect(resolvePreviewPresenterScrubTargetDecision({
+      targetFrame: 86,
+      prevTargetFrame: 98,
+      previewFrame: 86,
+      prevPreviewFrame: 98,
+      forceFastScrubOverlay: true,
+      isAtomicScrubTarget: false,
+      preserveHighFidelityBackwardPreview: false,
+      disableBackgroundPrewarmOnBackward: true,
+      fallbackToPlayerOnBackward: true,
+      lastBackwardRequestedFrame: 96,
+      lastBackwardRenderAtMs: 5000,
+      nowMs: 5100,
+      backwardRenderQuantizeFrames: 4,
+      backwardRenderThrottleMs: 50,
+      backwardForceJumpFrames: 8,
+    })).toEqual({
+      kind: 'request_frame',
+      requestedFrame: 84,
+      scrubDirection: -1,
+      scrubUpdates: 1,
+      scrubDroppedFrames: 11,
+      nextSuppressBackgroundPrewarm: true,
+      nextFallbackToPlayer: false,
+      nextBackwardRequestedFrame: 84,
+      nextBackwardRenderAtMs: 5100,
     });
   });
 

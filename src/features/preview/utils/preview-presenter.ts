@@ -69,6 +69,25 @@ export interface PreviewPresenterReleaseDecision {
   shouldHideImmediately: boolean;
 }
 
+interface PreviewPresenterScrubTargetDecisionBase {
+  scrubDirection: -1 | 0 | 1;
+  scrubUpdates: number;
+  scrubDroppedFrames: number;
+  nextSuppressBackgroundPrewarm: boolean;
+  nextFallbackToPlayer: boolean;
+  nextBackwardRequestedFrame: number | null;
+  nextBackwardRenderAtMs: number;
+}
+
+export type PreviewPresenterScrubTargetDecision =
+  | (PreviewPresenterScrubTargetDecisionBase & { kind: 'release_to_player' })
+  | (PreviewPresenterScrubTargetDecisionBase & { kind: 'use_player_fallback' })
+  | (PreviewPresenterScrubTargetDecisionBase & { kind: 'skip_frame_request' })
+  | (PreviewPresenterScrubTargetDecisionBase & {
+    kind: 'request_frame';
+    requestedFrame: number;
+  });
+
 export type PreviewPresenterTransitionPlaybackDecision =
   | {
     kind: 'player';
@@ -423,6 +442,117 @@ export function resolvePreviewPresenterReleaseDecision(input: {
       && !playerMatchesCurrentFrame
     ),
     shouldHideImmediately: playerMatchesCurrentFrame,
+  };
+}
+
+export function resolvePreviewPresenterScrubTargetDecision(input: {
+  targetFrame: number | null;
+  prevTargetFrame: number | null;
+  previewFrame: number | null;
+  prevPreviewFrame: number | null;
+  forceFastScrubOverlay: boolean;
+  isAtomicScrubTarget: boolean;
+  preserveHighFidelityBackwardPreview: boolean;
+  disableBackgroundPrewarmOnBackward: boolean;
+  fallbackToPlayerOnBackward: boolean;
+  lastBackwardRequestedFrame: number | null;
+  lastBackwardRenderAtMs: number;
+  nowMs: number;
+  backwardRenderQuantizeFrames: number;
+  backwardRenderThrottleMs: number;
+  backwardForceJumpFrames: number;
+}): PreviewPresenterScrubTargetDecision {
+  let scrubDirection: -1 | 0 | 1 = 0;
+  let scrubUpdates = 0;
+  let scrubDroppedFrames = 0;
+
+  if (input.previewFrame !== null && input.prevPreviewFrame !== null) {
+    const previewDelta = input.previewFrame - input.prevPreviewFrame;
+    scrubDirection = previewDelta > 0 ? 1 : previewDelta < 0 ? -1 : 0;
+    scrubUpdates = 1;
+    scrubDroppedFrames = Math.max(0, Math.abs(previewDelta) - 1);
+  } else if (input.targetFrame !== null && input.prevTargetFrame !== null) {
+    const targetDelta = input.targetFrame - input.prevTargetFrame;
+    scrubDirection = targetDelta > 0 ? 1 : targetDelta < 0 ? -1 : 0;
+  }
+
+  const nextSuppressBackgroundPrewarm = (
+    input.disableBackgroundPrewarmOnBackward
+    && scrubDirection < 0
+  );
+  const nextFallbackToPlayer = (
+    !input.forceFastScrubOverlay
+    && input.fallbackToPlayerOnBackward
+    && scrubDirection < 0
+    && !input.isAtomicScrubTarget
+    && !input.preserveHighFidelityBackwardPreview
+  );
+
+  const baseDecision = {
+    scrubDirection,
+    scrubUpdates,
+    scrubDroppedFrames,
+    nextSuppressBackgroundPrewarm,
+    nextFallbackToPlayer,
+  };
+
+  if (input.targetFrame === null) {
+    return {
+      kind: 'release_to_player',
+      ...baseDecision,
+      nextBackwardRequestedFrame: null,
+      nextBackwardRenderAtMs: 0,
+    };
+  }
+
+  if (nextFallbackToPlayer) {
+    return {
+      kind: 'use_player_fallback',
+      ...baseDecision,
+      nextBackwardRequestedFrame: null,
+      nextBackwardRenderAtMs: 0,
+    };
+  }
+
+  if (
+    scrubDirection < 0
+    && !input.isAtomicScrubTarget
+    && !input.preserveHighFidelityBackwardPreview
+  ) {
+    const quantizedFrame = Math.floor(
+      input.targetFrame / input.backwardRenderQuantizeFrames
+    ) * input.backwardRenderQuantizeFrames;
+    const withinThrottle = (
+      (input.nowMs - input.lastBackwardRenderAtMs) < input.backwardRenderThrottleMs
+    );
+    const jumpDistance = input.lastBackwardRequestedFrame === null
+      ? Number.POSITIVE_INFINITY
+      : Math.abs(quantizedFrame - input.lastBackwardRequestedFrame);
+
+    if (withinThrottle && jumpDistance < input.backwardForceJumpFrames) {
+      return {
+        kind: 'skip_frame_request',
+        ...baseDecision,
+        nextBackwardRequestedFrame: input.lastBackwardRequestedFrame,
+        nextBackwardRenderAtMs: input.lastBackwardRenderAtMs,
+      };
+    }
+
+    return {
+      kind: 'request_frame',
+      requestedFrame: quantizedFrame,
+      ...baseDecision,
+      nextBackwardRequestedFrame: quantizedFrame,
+      nextBackwardRenderAtMs: input.nowMs,
+    };
+  }
+
+  return {
+    kind: 'request_frame',
+    requestedFrame: input.targetFrame,
+    ...baseDecision,
+    nextBackwardRequestedFrame: null,
+    nextBackwardRenderAtMs: 0,
   };
 }
 
