@@ -5,12 +5,12 @@ import { PlayerTransportProviders } from './PlayerTransportProviders';
 import {
   usePlayerTransportBridge,
   type BasePlayerTransportProps,
-  type PlayerRef,
+  type PlayerTransportRef,
 } from './player-transport-shared';
 
 export type HeadlessPlayerTransportProps = BasePlayerTransportProps;
 
-const HeadlessPlayerTransportInner = forwardRef<PlayerRef, HeadlessPlayerTransportProps>(
+const HeadlessPlayerTransportInner = forwardRef<PlayerTransportRef, HeadlessPlayerTransportProps>(
   (
     {
       children,
@@ -55,7 +55,7 @@ const HeadlessPlayerTransportInner = forwardRef<PlayerRef, HeadlessPlayerTranspo
 );
 HeadlessPlayerTransportInner.displayName = 'HeadlessPlayerTransportInner';
 
-export const HeadlessPlayerTransport = forwardRef<PlayerRef, HeadlessPlayerTransportProps>(
+export const HeadlessPlayerTransport = forwardRef<PlayerTransportRef, HeadlessPlayerTransportProps>(
   (props, ref) => {
     const {
       durationInFrames,

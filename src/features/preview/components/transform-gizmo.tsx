@@ -93,7 +93,7 @@ export function TransformGizmo({
 
       if (strokeWidth > 0) {
         // Scale stroke width to screen space
-        const scale = coordParams.playerSize.width / coordParams.projectSize.width;
+        const scale = coordParams.previewSize.width / coordParams.projectSize.width;
         const screenStroke = strokeWidth * scale;
 
         // Expand bounds by half stroke on each side (stroke is centered on path)

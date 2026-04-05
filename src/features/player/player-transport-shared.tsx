@@ -23,7 +23,7 @@ export interface BasePlayerTransportProps {
   onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
-export interface PlayerRef {
+export interface PlayerTransportRef {
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -34,8 +34,10 @@ export interface PlayerRef {
   removeEventListener: <E extends PlayerEventTypes>(event: E, callback: CallbackListener<E>) => void;
 }
 
+export type PlayerRef = PlayerTransportRef;
+
 interface UsePlayerTransportBridgeOptions {
-  ref: React.ForwardedRef<PlayerRef>;
+  ref: React.ForwardedRef<PlayerTransportRef>;
   durationInFrames: number;
   initialFrame?: number;
   loop?: boolean;

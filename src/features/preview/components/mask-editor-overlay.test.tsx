@@ -9,7 +9,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
 
 const PROJECT_SIZE = { width: 200, height: 120 } as const;
-const PLAYER_SIZE = { width: 200, height: 120 } as const;
+const PREVIEW_SIZE = { width: 200, height: 120 } as const;
 let mockCanvasContext: {
   scale: ReturnType<typeof vi.fn>;
   clearRect: ReturnType<typeof vi.fn>;
@@ -54,10 +54,10 @@ function createRect(): DOMRect {
     y: 0,
     left: 0,
     top: 0,
-    right: PLAYER_SIZE.width,
-    bottom: PLAYER_SIZE.height,
-    width: PLAYER_SIZE.width,
-    height: PLAYER_SIZE.height,
+    right: PREVIEW_SIZE.width,
+    bottom: PREVIEW_SIZE.height,
+    width: PREVIEW_SIZE.width,
+    height: PREVIEW_SIZE.height,
     toJSON: () => ({}),
   } as DOMRect;
 }
@@ -136,7 +136,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -144,7 +144,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -230,7 +230,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -238,7 +238,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -311,7 +311,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -319,7 +319,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -410,7 +410,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -418,7 +418,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -462,7 +462,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -470,7 +470,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -511,7 +511,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -519,7 +519,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -543,7 +543,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -551,7 +551,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -589,7 +589,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -597,7 +597,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -640,7 +640,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -648,7 +648,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -688,7 +688,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -696,7 +696,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={FULL_CANVAS_TRANSFORM}
       />
     );
@@ -755,7 +755,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -763,7 +763,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -785,7 +785,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -793,7 +793,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -828,7 +828,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -836,7 +836,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -858,7 +858,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -866,7 +866,7 @@ describe('MaskEditorOverlay edit mode', () => {
     render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -891,7 +891,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -899,7 +899,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -941,7 +941,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -949,7 +949,7 @@ describe('MaskEditorOverlay edit mode', () => {
     render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -1000,7 +1000,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1008,7 +1008,7 @@ describe('MaskEditorOverlay edit mode', () => {
     render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -1030,7 +1030,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1038,7 +1038,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -1133,7 +1133,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1141,7 +1141,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={animatedTransform}
       />
     );
@@ -1253,7 +1253,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1261,7 +1261,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={animatedTransform}
       />
     );
@@ -1383,7 +1383,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1391,7 +1391,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={animatedTransform}
       />
     );
@@ -1410,7 +1410,7 @@ describe('MaskEditorOverlay edit mode', () => {
     expect(updatedItem?.transform?.x).not.toBeCloseTo(10);
     expect(updatedItem?.transform?.y).not.toBeCloseTo(5);
 
-    // Keyframe count should NOT have increased — no new keyframes in transition region
+    // Keyframe count should NOT have increased â€” no new keyframes in transition region
     const updatedKeyframes = useTimelineStore.getState().keyframes.find((entry) => entry.itemId === 'path-1');
     const xKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'x')?.keyframes ?? [];
     expect(xKeyframes).toHaveLength(1);
@@ -1421,7 +1421,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1429,7 +1429,7 @@ describe('MaskEditorOverlay edit mode', () => {
     const { container } = render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -1456,7 +1456,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     const coordParams: CoordinateParams = {
       containerRect: createRect(),
-      playerSize: PLAYER_SIZE,
+      previewSize: PREVIEW_SIZE,
       projectSize: PROJECT_SIZE,
       zoom: 1,
     };
@@ -1464,7 +1464,7 @@ describe('MaskEditorOverlay edit mode', () => {
     render(
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={PLAYER_SIZE}
+        previewSize={PREVIEW_SIZE}
         itemTransform={PATH_ITEM_TRANSFORM}
       />
     );
@@ -1503,7 +1503,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
       const coordParams: CoordinateParams = {
         containerRect: createRect(),
-        playerSize: PLAYER_SIZE,
+        previewSize: PREVIEW_SIZE,
         projectSize: PROJECT_SIZE,
         zoom: 1,
       };
@@ -1511,7 +1511,7 @@ describe('MaskEditorOverlay edit mode', () => {
       const { container, rerender } = render(
         <MaskEditorOverlay
           coordParams={coordParams}
-          playerSize={PLAYER_SIZE}
+          previewSize={PREVIEW_SIZE}
           itemTransform={PATH_ITEM_TRANSFORM}
         />
       );
@@ -1541,7 +1541,7 @@ describe('MaskEditorOverlay edit mode', () => {
       rerender(
         <MaskEditorOverlay
           coordParams={coordParams}
-          playerSize={PLAYER_SIZE}
+          previewSize={PREVIEW_SIZE}
           itemTransform={committedTransform}
         />
       );

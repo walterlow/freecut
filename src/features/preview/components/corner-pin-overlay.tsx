@@ -24,7 +24,7 @@ import { getEffectiveScale } from '../utils/coordinate-transform';
 
 interface CornerPinOverlayProps {
   coordParams: CoordinateParams;
-  playerSize: { width: number; height: number };
+  previewSize: { width: number; height: number };
   itemTransform: Transform;
 }
 
@@ -43,7 +43,7 @@ const DEFAULT_PIN: CornerPinValues = {
 
 export const CornerPinOverlay = memo(function CornerPinOverlay({
   coordParams,
-  playerSize,
+  previewSize,
   itemTransform,
 }: CornerPinOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -330,19 +330,19 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
     [],
   );
 
-  // Resize canvas to match player size (with padding), then redraw
+  // Resize the canvas to match the preview surface (with padding), then redraw.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
-    const w = (playerSize.width + PADDING * 2) * dpr;
-    const h = (playerSize.height + PADDING * 2) * dpr;
+    const w = (previewSize.width + PADDING * 2) * dpr;
+    const h = (previewSize.height + PADDING * 2) * dpr;
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
     }
     draw();
-  }, [playerSize, draw]);
+  }, [previewSize, draw]);
 
   return (
     <canvas
@@ -351,8 +351,8 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
       style={{
         top: -PADDING,
         left: -PADDING,
-        width: playerSize.width + PADDING * 2,
-        height: playerSize.height + PADDING * 2,
+        width: previewSize.width + PADDING * 2,
+        height: previewSize.height + PADDING * 2,
         pointerEvents: 'auto',
       }}
       onPointerDown={handlePointerDown}

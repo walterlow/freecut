@@ -16,14 +16,14 @@ import { ErrorBoundary } from '@/components/error-boundary';
 
 interface MaskEditorContainerProps {
   containerRect: DOMRect | null;
-  playerSize: { width: number; height: number };
+  previewSize: { width: number; height: number };
   projectSize: { width: number; height: number };
   zoom: number;
 }
 
 export const MaskEditorContainer = memo(function MaskEditorContainer({
   containerRect,
-  playerSize,
+  previewSize,
   projectSize,
   zoom,
 }: MaskEditorContainerProps) {
@@ -41,8 +41,8 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
 
   const coordParams = useMemo((): CoordinateParams | null => {
     if (!containerRect) return null;
-    return { containerRect, playerSize, projectSize, zoom };
-  }, [containerRect, playerSize, projectSize, zoom]);
+    return { containerRect, previewSize, projectSize, zoom };
+  }, [containerRect, previewSize, projectSize, zoom]);
 
   const itemTransform = useMemo((): Transform | null => {
     // Shape pen mode: use full canvas as the coordinate space
@@ -73,7 +73,7 @@ export const MaskEditorContainer = memo(function MaskEditorContainer({
     <ErrorBoundary level="component">
       <MaskEditorOverlay
         coordParams={coordParams}
-        playerSize={playerSize}
+        previewSize={previewSize}
         itemTransform={itemTransform}
       />
     </ErrorBoundary>

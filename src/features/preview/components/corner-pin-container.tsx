@@ -16,14 +16,14 @@ import { resolveTransform, getSourceDimensions } from '@/features/preview/deps/c
 
 interface CornerPinContainerProps {
   containerRect: DOMRect | null;
-  playerSize: { width: number; height: number };
+  previewSize: { width: number; height: number };
   projectSize: { width: number; height: number };
   zoom: number;
 }
 
 export const CornerPinContainer = memo(function CornerPinContainer({
   containerRect,
-  playerSize,
+  previewSize,
   projectSize,
   zoom,
 }: CornerPinContainerProps) {
@@ -48,8 +48,8 @@ export const CornerPinContainer = memo(function CornerPinContainer({
 
   const coordParams = useMemo((): CoordinateParams | null => {
     if (!containerRect) return null;
-    return { containerRect, playerSize, projectSize, zoom };
-  }, [containerRect, playerSize, projectSize, zoom]);
+    return { containerRect, previewSize, projectSize, zoom };
+  }, [containerRect, previewSize, projectSize, zoom]);
 
   const itemTransform = useMemo((): Transform | null => {
     if (!editingItem) return null;
@@ -71,7 +71,7 @@ export const CornerPinContainer = memo(function CornerPinContainer({
   return (
     <CornerPinOverlay
       coordParams={coordParams}
-      playerSize={playerSize}
+      previewSize={previewSize}
       itemTransform={itemTransform}
     />
   );

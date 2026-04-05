@@ -3,4 +3,5 @@ export {
   HeadlessPlayerTransport,
   Player,
   type PlayerRef,
+  type PlayerTransportRef,
 } from './player-contract';

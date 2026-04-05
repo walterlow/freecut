@@ -80,8 +80,8 @@ export interface GizmoState {
 export interface CoordinateParams {
   /** Container element's bounding rectangle */
   containerRect: DOMRect;
-  /** Rendered player size (after zoom) */
-  playerSize: { width: number; height: number };
+  /** Rendered preview size (after zoom) */
+  previewSize: { width: number; height: number };
   /** Original project/canvas size */
   projectSize: { width: number; height: number };
   /** Current zoom level (-1 for auto-fit, or percentage) */

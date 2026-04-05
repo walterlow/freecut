@@ -20,10 +20,10 @@ import { PlayerTransportProviders } from './PlayerTransportProviders';
 import {
   usePlayerTransportBridge,
   type BasePlayerTransportProps,
-  type PlayerRef,
+  type PlayerTransportRef,
 } from './player-transport-shared';
 
-export type { PlayerRef } from './player-transport-shared';
+export type { PlayerRef, PlayerTransportRef } from './player-transport-shared';
 
 // Types
 export interface PlayerProps extends BasePlayerTransportProps {
@@ -250,7 +250,7 @@ const DefaultControls: React.FC<{
 /**
  * Inner Player Component
  */
-const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
+const PlayerInner = forwardRef<PlayerTransportRef, PlayerProps>(
   (
     {
       children,
@@ -383,7 +383,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
           ...style,
           overflow: 'hidden',
         }}
-        data-player-container
+        data-preview-container
       >
         {/* Video content - canvas rendered at native size, scaled to fit via CSS */}
         <div
@@ -448,7 +448,7 @@ const PlayerInner = forwardRef<PlayerRef, PlayerProps>(
  * The ClockBridgeProvider maintains backwards compatibility with
  * existing code that uses useTimelineContext().
  */
-export const Player = forwardRef<PlayerRef, PlayerProps>(
+export const Player = forwardRef<PlayerTransportRef, PlayerProps>(
   (props, ref) => {
     const {
       durationInFrames,

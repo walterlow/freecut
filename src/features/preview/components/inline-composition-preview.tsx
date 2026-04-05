@@ -89,7 +89,7 @@ export const InlineCompositionPreview = memo(function InlineCompositionPreview({
     Math.max(0, seekFrame ?? 0),
   );
 
-  const playerSize = useMemo(() => {
+  const previewSize = useMemo(() => {
     const aspectRatio = compositionWidth / compositionHeight;
 
     if (zoom === -1) {
@@ -117,8 +117,8 @@ export const InlineCompositionPreview = memo(function InlineCompositionPreview({
   const needsOverflow = useMemo(() => {
     if (zoom === -1) return false;
     if (containerSize.width === 0 || containerSize.height === 0) return false;
-    return playerSize.width > containerSize.width || playerSize.height > containerSize.height;
-  }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom]);
+    return previewSize.width > containerSize.width || previewSize.height > containerSize.height;
+  }, [containerSize.height, containerSize.width, previewSize.height, previewSize.width, zoom]);
 
   if (!composition || !compositionInput) {
     return (
@@ -144,8 +144,8 @@ export const InlineCompositionPreview = memo(function InlineCompositionPreview({
           <div
             className="relative shadow-2xl overflow-hidden"
             style={{
-              width: `${playerSize.width}px`,
-              height: `${playerSize.height}px`,
+              width: `${previewSize.width}px`,
+              height: `${previewSize.height}px`,
               outline: '2px solid hsl(var(--border))',
               outlineOffset: 0,
             }}

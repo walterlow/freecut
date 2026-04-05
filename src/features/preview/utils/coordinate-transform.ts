@@ -9,13 +9,13 @@ export const ROTATION_HANDLE_OFFSET = 24;
  * When zoom is -1 (auto-fit), calculate based on container/project ratio.
  */
 export function getEffectiveScale(params: CoordinateParams): number {
-  const { playerSize, projectSize, zoom } = params;
+  const { previewSize, projectSize, zoom } = params;
 
   if (zoom === -1) {
-    // Auto-fit: scale to fit project within player
+    // Auto-fit: scale to fit the project within the preview surface.
     return Math.min(
-      playerSize.width / projectSize.width,
-      playerSize.height / projectSize.height
+      previewSize.width / projectSize.width,
+      previewSize.height / projectSize.height
     );
   }
 
@@ -31,21 +31,21 @@ export function screenToCanvas(
   screenY: number,
   params: CoordinateParams
 ): Point {
-  const { containerRect, playerSize } = params;
+  const { containerRect, previewSize } = params;
   const scale = getEffectiveScale(params);
 
-  // Calculate player position within container (centered)
-  const playerOffsetX = (containerRect.width - playerSize.width) / 2;
-  const playerOffsetY = (containerRect.height - playerSize.height) / 2;
+  // Calculate preview surface position within the container (centered).
+  const previewOffsetX = (containerRect.width - previewSize.width) / 2;
+  const previewOffsetY = (containerRect.height - previewSize.height) / 2;
 
-  // Convert screen to player space
-  const playerX = screenX - containerRect.left - playerOffsetX;
-  const playerY = screenY - containerRect.top - playerOffsetY;
+  // Convert screen coordinates into preview-surface space.
+  const previewX = screenX - containerRect.left - previewOffsetX;
+  const previewY = screenY - containerRect.top - previewOffsetY;
 
-  // Convert player to canvas space
+  // Convert preview-surface coordinates into canvas space.
   return {
-    x: playerX / scale,
-    y: playerY / scale,
+    x: previewX / scale,
+    y: previewY / scale,
   };
 }
 
@@ -85,8 +85,8 @@ export function getTransformCenter(
 }
 
 /**
- * Convert transform bounds to screen rectangle.
- * Used for positioning the gizmo overlay.
+ * Convert transform bounds to a screen-space rectangle.
+ * Used for positioning the gizmo overlay on the preview surface.
  */
 export function transformToScreenBounds(
   transform: Transform,
@@ -103,7 +103,7 @@ export function transformToScreenBounds(
   const canvasLeft = canvasCenterX + transform.x - transform.width / 2;
   const canvasTop = canvasCenterY + transform.y - transform.height / 2;
 
-  // Convert to screen space relative to player
+  // Convert to screen space relative to the preview surface.
   return {
     left: canvasLeft * scale,
     top: canvasTop * scale,

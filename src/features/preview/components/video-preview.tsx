@@ -1,10 +1,10 @@
-﻿import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
 import {
   backgroundPreseek as workerBackgroundPreseek,
   backgroundBatchPreseek as workerBackgroundBatchPreseek,
   getDecoderPrewarmMetricsSnapshot,
 } from '../utils/decoder-prewarm';
-import { HeadlessPlayerTransport, type PlayerRef } from '@/features/preview/deps/player-core';
+import { HeadlessPlayerTransport, type PlayerTransportRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
@@ -225,8 +225,8 @@ export const VideoPreview = memo(function VideoPreview({
   containerSize,
   suspendOverlay = false,
 }: VideoPreviewProps) {
-  const transportRef = useRef<PlayerRef>(null);
-  const playerContainerRef = useRef<HTMLDivElement>(null);
+  const transportRef = useRef<PlayerTransportRef>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
   const scrubFrameDirtyRef = useRef(false);
   const scrubRendererRef = useRef<CompositionRenderer | null>(null);
@@ -328,13 +328,13 @@ export const VideoPreview = memo(function VideoPreview({
   }, []);
 
   // State for gizmo overlay positioning
-  const [playerContainerRect, setPlayerContainerRect] = useState<DOMRect | null>(null);
+  const [previewContainerRect, setPreviewContainerRect] = useState<DOMRect | null>(null);
 
   // Callback ref that measures immediately when element is available
-  const setPlayerContainerRefCallback = useCallback((el: HTMLDivElement | null) => {
-    playerContainerRef.current = el;
+  const setPreviewContainerRefCallback = useCallback((el: HTMLDivElement | null) => {
+    previewContainerRef.current = el;
     if (el) {
-      setPlayerContainerRect(el.getBoundingClientRect());
+      setPreviewContainerRect(el.getBoundingClientRect());
     }
   }, []);
 
@@ -4426,8 +4426,8 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [disposePreviewRenderer, resetResolveRetryState]);
 
-  // Calculate player size based on zoom mode
-  const playerSize = useMemo(() => {
+  // Calculate preview surface size based on zoom mode.
+  const previewSize = useMemo(() => {
     const aspectRatio = project.width / project.height;
 
     if (zoom === -1) {
@@ -4455,22 +4455,22 @@ export const VideoPreview = memo(function VideoPreview({
     return { width: targetWidth, height: targetHeight };
   }, [project.width, project.height, zoom, containerSize]);
 
-  // Check if overflow is needed (video larger than container)
+  // Check if overflow is needed when the preview surface exceeds the container.
   const needsOverflow = useMemo(() => {
     if (zoom === -1) return false;
     if (containerSize.width === 0 || containerSize.height === 0) return false;
-    return playerSize.width > containerSize.width || playerSize.height > containerSize.height;
-  }, [zoom, playerSize, containerSize]);
+    return previewSize.width > containerSize.width || previewSize.height > containerSize.height;
+  }, [zoom, previewSize, containerSize]);
 
-  // Track player container rect changes for gizmo positioning
+  // Track preview container rect changes for overlay positioning
   useLayoutEffect(() => {
     if (suspendOverlay) return;
-    const container = playerContainerRef.current;
+    const container = previewContainerRef.current;
     if (!container) return;
 
     const updateRect = () => {
       const nextRect = container.getBoundingClientRect();
-      setPlayerContainerRect((prev) => {
+      setPreviewContainerRect((prev) => {
         if (
           prev
           && prev.left === nextRect.left
@@ -4532,12 +4532,12 @@ export const VideoPreview = memo(function VideoPreview({
       >
         <div className="relative">
           <div
-            ref={setPlayerContainerRefCallback}
-            data-player-container
+            ref={setPreviewContainerRefCallback}
+            data-preview-container
             className="relative shadow-2xl"
             style={{
-              width: `${playerSize.width}px`,
-              height: `${playerSize.height}px`,
+              width: `${previewSize.width}px`,
+              height: `${previewSize.height}px`,
               transition: 'none',
               outline: '2px solid hsl(var(--border))',
               outlineOffset: 0,
@@ -4732,21 +4732,21 @@ export const VideoPreview = memo(function VideoPreview({
           {!suspendOverlay && (
             <>
               <GizmoOverlay
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
+                containerRect={previewContainerRect}
+                previewSize={previewSize}
                 projectSize={{ width: project.width, height: project.height }}
                 zoom={zoom}
                 hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
               />
               <MaskEditorContainer
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
+                containerRect={previewContainerRect}
+                previewSize={previewSize}
                 projectSize={{ width: project.width, height: project.height }}
                 zoom={zoom}
               />
               <CornerPinContainer
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
+                containerRect={previewContainerRect}
+                previewSize={previewSize}
                 projectSize={{ width: project.width, height: project.height }}
                 zoom={zoom}
               />

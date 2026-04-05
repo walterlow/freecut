@@ -83,13 +83,13 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
   // so we can always assume preview mode
   const isPreview = true;
 
-  // Track player container position for portal mode
+  // Track preview container position for portal mode
   const [containerRect, setContainerRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
     if (!isPreview) return;
 
-    const container = document.querySelector('[data-player-container]');
+    const container = document.querySelector('[data-preview-container]');
     if (!container) return;
 
     const updateRect = () => {
@@ -145,7 +145,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
     navigator.clipboard.writeText(JSON.stringify(data, null, 2));
   }, [id, from, speed, trimBefore, safeTrimBefore, sourceStart, sourceEnd, sourceEndBound, sourceDuration, durationInFrames, sourceFramesNeeded, sourceEndPosition, sourceFps, isInvalidSeek, exceedsSource]);
 
-  // Calculate position for portal mode (anchored to player container bottom-right)
+  // Calculate position for portal mode (anchored to the preview container bottom-right)
   const portalPositionStyles: React.CSSProperties = containerRect
     ? {
         position: 'fixed' as const,
@@ -234,7 +234,7 @@ export const DebugOverlay: React.FC<DebugOverlayProps> = ({
     </div>
   );
 
-  // In preview mode, use portal to escape the player's stacking context
+  // In preview mode, use portal to escape the preview surface stacking context
   // This allows the button to be clickable above the GizmoOverlay
   if (isPreview && typeof document !== 'undefined') {
     return createPortal(content, document.body);

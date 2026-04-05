@@ -4,11 +4,11 @@
  * Interactive bezier mask path editor rendered as an overlay on top
  * of the preview canvas. Two modes:
  *
- * 1. **Edit mode** — drag existing vertices/handles, add/remove vertices
- * 2. **Pen mode** — click to place vertices, click+drag for bezier handles,
+ * 1. **Edit mode**: drag existing vertices/handles, add/remove vertices
+ * 2. **Pen mode**: click to place vertices, click+drag for bezier handles,
  *    click first vertex to close the path
  *
- * Positioned as a sibling to the player container, using the same
+ * Positioned as a sibling to the preview container, using the same
  * coordinate transform system as the transform gizmo.
  */
 
@@ -265,13 +265,13 @@ function toOverlayTransform(
 
 interface MaskEditorOverlayProps {
   coordParams: CoordinateParams;
-  playerSize: { width: number; height: number };
+  previewSize: { width: number; height: number };
   itemTransform: Transform;
 }
 
 export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   coordParams,
-  playerSize,
+  previewSize,
   itemTransform,
 }: MaskEditorOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -442,10 +442,10 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = playerSize.width * dpr;
-    canvas.height = playerSize.height * dpr;
+    canvas.width = previewSize.width * dpr;
+    canvas.height = previewSize.height * dpr;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, playerSize.width, playerSize.height);
+    ctx.clearRect(0, 0, previewSize.width, previewSize.height);
 
     if (penMode) {
       drawPenPath(ctx);
@@ -453,7 +453,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       drawEditPath(ctx);
       drawSelectionMarquee(ctx);
     }
-  }, [playerSize, penMode, penVertices, penCursorPos, penDraggingHandle, getVertices, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, selectedVertexIndex, hoveredVertexIndex, hoveredHandle, hoveredSegmentIndex, selectionMarquee]);
+  }, [previewSize, penMode, penVertices, penCursorPos, penDraggingHandle, getVertices, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, selectedVertexIndex, hoveredVertexIndex, hoveredHandle, hoveredSegmentIndex, selectionMarquee]);
 
   /** Draw a single bezier/line segment between two vertices */
   const drawSegment = useCallback((ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => {
@@ -1560,7 +1560,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
             });
             continue;
           }
-          // Frame is in a transition region — can't add a keyframe, fall through
+          // Frame is in a transition region â€” can't add a keyframe, fall through
           // to baseTransform so the edit isn't silently dropped.
         }
 
@@ -2114,8 +2114,8 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       style={{
         top: 0,
         left: 0,
-        width: playerSize.width,
-        height: playerSize.height,
+        width: previewSize.width,
+        height: previewSize.height,
         pointerEvents: 'none',
       }}
     >
@@ -2123,8 +2123,8 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
         ref={canvasRef}
         className="absolute inset-0"
         style={{
-          width: playerSize.width,
-          height: playerSize.height,
+          width: previewSize.width,
+          height: previewSize.height,
           pointerEvents: 'auto',
           cursor,
         }}

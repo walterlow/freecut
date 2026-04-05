@@ -29,7 +29,7 @@ import type { TimelineItem } from '@/types/timeline';
 
 interface GizmoOverlayProps {
   containerRect: DOMRect | null;
-  playerSize: { width: number; height: number };
+  previewSize: { width: number; height: number };
   projectSize: { width: number; height: number };
   zoom: number;
   /** Ref to the hit area element for marquee bounds checking */
@@ -45,7 +45,7 @@ interface GizmoOverlayProps {
  */
 export function GizmoOverlay({
   containerRect,
-  playerSize,
+  previewSize,
   projectSize,
   zoom,
   hitAreaRef,
@@ -216,11 +216,11 @@ export function GizmoOverlay({
 
     return {
       containerRect,
-      playerSize,
+      previewSize,
       projectSize,
       zoom,
     };
-  }, [containerRect, playerSize, projectSize, zoom]);
+  }, [containerRect, previewSize, projectSize, zoom]);
 
   const {
     dropState,
@@ -590,8 +590,8 @@ export function GizmoOverlay({
       style={{
         top: -overlayPadding,
         left: -overlayPadding,
-        width: playerSize.width + overlayPadding * 2,
-        height: playerSize.height + overlayPadding * 2,
+        width: previewSize.width + overlayPadding * 2,
+        height: previewSize.height + overlayPadding * 2,
         pointerEvents: 'none',
       }}
       onDoubleClick={(e) => e.stopPropagation()}
@@ -606,8 +606,8 @@ export function GizmoOverlay({
         style={{
           top: overlayPadding,
           left: overlayPadding,
-          width: playerSize.width,
-          height: playerSize.height,
+          width: previewSize.width,
+          height: previewSize.height,
           pointerEvents: (isCornerPinEditing || isMaskEditing) ? 'none' : 'auto',
         }}
         onClick={handleBackgroundClick}

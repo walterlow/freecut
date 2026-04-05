@@ -5,7 +5,7 @@ import {
   Player,
 } from './player-core';
 
-describe('player-core exports', () => {
+describe('preview transport seam exports', () => {
   it('re-exports both transport surfaces through the preview seam', () => {
     expect(Player).toBeTruthy();
     expect(HeadlessPlayerTransport).toBeTruthy();
