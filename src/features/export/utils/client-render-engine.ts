@@ -26,7 +26,7 @@ import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect } from '@/types/effects';
 import type { ResolvedTransform } from '@/types/transform';
 import { createLogger } from '@/shared/logging/logger';
-import { hasMediaCrop } from '@/shared/utils/media-crop';
+import { calculateContainedRect, hasMediaCrop } from '@/shared/utils/media-crop';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveMediaUrl } from '@/features/export/deps/media-library';
 import { VideoSourcePool } from '@/features/export/deps/player-contract';
@@ -35,6 +35,7 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
   applyAllEffectsAsync,
+  renderDirectVideoGpuFrame,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
@@ -244,6 +245,8 @@ export async function createCompositionRenderer(
   let gpuPresentationH = 0;
   let gpuPresentationConfigureFailed = false;
   let lastFramePresentedDirectly = false;
+  let directVideoGpuFrameCount = 0;
+  let directGpuPresentationCount = 0;
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -1294,12 +1297,117 @@ export async function createCompositionRenderer(
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
 
-        // NOTE: The importExternalTexture zero-copy path is disabled because
-        // textureSampleBaseClampToEdge produces subtly different edge pixel values
-        // compared to canvas 2D's drawImage (different YUV→RGB conversion at
-        // chroma subsampling boundaries). Spatial effects like halftone amplify
-        // this into a visible bright edge. The standard canvas 2D → GPU path
-        // below handles video correctly with negligible extra cost (~1-2ms).
+        const tryDirectVideoGpuFrame = async () => {
+          if (effectiveItem.type !== 'video') return null;
+          const allEffectsAreGpu = combinedEffects.every((e) => e.effect.type === 'gpu-effect');
+          if (combinedEffects.length > 0 && !allEffectsAreGpu) {
+            return null;
+          }
+
+          // Keep the direct importExternalTexture path on the narrowest safe
+          // geometry for now. This avoids reintroducing the edge/crop/rotation
+          // mismatches we saw when trying to generalize it across all video cases.
+          if (transform.rotation !== 0 || transform.opacity !== 1 || transform.cornerRadius !== 0) {
+            return null;
+          }
+          if (effectiveItem.cornerPin || hasMediaCrop(effectiveItem.crop)) {
+            return null;
+          }
+
+          const shouldAllowDirectVideoPath = renderMode !== 'preview'
+            || (
+              !useMediabunny.has(effectiveItem.id)
+              || mediabunnyDisabledItems.has(effectiveItem.id)
+            );
+          if (!shouldAllowDirectVideoPath) {
+            return null;
+          }
+
+          const video = videoElements.get(effectiveItem.id);
+          if (!video || video.readyState < 2 || video.videoWidth < 2 || video.videoHeight < 2) {
+            return null;
+          }
+
+          if (!itemRenderContext.gpuPipeline) {
+            itemRenderContext.gpuPipeline = await ensureGpuPipeline();
+            if (!itemRenderContext.gpuPipeline) {
+              getLog().warn('GPU pipeline init failed — direct video GPU path will be skipped');
+              return null;
+            }
+          }
+
+          const localFrame = frame - effectiveItem.from;
+          const localTime = localFrame / fps;
+          const sourceStart = effectiveItem.sourceStart ?? effectiveItem.trimStart ?? 0;
+          const sourceFps = effectiveItem.sourceFps ?? fps;
+          const speed = effectiveItem.speed ?? 1;
+          const sourceTime = (sourceStart / sourceFps) + localTime * speed;
+          const duration = Number.isFinite(video.duration) && video.duration > 0
+            ? video.duration
+            : sourceTime + 1;
+          const clampedTime = Math.max(0, Math.min(sourceTime, duration - 0.01));
+          const seekTolerance = renderMode === 'preview' ? 0.05 : 0.034;
+          if (Math.abs(video.currentTime - clampedTime) > seekTolerance) {
+            video.currentTime = clampedTime;
+            if (renderMode !== 'preview') {
+              await new Promise<void>((resolve) => {
+                const onSeeked = () => {
+                  video.removeEventListener('seeked', onSeeked);
+                  resolve();
+                };
+                video.addEventListener('seeked', onSeeked);
+                setTimeout(() => {
+                  video.removeEventListener('seeked', onSeeked);
+                  resolve();
+                }, 150);
+              });
+            }
+          }
+
+          if (video.readyState < 2) {
+            return null;
+          }
+
+          const containedRect = calculateContainedRect(
+            video.videoWidth,
+            video.videoHeight,
+            transform.width,
+            transform.height,
+          );
+          const containerLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
+          const containerTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
+          const destRect = {
+            x: containerLeft + containedRect.x,
+            y: containerTop + containedRect.y,
+            width: containedRect.width,
+            height: containedRect.height,
+          };
+
+          const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
+          const deferredGpuCanvas = renderDirectVideoGpuFrame(
+            effectCtx,
+            video,
+            combinedEffects,
+            destRect,
+            canvasSettings,
+            itemRenderContext.gpuPipeline,
+          );
+          const source = deferredGpuCanvas ?? effectCanvas;
+          return { source, poolCanvases: [effectCanvas] } as { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
+        };
+
+        const directVideoGpuFrame = await tryDirectVideoGpuFrame();
+        if (directVideoGpuFrame) {
+          directVideoGpuFrameCount += 1;
+          if (deferred) {
+            return directVideoGpuFrame;
+          }
+          targetCtx.drawImage(directVideoGpuFrame.source, 0, 0);
+          for (const pooledCanvas of directVideoGpuFrame.poolCanvases) {
+            canvasPool.release(pooledCanvas);
+          }
+          return null;
+        }
 
         // === PERFORMANCE: Use pooled canvas instead of creating new one ===
         const { canvas: itemCanvas, ctx: itemCtx } = canvasPool.acquire();
@@ -1644,6 +1752,9 @@ export async function createCompositionRenderer(
             }
           }
           lastFramePresentedDirectly = compositedToPresentationCanvas;
+          if (compositedToPresentationCanvas) {
+            directGpuPresentationCount += 1;
+          }
 
           for (const { result } of compositedResults) {
             for (const c of result.poolCanvases) canvasPool.release(c);
@@ -1687,6 +1798,9 @@ export async function createCompositionRenderer(
           canvasSettings.width,
           canvasSettings.height,
         );
+        if (lastFramePresentedDirectly) {
+          directGpuPresentationCount += 1;
+        }
       }
 
       ctx.drawImage(finalCompositeSource, 0, 0);
@@ -1941,6 +2055,14 @@ export async function createCompositionRenderer(
 
     wasLastFramePresentedDirectly(): boolean {
       return lastFramePresentedDirectly;
+    },
+
+    getDirectVideoGpuFrameCount(): number {
+      return directVideoGpuFrameCount;
+    },
+
+    getDirectGpuPresentationCount(): number {
+      return directGpuPresentationCount;
     },
 
     /**

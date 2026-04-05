@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { getAdjustmentLayerEffects, type AdjustmentLayerWithTrackOrder } from './canvas-effects';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  renderDirectVideoGpuFrame,
+  getAdjustmentLayerEffects,
+  type AdjustmentLayerWithTrackOrder,
+} from './canvas-effects';
 import type { AdjustmentItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
 
@@ -87,5 +91,111 @@ describe('getAdjustmentLayerEffects', () => {
 
     expect(effects).toEqual([activeEffect]);
     expect(previewLookups).toEqual(['adj-active']);
+  });
+});
+
+describe('renderDirectVideoGpuFrame', () => {
+  it('returns a deferred canvas when the gpu pipeline is batching', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      applyEffectsToVideo: vi.fn(() => resultCanvas),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [createGpuEffect('effect-1', 0.5)],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      pipeline,
+    );
+
+    expect(deferred).toBe(resultCanvas);
+    expect(ctx.clearRect).not.toHaveBeenCalled();
+    expect(ctx.drawImage).not.toHaveBeenCalled();
+    expect((pipeline as { applyEffectsToVideo: ReturnType<typeof vi.fn> }).applyEffectsToVideo)
+      .toHaveBeenCalledWith(
+        video,
+        [
+          {
+            id: 'effect-1',
+            type: 'gpu-blur',
+            name: 'gpu-blur',
+            enabled: true,
+            params: { amount: 0.5 },
+          },
+        ],
+        { x: 10, y: 20, width: 300, height: 200 },
+        1280,
+        720,
+      );
+  });
+
+  it('draws the gpu result back into the target context outside batch mode', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => false),
+      applyEffectsToVideo: vi.fn(() => resultCanvas),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [createGpuEffect('effect-1', 0.5)],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      pipeline,
+    );
+
+    expect(deferred).toBeNull();
+    expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
+  });
+
+  it('uses the plain importExternalTexture render path when there are no gpu effects', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => false),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      pipeline,
+    );
+
+    expect(deferred).toBeNull();
+    expect((pipeline as { renderVideoToCanvas: ReturnType<typeof vi.fn> }).renderVideoToCanvas)
+      .toHaveBeenCalledWith(
+        video,
+        { x: 10, y: 20, width: 300, height: 200 },
+        1280,
+        720,
+      );
+    expect((pipeline as { applyEffectsToVideo: ReturnType<typeof vi.fn> }).applyEffectsToVideo)
+      .not.toHaveBeenCalled();
+    expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 1280, 720);
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
   });
 });

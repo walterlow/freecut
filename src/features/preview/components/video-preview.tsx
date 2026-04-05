@@ -550,6 +550,8 @@ export const VideoPreview = memo(function VideoPreview({
     sourcePoolActiveClips: 0,
     previewRendererPrewarmedSources: 0,
     previewRendererPrewarmSourceEvictions: 0,
+    directVideoGpuFrames: 0,
+    directGpuPresentationFrames: 0,
     staleRendererFrameDrops: 0,
     scrubDroppedFrames: 0,
     scrubUpdates: 0,
@@ -1226,6 +1228,8 @@ export const VideoPreview = memo(function VideoPreview({
         sourcePoolActiveClips: stats.sourcePoolActiveClips,
         previewRendererPrewarmedSources: stats.previewRendererPrewarmedSources,
         previewRendererPrewarmSourceEvictions: stats.previewRendererPrewarmSourceEvictions,
+        directVideoGpuFrames: scrubRendererRef.current?.getDirectVideoGpuFrameCount?.() ?? 0,
+        directGpuPresentationFrames: scrubRendererRef.current?.getDirectGpuPresentationCount?.() ?? 0,
         preseekRequests: preseekMetrics.requests,
         preseekCacheHits: preseekMetrics.cacheHits,
         preseekInflightReuses: preseekMetrics.inflightReuses,
@@ -4653,6 +4657,11 @@ export const VideoPreview = memo(function VideoPreview({
                     <span style={{ color: srcColor }}>{srcLabel}</span>
                     {p.staleRendererFrameDrops > 0 && (
                       <span style={{ color: '#f87171' }}> {p.staleRendererFrameDrops} stale</span>
+                    )}
+                    {(p.directVideoGpuFrames > 0 || p.directGpuPresentationFrames > 0) && (
+                      <span style={{ color: '#a1a1aa' }}>
+                        {' '}GPU vid {p.directVideoGpuFrames} present {p.directGpuPresentationFrames}
+                      </span>
                     )}
                     {lastSw && (
                       <span style={{ color: '#a1a1aa' }}>

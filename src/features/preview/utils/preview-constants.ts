@@ -95,6 +95,8 @@ export type PreviewPerfSnapshot = {
   sourcePoolActiveClips: number;
   previewRendererPrewarmedSources: number;
   previewRendererPrewarmSourceEvictions: number;
+  directVideoGpuFrames: number;
+  directGpuPresentationFrames: number;
   preseekRequests: number;
   preseekCacheHits: number;
   preseekInflightReuses: number;

@@ -90,6 +90,48 @@ function applyGpuEffects(
   return null;
 }
 
+export function renderDirectVideoGpuFrame(
+  ctx: OffscreenCanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  effects: ItemEffect[],
+  destRect: { x: number; y: number; width: number; height: number },
+  canvas: EffectCanvasSettings,
+  gpuPipeline?: EffectsPipeline | null,
+): OffscreenCanvas | null {
+  if (!gpuPipeline) return null;
+
+  const gpuInstances = getGpuEffectInstances(effects);
+
+  try {
+    const result = gpuInstances.length > 0
+      ? gpuPipeline.applyEffectsToVideo(
+        video,
+        gpuInstances,
+        destRect,
+        canvas.width,
+        canvas.height,
+      )
+      : gpuPipeline.renderVideoToCanvas(
+        video,
+        destRect,
+        canvas.width,
+        canvas.height,
+      );
+    if (!result) {
+      return null;
+    }
+    if (gpuPipeline.isBatching()) {
+      return result;
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(result, 0, 0);
+    return null;
+  } catch (error) {
+    log.warn('GPU video importExternalTexture path failed, falling back', error);
+    return null;
+  }
+}
+
 // ============================================================================
 // Adjustment Layer Effects
 // ============================================================================

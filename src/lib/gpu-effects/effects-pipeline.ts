@@ -649,15 +649,13 @@ export class EffectsPipeline {
    *
    * Falls back to null if importExternalTexture is not supported or fails.
    */
-  applyEffectsToVideo(
+  private renderImportedVideo(
     video: HTMLVideoElement,
-    effects: GpuEffectInstance[],
+    enabledEffects: GpuEffectInstance[],
     destRect: { x: number; y: number; width: number; height: number },
     canvasWidth: number,
     canvasHeight: number,
   ): OffscreenCanvas | null {
-    const enabled = effects.filter(e => e.enabled);
-    if (enabled.length === 0) return null;
     if (!this.importPipeline || !this.importBindGroupLayout || !this.importUniformBuffer) return null;
     if (!this.blitPipeline || !this.blitBindGroupLayout) return null;
     if (video.readyState < 2 || video.videoWidth < 2) return null;
@@ -731,10 +729,11 @@ export class EffectsPipeline {
     importPass.draw(6);
     importPass.end();
 
-    // Pass 2+: Effect chain (ping/pong as usual)
-    const finalTex = this.runEffectChain(
-      commandEncoder, enabled, this.pingTexture, this.pongTexture, w, h,
-    );
+    const finalTex = enabledEffects.length > 0
+      ? this.runEffectChain(
+        commandEncoder, enabledEffects, this.pingTexture, this.pongTexture, w, h,
+      )
+      : this.pingTexture;
 
     // Final blit to output canvas (cached bind group for ping/pong input)
     const isPingFinal = finalTex === this.pingTexture;
@@ -769,6 +768,37 @@ export class EffectsPipeline {
     this.device.queue.submit([commandEncoder.finish()]);
 
     return outCanvas;
+  }
+
+  /**
+   * Draw an HTMLVideoElement directly to a GPU canvas via importExternalTexture.
+   * Zero-copy: the GPU samples the decoder output without an intermediate upload.
+   */
+  renderVideoToCanvas(
+    video: HTMLVideoElement,
+    destRect: { x: number; y: number; width: number; height: number },
+    canvasWidth: number,
+    canvasHeight: number,
+  ): OffscreenCanvas | null {
+    return this.renderImportedVideo(video, [], destRect, canvasWidth, canvasHeight);
+  }
+
+  /**
+   * Apply effects directly from an HTMLVideoElement via importExternalTexture.
+   * Zero-copy: the GPU reads directly from the video decoder's output buffer.
+   * Positions the video at `destRect` on a canvas of `canvasWidth Ã— canvasHeight`.
+   *
+   * Falls back to null if importExternalTexture is not supported or fails.
+   */
+  applyEffectsToVideo(
+    video: HTMLVideoElement,
+    effects: GpuEffectInstance[],
+    destRect: { x: number; y: number; width: number; height: number },
+    canvasWidth: number,
+    canvasHeight: number,
+  ): OffscreenCanvas | null {
+    const enabled = effects.filter(e => e.enabled);
+    return this.renderImportedVideo(video, enabled, destRect, canvasWidth, canvasHeight);
   }
 
   getDevice(): GPUDevice {
