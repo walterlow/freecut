@@ -1305,11 +1305,8 @@ export async function createCompositionRenderer(
           }
 
           // Keep the direct importExternalTexture path on a narrow, well-tested
-          // geometry envelope. Crop and feather are safe now, but rotation,
-          // corner shaping, and perspective still fall back to the general path.
-          if (transform.rotation !== 0 || transform.cornerRadius !== 0) {
-            return null;
-          }
+          // geometry envelope. Crop, feather, rounded corners, and plain 2D
+          // rotation are safe now, but perspective still falls back.
           if (effectiveItem.cornerPin) {
             return null;
           }
@@ -1377,6 +1374,12 @@ export async function createCompositionRenderer(
           );
           const containerLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
           const containerTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
+          const itemRect = {
+            x: containerLeft,
+            y: containerTop,
+            width: transform.width,
+            height: transform.height,
+          };
           const mediaRect = {
             x: containerLeft + cropLayout.mediaRect.x,
             y: containerTop + cropLayout.mediaRect.y,
@@ -1407,8 +1410,11 @@ export async function createCompositionRenderer(
             mediaRect,
             visibleRect,
             featherInsets,
+            itemRect,
             canvasSettings,
             transform.opacity,
+            transform.cornerRadius,
+            transform.rotation,
             itemRenderContext.gpuPipeline,
           );
           const source = deferredGpuCanvas ?? effectCanvas;

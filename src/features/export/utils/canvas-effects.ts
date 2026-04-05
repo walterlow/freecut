@@ -27,6 +27,13 @@ interface EffectCanvasSettings {
   height: number;
 }
 
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // ============================================================================
 // GPU Effects
 // ============================================================================
@@ -94,11 +101,14 @@ export function renderDirectVideoGpuFrame(
   ctx: OffscreenCanvasRenderingContext2D,
   video: HTMLVideoElement,
   effects: ItemEffect[],
-  mediaRect: { x: number; y: number; width: number; height: number },
-  visibleRect: { x: number; y: number; width: number; height: number },
+  mediaRect: Rect,
+  visibleRect: Rect,
   featherInsets: { left: number; right: number; top: number; bottom: number },
+  itemRect: Rect,
   canvas: EffectCanvasSettings,
   opacity: number,
+  cornerRadius: number,
+  rotation: number,
   gpuPipeline?: EffectsPipeline | null,
 ): OffscreenCanvas | null {
   if (!gpuPipeline) return null;
@@ -127,18 +137,30 @@ export function renderDirectVideoGpuFrame(
     if (!result) {
       return null;
     }
-    if (gpuPipeline.isBatching() && opacity === 1) {
+    if (gpuPipeline.isBatching() && opacity === 1 && cornerRadius === 0 && rotation === 0) {
       return result;
     }
+    const centerX = itemRect.x + itemRect.width / 2;
+    const centerY = itemRect.y + itemRect.height / 2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
     if (opacity !== 1) {
-      ctx.save();
       ctx.globalAlpha = opacity;
-      ctx.drawImage(result, 0, 0);
-      ctx.restore();
-    } else {
-      ctx.drawImage(result, 0, 0);
     }
+    if (rotation !== 0) {
+      ctx.translate(centerX, centerY);
+      ctx.rotate((rotation * Math.PI) / 180);
+      ctx.translate(-centerX, -centerY);
+    }
+    ctx.drawImage(result, 0, 0);
+    if (cornerRadius > 0) {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.beginPath();
+      ctx.roundRect(itemRect.x, itemRect.y, itemRect.width, itemRect.height, cornerRadius);
+      ctx.fill();
+    }
+    ctx.restore();
     return null;
   } catch (error) {
     log.warn('GPU video importExternalTexture path failed, falling back', error);

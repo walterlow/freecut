@@ -102,6 +102,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -116,8 +121,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 10, y: 20, width: 300, height: 200 },
       { x: 10, y: 20, width: 300, height: 200 },
       { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
       { width: 1280, height: 720 },
       1,
+      0,
+      0,
       pipeline,
     );
 
@@ -151,6 +159,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -165,8 +178,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 10, y: 20, width: 300, height: 200 },
       { x: 10, y: 20, width: 300, height: 200 },
       { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
       { width: 1280, height: 720 },
       1,
+      0,
+      0,
       pipeline,
     );
 
@@ -182,6 +198,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -197,8 +218,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 10, y: 20, width: 300, height: 200 },
       { x: 10, y: 20, width: 300, height: 200 },
       { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
       { width: 1280, height: 720 },
       1,
+      0,
+      0,
       pipeline,
     );
 
@@ -225,6 +249,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
       globalAlpha: 1,
       canvas: { width: 1280, height: 720 },
     } as unknown as OffscreenCanvasRenderingContext2D;
@@ -242,8 +271,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 10, y: 20, width: 300, height: 200 },
       { x: 10, y: 20, width: 300, height: 200 },
       { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
       { width: 1280, height: 720 },
       0.5,
+      0,
+      0,
       pipeline,
     );
 
@@ -261,6 +293,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -276,8 +313,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 100, y: 80, width: 400, height: 300 },
       { x: 140, y: 110, width: 320, height: 240 },
       { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 100, y: 80, width: 400, height: 300 },
       { width: 1280, height: 720 },
       1,
+      0,
+      0,
       pipeline,
     );
 
@@ -299,6 +339,11 @@ describe('renderDirectVideoGpuFrame', () => {
       drawImage: vi.fn(),
       save: vi.fn(),
       restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -314,8 +359,11 @@ describe('renderDirectVideoGpuFrame', () => {
       { x: 100, y: 80, width: 400, height: 300 },
       { x: 120, y: 96, width: 360, height: 268 },
       { left: 20, right: 12, top: 16, bottom: 24 },
+      { x: 100, y: 80, width: 400, height: 300 },
       { width: 1280, height: 720 },
       1,
+      0,
+      0,
       pipeline,
     );
 
@@ -328,5 +376,90 @@ describe('renderDirectVideoGpuFrame', () => {
         1280,
         720,
       );
+  });
+
+  it('flattens batching output when corner radius masking is needed', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+      globalCompositeOperation: 'source-over',
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      1,
+      24,
+      0,
+      pipeline,
+    );
+
+    expect(deferred).toBeNull();
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
+    expect(ctx.beginPath).toHaveBeenCalled();
+    expect(ctx.roundRect).toHaveBeenCalledWith(10, 20, 300, 200, 24);
+    expect(ctx.fill).toHaveBeenCalled();
+  });
+
+  it('flattens batching output when 2d rotation is needed', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const deferred = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      1,
+      0,
+      15,
+      pipeline,
+    );
+
+    expect(deferred).toBeNull();
+    expect(ctx.translate).toHaveBeenNthCalledWith(1, 160, 120);
+    expect(ctx.rotate).toHaveBeenCalledWith((15 * Math.PI) / 180);
+    expect(ctx.translate).toHaveBeenNthCalledWith(2, -160, -120);
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
   });
 });
