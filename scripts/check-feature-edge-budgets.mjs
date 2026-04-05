@@ -12,11 +12,19 @@ const EDGE_BUDGETS = [
   { edge: 'editor -> timeline', maxImports: 2, maxFiles: 2 },
   { edge: 'editor -> preview', maxImports: 12, maxFiles: 2 },
   { edge: 'editor -> media-library', maxImports: 8, maxFiles: 2 },
+  { edge: 'editor -> prompt-engine', maxImports: 4, maxFiles: 2 },
+  { edge: 'editor -> generative', maxImports: 4, maxFiles: 2 },
   { edge: 'preview -> timeline', maxImports: 2, maxFiles: 2 },
   { edge: 'preview -> player', maxImports: 2, maxFiles: 2 },
   { edge: 'timeline -> media-library', maxImports: 2, maxFiles: 2 },
   { edge: 'media-library -> timeline', maxImports: 2, maxFiles: 2 },
   { edge: 'composition-runtime -> player', maxImports: 8, maxFiles: 2 },
+  { edge: 'live-ai -> prompt-engine', maxImports: 4, maxFiles: 2 },
+  { edge: 'prompt-engine -> live-ai', maxImports: 4, maxFiles: 2 },
+  { edge: 'generative -> live-ai', maxImports: 4, maxFiles: 2 },
+  { edge: 'generative -> prompt-engine', maxImports: 4, maxFiles: 2 },
+  { edge: 'generative -> timeline', maxImports: 4, maxFiles: 2 },
+  { edge: 'generative -> media-library', maxImports: 4, maxFiles: 2 },
 ];
 
 function parseArgs(argv) {

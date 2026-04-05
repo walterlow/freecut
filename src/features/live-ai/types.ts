@@ -58,3 +58,29 @@ export interface StreamData {
   whipUrl: string;
   outputPlaybackId: string;
 }
+
+// ---------------------------------------------------------------------------
+// Scope local server types
+// ---------------------------------------------------------------------------
+
+/** Scope prompt format: array of weighted text entries. */
+export interface ScopePromptEntry {
+  text: string;
+  weight: number;
+}
+
+/** Parameters for initiating a Scope WebRTC session. */
+export interface ScopeStreamParams {
+  prompts?: ScopePromptEntry[];
+  denoising_step_list?: number[];
+  manage_cache?: boolean;
+  [key: string]: unknown;
+}
+
+/** Active Scope session data (WebRTC-based, not WHIP/WHEP). */
+export interface ScopeSessionData {
+  sessionId: string;
+  peerConnection: RTCPeerConnection;
+  dataChannel: RTCDataChannel;
+  remoteStream: MediaStream;
+}

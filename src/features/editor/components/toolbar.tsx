@@ -11,7 +11,9 @@ import {
   Settings,
   Share2,
   Video,
+  Workflow,
 } from 'lucide-react';
+import { useEditorStore } from '@/shared/state/editor';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -109,6 +111,7 @@ export const Toolbar = memo(function Toolbar({
 
       <div className="flex-1" />
 
+      <FlowStageToggle />
       <LocalInferenceStatusPill />
 
       <div className="hidden items-center gap-1.5 md:flex">
@@ -208,3 +211,24 @@ export const Toolbar = memo(function Toolbar({
     </div>
   );
 });
+
+/** Toggle between Program Monitor and Flow Keyframe Stage. */
+function FlowStageToggle() {
+  const previewMode = useEditorStore((s) => s.previewMode);
+  const togglePreviewMode = useEditorStore((s) => s.togglePreviewMode);
+
+  return (
+    <Button
+      variant={previewMode === 'flow-stage' ? 'default' : 'outline'}
+      size="sm"
+      className="h-7 gap-1.5 px-2.5 text-xs"
+      onClick={togglePreviewMode}
+      data-tooltip={previewMode === 'flow-stage' ? 'Switch to Program Monitor' : 'Switch to Flow Stage'}
+      data-tooltip-side="bottom"
+      aria-label="Toggle Flow Stage"
+    >
+      <Workflow className="h-3.5 w-3.5" />
+      Flow
+    </Button>
+  );
+}
