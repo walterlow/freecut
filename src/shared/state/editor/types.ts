@@ -1,5 +1,7 @@
 export type ClipInspectorTab = 'transform' | 'effects' | 'media';
 
+export type PreviewMode = 'program' | 'flow-stage';
+
 export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;
   leftSidebarOpen: boolean;
@@ -11,6 +13,8 @@ export interface EditorState {
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
   colorScopesOpen: boolean;
+  /** Controls whether the center canvas shows the NLE program monitor or the Flow Stage. */
+  previewMode: PreviewMode;
 }
 
 export interface EditorActions {
@@ -32,4 +36,6 @@ export interface EditorActions {
   setSourcePreviewMediaId: (mediaId: string | null) => void;
   setColorScopesOpen: (open: boolean) => void;
   toggleColorScopesOpen: () => void;
+  setPreviewMode: (mode: PreviewMode) => void;
+  togglePreviewMode: () => void;
 }

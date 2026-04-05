@@ -87,6 +87,12 @@ export default defineConfig({
           })
         },
       },
+      // Scope local server proxy (self-hosted Daydream Scope on localhost:8000)
+      '/scope-api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path: string) => path.replace('/scope-api', ''),
+      },
     },
   },
   preview: {
@@ -126,6 +132,13 @@ export default defineConfig({
           }
           if (id.includes('/src/features/composition-runtime/')) {
             return 'feature-composition-runtime';
+          }
+          // Generative AI features (lazy-loaded, never in main bundle)
+          if (id.includes('/src/features/generative/')) {
+            return 'feature-generative';
+          }
+          if (id.includes('/src/features/prompt-engine/')) {
+            return 'feature-prompt-engine';
           }
 
           // React must be in its own chunk, loaded first to ensure proper initialization

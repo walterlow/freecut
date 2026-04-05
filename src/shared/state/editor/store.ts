@@ -46,6 +46,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   timelineHeight: 250,
   sourcePreviewMediaId: null,
   colorScopesOpen: false,
+  previewMode: 'program',
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -79,4 +80,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
   setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
   toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
+  setPreviewMode: (mode) => set({ previewMode: mode }),
+  togglePreviewMode: () =>
+    set((state) => ({
+      previewMode: state.previewMode === 'program' ? 'flow-stage' : 'program',
+    })),
 }));
