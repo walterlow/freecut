@@ -108,6 +108,20 @@ describe('useVisualTransforms skimming frame resolution', () => {
     });
   });
 
+  it('prefers displayedFrame over previewFrame when overlay output is visible', async () => {
+    render(<VisualTransformsProbe />);
+
+    act(() => {
+      const playback = usePlaybackStore.getState();
+      playback.setPreviewFrame(20);
+      playback.setDisplayedFrame(30);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('visual-probe')).toHaveAttribute('data-x', '330');
+    });
+  });
+
   it('ignores previewFrame while playing', async () => {
     render(<VisualTransformsProbe />);
 

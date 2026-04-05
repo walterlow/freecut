@@ -2,8 +2,7 @@ import { useMemo } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useTimelineStore } from '@/features/keyframes/deps/timeline';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
+import { useResolvedPlaybackFrame } from '@/shared/state/playback';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -45,21 +44,7 @@ export function useAnimatedTransform(
     [allKeyframes, item.id]
   );
 
-  // Get current frame from playback store
-  const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
-  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
-  const animationFrame = getResolvedPlaybackFrame({
-    currentFrame,
-    previewFrame,
-    displayedFrame,
-    isPlaying,
-    currentFrameEpoch,
-    previewFrameEpoch,
-  });
+  const animationFrame = useResolvedPlaybackFrame();
 
   // Calculate relative frame
   const relativeFrame = animationFrame - item.from;
@@ -100,21 +85,7 @@ export function useAnimatedTransforms(
   // Get all keyframes
   const allKeyframes = useTimelineStore((s) => s.keyframes);
 
-  // Get current frame from playback store
-  const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
-  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
-  const animationFrame = getResolvedPlaybackFrame({
-    currentFrame,
-    previewFrame,
-    displayedFrame,
-    isPlaying,
-    currentFrameEpoch,
-    previewFrameEpoch,
-  });
+  const animationFrame = useResolvedPlaybackFrame();
 
   // Resolve transforms for all items
   return useMemo(() => {

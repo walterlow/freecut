@@ -8,7 +8,7 @@ import {
   importWaveformCache,
 } from '@/features/editor/deps/timeline-store';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { usePlaybackStore, useResolvedPlaybackFrame } from '@/shared/state/playback';
 import { useEditorStore } from '@/shared/state/editor/store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
@@ -96,9 +96,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
   const compositions = useCompositionsStore((s) => s.compositions);
 
-  const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
-  const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const effectiveFrame = useResolvedPlaybackFrame();
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const volume = usePlaybackStore((s) => s.volume);
   const setVolume = usePlaybackStore((s) => s.setVolume);
@@ -116,7 +114,6 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     lastTimestamp: 0,
   });
 
-  const effectiveFrame = previewFrame ?? displayedFrame ?? currentFrame;
   const combinedTracks = useMemo(() => {
     return tracks
       .filter((track) => !track.isGroup)

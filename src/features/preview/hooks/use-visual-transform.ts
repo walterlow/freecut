@@ -6,8 +6,7 @@ import {
   useKeyframesStore,
   useTimelineSettingsStore,
 } from '@/features/preview/deps/timeline-store';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
+import { useResolvedPlaybackFrame } from '@/shared/state/playback';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
   applyTransformOverride,
@@ -46,23 +45,10 @@ export function useVisualTransforms(
       )
     )
   );
-  const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
-  const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
+  const animationFrame = useResolvedPlaybackFrame();
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const gizmoPreviewTransform = useGizmoStore((s) => s.previewTransform);
   const preview = useGizmoStore((s) => s.preview);
-  const animationFrame = getResolvedPlaybackFrame({
-    currentFrame,
-    previewFrame,
-    displayedFrame,
-    isPlaying,
-    currentFrameEpoch,
-    previewFrameEpoch,
-  });
 
   return useMemo(() => {
     const transforms = new Map<string, ResolvedTransform>();

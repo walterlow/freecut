@@ -166,6 +166,21 @@ describe('useAnimatedTransform skimming frame resolution', () => {
     });
   });
 
+  it('prefers displayedFrame over previewFrame when overlay output is visible', async () => {
+    render(<SingleAnimatedTransformProbe />);
+
+    act(() => {
+      const playback = usePlaybackStore.getState();
+      playback.setPreviewFrame(20);
+      playback.setDisplayedFrame(30);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('single-probe')).toHaveAttribute('data-x', '330');
+      expect(screen.getByTestId('single-probe')).toHaveAttribute('data-relative-frame', '30');
+    });
+  });
+
   it('ignores previewFrame while playing', async () => {
     render(<SingleAnimatedTransformProbe />);
 
