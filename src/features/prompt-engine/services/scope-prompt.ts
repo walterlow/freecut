@@ -17,7 +17,6 @@
  */
 export async function generatePromptFromScope(
   dataChannel: RTCDataChannel,
-  _frameBlob?: Blob,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     if (dataChannel.readyState !== 'open') {
