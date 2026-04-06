@@ -448,7 +448,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
     const data = getMediaDragData();
     const hasExternalFiles = !data && e.dataTransfer.types.includes('Files');
-    if (!data && !hasExternalFiles) {
+    const hasGenerativeClip = e.dataTransfer.types.includes('application/x-generative-clip');
+    if (!data && !hasExternalFiles && !hasGenerativeClip) {
       setIsExternalDragOver(false);
       return;
     }
@@ -703,6 +704,30 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       } catch (error) {
         logger.warn('Failed to parse drag payload, falling back to file-drop handling', error);
       }
+    }
+
+    // Handle generative AI clip drops from ClipBin
+    const generativeClipId = e.dataTransfer.getData('application/x-generative-clip');
+    if (generativeClipId) {
+      try {
+        const { useGenerativeStore } = await import('../deps/generative-contract');
+        const clip = useGenerativeStore.getState().getClipById(generativeClipId);
+        if (clip && currentProject?.id) {
+          const { insertRecordedClip } = await import('../stores/actions/recorded-clip-actions');
+          await insertRecordedClip({
+            blob: clip.blob,
+            durationMs: clip.durationMs,
+            linkedTimelineStart: dropFrame,
+            projectId: currentProject.id,
+          });
+        } else {
+          logger.warn('Generative clip not found or no project', { generativeClipId });
+        }
+      } catch (error) {
+        logger.error('Failed to handle generative clip drop', error);
+        toast.error('Failed to add AI clip to timeline');
+      }
+      return;
     }
 
     if (!e.dataTransfer.types.includes('Files')) {
