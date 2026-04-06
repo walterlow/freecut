@@ -1,10 +1,8 @@
-import { useRef, useEffect, useState, useMemo, useCallback, memo } from 'react';
+import { useRef, useState, useMemo, useCallback, memo } from 'react';
 import { type PlayerRef } from '@/features/preview/deps/player-core';
 import type { PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
-import { resolveEffectiveTrackStates } from '@/features/preview/deps/timeline-utils';
-import { resolveProxyUrl } from '../utils/media-resolver';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
 import { CornerPinContainer } from './corner-pin-container';
@@ -14,17 +12,8 @@ import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
 import { SlideEditOverlay } from './slide-edit-overlay';
-import { useGizmoStore } from '../stores/gizmo-store';
-import { useCornerPinStore } from '../stores/corner-pin-store';
-import { useMaskEditorStore } from '../stores/mask-editor-store';
-import type { CompositionInputProps } from '@/types/export';
-import type { ItemEffect } from '@/types/effects';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransform } from '@/types/transform';
-import {
-  resolveTransitionWindows,
-  type ResolvedTransitionWindow,
-} from '@/domain/timeline/transitions/transition-planner';
+import { type ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import {
   getPreviewRuntimeSnapshotFromPlaybackState,
 } from '../utils/preview-state-coordinator';
@@ -35,9 +24,12 @@ import {
 } from '../utils/adaptive-preview-quality';
 import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledTextScrubGuard } from '../utils/text-render-guard';
 import {
-  shouldForceContinuousPreviewOverlay,
   useGpuEffectsOverlay,
 } from '../hooks/use-gpu-effects-overlay';
+import {
+  usePreviewCompositionBaseModel,
+  usePreviewCompositionModel,
+} from '../hooks/use-preview-composition-model';
 import { useCustomPlayer } from '../hooks/use-custom-player';
 import { usePreviewMediaResolution } from '../hooks/use-preview-media-resolution';
 import { usePreviewMediaPreload } from '../hooks/use-preview-media-preload';
@@ -49,7 +41,9 @@ import {
   usePreviewRendererController,
   type PreviewCompositionRenderer,
 } from '../hooks/use-preview-renderer-controller';
+import { usePreviewRuntimeGuards } from '../hooks/use-preview-runtime-guards';
 import { usePreviewSourceWarm } from '../hooks/use-preview-source-warm';
+import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model';
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import {
   usePreviewTransitionSessionController,
@@ -67,10 +61,6 @@ if (import.meta.env.DEV) {
 }
 import {
   ADAPTIVE_PREVIEW_QUALITY_ENABLED,
-  type VideoSourceSpan,
-  type FastScrubBoundarySource,
-  toTrackFingerprint,
-  getMediaResolveCost,
 } from '../utils/preview-constants';
 
 interface VideoPreviewProps {
@@ -211,7 +201,6 @@ export const VideoPreview = memo(function VideoPreview({
     scrubFrameDirtyRef,
   );
   const isGizmoInteractingRef = useRef(isGizmoInteracting);
-  isGizmoInteractingRef.current = isGizmoInteracting;
   const preferPlayerForTextGizmoRef = useRef(false);
   const preferPlayerForStyledTextScrubRef = useRef(false);
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
@@ -276,52 +265,15 @@ export const VideoPreview = memo(function VideoPreview({
     _devJitterMonitor?.recordRenderFrame(frame, renderMs, inTransition, transitionId, progress);
   }, []);
 
-  useEffect(() => {
-    const playback = usePlaybackStore.getState();
-    if (playback.previewFrame !== null) {
-      // Preserve the currently viewed frame before clearing preview mode.
-      if (playback.currentFrame !== playback.previewFrame) {
-        playback.setCurrentFrame(playback.previewFrame);
-      }
-      playback.setPreviewFrame(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    isGizmoInteractingRef.current = isGizmoInteracting;
-    if (!isGizmoInteracting) return;
-    // During active transform drags, clear stale hover-scrub state without
-    // changing the viewed frame. This avoids a one-frame render source/frame jump.
-    const playbackState = usePlaybackStore.getState();
-    if (playbackState.previewFrame !== null) {
-      if (playbackState.currentFrame !== playbackState.previewFrame) {
-        playbackState.setCurrentFrame(playbackState.previewFrame);
-      }
-      playbackState.setPreviewFrame(null);
-    }
-  }, [isGizmoInteracting]);
-
-  useEffect(() => {
-    if (!ADAPTIVE_PREVIEW_QUALITY_ENABLED) {
-      adaptiveFrameSampleRef.current = null;
-      adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1);
-      if (adaptiveQualityCap !== 1) {
-        setAdaptiveQualityCap(1);
-      }
-      return;
-    }
-
-    if (isPlaying) {
-      adaptiveFrameSampleRef.current = null;
-      return;
-    }
-
-    adaptiveFrameSampleRef.current = null;
-    adaptiveQualityStateRef.current = createAdaptivePreviewQualityState(1);
-    if (adaptiveQualityCap !== 1) {
-      setAdaptiveQualityCap(1);
-    }
-  }, [adaptiveQualityCap, isPlaying]);
+  usePreviewRuntimeGuards({
+    isGizmoInteracting,
+    isGizmoInteractingRef,
+    isPlaying,
+    adaptiveQualityCap,
+    setAdaptiveQualityCap,
+    adaptiveQualityStateRef,
+    adaptiveFrameSampleRef,
+  });
 
   const previewPerfRef = useRef({
     resolveSamples: 0,
@@ -359,24 +311,11 @@ export const VideoPreview = memo(function VideoPreview({
     adaptiveQualityRecovers: 0,
   });
 
-  // Combine tracks and items into TimelineTrack format
-  // resolveEffectiveTrackStates applies parent group gate behavior (mute/hide/lock)
-  // and filters out group container tracks (which hold no items)
-  const combinedTracks = useMemo(() => {
-    const effectiveTracks = resolveEffectiveTrackStates(tracks).toSorted((a, b) => b.order - a.order);
-    return effectiveTracks.map((track) => ({
-      ...track,
-      items: itemsByTrackId[track.id] ?? [],
-    }));
-  }, [tracks, itemsByTrackId]);
-
-  const mediaResolveCostById = useMemo(() => {
-    const costs = new Map<string, number>();
-    for (const [mediaId, media] of Object.entries(mediaById)) {
-      costs.set(mediaId, getMediaResolveCost(media));
-    }
-    return costs;
-  }, [mediaById]);
+  const { combinedTracks, mediaResolveCostById } = usePreviewCompositionBaseModel({
+    tracks,
+    itemsByTrackId,
+    mediaById,
+  });
 
   const {
     resolvedUrls,
@@ -442,115 +381,36 @@ export const VideoPreview = memo(function VideoPreview({
   );
 
   const {
-    resolvedTracks,
-    fastScrubTracks,
     playbackVideoSourceSpans,
     scrubVideoSourceSpans,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
+    totalFrames,
+    inputProps,
+    playerRenderSize,
+    renderSize,
+    fastScrubScaledTracks,
+    fastScrubScaledKeyframes,
+    fastScrubInputProps,
+    fastScrubPreviewItems,
     fastScrubTracksFingerprint,
-  } = useMemo(() => {
-    const resolvedTrackList: CompositionInputProps['tracks'] = [];
-    const fastScrubTrackList: CompositionInputProps['tracks'] = [];
-    const playbackSpans: VideoSourceSpan[] = [];
-    const scrubSpans: VideoSourceSpan[] = [];
-    const boundaryFrames = new Set<number>();
-    const boundarySources = new Map<number, Set<string>>();
-
-    for (const track of combinedTracks) {
-      const resolvedItems: typeof track.items = [];
-      const fastScrubItems: typeof track.items = [];
-
-      for (const item of track.items) {
-        if (!item.mediaId || (item.type !== 'video' && item.type !== 'audio' && item.type !== 'image')) {
-          resolvedItems.push(item);
-          fastScrubItems.push(item);
-          continue;
-        }
-
-        const sourceUrl = resolvedUrls.get(item.mediaId) ?? '';
-        const proxyUrl = item.type === 'video'
-          ? (resolveProxyUrl(item.mediaId) || sourceUrl)
-          : sourceUrl;
-        const resolvedSrc = useProxy && item.type === 'video' ? proxyUrl : sourceUrl;
-        const fastScrubSrc = item.type === 'video' ? proxyUrl : sourceUrl;
-
-        const resolvedItem = ('src' in item && item.src === resolvedSrc)
-          ? item
-          : { ...item, src: resolvedSrc };
-        const fastScrubItem = ('src' in item && item.src === fastScrubSrc)
-          ? item
-          : { ...item, src: fastScrubSrc };
-
-        resolvedItems.push(resolvedItem);
-        fastScrubItems.push(fastScrubItem);
-
-        if (resolvedItem.type === 'video' && resolvedSrc) {
-          playbackSpans.push({
-            src: resolvedSrc,
-            startFrame: resolvedItem.from,
-            endFrame: resolvedItem.from + resolvedItem.durationInFrames,
-          });
-        }
-
-        if (fastScrubItem.type === 'video' && fastScrubSrc) {
-          scrubSpans.push({
-            src: fastScrubSrc,
-            startFrame: fastScrubItem.from,
-            endFrame: fastScrubItem.from + fastScrubItem.durationInFrames,
-          });
-          if (fastScrubItem.durationInFrames > 0) {
-            const startFrame = fastScrubItem.from;
-            const endFrame = fastScrubItem.from + fastScrubItem.durationInFrames;
-            boundaryFrames.add(startFrame);
-            boundaryFrames.add(endFrame);
-
-            let startSet = boundarySources.get(startFrame);
-            if (!startSet) {
-              startSet = new Set<string>();
-              boundarySources.set(startFrame, startSet);
-            }
-            startSet.add(fastScrubSrc);
-
-            let endSet = boundarySources.get(endFrame);
-            if (!endSet) {
-              endSet = new Set<string>();
-              boundarySources.set(endFrame, endSet);
-            }
-            endSet.add(fastScrubSrc);
-          }
-        }
-      }
-
-      resolvedTrackList.push({ ...track, items: resolvedItems });
-      fastScrubTrackList.push({ ...track, items: fastScrubItems });
-    }
-
-    const sortedBoundaryFrames = [...boundaryFrames].sort((a, b) => a - b);
-    const sortedBoundarySources: FastScrubBoundarySource[] = [...boundarySources.entries()]
-      .map(([frame, srcSet]) => ({ frame, srcs: [...srcSet] }))
-      .sort((a, b) => a.frame - b.frame);
-
-    return {
-      resolvedTracks: resolvedTrackList,
-      fastScrubTracks: fastScrubTrackList,
-      playbackVideoSourceSpans: playbackSpans,
-      scrubVideoSourceSpans: scrubSpans,
-      fastScrubBoundaryFrames: sortedBoundaryFrames,
-      fastScrubBoundarySources: sortedBoundarySources,
-      fastScrubTracksFingerprint: toTrackFingerprint(fastScrubTrackList),
-    };
-  }, [combinedTracks, resolvedUrls, useProxy, proxyReadyCount]);
-
-  // Calculate total frames from item data in local memoized pass.
-  const furthestItemEndFrame = useMemo(
-    () => items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0),
-    [items]
-  );
-  const totalFrames = useMemo(() => {
-    if (furthestItemEndFrame === 0) return 900; // Default 30s at 30fps
-    return furthestItemEndFrame + (fps * 5);
-  }, [furthestItemEndFrame, fps]);
+    getPreviewTransformOverride,
+    getPreviewEffectsOverride,
+    getPreviewCornerPinOverride,
+    getPreviewPathVerticesOverride,
+    getLiveItemSnapshot,
+    getLiveKeyframes,
+  } = usePreviewCompositionModel({
+    combinedTracks,
+    fps,
+    items,
+    keyframes,
+    transitions,
+    resolvedUrls,
+    useProxy,
+    proxyReadyCount,
+    project,
+  });
 
   usePreviewSourceWarm({
     resolvedUrlCount: resolvedUrls.size,
@@ -569,131 +429,27 @@ export const VideoPreview = memo(function VideoPreview({
     },
     isGizmoInteractingRef,
   });
-
-  // Memoize inputProps to prevent Player from re-rendering
-  const inputProps: CompositionInputProps = useMemo(() => ({
+  const {
+    playbackTransitionFingerprint,
+    playbackTransitionWindows,
+    playbackTransitionLookaheadFrames,
+    playbackTransitionCooldownFrames,
+    pausedTransitionPrearmFrames,
+    playingComplexTransitionPrearmFrames,
+    playbackTransitionPrerenderRunwayFrames,
+    playbackTransitionComplexStartFrames,
+    transitionWindowUsesDomProvider,
+    getTransitionWindowByStartFrame,
+    getTransitionWindowForFrame,
+    getActiveTransitionWindowForFrame,
+    playbackTransitionOverlayWindows,
+    shouldPreserveHighFidelityBackwardPreview,
+  } = usePreviewTransitionModel({
     fps,
-    width: project.width,
-    height: project.height,
-    tracks: resolvedTracks as CompositionInputProps['tracks'],
     transitions,
-    backgroundColor: project.backgroundColor,
-    keyframes,
-  }), [fps, project.width, project.height, resolvedTracks, transitions, project.backgroundColor, keyframes]);
-
-  // Keep main Player geometry fixed at project resolution.
-  // This prevents quality toggles from changing the live preview sampling path,
-  // which can look like layout drift on certain source aspect ratios.
-  const playerRenderSize = useMemo(() => {
-    const w = Math.max(2, project.width);
-    const h = Math.max(2, project.height);
-    return { width: w, height: h };
-  }, [project.width, project.height]);
-
-  // Keep fast-scrub renderer at project resolution until the renderer
-  // separates logical composition space from physical canvas size.
-  const renderSize = useMemo(() => {
-    const projectWidth = Math.max(1, Math.round(project.width));
-    const projectHeight = Math.max(1, Math.round(project.height));
-    return { width: Math.max(2, projectWidth), height: Math.max(2, projectHeight) };
-  }, [project.width, project.height]);
-
-  // Provide live gizmo preview transforms to fast-scrub renderer so dragged
-  // items move with LUT preview instead of freezing at committed transforms.
-  const getPreviewTransformOverride = useCallback((itemId: string): Partial<ResolvedTransform> | undefined => {
-    const gizmoState = useGizmoStore.getState();
-    const unifiedPreviewTransform = gizmoState.preview?.[itemId]?.transform;
-    if (unifiedPreviewTransform) return unifiedPreviewTransform;
-    if (gizmoState.activeGizmo?.itemId === itemId && gizmoState.previewTransform) {
-      return gizmoState.previewTransform;
-    }
-    return undefined;
-  }, []);
-
-  const getPreviewEffectsOverride = useCallback((itemId: string): ItemEffect[] | undefined => {
-    const gizmoState = useGizmoStore.getState();
-    return gizmoState.preview?.[itemId]?.effects;
-  }, []);
-
-  const getPreviewCornerPinOverride = useCallback((itemId: string) => {
-    const cpState = useCornerPinStore.getState();
-    if (cpState.editingItemId === itemId && cpState.previewCornerPin) {
-      return cpState.previewCornerPin;
-    }
-    return undefined;
-  }, []);
-
-  const getPreviewPathVerticesOverride = useCallback((itemId: string) => {
-    const maskState = useMaskEditorStore.getState();
-    if (maskState.editingItemId === itemId && maskState.previewVertices) {
-      return maskState.previewVertices;
-    }
-    return undefined;
-  }, []);
-
-  const fastScrubScaledTracks = useMemo(() => {
-    return fastScrubTracks as CompositionInputProps['tracks'];
-  }, [
-    fastScrubTracks,
-    fastScrubTracksFingerprint,
-  ]);
-
-  const fastScrubLiveItemsById = useMemo(() => {
-    const map = new Map<string, TimelineItem>();
-    for (const track of fastScrubScaledTracks) {
-      for (const item of track.items as TimelineItem[]) {
-        map.set(item.id, item);
-      }
-    }
-    return map;
-  }, [fastScrubScaledTracks]);
-  const fastScrubLiveItemsByIdRef = useRef<Map<string, TimelineItem>>(fastScrubLiveItemsById);
-  fastScrubLiveItemsByIdRef.current = fastScrubLiveItemsById;
-
-  const fastScrubKeyframesByItemId = useMemo(() => (
-    new Map(keyframes.map((entry) => [entry.itemId, entry]))
-  ), [keyframes]);
-  const fastScrubKeyframesByItemIdRef = useRef<Map<string, typeof keyframes[number]>>(fastScrubKeyframesByItemId);
-  fastScrubKeyframesByItemIdRef.current = fastScrubKeyframesByItemId;
-
-  const getLiveItemSnapshot = useCallback((itemId: string) => {
-    return fastScrubLiveItemsByIdRef.current.get(itemId);
-  }, []);
-
-  const getLiveKeyframes = useCallback((itemId: string) => {
-    return fastScrubKeyframesByItemIdRef.current.get(itemId);
-  }, []);
-
-  const fastScrubScaledKeyframes = useMemo(() => {
-    return keyframes;
-  }, [
-    keyframes,
-  ]);
-  const fastScrubInputProps: CompositionInputProps = useMemo(() => ({
-    fps,
-    width: project.width,
-    height: project.height,
-    tracks: fastScrubScaledTracks,
-    transitions,
-    backgroundColor: project.backgroundColor,
-    keyframes: fastScrubScaledKeyframes,
-  }), [
-    fps,
-    project.width,
-    project.height,
     fastScrubScaledTracks,
-    transitions,
-    project.backgroundColor,
-    fastScrubScaledKeyframes,
-  ]);
-
-  const playbackTransitionFingerprint = useMemo(() => (
-    transitions
-      .map((transition) => (
-        `${transition.id}:${transition.type}:${transition.leftClipId}:${transition.rightClipId}:${transition.trackId ?? ''}:${transition.durationInFrames}:${transition.presentation ?? ''}:${transition.timing ?? ''}`
-      ))
-      .join('|')
-  ), [transitions]);
+    fastScrubPreviewItems,
+  });
 
   const fastScrubRendererStructureKey = useMemo(() => (
     [
@@ -713,128 +469,6 @@ export const VideoPreview = memo(function VideoPreview({
     project.width,
   ]);
 
-  const playbackTransitionWindows = useMemo(() => {
-    const clipMap = new Map<string, TimelineItem>();
-    for (const track of fastScrubScaledTracks) {
-      for (const item of track.items as TimelineItem[]) {
-        clipMap.set(item.id, item);
-      }
-    }
-    return resolveTransitionWindows(transitions, clipMap);
-  }, [fastScrubScaledTracks, transitions]);
-  const fastScrubPreviewItems = useMemo(
-    () => fastScrubScaledTracks.flatMap((track) => track.items as TimelineItem[]),
-    [fastScrubScaledTracks],
-  );
-
-  const playbackTransitionLookaheadFrames = useMemo(
-    () => Math.max(2, Math.round(fps * 0.25)),
-    [fps],
-  );
-  const playbackTransitionCooldownFrames = useMemo(
-    () => Math.max(2, Math.round(fps * 0.1)),
-    [fps],
-  );
-  const pausedTransitionPrearmFrames = useMemo(
-    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 3)),
-    [fps, playbackTransitionLookaheadFrames],
-  );
-  const playingComplexTransitionPrearmFrames = useMemo(
-    () => Math.max(playbackTransitionLookaheadFrames, Math.round(fps * 1.5)),
-    [fps, playbackTransitionLookaheadFrames],
-  );
-  const playbackTransitionPrerenderRunwayFrames = 8;
-  const playbackTransitionEffectfulStartFrames = useMemo(() => {
-    const hasExpensiveVisuals = (item: TimelineItem) => (
-      item.effects?.some((effect) => effect.enabled)
-      || (item.blendMode !== undefined && item.blendMode !== 'normal')
-    );
-
-    const effectfulStartFrames = new Set<number>();
-    for (const window of playbackTransitionWindows) {
-      if (hasExpensiveVisuals(window.leftClip) || hasExpensiveVisuals(window.rightClip)) {
-        effectfulStartFrames.add(window.startFrame);
-      }
-    }
-
-    return effectfulStartFrames;
-  }, [playbackTransitionWindows]);
-
-  const playbackTransitionVariableSpeedStartFrames = useMemo(() => {
-    const variableSpeedStartFrames = new Set<number>();
-    for (const window of playbackTransitionWindows) {
-      const leftSpeed = window.leftClip.speed ?? 1;
-      const rightSpeed = window.rightClip.speed ?? 1;
-      if (Math.abs(leftSpeed - 1) > 0.001 || Math.abs(rightSpeed - 1) > 0.001) {
-        variableSpeedStartFrames.add(window.startFrame);
-      }
-    }
-    return variableSpeedStartFrames;
-  }, [playbackTransitionWindows]);
-
-  const playbackTransitionComplexStartFrames = useMemo(() => {
-    const complexStartFrames = new Set<number>();
-    for (const frame of playbackTransitionEffectfulStartFrames) {
-      complexStartFrames.add(frame);
-    }
-    for (const frame of playbackTransitionVariableSpeedStartFrames) {
-      complexStartFrames.add(frame);
-    }
-    return complexStartFrames;
-  }, [playbackTransitionEffectfulStartFrames, playbackTransitionVariableSpeedStartFrames]);
-
-  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
-    if (!window) return true;
-    return !playbackTransitionComplexStartFrames.has(window.startFrame);
-  }, [playbackTransitionComplexStartFrames]);
-
-  const getTransitionWindowByStartFrame = useCallback((startFrame: number | null) => {
-    if (startFrame === null) return null;
-    return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
-  }, [playbackTransitionWindows]);
-
-  const getTransitionCooldownForWindow = useCallback((window: ResolvedTransitionWindow<TimelineItem>) => {
-    const leftOriginId = window.leftClip.originId;
-    const rightOriginId = window.rightClip.originId;
-
-    // Split/same-origin handoffs keep the primary lane alive across the exit,
-    // so extra post-overlap overlay frames just prolong the stale handoff path
-    // and can leak a visible 1-2 frame hitch.
-    if (leftOriginId && rightOriginId && leftOriginId === rightOriginId) {
-      return 0;
-    }
-
-    return playbackTransitionCooldownFrames;
-  }, [playbackTransitionCooldownFrames]);
-
-  const getTransitionWindowForFrame = useCallback((frame: number) => {
-    return playbackTransitionWindows.find((window) => (
-      frame >= window.startFrame && frame < window.endFrame + getTransitionCooldownForWindow(window)
-    )) ?? null;
-  }, [getTransitionCooldownForWindow, playbackTransitionWindows]);
-
-  /** Like getTransitionWindowForFrame but without cooldown â€” true only in the active span. */
-  const getActiveTransitionWindowForFrame = useCallback((frame: number) => {
-    return playbackTransitionWindows.find((window) => (
-      frame >= window.startFrame && frame < window.endFrame
-    )) ?? null;
-  }, [playbackTransitionWindows]);
-
-  const playbackTransitionOverlayWindows = useMemo(
-    () => playbackTransitionWindows.map((window) => ({
-      startFrame: window.startFrame,
-      endFrame: window.endFrame,
-      cooldownFrames: getTransitionCooldownForWindow(window),
-    })),
-    [getTransitionCooldownForWindow, playbackTransitionWindows],
-  );
-  const shouldPreserveHighFidelityBackwardPreview = useCallback((frame: number | null) => {
-    if (frame === null) return false;
-    if (getTransitionWindowForFrame(frame) !== null) {
-      return true;
-    }
-    return shouldForceContinuousPreviewOverlay(fastScrubPreviewItems, transitions.length, frame);
-  }, [fastScrubPreviewItems, getTransitionWindowForFrame, transitions.length]);
   const forceFastScrubOverlay = showGpuEffectsOverlay;
   const {
     clearTransitionPlaybackSession,
