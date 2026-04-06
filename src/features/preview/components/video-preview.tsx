@@ -1,6 +1,6 @@
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, memo } from 'react';
 import { getDecoderPrewarmMetricsSnapshot } from '../utils/decoder-prewarm';
-import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
+import { type PlayerRef } from '@/features/preview/deps/player-core';
 import type { PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
@@ -18,13 +18,14 @@ import {
   useSlideEditPreviewStore,
 } from '@/features/preview/deps/timeline-edit-preview';
 import { useSelectionStore } from '@/shared/state/selection';
-import { MainComposition } from '@/features/preview/deps/composition-runtime';
 import { resolveProxyUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore } from '@/features/preview/deps/media-library';
 import { useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
 import { CornerPinContainer } from './corner-pin-container';
+import { PreviewPerfPanel } from './preview-perf-panel';
+import { PreviewStage } from './preview-stage';
 import { RollingEditOverlay } from './rolling-edit-overlay';
 import { RippleEditOverlay } from './ripple-edit-overlay';
 import { SlipEditOverlay } from './slip-edit-overlay';
@@ -64,6 +65,7 @@ import { useCustomPlayer } from '../hooks/use-custom-player';
 import { usePreviewMediaResolution } from '../hooks/use-preview-media-resolution';
 import { usePreviewMediaPreload } from '../hooks/use-preview-media-preload';
 import { usePreviewOverlayController } from '../hooks/use-preview-overlay-controller';
+import { usePreviewPerfPanel } from '../hooks/use-preview-perf-panel';
 import { usePreviewRenderPump } from '../hooks/use-preview-render-pump-controller';
 import {
   usePreviewRendererController,
@@ -76,7 +78,6 @@ import {
   type TransitionPreviewTelemetry,
 } from '../hooks/use-preview-transition-session-controller';
 import { createLogger } from '@/shared/logging/logger';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
 // DEV-only: cached reference loaded via dynamic import so the module
 // is excluded from production bundles entirely.
@@ -87,10 +88,7 @@ if (import.meta.env.DEV) {
   });
 }
 import {
-  FAST_SCRUB_RENDERER_ENABLED,
   PREVIEW_PERF_PUBLISH_INTERVAL_MS,
-  PREVIEW_PERF_PANEL_STORAGE_KEY,
-  PREVIEW_PERF_PANEL_QUERY_KEY,
   PREVIEW_PERF_SEEK_TIMEOUT_MS,
   ADAPTIVE_PREVIEW_QUALITY_ENABLED,
   type VideoSourceSpan,
@@ -98,7 +96,6 @@ import {
   type PreviewPerfSnapshot,
   toTrackFingerprint,
   getMediaResolveCost,
-  parsePreviewPerfPanelQuery,
 } from '../utils/preview-constants';
 
 const logger = createLogger('VideoPreview');
@@ -194,8 +191,11 @@ export const VideoPreview = memo(function VideoPreview({
     lastMs: 0,
     timeouts: 0,
   });
-  const [showPerfPanel, setShowPerfPanel] = useState(false);
-  const [perfPanelSnapshot, setPerfPanelSnapshot] = useState<PreviewPerfSnapshot | null>(null);
+  const {
+    showPerfPanel,
+    perfPanelSnapshot,
+    latestRenderSourceSwitch,
+  } = usePreviewPerfPanel();
   const transitionSessionTraceRef = useRef<TransitionPreviewSessionTrace | null>(null);
   const transitionTelemetryRef = useRef<TransitionPreviewTelemetry>({
     sessionCount: 0,
@@ -741,61 +741,6 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, []);
 
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-
-    let panelEnabled = window.__PREVIEW_PERF_PANEL__ === true;
-    const queryOverride = parsePreviewPerfPanelQuery(
-      new URLSearchParams(window.location.search).get(PREVIEW_PERF_PANEL_QUERY_KEY)
-    );
-    if (queryOverride !== null) {
-      panelEnabled = queryOverride;
-      try {
-        window.localStorage.setItem(PREVIEW_PERF_PANEL_STORAGE_KEY, panelEnabled ? '1' : '0');
-      } catch {
-        // Ignore storage failures (private mode / quota / disabled storage).
-      }
-    } else {
-      try {
-        const persisted = window.localStorage.getItem(PREVIEW_PERF_PANEL_STORAGE_KEY);
-        if (persisted === '1' || persisted === '0') {
-          panelEnabled = persisted === '1';
-        }
-      } catch {
-        // Ignore storage failures (private mode / quota / disabled storage).
-      }
-    }
-    window.__PREVIEW_PERF_PANEL__ = panelEnabled;
-    setShowPerfPanel(panelEnabled);
-    setPerfPanelSnapshot(panelEnabled ? window.__PREVIEW_PERF__ ?? null : null);
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.altKey && event.shiftKey && event.key.toLowerCase() === 'p')) return;
-      event.preventDefault();
-      const nextEnabled = !(window.__PREVIEW_PERF_PANEL__ === true);
-      window.__PREVIEW_PERF_PANEL__ = nextEnabled;
-      try {
-        window.localStorage.setItem(PREVIEW_PERF_PANEL_STORAGE_KEY, nextEnabled ? '1' : '0');
-      } catch {
-        // Ignore storage failures (private mode / quota / disabled storage).
-      }
-      setShowPerfPanel(nextEnabled);
-      if (!nextEnabled) {
-        setPerfPanelSnapshot(null);
-      }
-    };
-
-    const intervalId = setInterval(() => {
-      if (window.__PREVIEW_PERF_PANEL__ !== true) return;
-      setPerfPanelSnapshot(window.__PREVIEW_PERF__ ?? null);
-    }, 250);
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      clearInterval(intervalId);
-    };
-  }, []);
   // Memoize inputProps to prevent Player from re-rendering
   const inputProps: CompositionInputProps = useMemo(() => ({
     fps,
@@ -1453,259 +1398,68 @@ export const VideoPreview = memo(function VideoPreview({
       usePlaybackStore.getState().pause();
     }
   }, []);
-  const latestRenderSourceSwitch = perfPanelSnapshot?.renderSourceHistory[
-    perfPanelSnapshot.renderSourceHistory.length - 1
-  ] ?? null;
+  const perfPanel = import.meta.env.DEV && showPerfPanel && perfPanelSnapshot ? (
+    <PreviewPerfPanel
+      snapshot={perfPanelSnapshot}
+      latestRenderSourceSwitch={latestRenderSourceSwitch}
+    />
+  ) : null;
+
+  const comparisonOverlay = hasRolling2Up ? (
+    <RollingEditOverlay fps={fps} />
+  ) : hasRipple2Up ? (
+    <RippleEditOverlay fps={fps} />
+  ) : hasSlip4Up ? (
+    <SlipEditOverlay fps={fps} />
+  ) : hasSlide4Up ? (
+    <SlideEditOverlay fps={fps} />
+  ) : null;
+
+  const overlayControls = !suspendOverlay ? (
+    <>
+      <GizmoOverlay
+        containerRect={playerContainerRect}
+        playerSize={playerSize}
+        projectSize={{ width: project.width, height: project.height }}
+        zoom={zoom}
+        hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
+      />
+      <MaskEditorContainer
+        containerRect={playerContainerRect}
+        playerSize={playerSize}
+        projectSize={{ width: project.width, height: project.height }}
+        zoom={zoom}
+      />
+      <CornerPinContainer
+        containerRect={playerContainerRect}
+        playerSize={playerSize}
+        projectSize={{ width: project.width, height: project.height }}
+        zoom={zoom}
+      />
+    </>
+  ) : null;
 
   return (
-    <div
-      ref={backgroundRef}
-      className="w-full h-full bg-video-preview-background relative"
-      style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
-      onClick={handleBackgroundClick}
-      role="img"
-      aria-label="Video preview"
-    >
-      <div
-        className="min-w-full min-h-full grid place-items-center"
-        style={{ padding: `calc(${EDITOR_LAYOUT_CSS_VALUES.previewPadding} / 2)` }}
-        onClick={handleBackgroundClick}
-      >
-        <div className="relative">
-          <div
-            ref={setPlayerContainerRefCallback}
-            data-player-container
-            className="relative shadow-2xl"
-            style={{
-              width: `${playerSize.width}px`,
-              height: `${playerSize.height}px`,
-              transition: 'none',
-              outline: '2px solid hsl(var(--border))',
-              outlineOffset: 0,
-            }}
-            onDoubleClick={(e) => e.preventDefault()}
-          >
-            {isResolving && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
-                <p className="text-white text-sm">Loading media...</p>
-              </div>
-            )}
-
-            <Player
-              ref={playerRef}
-              durationInFrames={totalFrames}
-              fps={fps}
-              width={playerRenderSize.width}
-              height={playerRenderSize.height}
-              autoPlay={false}
-              loop={false}
-              controls={false}
-              style={{
-                width: '100%',
-                height: '100%',
-              }}
-              onFrameChange={handleFrameChange}
-              onPlayStateChange={handlePlayStateChange}
-            >
-              <MainComposition {...inputProps} />
-            </Player>
-
-            {FAST_SCRUB_RENDERER_ENABLED && (
-              <canvas
-                ref={scrubCanvasRef}
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  zIndex: 4,
-                  visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
-                }}
-              />
-            )}
-
-            {/* GPU effects overlay canvas â€” kept hidden. GPU effects are now
-                applied per-item in the composition renderer. The canvas ref is
-                retained for API compatibility. */}
-            <canvas
-              ref={gpuEffectsCanvasRef}
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                width: '100%',
-                height: '100%',
-                zIndex: 5,
-                visibility: 'hidden',
-              }}
-            />
-
-            {import.meta.env.DEV && showPerfPanel && perfPanelSnapshot && (() => {
-              const p = perfPanelSnapshot;
-              const srcLabel = p.renderSource === 'fast_scrub_overlay' ? 'Overlay'
-                : p.renderSource === 'playback_transition_overlay' ? 'Transition' : 'Player';
-              const srcColor = p.renderSource === 'player' ? '#4ade80' : '#60a5fa';
-              const seekOk = p.seekLatencyAvgMs < 50;
-              const qualOk = p.effectivePreviewQuality >= p.userPreviewQuality;
-              const frameOk = p.frameTimeEmaMs <= p.frameTimeBudgetMs * 1.2;
-              const trActive = p.transitionSessionActive;
-              const trMode = p.transitionSessionMode === 'none' ? null
-                : p.transitionSessionMode === 'dom' ? 'DOM' : 'Canvas';
-              const lastSw = latestRenderSourceSwitch;
-              const fmtSrc = (s: string) => s === 'fast_scrub_overlay' ? 'Overlay'
-                : s === 'playback_transition_overlay' ? 'Transition' : 'Player';
-              return (
-                <div
-                  className="absolute right-2 bottom-2 z-30 bg-black/80 text-white/90 rounded-md text-[10px] leading-[14px] font-mono pointer-events-none select-none backdrop-blur-sm"
-                  style={{ padding: '6px 8px', minWidth: 180 }}
-                  data-testid="preview-perf-panel"
-                  title={`Toggle: Alt+Shift+P | URL: ?${PREVIEW_PERF_PANEL_QUERY_KEY}=1`}
-                >
-                  {/* Render source */}
-                  <div style={{ marginBottom: 3 }}>
-                    <span style={{ color: srcColor }}>{srcLabel}</span>
-                    {p.staleScrubOverlayDrops > 0 && (
-                      <span style={{ color: '#f87171' }}> {p.staleScrubOverlayDrops} stale</span>
-                    )}
-                    {lastSw && (
-                      <span style={{ color: '#a1a1aa' }}>
-                        {' '}{fmtSrc(lastSw.from)}{'\u2192'}{fmtSrc(lastSw.to)} @{lastSw.atFrame}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Seek & scrub */}
-                  <div>
-                    <span style={{ color: seekOk ? '#a1a1aa' : '#fbbf24' }}>
-                      Seek {p.seekLatencyAvgMs.toFixed(0)}ms
-                    </span>
-                    {p.seekLatencyTimeouts > 0 && (
-                      <span style={{ color: '#f87171' }}> {p.seekLatencyTimeouts} timeout</span>
-                    )}
-                    {p.scrubDroppedFrames > 0 && (
-                      <span style={{ color: '#fbbf24' }}>
-                        {' '}Scrub {p.scrubDroppedFrames}/{p.scrubUpdates} dropped
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Quality & frame time */}
-                  <div>
-                    <span style={{ color: qualOk ? '#a1a1aa' : '#fbbf24' }}>
-                      Quality {p.effectivePreviewQuality}x
-                      {p.effectivePreviewQuality < p.userPreviewQuality && ` (cap ${p.adaptiveQualityCap}x)`}
-                    </span>
-                    {' '}
-                    <span style={{ color: frameOk ? '#a1a1aa' : '#f87171' }}>
-                      {p.frameTimeEmaMs.toFixed(0)}/{p.frameTimeBudgetMs.toFixed(0)}ms
-                    </span>
-                    {(p.adaptiveQualityDowngrades > 0 || p.adaptiveQualityRecovers > 0) && (
-                      <span style={{ color: '#a1a1aa' }}>
-                        {' '}{'\u2193'}{p.adaptiveQualityDowngrades} {'\u2191'}{p.adaptiveQualityRecovers}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Source pool */}
-                  <div style={{ color: '#a1a1aa' }}>
-                    Pool {p.sourceWarmKeep}/{p.sourceWarmTarget}
-                    {' '}({p.sourcePoolSources}src {p.sourcePoolElements}el)
-                    {p.sourceWarmEvictions > 0 && (
-                      <span style={{ color: '#fbbf24' }}> {p.sourceWarmEvictions} evict</span>
-                    )}
-                  </div>
-
-                  {/* Preseek worker */}
-                  {(p.preseekRequests > 0 || p.preseekCachedBitmaps > 0) && (
-                    <div style={{ color: '#a1a1aa' }}>
-                      Preseek {p.preseekCacheHits + p.preseekInflightReuses}/{p.preseekRequests} hit
-                      {' '}post {p.preseekWorkerSuccesses}/{p.preseekWorkerPosts}
-                      {' '}cache {p.preseekCachedBitmaps}
-                      {p.preseekWaitMatches > 0 && (
-                        <span>
-                          {' '}wait {p.preseekWaitResolved}/{p.preseekWaitMatches}
-                        </span>
-                      )}
-                      {p.preseekWorkerFailures > 0 && (
-                        <span style={{ color: '#fbbf24' }}> {p.preseekWorkerFailures} fail</span>
-                      )}
-                      {p.preseekWaitTimeouts > 0 && (
-                        <span style={{ color: '#fbbf24' }}> {p.preseekWaitTimeouts} timeout</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Media resolution */}
-                  {(p.unresolvedQueue > 0 || p.pendingResolves > 0) && (
-                    <div style={{ color: '#fbbf24' }}>
-                      Resolving {p.pendingResolves} pending, {p.unresolvedQueue} queued
-                      {' '}({p.resolveAvgMs.toFixed(0)}ms avg)
-                    </div>
-                  )}
-
-                  {/* Transition session â€” only show when active or recent */}
-                  {(trActive || p.transitionSessionCount > 0) && (
-                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3 }}>
-                      <div>
-                        <span style={{ color: trActive ? '#60a5fa' : '#a1a1aa' }}>
-                          {trActive ? `Transition ${trMode}` : 'Last transition'}
-                          {p.transitionSessionComplex ? ' (complex)' : ''}
-                        </span>
-                        {trActive && (
-                          <span style={{ color: '#a1a1aa' }}>
-                            {' '}{p.transitionSessionStartFrame}{'\u2192'}{p.transitionSessionEndFrame}
-                            {' '}buf:{p.transitionBufferedFrames}
-                          </span>
-                        )}
-                      </div>
-                      {p.transitionLastPrepareMs > 0 && (
-                        <div style={{ color: p.transitionLastEntryMisses > 0 ? '#f87171' : '#a1a1aa' }}>
-                          Prep {p.transitionLastPrepareMs.toFixed(0)}ms
-                          {p.transitionLastReadyLeadMs > 0 && ` lead ${p.transitionLastReadyLeadMs.toFixed(0)}ms`}
-                          {p.transitionLastEntryMisses > 0 && ` ${p.transitionLastEntryMisses} miss`}
-                          <span style={{ color: '#a1a1aa' }}> #{p.transitionSessionCount}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Edit frame comparison overlays */}
-            {hasRolling2Up ? (
-              <RollingEditOverlay fps={fps} />
-            ) : hasRipple2Up ? (
-              <RippleEditOverlay fps={fps} />
-            ) : hasSlip4Up ? (
-              <SlipEditOverlay fps={fps} />
-            ) : hasSlide4Up ? (
-              <SlideEditOverlay fps={fps} />
-            ) : null}
-          </div>
-
-          {!suspendOverlay && (
-            <>
-              <GizmoOverlay
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
-                projectSize={{ width: project.width, height: project.height }}
-                zoom={zoom}
-                hitAreaRef={backgroundRef as React.RefObject<HTMLDivElement>}
-              />
-              <MaskEditorContainer
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
-                projectSize={{ width: project.width, height: project.height }}
-                zoom={zoom}
-              />
-              <CornerPinContainer
-                containerRect={playerContainerRect}
-                playerSize={playerSize}
-                projectSize={{ width: project.width, height: project.height }}
-                zoom={zoom}
-              />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <PreviewStage
+      backgroundRef={backgroundRef}
+      playerRef={playerRef}
+      scrubCanvasRef={scrubCanvasRef}
+      gpuEffectsCanvasRef={gpuEffectsCanvasRef}
+      needsOverflow={needsOverflow}
+      playerSize={playerSize}
+      playerRenderSize={playerRenderSize}
+      totalFrames={totalFrames}
+      fps={fps}
+      isResolving={isResolving}
+      isRenderedOverlayVisible={isRenderedOverlayVisible}
+      inputProps={inputProps}
+      onBackgroundClick={handleBackgroundClick}
+      onFrameChange={handleFrameChange}
+      onPlayStateChange={handlePlayStateChange}
+      setPlayerContainerRefCallback={setPlayerContainerRefCallback}
+      perfPanel={perfPanel}
+      comparisonOverlay={comparisonOverlay}
+      overlayControls={overlayControls}
+    />
   );
 });
