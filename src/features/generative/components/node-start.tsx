@@ -2,15 +2,17 @@ import { useCallback, useRef, useState, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ImagePlus, Camera, X } from 'lucide-react';
 import { useGenerativeStore } from '../stores/generative-store';
+import { usePlaybackStore } from '../deps/playback-contract';
 
 /**
  * Node A: Start Image drop-zone.
- * Users can drag an image, paste from clipboard, or capture from webcam.
+ * Users can drag an image, paste from clipboard, or capture from the preview canvas.
  */
 export const NodeStart = memo(function NodeStart() {
   const startImage = useGenerativeStore((s) => s.startImage);
   const setStartImage = useGenerativeStore((s) => s.setStartImage);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
@@ -39,6 +41,22 @@ export const NodeStart = memo(function NodeStart() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
   }, [setStartImage, previewUrl]);
+
+  const handleCapture = useCallback(async () => {
+    setIsCapturing(true);
+    try {
+      const { captureFrame } = usePlaybackStore.getState();
+      if (!captureFrame) return;
+      const dataUrl = await captureFrame();
+      if (!dataUrl) return;
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `capture-${Date.now()}.png`, { type: 'image/png' });
+      handleFile(file);
+    } finally {
+      setIsCapturing(false);
+    }
+  }, [handleFile]);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -80,9 +98,15 @@ export const NodeStart = memo(function NodeStart() {
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
       </div>
-      <Button variant="ghost" size="sm" className="h-7 text-xs" disabled>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 text-xs"
+        onClick={handleCapture}
+        disabled={isCapturing}
+      >
         <Camera className="mr-1 h-3 w-3" />
-        Capture
+        {isCapturing ? 'Capturing...' : 'Capture'}
       </Button>
     </div>
   );

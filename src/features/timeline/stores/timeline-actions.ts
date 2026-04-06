@@ -21,3 +21,4 @@ export * from './actions/marker-actions';
 export * from './actions/settings-actions';
 export * from './actions/source-edit-actions';
 export * from './actions/composition-actions';
+export * from './actions/recorded-clip-actions';
