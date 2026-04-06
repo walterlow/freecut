@@ -114,6 +114,9 @@ export function renderDirectVideoGpuFrame(
   cornerPin?: NonNullable<TimelineItem['cornerPin']>,
   canvasPool?: CanvasPool | null,
   gpuPipeline?: EffectsPipeline | null,
+  options?: {
+    returnTargetCanvasOnFlattened?: boolean;
+  },
 ): OffscreenCanvas | null {
   if (!gpuPipeline) return null;
 
@@ -215,7 +218,7 @@ export function renderDirectVideoGpuFrame(
       } finally {
         ctx.restore();
       }
-      return null;
+      return options?.returnTargetCanvasOnFlattened ? (ctx.canvas as OffscreenCanvas) : null;
     }
     if (gpuPipeline.isBatching() && opacity === 1 && cornerRadius === 0 && rotation === 0) {
       return result;
@@ -241,7 +244,7 @@ export function renderDirectVideoGpuFrame(
       ctx.fill();
     }
     ctx.restore();
-    return null;
+    return options?.returnTargetCanvasOnFlattened ? (ctx.canvas as OffscreenCanvas) : null;
   } catch (error) {
     log.warn('GPU video importExternalTexture path failed, falling back', error);
     return null;

@@ -10,6 +10,20 @@ describe('resolveFrameRenderOptimization', () => {
       renderTaskCount: 1,
     })).toEqual({
       shouldDirectRenderSingleTask: true,
+      shouldDirectRenderSingleTransitionTask: false,
+      shouldUseDeferredGpuBatch: false,
+    });
+  });
+
+  it('direct-renders a single unmasked transition task', () => {
+    expect(resolveFrameRenderOptimization({
+      activeMaskCount: 0,
+      activeTransitionCount: 1,
+      hasGpuEffects: true,
+      renderTaskCount: 1,
+    })).toEqual({
+      shouldDirectRenderSingleTask: false,
+      shouldDirectRenderSingleTransitionTask: true,
       shouldUseDeferredGpuBatch: false,
     });
   });
@@ -22,6 +36,7 @@ describe('resolveFrameRenderOptimization', () => {
       renderTaskCount: 3,
     })).toEqual({
       shouldDirectRenderSingleTask: false,
+      shouldDirectRenderSingleTransitionTask: false,
       shouldUseDeferredGpuBatch: true,
     });
   });
@@ -33,6 +48,12 @@ describe('resolveFrameRenderOptimization', () => {
       hasGpuEffects: true,
       renderTaskCount: 1,
     }).shouldDirectRenderSingleTask).toBe(false);
+    expect(resolveFrameRenderOptimization({
+      activeMaskCount: 1,
+      activeTransitionCount: 0,
+      hasGpuEffects: true,
+      renderTaskCount: 1,
+    }).shouldDirectRenderSingleTransitionTask).toBe(false);
 
     expect(resolveFrameRenderOptimization({
       activeMaskCount: 0,
@@ -40,5 +61,11 @@ describe('resolveFrameRenderOptimization', () => {
       hasGpuEffects: true,
       renderTaskCount: 1,
     }).shouldDirectRenderSingleTask).toBe(false);
+    expect(resolveFrameRenderOptimization({
+      activeMaskCount: 1,
+      activeTransitionCount: 1,
+      hasGpuEffects: true,
+      renderTaskCount: 1,
+    }).shouldDirectRenderSingleTransitionTask).toBe(false);
   });
 });

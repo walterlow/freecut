@@ -14,6 +14,7 @@ export interface ResolvePreviewDomVideoDrawDecisionOptions {
   sourceTime: number;
   speed: number;
   isRenderingTransition: boolean;
+  allowLooseTransitionFrame?: boolean;
 }
 
 export interface ResolvePreviewMediabunnyInitActionOptions {
@@ -57,7 +58,13 @@ export function getPreviewDomVideoDriftThreshold(speed: number, isInTransition: 
 export function resolvePreviewDomVideoDrawDecision(
   options: ResolvePreviewDomVideoDrawDecisionOptions,
 ): PreviewDomVideoDrawDecision {
-  const { domVideo, sourceTime, speed, isRenderingTransition } = options;
+  const {
+    domVideo,
+    sourceTime,
+    speed,
+    isRenderingTransition,
+    allowLooseTransitionFrame = false,
+  } = options;
 
   if (!domVideo || domVideo.readyState < 2 || domVideo.videoWidth <= 0) {
     return {
@@ -76,7 +83,7 @@ export function resolvePreviewDomVideoDrawDecision(
   // may have a large drift because its premounted video element hasn't been
   // seeked to the exact transition position. A wrong-time frame is always
   // better than rendering black.
-  const shouldDraw = isRenderingTransition || drift <= driftThreshold;
+  const shouldDraw = (allowLooseTransitionFrame && isRenderingTransition) || drift <= driftThreshold;
 
   return {
     hasReadyDomVideo: true,

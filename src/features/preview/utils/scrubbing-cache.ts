@@ -472,6 +472,11 @@ export class ScrubbingCache {
     return null;
   }
 
+  /** Check whether a composited frame is already cached without affecting hit stats. */
+  hasFrame(frame: number): boolean {
+    return this.tier1.has(frame) || this.tier3.has(frame);
+  }
+
   /**
    * Cache a fully composited frame into Tier 1 + Tier 3.
    * Call after renderFrame() completes.

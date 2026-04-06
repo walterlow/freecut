@@ -228,4 +228,80 @@ describe('client-render-engine direct GPU presentation', () => {
       ))
     ))).toBe(true);
   });
+
+  it('keeps playback blend scenes on the realtime compositor path', async () => {
+    const renderCanvas = new MockOffscreenCanvas(640, 360) as unknown as OffscreenCanvas;
+    const renderCtx = (renderCanvas as unknown as MockOffscreenCanvas).getContext('2d');
+
+    const renderer = await createCompositionRenderer(
+      {
+        fps: 30,
+        width: 640,
+        height: 360,
+        backgroundColor: '#101010',
+        keyframes: [],
+        transitions: [],
+        tracks: [
+          {
+            id: 'track-bg',
+            name: 'Background',
+            kind: 'video',
+            height: 80,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+            order: 1,
+            items: [
+              {
+                id: 'text-bg',
+                type: 'text',
+                trackId: 'track-bg',
+                from: 0,
+                durationInFrames: 90,
+                label: 'BG',
+                text: 'Background',
+                color: '#ffffff',
+              },
+            ],
+          },
+          {
+            id: 'track-blend',
+            name: 'Blend',
+            kind: 'video',
+            height: 80,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+            order: 0,
+            items: [
+              {
+                id: 'text-blend',
+                type: 'text',
+                trackId: 'track-blend',
+                from: 0,
+                durationInFrames: 90,
+                label: 'Blend',
+                text: 'Overlay',
+                color: '#ff0000',
+                blendMode: 'multiply',
+              },
+            ],
+          },
+        ],
+      },
+      renderCanvas,
+      renderCtx!,
+      {
+        mode: 'preview',
+      },
+    );
+
+    renderer.setPlaybackVideoElementPreference(true);
+    await renderer.renderFrame(0);
+
+    expect(gpuMocks.compositeToCanvasMock).not.toHaveBeenCalled();
+    expect(renderer.wasLastFramePresentedDirectly()).toBe(false);
+  });
 });

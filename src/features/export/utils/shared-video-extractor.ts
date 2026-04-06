@@ -38,6 +38,8 @@ export interface VideoFrameSource {
     height: number,
   ): Promise<number>;
   isBatchPrewarmAvailable(): boolean;
+  /** Get a VideoFrame at the specified timestamp for zero-copy GPU ingest. */
+  getVideoFrameAtTimestamp?(timestamp: number): Promise<VideoFrame | null>;
   dispose(): void;
 }
 
@@ -128,6 +130,10 @@ class SharedItemVideoSource implements VideoFrameSource {
 
   isBatchPrewarmAvailable(): boolean {
     return this.pool.isItemBatchPrewarmAvailable(this.itemId, this.src);
+  }
+
+  async getVideoFrameAtTimestamp(timestamp: number): Promise<VideoFrame | null> {
+    return this.pool.getItemVideoFrame(this.itemId, this.src, timestamp);
   }
 
   // Shared lanes are owned/disposed by the pool.
@@ -303,6 +309,28 @@ export class SharedVideoExtractorPool {
   isItemBatchPrewarmAvailable(itemId: string, src: string): boolean {
     const extractor = this.getExtractorForItem(itemId, src);
     return extractor?.isBatchPrewarmAvailable() ?? false;
+  }
+
+  async getItemVideoFrame(itemId: string, src: string, timestamp: number): Promise<VideoFrame | null> {
+    const state = this.ensureSourceState(src);
+    const sourceReady = await this.initSource(src);
+    if (!sourceReady) return null;
+
+    let laneIndex = this.getAssignedLaneIndex(state, itemId);
+    let laneReady = await this.ensureLaneInitialized(state, laneIndex);
+    if (!laneReady && laneIndex !== 0) {
+      laneIndex = 0;
+      laneReady = await this.ensureLaneInitialized(state, laneIndex);
+    }
+    if (!laneReady) return null;
+
+    const lane = state.lanes[laneIndex]!;
+    const prev = lane.drawLock ?? Promise.resolve();
+    const result = prev.then(() =>
+      lane.extractor.getVideoFrameAtTimestamp(timestamp)
+    );
+    lane.drawLock = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   dispose(): void {

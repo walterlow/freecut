@@ -7,7 +7,7 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { transitionRegistry } from '@/domain/timeline/transitions/registry';
+import { transitionRegistry } from '@/domain/timeline/transitions';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
 import {
   resolveTransitionFrameState,

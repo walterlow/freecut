@@ -45,17 +45,33 @@ describe('frame-source-policy', () => {
     expect(decision.driftThreshold).toBe(1.0);
   });
 
-  it('still draws a ready DOM video during transition rendering even when drift is large', () => {
+  it('only allows very stale transition frames when explicitly requested', () => {
     const decision = resolvePreviewDomVideoDrawDecision({
       domVideo: makeDomVideo({ currentTime: 13 }),
       sourceTime: 10,
       speed: 1,
       isRenderingTransition: true,
+      allowLooseTransitionFrame: true,
     });
 
     expect(decision.hasReadyDomVideo).toBe(true);
     expect(decision.shouldDraw).toBe(true);
     expect(decision.drift).toBe(3);
+  });
+
+  it('rejects very stale transition frames in realtime playback mode', () => {
+    const decision = resolvePreviewDomVideoDrawDecision({
+      domVideo: makeDomVideo({ currentTime: 13 }),
+      sourceTime: 10,
+      speed: 1,
+      isRenderingTransition: true,
+      allowLooseTransitionFrame: false,
+    });
+
+    expect(decision.hasReadyDomVideo).toBe(true);
+    expect(decision.shouldDraw).toBe(false);
+    expect(decision.drift).toBe(3);
+    expect(decision.driftThreshold).toBe(1.0);
   });
 
   it('warms mediabunny in the background for variable-speed preview playback', () => {

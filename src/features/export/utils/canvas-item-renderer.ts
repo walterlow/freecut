@@ -36,6 +36,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
+import { transitionRegistry } from '@/domain/timeline/transitions';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import type { ScrubbingCache } from '@/features/export/deps/preview';
@@ -43,6 +44,7 @@ import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/time
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import {
+  resolvePreviewDomVideoDrawDecision,
   resolvePreviewMediabunnyInitAction,
   shouldAllowPreviewVideoElementFallback,
   shouldTryPreviewWorkerBitmap,
@@ -58,6 +60,7 @@ import {
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
+import type { GpuTransitionExternalSource } from '@/infrastructure/gpu/transitions';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -195,6 +198,10 @@ export interface ItemRenderContext {
   // DOM video drift threshold to prefer stale zero-copy frames over
   // 170ms mediabunny stalls during transition ramp-up / exit.
   isRenderingTransition?: boolean;
+
+  // Playback-only hint: allow preview playback renders to prefer the live
+  // pooled HTMLVideoElement path over exact decoded preview frames.
+  preferPlaybackVideoElements?: boolean;
 }
 
 /**
@@ -219,6 +226,12 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
   transform: ItemTransform;
   effects: ItemEffect[];
 }
+
+interface DirectPlaybackTransitionVideoSource {
+  video: HTMLVideoElement;
+  source: GpuTransitionExternalSource;
+}
+
 
 // ---------------------------------------------------------------------------
 // Core item dispatch
@@ -545,10 +558,17 @@ async function renderVideoItem(
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
-  // Preview rendering now stays on decoded renderer inputs instead of sampling
-  // live DOM video elements. That keeps scrub, paused, and playback visuals on
-  // the same composition path and avoids transition-specific mismatches.
-  const hasDomVideo = false;
+  const domVideo = rctx.preferPlaybackVideoElements === true
+    ? videoElements.get(item.id) ?? null
+    : null;
+  const domVideoDrawDecision = resolvePreviewDomVideoDrawDecision({
+    domVideo,
+    sourceTime,
+    speed,
+    isRenderingTransition: rctx.isRenderingTransition === true,
+    allowLooseTransitionFrame: rctx.isRenderingTransition === true && rctx.preferPlaybackVideoElements !== true,
+  });
+  const hasDomVideo = domVideoDrawDecision.hasReadyDomVideo;
 
   const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({
     renderMode: rctx.renderMode,
@@ -644,6 +664,21 @@ async function renderVideoItem(
       }
       return;
     }
+  }
+
+  if (isPreviewMode && domVideo && domVideoDrawDecision.shouldDraw) {
+    drawContainedMediaSource(
+      ctx,
+      domVideo,
+      domVideo.videoWidth,
+      domVideo.videoHeight,
+      transform,
+      canvasSettings,
+      item.crop,
+      undefined,
+      rctx.canvasPool,
+    );
+    return;
   }
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
@@ -1477,11 +1512,221 @@ async function renderCompositionItem(
 // ---------------------------------------------------------------------------
 
 /**
+ * Try rendering a transition using VideoFrame objects from mediabunny decoders.
+ * Returns true if both frames were obtained and the GPU rendered successfully.
+ *
+ * This is the preferred playback path: mediabunny decodes at the exact source
+ * timestamp (frame-accurate), producing a VideoFrame that importExternalTexture
+ * ingests zero-copy. No HTMLVideoElement readyState issues, no real-time decode
+ * constraints — works reliably for any resolution including 4K.
+ */
+async function tryRenderTransitionWithVideoFrames(
+  activeTransition: ActiveTransition,
+  leftParticipant: TransitionParticipantRenderState,
+  rightParticipant: TransitionParticipantRenderState,
+  frame: number,
+  rctx: ItemRenderContext,
+  gpuTransitionId: string,
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+): Promise<boolean> {
+  // Only for video-to-video transitions without effects or corner-pin
+  if (leftParticipant.item.type !== 'video' || rightParticipant.item.type !== 'video') return false;
+  if (leftParticipant.effects.length > 0 || rightParticipant.effects.length > 0) return false;
+  if (hasCornerPin(leftParticipant.item.cornerPin) || hasCornerPin(rightParticipant.item.cornerPin)) return false;
+  if (!rctx.gpuTransitionPipeline) return false;
+
+  const leftExtractor = rctx.videoExtractors.get(leftParticipant.item.id);
+  const rightExtractor = rctx.videoExtractors.get(rightParticipant.item.id);
+  if (!leftExtractor?.getVideoFrameAtTimestamp || !rightExtractor?.getVideoFrameAtTimestamp) return false;
+
+  const leftTime = resolveTransitionParticipantVideoTime(leftParticipant.item, frame, rctx.fps);
+  const rightTime = resolveTransitionParticipantVideoTime(rightParticipant.item, frame, rctx.fps);
+
+  const [leftBorrowed, rightBorrowed] = await Promise.all([
+    leftExtractor.getVideoFrameAtTimestamp(leftTime),
+    rightExtractor.getVideoFrameAtTimestamp(rightTime),
+  ]);
+  if (!leftBorrowed || !rightBorrowed) return false;
+
+  // Clone the borrowed frames so the extractor can safely advance its cache
+  // without invalidating our references. VideoFrame.clone() is lightweight —
+  // it shares the underlying decoded buffer (no pixel copy). We close the
+  // clones after GPU submit to release the GPU memory reference.
+  let leftFrame: VideoFrame | null = null;
+  let rightFrame: VideoFrame | null = null;
+  try {
+    leftFrame = leftBorrowed.clone();
+    rightFrame = rightBorrowed.clone();
+  } catch {
+    leftFrame?.close();
+    rightFrame?.close();
+    return false;
+  }
+
+  try {
+    const leftPlacement = resolveTransitionSourcePlacement(leftParticipant, leftFrame, rctx);
+    const rightPlacement = resolveTransitionSourcePlacement(rightParticipant, rightFrame, rctx);
+
+    let result: OffscreenCanvas | null = null;
+    if (leftPlacement && rightPlacement) {
+      result = rctx.gpuTransitionPipeline.renderVideoElementsWithTransforms(
+        gpuTransitionId,
+        leftFrame, rightFrame,
+        leftPlacement, rightPlacement,
+        activeTransition.progress,
+        rctx.canvasSettings.width, rctx.canvasSettings.height,
+        activeTransition.transition.direction as string | undefined,
+        activeTransition.transition.properties,
+      );
+    } else {
+      result = rctx.gpuTransitionPipeline.renderVideoElements(
+        gpuTransitionId,
+        leftFrame, rightFrame,
+        activeTransition.progress,
+        rctx.canvasSettings.width, rctx.canvasSettings.height,
+        activeTransition.transition.direction as string | undefined,
+        activeTransition.transition.properties,
+      );
+    }
+
+    if (result) {
+      ctx.drawImage(result, 0, 0);
+      return true;
+    }
+    return false;
+  } finally {
+    // Always close cloned frames to release GPU memory — the extractor's
+    // cached originals remain alive for subsequent calls.
+    leftFrame.close();
+    rightFrame.close();
+  }
+}
+
+/** Compute transition source placement from VideoFrame dimensions + item transform. */
+export function resolveTransitionSourcePlacement(
+  participant: TransitionParticipantRenderState,
+  videoFrame: VideoFrame,
+  rctx: ItemRenderContext,
+): GpuTransitionExternalSource | null {
+  const mediaWidth = videoFrame.displayWidth;
+  const mediaHeight = videoFrame.displayHeight;
+  if (mediaWidth < 2 || mediaHeight < 2) return null;
+
+  const itemRect = {
+    x: rctx.canvasSettings.width / 2 + participant.transform.x - participant.transform.width / 2,
+    y: rctx.canvasSettings.height / 2 + participant.transform.y - participant.transform.height / 2,
+    width: participant.transform.width,
+    height: participant.transform.height,
+  };
+  const layout = calculateContainedMediaDrawLayout(
+    mediaWidth, mediaHeight,
+    participant.transform,
+    rctx.canvasSettings,
+    (participant.item as VideoItem).crop,
+  );
+  if (layout.viewportRect.width <= 0 || layout.viewportRect.height <= 0) return null;
+
+  return {
+    mediaRect: layout.mediaRect,
+    visibleRect: layout.viewportRect,
+    featherInsets: layout.featherPixels,
+    itemRect,
+    opacity: participant.transform.opacity,
+    rotation: participant.transform.rotation,
+    cornerRadius: participant.transform.cornerRadius,
+  };
+}
+
+function isPlainFullCanvasTransitionVideoParticipant(
+  state: TransitionParticipantRenderState<VideoItem>,
+  canvasSettings: CanvasSettings,
+): boolean {
+  const { item, transform, effects } = state;
+  if (effects.length > 0) return false;
+  if (item.crop) return false;
+  if (hasCornerPin(item.cornerPin)) return false;
+
+  const epsilon = 1;
+  return Math.abs(transform.x) <= epsilon
+    && Math.abs(transform.y) <= epsilon
+    && Math.abs(transform.width - canvasSettings.width) <= epsilon
+    && Math.abs(transform.height - canvasSettings.height) <= epsilon
+    && Math.abs(transform.rotation) <= 0.01
+    && Math.abs(transform.opacity - 1) <= 0.001
+    && Math.abs(transform.cornerRadius) <= 0.01;
+}
+
+function resolveDirectPlaybackTransitionVideoSource(
+  participant: TransitionParticipantRenderState,
+  frame: number,
+  rctx: ItemRenderContext,
+): DirectPlaybackTransitionVideoSource | null {
+  if (rctx.renderMode !== 'preview' || rctx.preferPlaybackVideoElements !== true) {
+    return null;
+  }
+  if (participant.item.type !== 'video') {
+    return null;
+  }
+  if (participant.effects.length > 0 || hasCornerPin(participant.item.cornerPin)) {
+    return null;
+  }
+
+  const video = rctx.videoElements.get(participant.item.id) ?? null;
+  const drawDecision = resolvePreviewDomVideoDrawDecision({
+    domVideo: video,
+    sourceTime: resolveTransitionParticipantVideoTime(participant.item, frame, rctx.fps),
+    speed: participant.item.speed ?? 1,
+    isRenderingTransition: true,
+    allowLooseTransitionFrame: false,
+  });
+  if (
+    !drawDecision.hasReadyDomVideo
+    || !drawDecision.shouldDraw
+    || !video
+    || video.videoWidth < 2
+    || video.videoHeight < 2
+  ) {
+    return null;
+  }
+
+  const placement = resolveTransitionSourcePlacement(
+    participant,
+    {
+      displayWidth: video.videoWidth,
+      displayHeight: video.videoHeight,
+    } as VideoFrame,
+    rctx,
+  );
+  if (!placement) {
+    return null;
+  }
+
+  return {
+    video,
+    source: placement,
+  };
+}
+
+function resolveDirectPlaybackTransitionVideoPair(
+  leftParticipant: TransitionParticipantRenderState,
+  rightParticipant: TransitionParticipantRenderState,
+  frame: number,
+  rctx: ItemRenderContext,
+): { left: DirectPlaybackTransitionVideoSource; right: DirectPlaybackTransitionVideoSource } | null {
+  const left = resolveDirectPlaybackTransitionVideoSource(leftParticipant, frame, rctx);
+  const right = resolveDirectPlaybackTransitionVideoSource(rightParticipant, frame, rctx);
+  if (!left || !right) {
+    return null;
+  }
+  return { left, right };
+}
+
+/**
  * Render a single active transition: renders both clips with effects, then
  * composites them via the transition renderer.
  */
 export async function renderTransitionToCanvas(
-  ctx: OffscreenCanvasRenderingContext2D,
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
   activeTransition: ActiveTransition,
   frame: number,
   rctx: ItemRenderContext,
@@ -1491,8 +1736,57 @@ export async function renderTransitionToCanvas(
   const { leftClip, rightClip } = activeTransition;
   const leftParticipant = resolveTransitionParticipantRenderState(leftClip, frame, trackOrder, rctx);
   const rightParticipant = resolveTransitionParticipantRenderState(rightClip, frame, trackOrder, rctx);
+  const directGpuTransitionId = transitionRegistry.getRenderer(activeTransition.transition.presentation)?.gpuTransitionId;
+  const playbackVideoTransition = resolveDirectPlaybackTransitionVideoPair(
+    leftParticipant,
+    rightParticipant,
+    frame,
+    rctx,
+  );
+  if (directGpuTransitionId && rctx.gpuTransitionPipeline && playbackVideoTransition) {
+    const shouldUsePlainPlaybackVideoPair = (
+      isPlainFullCanvasTransitionVideoParticipant(leftParticipant as TransitionParticipantRenderState<VideoItem>, rctx.canvasSettings)
+      && isPlainFullCanvasTransitionVideoParticipant(rightParticipant as TransitionParticipantRenderState<VideoItem>, rctx.canvasSettings)
+    );
+    const playbackVideoResult = shouldUsePlainPlaybackVideoPair
+      ? rctx.gpuTransitionPipeline.renderVideoElements(
+        directGpuTransitionId,
+        playbackVideoTransition.left.video,
+        playbackVideoTransition.right.video,
+        activeTransition.progress,
+        canvasSettings.width,
+        canvasSettings.height,
+        activeTransition.transition.direction as string | undefined,
+        activeTransition.transition.properties,
+      )
+      : rctx.gpuTransitionPipeline.renderVideoElementsWithTransforms(
+        directGpuTransitionId,
+        playbackVideoTransition.left.video,
+        playbackVideoTransition.right.video,
+        playbackVideoTransition.left.source,
+        playbackVideoTransition.right.source,
+        activeTransition.progress,
+        canvasSettings.width,
+        canvasSettings.height,
+        activeTransition.transition.direction as string | undefined,
+        activeTransition.transition.properties,
+      );
+    if (playbackVideoResult) {
+      ctx.drawImage(playbackVideoResult, 0, 0);
+      return;
+    }
+  }
 
-  // === PERFORMANCE: Render both clips in parallel ===
+  // Exact VideoFrame decode remains as the accuracy fallback when realtime
+  // playback can't safely ride the live pooled video elements.
+  if (directGpuTransitionId && rctx.gpuTransitionPipeline) {
+    const videoFrameResult = await tryRenderTransitionWithVideoFrames(
+      activeTransition, leftParticipant, rightParticipant, frame, rctx, directGpuTransitionId, ctx,
+    );
+    if (videoFrameResult) return;
+  }
+
+  // === Full canvas fallback: render both clips via mediabunny decode ===
   // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
   // Running both clips concurrently halves the decode wait time.
   const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
@@ -1564,6 +1858,19 @@ export async function renderTransitionToCanvas(
   canvasPool.release(leftCanvas);
   if (rightEffectPoolCanvas) canvasPool.release(rightEffectPoolCanvas);
   canvasPool.release(rightCanvas);
+}
+
+function resolveTransitionParticipantVideoTime(
+  item: VideoItem,
+  frame: number,
+  fps: number,
+): number {
+  const localFrame = frame - item.from;
+  const localTime = localFrame / fps;
+  const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+  const sourceFps = item.sourceFps ?? fps;
+  const speed = item.speed ?? 1;
+  return (sourceStart / sourceFps) + localTime * speed;
 }
 
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(

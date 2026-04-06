@@ -273,6 +273,7 @@ describe('renderDirectVideoGpuFrame', () => {
 
   it('flattens opacity into the effect canvas when batching would otherwise defer', () => {
     const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const targetCanvas = { width: 1280, height: 720 } as OffscreenCanvas;
     const ctx = {
       clearRect: vi.fn(),
       drawImage: vi.fn(),
@@ -284,7 +285,7 @@ describe('renderDirectVideoGpuFrame', () => {
       roundRect: vi.fn(),
       fill: vi.fn(),
       globalAlpha: 1,
-      canvas: { width: 1280, height: 720 },
+      canvas: targetCanvas,
     } as unknown as OffscreenCanvasRenderingContext2D;
     const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
     const pipeline = {
@@ -315,6 +316,51 @@ describe('renderDirectVideoGpuFrame', () => {
     expect(ctx.save).toHaveBeenCalled();
     expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
     expect(ctx.restore).toHaveBeenCalled();
+  });
+
+  it('can return the target canvas when a flattened direct video draw succeeds', () => {
+    const resultCanvas = { width: 640, height: 360 } as OffscreenCanvas;
+    const targetCanvas = { width: 1280, height: 720 } as OffscreenCanvas;
+    const ctx = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      roundRect: vi.fn(),
+      fill: vi.fn(),
+      globalAlpha: 1,
+      canvas: targetCanvas,
+    } as unknown as OffscreenCanvasRenderingContext2D;
+    const video = { readyState: 4, videoWidth: 1920, videoHeight: 1080 } as HTMLVideoElement;
+    const pipeline = {
+      isBatching: vi.fn(() => true),
+      renderVideoToCanvas: vi.fn(() => resultCanvas),
+      applyEffectsToVideo: vi.fn(),
+    } as unknown as import('@/infrastructure/gpu/effects').EffectsPipeline;
+
+    const flattened = renderDirectVideoGpuFrame(
+      ctx,
+      video,
+      [],
+      { x: 10, y: 20, width: 300, height: 200 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { left: 0, right: 0, top: 0, bottom: 0 },
+      { x: 10, y: 20, width: 300, height: 200 },
+      { width: 1280, height: 720 },
+      0.5,
+      0,
+      0,
+      undefined,
+      undefined,
+      pipeline,
+      { returnTargetCanvasOnFlattened: true },
+    );
+
+    expect(flattened).toBe(targetCanvas);
+    expect(ctx.drawImage).toHaveBeenCalledWith(resultCanvas, 0, 0);
   });
 
   it('forwards a cropped visible rect without rescaling the media rect', () => {

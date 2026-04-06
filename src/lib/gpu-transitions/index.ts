@@ -1,5 +1,5 @@
 import type { GpuTransitionDefinition } from './types';
-export type { GpuTransitionDefinition } from './types';
+export type { GpuTransitionDefinition, GpuTransitionExternalSource } from './types';
 export { TransitionPipeline } from './transition-pipeline';
 
 import { dissolve } from './transitions/dissolve';

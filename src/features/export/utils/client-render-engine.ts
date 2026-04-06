@@ -71,6 +71,7 @@ import {
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
   resolveFrameRenderScene,
+  type FrameRenderTask,
 } from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
@@ -109,6 +110,54 @@ function isAnimatedImage(item: ImageItem): boolean {
  */
 function isGifFormat(item: ImageItem): boolean {
   return isGifUrl(item.src) || (item.label?.toLowerCase() ?? '').endsWith('.gif');
+}
+
+type DetachedCanvas = OffscreenCanvas | HTMLCanvasElement;
+type DetachedCanvasContext = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+
+interface TransitionStaticSegmentTask {
+  type: 'item';
+  item: TimelineItem;
+  trackOrder: number;
+}
+
+interface TransitionStaticSegment {
+  key: string;
+  startIndex: number;
+  tasks: TransitionStaticSegmentTask[];
+  maskTrackOrder: number | null;
+}
+
+interface RealtimeTransitionLane {
+  transitionTask: Extract<FrameRenderTask<ActiveTransition>, { type: 'transition' }>;
+  underlaySegment: TransitionStaticSegment | null;
+  overlaySegment: TransitionStaticSegment | null;
+}
+
+function createDetached2dCanvas(width: number, height: number): {
+  canvas: DetachedCanvas;
+  ctx: DetachedCanvasContext;
+} | null {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      return { canvas, ctx };
+    }
+    return null;
+  }
+
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      return { canvas, ctx };
+    }
+  }
+
+  return null;
 }
 
 // WebP frame extraction is handled by gifFrameCache.getWebpFrames() â€”
@@ -166,6 +215,8 @@ export async function createCompositionRenderer(
   };
   const frameSceneCache = createFrameCompositionSceneCache();
   let frameSceneRevision = 0;
+  let preferPlaybackVideoElements = false;
+  const transitionStaticSegmentCache = new Map<string, DetachedCanvas>();
 
   let renderPlan = resolveCompositionRenderPlan({ tracks: currentTracks, transitions: currentTransitions });
   let visibleTrackIds = renderPlan.trackRenderState.visibleTrackIds;
@@ -248,6 +299,10 @@ export async function createCompositionRenderer(
   let lastFramePresentedDirectly = false;
   let directVideoGpuFrameCount = 0;
   let directGpuPresentationCount = 0;
+
+  const clearTransitionStaticSegmentCache = () => {
+    transitionStaticSegmentCache.clear();
+  };
 
   function ensureGpuCompositor(): boolean {
     if (gpuCompositor) return true;
@@ -611,6 +666,7 @@ export async function createCompositionRenderer(
     subCompRenderData,
     gpuPipeline: null,
     gpuTransitionPipeline: null,
+    preferPlaybackVideoElements: false,
   };
 
   const refreshDerivedSceneState = (next: {
@@ -657,6 +713,233 @@ export async function createCompositionRenderer(
     frameSceneRevision += 1;
     frameSceneCache.invalidate();
     scrubbingCache?.invalidate();
+    clearTransitionStaticSegmentCache();
+  };
+
+  const itemHasAnyKeyframes = (itemId: string): boolean => {
+    const itemKeyframes = getCurrentKeyframes(itemId);
+    if (!itemKeyframes) {
+      return false;
+    }
+    return itemKeyframes.properties.some((property) => property.keyframes.length > 0);
+  };
+
+  const itemSpansFrameRange = (
+    item: TimelineItem,
+    startFrame: number,
+    endFrameExclusive: number,
+  ): boolean => {
+    const itemEnd = item.from + item.durationInFrames;
+    return item.from <= startFrame && itemEnd >= endFrameExclusive;
+  };
+
+  const hasStableAdjustmentStackAcrossRange = (
+    itemTrackOrder: number,
+    startFrame: number,
+    endFrameExclusive: number,
+  ): boolean => {
+    for (const { layer, trackOrder } of adjustmentLayers) {
+      if (itemTrackOrder <= trackOrder) {
+        continue;
+      }
+      const layerStart = layer.from;
+      const layerEnd = layer.from + layer.durationInFrames;
+      const overlapsRange = layerEnd > startFrame && layerStart < endFrameExclusive;
+      if (!overlapsRange) {
+        continue;
+      }
+      if (layerStart > startFrame || layerEnd < endFrameExclusive) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const isCacheableTransitionStaticItemTask = (
+    task: { type: 'item'; item: TimelineItem; trackOrder: number },
+    activeTransition: ActiveTransition,
+  ): boolean => {
+    const effectiveItem = getCurrentItem(task.item);
+    if (!itemSpansFrameRange(effectiveItem, activeTransition.transitionStart, activeTransition.transitionEnd)) {
+      return false;
+    }
+    if (itemHasAnyKeyframes(effectiveItem.id)) {
+      return false;
+    }
+    if (!hasStableAdjustmentStackAcrossRange(
+      task.trackOrder,
+      activeTransition.transitionStart,
+      activeTransition.transitionEnd,
+    )) {
+      return false;
+    }
+    if ((effectiveItem.blendMode ?? 'normal') !== 'normal') {
+      return false;
+    }
+
+    switch (effectiveItem.type) {
+      case 'image':
+        return !isAnimatedImage(effectiveItem);
+      case 'text':
+      case 'shape':
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const buildTransitionStaticSegments = (
+    renderTasks: FrameRenderTask<ActiveTransition>[],
+    activeTransition: ActiveTransition,
+    activeMasks: Array<{
+      path: Path2D;
+      inverted: boolean;
+      feather: number;
+      maskType: 'clip' | 'alpha';
+      trackOrder: number;
+    }>,
+  ): TransitionStaticSegment[] => {
+    const segments: TransitionStaticSegment[] = [];
+    let currentTasks: TransitionStaticSegmentTask[] = [];
+    let currentStartIndex = -1;
+    let currentMaskSignature = '';
+    let currentMaskTrackOrder: number | null = null;
+    let segmentIndex = 0;
+
+    const getMaskSignatureForTrackOrder = (trackOrder: number): string => (
+      activeMasks
+        .map((mask, index) => (doesMaskAffectTrack(mask.trackOrder, trackOrder) ? index : -1))
+        .filter((index) => index >= 0)
+        .join(',')
+    );
+
+    const flushSegment = () => {
+      if (currentTasks.length === 0) {
+        return;
+      }
+      segments.push({
+        key: [
+          frameSceneRevision,
+          canvasSettings.width,
+          canvasSettings.height,
+          activeTransition.transition.id,
+          activeTransition.transitionStart,
+          activeTransition.transitionEnd,
+          segmentIndex,
+          ...currentTasks.map((task) => `${task.trackOrder}:${task.item.id}`),
+        ].join(':'),
+        startIndex: currentStartIndex,
+        tasks: currentTasks,
+        maskTrackOrder: currentMaskTrackOrder,
+      });
+      currentTasks = [];
+      currentStartIndex = -1;
+      currentMaskSignature = '';
+      currentMaskTrackOrder = null;
+      segmentIndex += 1;
+    };
+
+    for (const [taskIndex, task] of renderTasks.entries()) {
+      if (task.type !== 'item' || !isCacheableTransitionStaticItemTask(task, activeTransition)) {
+        flushSegment();
+        continue;
+      }
+      const maskSignature = getMaskSignatureForTrackOrder(task.trackOrder);
+      if (currentTasks.length > 0 && currentMaskSignature !== maskSignature) {
+        flushSegment();
+      }
+      if (currentTasks.length === 0) {
+        currentStartIndex = taskIndex;
+        currentMaskSignature = maskSignature;
+        currentMaskTrackOrder = task.trackOrder;
+      }
+      currentTasks.push(task);
+    }
+
+    flushSegment();
+    return segments;
+  };
+
+  const buildRealtimeTransitionLane = (
+    renderTasks: FrameRenderTask<ActiveTransition>[],
+    activeTransition: ActiveTransition,
+  ): RealtimeTransitionLane | null => {
+    const transitionTaskIndex = renderTasks.findIndex((task) => task.type === 'transition');
+    if (transitionTaskIndex < 0) {
+      return null;
+    }
+    const transitionTask = renderTasks[transitionTaskIndex];
+    if (!transitionTask || transitionTask.type !== 'transition') {
+      return null;
+    }
+    if (renderTasks.some((task, index) => task.type === 'transition' && index !== transitionTaskIndex)) {
+      return null;
+    }
+
+    const buildLaneSegment = (
+      tasks: FrameRenderTask<ActiveTransition>[],
+      segmentLabel: 'underlay' | 'overlay',
+    ): TransitionStaticSegment | null => {
+      if (tasks.length === 0) {
+        return null;
+      }
+      const segmentTasks: TransitionStaticSegmentTask[] = [];
+      for (const task of tasks) {
+        if (task.type !== 'item' || !isCacheableTransitionStaticItemTask(task, activeTransition)) {
+          return null;
+        }
+        segmentTasks.push(task);
+      }
+      return {
+        key: [
+          frameSceneRevision,
+          canvasSettings.width,
+          canvasSettings.height,
+          activeTransition.transition.id,
+          activeTransition.transitionStart,
+          activeTransition.transitionEnd,
+          'lane',
+          segmentLabel,
+          ...segmentTasks.map((task) => `${task.trackOrder}:${task.item.id}`),
+        ].join(':'),
+        startIndex: segmentLabel === 'underlay' ? 0 : transitionTaskIndex + 1,
+        tasks: segmentTasks,
+        maskTrackOrder: null,
+      };
+    };
+
+    return {
+      transitionTask,
+      underlaySegment: buildLaneSegment(renderTasks.slice(0, transitionTaskIndex), 'underlay'),
+      overlaySegment: buildLaneSegment(renderTasks.slice(transitionTaskIndex + 1), 'overlay'),
+    };
+  };
+
+  const getOrRenderTransitionStaticSegment = async (
+    segment: TransitionStaticSegment,
+    renderItemWithEffects: (
+      item: TimelineItem,
+      trackOrder: number,
+      deferred: boolean,
+      targetCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    ) => Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null>,
+  ): Promise<DetachedCanvas | null> => {
+    const cached = transitionStaticSegmentCache.get(segment.key);
+    if (cached) {
+      return cached;
+    }
+
+    const surface = createDetached2dCanvas(canvasSettings.width, canvasSettings.height);
+    if (!surface) {
+      return null;
+    }
+
+    surface.ctx.clearRect(0, 0, canvasSettings.width, canvasSettings.height);
+    for (const task of segment.tasks) {
+      await renderItemWithEffects(task.item, task.trackOrder, false, surface.ctx);
+    }
+    transitionStaticSegmentCache.set(segment.key, surface.canvas);
+    return surface.canvas;
   };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
@@ -1363,10 +1646,9 @@ export async function createCompositionRenderer(
           // corner pin reuses the shared warp helper after zero-copy ingest.
 
           const shouldAllowDirectVideoPath = renderMode !== 'preview'
-            || (
-              !useMediabunny.has(effectiveItem.id)
-              || mediabunnyDisabledItems.has(effectiveItem.id)
-            );
+            || itemRenderContext.preferPlaybackVideoElements === true
+            || !useMediabunny.has(effectiveItem.id)
+            || mediabunnyDisabledItems.has(effectiveItem.id);
           if (!shouldAllowDirectVideoPath) {
             return null;
           }
@@ -1656,6 +1938,7 @@ export async function createCompositionRenderer(
 
       const {
         shouldDirectRenderSingleTask,
+        shouldDirectRenderSingleTransitionTask,
         shouldUseDeferredGpuBatch,
       } = resolveFrameRenderOptimization({
         activeMaskCount: activeMasks.length,
@@ -1663,7 +1946,22 @@ export async function createCompositionRenderer(
         hasGpuEffects: hasAnyGpuEffects,
         renderTaskCount: renderTasks.length,
       });
-      if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
+      itemRenderContext.preferPlaybackVideoElements = preferPlaybackVideoElements;
+      const hasNonNormalBlend = renderTasks.some(
+        (task) => task.type === 'item' && (() => {
+          const blendMode = getCurrentItem(task.item).blendMode;
+          return Boolean(blendMode && blendMode !== 'normal');
+        })(),
+      );
+      const shouldUseRealtimePlaybackCompositor = (
+        renderMode === 'preview'
+        && itemRenderContext.preferPlaybackVideoElements === true
+      );
+      if (
+        !shouldUseRealtimePlaybackCompositor
+        && shouldUseDeferredGpuBatch
+        && itemRenderContext.gpuPipeline
+      ) {
         itemRenderContext.gpuPipeline.beginBatch();
       }
 
@@ -1685,6 +1983,261 @@ export async function createCompositionRenderer(
           } finally {
             if (blendMode && blendMode !== 'normal') {
               ctx.globalCompositeOperation = 'source-over';
+            }
+          }
+        }
+
+        cacheRenderedFrame(frame);
+        return;
+      }
+
+      if (shouldDirectRenderSingleTransitionTask) {
+        const directTask = renderTasks[0];
+        if (directTask?.type === 'transition') {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = currentBackgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await renderTransitionToCanvas(
+            ctx,
+            directTask.transition,
+            frame,
+            itemRenderContext,
+            directTask.trackOrder,
+          );
+        }
+
+        cacheRenderedFrame(frame);
+        return;
+      }
+
+      const activeTransition = activeTransitions.length === 1 ? activeTransitions[0]! : null;
+      const realtimeTransitionLane = (
+        shouldUseRealtimePlaybackCompositor
+        && activeMasks.length === 0
+        && activeTransition
+        && !shouldDirectRenderSingleTransitionTask
+      )
+        ? buildRealtimeTransitionLane(renderTasks, activeTransition)
+        : null;
+      if (realtimeTransitionLane) {
+        const underlayCanvas = realtimeTransitionLane.underlaySegment
+          ? await getOrRenderTransitionStaticSegment(
+            realtimeTransitionLane.underlaySegment,
+            renderItemWithEffects,
+          )
+          : null;
+        const overlayCanvas = realtimeTransitionLane.overlaySegment
+          ? await getOrRenderTransitionStaticSegment(
+            realtimeTransitionLane.overlaySegment,
+            renderItemWithEffects,
+          )
+          : null;
+
+        if (
+          (!realtimeTransitionLane.underlaySegment || underlayCanvas)
+          && (!realtimeTransitionLane.overlaySegment || overlayCanvas)
+        ) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = currentBackgroundColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          if (underlayCanvas) {
+            ctx.drawImage(underlayCanvas, 0, 0);
+          }
+
+          await renderTransitionToCanvas(
+            ctx,
+            realtimeTransitionLane.transitionTask.transition,
+            frame,
+            itemRenderContext,
+            realtimeTransitionLane.transitionTask.trackOrder,
+          );
+
+          if (overlayCanvas) {
+            ctx.drawImage(overlayCanvas, 0, 0);
+          }
+
+          cacheRenderedFrame(frame);
+          return;
+        }
+      }
+      const transitionStaticSegments = (
+        shouldUseRealtimePlaybackCompositor
+        && activeTransition
+        && !shouldDirectRenderSingleTransitionTask
+      )
+        ? buildTransitionStaticSegments(renderTasks, activeTransition, activeMasks)
+        : [];
+
+      if (shouldUseRealtimePlaybackCompositor || transitionStaticSegments.length > 0) {
+        const transitionStaticSegmentsByStartIndex = new Map(
+          transitionStaticSegments.map((segment) => [segment.startIndex, segment] as const),
+        );
+        const applicableMasksByTrackOrder = new Map<number, typeof activeMasks>();
+        const getApplicableMasks = (trackOrder: number) => {
+          const cachedMasks = applicableMasksByTrackOrder.get(trackOrder);
+          if (cachedMasks) {
+            return cachedMasks;
+          }
+          const nextMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
+          applicableMasksByTrackOrder.set(trackOrder, nextMasks);
+          return nextMasks;
+        };
+        const drawDeferredSourceWithMasks = (
+          result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] },
+          trackOrder: number,
+          blendMode?: string,
+        ) => {
+          const applicableMasks = getApplicableMasks(trackOrder);
+          if (applicableMasks.length === 0) {
+            try {
+              if (blendMode && blendMode !== 'normal') {
+                ctx.globalCompositeOperation = getCompositeOperation(blendMode);
+              }
+              ctx.drawImage(result.source, 0, 0);
+            } finally {
+              if (blendMode && blendMode !== 'normal') {
+                ctx.globalCompositeOperation = 'source-over';
+              }
+              for (const pooledCanvas of result.poolCanvases) {
+                canvasPool.release(pooledCanvas);
+              }
+            }
+            return;
+          }
+
+          const { canvas: maskedCanvas, ctx: maskedCtx } = canvasPool.acquire();
+          try {
+            applyMasks(maskedCtx, result.source, applicableMasks, maskSettings);
+            if (blendMode && blendMode !== 'normal') {
+              ctx.globalCompositeOperation = getCompositeOperation(blendMode);
+            }
+            ctx.drawImage(maskedCanvas, 0, 0);
+          } finally {
+            if (blendMode && blendMode !== 'normal') {
+              ctx.globalCompositeOperation = 'source-over';
+            }
+            canvasPool.release(maskedCanvas);
+            for (const pooledCanvas of result.poolCanvases) {
+              canvasPool.release(pooledCanvas);
+            }
+          }
+        };
+        const drawCachedSegment = (
+          cachedCanvas: DetachedCanvas,
+          segment: TransitionStaticSegment,
+        ) => {
+          const applicableMasks = segment.maskTrackOrder === null
+            ? []
+            : getApplicableMasks(segment.maskTrackOrder);
+          if (applicableMasks.length === 0) {
+            ctx.drawImage(cachedCanvas, 0, 0);
+            return;
+          }
+
+          const contentCanvas =
+            typeof OffscreenCanvas !== 'undefined' && cachedCanvas instanceof OffscreenCanvas
+              ? cachedCanvas
+              : null;
+          const { canvas: maskedCanvas, ctx: maskedCtx } = canvasPool.acquire();
+          const releaseCanvases: OffscreenCanvas[] = [maskedCanvas];
+          try {
+            let maskSource = contentCanvas;
+            if (!maskSource) {
+              const acquired = canvasPool.acquire();
+              acquired.ctx.drawImage(cachedCanvas, 0, 0);
+              maskSource = acquired.canvas;
+              releaseCanvases.push(acquired.canvas);
+            }
+            applyMasks(maskedCtx, maskSource, applicableMasks, maskSettings);
+            ctx.drawImage(maskedCanvas, 0, 0);
+          } finally {
+            for (const pooledCanvas of releaseCanvases) {
+              canvasPool.release(pooledCanvas);
+            }
+          }
+        };
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = currentBackgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let taskIndex = 0; taskIndex < renderTasks.length; taskIndex += 1) {
+          const cachedSegment = transitionStaticSegmentsByStartIndex.get(taskIndex);
+          if (cachedSegment) {
+            const cachedCanvas = await getOrRenderTransitionStaticSegment(
+              cachedSegment,
+              renderItemWithEffects,
+            );
+            if (cachedCanvas) {
+              drawCachedSegment(cachedCanvas, cachedSegment);
+              taskIndex += cachedSegment.tasks.length - 1;
+              continue;
+            }
+          }
+
+          const task = renderTasks[taskIndex]!;
+          if (task.type === 'transition') {
+            const applicableMasks = getApplicableMasks(task.trackOrder);
+            if (applicableMasks.length === 0) {
+              await renderTransitionToCanvas(
+                ctx,
+                task.transition,
+                frame,
+                itemRenderContext,
+                task.trackOrder,
+              );
+            } else {
+              const { canvas: transitionCanvas, ctx: transitionCtx } = canvasPool.acquire();
+              try {
+                await renderTransitionToCanvas(
+                  transitionCtx,
+                  task.transition,
+                  frame,
+                  itemRenderContext,
+                  task.trackOrder,
+                );
+                const { canvas: maskedCanvas, ctx: maskedCtx } = canvasPool.acquire();
+                try {
+                  applyMasks(maskedCtx, transitionCanvas, applicableMasks, maskSettings);
+                  ctx.drawImage(maskedCanvas, 0, 0);
+                } finally {
+                  canvasPool.release(maskedCanvas);
+                }
+              } finally {
+                canvasPool.release(transitionCanvas);
+              }
+            }
+            continue;
+          }
+
+          const blendMode = getCurrentItem(task.item).blendMode;
+          const applicableMasks = getApplicableMasks(task.trackOrder);
+          if (applicableMasks.length === 0) {
+            try {
+              if (blendMode && blendMode !== 'normal') {
+                ctx.globalCompositeOperation = getCompositeOperation(blendMode);
+              }
+              await renderItemWithEffects(
+                task.item,
+                task.trackOrder,
+                false,
+                ctx,
+              );
+            } finally {
+              if (blendMode && blendMode !== 'normal') {
+                ctx.globalCompositeOperation = 'source-over';
+              }
+            }
+          } else {
+            const result = await renderItemWithEffects(
+              task.item,
+              task.trackOrder,
+              true,
+              ctx,
+            );
+            if (result) {
+              drawDeferredSourceWithMasks(result, task.trackOrder, blendMode);
             }
           }
         }
@@ -1754,12 +2307,6 @@ export async function createCompositionRenderer(
 
         // Composite all results in z-order (preserved by renderTasks ordering)
         // Use GPU compositor for pixel-perfect blend modes when available
-        const hasNonNormalBlend = renderTasks.some(
-          (t) => t.type === 'item' && (() => {
-            const item = getCurrentItem(t.item);
-            return Boolean(item.blendMode && item.blendMode !== 'normal');
-          })(),
-        );
         const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor();
         const gpuCompositeOutput = useGpuCompositor
           ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
@@ -2135,6 +2682,7 @@ export async function createCompositionRenderer(
       canvasPool.resize(nextWidth, nextHeight);
       textMeasureCache.clear();
       scrubbingCache?.invalidate();
+      clearTransitionStaticSegmentCache();
       lastRenderedFrame = -1;
       lastFramePresentedDirectly = false;
       directGpuPresentationCount = 0;
@@ -2163,7 +2711,19 @@ export async function createCompositionRenderer(
       lastRenderedFrame = -1;
       lastFramePresentedDirectly = false;
       directGpuPresentationCount = 0;
+      clearTransitionStaticSegmentCache();
     },
+
+    setPlaybackVideoElementPreference(enabled: boolean) {
+      preferPlaybackVideoElements = enabled;
+      itemRenderContext.preferPlaybackVideoElements = enabled;
+    },
+
+    setPlaybackTransitionVideoPreference(enabled: boolean) {
+      preferPlaybackVideoElements = enabled;
+      itemRenderContext.preferPlaybackVideoElements = enabled;
+    },
+
 
 
     /** Evict cached render frames or cached frame ranges after visual edits. */
@@ -2171,6 +2731,7 @@ export async function createCompositionRenderer(
       frameSceneRevision += 1;
       frameSceneCache.invalidate(request);
       scrubbingCache?.invalidate(request);
+      clearTransitionStaticSegmentCache();
     },
 
     /** Get the scrubbing cache instance for stats/GPU wiring. */
@@ -2275,6 +2836,7 @@ export async function createCompositionRenderer(
       gpuPipeline?.destroy();
       gpuPipeline = null;
       frameSceneCache.invalidate();
+      clearTransitionStaticSegmentCache();
       canvasPool.dispose();
       textMeasureCache.clear();
 

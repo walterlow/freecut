@@ -1,5 +1,15 @@
 import type { TransitionCategory } from '@/types/transition';
 
+export interface GpuTransitionExternalSource {
+  mediaRect: { x: number; y: number; width: number; height: number };
+  visibleRect: { x: number; y: number; width: number; height: number };
+  featherInsets: { left: number; right: number; top: number; bottom: number };
+  itemRect: { x: number; y: number; width: number; height: number };
+  opacity: number;
+  rotation: number;
+  cornerRadius: number;
+}
+
 export interface GpuTransitionDefinition {
   id: string;
   name: string;

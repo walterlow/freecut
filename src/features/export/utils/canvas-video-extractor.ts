@@ -189,6 +189,24 @@ export class VideoFrameExtractor {
     }
   }
 
+  /**
+   * Get a VideoFrame at the specified timestamp without drawing to canvas.
+   * Returns a BORROWED reference — the caller must NOT close it (it's
+   * managed by the extractor's cache). For importExternalTexture this is
+   * fine since the GPU copies the data synchronously during submit.
+   */
+  async getVideoFrameAtTimestamp(timestamp: number): Promise<VideoFrame | null> {
+    if (!this.ready || !this.sink) return null;
+    const maxTime = Math.max(0, this.duration - 0.001);
+    const clampedTime = Math.max(0, Math.min(timestamp, maxTime));
+    try {
+      await this.ensureSampleForTimestamp(clampedTime);
+      return this.getOrCreateCurrentVideoFrame();
+    } catch {
+      return null;
+    }
+  }
+
   async drawFrameWithCapture(
     ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
     timestamp: number,
