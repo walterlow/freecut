@@ -88,6 +88,7 @@ export const FlowStage = memo(function FlowStage() {
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const renderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // --- Fix 1: Sync pipelineReady with Scope session state ---
   useEffect(() => {
@@ -140,6 +141,10 @@ export const FlowStage = memo(function FlowStage() {
 
     recorder.onstop = async () => {
       recorderRef.current = null;
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
 
       if (chunks.length === 0) {
         setRenderStatus('error');
@@ -190,8 +195,8 @@ export const FlowStage = memo(function FlowStage() {
     recorderRef.current = recorder;
     recorder.start(TIMESLICE_MS);
 
-    // Progress ticker
-    const progressInterval = setInterval(() => {
+    // Progress ticker — stored in ref so unmount cleanup can clear it
+    progressTimerRef.current = setInterval(() => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / DEFAULT_RENDER_DURATION_MS, 0.99);
       setRenderProgress(progress);
@@ -199,29 +204,29 @@ export const FlowStage = memo(function FlowStage() {
 
     // Auto-stop after duration
     renderTimerRef.current = setTimeout(() => {
-      clearInterval(progressInterval);
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
       if (recorder.state === 'recording') {
         recorder.stop();
       }
     }, DEFAULT_RENDER_DURATION_MS);
-
-    // Cleanup on unmount
-    return () => {
-      clearInterval(progressInterval);
-      if (renderTimerRef.current) {
-        clearTimeout(renderTimerRef.current);
-      }
-    };
   }, [remoteStream, setRenderStatus, setRenderProgress, setRenderError, addClip]);
 
-  // Cleanup recorder on unmount
+  // Cleanup recorder, timers on unmount
   useEffect(() => {
     return () => {
-      if (recorderRef.current?.state === 'recording') {
-        recorderRef.current.stop();
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
       }
       if (renderTimerRef.current) {
         clearTimeout(renderTimerRef.current);
+        renderTimerRef.current = null;
+      }
+      if (recorderRef.current?.state === 'recording') {
+        recorderRef.current.stop();
       }
     };
   }, []);

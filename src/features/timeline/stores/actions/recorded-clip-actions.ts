@@ -24,7 +24,7 @@ export async function insertRecordedClip(params: InsertRecordedClipParams): Prom
   const { blob, durationMs, linkedTimelineStart, projectId } = params;
 
   try {
-    const file = new File([blob], `ai-recording-${Date.now()}.webm`, { type: 'video/webm' });
+    const file = new File([blob], `ai-recording-${Date.now()}.webm`, { type: blob.type || 'video/webm' });
     const media = await mediaLibraryService.importMediaWithFile(file, projectId);
 
     // Refresh the media library store so the clip shows in the sidebar
