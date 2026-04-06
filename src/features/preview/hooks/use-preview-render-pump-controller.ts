@@ -35,6 +35,14 @@ import {
   selectBoundaryPrewarmFrames,
   selectBoundarySourcePrewarmSources,
 } from '../utils/render-pump-frame-plan';
+import {
+  collectClipVideoSourceTimesBySrcForFrame,
+  collectClipVideoSourceTimesBySrcForFrameRange,
+  collectPlaybackStartVariableSpeedPreseekTargets,
+  collectPlaybackStartVariableSpeedPrewarmItemIds,
+  collectVisibleTrackVideoSourceTimesBySrc,
+  getVideoItemSourceTimeSeconds,
+} from '../utils/render-pump-preseek';
 import type { TransitionPreviewSessionTrace } from './use-preview-transition-session-controller';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -325,6 +333,18 @@ export function usePreviewRenderPump({
       clearPrewarmQueue();
     };
 
+    const runBatchPreseek = (bySource: Map<string, number[]>) => {
+      for (const [src, timestamps] of bySource) {
+        void workerBackgroundBatchPreseek(src, timestamps);
+      }
+    };
+
+    const runPreseekTargets = (targets: Array<{ src: string; time: number }>) => {
+      for (const target of targets) {
+        void workerBackgroundPreseek(target.src, target.time);
+      }
+    };
+
     const scheduleOpportunisticTransitionPrepare = () => {
       const deferredFrame = deferredPlaybackTransitionPrepareFrameRef.current;
       if (deferredFrame === null) {
@@ -514,7 +534,7 @@ export function usePreviewRenderPump({
             if (suppressScrubBackgroundPrewarmRef.current) {
               continue;
             }
-            // Skip prewarm during playback Ã¢â‚¬â€ WASM decode prewarm renders
+            // Skip prewarm during playback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â WASM decode prewarm renders
             // (40-80ms each) block the loop from processing priority frames,
             // causing the overlay to fall behind and show stale content.
             if (usePlaybackStore.getState().isPlaying) {
@@ -533,12 +553,12 @@ export function usePreviewRenderPump({
             break;
           }
           // For background prewarm frames, bail if a newer scrub target arrived.
-          // Priority frames proceed regardless Ã¢â‚¬â€ their rendered content is always useful.
+          // Priority frames proceed regardless ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â their rendered content is always useful.
           if (!isPriorityFrame && isStale()) break;
 
           // Enable DOM video element provider during playback for zero-copy rendering.
           // During playback, the Player's <video> elements are already at
-          // the correct frame Ã¢â‚¬â€ reading from them avoids mediabunny decode entirely.
+          // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             if (playbackNow.isPlaying) {
@@ -580,7 +600,7 @@ export function usePreviewRenderPump({
             // Visible scrub targets still use full composition rendering.
             const renderStartMs = performance.now();
             await renderer.renderFrame(frameToRender);
-            // Don't check isStale() here Ã¢â‚¬â€ the priority frame is fully rendered
+            // Don't check isStale() here ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the priority frame is fully rendered
             // and should always be displayed. Discarding it wastes the decode work
             // and reduces scrub hit rate.
             const renderMs = performance.now() - renderStartMs;
@@ -629,7 +649,7 @@ export function usePreviewRenderPump({
               scrubPrewarmQueuedSetRef.current.delete(next);
               prewarmBatch.push(next);
             }
-            // Batch prewarm via samplesAtTimestamps Ã¢â‚¬â€ each packet decoded at most
+            // Batch prewarm via samplesAtTimestamps ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â each packet decoded at most
             // once across the batch. Falls back to sequential drawFrame internally
             // for sources where batch mode has been disabled.
             await renderer.prewarmFrames(prewarmBatch);
@@ -702,7 +722,7 @@ export function usePreviewRenderPump({
         disposeFastScrubRenderer();
       } finally {
         if (scrubRenderGenerationRef.current === generation) {
-          // Current generation Ã¢â‚¬â€ this pump owns the lock. Release normally.
+          // Current generation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â this pump owns the lock. Release normally.
           scrubRenderInFlightRef.current = false;
           const deferredPrepareFrame = deferredPlaybackTransitionPrepareFrameRef.current;
           if (deferredPrepareFrame !== null) {
@@ -712,7 +732,7 @@ export function usePreviewRenderPump({
             void pumpRenderLoop();
           }
         }
-        // Stale generation Ã¢â‚¬â€ a newer seek/play bumped the generation while
+        // Stale generation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a newer seek/play bumped the generation while
         // we were in-flight. DON'T release the lock here; the playback-start
         // force-clear or the new pump's finally handles it. Releasing would
         // allow a concurrent pump to start and share mutable canvas state.
@@ -723,7 +743,7 @@ export function usePreviewRenderPump({
       void pumpRenderLoop();
     };
 
-    // rAF-driven render pump for playback Ã¢â‚¬â€ fires at display vsync (60Hz+),
+    // rAF-driven render pump for playback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â fires at display vsync (60Hz+),
     // catching frames the Zustand subscription misses due to event loop
     // contention from React renders, GC pauses, etc. This reduces the ~9%
     // frame drop rate during playback to near zero.
@@ -783,11 +803,11 @@ export function usePreviewRenderPump({
 
     // Threshold for triggering background worker preseek on large jumps.
     // Below this threshold, mediabunny sequential advance is fast (~1ms).
-    // Above it, a keyframe seek is needed (300-600ms) Ã¢â‚¬â€ the worker does it off-thread.
+    // Above it, a keyframe seek is needed (300-600ms) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the worker does it off-thread.
     const JUMP_PRESEEK_THRESHOLD_FRAMES = Math.round(fps * 3);
 
     const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
-      // Background preseek on large timeline jumps Ã¢â‚¬â€ fire off-thread decoder
+      // Background preseek on large timeline jumps ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â fire off-thread decoder
       // seek for all visible video clips at the new position so the first
       // renderFrame after the jump uses the cached bitmap (~0ms) instead of
       // blocking on mediabunny keyframe seek (~300-600ms).
@@ -796,33 +816,15 @@ export function usePreviewRenderPump({
         && Math.abs(state.currentFrame - prev.currentFrame) >= JUMP_PRESEEK_THRESHOLD_FRAMES
         && !state.isPlaying
       ) {
-        // Group timestamps by source URL for batch preseek Ã¢â‚¬â€ mediabunny's
+        // Group timestamps by source URL for batch preseek ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â mediabunny's
         // samplesAtTimestamps() shares decoder state across the batch,
         // decoding each packet at most once.
-        const frame = state.currentFrame;
-        const bySource = new Map<string, number[]>();
-        for (const track of combinedTracks) {
-          for (const item of track.items) {
-            if (item.type !== 'video' || !('src' in item) || !item.src) continue;
-            if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-            // Skip if sourceFps isn't populated yet (metadata still loading) Ã¢â‚¬â€
-            // sourceStart is in source-native FPS, so wrong fps produces wrong timestamps.
-            if (!item.sourceFps) continue;
-            const localFrame = frame - item.from;
-            const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-            const speed = item.speed ?? 1;
-            const sourceTime = (sourceStart / item.sourceFps) + (localFrame / fps) * speed;
-            const existing = bySource.get(item.src);
-            if (existing) {
-              existing.push(sourceTime);
-            } else {
-              bySource.set(item.src, [sourceTime]);
-            }
-          }
-        }
-        for (const [src, timestamps] of bySource) {
-          void workerBackgroundBatchPreseek(src, timestamps);
-        }
+        runBatchPreseek(collectVisibleTrackVideoSourceTimesBySrc(
+          combinedTracks,
+          state.currentFrame,
+          fps,
+          { requireExplicitSourceFps: true },
+        ));
       }
 
       // Start/stop rAF render pump on play state transitions
@@ -841,48 +843,20 @@ export function usePreviewRenderPump({
           // which takes 150-500ms on first decode without prewarm.
           // Check if any variable-speed clips need mediabunny prewarm
           const frame = state.currentFrame;
-          const prewarmItemIds: string[] = [];
-          for (const track of combinedTracks) {
-            for (const item of track.items) {
-              if (item.type !== 'video') continue;
-              if (frame < item.from || frame >= item.from + item.durationInFrames) continue;
-              const speed = item.speed ?? 1;
-              if (Math.abs(speed - 1) < 0.01) continue;
-              // Only prewarm clips where playback starts AT or very near the
-              // clip start (within 2 frames). Clips that started much earlier
-              // will use DOM video during playback Ã¢â‚¬â€ pre-seeking their decoder
-              // to the current frame wastes time and positions it wrong.
-              const framesIntoClip = frame - item.from;
-              if (framesIntoClip <= 2) {
-                prewarmItemIds.push(item.id);
-              }
-            }
-          }
-          // Fire ONE background worker preseek per variable-speed clip at the
-          // furthest lookahead position. The worker runs mediabunny off the main
-          // thread and caches the decoded ImageBitmap for the render loop.
-          for (const track of combinedTracks) {
-            for (const item of track.items) {
-              if (item.type !== 'video' || !('src' in item) || !item.src) continue;
-              const speed = item.speed ?? 1;
-              if (Math.abs(speed - 1) < 0.01) continue;
-              const itemEnd = item.from + item.durationInFrames;
-              const lookahead = Math.round(fps * 3);
-              if (item.from <= frame + lookahead && itemEnd > frame) {
-                const targetFrame = Math.min(frame + lookahead, itemEnd - 1);
-                const localFrame = Math.max(0, targetFrame - item.from);
-                const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
-                const sourceFps = item.sourceFps ?? fps;
-                const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
-                void workerBackgroundPreseek(item.src, sourceTime);
-              }
-            }
-          }
-
+          const prewarmItemIds = collectPlaybackStartVariableSpeedPrewarmItemIds(
+            combinedTracks,
+            frame,
+          );
+          runPreseekTargets(collectPlaybackStartVariableSpeedPreseekTargets(
+            combinedTracks,
+            frame,
+            fps,
+            Math.round(fps * 3),
+          ));
           if (prewarmItemIds.length > 0) {
-            // Prewarm first, then start rAF pump Ã¢â‚¬â€ avoids 150ms+ first-frame stall.
+            // Prewarm first, then start rAF pump ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â avoids 150ms+ first-frame stall.
             // Set flag to prevent subscription from pumping render loop during prewarm.
-            // SKIP items already pre-seeked by the paused occlusion prewarm Ã¢â‚¬â€ re-seeking
+            // SKIP items already pre-seeked by the paused occlusion prewarm ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â re-seeking
             // to the current frame would undo the precise visibility-frame positioning.
             playbackPrewarmInFlight = true;
             void (async () => {
@@ -903,7 +877,7 @@ export function usePreviewRenderPump({
               }
             })();
           } else {
-            // No prewarm needed Ã¢â‚¬â€ start immediately
+            // No prewarm needed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â start immediately
             playbackRafId = requestAnimationFrame(playbackRafPump);
           }
         }
@@ -923,8 +897,8 @@ export function usePreviewRenderPump({
         // session pinned and DOM video elements playing. Previously only
         // complex transitions (effects/variable speed) were prearmed here,
         // leaving simple transitions (fade, wipe, slide, etc.) without a
-        // pinned session Ã¢â‚¬â€ causing frozen incoming clips and dropped frames.
-        // First check if we're already inside a transition Ã¢â‚¬â€ pin that session
+        // pinned session ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â causing frozen incoming clips and dropped frames.
+        // First check if we're already inside a transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin that session
         // so the DOM video provider is available immediately, and prewarm the
         // decoders for both clips so the first rendered frame doesn't stall.
         const activeTransitionWindow = getTransitionWindowForFrame(state.currentFrame);
@@ -939,24 +913,12 @@ export function usePreviewRenderPump({
               state.currentFrame,
             );
           }
-          {
-            const transClips = [activeTransitionWindow.leftClip, activeTransitionWindow.rightClip];
-            const transBySource = new Map<string, number[]>();
-            for (const clip of transClips) {
-              if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
-                const localFrame = state.currentFrame - clip.from;
-                const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                const clipSpeed = clip.speed ?? 1;
-                const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
-                const existing = transBySource.get(clip.src);
-                if (existing) existing.push(sourceTime);
-                else transBySource.set(clip.src, [sourceTime]);
-              }
-            }
-            for (const [src, timestamps] of transBySource) {
-              void workerBackgroundBatchPreseek(src, timestamps);
-            }
-          }
+          runBatchPreseek(collectClipVideoSourceTimesBySrcForFrame(
+            [activeTransitionWindow.leftClip, activeTransitionWindow.rightClip],
+            state.currentFrame,
+            fps,
+            { requireExplicitSourceFps: true },
+          ));
         }
 
         // Per-frame drift correction for held video elements during an active
@@ -964,19 +926,16 @@ export function usePreviewRenderPump({
         // seconds away from their expected position, causing a hard backward
         // seek (and visible freeze) when the hold is released at exit.
         // Uses gentle playbackRate adjustment (same pattern as RVFC) so the
-        // element never drifts far Ã¢â‚¬â€ making the exit-time pre-seek a no-op.
+        // element never drifts far ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â making the exit-time pre-seek a no-op.
         const sessionWindow = transitionSessionWindowRef.current;
         if (sessionWindow && transitionSessionPinnedElementsRef.current.size > 0) {
           for (const clip of [sessionWindow.leftClip, sessionWindow.rightClip]) {
             if (clip.type !== 'video') continue;
             const el = transitionSessionPinnedElementsRef.current.get(clip.id);
             if (!el || el.dataset.transitionHold !== '1') continue;
-            const localFrame = state.currentFrame - clip.from;
-            if (localFrame < 0) continue;
-            const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-            const sourceFps = clip.sourceFps ?? fps;
             const clipSpeed = clip.speed ?? 1;
-            const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
+            const targetTime = getVideoItemSourceTimeSeconds(clip, state.currentFrame, fps);
+            if (targetTime === null) continue;
 
             // Detect stalled decode: if currentTime hasn't changed for 3+
             // frames, the browser's decode pipeline is stuck. Re-trigger
@@ -999,11 +958,11 @@ export function usePreviewRenderPump({
 
             const drift = el.currentTime - targetTime;
             if (Math.abs(drift) > 0.2) {
-              // Large drift Ã¢â‚¬â€ hard seek to prevent runaway divergence.
+              // Large drift ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hard seek to prevent runaway divergence.
               try { el.currentTime = targetTime; } catch { /* settling */ }
               el.playbackRate = clipSpeed;
             } else if (Math.abs(drift) > 0.016) {
-              // Small drift Ã¢â‚¬â€ gentle rate correction (Ã‚Â±6% of nominal speed).
+              // Small drift ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â gentle rate correction (Ãƒâ€šÃ‚Â±6% of nominal speed).
               const correction = -drift * 0.25;
               const maxAdj = Math.max(0.03, clipSpeed * 0.06);
               el.playbackRate = Math.max(
@@ -1039,28 +998,15 @@ export function usePreviewRenderPump({
               }
               // Fire background worker batch preseek for the first several
               // transition frames per clip. Pre-decoding a batch gives the
-              // render loop cached bitmaps as fallback Ã¢â‚¬â€ reduces the 100-300ms
+              // render loop cached bitmaps as fallback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reduces the 100-300ms
               // cold decode stall at transition entry.
-              {
-                const preseekCount = Math.min(8, transitionWindow.endFrame - transitionWindow.startFrame);
-                const transBySource = new Map<string, number[]>();
-                for (const clip of [transitionWindow.leftClip, transitionWindow.rightClip]) {
-                  if (clip.type !== 'video' || !('src' in clip) || !clip.src || !clip.sourceFps) continue;
-                  const timestamps: number[] = [];
-                  for (let i = 0; i < preseekCount; i++) {
-                    const localFrame = (transitionWindow.startFrame + i) - clip.from;
-                    const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                    const clipSpeed = clip.speed ?? 1;
-                    timestamps.push((sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed);
-                  }
-                  const existing = transBySource.get(clip.src);
-                  if (existing) existing.push(...timestamps);
-                  else transBySource.set(clip.src, timestamps);
-                }
-                for (const [src, timestamps] of transBySource) {
-                  void workerBackgroundBatchPreseek(src, timestamps);
-                }
-              }
+              runBatchPreseek(collectClipVideoSourceTimesBySrcForFrameRange(
+                [transitionWindow.leftClip, transitionWindow.rightClip],
+                transitionWindow.startFrame,
+                Math.min(8, transitionWindow.endFrame - transitionWindow.startFrame),
+                fps,
+                { requireExplicitSourceFps: true },
+              ));
             }
             pushTransitionTrace('playing_prearm', {
               targetFrame: prearmStartFrame,
@@ -1082,25 +1028,22 @@ export function usePreviewRenderPump({
       // advance threshold (fast) instead of triggering a keyframe restart (slow).
       if (!state.isPlaying && state.previewFrame === null && prev.currentFrame !== state.currentFrame) {
         const varSpeedItemIds: string[] = [];
-        let furthestFrame = state.currentFrame;
         const lookahead = Math.round(fps * 3);
         for (const track of combinedTracks) {
           for (const item of track.items) {
             if (item.type !== 'video') continue;
             const speed = item.speed ?? 1;
             if (Math.abs(speed - 1) < 0.01) continue;
-            const itemEnd = item.from + item.durationInFrames;
             // Only prewarm clips that START ahead (upcoming clip boundaries).
-            // Clips already active use DOM video during playback Ã¢â‚¬â€ pre-seeking
+            // Clips already active use DOM video during playback ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pre-seeking
             // their decoder wastes main-thread time and mispositions the cursor.
             if (item.from > state.currentFrame && item.from <= state.currentFrame + lookahead) {
               varSpeedItemIds.push(item.id);
-              furthestFrame = Math.max(furthestFrame, Math.min(state.currentFrame + lookahead, itemEnd - 1));
             }
           }
         }
         if (varSpeedItemIds.length > 0) {
-          // Find where occluding clips end Ã¢â‚¬â€ that's where the variable-speed
+          // Find where occluding clips end ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â that's where the variable-speed
           // clip becomes visible and needs its decoder positioned.
           const visibilityFrame = (() => {
             // Find the track order of the variable-speed clip
@@ -1128,13 +1071,13 @@ export function usePreviewRenderPump({
           })();
           for (const id of varSpeedItemIds) pausePrewarmedItemIds.add(id);
           // Seek to 1 frame BEFORE the visibility point. drawFrame advances
-          // the iterator past the target Ã¢â‚¬â€ seeking exactly to the visibility
+          // the iterator past the target ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â seeking exactly to the visibility
           // frame would cause a backward restart when the render loop requests
           // the same timestamp. Seeking 1 frame early leaves the decoder
           // positioned for an instant sequential advance.
           // Seek to 1 frame before visibility point (drawFrame advances past
-          // the target Ã¢â‚¬â€ seeking exactly to it would cause a backward restart).
-          // This runs async Ã¢â‚¬â€ if it completes before playback reaches the clip,
+          // the target ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â seeking exactly to it would cause a backward restart).
+          // This runs async ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â if it completes before playback reaches the clip,
           // the keyframe seek is absorbed during pause (0ms at playback time).
           const preseekFrame = Math.max(state.currentFrame, visibilityFrame - 1);
           const renderer = scrubRendererRef.current;
@@ -1147,7 +1090,7 @@ export function usePreviewRenderPump({
       if (!state.isPlaying && state.previewFrame === null) {
         // Check both: upcoming transitions AND the transition we're currently
         // inside.  getPausedTransitionPrewarmStartFrame only looks forward,
-        // so pausing/seeking inside a transition left no session pinned Ã¢â‚¬â€
+        // so pausing/seeking inside a transition left no session pinned ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
         // causing the render loop to fall back to mediabunny for both clips.
         const pausedActiveWindow = getTransitionWindowForFrame(state.currentFrame);
         const pausedPrewarmStartFrame = pausedActiveWindow?.startFrame
@@ -1170,20 +1113,17 @@ export function usePreviewRenderPump({
                   // playing prearm). Positions the worker decoder so cached
                   // bitmaps are ready as a fallback if DOM video / mediabunny
                   // can't deliver the first transition frame fast enough.
-                  for (const clip of [tw.leftClip, tw.rightClip]) {
-                    if (clip.type === 'video' && 'src' in clip && clip.src && clip.sourceFps) {
-                      const localFrame = tw.startFrame - clip.from;
-                      const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-                      const clipSpeed = clip.speed ?? 1;
-                      const sourceTime = (sourceStart / clip.sourceFps) + (localFrame / fps) * clipSpeed;
-                      void workerBackgroundPreseek(clip.src, sourceTime);
-                    }
-                  }
+                  runBatchPreseek(collectClipVideoSourceTimesBySrcForFrame(
+                    [tw.leftClip, tw.rightClip],
+                    tw.startFrame,
+                    fps,
+                    { requireExplicitSourceFps: true },
+                  ));
                   // Pre-render the first few transition frames using the MAIN
                   // renderer (whose decoders are already at tw.startFrame from
                   // the prewarmItems call above).  The previous approach created
                   // a separate bg renderer which required its own GPU pipeline
-                  // init + cold mediabunny decode Ã¢â‚¬â€ taking 1-2s and rarely
+                  // init + cold mediabunny decode ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â taking 1-2s and rarely
                   // completing before playback started.  Using the main renderer
                   // is fast because everything is already warm.  Pre-rendering
                   // multiple frames gives the render loop a head start so the
@@ -1211,11 +1151,11 @@ export function usePreviewRenderPump({
               }
             }
           } else if (pausedActiveWindow) {
-            // Paused INSIDE a transition Ã¢â‚¬â€ pin the session and render the
+            // Paused INSIDE a transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin the session and render the
             // current frame so the GPU transition effect is visible even
             // without forceFastScrubOverlay.  Without this, the DOM Player
             // shows the raw video frame because CSS/DOM transition rendering
-            // was removed Ã¢â‚¬â€ all transitions are GPU-only.
+            // was removed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all transitions are GPU-only.
             const tw = pausedActiveWindow;
             pinTransitionPlaybackSession(tw);
             scrubRequestedFrameRef.current = state.currentFrame;
@@ -1230,7 +1170,7 @@ export function usePreviewRenderPump({
             });
           }
         } else {
-          // No nearby transition while paused Ã¢â‚¬â€ clean up.
+          // No nearby transition while paused ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â clean up.
           // Check on any frame change OR play-state transition (isPlaying toggled).
           if (prev.currentFrame !== state.currentFrame || prev.isPlaying !== state.isPlaying) {
             lastPausedPrearmTargetRef.current = null;
@@ -1314,7 +1254,7 @@ export function usePreviewRenderPump({
       previewPerfRef.current.scrubDroppedFrames += scrubDirectionPlan.scrubDroppedFrames;
 
       // Update cache eviction hint so Tier 1/3 prefer evicting frames in the
-      // opposite scrub direction Ã¢â‚¬â€ preserves frames the user is moving toward.
+      // opposite scrub direction ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â preserves frames the user is moving toward.
       if (targetFrame !== null && scrubRendererRef.current && 'getScrubbingCache' in scrubRendererRef.current) {
         scrubRendererRef.current.getScrubbingCache()?.setEvictionHint(
           targetFrame,
@@ -1407,7 +1347,7 @@ export function usePreviewRenderPump({
 
       // Clear stale prewarm queue so the pump processes the new target
       // instead of old prewarm frames. Don't bump generation or clear the
-      // lock here Ã¢â‚¬â€ the pump's single-mutex design handles scrub correctly:
+      // lock here ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the pump's single-mutex design handles scrub correctly:
       // the in-flight pump picks up the new target on its next iteration.
       clearPrewarmQueue();
       scrubRequestedFrameRef.current = backwardScrubFramePlan.requestedFrame;
@@ -1425,8 +1365,8 @@ export function usePreviewRenderPump({
       if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) return;
       // Without forceFastScrubOverlay, gizmo previews (transform, crop, etc.)
       // are handled by the DOM Player through React props. Activating the
-      // overlay here would switch from browser video seek (Ã‚Â±1 frame) to
-      // mediabunny (exact), causing a visible frame shift Ã¢â‚¬â€ especially at
+      // overlay here would switch from browser video seek (Ãƒâ€šÃ‚Â±1 frame) to
+      // mediabunny (exact), causing a visible frame shift ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â especially at
       // soft-edge crop boundaries where the content difference is amplified.
       if (!forceFastScrubOverlay) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
@@ -1483,7 +1423,7 @@ export function usePreviewRenderPump({
 
     const initialPlaybackState = usePlaybackStore.getState();
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
-      // Check if playback starts inside an active transition Ã¢â‚¬â€ pin that
+      // Check if playback starts inside an active transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin that
       // session immediately so the render pump has the DOM video provider.
       const activeWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
       if (activeWindow) {
@@ -1542,7 +1482,7 @@ export function usePreviewRenderPump({
             })();
           }
         } else if (initialPausedActiveWindow) {
-          // Paused INSIDE a transition on initial mount Ã¢â‚¬â€ pin session and
+          // Paused INSIDE a transition on initial mount ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin session and
           // render so the GPU transition is visible without forceFastScrubOverlay.
           pinTransitionPlaybackSession(initialPausedActiveWindow);
         } else {
@@ -1554,7 +1494,7 @@ export function usePreviewRenderPump({
       }
     }
 
-    // Paused inside a transition on initial mount Ã¢â‚¬â€ trigger a render so
+    // Paused inside a transition on initial mount ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â trigger a render so
     // the GPU transition is visible without forceFastScrubOverlay.
     if (isPausedTransitionOverlayActive(initialPlaybackState.currentFrame, initialPlaybackState)) {
       scrubRequestedFrameRef.current = initialPlaybackState.currentFrame;
