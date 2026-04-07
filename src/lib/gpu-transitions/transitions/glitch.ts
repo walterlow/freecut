@@ -76,7 +76,15 @@ fn glitchFragment(input: VertexOutput) -> @location(0) vec4f {
   let rA = textureSample(rightTex, texSampler, dUv).a;
   let rightColor = vec4f(rR, rG, rB, rA);
 
-  var color = mix(leftColor, rightColor, useRight);
+  // Detect near-black samples (empty texture / out-of-range clip).
+  // When one clip is black, substitute the other clip's content so
+  // glitched blocks never show solid black voids.
+  let leftLum = dot(leftColor.rgb, vec3f(0.299, 0.587, 0.114));
+  let rightLum = dot(rightColor.rgb, vec3f(0.299, 0.587, 0.114));
+  let safeLeft = select(leftColor, rightColor, leftLum < 0.01 && rightLum >= 0.01);
+  let safeRight = select(rightColor, leftColor, rightLum < 0.01 && leftLum >= 0.01);
+
+  var color = mix(safeLeft, safeRight, useRight);
 
   // --- Digital noise on glitched regions ---
   let noiseSeed = hash(vec2f(uv.x * params.width * 0.5,
