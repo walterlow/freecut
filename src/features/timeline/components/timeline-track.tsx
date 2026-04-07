@@ -19,8 +19,6 @@ import { mediaLibraryService } from '@/features/timeline/deps/media-library-serv
 import {
   resolveMediaUrl,
   getMediaDragData,
-  getMediaType,
-  extractValidMediaFileEntriesFromDataTransfer,
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
@@ -48,7 +46,12 @@ import {
   buildGhostPreviewsFromTrackMediaDropPlan,
   planTrackMediaDropPlacements,
 } from '../utils/track-media-drop';
-import { preflightFirstTimelineVideoProjectMatch } from '../utils/external-file-project-match';
+import {
+  applyResolvedTimelineDrop,
+  resolveDroppedMediaEntriesFromExternalFiles,
+  resolveDroppedMediaEntriesFromPayload,
+  type DroppedMediaEntry,
+} from '../utils/drop-execution';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -61,7 +64,6 @@ import {
   getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
-  type DragMediaItem,
 } from '../utils/drag-drop-preview';
 
 interface TimelineTrackProps {
@@ -70,13 +72,6 @@ interface TimelineTrackProps {
 }
 
 type GhostPreviewItem = TrackDropGhostPreview;
-
-interface DroppedMediaEntry {
-  media: MediaMetadata;
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  label: string;
-}
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
 
@@ -742,73 +737,24 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           return;
         }
 
-        let entries: DroppedMediaEntry[] = [];
-        if (data.type === 'media-items') {
-          const rawItems = Array.isArray(data.items) ? data.items : [];
-          const validItems = rawItems.filter(isValidDragMediaItem);
-          if (validItems.length !== rawItems.length) {
-            logger.warn('Skipping invalid media-items payload entries', {
-              invalidCount: rawItems.length - validItems.length,
-            });
-          }
-
-          const mediaById = new Map(getMedia.map((media) => [media.id, media]));
-          entries = validItems.flatMap((dragItem: DragMediaItem) => {
-            const media = mediaById.get(dragItem.mediaId);
-            if (!media) {
-              logger.error('Media not found:', dragItem.mediaId);
-              return [];
-            }
-
-            return [{
-              media,
-              mediaId: dragItem.mediaId,
-              mediaType: dragItem.mediaType,
-              label: dragItem.fileName,
-            }];
-          });
-        } else if (data.type === 'media-item' && data.mediaId && data.mediaType && data.fileName) {
-          if (!isDroppableMediaType(data.mediaType)) {
-            return;
-          }
-
-          const media = getMedia.find((entry) => entry.id === data.mediaId);
-          if (!media) {
-            logger.error('Media not found:', data.mediaId);
-            return;
-          }
-
-          entries = [{
-            media,
-            mediaId: data.mediaId,
-            mediaType: data.mediaType,
-            label: data.fileName,
-          }];
-        }
+        const entries = resolveDroppedMediaEntriesFromPayload(data, getMedia, logger);
 
         if (entries.length === 0) {
           return;
         }
 
         const dropResult = await resolveTimelineItemsForEntries(entries, dropFrame);
-        if (dropResult.items.length === 0) {
-          toast.error('Unable to add dropped media items');
-          return;
-        }
-
-        if (dropResult.tracks !== useTimelineStore.getState().tracks) {
-          useTimelineStore.getState().setTracks(dropResult.tracks);
-        }
-
-        if (dropResult.items.length < entries.length) {
-          toast.warning(`Some dropped media items could not be added: ${entries.length - dropResult.items.length} failed`);
-        }
-
-        if (dropResult.items.length === 1) {
-          addItem(dropResult.items[0]!);
-        } else {
-          addItems(dropResult.items);
-        }
+        applyResolvedTimelineDrop({
+          addItem,
+          addItems,
+          currentTracks: useTimelineStore.getState().tracks,
+          dropResult,
+          emptyMessage: 'Unable to add dropped media items',
+          notify: toast,
+          partialFailureLabel: 'dropped media items',
+          requestedCount: entries.length,
+          setTracks: useTimelineStore.getState().setTracks,
+        });
         return;
       } catch (error) {
         logger.warn('Failed to parse drag payload, falling back to file-drop handling', error);
@@ -819,72 +765,27 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return;
     }
 
-    const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
-    if (!supported) {
-      toast.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
-      return;
-    }
-
-    if (errors.length > 0) {
-      toast.error(`Some files were rejected: ${errors.join(', ')}`);
-    }
-
-    if (entries.length === 0) {
-      return;
-    }
-
-    try {
-      await preflightFirstTimelineVideoProjectMatch(entries);
-    } catch (error) {
-      toast.error('Unable to inspect dropped file.', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-      return;
-    }
-
-    const importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle));
-    if (importedMedia.length === 0) {
-      toast.error('Unable to import dropped files');
-      return;
-    }
-
-    const droppedEntries: DroppedMediaEntry[] = importedMedia.flatMap((media) => {
-      const mediaType = getMediaType(media.mimeType);
-      if (!isDroppableMediaType(mediaType)) {
-        return [];
-      }
-      return [{
-        media,
-        mediaId: media.id,
-        mediaType,
-        label: media.fileName,
-      }];
+    const droppedEntries = await resolveDroppedMediaEntriesFromExternalFiles({
+      dataTransfer: e.dataTransfer,
+      importHandlesForPlacement,
+      notify: toast,
     });
-
-    if (droppedEntries.length === 0) {
-      toast.warning('Dropped files were imported, but none could be placed on the timeline.');
+    if (!droppedEntries) {
       return;
     }
 
     const dropResult = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
-    if (dropResult.items.length === 0) {
-      toast.error('Unable to add dropped files to the timeline');
-      return;
-    }
-
-    if (dropResult.tracks !== useTimelineStore.getState().tracks) {
-      useTimelineStore.getState().setTracks(dropResult.tracks);
-    }
-
-    if (dropResult.items.length < droppedEntries.length) {
-      toast.warning(`Some dropped files could not be added: ${droppedEntries.length - dropResult.items.length} failed`);
-    }
-
-    if (dropResult.items.length === 1) {
-      addItem(dropResult.items[0]!);
-    } else {
-      addItems(dropResult.items);
-    }
+    applyResolvedTimelineDrop({
+      addItem,
+      addItems,
+      currentTracks: useTimelineStore.getState().tracks,
+      dropResult,
+      emptyMessage: 'Unable to add dropped files to the timeline',
+      notify: toast,
+      partialFailureLabel: 'dropped files',
+      requestedCount: droppedEntries.length,
+      setTracks: useTimelineStore.getState().setTracks,
+    });
   };
 
   return (
