@@ -2137,14 +2137,110 @@ describe('VideoPreview sync behavior', () => {
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
-    // Advance past cooldown (same-origin now uses standard cooldown, not 0)
+    // Advance past extended same-origin cooldown (max(10, fps*0.35) ≈ 11 frames)
     act(() => {
-      usePlaybackStore.getState().setCurrentFrame(70);
+      usePlaybackStore.getState().setCurrentFrame(80);
     });
 
     await waitFor(() => {
       expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
+  // Regression: arrow-keying from the last transition frame to the first
+  // post-transition frame flashed stale left-clip content because the
+  // paused-transition-prewarm handler cleared the session before the scrub
+  // handler could render the post-transition frame on the overlay.
+  it('keeps overlay visible when scrubbing from last transition frame to first post-transition frame', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left',
+        label: 'Left',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left',
+      } as TimelineItem,
+      {
+        id: 'clip-right',
+        label: 'Right',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left',
+        rightClipId: 'clip-right',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    // Transition window: startFrame=40, endFrame=60
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+
+    // Scrub to last transition frame (endFrame - 1 = 59)
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(59);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(59);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    // Step to first post-transition frame (endFrame = 60).
+    // The render pump must render this frame on the overlay (not drop
+    // straight to the Player, which would flash stale pool lane content).
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(60);
+    });
+
+    // The composition renderer must have been asked to render the
+    // post-transition frame. This proves the scrub handler kept the
+    // session alive and rendered via the overlay rather than hiding
+    // it immediately (which would skip renderFrame entirely).
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(60);
     });
   });
 

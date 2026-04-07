@@ -1115,7 +1115,14 @@ export function usePreviewRenderPump({
       if (prev.currentFrame !== state.currentFrame || prev.isPlaying !== state.isPlaying) {
         lastPausedPrearmTargetRef.current = null;
         schedulePlaybackTransitionPrepare(null);
-        clearTransitionPlaybackSession();
+        // Don't clear the session when stepping out of a paused transition
+        // frame — handleScrubTargetUpdate needs the session to render the
+        // post-transition frame on the overlay before handing off to the
+        // Player. The session will be cleared there after the handoff.
+        const wasOnTransition = !prev.isPlaying && getTransitionWindowForFrame(prev.currentFrame) !== null;
+        if (!wasOnTransition) {
+          clearTransitionPlaybackSession();
+        }
       }
     };
 
@@ -1139,33 +1146,6 @@ export function usePreviewRenderPump({
           }
         }
         if (!(playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)) {
-          // Same-origin transitions: the pool lane was stabilized on the
-          // LEFT clip and re-seeks to the RIGHT clip at exit. The pinned
-          // element for the LEFT clip IS the pool lane. Hold the overlay
-          // until that element reaches the right clip's target time.
-          const sessionWindow = transitionSessionWindowRef.current;
-          if (
-            sessionWindow
-            && sessionWindow.rightClip.type === 'video'
-            && sessionWindow.leftClip.originId
-            && sessionWindow.leftClip.originId === sessionWindow.rightClip.originId
-          ) {
-            let targetTime: number | null = null;
-            try {
-              targetTime = getVideoItemSourceTimeSeconds(sessionWindow.rightClip, state.currentFrame, fps);
-            } catch { /* missing sourceFps in tests */ }
-            if (targetTime !== null) {
-              // The pool lane was stabilized on the LEFT clip during the
-              // transition. Check it directly — it must reach the RIGHT
-              // clip's target time before we drop the overlay.
-              const poolLane = transitionSessionPinnedElementsRef.current.get(sessionWindow.leftClip.id);
-              if (poolLane && poolLane.readyState >= 2 && Math.abs(poolLane.currentTime - targetTime) > 0.1) {
-                scrubRequestedFrameRef.current = state.currentFrame;
-                void pumpRenderLoop();
-                return;
-              }
-            }
-          }
           if (!playbackTransitionState.shouldPrewarm) {
             clearTransitionPlaybackSession();
           }
@@ -1260,6 +1240,21 @@ export function usePreviewRenderPump({
         resetScrubLoopState();
         clearPendingFastScrubHandoff();
         bypassPreviewSeekRef.current = false;
+
+        // When leaving a transition frame (e.g. 12714→12715), the
+        // StableVideoSequence pool lane needs time to re-seek from the
+        // stabilized left clip position to the right clip. Render this
+        // frame on the fast-scrub overlay so the Player isn't revealed
+        // until it has caught up.
+        if (prevIsPausedInsideTransition && !isPausedInsideTransition) {
+          scrubRequestedFrameRef.current = state.currentFrame;
+          void pumpRenderLoop();
+          playerRef.current?.seekTo(state.currentFrame);
+          beginFastScrubHandoff(state.currentFrame);
+          scheduleFastScrubHandoffCheck();
+          return;
+        }
+
         try {
           const playerFrame = playerRef.current?.getCurrentFrame();
           const roundedFrame = Number.isFinite(playerFrame)

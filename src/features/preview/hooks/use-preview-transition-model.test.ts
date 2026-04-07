@@ -71,7 +71,7 @@ describe('buildPreviewTransitionData', () => {
     ]);
   });
 
-  it('applies cooldown for same-origin handoffs', () => {
+  it('applies extended cooldown for same-origin handoffs', () => {
     const track: TimelineTrack = {
       id: 'track-1',
       name: 'Video',
@@ -123,7 +123,7 @@ describe('buildPreviewTransitionData', () => {
     });
 
     expect(result.playbackTransitionOverlayWindows).toEqual([
-      { startFrame: 35, endFrame: 45, cooldownFrames: 3 },
+      { startFrame: 35, endFrame: 45, cooldownFrames: 11 },
     ]);
   });
 });

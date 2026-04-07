@@ -36,8 +36,8 @@ import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
-const SHADOW_UNMOUNT_COOLDOWN_FRAMES = 3;
-const TRANSITION_SYNC_COOLDOWN_FRAMES = 3;
+const SHADOW_UNMOUNT_COOLDOWN_FRAMES = 12;
+const TRANSITION_SYNC_COOLDOWN_FRAMES = 12;
 const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 1.5;
 
 /** Video item with additional properties added by MainComposition */
