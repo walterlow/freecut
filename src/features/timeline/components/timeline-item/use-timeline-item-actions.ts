@@ -14,6 +14,7 @@ import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-sto
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import {
   insertFreezeFrame,
   linkItems,
@@ -21,10 +22,15 @@ import {
   unlinkItems,
 } from '../../stores/actions/item-actions';
 import {
+  createPreComp,
+  dissolvePreComp,
+} from '../../stores/actions/composition-actions';
+import {
   type TimelineItemOverlay,
   useTimelineItemOverlayStore,
 } from '../../stores/timeline-item-overlay-store';
 import { canJoinMultipleItems } from '../../utils/clip-utils';
+import { canLinkSelection, hasLinkedItems } from '../../utils/linked-items';
 import { detectScenes } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
@@ -47,6 +53,39 @@ export function useTimelineItemActions({
   rightNeighbor,
   segmentOverlays,
 }: UseTimelineItemActionsParams) {
+  const getCanJoinSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    if (selectedItemIds.length < 2) {
+      return false;
+    }
+
+    const items = useTimelineStore.getState().items;
+    const selectedItems = selectedItemIds
+      .map((id) => items.find((candidate) => candidate.id === id))
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== undefined);
+    return canJoinMultipleItems(selectedItems);
+  }, []);
+
+  const getCanLinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    if (selectedItemIds.length < 2) {
+      return false;
+    }
+
+    const items = useTimelineStore.getState().items;
+    return canLinkSelection(items, selectedItemIds);
+  }, []);
+
+  const getCanUnlinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    if (selectedItemIds.length === 0) {
+      return false;
+    }
+
+    const items = useTimelineStore.getState().items;
+    return selectedItemIds.some((id) => hasLinkedItems(items, id));
+  }, []);
+
   const handleJoinSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds;
     if (selectedItemIds.length >= 2) {
@@ -255,8 +294,31 @@ export function useTimelineItemActions({
     (overlay) => overlay.id === SCENE_DETECTION_OVERLAY_ID,
   );
 
+  const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
   const sourceStart = 'sourceStart' in item ? item.sourceStart : undefined;
   const clipFrom = item.from;
+
+  const handleCreatePreComp = useCallback(() => {
+    // Capture selection synchronously - context menu close may clear it before the dynamic import resolves.
+    const ids = useSelectionStore.getState().selectedItemIds;
+    createPreComp(undefined, ids);
+  }, []);
+
+  const handleEnterComposition = useCallback(() => {
+    if (!isCompositionItem || !item.compositionId) {
+      return;
+    }
+
+    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
+  }, [isCompositionItem, item]);
+
+  const handleDissolveComposition = useCallback(() => {
+    if (!isCompositionItem) {
+      return;
+    }
+
+    dissolvePreComp(item.id);
+  }, [isCompositionItem, item.id]);
 
   const handleDetectScenes = useCallback(() => {
     if (item.type !== 'video' || !item.mediaId || isBroken) {
@@ -351,9 +413,13 @@ export function useTimelineItemActions({
   }, [clipFrom, isBroken, item.durationInFrames, item.id, item.mediaId, item.type, sourceStart]);
 
   return {
+    getCanJoinSelected,
+    getCanLinkSelected,
+    getCanUnlinkSelected,
     hasSpeakableText,
     isCaptionGenerationActive,
     isSceneDetectionActive,
+    isCompositionItem,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
@@ -368,6 +434,9 @@ export function useTimelineItemActions({
     handleGenerateAudioFromText,
     handleGenerateCaptions,
     handleRegenerateCaptions,
+    handleCreatePreComp,
+    handleEnterComposition,
+    handleDissolveComposition,
     handleDetectScenes,
   };
 }

@@ -8,7 +8,6 @@ import { useItemsStore } from '../../stores/items-store';
 import { useKeyframesStore } from '../../stores/keyframes-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store';
-import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store';
 import { useLinkedEditPreviewStore } from '../../stores/linked-edit-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
@@ -20,13 +19,10 @@ import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
-  TRANSITION_DRAG_MIME,
   useTransitionDragStore,
-  type DraggedTransitionDescriptor,
 } from '@/shared/state/transition-drag';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import type { PreviewItemUpdate } from '../../utils/item-edit-preview';
-import { getMediaDragData } from '@/features/timeline/deps/media-library-resolver';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
@@ -35,8 +31,7 @@ import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stre
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
-import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
+import { canJoinItems } from '@/features/timeline/utils/clip-utils';
 import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import {
@@ -70,15 +65,14 @@ import {
 } from './tool-operation-overlay-utils';
 import { useDragVisualState } from './use-drag-visual-state';
 import { useTimelineItemActions } from './use-timeline-item-actions';
+import { useTimelineItemDropHandlers } from './use-timeline-item-drop-handlers';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
-import { toast } from 'sonner';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
 import type { RazorSnapTarget } from '../../utils/razor-snap';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import {
-  canLinkSelection,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
   getLinkedItems,
@@ -87,11 +81,6 @@ import {
   hasLinkedItems,
 } from '../../utils/linked-items';
 import { getVisibleTrackIds } from '../../utils/group-utils';
-import {
-  isDragPointInsideElement,
-  resolveEffectDropTargetIds,
-} from '../../utils/effect-drop';
-import { getTemplateEffectsForDirectApplication } from '../../utils/generated-layer-items';
 import {
   resolveSmartBodyIntent,
   resolveSmartTrimIntent,
@@ -105,10 +94,6 @@ import {
 } from '../../utils/smart-trim-zones';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
-import {
-  createPreComp,
-  dissolvePreComp,
-} from '../../stores/actions/composition-actions';
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { useRollHoverStore } from '../../stores/roll-hover-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
@@ -151,24 +136,6 @@ const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4;
-function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
-  const cached = useTransitionDragStore.getState().draggedTransition;
-  if (cached) return cached;
-
-  const raw = event.dataTransfer.getData(TRANSITION_DRAG_MIME);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<DraggedTransitionDescriptor>;
-    if (typeof parsed.presentation !== 'string') return null;
-    return {
-      presentation: parsed.presentation,
-      direction: parsed.direction,
-    };
-  } catch {
-    return null;
-  }
-}
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -1337,33 +1304,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-grabbing'
     : 'cursor-default';
 
-  // Check if join is available for selected items - computed on demand
-  const getCanJoinSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length < 2) return false;
-    const items = useTimelineStore.getState().items;
-    const selectedItems = selectedItemIds
-      .map((id) => items.find((i) => i.id === id))
-      .filter((i): i is NonNullable<typeof i> => i !== undefined);
-    return canJoinMultipleItems(selectedItems);
-  }, [item.id]);
-
-  const getCanLinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length < 2) return false;
-
-    const items = useTimelineStore.getState().items;
-    return canLinkSelection(items, selectedItemIds);
-  }, [item.id]);
-
-  const getCanUnlinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length === 0) return false;
-
-    const items = useTimelineStore.getState().items;
-    return selectedItemIds.some((id) => hasLinkedItems(items, id));
-  }, []);
-
   // Reactive neighbor detection: recompute join indicators when adjacent items
   // change (covers deletion, moves to another track, and position shifts).
   // Uses itemsByTrackId for O(trackItems) instead of O(allItems) lookup.
@@ -1430,9 +1370,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, [hasGapBefore, item.trackId, item.id, item.from, item.durationInFrames, frameToPixels]);
 
   const {
+    getCanJoinSelected,
+    getCanLinkSelected,
+    getCanUnlinkSelected,
     hasSpeakableText,
     isCaptionGenerationActive,
     isSceneDetectionActive,
+    isCompositionItem,
     handleJoinSelected,
     handleJoinLeft,
     handleJoinRight,
@@ -1447,6 +1391,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleGenerateAudioFromText,
     handleGenerateCaptions,
     handleRegenerateCaptions,
+    handleCreatePreComp,
+    handleEnterComposition,
+    handleDissolveComposition,
     handleDetectScenes,
   } = useTimelineItemActions({
     item,
@@ -1456,8 +1403,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     segmentOverlays,
   });
 
+  const {
+    handleTransitionCutDragOver,
+    handleTransitionCutDragLeave,
+    handleTransitionCutDrop,
+    handleEffectDragEnter,
+    handleEffectDragOver,
+    handleEffectDragLeave,
+    handleEffectDrop,
+  } = useTimelineItemDropHandlers({
+    item,
+    trackLocked,
+    draggedTransition,
+    addEffects,
+  });
+
   // Composition operations
-  const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
   const isVisualFadeItem = supportsVisualFadeControls(item);
   const [videoFadeEdit, setVideoFadeEdit] = useState<{
     handle: AudioFadeHandle;
@@ -2296,22 +2257,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       : null
   ), [linkedItemsForSync, linkedSyncPreviewItem, fps, linkedSyncPreviewUpdatesById, suppressLinkedSyncBadge]);
 
-  const handleCreatePreComp = useCallback(() => {
-    // Capture selection synchronously - context menu close may clear it before the dynamic import resolves
-    const ids = useSelectionStore.getState().selectedItemIds;
-    createPreComp(undefined, ids);
-  }, []);
-
-  const handleEnterComposition = useCallback(() => {
-    if (!isCompositionItem || !item.compositionId) return;
-    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
-  }, [isCompositionItem, item]);
-
-  const handleDissolveComposition = useCallback(() => {
-    if (!isCompositionItem) return;
-    dissolvePreComp(item.id);
-  }, [isCompositionItem, item]);
-
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -2431,208 +2376,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
     }
   }, [item.id]);
-
-  const handleTransitionCutDragOver = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
-    const dragDescriptor = readDraggedTransitionDescriptor(e);
-    if (!dragDescriptor || trackLocked || !draggedTransition) return;
-
-    const dragState = useTransitionDragStore.getState();
-
-    const target = resolveTransitionTargetForEdge({
-      itemId: item.id,
-      edge,
-      items: useItemsStore.getState().items,
-      transitions: useTransitionsStore.getState().transitions,
-    });
-
-    if (!target) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: 'No adjacent clip on this edge',
-      });
-      return;
-    }
-
-    if (target.hasExisting) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: 'Drop on the existing transition bridge to replace it',
-      });
-      return;
-    }
-
-    if (!target.canApply) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: target.reason ?? 'This cut cannot accept a transition',
-      });
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    dragState.setInvalidHint(null);
-    dragState.setPreview({
-      leftClipId: target.leftClipId,
-      rightClipId: target.rightClipId,
-      durationInFrames: target.suggestedDurationInFrames,
-      alignment: target.alignment,
-    });
-  }, [draggedTransition, item.id, trackLocked]);
-
-  const handleTransitionCutDragLeave = useCallback(() => {
-    const dragState = useTransitionDragStore.getState();
-    const preview = dragState.preview;
-    if (!preview || preview.existingTransitionId) return;
-    if (preview.leftClipId === item.id || preview.rightClipId === item.id) {
-      dragState.clearPreview();
-    }
-    dragState.setInvalidHint(null);
-  }, [item.id]);
-
-  const handleTransitionCutDrop = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
-    const dragDescriptor = readDraggedTransitionDescriptor(e);
-    if (!dragDescriptor || trackLocked) return;
-
-    const target = resolveTransitionTargetForEdge({
-      itemId: item.id,
-      edge,
-      items: useItemsStore.getState().items,
-      transitions: useTransitionsStore.getState().transitions,
-    });
-
-    if (!target || target.hasExisting || !target.canApply) {
-      useTransitionDragStore.getState().clearDrag();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    useTimelineStore.getState().addTransition(
-      target.leftClipId,
-      target.rightClipId,
-      'crossfade',
-      target.suggestedDurationInFrames,
-      dragDescriptor.presentation,
-      dragDescriptor.direction,
-    );
-    useTransitionDragStore.getState().clearDrag();
-  }, [item.id, trackLocked]);
-
-  const resolveDirectEffectDropTemplate = useCallback((payload: unknown) => {
-    const effects = getTemplateEffectsForDirectApplication(payload);
-    if (!effects || trackLocked || item.type === 'audio') {
-      return null;
-    }
-
-    return effects;
-  }, [item.type, trackLocked]);
-
-  const resolveEffectDropTargets = useCallback((payload: unknown): string[] => {
-    const effects = resolveDirectEffectDropTemplate(payload);
-    if (!effects) {
-      return [];
-    }
-
-    const items = useItemsStore.getState().items;
-    const itemById = new Map(items.map((timelineItem) => [timelineItem.id, timelineItem]));
-    const lockedTrackIds = new Set(
-      useTimelineStore.getState().tracks
-        .filter((track) => track.locked)
-        .map((track) => track.id)
-    );
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-
-    return resolveEffectDropTargetIds({
-      hoveredItemId: item.id,
-      items,
-      selectedItemIds,
-    }).filter((itemId) => !lockedTrackIds.has(itemById.get(itemId)?.trackId ?? ''));
-  }, [item.id, resolveDirectEffectDropTemplate]);
-
-  const setEffectDropPreview = useCallback((targetItemIds: string[]) => {
-    if (targetItemIds.length === 0) {
-      useEffectDropPreviewStore.getState().clearPreview();
-      return;
-    }
-
-    useEffectDropPreviewStore.getState().setPreview(targetItemIds, item.id);
-  }, [item.id]);
-
-  const handleEffectDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
-    if (targetItemIds.length === 0) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    setEffectDropPreview(targetItemIds);
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-  }, [resolveEffectDropTargets, setEffectDropPreview]);
-
-  const handleEffectDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
-    if (targetItemIds.length === 0) {
-      useEffectDropPreviewStore.getState().clearPreview();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    setEffectDropPreview(targetItemIds);
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-  }, [resolveEffectDropTargets, setEffectDropPreview]);
-
-  const handleEffectDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (isDragPointInsideElement(e, e.currentTarget)) {
-      return;
-    }
-
-    if (useEffectDropPreviewStore.getState().hoveredItemId !== item.id) {
-      return;
-    }
-
-    useEffectDropPreviewStore.getState().clearPreview();
-  }, [item.id]);
-
-  const handleEffectDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const rawPayload = e.dataTransfer.getData('application/json');
-    let parsedPayload: unknown = getMediaDragData();
-
-    if (rawPayload) {
-      try {
-        parsedPayload = JSON.parse(rawPayload);
-      } catch {
-        parsedPayload = getMediaDragData();
-      }
-    }
-
-    const effects = resolveDirectEffectDropTemplate(parsedPayload);
-    const targetItemIds = resolveEffectDropTargets(parsedPayload);
-    useEffectDropPreviewStore.getState().clearPreview();
-
-    if (!effects || targetItemIds.length === 0) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-    addEffects(targetItemIds.map((itemId) => ({ itemId, effects })));
-    if (targetItemIds.length > 1) {
-      toast.success(`Applied effect to ${targetItemIds.length} clips`);
-    }
-  }, [addEffects, resolveDirectEffectDropTemplate, resolveEffectDropTargets]);
 
   return (
     <>
