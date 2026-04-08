@@ -18,6 +18,7 @@ import {
   chooseLevelForZoom,
   type MultiResolutionWaveform,
 } from './waveform-opfs-storage';
+import { SizedAccessedMemoryCache } from './sized-accessed-memory-cache';
 import type { WaveformWorkerResponse } from './waveform-worker';
 import type { WaveformBin } from '@/types/storage';
 import {
@@ -78,8 +79,7 @@ interface QueuedGeneration {
 type WaveformUpdateCallback = (waveform: CachedWaveform) => void;
 
 class WaveformCacheService {
-  private memoryCache = new Map<string, CachedWaveform>();
-  private currentCacheSize = 0;
+  private memoryCache = new SizedAccessedMemoryCache<CachedWaveform>(MAX_CACHE_SIZE_BYTES);
   private pendingRequests = new Map<string, PendingRequest>();
   private updateCallbacks = new Map<string, Set<WaveformUpdateCallback>>();
   private workerRequestId = 0;
@@ -214,15 +214,7 @@ class WaveformCacheService {
    * Get waveform from memory cache (private)
    */
   private getFromMemoryCache(mediaId: string): CachedWaveform | null {
-    const cached = this.memoryCache.get(mediaId);
-
-    if (cached) {
-      // Update last accessed time
-      cached.lastAccessed = Date.now();
-      return cached;
-    }
-
-    return null;
+    return this.memoryCache.get(mediaId);
   }
 
   /**
@@ -237,43 +229,7 @@ class WaveformCacheService {
    * Add waveform to memory cache with LRU eviction
    */
   private addToMemoryCache(mediaId: string, data: CachedWaveform): void {
-    const existing = this.memoryCache.get(mediaId);
-    if (existing) {
-      this.currentCacheSize -= existing.sizeBytes;
-      this.memoryCache.delete(mediaId);
-    }
-
-    // Evict old entries if necessary
-    while (this.currentCacheSize + data.sizeBytes > MAX_CACHE_SIZE_BYTES && this.memoryCache.size > 0) {
-      this.evictOldest();
-    }
-
-    // Add to cache
-    this.memoryCache.set(mediaId, data);
-    this.currentCacheSize += data.sizeBytes;
-  }
-
-  /**
-   * Evict the oldest (least recently accessed) entry
-   */
-  private evictOldest(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.memoryCache) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      const entry = this.memoryCache.get(oldestKey);
-      if (entry) {
-        this.currentCacheSize -= entry.sizeBytes;
-        this.memoryCache.delete(oldestKey);
-      }
-    }
+    this.memoryCache.add(mediaId, data);
   }
 
   private makeCachedWaveform(
@@ -1058,11 +1014,7 @@ class WaveformCacheService {
    */
   async clearMedia(mediaId: string): Promise<void> {
     // Clear from memory cache
-    const entry = this.memoryCache.get(mediaId);
-    if (entry) {
-      this.currentCacheSize -= entry.sizeBytes;
-      this.memoryCache.delete(mediaId);
-    }
+    this.memoryCache.delete(mediaId);
 
     // Clear from OPFS
     await waveformOPFSStorage.delete(mediaId);
@@ -1077,7 +1029,6 @@ class WaveformCacheService {
    */
   clearAll(): void {
     this.memoryCache.clear();
-    this.currentCacheSize = 0;
   }
 
   /**
