@@ -1,14 +1,12 @@
-# FreeCut
-
-**[freecut.net](http://freecut.net/)**
+# Pixels
 
 **Edit videos. In your browser.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-![FreeCut Timeline Editor](./public/assets/landing/timeline.png)
+![Pixels Timeline Editor](./public/assets/landing/timeline.png)
 
-FreeCut is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
+Pixels is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
 
 ## Features
 
@@ -104,8 +102,8 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 **Prerequisites:** Node.js 18+
 
 ```bash
-git clone https://github.com/walterlow/freecut.git
-cd freecut
+git clone https://github.com/sirgawain0x/edit-pixels.git
+cd edit-pixels
 npm install
 npm run dev
 ```
@@ -123,7 +121,7 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 ## Browser Support
 
-Chrome 113+ required. FreeCut uses WebGPU, WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
+Chrome 113+ required. Pixels uses WebGPU, WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
 
 ### Brave
 
@@ -259,7 +257,7 @@ Architecture boundary policy and migration plan: `docs/architecture-boundaries.m
 
 ## Contributing
 
-FreeCut is open source but not open contribution — pull requests are not accepted at this time.
+Pixels is open source but not open contribution — pull requests are not accepted at this time.
 
 - **Report bugs** — open an issue
 - **Suggest features** — start a discussion
