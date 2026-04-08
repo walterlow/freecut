@@ -6,7 +6,7 @@
 
 ![Pixels Timeline Editor](./public/assets/landing/timeline.png)
 
-Pixels is a browser-based multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
+Pixels is a browser-based AI multi-track video editor. No installation, no uploads — everything runs locally in your browser using WebGPU, WebCodecs, OPFS, and the File System Access API.
 
 ## Features
 
