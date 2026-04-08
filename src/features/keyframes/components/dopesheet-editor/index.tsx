@@ -59,12 +59,24 @@ import { getCombinedGraphValueRange } from '../value-graph-editor/value-range-ut
 import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
 import { constrainSelectedKeyframeDelta } from '@/features/keyframes/utils/frame-move-constraints';
 import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store';
-import { clampFrame, clampToAvoidBlockedRanges } from './frame-utils';
+import { clampFrame } from './frame-utils';
+import {
+  getCommittedHeaderFrameValues,
+  planGlobalHeaderFrameCommit,
+  planLocalHeaderFrameCommit,
+} from './header-frame-input-actions';
 import {
   buildSelectionFramePreview as buildSelectionFramePreviewState,
   commitSelectionFramePreview as commitSelectionFramePreviewState,
   duplicateSelectionFramePreview as duplicateSelectionFramePreviewState,
 } from './selection-frame-actions';
+import {
+  buildGroupAddEntries,
+  buildPropertyKeyframeRefs,
+  buildRowKeyframeRefs,
+  getRemovableGroupCurrentKeyframes,
+  removeSelectionIds,
+} from './row-action-helpers';
 import { getDisplayedGroupFrameGroups as getDisplayedGroupFrameGroupsState } from './sheet-preview-frame-groups';
 
 interface DopesheetEditorProps {
@@ -1715,92 +1727,78 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   );
 
   const commitLocalFrameInput = useCallback(() => {
-    if (
-      selectedFrameSummary.localFrame === null ||
-      selectedFrameSummary.hasMixedFrames ||
-      !onKeyframeMove
-    ) {
+    if (!onKeyframeMove) {
       resetHeaderFrameInputs();
       return;
     }
 
-    const parsed = Math.round(Number(localFrameInputValue));
-    if (!Number.isFinite(parsed)) {
+    const plan = planLocalHeaderFrameCommit({
+      inputValue: localFrameInputValue,
+      selectedFrameSummary,
+      totalFrames,
+      transitionBlockedRanges,
+    });
+    if (!plan) {
       resetHeaderFrameInputs();
       return;
     }
 
-    let targetFrame = clampFrame(parsed, totalFrames);
-    targetFrame = clampToAvoidBlockedRanges(
-      targetFrame,
-      selectedFrameSummary.localFrame,
-      transitionBlockedRanges
-    );
-    targetFrame = clampFrame(targetFrame, totalFrames);
-    const moveResult = moveSelectedKeyframesByDelta(targetFrame - selectedFrameSummary.localFrame);
-    const finalLocalFrame = selectedFrameSummary.localFrame + moveResult.appliedDeltaFrames;
+    const moveResult = moveSelectedKeyframesByDelta(plan.targetLocalFrame - plan.initialLocalFrame);
+    const committedValues = getCommittedHeaderFrameValues(plan, moveResult);
 
-    setLocalFrameInputValue(String(finalLocalFrame));
-    if (selectedFrameSummary.globalFrame !== null) {
-      const frameOffset = selectedFrameSummary.globalFrame - selectedFrameSummary.localFrame;
-      setGlobalFrameInputValue(String(finalLocalFrame + frameOffset));
+    setLocalFrameInputValue(committedValues.localInputValue);
+    if (committedValues.globalInputValue !== null) {
+      setGlobalFrameInputValue(committedValues.globalInputValue);
     }
 
     if (!moveResult.didMove) {
       return;
     }
 
-    onNavigateToKeyframe?.(finalLocalFrame);
+    onNavigateToKeyframe?.(committedValues.finalLocalFrame);
   }, [
     localFrameInputValue,
     moveSelectedKeyframesByDelta,
     onKeyframeMove,
     onNavigateToKeyframe,
     resetHeaderFrameInputs,
-    selectedFrameSummary.globalFrame,
-    selectedFrameSummary.hasMixedFrames,
-    selectedFrameSummary.localFrame,
+    selectedFrameSummary,
     totalFrames,
     transitionBlockedRanges,
   ]);
 
   const commitGlobalFrameInput = useCallback(() => {
-    if (
-      globalFrame === null ||
-      selectedFrameSummary.localFrame === null ||
-      selectedFrameSummary.hasMixedFrames ||
-      !onKeyframeMove
-    ) {
+    if (!onKeyframeMove) {
       resetHeaderFrameInputs();
       return;
     }
 
-    const parsed = Math.round(Number(globalFrameInputValue));
-    if (!Number.isFinite(parsed)) {
+    const plan = planGlobalHeaderFrameCommit({
+      inputValue: globalFrameInputValue,
+      selectedFrameSummary,
+      currentFrame,
+      globalFrame,
+      totalFrames,
+      transitionBlockedRanges,
+    });
+    if (!plan) {
       resetHeaderFrameInputs();
       return;
     }
 
-    const frameOffset = globalFrame - currentFrame;
-    let nextLocalFrame = clampFrame(parsed - frameOffset, totalFrames);
-    nextLocalFrame = clampToAvoidBlockedRanges(
-      nextLocalFrame,
-      selectedFrameSummary.localFrame,
-      transitionBlockedRanges
-    );
-    nextLocalFrame = clampFrame(nextLocalFrame, totalFrames);
-    const moveResult = moveSelectedKeyframesByDelta(nextLocalFrame - selectedFrameSummary.localFrame);
-    const finalLocalFrame = selectedFrameSummary.localFrame + moveResult.appliedDeltaFrames;
-    const normalizedGlobalFrame = finalLocalFrame + frameOffset;
+    const moveResult = moveSelectedKeyframesByDelta(plan.targetLocalFrame - plan.initialLocalFrame);
+    const committedValues = getCommittedHeaderFrameValues(plan, moveResult);
 
-    setLocalFrameInputValue(String(finalLocalFrame));
-    setGlobalFrameInputValue(String(normalizedGlobalFrame));
+    setLocalFrameInputValue(committedValues.localInputValue);
+    if (committedValues.globalInputValue !== null) {
+      setGlobalFrameInputValue(committedValues.globalInputValue);
+    }
 
     if (!moveResult.didMove) {
       return;
     }
 
-    onNavigateToKeyframe?.(finalLocalFrame);
+    onNavigateToKeyframe?.(committedValues.finalLocalFrame);
   }, [
     currentFrame,
     globalFrame,
@@ -1809,8 +1807,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     onKeyframeMove,
     onNavigateToKeyframe,
     resetHeaderFrameInputs,
-    selectedFrameSummary.hasMixedFrames,
-    selectedFrameSummary.localFrame,
+    selectedFrameSummary,
     totalFrames,
     transitionBlockedRanges,
   ]);
@@ -1850,25 +1847,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (rows: DopesheetPropertyRow[]) => {
       if (!onRemoveKeyframes) return;
 
-      const refs = rows.flatMap((row) =>
-        row.keyframes.map((keyframe) => ({
-          itemId,
-          property: row.property,
-          keyframeId: keyframe.id,
-        }))
-      );
+      const refs = buildRowKeyframeRefs(itemId, rows);
 
       if (refs.length === 0) return;
 
       onRemoveKeyframes(refs);
 
       if (onSelectionChange) {
-        const removedKeyframeIds = new Set(refs.map((ref) => ref.keyframeId));
-        const nextSelection = new Set(selectedKeyframeIds);
-        for (const keyframeId of removedKeyframeIds) {
-          nextSelection.delete(keyframeId);
-        }
-        onSelectionChange(nextSelection);
+        onSelectionChange(removeSelectionIds(selectedKeyframeIds, refs.map((ref) => ref.keyframeId)));
       }
     },
     [itemId, onRemoveKeyframes, onSelectionChange, selectedKeyframeIds]
@@ -1889,11 +1875,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     (group: DopesheetPropertyGroup) => {
       if (disabled || (!onAddKeyframe && !onAddKeyframes)) return;
 
-      const entries = group.rows.flatMap((row) =>
-        canAddKeyframeForRow(row)
-          ? [{ property: row.property, frame: currentFrame }]
-          : []
-      );
+      const entries = buildGroupAddEntries(group.rows, currentFrame, canAddKeyframeForRow);
 
       if (entries.length === 0) {
         return;
@@ -1920,8 +1902,9 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const handleGroupToggleKeyframes = useCallback(
     (group: DopesheetPropertyGroup) => {
-      const removableCurrentKeyframes = group.currentKeyframes.filter(
-        ({ property }) => !isPropertyLocked(property)
+      const removableCurrentKeyframes = getRemovableGroupCurrentKeyframes(
+        group.currentKeyframes,
+        isPropertyLocked
       );
 
       if (removableCurrentKeyframes.length > 0) {
@@ -1935,11 +1918,12 @@ export const DopesheetEditor = memo(function DopesheetEditor({
         onRemoveKeyframes(refs);
 
         if (onSelectionChange) {
-          const nextSelection = new Set(selectedKeyframeIds);
-          for (const { keyframe } of removableCurrentKeyframes) {
-            nextSelection.delete(keyframe.id);
-          }
-          onSelectionChange(nextSelection);
+          onSelectionChange(
+            removeSelectionIds(
+              selectedKeyframeIds,
+              removableCurrentKeyframes.map(({ keyframe }) => keyframe.id)
+            )
+          );
         }
         return;
       }
@@ -1966,18 +1950,12 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       activateProperty(property);
       if (currentKeyframes.length > 0) {
         if (!onRemoveKeyframes) return;
-        const refs = currentKeyframes.map((keyframe) => ({
-          itemId,
-          property,
-          keyframeId: keyframe.id,
-        }));
+        const refs = buildPropertyKeyframeRefs(itemId, property, currentKeyframes);
         onRemoveKeyframes(refs);
         if (onSelectionChange) {
-          const nextSelection = new Set(selectedKeyframeIds);
-          for (const keyframe of currentKeyframes) {
-            nextSelection.delete(keyframe.id);
-          }
-          onSelectionChange(nextSelection);
+          onSelectionChange(
+            removeSelectionIds(selectedKeyframeIds, currentKeyframes.map((keyframe) => keyframe.id))
+          );
         }
         return;
       }
