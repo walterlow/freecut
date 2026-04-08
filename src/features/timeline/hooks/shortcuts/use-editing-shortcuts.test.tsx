@@ -21,7 +21,12 @@ function ShortcutHarness() {
   return null;
 }
 
-type HotkeyCallback = (event: { preventDefault: () => void }) => void;
+type HotkeyEvent = {
+  preventDefault: () => void;
+  stopPropagation: () => void;
+};
+
+type HotkeyCallback = (event: HotkeyEvent) => void;
 
 const TRACK: TimelineTrack = {
   id: 'track-1',
@@ -51,6 +56,13 @@ function getHotkeyRegistration(binding: string) {
 
   expect(registration).toBeDefined();
   return registration as [string, HotkeyCallback, { enabled?: boolean }];
+}
+
+function createHotkeyEvent(): HotkeyEvent {
+  return {
+    preventDefault: vi.fn(),
+    stopPropagation: vi.fn(),
+  };
 }
 
 describe('useEditingShortcuts delete ownership', () => {
@@ -107,9 +119,9 @@ describe('useEditingShortcuts delete ownership', () => {
     expect(backspaceOptions.enabled).not.toBe(false);
     expect(rippleDeleteOptions.enabled).not.toBe(false);
 
-    const deleteEvent = { preventDefault: vi.fn() };
-    const backspaceEvent = { preventDefault: vi.fn() };
-    const rippleDeleteEvent = { preventDefault: vi.fn() };
+    const deleteEvent = createHotkeyEvent();
+    const backspaceEvent = createHotkeyEvent();
+    const rippleDeleteEvent = createHotkeyEvent();
 
     act(() => {
       deleteCallback(deleteEvent);
@@ -119,8 +131,11 @@ describe('useEditingShortcuts delete ownership', () => {
 
     expect(useTimelineStore.getState().items).toHaveLength(1);
     expect(deleteEvent.preventDefault).toHaveBeenCalled();
+    expect(deleteEvent.stopPropagation).toHaveBeenCalled();
     expect(backspaceEvent.preventDefault).toHaveBeenCalled();
+    expect(backspaceEvent.stopPropagation).toHaveBeenCalled();
     expect(rippleDeleteEvent.preventDefault).toHaveBeenCalled();
+    expect(rippleDeleteEvent.stopPropagation).toHaveBeenCalled();
   });
 
   it('disables clip delete shortcuts while the pointer or focus is inside the keyframe editor', () => {
@@ -141,8 +156,8 @@ describe('useEditingShortcuts delete ownership', () => {
     expect(deleteOptions.enabled).not.toBe(false);
     expect(backspaceOptions.enabled).not.toBe(false);
 
-    const deleteEvent = { preventDefault: vi.fn() };
-    const backspaceEvent = { preventDefault: vi.fn() };
+    const deleteEvent = createHotkeyEvent();
+    const backspaceEvent = createHotkeyEvent();
 
     act(() => {
       deleteCallback(deleteEvent);
@@ -151,7 +166,9 @@ describe('useEditingShortcuts delete ownership', () => {
 
     expect(useTimelineStore.getState().items).toHaveLength(1);
     expect(deleteEvent.preventDefault).toHaveBeenCalled();
+    expect(deleteEvent.stopPropagation).toHaveBeenCalled();
     expect(backspaceEvent.preventDefault).toHaveBeenCalled();
+    expect(backspaceEvent.stopPropagation).toHaveBeenCalled();
   });
 
   it('keeps clip delete shortcuts active when the keyframe editor is closed', () => {
@@ -172,12 +189,13 @@ describe('useEditingShortcuts delete ownership', () => {
     const [, deleteCallback, deleteOptions] = getHotkeyRegistration(HOTKEYS.DELETE_SELECTED);
     expect(deleteOptions.enabled).not.toBe(false);
 
-    const deleteEvent = { preventDefault: vi.fn() };
+    const deleteEvent = createHotkeyEvent();
     act(() => {
       deleteCallback(deleteEvent);
     });
 
     expect(useTimelineStore.getState().items).toHaveLength(0);
     expect(deleteEvent.preventDefault).toHaveBeenCalled();
+    expect(deleteEvent.stopPropagation).not.toHaveBeenCalled();
   });
 });

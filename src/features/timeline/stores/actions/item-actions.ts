@@ -230,7 +230,8 @@ export function removeItems(ids: string[]): void {
 
 export function rippleDeleteItems(ids: string[]): void {
   const items = useItemsStore.getState().items;
-  const expandedIds = expandIdsWithLinkedItems(items, ids, isLinkedSelectionEnabled());
+  const linkedSelectionEnabled = isLinkedSelectionEnabled();
+  const expandedIds = expandIdsWithLinkedItems(items, ids, linkedSelectionEnabled);
   if (expandedIds.length === 0) return;
 
   const idsToDelete = new Set(expandedIds);
@@ -251,7 +252,7 @@ export function rippleDeleteItems(ids: string[]): void {
     }
   }
 
-  const updates = buildLinkedLeftShiftUpdates(remainingItems, baseShiftByItemId, isLinkedSelectionEnabled());
+  const updates = buildLinkedLeftShiftUpdates(remainingItems, baseShiftByItemId, linkedSelectionEnabled);
 
   // Detect non-shifted items that would be overlapped by shifted items.
   // These get deleted rather than creating overlaps.
@@ -273,7 +274,11 @@ export function rippleDeleteItems(ids: string[]): void {
   }
 
   // Expand covered IDs with linked companions so we don't orphan them
-  const expandedCoveredIds = expandIdsWithLinkedItems(coveredIds);
+  const expandedCoveredIds = expandIdsWithLinkedItems(
+    remainingItems,
+    coveredIds,
+    linkedSelectionEnabled,
+  );
   const allRemoveIds = [...expandedIds, ...expandedCoveredIds];
 
   // Filter out updates for items that were removed as covered (including their linked companions)
