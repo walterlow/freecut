@@ -112,7 +112,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
-  // canDetectScenes, isDetectingScenes, onDetectScenes — disabled pending optical flow tuning
+  canDetectScenes,
+  isDetectingScenes,
+  onDetectScenes,
 }: ItemContextMenuProps) {
   const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
@@ -232,8 +234,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
           </>
         )}
 
-        {/* Detect Scenes - disabled pending optical flow tuning */}
-        {/* {canDetectScenes && onDetectScenes && (
+        {canDetectScenes && onDetectScenes && (
           <>
             {isDetectingScenes ? (
               <ContextMenuItem disabled>
@@ -246,7 +247,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
             )}
             <ContextMenuSeparator />
           </>
-        )} */}
+        )}
 
         {/* Generate Audio from Text - only show for text items */}
         {isTextItem && onGenerateAudioFromText && (

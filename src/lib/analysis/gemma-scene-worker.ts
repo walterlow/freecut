@@ -1,9 +1,9 @@
 /**
  * Web Worker for Gemma-4 scene cut verification.
  *
- * Loads Gemma-4-E2B-it-ONNX via @huggingface/transformers CDN.
- * Runs inside a Worker to bypass COEP (Cross-Origin-Embedder-Policy)
- * restrictions on the main thread.
+ * Loads Gemma-4-E2B-it-ONNX via @huggingface/transformers (bundled by Vite).
+ * Runs inside a Worker so that model loading and inference don't block the
+ * main thread.
  *
  * Messages:
  *   → { type: 'init' }                         — preload model
@@ -14,18 +14,22 @@
  *   ← { type: 'error', message }                 — error
  */
 
-// TODO: Replace CDN imports with a bundled devDependency (`@huggingface/transformers`)
-// imported via a Vite worker entry. CDN fetches bypass npm audit and lack SRI hashes,
-// meaning a compromised CDN could execute arbitrary code in this Worker context.
-// See: https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
-const TRANSFORMERS_CDN_URL = 'https://esm.sh/@huggingface/transformers@4.0.1?bundle';
-const WASM_CDN_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.1/dist/';
+import {
+  AutoProcessor,
+  Gemma4ForConditionalGeneration,
+  RawImage,
+  env,
+} from '@huggingface/transformers';
+
 const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
+
+// Configure transformers.js for browser worker context
+env.useBrowserCache = true;
+env.allowLocalModels = false;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let processor: any = null;
 let model: any = null;
-let transformers: any = null;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 let loading = false;
 
@@ -40,20 +44,12 @@ async function loadModel(): Promise<void> {
 
   try {
     post({ type: 'progress', stage: 'loading-transformers', percent: 0 });
-
-    const mod = await import(/* @vite-ignore */ TRANSFORMERS_CDN_URL);
-    transformers = mod;
-
-    mod.env.useBrowserCache = true;
-    mod.env.allowLocalModels = false;
-    mod.env.backends.onnx.wasm.wasmPaths = WASM_CDN_URL;
-
     post({ type: 'progress', stage: 'loading-model', percent: 5 });
 
     let lastPct = 5;
-    processor = await mod.AutoProcessor.from_pretrained(MODEL_ID);
+    processor = await AutoProcessor.from_pretrained(MODEL_ID);
 
-    model = await mod.Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
+    model = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
       dtype: 'q4f16',
       device: 'webgpu',
       progress_callback: (info: { status?: string; total?: number; loaded?: number }) => {
@@ -77,24 +73,33 @@ async function loadModel(): Promise<void> {
 }
 
 const VERIFY_PROMPT =
-  'Look at these two consecutive video frames. ' +
-  'Is this a hard scene cut (completely different scene or shot) or continuous footage ' +
-  '(same scene with camera movement, zoom, dissolve, or minor changes)? ' +
-  'Answer with exactly one word: CUT or CONTINUOUS';
+  'These two images are frames from a video, taken about 1 second apart. ' +
+  'Do they show DIFFERENT scenes or camera angles (a scene cut), ' +
+  'or the SAME scene with movement? ' +
+  'Reply with only one word: CUT or SAME';
 
 async function verifyCandidate(
   id: number,
   beforeBlob: Blob,
   afterBlob: Blob,
 ): Promise<void> {
-  if (!model || !processor || !transformers) {
+  if (!model || !processor) {
     post({ type: 'error', message: 'Model not loaded' });
     return;
   }
 
   try {
-    const beforeImg = await transformers.RawImage.fromBlob(beforeBlob);
-    const afterImg = await transformers.RawImage.fromBlob(afterBlob);
+    const beforeImg = await RawImage.fromBlob(beforeBlob);
+    const afterImg = await RawImage.fromBlob(afterBlob);
+
+    post({
+      type: 'debug',
+      id,
+      beforeSize: `${beforeImg.width}x${beforeImg.height}`,
+      afterSize: `${afterImg.width}x${afterImg.height}`,
+      beforeBlobSize: beforeBlob.size,
+      afterBlobSize: afterBlob.size,
+    });
 
     const messages = [
       {
@@ -108,17 +113,26 @@ async function verifyCandidate(
     ];
 
     const prompt = processor.apply_chat_template(messages, {
-      enable_thinking: false,
+      enable_thinking: true,
       add_generation_prompt: true,
     });
 
-    const inputs = await processor(prompt, [beforeImg, afterImg], {
+    post({ type: 'debug', id, prompt: typeof prompt === 'string' ? prompt.slice(0, 500) : 'non-string prompt' });
+
+    const inputs = await processor(prompt, [beforeImg, afterImg], null, {
       add_special_tokens: false,
+    });
+
+    post({
+      type: 'debug',
+      id,
+      inputIds: inputs.input_ids?.dims?.toString(),
+      pixelValues: inputs.pixel_values?.dims?.toString(),
     });
 
     const outputs = await model.generate({
       ...inputs,
-      max_new_tokens: 10,
+      max_new_tokens: 128,
       do_sample: false,
     });
 
@@ -127,8 +141,12 @@ async function verifyCandidate(
       { skip_special_tokens: true },
     );
 
-    const answer = (decoded[0] ?? '').trim().toUpperCase();
-    post({ type: 'result', id, isSceneCut: answer.startsWith('CUT'), reason: answer });
+    const raw = (decoded[0] ?? '').trim();
+    // With thinking enabled, output is: <think>...reasoning...</think>\n\nFINAL_ANSWER
+    // Extract the part after </think> if present, otherwise use the whole output
+    const afterThink = raw.includes('</think>') ? raw.split('</think>').pop()!.trim() : raw;
+    const answer = afterThink.toUpperCase();
+    post({ type: 'result', id, isSceneCut: answer.startsWith('CUT'), reason: raw });
   } catch (err) {
     post({ type: 'result', id, isSceneCut: false, reason: `error: ${(err as Error).message}` });
   }

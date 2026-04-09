@@ -382,8 +382,9 @@ export function useTimelineItemActions({
         const media = useMediaLibraryStore.getState().mediaById[mediaId];
         const mediaFps = media?.fps ?? currentFps;
         const cuts = await detectScenes(video, currentFps, {
+          mediaId,
           sampleIntervalMs: 500,
-          useGemmaVerification: false,
+          useGemmaVerification: true,
           signal: abortController.signal,
           onProgress: (progress) => {
             const stageLabels = {

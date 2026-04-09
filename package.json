@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
+    "@huggingface/transformers": "^4.0.1",
     "@mediabunny/ac3": "^1.34.3",
     "@mediabunny/mp3-encoder": "^1.27.0",
     "@radix-ui/react-accordion": "^1.2.12",

@@ -15,6 +15,24 @@ import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('SceneDetection');
 
+/**
+ * In-memory cache of scene detection results keyed by
+ * `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}`.
+ * Survives across multiple detection runs within the same session.
+ */
+const resultsCache = new Map<string, SceneCut[]>();
+
+/** Clear cached results for a specific media, or all if no id given. */
+export function clearSceneCache(mediaId?: string): void {
+  if (mediaId) {
+    for (const key of resultsCache.keys()) {
+      if (key.startsWith(`${mediaId}:`)) resultsCache.delete(key);
+    }
+  } else {
+    resultsCache.clear();
+  }
+}
+
 /** Default sampling interval in milliseconds (matches masterselects) */
 const SAMPLE_INTERVAL_MS = 500;
 
@@ -22,8 +40,11 @@ const SAMPLE_INTERVAL_MS = 500;
 const MIN_CUT_GAP_SEC = 2.0;
 
 /** Resolution for frames sent to Gemma (larger = better accuracy, slower) */
-const VERIFY_FRAME_WIDTH = 320;
-const VERIFY_FRAME_HEIGHT = 180;
+const VERIFY_FRAME_WIDTH = 640;
+const VERIFY_FRAME_HEIGHT = 360;
+
+/** How far before the detected cut to sample the "before" frame (seconds) */
+const VERIFY_BEFORE_OFFSET_SEC = 1.0;
 
 export interface SceneCut {
   /** Frame number where the scene cut occurs */
@@ -73,6 +94,8 @@ export interface DetectScenesOptions {
   onProgress?: (progress: SceneDetectionProgress) => void;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Media ID for result caching — skip re-analysis when the same media is detected again */
+  mediaId?: string;
 }
 
 /**
@@ -96,7 +119,19 @@ export async function detectScenes(
     useGemmaVerification = true,
     onProgress,
     signal,
+    mediaId,
   } = options;
+
+  // Return cached results when available
+  if (mediaId) {
+    const cacheKey = `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}`;
+    const cached = resultsCache.get(cacheKey);
+    if (cached) {
+      log.info('Returning cached scene detection results', { mediaId, cuts: cached.length });
+      return cached;
+    }
+  }
+
   if (!navigator.gpu) {
     throw new Error('WebGPU not supported — scene detection requires GPU');
   }
@@ -168,19 +203,25 @@ export async function detectScenes(
 
   log.info('Deduplication complete', { cuts: deduped.length, minGapSec: MIN_CUT_GAP_SEC });
 
+  const cacheKey = mediaId ? `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}` : null;
+  const cacheAndReturn = (results: SceneCut[]): SceneCut[] => {
+    if (cacheKey) resultsCache.set(cacheKey, results);
+    return results;
+  };
+
   if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
-    return deduped;
+    return cacheAndReturn(deduped);
   }
 
   // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
   try {
     const verified = await verifyWithGemma(video, deduped, onProgress, signal);
     log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
-    return verified;
+    return cacheAndReturn(verified);
   } catch (err) {
     resetGemmaWorker();
     log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
-    return deduped;
+    return cacheAndReturn(deduped);
   }
 }
 
@@ -229,7 +270,6 @@ async function verifyWithGemma(
   signal?: AbortSignal,
 ): Promise<SceneCut[]> {
   const worker = getGemmaWorker();
-  const sampleInterval = SAMPLE_INTERVAL_MS / 1000;
 
   // Wait for model to load (30s timeout for bootstrap + initial load handshake)
   await new Promise<void>((resolve, reject) => {
@@ -274,7 +314,7 @@ async function verifyWithGemma(
     if (signal?.aborted) break;
 
     const cut = candidates[i]!;
-    const beforeTime = Math.max(0, cut.time - sampleInterval);
+    const beforeTime = Math.max(0, cut.time - VERIFY_BEFORE_OFFSET_SEC);
 
     onProgress?.({
       percent: (i / candidates.length) * 100,
@@ -291,7 +331,9 @@ async function verifyWithGemma(
 
     const result = await new Promise<{ isSceneCut: boolean; reason: string }>((resolve) => {
       const onMsg = (e: MessageEvent) => {
-        if (e.data.type === 'result' && e.data.id === i) {
+        if (e.data.type === 'debug') {
+          log.info('Gemma worker debug', e.data);
+        } else if (e.data.type === 'result' && e.data.id === i) {
           worker.removeEventListener('message', onMsg);
           resolve({ isSceneCut: e.data.isSceneCut, reason: e.data.reason });
         }
