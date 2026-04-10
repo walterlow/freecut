@@ -13,7 +13,6 @@ import { useVisibleItems } from '../hooks/use-visible-items';
 import { useItemsStore } from '../stores/items-store';
 import { useCompositionsStore } from '../stores/compositions-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
 import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
@@ -64,10 +63,10 @@ import {
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview';
+import { useZoomStore } from '../stores/zoom-store';
 
 interface TimelineTrackProps {
   track: TimelineTrackType;
-  timelineWidth?: number;
 }
 
 type GhostPreviewItem = TrackDropGhostPreview;
@@ -75,14 +74,28 @@ type GhostPreviewItem = TrackDropGhostPreview;
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
 
 /**
- * Custom equality for TimelineTrack memo - compares track and width only
- * Items are fetched from store internally, so we don't compare them here
+ * Custom equality for TimelineTrack memo - only track identity matters.
+ * Items and transitions are fetched from stores internally.
  */
 function areTrackPropsEqual(
   prev: TimelineTrackProps,
   next: TimelineTrackProps
 ): boolean {
-  return prev.track === next.track && prev.timelineWidth === next.timelineWidth;
+  return prev.track === next.track;
+}
+
+function frameToPixelsNow(frame: number): number {
+  const fps = useTimelineStore.getState().fps;
+  const pixelsPerSecond = useZoomStore.getState().pixelsPerSecond;
+  return fps > 0 ? (frame / fps) * pixelsPerSecond : 0;
+}
+
+function pixelsToFrameNow(pixels: number): number {
+  const fps = useTimelineStore.getState().fps;
+  const pixelsPerSecond = useZoomStore.getState().pixelsPerSecond;
+  return fps > 0 && pixelsPerSecond > 0
+    ? Math.round((pixels / pixelsPerSecond) * fps)
+    : 0;
 }
 
 /**
@@ -129,8 +142,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const getMedia = useMediaLibraryStore((s) => s.mediaItems);
   const importHandlesForPlacement = useMediaLibraryStore((s) => s.importHandlesForPlacement);
 
-  // Zoom utilities for position calculation
-  const { pixelsToFrame, frameToPixels } = useTimelineZoomContext();
   const ghostPreviews = useMemo(
     () => allGhostPreviews.filter((ghost) => ghost.targetTrackId === track.id),
     [allGhostPreviews, track.id]
@@ -149,8 +160,8 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const scrollLeft = timelineContainer.scrollLeft || 0;
     const containerRect = timelineContainer.getBoundingClientRect();
     const offsetX = (event.clientX - containerRect.left) + scrollLeft;
-    return pixelsToFrame(offsetX);
-  }, [pixelsToFrame]);
+    return pixelsToFrameNow(offsetX);
+  }, []);
 
   const getCurrentCanvasSize = useCallback(() => {
     const liveProject = useProjectStore.getState().currentProject;
@@ -264,9 +275,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
     return buildGhostPreviewsFromTrackMediaDropPlan({
       plannedItems,
-      frameToPixels,
+      frameToPixels: frameToPixelsNow,
     });
-  }, [fps, frameToPixels, track.id]);
+  }, [fps, track.id]);
 
   const buildGenericExternalGhostPreviews = useCallback((
     dropFrame: number,
@@ -285,13 +296,13 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }
 
     return [{
-      left: frameToPixels(finalPosition),
-      width: frameToPixels(placeholderDuration),
+      left: frameToPixelsNow(finalPosition),
+      width: frameToPixelsNow(placeholderDuration),
       label: itemCount > 1 ? `${itemCount} files` : 'Drop media',
       type: 'external-file',
       targetTrackId: track.id,
     }];
-  }, [fps, frameToPixels, track.id]);
+  }, [fps, track.id]);
 
   const buildGhostPreviewForTemplate = useCallback((
     template: unknown,
@@ -325,13 +336,13 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }
 
     return [{
-      left: frameToPixels(finalPosition),
-      width: frameToPixels(durationInFrames),
+      left: frameToPixelsNow(finalPosition),
+      width: frameToPixelsNow(durationInFrames),
       label: template.label,
       type: template.itemType,
       targetTrackId: targetTrack.id,
     }];
-  }, [fps, frameToPixels, track.id]);
+  }, [fps, track.id]);
 
   const {
     clearExternalPreviewSession,
@@ -439,7 +450,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const scrollLeft = timelineContainer.scrollLeft || 0;
     const containerRect = timelineContainer.getBoundingClientRect();
     const offsetX = (e.clientX - containerRect.left) + scrollLeft;
-    const clickedFrame = pixelsToFrame(offsetX);
+    const clickedFrame = pixelsToFrameNow(offsetX);
 
     // Check if this frame is in a gap - just track the frame, let Radix handle menu
     if (isFrameInGap(clickedFrame)) {
@@ -449,7 +460,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       e.preventDefault();
       setContextMenuFrame(null);
     }
-  }, [pixelsToFrame, isFrameInGap]);
+  }, [isFrameInGap]);
 
   // Handle closing the gap
   const handleCloseGap = useCallback(() => {
@@ -561,7 +572,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       previews.push(
         ...buildGhostPreviewsFromTrackMediaDropPlan({
           plannedItems: [plannedItem],
-          frameToPixels,
+          frameToPixels: frameToPixelsNow,
         }).map((preview) => ({
           ...preview,
           label: data.name,

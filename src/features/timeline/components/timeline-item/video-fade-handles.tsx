@@ -1,14 +1,13 @@
 import { memo, useState } from 'react';
 import { cn } from '@/shared/ui/cn';
-import { getAudioFadeHandleLeft, type AudioFadeHandle } from '../../utils/audio-fade';
+import type { AudioFadeHandle } from '../../utils/audio-fade';
 
 interface VideoFadeHandlesProps {
   trackLocked: boolean;
   activeTool: string;
-  clipWidth: number;
   lineYPercent: number;
-  fadeInPixels: number;
-  fadeOutPixels: number;
+  fadeInPercent: number;
+  fadeOutPercent: number;
   isSelected: boolean;
   isEditing: boolean;
   fadeInLabel?: string;
@@ -20,10 +19,9 @@ interface VideoFadeHandlesProps {
 export const VideoFadeHandles = memo(function VideoFadeHandles({
   trackLocked,
   activeTool,
-  clipWidth,
   lineYPercent,
-  fadeInPixels,
-  fadeOutPixels,
+  fadeInPercent,
+  fadeOutPercent,
   isSelected,
   isEditing,
   fadeInLabel,
@@ -40,8 +38,8 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
   const handleVisibilityClass = isEditing || isSelected
     ? 'opacity-100'
     : 'opacity-0 group-hover/timeline-item:opacity-100';
-  const fadeInLeft = getAudioFadeHandleLeft({ handle: 'in', clipWidthPixels: clipWidth, fadePixels: fadeInPixels });
-  const fadeOutLeft = getAudioFadeHandleLeft({ handle: 'out', clipWidthPixels: clipWidth, fadePixels: fadeOutPixels });
+  const fadeInLeft = Math.max(0, Math.min(100, fadeInPercent));
+  const fadeOutLeft = Math.max(0, Math.min(100, 100 - fadeOutPercent));
   const activeLeft = hoveredHandle === 'in' ? fadeInLeft : fadeOutLeft;
   const visibleLabel = hoveredHandle === 'in'
     ? fadeInLabel
@@ -61,7 +59,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
       <button
         type="button"
         className={getHandleClassName()}
-        style={{ left: `${fadeInLeft}px`, top: handleTop }}
+        style={{ left: `${fadeInLeft}%`, top: handleTop }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -79,7 +77,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
       <button
         type="button"
         className={getHandleClassName()}
-        style={{ left: `${fadeOutLeft}px`, top: handleTop }}
+        style={{ left: `${fadeOutLeft}%`, top: handleTop }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -98,7 +96,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
       {hoveredHandle && visibleLabel && (
         <div
           className="absolute -translate-x-1/2 -translate-y-full rounded bg-slate-950/95 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-lg whitespace-nowrap"
-          style={{ left: `${activeLeft}px`, top: `calc(${lineYPercent}% + 10px)` }}
+          style={{ left: `${activeLeft}%`, top: `calc(${lineYPercent}% + 10px)` }}
         >
           {visibleLabel}
         </div>

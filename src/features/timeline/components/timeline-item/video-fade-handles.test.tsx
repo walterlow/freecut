@@ -8,10 +8,9 @@ describe('VideoFadeHandles', () => {
       <VideoFadeHandles
         trackLocked={false}
         activeTool="select"
-        clipWidth={120}
         lineYPercent={50}
-        fadeInPixels={24}
-        fadeOutPixels={18}
+        fadeInPercent={20}
+        fadeOutPercent={15}
         isSelected={false}
         isEditing={false}
         fadeInLabel="Fade In 0.80s"
@@ -35,10 +34,9 @@ describe('VideoFadeHandles', () => {
         <VideoFadeHandles
           trackLocked={false}
           activeTool="select"
-          clipWidth={120}
           lineYPercent={50}
-          fadeInPixels={30}
-          fadeOutPixels={30}
+          fadeInPercent={25}
+          fadeOutPercent={25}
           isSelected={true}
           isEditing={false}
           fadeInLabel="Fade In 1.00s"

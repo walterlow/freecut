@@ -216,12 +216,12 @@ describe('useVisibleItems filtering logic', () => {
     vi.useRealTimers();
   });
 
-  it('keeps the mounted item window stable during live zoom-in and settles afterward', () => {
+  it('culls items outside the buffered viewport during live zoom-in', () => {
     vi.useFakeTimers();
 
     useItemsStore.getState().setItems([
       makeItem('a', 0, 30),
-      makeItem('b', 500, 30),
+      makeItem('b', 500, 30), // at 2x zoom: pixel 3333 — outside [0,3000] buffered range
     ]);
 
     const onRender = vi.fn();
@@ -230,19 +230,21 @@ describe('useVisibleItems filtering logic', () => {
     expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b');
     expect(onRender).toHaveBeenCalledTimes(1);
 
+    // Zoom in — culling now uses live pps (matching the viewport coordinate
+    // space) so item b at frame 500 correctly exits the buffered range.
     act(() => {
       useZoomStore.getState().setZoomLevelImmediate(2);
     });
 
-    expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b');
-    expect(onRender).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a');
+    expect(onRender).toHaveBeenCalledTimes(2);
 
+    // After settle, same result
     act(() => {
       vi.advanceTimersByTime(100);
     });
 
     expect(screen.getByTestId('visible-items')).toHaveTextContent('a');
-    expect(onRender).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
   });

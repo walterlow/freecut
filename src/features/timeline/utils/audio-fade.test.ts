@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getAudioFadeHandleLeft,
   getAudioFadePixels,
+  getAudioFadeRatio,
   getAudioFadeSecondsFromOffset,
 } from './audio-fade';
 
@@ -12,17 +13,20 @@ describe('audio-fade utils', () => {
     expect(getAudioFadePixels(0, 30, (frame) => frame, 100)).toBe(0);
   });
 
-  it('converts pointer offsets into fade seconds for both handles', () => {
-    const pixelsToFrame = (pixels: number) => Math.round(pixels / 2);
+  it('converts fade seconds into clip-width ratios', () => {
+    expect(getAudioFadeRatio(1, 30, 90)).toBeCloseTo(1 / 3, 5);
+    expect(getAudioFadeRatio(10, 30, 90)).toBe(1);
+    expect(getAudioFadeRatio(0, 30, 90)).toBe(0);
+  });
 
+  it('converts pointer offsets into fade seconds for both handles', () => {
     expect(getAudioFadeSecondsFromOffset({
       handle: 'in',
       clipWidthPixels: 100,
       pointerOffsetPixels: 20,
       fps: 30,
       maxDurationFrames: 90,
-      pixelsToFrame,
-    })).toBeCloseTo(10 / 30, 5);
+    })).toBeCloseTo(18 / 30, 5);
 
     expect(getAudioFadeSecondsFromOffset({
       handle: 'out',
@@ -30,8 +34,7 @@ describe('audio-fade utils', () => {
       pointerOffsetPixels: 70,
       fps: 30,
       maxDurationFrames: 90,
-      pixelsToFrame,
-    })).toBeCloseTo(15 / 30, 5);
+    })).toBeCloseTo(27 / 30, 5);
   });
 
   it('returns handle anchor positions inside the clip bounds', () => {

@@ -9,10 +9,10 @@ const TRACK_PUSH_COLORS = {
 interface TrackPushHandleProps {
   enabled: boolean;
   isActive: boolean;
-  /** Pixel position of the clip's left edge */
-  clipLeftPx: number;
-  /** Width of the trigger zone in pixels (computed by parent based on zoom + gap) */
-  zonePx: number;
+  /** CSS length for the clip's left edge in timeline-content coordinates */
+  clipLeftStyle: string;
+  /** CSS length for the trigger zone width (can reference shared zoom vars) */
+  zoneStyle: string;
   onMouseDown: (e: React.MouseEvent) => void;
 }
 
@@ -29,8 +29,8 @@ interface TrackPushHandleProps {
 export const TrackPushHandle = memo(function TrackPushHandle({
   enabled,
   isActive,
-  clipLeftPx,
-  zonePx,
+  clipLeftStyle,
+  zoneStyle,
   onMouseDown,
 }: TrackPushHandleProps) {
   if (!enabled && !isActive) return null;
@@ -40,8 +40,8 @@ export const TrackPushHandle = memo(function TrackPushHandle({
       className="absolute inset-y-px cursor-track-push group/trackpush"
       data-track-push
       style={{
-        left: `${clipLeftPx - zonePx}px`,
-        width: `${zonePx}px`,
+        left: `calc(${clipLeftStyle} - ${zoneStyle})`,
+        width: zoneStyle,
         zIndex: 1,
       }}
       onMouseDown={onMouseDown}
@@ -59,7 +59,7 @@ export const TrackPushHandle = memo(function TrackPushHandle({
         {/* Fade halo into gap */}
         <div
           className="absolute inset-y-0"
-          style={{ right: '2px', width: `${Math.max(0, zonePx - 2)}px`, background: `linear-gradient(to left, ${TRACK_PUSH_COLORS.fade}, transparent)` }}
+          style={{ right: '2px', width: `max(0px, calc(${zoneStyle} - 2px))`, background: `linear-gradient(to left, ${TRACK_PUSH_COLORS.fade}, transparent)` }}
         />
       </div>
     </div>

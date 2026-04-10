@@ -9,6 +9,8 @@ import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useClipVisibility } from '../../hooks/use-clip-visibility';
+import { useZoomStore } from '../../stores/zoom-store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { summarizeCompositionClipContent } from '../../utils/composition-clip-summary';
 import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
@@ -19,13 +21,10 @@ const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 
 interface ClipContentProps {
   item: TimelineItem;
-  clipWidth: number;
+  clipLeftFrames: number;
+  clipWidthFrames: number;
   fps: number;
   isLinked?: boolean;
-  isClipVisible: boolean;
-  visibleStartRatio?: number;
-  visibleEndRatio?: number;
-  pixelsPerSecond: number;
   preferImmediateRendering?: boolean;
   audioWaveformScale?: number;
   linkedSyncOffsetFrames?: number | null;
@@ -42,19 +41,30 @@ interface ClipContentProps {
  */
 export const ClipContent = memo(function ClipContent({
   item,
-  clipWidth,
+  clipLeftFrames,
+  clipWidthFrames,
   fps,
   isLinked = false,
-  isClipVisible,
-  visibleStartRatio = 0,
-  visibleEndRatio = 1,
-  pixelsPerSecond,
   preferImmediateRendering = false,
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
+  // Use settled (content) zoom only — during zoom interaction the parent container
+  // already resizes via CSS calc(frame * var(--timeline-px-per-frame)) so ClipContent
+  // and its expensive filmstrip/waveform children skip re-renders entirely until
+  // the zoom gesture settles.
+  const pixelsPerSecond = useZoomStore((s) => s.contentPixelsPerSecond);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
+  const clipLeftPx = useMemo(
+    () => fps > 0 ? (clipLeftFrames / fps) * pixelsPerSecond : 0,
+    [clipLeftFrames, fps, pixelsPerSecond],
+  );
+  const clipWidth = useMemo(
+    () => Math.max(0, fps > 0 ? (clipWidthFrames / fps) * pixelsPerSecond : 0),
+    [clipWidthFrames, fps, pixelsPerSecond],
+  );
+  const clipVisibility = useClipVisibility(clipLeftPx, clipWidth);
   const isCompositionAudioWrapper = item.type === 'audio' && !!item.compositionId;
 
   // For composition items: find the topmost video in the sub-comp for filmstrip
@@ -233,9 +243,9 @@ export const ClipContent = memo(function ClipContent({
               trimStart={trimStart}
               speed={speed}
               fps={fps}
-              isVisible={isClipVisible}
-              visibleStartRatio={visibleStartRatio}
-              visibleEndRatio={visibleEndRatio}
+              isVisible={clipVisibility.isVisible}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
               preferImmediateRendering={preferImmediateRendering}
             />
@@ -277,7 +287,7 @@ export const ClipContent = memo(function ClipContent({
                 trimStart={trimStart}
                 speed={speed}
                 fps={fps}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -298,7 +308,7 @@ export const ClipContent = memo(function ClipContent({
               clipWidth={clipWidth}
               sourceStart={compoundClipSourceStart}
               sourceDuration={compoundClipSourceDuration}
-              isVisible={isClipVisible}
+              isVisible={clipVisibility.isVisible}
               pixelsPerSecond={pixelsPerSecond}
             />
           </div>
@@ -336,9 +346,9 @@ export const ClipContent = memo(function ClipContent({
                 trimStart={0}
                 speed={compositionVisualSpeed}
                 fps={fps}
-                isVisible={isClipVisible}
-                visibleStartRatio={visibleStartRatio}
-                visibleEndRatio={visibleEndRatio}
+                isVisible={clipVisibility.isVisible}
+                visibleStartRatio={clipVisibility.visibleStartRatio}
+                visibleEndRatio={clipVisibility.visibleEndRatio}
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateRendering}
               />
@@ -355,7 +365,7 @@ export const ClipContent = memo(function ClipContent({
                 clipWidth={clipWidth}
                 sourceStart={compoundClipSourceStart}
                 sourceDuration={compoundClipSourceDuration}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -374,7 +384,7 @@ export const ClipContent = memo(function ClipContent({
                 clipWidth={clipWidth}
                 sourceStart={compoundClipSourceStart}
                 sourceDuration={compoundClipSourceDuration}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -430,15 +440,15 @@ export const ClipContent = memo(function ClipContent({
               isAnimated={isAnimated}
               animationFormat={isAnimatedWebp ? 'webp' : 'gif'}
               clipWidth={clipWidth}
-              isVisible={isClipVisible}
+              isVisible={clipVisibility.isVisible}
               src={item.src}
               sourceStart={sourceStart}
               sourceDuration={sourceDuration}
               trimStart={trimStart}
               speed={speed}
               fps={fps}
-              visibleStartRatio={visibleStartRatio}
-              visibleEndRatio={visibleEndRatio}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
             />
           )}

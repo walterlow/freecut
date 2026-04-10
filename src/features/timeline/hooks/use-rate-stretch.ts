@@ -5,7 +5,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import {
   MIN_SPEED,
@@ -246,7 +246,7 @@ export function resolveDurationAndSpeed(
  * - Snapping support for stretch edges to grid and item boundaries
  */
 export function useRateStretch(item: TimelineItem, timelineDuration: number, trackLocked: boolean = false) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s) => s.fps);
   const rateStretchItem = useTimelineStore((s) => s.rateStretchItem);
   const setDragState = useSelectionStore((s) => s.setDragState);

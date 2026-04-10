@@ -2,7 +2,6 @@ import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useShallow } from 'zustand/react/shallow';
 import { setMixerLiveGains, getMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
-import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useItemsStore } from '../../stores/items-store';
 import { useKeyframesStore } from '../../stores/keyframes-store';
@@ -29,7 +28,6 @@ import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useTrackPush } from '../../hooks/use-track-push';
 import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch';
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
-import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems } from '@/features/timeline/utils/clip-utils';
 import { cn } from '@/shared/ui/cn';
@@ -94,10 +92,11 @@ import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { useRollHoverStore } from '../../stores/roll-hover-store';
+import { useZoomStore } from '../../stores/zoom-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry';
-import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
+import { getAudioFadeRatio, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
@@ -123,16 +122,40 @@ const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
 const TRACK_PUSH_MIN_PX = 6;
 const TRACK_PUSH_MAX_PX = 14;
 const TRACK_PUSH_ZOOM_THRESHOLD = 120;
-function getTrackPushZonePx(pxPerSec: number, gapPx: number): number {
-  const base = pxPerSec >= TRACK_PUSH_ZOOM_THRESHOLD
-    ? TRACK_PUSH_MIN_PX
-    : Math.round(TRACK_PUSH_MIN_PX + (TRACK_PUSH_MAX_PX - TRACK_PUSH_MIN_PX) * (1 - pxPerSec / TRACK_PUSH_ZOOM_THRESHOLD));
-  return Math.max(TRACK_PUSH_MIN_PX, Math.min(base, gapPx, TRACK_PUSH_MAX_PX));
+
+function getPixelsPerSecondNow(): number {
+  return useZoomStore.getState().pixelsPerSecond;
+}
+
+function frameToPixelsNow(frame: number): number {
+  const fps = useTimelineStore.getState().fps;
+  return fps > 0 ? (frame / fps) * getPixelsPerSecondNow() : 0;
+}
+
+function pixelsToFrameNow(pixels: number): number {
+  const fps = useTimelineStore.getState().fps;
+  const pixelsPerSecond = getPixelsPerSecondNow();
+  return fps > 0 && pixelsPerSecond > 0
+    ? Math.round((pixels / pixelsPerSecond) * fps)
+    : 0;
+}
+
+function getFramePositionStyle(frame: number): string {
+  return `calc(${frame} * var(--timeline-px-per-frame, 0px))`;
+}
+
+function getTrackPushZoneStyle(gapFrames: number): string {
+  const safeGapFrames = Math.max(0, gapFrames);
+  const gapWidth = `calc(${safeGapFrames} * var(--timeline-px-per-frame, 0px))`;
+  const zoomSlopeDivisor = TRACK_PUSH_ZOOM_THRESHOLD / (TRACK_PUSH_MAX_PX - TRACK_PUSH_MIN_PX);
+  const adaptiveWidth = `clamp(${TRACK_PUSH_MIN_PX}px, calc(${TRACK_PUSH_MAX_PX}px - (var(--timeline-pixels-per-second, 0px) / ${zoomSlopeDivisor})), ${TRACK_PUSH_MAX_PX}px)`;
+  return `min(${gapWidth}, ${adaptiveWidth})`;
 }
 const VIDEO_FADE_EPSILON = 0.0001;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
+const FADE_VIEWBOX_WIDTH = 1000;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4;
 
@@ -157,8 +180,6 @@ interface TimelineItemProps {
  * - Grid snapping support
  */
 export const TimelineItem = memo(function TimelineItem({ item, timelineDuration = 30, trackLocked = false, trackHidden = false }: TimelineItemProps) {
-  const { timeToPixels, frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
-
   // Granular selector: only re-render when THIS item's selection state changes
   const isSelected = useSelectionStore(
     useCallback((s) => s.selectedItemIds.includes(item.id), [item.id])
@@ -598,9 +619,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       transitionDragPreview.durationInFrames,
       transitionDragPreview.alignment,
     );
-    const leftPx = Math.round(frameToPixels(bridge.leftFrame));
-    const rightPx = Math.round(frameToPixels(bridge.rightFrame));
-    const cutPx = Math.round(frameToPixels(transitionDragPreviewRightClip.from));
+    const leftPx = Math.round(frameToPixelsNow(bridge.leftFrame));
+    const rightPx = Math.round(frameToPixelsNow(bridge.rightFrame));
+    const cutPx = Math.round(frameToPixelsNow(transitionDragPreviewRightClip.from));
     const naturalWidth = rightPx - leftPx;
     const minWidth = 32;
     const left = naturalWidth >= minWidth ? leftPx : leftPx - (minWidth - naturalWidth) / 2;
@@ -611,7 +632,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       cutOffset: cutPx - left,
     };
   }, [
-    frameToPixels,
     previewBaseItem.durationInFrames,
     previewBaseItem.from,
     transitionDragPreview,
@@ -633,8 +653,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     (slideNeighborSide === 'left' ? slideNeighborDelta : 0)
     + (slideNeighborSide === 'right' ? -slideNeighborDelta : 0);
 
-  const left = Math.round(timeToPixels((previewBaseItem.from + slideFromOffset + rippleEditOffset + trackPushOffset) / fps));
-  const right = Math.round(timeToPixels((previewBaseItem.from + previewBaseItem.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset + trackPushOffset) / fps));
+  const leftFrame = previewBaseItem.from + slideFromOffset + rippleEditOffset + trackPushOffset;
+  const rightFrame = previewBaseItem.from + previewBaseItem.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset + trackPushOffset;
+  const left = Math.round(frameToPixelsNow(leftFrame));
+  const right = Math.round(frameToPixelsNow(rightFrame));
   const width = right - left;
 
   // Source FPS for converting source frames -> timeline frames (sourceStart etc. are in source-native FPS)
@@ -760,27 +782,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     || slideNeighborDelta !== 0;
 
   // Calculate visual positions during trim/stretch
-  const { visualLeft, visualWidth } = useMemo(() => {
-    let trimVisualLeft = left;
-    let trimVisualWidth = width;
+  const { visualLeftFrame, visualWidthFrames } = useMemo(() => {
+    let trimVisualLeftFrame = leftFrame;
+    let trimVisualRightFrame = rightFrame;
 
     // Ripple edit: compute the new right edge from frames - the SAME rounding
     // path that downstream items use for their `left` - so both edges go through
     // a single Math.round(timeToPixels(totalFrames / fps)) and can never diverge
     // by even 1 px.  `rippleEdgeDelta` equals the downstream `rippleEditOffset`.
     if (rippleEdgeDelta !== 0) {
-      const newRight = Math.round(
-        timeToPixels((previewBaseItem.from + previewBaseItem.durationInFrames + rippleEdgeDelta) / fps)
-      );
-      trimVisualWidth = newRight - trimVisualLeft;
+      trimVisualRightFrame = previewBaseItem.from + previewBaseItem.durationInFrames + rippleEdgeDelta;
     } else if (isTrimming && trimHandle) {
       if (trimHandle === 'start') {
-        const nextLeft = Math.round(frameToPixels(previewBaseItem.from + trimDelta));
-        trimVisualLeft = nextLeft;
-        trimVisualWidth = right - nextLeft;
+        trimVisualLeftFrame = previewBaseItem.from + trimDelta;
       } else {
-        const nextRight = Math.round(frameToPixels(previewBaseItem.from + previewBaseItem.durationInFrames + trimDelta));
-        trimVisualWidth = nextRight - left;
+        trimVisualRightFrame = previewBaseItem.from + previewBaseItem.durationInFrames + trimDelta;
       }
     }
 
@@ -790,35 +806,53 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (rollingEditDelta !== 0) {
       if (rollingEditHandle === 'end') {
         // Trimmed item's end handle was dragged -- this neighbor's start adjusts
-        const newLeft = Math.round(frameToPixels(previewBaseItem.from + rollingEditDelta));
-        trimVisualWidth -= (newLeft - trimVisualLeft);
-        trimVisualLeft = newLeft;
+        trimVisualLeftFrame = previewBaseItem.from + rollingEditDelta;
       } else if (rollingEditHandle === 'start') {
         // Trimmed item's start handle was dragged -- this neighbor's end adjusts
-        const newRight = Math.round(frameToPixels(previewBaseItem.from + previewBaseItem.durationInFrames + rollingEditDelta));
-        trimVisualWidth = newRight - trimVisualLeft;
+        trimVisualRightFrame = previewBaseItem.from + previewBaseItem.durationInFrames + rollingEditDelta;
       }
     }
 
-    let stretchVisualLeft = trimVisualLeft;
-    let stretchVisualWidth = trimVisualWidth;
+    let stretchVisualLeftFrame = trimVisualLeftFrame;
+    let stretchVisualRightFrame = trimVisualRightFrame;
 
     if (isStretching && stretchFeedback) {
-      stretchVisualLeft = Math.round(timeToPixels(stretchFeedback.from / fps));
-      const stretchVisualRight = Math.round(timeToPixels((stretchFeedback.from + stretchFeedback.duration) / fps));
-      stretchVisualWidth = stretchVisualRight - stretchVisualLeft;
+      stretchVisualLeftFrame = stretchFeedback.from;
+      stretchVisualRightFrame = stretchFeedback.from + stretchFeedback.duration;
     }
 
     const isActive = rippleEdgeDelta !== 0 || isTrimming || rollingEditDelta !== 0;
+    const nextVisualLeftFrame = isStretching
+      ? stretchVisualLeftFrame
+      : isActive
+      ? trimVisualLeftFrame
+      : leftFrame;
+    const nextVisualRightFrame = isStretching
+      ? stretchVisualRightFrame
+      : isActive
+      ? trimVisualRightFrame
+      : rightFrame;
+
     return {
-      visualLeft: isStretching ? stretchVisualLeft : isActive ? trimVisualLeft : left,
-      visualWidth: isStretching ? stretchVisualWidth : isActive ? trimVisualWidth : width,
+      visualLeftFrame: nextVisualLeftFrame,
+      visualWidthFrames: Math.max(1, nextVisualRightFrame - nextVisualLeftFrame),
     };
   }, [
-    left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
-    frameToPixels, previewBaseItem.from, previewBaseItem.durationInFrames,
-    timeToPixels, fps, trimDelta, right, rollingEditDelta, rollingEditHandle, rippleEdgeDelta
+    isTrimming,
+    trimHandle,
+    isStretching,
+    stretchFeedback,
+    previewBaseItem.from,
+    previewBaseItem.durationInFrames,
+    trimDelta,
+    rollingEditDelta,
+    rollingEditHandle,
+    rippleEdgeDelta,
+    leftFrame,
+    rightFrame,
   ]);
+  const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame));
+  const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames));
 
   const toolOperationOverlay = useMemo(() => {
     if (visualWidth <= 0) return null;
@@ -835,7 +869,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         items,
         transitions,
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         handle: trimHandle,
         isRollingEdit,
         isRippleEdit,
@@ -849,7 +883,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return getStretchOperationBoundsVisual({
         item,
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         handle: stretchHandle,
         constrained: stretchConstrained,
         currentLeftPx,
@@ -901,7 +935,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         items,
         transitions,
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         leftNeighbor: slideLeftNeighborForSlidItem,
         rightNeighbor: slideRightNeighborForSlidItem,
         constraintEdge: slipSlideConstraintEdge,
@@ -919,7 +953,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return getSlipOperationBoundsVisual({
         item: contentPreviewItem,
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         constraintEdge: slipSlideConstraintEdge,
         constrained: slipSlideConstrained,
         currentLeftPx,
@@ -934,7 +968,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         items: [],
         transitions: [],
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         leftNeighbor: null,
         rightNeighbor: null,
         constraintEdge: null,
@@ -951,7 +985,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return getSlipOperationBoundsVisual({
         item: previewBaseItem,
         fps,
-        frameToPixels,
+        frameToPixels: frameToPixelsNow,
         constraintEdge: null,
         constrained: false,
         currentLeftPx,
@@ -962,7 +996,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     return null;
   }, [
     fps,
-    frameToPixels,
     isRollingEdit,
     isRippleEdit,
     isSlipSlideActive,
@@ -1000,9 +1033,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ? { start: stretchHandle === 'start', end: stretchHandle === 'end', constrainedEdge: stretchConstrained ? stretchHandle : null }
       : null;
 
-  // Visibility detection for lazy filmstrip loading (shared viewport state)
-  const clipVisibility = useClipVisibility(visualLeft, visualWidth);
-
   // Get color based on item type - memoized
   const itemColorClasses = useMemo(() => {
     switch (item.type) {
@@ -1037,7 +1067,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const tracksRect = tracksContainer?.getBoundingClientRect();
       const cursorX = tracksRect
         ? e.clientX - tracksRect.left + tracksContainer!.scrollLeft
-        : frameToPixels(item.from) + (e.clientX - e.currentTarget.getBoundingClientRect().left);
+        : frameToPixelsNow(item.from) + (e.clientX - e.currentTarget.getBoundingClientRect().left);
       const { currentFrame, isPlaying } = usePlaybackStore.getState();
 
       // Build snap targets when Shift is held
@@ -1059,8 +1089,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         cursorX,
         currentFrame,
         isPlaying,
-        frameToPixels,
-        pixelsToFrame,
+        frameToPixels: frameToPixelsNow,
+        pixelsToFrame: pixelsToFrameNow,
         shiftHeld: e.shiftKey,
         snapTargets,
       });
@@ -1108,7 +1138,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     } else {
       selectItems(targetIds);
     }
-  }, [trackLocked, frameToPixels, pixelsToFrame, item.from, item.id]);
+  }, [trackLocked, item.from, item.id]);
 
   // Double-click: open media in source monitor with clip's source range as I/O
   // For composition items: enter the sub-composition for editing
@@ -1345,10 +1375,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Gap detection: clip has empty space before it (no strictly adjacent left neighbor)
   const hasGapBefore = item.from > 0 && !leftNeighbor;
 
-  // Gap width in pixels - used for track-push handle sizing.
-  // Uses getState() snapshot - acceptable because this only affects the push
-  // handle width, which is only visible during active gap interactions.
-  const gapBeforePx = useMemo(() => {
+  // Gap width in frames - lets the track-push affordance follow zoom through CSS
+  // variables without forcing the entire item shell to re-render on every wheel tick.
+  const gapBeforeFrames = useMemo(() => {
     if (!hasGapBefore) return 0;
     const trackItems = useItemsStore.getState().itemsByTrackId[item.trackId] ?? [];
     let prevEnd = 0;
@@ -1357,8 +1386,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const end = ti.from + ti.durationInFrames;
       if (end <= item.from && end > prevEnd) prevEnd = end;
     }
-    return Math.round(frameToPixels(item.from - prevEnd));
-  }, [hasGapBefore, item.trackId, item.id, item.from, item.durationInFrames, frameToPixels]);
+    return Math.max(0, item.from - prevEnd);
+  }, [hasGapBefore, item.trackId, item.id, item.from]);
 
   const {
     getCanJoinSelected,
@@ -1488,22 +1517,23 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const displayedAudioVolumeDb = item.type === 'audio'
     ? (item.volume ?? 0)
     : 0;
-  const videoFadeInPixels = useMemo(
-    () => isVisualFadeItem ? getAudioFadePixels(displayedVideoFadeIn, fps, frameToPixels, visualWidth) : 0,
-    [displayedVideoFadeIn, fps, frameToPixels, isVisualFadeItem, visualWidth]
+  const clipFadeDurationFrames = Math.max(1, Math.round(visualWidthFrames));
+  const videoFadeInRatio = useMemo(
+    () => isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeIn, fps, clipFadeDurationFrames) : 0,
+    [clipFadeDurationFrames, displayedVideoFadeIn, fps, isVisualFadeItem]
   );
-  const videoFadeOutPixels = useMemo(
-    () => isVisualFadeItem ? getAudioFadePixels(displayedVideoFadeOut, fps, frameToPixels, visualWidth) : 0,
-    [displayedVideoFadeOut, fps, frameToPixels, isVisualFadeItem, visualWidth]
+  const videoFadeOutRatio = useMemo(
+    () => isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeOut, fps, clipFadeDurationFrames) : 0,
+    [clipFadeDurationFrames, displayedVideoFadeOut, fps, isVisualFadeItem]
   );
   const videoFadeLineYPercent = 50;
-  const audioFadeInPixels = useMemo(
-    () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeIn, fps, frameToPixels, visualWidth) : 0,
-    [displayedAudioFadeIn, fps, frameToPixels, item.type, visualWidth]
+  const audioFadeInRatio = useMemo(
+    () => item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeIn, fps, clipFadeDurationFrames) : 0,
+    [clipFadeDurationFrames, displayedAudioFadeIn, fps, item.type]
   );
-  const audioFadeOutPixels = useMemo(
-    () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeOut, fps, frameToPixels, visualWidth) : 0,
-    [displayedAudioFadeOut, fps, frameToPixels, item.type, visualWidth]
+  const audioFadeOutRatio = useMemo(
+    () => item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeOut, fps, clipFadeDurationFrames) : 0,
+    [clipFadeDurationFrames, displayedAudioFadeOut, fps, item.type]
   );
   const audioFadeInHoverLabel = useMemo(
     () => `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
@@ -1542,65 +1572,69 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const audioVolumeLineStroke = isAudioVolumeControlActive
     ? 'rgba(255,255,255,0.72)'
     : 'rgba(255,255,255,0.42)';
+  const audioFadeInViewboxWidth = audioFadeInRatio * FADE_VIEWBOX_WIDTH;
+  const audioFadeOutViewboxWidth = audioFadeOutRatio * FADE_VIEWBOX_WIDTH;
+  const videoFadeInViewboxWidth = videoFadeInRatio * FADE_VIEWBOX_WIDTH;
+  const videoFadeOutViewboxWidth = videoFadeOutRatio * FADE_VIEWBOX_WIDTH;
   const audioFadeInCurvePoint = useMemo(
     () => getAudioFadeCurveControlPoint({
       handle: 'in',
-      fadePixels: audioFadeInPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: audioFadeInViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [audioFadeInPixels, displayedAudioFadeInCurve, displayedAudioFadeInCurveX, visualWidth]
+    [audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePoint = useMemo(
     () => getAudioFadeCurveControlPoint({
       handle: 'out',
-      fadePixels: audioFadeOutPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: audioFadeOutViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
+    [audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const audioFadeInCurvePath = useMemo(
     () => getAudioFadeCurvePath({
       handle: 'in',
-      fadePixels: audioFadeInPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: audioFadeInViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [audioFadeInPixels, displayedAudioFadeInCurve, displayedAudioFadeInCurveX, visualWidth]
+    [audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePath = useMemo(
     () => getAudioFadeCurvePath({
       handle: 'out',
-      fadePixels: audioFadeOutPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: audioFadeOutViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
+    [audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const videoFadeInPath = useMemo(
     () => getAudioFadeCurvePath({
       handle: 'in',
-      fadePixels: videoFadeInPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: videoFadeInViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [videoFadeInPixels, visualWidth]
+    [videoFadeInViewboxWidth]
   );
   const videoFadeOutPath = useMemo(
     () => getAudioFadeCurvePath({
       handle: 'out',
-      fadePixels: videoFadeOutPixels,
-      clipWidthPixels: visualWidth,
+      fadePixels: videoFadeOutViewboxWidth,
+      clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [videoFadeOutPixels, visualWidth]
+    [videoFadeOutViewboxWidth]
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
@@ -1750,7 +1784,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         pointerOffsetPixels: clientX - rect.left,
         fps,
         maxDurationFrames: item.durationInFrames,
-        pixelsToFrame,
       });
     };
 
@@ -1803,7 +1836,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, isVisualFadeItem, item, pixelsToFrame, trackLocked, updateTimelineItem]);
+  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, isVisualFadeItem, item, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
@@ -1828,7 +1861,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         pointerOffsetPixels: clientX - rect.left,
         fps,
         maxDurationFrames: item.durationInFrames,
-        pixelsToFrame,
       });
     };
 
@@ -1881,14 +1913,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, displayedAudioFadeIn, displayedAudioFadeOut, fps, item, pixelsToFrame, trackLocked, updateTimelineItem]);
+  }, [activeTool, displayedAudioFadeIn, displayedAudioFadeOut, fps, item, trackLocked, updateTimelineItem]);
   const handleAudioFadeCurveDotMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
     }
 
-    const fadePixels = handle === 'in' ? audioFadeInPixels : audioFadeOutPixels;
-    if (fadePixels <= 0) {
+    const fadeRatio = handle === 'in' ? audioFadeInRatio : audioFadeOutRatio;
+    if (fadeRatio <= 0) {
       return;
     }
 
@@ -1917,7 +1949,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         handle,
         pointerOffsetX: clientX - rect.left,
         pointerOffsetY: clientY - rect.top,
-        fadePixels,
+        fadePixels: fadeRatio * rect.width,
         clipWidthPixels: rect.width,
         rowHeight: rect.height,
       });
@@ -1987,8 +2019,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     };
   }, [
     activeTool,
-    audioFadeInPixels,
-    audioFadeOutPixels,
+    audioFadeInRatio,
+    audioFadeOutRatio,
     displayedAudioFadeInCurve,
     displayedAudioFadeInCurveX,
     displayedAudioFadeOutCurve,
@@ -2423,8 +2455,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'
           )}
           style={{
-            left: `${visualLeft}px`,
-            width: `${visualWidth}px`,
+            left: getFramePositionStyle(visualLeftFrame),
+            width: getFramePositionStyle(visualWidthFrames),
             transform: isBeingDragged && !isAltDrag
               ? `translate(${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).x}px, ${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).y}px)`
               : undefined,
@@ -2485,16 +2517,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               >
                 <svg
                   className="absolute inset-0 h-full w-full"
-                  viewBox={`0 0 ${Math.max(1, visualWidth)} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                  viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
                   preserveAspectRatio="none"
                 >
-                  {videoFadeInPixels > 0 && (
+                  {videoFadeInRatio > 0 && (
                     <path
                       d={videoFadeInPath}
                       fill="rgba(15,23,42,0.46)"
                     />
                   )}
-                  {videoFadeOutPixels > 0 && (
+                  {videoFadeOutRatio > 0 && (
                     <path
                       d={videoFadeOutPath}
                       fill="rgba(15,23,42,0.46)"
@@ -2519,16 +2551,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 />
                 <svg
                   className="absolute inset-0 h-full w-full"
-                  viewBox={`0 0 ${Math.max(1, visualWidth)} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                  viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
                   preserveAspectRatio="none"
                 >
-                  {audioFadeInPixels > 0 && (
+                  {audioFadeInRatio > 0 && (
                     <path
                       d={audioFadeInCurvePath}
                       fill="rgba(0,0,0,0.5)"
                     />
                   )}
-                  {audioFadeOutPixels > 0 && (
+                  {audioFadeOutRatio > 0 && (
                     <path
                       d={audioFadeOutCurvePath}
                       fill="rgba(0,0,0,0.5)"
@@ -2540,13 +2572,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
             <ClipContent
               item={contentVisualPreviewItem}
-              clipWidth={visualWidth}
+              clipLeftFrames={visualLeftFrame}
+              clipWidthFrames={visualWidthFrames}
               fps={fps}
               isLinked={isLinked}
-              isClipVisible={clipVisibility.isVisible}
-              visibleStartRatio={clipVisibility.visibleStartRatio}
-              visibleEndRatio={clipVisibility.visibleEndRatio}
-              pixelsPerSecond={pixelsPerSecond}
               preferImmediateRendering={preferImmediateContentRendering}
               audioWaveformScale={audioVisualizationScale}
               linkedSyncOffsetFrames={linkedSyncOffsetFrames}
@@ -2573,10 +2602,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               <VideoFadeHandles
                 trackLocked={trackLocked}
                 activeTool={activeTool}
-                clipWidth={visualWidth}
                 lineYPercent={videoFadeLineYPercent}
-                fadeInPixels={videoFadeInPixels}
-                fadeOutPixels={videoFadeOutPixels}
+                fadeInPercent={videoFadeInRatio * 100}
+                fadeOutPercent={videoFadeOutRatio * 100}
                 isSelected={isSelected}
                 isEditing={videoFadeEdit !== null}
                 fadeInLabel={videoFadeInHoverLabel}
@@ -2596,17 +2624,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               <AudioFadeHandles
                 trackLocked={trackLocked}
                 activeTool={activeTool}
-                clipWidth={visualWidth}
                 lineYPercent={audioVolumeLineYPercent}
-                fadeInPixels={audioFadeInPixels}
-                fadeOutPixels={audioFadeOutPixels}
+                fadeInPercent={audioFadeInRatio * 100}
+                fadeOutPercent={audioFadeOutRatio * 100}
                 isSelected={isSelected}
                 isEditing={audioFadeEdit !== null}
                 curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
                 fadeInLabel={audioFadeInHoverLabel}
                 fadeOutLabel={audioFadeOutHoverLabel}
-                fadeInCurveDot={audioFadeInPixels > 0 ? { x: audioFadeInCurvePoint.x, yPercent: audioFadeInCurvePoint.y } : null}
-                fadeOutCurveDot={audioFadeOutPixels > 0 ? { x: audioFadeOutCurvePoint.x, yPercent: audioFadeOutCurvePoint.y } : null}
+                fadeInCurveDot={audioFadeInRatio > 0 ? { xPercent: (audioFadeInCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeInCurvePoint.y } : null}
+                fadeOutCurveDot={audioFadeOutRatio > 0 ? { xPercent: (audioFadeOutCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeOutCurvePoint.y } : null}
                 onFadeHandleMouseDown={handleAudioFadeHandleMouseDown}
                 onFadeHandleDoubleClick={handleAudioFadeHandleDoubleClick}
                 onFadeCurveDotMouseDown={handleAudioFadeCurveDotMouseDown}
@@ -2705,8 +2732,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       <TrackPushHandle
         enabled={hasGapBefore && !trackLocked && activeTool === 'trim-edit'}
         isActive={isTrackPushActive}
-        clipLeftPx={visualLeft}
-        zonePx={getTrackPushZonePx(pixelsPerSecond, gapBeforePx)}
+        clipLeftStyle={getFramePositionStyle(visualLeftFrame)}
+        zoneStyle={getTrackPushZoneStyle(gapBeforeFrames)}
         onMouseDown={handleTrackPushStart}
       />
 
@@ -2716,7 +2743,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       {activeEdges && (
         <div
           className="absolute inset-y-0 pointer-events-none"
-          style={{ left: `${visualLeft}px`, width: `${visualWidth}px`, zIndex: 2 }}
+          style={{ left: getFramePositionStyle(visualLeftFrame), width: getFramePositionStyle(visualWidthFrames), zIndex: 2 }}
         >
           {activeEdges.start && (() => {
             const constrained = activeEdges.constrainedEdge === 'start' || activeEdges.constrainedEdge === 'both';

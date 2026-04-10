@@ -4,10 +4,14 @@ import type { TimelineItem } from '@/types/timeline';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useTimelineStore } from '../../stores/timeline-store';
+import { useZoomStore } from '../../stores/zoom-store';
 import { ClipContent } from './clip-content';
 
 describe('ClipContent', () => {
   beforeEach(() => {
+    useTimelineStore.setState({ fps: 30 });
+    useZoomStore.setState({ level: 1, pixelsPerSecond: 100, contentLevel: 1, contentPixelsPerSecond: 100, isZoomInteracting: false });
     useSettingsStore.setState({
       showFilmstrips: false,
       showWaveforms: false,
@@ -37,11 +41,10 @@ describe('ClipContent', () => {
     render(
       <ClipContent
         item={item}
-        clipWidth={320}
+        clipLeftFrames={0}
+        clipWidthFrames={96}
         fps={30}
         isLinked={true}
-        isClipVisible={true}
-        pixelsPerSecond={30}
         linkedSyncOffsetFrames={-283}
       />,
     );
@@ -66,11 +69,10 @@ describe('ClipContent', () => {
     render(
       <ClipContent
         item={item}
-        clipWidth={320}
+        clipLeftFrames={0}
+        clipWidthFrames={96}
         fps={30}
         isLinked={true}
-        isClipVisible={true}
-        pixelsPerSecond={30}
       />,
     );
 

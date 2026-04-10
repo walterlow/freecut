@@ -5,7 +5,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useItemsStore } from '../stores/items-store';
 import { useTrackPushPreviewStore } from '../stores/track-push-preview-store';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { trackPushItems } from '../stores/actions/item-actions';
 import type { SnapTarget } from '../types/drag';
@@ -25,7 +25,7 @@ interface TrackPushState {
  * tracks so no overlaps are created.
  */
 export function useTrackPush(item: TimelineItem, timelineDuration: number, trackLocked: boolean = false) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s) => s.fps);
   const setDragState = useSelectionStore((s) => s.setDragState);
   const { getMagneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(

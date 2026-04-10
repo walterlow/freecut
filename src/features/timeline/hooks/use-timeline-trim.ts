@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
 import { useTransitionsStore } from '../stores/transitions-store';
@@ -64,7 +64,7 @@ interface TrimState {
  * - Source boundary clamping for accurate visual feedback
  */
 export function useTimelineTrim(item: TimelineItem, timelineDuration: number, trackLocked: boolean = false) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s) => s.fps);
   const trimItemStart = useTimelineStore((s) => s.trimItemStart);
   const trimItemEnd = useTimelineStore((s) => s.trimItemEnd);

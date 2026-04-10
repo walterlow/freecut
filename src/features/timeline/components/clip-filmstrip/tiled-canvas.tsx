@@ -8,7 +8,7 @@ interface TiledCanvasProps {
   width: number;
   /** Canvas height in pixels */
   height: number;
-  /** Render function for each tile */
+  /** Render function for each tile. tileWidth is always a whole-pixel logical width. */
   renderTile: (
     ctx: CanvasRenderingContext2D,
     tileIndex: number,
@@ -79,7 +79,8 @@ export const TiledCanvas = memo(function TiledCanvas({
 
       // Calculate tile dimensions
       const tileOffset = tileIndex * TILE_WIDTH;
-      const actualTileWidth = Math.min(TILE_WIDTH, width - tileOffset);
+      const actualTileWidth = Math.max(0, Math.min(TILE_WIDTH, width - tileOffset));
+      const renderTileWidth = actualTileWidth > 0 ? Math.max(1, Math.ceil(actualTileWidth)) : 0;
 
       // Always update layout (cheap CSS — no canvas redraw)
       canvas.style.transform = `translateX(${tileOffset}px)`;
@@ -90,14 +91,14 @@ export const TiledCanvas = memo(function TiledCanvas({
       // or when the tile is brand new. Width-only changes (zoom) skip the
       // expensive canvas draw — tiles CSS-stretch until content catches up.
       if (needsContentRedraw || isNew) {
-        canvas.width = Math.ceil(actualTileWidth * dpr);
+        canvas.width = Math.ceil(renderTileWidth * dpr);
         canvas.height = Math.ceil(height * dpr);
 
         const ctx = canvas.getContext('2d');
-        if (ctx) {
+        if (ctx && renderTileWidth > 0) {
           ctx.scale(dpr, dpr);
-          ctx.clearRect(0, 0, actualTileWidth, height);
-          renderTile(ctx, tileIndex, tileOffset, actualTileWidth);
+          ctx.clearRect(0, 0, renderTileWidth, height);
+          renderTile(ctx, tileIndex, tileOffset, renderTileWidth);
         }
       }
     }

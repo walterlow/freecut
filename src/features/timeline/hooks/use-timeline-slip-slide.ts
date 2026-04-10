@@ -6,7 +6,7 @@ import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
@@ -63,7 +63,7 @@ export function useTimelineSlipSlide(
   timelineDuration: number,
   trackLocked: boolean = false,
 ) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s) => s.fps);
   const setDragState = useSelectionStore((s) => s.setDragState);
 

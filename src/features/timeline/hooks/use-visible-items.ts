@@ -49,15 +49,15 @@ function quantizeInteractionPixelsPerSecond(pixelsPerSecond: number): number {
 }
 
 function getCullingPixelsPerSecond(zoomState: ReturnType<typeof useZoomStore.getState>): number {
-  const settledPps = zoomState.contentPixelsPerSecond;
   if (!zoomState.isZoomInteracting) {
-    return settledPps;
+    return zoomState.contentPixelsPerSecond;
   }
 
-  // During live zoom-in, keep the mounted set stable until content zoom settles.
-  // During live zoom-out, expand the mounted set in coarse buckets so clips enter
-  // ahead of time without recomputing on every wheel tick.
-  return Math.min(settledPps, quantizeInteractionPixelsPerSecond(zoomState.pixelsPerSecond));
+  // During zoom interaction the viewport's scrollLeft is in the LIVE coordinate
+  // space (cursor-anchor adjusted), so culling must use the live pps to avoid a
+  // coordinate-space mismatch that unmounts visible items.  Quantize in coarse
+  // 20% log-steps to avoid recomputing on every single wheel tick.
+  return quantizeInteractionPixelsPerSecond(zoomState.pixelsPerSecond);
 }
 
 function getTrackVisibleTransitions(trackId: string): Transition[] | undefined {

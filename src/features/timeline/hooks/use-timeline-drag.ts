@@ -5,7 +5,7 @@ import type { DragState, UseTimelineDragReturn, SnapTarget } from '../types/drag
 import { useTimelineStore } from '../stores/timeline-store';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToFramePreciseNow, frameToPixelsNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getTrackKind } from '../utils/classic-tracks';
@@ -321,7 +321,10 @@ export function useTimelineDrag(
   }, []);
 
   // Get zoom utilities
-  const { pixelsToFramePrecise, frameToPixels } = useTimelineZoom();
+  // Zoom conversions are read imperatively (via store.getState()) at call-time
+  // to avoid subscribing every TimelineItem to the live zoom store.
+  const pixelsToFramePrecise = pixelsToFramePreciseNow;
+  const frameToPixels = frameToPixelsNow;
 
   // Get current alt-drag state from selection store for snap exclusion logic
   const isAltDragActive = useSelectionStore((s) => s.dragState?.isAltDrag ?? false);

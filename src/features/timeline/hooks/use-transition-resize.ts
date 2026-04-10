@@ -4,7 +4,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { TRANSITION_CONFIGS } from '@/types/transition';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useItemsStore } from '../stores/items-store';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import type { TimelineState, TimelineActions } from '../types';
 import { getMaxTransitionDurationForHandles } from '../utils/transition-utils';
 
@@ -28,7 +28,7 @@ interface ResizeState {
  * - Respects min/max duration constraints
  */
 export function useTransitionResize(transition: Transition) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s: TimelineState) => s.fps);
   const updateTransition = useTimelineStore(
     (s: TimelineActions) => s.updateTransition
