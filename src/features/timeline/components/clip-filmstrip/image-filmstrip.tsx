@@ -230,8 +230,7 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
   return (
     <div ref={containerRef} className="absolute inset-0">
       <div
-        className="absolute left-0 top-0 overflow-hidden pointer-events-none"
-        style={{ width: clipWidth, height }}
+        className="absolute inset-0 overflow-hidden pointer-events-none"
       >
         {tiles.map(({ tileIndex, bitmap, x, width }) => (
           <AnimatedTile

@@ -448,13 +448,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
         <FilmstripSkeleton clipWidth={clipWidth} height={height} />
       )}
       <div
-        className="absolute left-0 top-0 overflow-hidden pointer-events-none"
-        style={{
-          width: renderClipWidth,
-          height,
-          contentVisibility: 'auto',
-          containIntrinsicSize: `${renderClipWidth}px ${height}px`,
-        }}
+        className="absolute inset-0 overflow-hidden pointer-events-none"
       >
         {tiles.map(({ tileIndex, frame, x, width }) => (
           <FilmstripTile

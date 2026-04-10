@@ -1101,7 +1101,6 @@ export const TimelineContent = memo(function TimelineContent({
         style={{
           width: `${timelineWidth}px`,
           contain: 'layout style paint',
-          willChange: 'contents',
           '--timeline-px-per-frame': fps > 0 ? `${(zoomLevel * 100) / fps}px` : '0px',
           '--timeline-pixels-per-second': `${zoomLevel * 100}px`,
         } as React.CSSProperties}

@@ -2465,8 +2465,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             zIndex: isBeingDragged ? 50 : undefined,
             transition: isBeingDragged ? 'none' : undefined,
             contain: 'layout style paint',
-            contentVisibility: 'auto',
-            containIntrinsicSize: `0 ${DEFAULT_TRACK_HEIGHT}px`,
             '--timeline-audio-volume-line-y': `${
               item.type === 'audio' && audioVolumeEdit !== null
                 ? (getAudioVolumeLineY(audioVolumePreviewRef.current, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) / AUDIO_ENVELOPE_VIEWBOX_HEIGHT) * 100

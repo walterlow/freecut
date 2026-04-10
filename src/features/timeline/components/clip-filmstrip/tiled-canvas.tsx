@@ -133,11 +133,7 @@ export const TiledCanvas = memo(function TiledCanvas({
     <div
       ref={containerRef}
       className={`absolute inset-0 ${className}`}
-      style={{
-        pointerEvents: 'none',
-        width: `${width}px`,
-        height: `${height}px`,
-      }}
+      style={{ pointerEvents: 'none' }}
     />
   );
 });
