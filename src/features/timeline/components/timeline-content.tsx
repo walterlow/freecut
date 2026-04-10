@@ -518,8 +518,15 @@ export const TimelineContent = memo(function TimelineContent({
       return;
     }
 
-    // Deselect items and markers if NOT clicking on a timeline item
+    // Don't deselect if clicking inside a context menu portal (Radix renders
+    // menus in a portal outside the timeline DOM, but React synthetic events
+    // still bubble through the component tree)
     const target = e.target as HTMLElement;
+    if (target.closest('[role="menu"]')) {
+      return;
+    }
+
+    // Deselect items and markers if NOT clicking on a timeline item
     const clickedOnItem = target.closest('[data-item-id]');
 
     if (!clickedOnItem) {
