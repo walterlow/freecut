@@ -59,6 +59,7 @@ export interface GeneratedCaptionSource {
 export type VideoItem = BaseTimelineItem & {
   type: 'video';
   src: string;
+  audioSrc?: string; // Optional source used for audio playback when visuals use a silent proxy
   thumbnailUrl?: string;
   offset?: number; // Trim offset in source video
   embeddedAudioMuted?: boolean; // Suppress embedded audio after unlinking from audio companion

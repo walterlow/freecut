@@ -138,8 +138,12 @@ export async function resolveMediaUrls(
           if (useProxy && item.type === 'video') {
             const proxyUrl = resolveProxyUrl(item.mediaId!);
             item.src = proxyUrl || blobUrl;
+            item.audioSrc = blobUrl;
           } else {
             item.src = blobUrl;
+            if (item.type === 'video') {
+              item.audioSrc = blobUrl;
+            }
           }
         });
         resolutionPromises.push(promise);
@@ -166,4 +170,3 @@ export function cleanupBlobUrls(): void {
   blobUrlManager.releaseAll();
   pendingRequests.clear();
 }
-

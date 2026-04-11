@@ -21,7 +21,7 @@ const PROXY_HEIGHT = 720;
 export interface ProxyGenerateRequest {
   type: 'generate';
   mediaId: string; // proxyKey (kept as mediaId for message compatibility)
-  blobUrl: string;
+  source: Blob;
   sourceWidth: number;
   sourceHeight: number;
 }
@@ -116,11 +116,11 @@ function calculateProxyDimensions(sourceWidth: number, sourceHeight: number): { 
  * Generate a 720p proxy video via mediabunny Conversion
  */
 async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
-  const { mediaId, blobUrl, sourceWidth, sourceHeight } = request;
+  const { mediaId, source, sourceWidth, sourceHeight } = request;
 
   const {
-    Input, UrlSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
-    QUALITY_LOW, MP4, WEBM, MATROSKA,
+    Input, BlobSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
+    QUALITY_LOW, MP4, QTFF, WEBM, MATROSKA,
   } = await loadMediabunny();
 
   const dir = await getProxyDir(mediaId);
@@ -139,8 +139,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   });
 
   const input = new Input({
-    source: new UrlSource(blobUrl),
-    formats: [MP4, WEBM, MATROSKA],
+    source: new BlobSource(source),
+    formats: [MP4, QTFF, WEBM, MATROSKA],
   });
 
   let conversion: ConversionType | null = null;

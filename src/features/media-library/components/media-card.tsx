@@ -203,11 +203,11 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     e.preventDefault();
     e.stopPropagation();
     try {
-      const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-      if (blobUrl) {
+      const source = await mediaLibraryService.getMediaFile(media.id);
+      if (source) {
         const proxyKey = getSharedProxyKey(media);
         proxyService.setProxyKey(media.id, proxyKey);
-        proxyService.generateProxy(media.id, blobUrl, media.width, media.height, proxyKey);
+        proxyService.generateProxy(media.id, source, media.width, media.height, proxyKey);
       }
     } catch {
       useMediaLibraryStore.getState().setProxyStatus(media.id, 'error');

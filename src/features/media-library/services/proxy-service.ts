@@ -77,7 +77,6 @@ type ProxyStatusListener = (
 
 class ProxyService {
   private proxyBlobUrlByKey = new Map<string, string>();
-  private sourceBlobUrlByProxyKey = new Map<string, string>();
   private proxyKeyByMediaId = new Map<string, string>();
   private mediaIdsByProxyKey = new Map<string, Set<string>>();
   private progressByProxyKey = new Map<string, number>();
@@ -187,7 +186,7 @@ class ProxyService {
    */
   generateProxy(
     mediaId: string,
-    blobUrl: string,
+    source: Blob,
     sourceWidth: number,
     sourceHeight: number,
     proxyKey?: string
@@ -211,12 +210,6 @@ class ProxyService {
       return;
     }
 
-    const previousSourceBlobUrl = this.sourceBlobUrlByProxyKey.get(resolvedProxyKey);
-    if (previousSourceBlobUrl && previousSourceBlobUrl !== blobUrl) {
-      revokeRegisteredObjectUrl(previousSourceBlobUrl);
-    }
-    this.sourceBlobUrlByProxyKey.set(resolvedProxyKey, blobUrl);
-
     this.generatingProxyKeys.add(resolvedProxyKey);
     this.progressByProxyKey.set(resolvedProxyKey, 0);
     this.emitStatusForProxyKey(resolvedProxyKey, 'generating', 0);
@@ -225,7 +218,7 @@ class ProxyService {
     worker.postMessage({
       type: 'generate',
       mediaId: resolvedProxyKey,
-      blobUrl,
+      source,
       sourceWidth,
       sourceHeight,
     } as ProxyWorkerRequest);
@@ -271,12 +264,11 @@ class ProxyService {
 
     // Cancel if generating
     this.cancelProxy(mediaId, resolvedProxyKey);
-    this.revokeTrackedSourceBlobUrl(resolvedProxyKey);
 
     // Revoke blob URL
     const url = this.proxyBlobUrlByKey.get(resolvedProxyKey);
     if (url) {
-      URL.revokeObjectURL(url);
+      revokeRegisteredObjectUrl(url);
       this.proxyBlobUrlByKey.delete(resolvedProxyKey);
     }
 
@@ -394,7 +386,6 @@ class ProxyService {
       case 'complete': {
         this.generatingProxyKeys.delete(proxyKey);
         this.progressByProxyKey.delete(proxyKey);
-        this.revokeTrackedSourceBlobUrl(proxyKey);
         // Load the completed proxy from OPFS
         void this.loadCompletedProxy(proxyKey);
         break;
@@ -403,7 +394,6 @@ class ProxyService {
       case 'error': {
         this.generatingProxyKeys.delete(proxyKey);
         this.progressByProxyKey.delete(proxyKey);
-        this.revokeTrackedSourceBlobUrl(proxyKey);
         logger.error(`Proxy generation failed for ${proxyKey}:`, message.error);
         this.emitStatusForProxyKey(proxyKey, 'error');
         break;
@@ -516,16 +506,6 @@ class ProxyService {
     }
 
     return refreshed;
-  }
-
-  private revokeTrackedSourceBlobUrl(proxyKey: string): void {
-    const sourceBlobUrl = this.sourceBlobUrlByProxyKey.get(proxyKey);
-    if (!sourceBlobUrl) {
-      return;
-    }
-
-    revokeRegisteredObjectUrl(sourceBlobUrl);
-    this.sourceBlobUrlByProxyKey.delete(proxyKey);
   }
 
   private resolveProxyKey(mediaId: string, explicitProxyKey?: string): string {

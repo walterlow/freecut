@@ -63,11 +63,11 @@ function getProxyEligibleVideoItems(mediaItems: MediaMetadata[]): MediaMetadata[
 }
 
 async function regenerateStaleProxies(videoItems: MediaMetadata[]): Promise<void> {
-  const blobUrlResults = await Promise.allSettled(
-    videoItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
+  const sourceResults = await Promise.allSettled(
+    videoItems.map((item) => mediaLibraryService.getMediaFile(item.id))
   );
 
-  blobUrlResults.forEach((result, index) => {
+  sourceResults.forEach((result, index) => {
     const item = videoItems[index];
     if (!item) {
       return;
@@ -78,16 +78,16 @@ async function regenerateStaleProxies(videoItems: MediaMetadata[]): Promise<void
       return;
     }
 
-    const blobUrl = result.value;
-    if (!blobUrl) {
-      logger.warn(`[MediaLibraryStore] Missing source blob URL for stale proxy ${item.id}`);
+    const source = result.value;
+    if (!source) {
+      logger.warn(`[MediaLibraryStore] Missing source blob for stale proxy ${item.id}`);
       return;
     }
 
     try {
       proxyService.generateProxy(
         item.id,
-        blobUrl,
+        source,
         item.width,
         item.height,
         getSharedProxyKey(item)

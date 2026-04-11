@@ -83,6 +83,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const playbackRate = useClockPlaybackRate();
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const poolRef = useRef(getGlobalVideoSourcePool());
   const poolClipIdRef = useRef<string>(`source-monitor-${++sourceMonitorVideoInstanceCounter}`);
   const decoderPoolRef = useRef(getSourceMonitorDecoderPool());
@@ -255,8 +256,8 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     const video = pool.acquireForClip(clipId, activeSrc);
     if (!video) return;
 
-    video.muted = false;
-    video.volume = 1;
+    video.muted = true;
+    video.volume = 0;
     video.playsInline = true;
     video.style.width = '100%';
     video.style.height = '100%';
@@ -336,6 +337,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
 
   const syncSourceFrame = useCallback((frame: number) => {
     const video = videoRef.current;
+    const audio = audioRef.current;
     const targetTime = frame / fps;
     latestTargetTimeRef.current = targetTime;
 
@@ -348,17 +350,40 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       }
     }
 
-    if (!video || !activeSrc) return;
+    const syncAudioTime = () => {
+      if (!audio || !src || audio.readyState < 1) {
+        return;
+      }
+
+      if (playingRef.current) {
+        if (!shouldResyncPlayingMedia(audio.currentTime, targetTime, fps)) {
+          return;
+        }
+      }
+
+      try {
+        audio.currentTime = targetTime;
+      } catch {
+        // Ignore seek errors while media is loading
+      }
+    };
+
+    if (!video || !activeSrc) {
+      syncAudioTime();
+      return;
+    }
 
     const canSeek = video.readyState >= 1;
     if (!canSeek) return;
 
     if (!playingRef.current && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek) {
+      syncAudioTime();
       return;
     }
 
     if (playingRef.current) {
       if (!shouldResyncPlayingMedia(video.currentTime, targetTime, fps)) {
+        syncAudioTime();
         return;
       }
       try {
@@ -366,6 +391,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       } catch {
         // Ignore seek errors while media is loading
       }
+      syncAudioTime();
       return;
     }
 
@@ -374,7 +400,9 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     } catch {
       // Ignore seek errors while media is loading
     }
-  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, strictDecodeReady, useLegacyPausedSeek]);
+
+    syncAudioTime();
+  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, src, strictDecodeReady, useLegacyPausedSeek]);
 
   useEffect(() => {
     syncSourceFrame(clock.currentFrame);
@@ -407,6 +435,25 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
   }, [activeSrc, playbackRate, playing]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !src) return;
+
+    if (playing) {
+      audio.playbackRate = playbackRate;
+      if (audio.readyState >= 1) {
+        try {
+          audio.currentTime = latestTargetTimeRef.current;
+        } catch {
+          // Ignore seek errors while media is loading
+        }
+      }
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [playbackRate, playing, src]);
+
   const showDecodedCanvas = !playing && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek;
 
   return (
@@ -428,6 +475,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
           display: showDecodedCanvas ? 'block' : 'none',
         }}
       />
+      <audio ref={audioRef} src={src} preload="auto" style={{ display: 'none' }} />
     </AbsoluteFill>
   );
 }

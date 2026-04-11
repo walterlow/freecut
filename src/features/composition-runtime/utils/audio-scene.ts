@@ -85,6 +85,14 @@ interface ClipAudioExtension {
   fadeOutLead: number;
 }
 
+function getAudioPlaybackSrc(item: TransitionAudioItem): string {
+  if (item.type === 'video') {
+    return item.audioSrc ?? item.src;
+  }
+
+  return item.src;
+}
+
 function buildClipFadeSpan(params: {
   startFrame: number;
   durationInFrames: number;
@@ -344,7 +352,7 @@ export function buildTransitionVideoAudioSegments(
   for (const window of resolvedWindows) {
     const left = window.leftClip;
     const right = window.rightClip;
-    if (!left.src || !right.src) continue;
+    if (!getAudioPlaybackSrc(left) || !getAudioPlaybackSrc(right)) continue;
     if (isContinuousAudioBoundary(left, right, fps)) continue;
 
     const rightPreRoll = Math.max(0, right.from - window.startFrame);
@@ -378,7 +386,8 @@ export function buildTransitionVideoAudioSegments(
   const expandedSegments: ExpandedVideoAudioSegment[] = [];
 
   for (const item of sortedItems) {
-    if (!item.src) continue;
+    const audioSrc = getAudioPlaybackSrc(item);
+    if (!audioSrc) continue;
 
     const playbackRate = item.speed ?? 1;
     const itemSourceFps = item.sourceFps ?? fps;
@@ -401,7 +410,7 @@ export function buildTransitionVideoAudioSegments(
       itemId: item.id,
       mediaId: item.mediaId,
       clip: item,
-      src: item.src,
+      src: audioSrc,
       from: item.from - before,
       durationInFrames: item.durationInFrames + before + after,
       trimBefore: Math.max(0, baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)),

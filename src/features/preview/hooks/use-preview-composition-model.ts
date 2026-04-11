@@ -235,13 +235,14 @@ export function buildPreviewCompositionData({
         : sourceUrl;
       const resolvedSrc = useProxy && item.type === 'video' ? proxyUrl : sourceUrl;
       const fastScrubSrc = item.type === 'video' ? proxyUrl : sourceUrl;
+      const hasMatchingAudioSrc = item.type !== 'video' || item.audioSrc === sourceUrl;
 
-      const resolvedItem = ('src' in item && item.src === resolvedSrc)
+      const resolvedItem = ('src' in item && item.src === resolvedSrc && hasMatchingAudioSrc)
         ? item
-        : { ...item, src: resolvedSrc };
-      const fastScrubItem = ('src' in item && item.src === fastScrubSrc)
+        : { ...item, src: resolvedSrc, ...(item.type === 'video' ? { audioSrc: sourceUrl } : {}) };
+      const fastScrubItem = ('src' in item && item.src === fastScrubSrc && hasMatchingAudioSrc)
         ? item
-        : { ...item, src: fastScrubSrc };
+        : { ...item, src: fastScrubSrc, ...(item.type === 'video' ? { audioSrc: sourceUrl } : {}) };
 
       resolvedItems.push(resolvedItem);
       fastScrubItems.push(fastScrubItem);

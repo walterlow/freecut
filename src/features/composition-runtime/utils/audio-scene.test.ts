@@ -120,13 +120,43 @@ describe('audio scene', () => {
         itemId: 'video-1',
         from: 0,
         durationInFrames: 30,
+        src: 'video.mp4',
         crossfadeFadeOut: 10,
       }),
       expect.objectContaining({
         itemId: 'video-2',
         from: 20,
         durationInFrames: 30,
+        src: 'video-2.mp4',
         crossfadeFadeIn: 10,
+      }),
+    ]);
+  });
+
+  it('uses original audio sources for video-backed audio segments when proxies are active', () => {
+    const segments = buildTransitionVideoAudioSegments([
+      {
+        id: 'video-1',
+        type: 'video',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        src: 'proxy://video-1',
+        audioSrc: 'blob://video-1',
+        label: 'Video 1',
+        mediaId: 'media-1',
+        sourceStart: 0,
+        sourceFps: 30,
+        muted: false,
+        trackVolumeDb: 0,
+        trackVisible: true,
+      },
+    ], [], 30);
+
+    expect(segments).toEqual([
+      expect.objectContaining({
+        itemId: 'video-1',
+        src: 'blob://video-1',
       }),
     ]);
   });

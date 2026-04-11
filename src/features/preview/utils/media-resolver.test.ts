@@ -213,8 +213,51 @@ describe('resolveMediaUrls', () => {
 
     // Video item should have src resolved
     expect((resolved[0]!.items[0]! as VideoItem).src).toMatch(/^blob:test-/);
+    expect((resolved[0]!.items[0]! as VideoItem).audioSrc).toMatch(/^blob:test-/);
     // Text item should be unchanged (no mediaId)
     expect('src' in resolved[0]!.items[1]!).toBe(false);
+  });
+
+  it('keeps video audio on the original source when proxy playback is enabled', async () => {
+    const { proxyService } = await import('@/features/media-library/services/proxy-service');
+    (mediaLibraryService.getMedia as Mock).mockResolvedValue({
+      id: 'media-1',
+      fileName: 'video.mp4',
+    });
+    (mediaLibraryService.getMediaFile as Mock).mockResolvedValue(
+      new Blob(['data'])
+    );
+    (proxyService.getProxyBlobUrl as Mock).mockReturnValue('proxy://video');
+
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-1',
+        name: 'Track 1',
+        height: 40,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [
+          {
+            id: 'item-1',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 30,
+            mediaId: 'media-1',
+            src: '',
+            label: 'clip',
+          },
+        ],
+      },
+    ];
+
+    const resolved = await resolveMediaUrls(tracks, { useProxy: true });
+    const resolvedVideo = resolved[0]!.items[0]! as VideoItem;
+    expect(resolvedVideo.src).toBe('proxy://video');
+    expect(resolvedVideo.audioSrc).toMatch(/^blob:test-/);
   });
 
   it('does not mutate original tracks', async () => {
@@ -313,4 +356,3 @@ describe('relinking regression', () => {
     expect(relinkedUrl).not.toBe(originalUrl);
   });
 });
-

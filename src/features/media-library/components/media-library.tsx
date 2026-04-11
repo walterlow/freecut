@@ -461,15 +461,15 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         && proxyStatus.get(m.id) !== 'ready'
         && proxyStatus.get(m.id) !== 'generating'
       );
-    const urls = await Promise.all(
-      selectedItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
+    const sources = await Promise.all(
+      selectedItems.map((item) => mediaLibraryService.getMediaFile(item.id))
     );
     selectedItems.forEach((item, i) => {
-      const blobUrl = urls[i];
-      if (blobUrl) {
+      const source = sources[i];
+      if (source) {
         const proxyKey = getSharedProxyKey(item);
         proxyService.setProxyKey(item.id, proxyKey);
-        proxyService.generateProxy(item.id, blobUrl, item.width, item.height, proxyKey);
+        proxyService.generateProxy(item.id, source, item.width, item.height, proxyKey);
       }
     });
   };

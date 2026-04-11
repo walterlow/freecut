@@ -51,6 +51,14 @@ describe('buildPreviewCompositionData', () => {
       { frame: 70, srcs: ['proxy://video'] },
     ]);
     expect(result.totalFrames).toBe(220);
+    const playbackVideoItem = result.inputProps.tracks[0]?.items[0];
+    const scrubVideoItem = result.fastScrubInputProps.tracks[0]?.items[0];
+    expect(playbackVideoItem?.type).toBe('video');
+    expect(scrubVideoItem?.type).toBe('video');
+    if (playbackVideoItem?.type === 'video' && scrubVideoItem?.type === 'video') {
+      expect(playbackVideoItem.audioSrc).toBe('blob://video');
+      expect(scrubVideoItem.audioSrc).toBe('blob://video');
+    }
   });
 
   it('falls back to default duration for empty timelines', () => {
