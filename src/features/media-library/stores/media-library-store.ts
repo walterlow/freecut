@@ -164,6 +164,8 @@ export const useMediaLibraryStore = create<
       transcriptStatus: new Map(),
       transcriptProgress: new Map(),
 
+      // AI tagging
+      taggingMediaIds: new Set(),
 
       // v3: Set current project context
       setCurrentProject: (projectId: string | null) => {
@@ -184,6 +186,7 @@ export const useMediaLibraryStore = create<
           proxyProgress: new Map(),
           transcriptStatus: new Map(),
           transcriptProgress: new Map(),
+          taggingMediaIds: new Set(),
         });
         // Note: loadMediaItems is triggered by the component's useEffect
         // Don't call it here to avoid double loading
@@ -382,6 +385,28 @@ export const useMediaLibraryStore = create<
           return { transcriptProgress };
         });
       },
+
+      // AI tagging
+      setTaggingMedia: (mediaId, active) => {
+        set((state) => {
+          const taggingMediaIds = new Set(state.taggingMediaIds);
+          if (active) {
+            taggingMediaIds.add(mediaId);
+          } else {
+            taggingMediaIds.delete(mediaId);
+          }
+          return { taggingMediaIds };
+        });
+      },
+
+      updateMediaCaptions: (mediaId, captions) => {
+        set((state) => {
+          const mediaItems = state.mediaItems.map((item) =>
+            item.id === mediaId ? { ...item, aiCaptions: captions, updatedAt: Date.now() } : item
+          );
+          return { mediaItems };
+        });
+      },
     }),
     {
       name: 'MediaLibraryStore',
@@ -416,12 +441,13 @@ export const useFilteredMediaItems = () => {
   const filterByType = useMediaLibraryStore((s) => s.filterByType);
   const sortBy = useMediaLibraryStore((s) => s.sortBy);
 
-  // Filter by search query
+  // Filter by search query (matches filename and AI-generated captions)
   let filtered = mediaItems;
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
     filtered = filtered.filter((item) =>
-      item.fileName.toLowerCase().includes(query)
+      item.fileName.toLowerCase().includes(query) ||
+      item.aiCaptions?.some((c) => c.text.toLowerCase().includes(query))
     );
   }
 

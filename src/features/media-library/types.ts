@@ -92,6 +92,8 @@ export interface MediaLibraryState {
   transcriptStatus: Map<string, MediaTranscriptStatus>;
   transcriptProgress: Map<string, MediaTranscriptProgress>;
 
+  // AI tagging
+  taggingMediaIds: Set<string>;
 }
 
 export interface MediaLibraryActions {
@@ -180,4 +182,8 @@ export interface MediaLibraryActions {
   setTranscriptStatus: (mediaId: string, status: MediaTranscriptStatus) => void;
   setTranscriptProgress: (mediaId: string, progress: MediaTranscriptProgress) => void;
   clearTranscriptProgress: (mediaId: string) => void;
+
+  // AI captioning
+  setTaggingMedia: (mediaId: string, active: boolean) => void;
+  updateMediaCaptions: (mediaId: string, captions: Array<{ timeSec: number; text: string }>) => void;
 }

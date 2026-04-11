@@ -5,3 +5,5 @@
 
 export { detectScenes, clearSceneCache } from '@/lib/analysis';
 export type { SceneCut, SceneDetectionProgress, VerificationModel } from '@/lib/analysis';
+export { captionVideo, captionImage } from '@/lib/analysis';
+export type { MediaCaption, CaptioningProgress, CaptioningOptions } from '@/lib/analysis';

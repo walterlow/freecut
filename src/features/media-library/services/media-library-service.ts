@@ -838,6 +838,16 @@ class MediaLibraryService {
   }
 
   /**
+   * Update AI-generated captions for a media item.
+   */
+  async updateMediaCaptions(
+    mediaId: string,
+    captions: Array<{ timeSec: number; text: string }>,
+  ): Promise<MediaMetadata> {
+    return updateMediaDB(mediaId, { aiCaptions: captions });
+  }
+
+  /**
    * Get media file as blob URL (for preview/playback)
    */
   async getMediaBlobUrl(id: string): Promise<string | null> {

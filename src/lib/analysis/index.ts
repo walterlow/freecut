@@ -5,4 +5,6 @@ export type { SceneCut, SceneDetectionProgress, DetectScenesOptions, Verificatio
 export { detectScenesHistogram, computeHistogram, chiSquaredDistance } from './histogram-scene-detection';
 export type { HistogramDetectOptions } from './histogram-scene-detection';
 export { seekVideo, deduplicateCuts } from './scene-detection-utils';
+export { captionVideo, captionImage } from './media-tagger';
+export type { MediaCaption, CaptioningProgress, CaptioningOptions } from './media-tagger';
 export { ANALYSIS_WIDTH, ANALYSIS_HEIGHT, PYRAMID_LEVELS } from './optical-flow-shaders';

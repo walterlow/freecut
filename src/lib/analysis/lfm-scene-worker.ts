@@ -8,9 +8,11 @@
  * Messages:
  *   → { type: 'init' }                         — preload model
  *   → { type: 'verify', id, before, after }     — verify a candidate cut
+ *   → { type: 'describe', id, image }           — describe an image with tags
  *   ← { type: 'ready' }                         — model loaded
  *   ← { type: 'progress', stage, percent }       — loading progress
  *   ← { type: 'result', id, isSceneCut, reason } — verification result
+ *   ← { type: 'caption', id, caption }             — image caption
  *   ← { type: 'error', message }                 — error
  */
 
@@ -157,7 +159,7 @@ async function verifyCandidate(
 
     post({ type: 'debug', id, prompt: typeof prompt === 'string' ? prompt.slice(0, 500) : 'non-string prompt' });
 
-    const inputs = await processor(stitched, prompt);
+    const inputs = await processor(stitched, prompt, { add_special_tokens: false });
 
     post({
       type: 'debug',
@@ -190,6 +192,52 @@ async function verifyCandidate(
   }
 }
 
+const DESCRIBE_PROMPT = 'Describe the scene in one sentence.';
+
+async function describeImage(id: number, imageBlob: Blob): Promise<void> {
+  if (!model || !processor) {
+    post({ type: 'error', message: 'Model not loaded' });
+    return;
+  }
+
+  try {
+    const image = await RawImage.fromBlob(imageBlob);
+
+    const messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'image' },
+          { type: 'text', text: DESCRIBE_PROMPT },
+        ],
+      },
+    ];
+
+    const prompt = processor.apply_chat_template(messages, {
+      add_generation_prompt: true,
+    });
+
+    const inputs = await processor(image, prompt, { add_special_tokens: false });
+
+    const outputs = await model.generate({
+      ...inputs,
+      max_new_tokens: 128,
+      do_sample: false,
+      repetition_penalty: 1.05,
+    });
+
+    const decoded = processor.batch_decode(
+      outputs.slice(null, [inputs.input_ids.dims.at(-1), null]),
+      { skip_special_tokens: true },
+    );
+
+    const caption = (decoded[0] ?? '').trim();
+    post({ type: 'caption', id, caption });
+  } catch (err) {
+    post({ type: 'caption', id, caption: '', error: (err as Error).message });
+  }
+}
+
 /** Release model and processor to free VRAM. */
 function dispose(): void {
   disposed = true;
@@ -211,6 +259,8 @@ self.addEventListener('message', (event: MessageEvent) => {
     void loadModel();
   } else if (msg.type === 'verify') {
     void verifyCandidate(msg.id, msg.before, msg.after);
+  } else if (msg.type === 'describe') {
+    void describeImage(msg.id, msg.image);
   } else if (msg.type === 'dispose') {
     dispose();
   }

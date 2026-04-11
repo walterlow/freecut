@@ -1,16 +1,24 @@
-import { Info, Video, FileAudio, Image as ImageIcon, Film, Clock, Maximize2, HardDrive, FileType } from 'lucide-react';
+import { Info, Video, FileAudio, Image as ImageIcon, Film, Clock, Maximize2, HardDrive, FileType, Sparkles } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { MediaMetadata } from '@/types/storage';
 import { getMediaType, formatDuration } from '../utils/validation';
 import { formatBytes } from '@/utils/format-utils';
 
+function formatTimestamp(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 interface MediaInfoPopoverProps {
   media: MediaMetadata;
   /** Tailwind classes for the trigger button */
   triggerClassName?: string;
+  /** Called when user clicks a caption timestamp to open source monitor at that time */
+  onSeekToCaption?: (timeSec: number) => void;
 }
 
-export function MediaInfoPopover({ media, triggerClassName }: MediaInfoPopoverProps) {
+export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: MediaInfoPopoverProps) {
   const mediaType = getMediaType(media.mimeType);
   const typeLabel = mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Audio' : 'Image';
 
@@ -77,6 +85,33 @@ export function MediaInfoPopover({ media, triggerClassName }: MediaInfoPopoverPr
             </div>
           ))}
         </div>
+
+        {/* AI Captions section */}
+        {media.aiCaptions && media.aiCaptions.length > 0 && (
+          <div className="border-t border-border/50">
+            <div className="flex items-center gap-1.5 px-3 py-1.5">
+              <Sparkles className="w-3 h-3 text-purple-400" />
+              <span className="text-[10px] font-medium text-muted-foreground">
+                AI Captions ({media.aiCaptions.length})
+              </span>
+            </div>
+            <div className="px-3 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
+              {media.aiCaptions.map((caption, i) => (
+                <div key={i} className="flex gap-2 text-[10px]">
+                  <button
+                    type="button"
+                    className="text-primary/80 hover:text-primary font-mono flex-shrink-0 w-10 text-right cursor-pointer hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onSeekToCaption?.(caption.timeSec); }}
+                    title="Open in source monitor"
+                  >
+                    {formatTimestamp(caption.timeSec)}
+                  </button>
+                  <span className="text-foreground leading-snug">{caption.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

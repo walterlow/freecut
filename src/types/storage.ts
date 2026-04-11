@@ -67,6 +67,8 @@ export interface MediaMetadata {
   gopInterval?: number;
   thumbnailId?: string;
   tags: string[];
+  /** AI-generated timestamped captions from LFM vision-language model. */
+  aiCaptions?: Array<{ timeSec: number; text: string }>;
   createdAt: number;
   updatedAt: number;
 }
