@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import {
   CheckCircle2,
   Download,
@@ -23,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
+import { getMusicgenModelDefinition } from '@/shared/utils/musicgen-models';
 import { SliderInput } from '@/shared/ui/property-controls';
 import {
   importMediaLibraryService,
@@ -43,22 +53,45 @@ import {
   kittenTtsService,
   type KittenTtsVoice,
 } from '../services/kitten-tts-service';
+import {
+  DEFAULT_MUSICGEN_MODEL,
+  MUSICGEN_MODEL_OPTIONS,
+  musicgenService,
+  type MusicgenModelId,
+} from '../services/musicgen-service';
 
 const DEFAULT_PROMPT = 'Welcome to free cut. This voice was generated locally in the browser with WebGPU.';
 
-interface Generation {
+const MUSIC_PROMPT_PRESETS = [
+  { label: 'Lo-fi Chill', prompt: 'Warm lo-fi beat with dusty drums, mellow bass, and a dreamy synth lead' },
+  { label: '80s Pop', prompt: '80s pop track with bassy drums and synth' },
+  { label: '90s Rock', prompt: '90s rock song with loud guitars and heavy drums' },
+  { label: 'Upbeat EDM', prompt: 'A light and cheery EDM track, with syncopated drums, airy pads, and strong emotions bpm: 130' },
+  { label: 'Country', prompt: 'A cheerful country song with acoustic guitars' },
+  { label: 'Lo-fi Electro', prompt: 'Lofi slow bpm electro chill with organic samples' },
+];
+
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+const DEFAULT_MUSIC_PROMPT = MUSIC_PROMPT_PRESETS[0]!.prompt;
+
+interface AudioGeneration {
   id: string;
   file: File;
   objectUrl: string;
   byteSize: number;
   duration: number;
   textSnippet: string;
-  voice: KittenTtsVoice;
+  voice: string;
   model: string;
+  summary: string;
+  details: string;
+  tags: string[];
   /** null = unsaved, string = saved media ID */
   savedMediaId: string | null;
   saving: boolean;
 }
+
+type Generation = AudioGeneration;
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -209,7 +242,7 @@ function insertAudioItemAtPlayhead(media: MediaMetadata, blobUrl: string): boole
 
   addItem(audioItem);
 
-  // addItem may silently drop the item if placement fails — verify it landed
+  // addItem may silently drop the item if placement fails; verify it landed.
   const added = useTimelineStore.getState().items.some((i) => i.id === audioItem.id);
   if (added) {
     selectItems([audioItem.id]);
@@ -223,17 +256,37 @@ export const AiPanel = memo(function AiPanel() {
   const selectMedia = useMediaLibraryStore((state) => state.selectMedia);
   const showNotification = useMediaLibraryStore((state) => state.showNotification);
 
-  const [text, setText] = useState(DEFAULT_PROMPT);
-  const [voice, setVoice] = useState<KittenTtsVoice>('Bella');
-  const [model, setModel] = useState<'nano' | 'micro' | 'mini'>('mini');
-  const [speed, setSpeed] = useState(1.25);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [generations, setGenerations] = useState<Generation[]>([]);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const [ttsText, setTtsText] = useState(DEFAULT_PROMPT);
+  const [ttsVoice, setTtsVoice] = useState<KittenTtsVoice>('Bella');
+  const [ttsModel, setTtsModel] = useState<'nano' | 'micro' | 'mini'>('mini');
+  const [ttsSpeed, setTtsSpeed] = useState(1.25);
+  const [isTtsGenerating, setIsTtsGenerating] = useState(false);
+  const [ttsProgress, setTtsProgress] = useState<string | null>(null);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const [ttsGenerations, setTtsGenerations] = useState<AudioGeneration[]>([]);
+  const [ttsInfoOpen, setTtsInfoOpen] = useState(false);
 
+  const [musicPrompt, setMusicPrompt] = useState(DEFAULT_MUSIC_PROMPT);
+  const [musicModel] = useState<MusicgenModelId>(DEFAULT_MUSICGEN_MODEL);
+  const currentMusicModel = useMemo(() => getMusicgenModelDefinition(musicModel), [musicModel]);
+  const [musicDuration, setMusicDuration] = useState(currentMusicModel.defaultDurationSeconds);
+  const [isMusicGenerating, setIsMusicGenerating] = useState(false);
+  const [musicProgress, setMusicProgress] = useState<string | null>(null);
+  const [musicError, setMusicError] = useState<string | null>(null);
+  const [musicGenerations, setMusicGenerations] = useState<AudioGeneration[]>([]);
+  const [musicProgressPct, setMusicProgressPct] = useState<number | null>(null);
+  const [musicInfoOpen, setMusicInfoOpen] = useState(false);
+
+  const musicAbortRef = useRef<AbortController | null>(null);
   const generationUrlsRef = useRef<Set<string>>(new Set());
+
+  // Revoke all blob URLs on unmount
+  useEffect(() => {
+    setMusicDuration((previous) => Math.min(
+      currentMusicModel.maxDurationSeconds,
+      Math.max(currentMusicModel.minDurationSeconds, previous),
+    ));
+  }, [currentMusicModel.maxDurationSeconds, currentMusicModel.minDurationSeconds]);
 
   // Revoke all blob URLs on unmount
   useEffect(() => {
@@ -245,101 +298,217 @@ export const AiPanel = memo(function AiPanel() {
     };
   }, []);
 
-  const isWebGpuSupported = kittenTtsService.isSupported();
-  const trimmedText = text.trim();
-  const recommendedLength = trimmedText.length <= 500;
+  const isTtsSupported = kittenTtsService.isSupported();
+  const isMusicSupported = musicgenService.isSupported();
+  const trimmedTtsText = ttsText.trim();
+  const trimmedMusicPrompt = musicPrompt.trim();
+  const recommendedLength = trimmedTtsText.length <= 500;
 
-  const totalBytes = useMemo(
-    () => generations.reduce((sum, g) => sum + g.byteSize, 0),
-    [generations]
+  const totalTtsBytes = useMemo(
+    () => ttsGenerations.reduce((sum, generation) => sum + generation.byteSize, 0),
+    [ttsGenerations]
   );
 
-  const anySaving = generations.some((g) => g.saving);
+  const totalMusicBytes = useMemo(
+    () => musicGenerations.reduce((sum, generation) => sum + generation.byteSize, 0),
+    [musicGenerations]
+  );
+
+  const anyTtsSaving = ttsGenerations.some((generation) => generation.saving);
+  const anyMusicSaving = musicGenerations.some((generation) => generation.saving);
+  const text = ttsText;
+  const setText = setTtsText;
+  const model = ttsModel;
+  const setModel = setTtsModel;
+  const voice = ttsVoice;
+  const setVoice = setTtsVoice;
+  const speed = ttsSpeed;
+  const setSpeed = setTtsSpeed;
+  const isGenerating = isTtsGenerating;
+  const progress = ttsProgress;
+  const error = ttsError;
+  const generations = ttsGenerations;
+  const totalBytes = totalTtsBytes;
+  const anySaving = anyTtsSaving;
+  const trimmedText = trimmedTtsText;
+  const isWebGpuSupported = isTtsSupported;
 
   // --- actions ---
 
-  const handleGenerate = useCallback(async () => {
+  const handleTtsGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setError('Open a project before generating audio.');
+      setTtsError('Open a project before generating audio.');
       return;
     }
-    if (!trimmedText) {
-      setError('Enter some text to synthesize.');
+    if (!trimmedTtsText) {
+      setTtsError('Enter some text to synthesize.');
       return;
     }
-    if (!isWebGpuSupported) {
-      setError('WebGPU is required for Kitten TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
+    if (!isTtsSupported) {
+      setTtsError('WebGPU is required for Kitten TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
       return;
     }
 
-    setError(null);
-    setIsGenerating(true);
-    setProgress('Preparing local TTS...');
+    setTtsError(null);
+    setIsTtsGenerating(true);
+    setTtsProgress('Preparing local TTS...');
 
     try {
       const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
-        text: trimmedText,
-        voice,
-        speed,
-        model,
-        onProgress: setProgress,
+        text: trimmedTtsText,
+        voice: ttsVoice,
+        speed: ttsSpeed,
+        model: ttsModel,
+        onProgress: setTtsProgress,
       });
 
       const objectUrl = URL.createObjectURL(blob);
       generationUrlsRef.current.add(objectUrl);
 
-      const gen: Generation = {
+      const generation: AudioGeneration = {
         id: crypto.randomUUID(),
         file,
         objectUrl,
         byteSize: blob.size,
         duration,
-        textSnippet: trimmedText,
-        voice,
-        model,
+        textSnippet: trimmedTtsText,
+        voice: ttsVoice,
+        model: ttsModel,
+        summary: trimmedTtsText,
+        details: `${ttsVoice} / ${ttsModel} / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        tags: [
+          'ai-generated',
+          'kitten-tts',
+          `kitten-model:${ttsModel}`,
+          `kitten-voice:${ttsVoice.toLowerCase()}`,
+        ],
         savedMediaId: null,
         saving: false,
       };
 
-      setGenerations((prev) => [gen, ...prev]);
-      setProgress(null);
+      setTtsGenerations((prev) => [generation, ...prev]);
+      setTtsProgress(null);
     } catch (generationError) {
-      setError(
+      setTtsError(
         generationError instanceof Error
           ? generationError.message
           : 'Failed to generate speech.'
       );
-      setProgress(null);
+      setTtsProgress(null);
     } finally {
-      setIsGenerating(false);
+      setIsTtsGenerating(false);
     }
-  }, [currentProjectId, trimmedText, isWebGpuSupported, voice, speed, model]);
+  }, [currentProjectId, trimmedTtsText, isTtsSupported, ttsVoice, ttsSpeed, ttsModel]);
 
-  const updateGeneration = useCallback((id: string, patch: Partial<Generation>) => {
-    setGenerations((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  const handleMusicGenerate = useCallback(async () => {
+    if (!currentProjectId) return null;
+    if (!trimmedMusicPrompt) {
+      setMusicError('Describe the music you want to generate.');
+      return null;
+    }
+    if (!isMusicSupported) {
+      setMusicError('WebGPU is required for MusicGen. Try Chrome 113+, Edge 113+, or Safari 26+.');
+      return null;
+    }
+
+    const abortController = new AbortController();
+    musicAbortRef.current = abortController;
+
+    setMusicError(null);
+    setIsMusicGenerating(true);
+    setMusicProgress('Preparing local music generation...');
+    setMusicProgressPct(null);
+
+    try {
+      const { blob, file, duration } = await musicgenService.generateMusicFile({
+        prompt: trimmedMusicPrompt,
+        model: musicModel,
+        durationSeconds: musicDuration,
+        onProgress: (stage, fraction) => {
+          setMusicProgress(stage);
+          setMusicProgressPct(fraction ?? null);
+        },
+        signal: abortController.signal,
+      });
+
+      const objectUrl = URL.createObjectURL(blob);
+      generationUrlsRef.current.add(objectUrl);
+
+      const modelLabel = MUSICGEN_MODEL_OPTIONS.find((option) => option.value === musicModel)?.label ?? musicModel;
+      const generation: AudioGeneration = {
+        id: crypto.randomUUID(),
+        file,
+        objectUrl,
+        byteSize: blob.size,
+        duration,
+        textSnippet: trimmedMusicPrompt,
+        voice: modelLabel,
+        model: `target ${musicDuration}s`,
+        summary: trimmedMusicPrompt,
+        details: `${modelLabel} / target ${musicDuration}s / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        tags: [
+          'ai-generated',
+          'musicgen',
+          `musicgen-model:${musicModel}`,
+          `musicgen-target:${musicDuration}s`,
+        ],
+        savedMediaId: null,
+        saving: false,
+      };
+
+      setMusicGenerations((prev) => [generation, ...prev]);
+    } catch (generationError) {
+      if (generationError instanceof DOMException && generationError.name === 'AbortError') {
+        // Intentional cancellation — no error shown.
+      } else {
+        setMusicError(
+          generationError instanceof Error
+            ? generationError.message
+            : 'Failed to generate music.'
+        );
+      }
+    } finally {
+      musicAbortRef.current = null;
+      setIsMusicGenerating(false);
+      setMusicProgress(null);
+      setMusicProgressPct(null);
+    }
+  }, [currentProjectId, trimmedMusicPrompt, isMusicSupported, musicModel, musicDuration]);
+
+  const handleMusicCancel = useCallback(() => {
+    musicAbortRef.current?.abort();
   }, []);
 
-  const saveGeneration = useCallback(async (gen: Generation): Promise<MediaMetadata | null> => {
+  const updateGenerationInList = useCallback((
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+    id: string,
+    patch: Partial<AudioGeneration>,
+  ) => {
+    setGenerations((prev) => prev.map((generation) => (
+      generation.id === id ? { ...generation, ...patch } : generation
+    )));
+  }, []);
+
+  const saveGeneration = useCallback(async (
+    generation: AudioGeneration,
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+    setError: Dispatch<SetStateAction<string | null>>,
+  ): Promise<MediaMetadata | null> => {
     if (!currentProjectId) return null;
-    updateGeneration(gen.id, { saving: true });
+    updateGenerationInList(setGenerations, generation.id, { saving: true });
 
     try {
       const { mediaLibraryService } = await importMediaLibraryService();
-      const media = await mediaLibraryService.importGeneratedAudio(gen.file, currentProjectId, {
-        tags: [
-          'ai-generated',
-          'kitten-tts',
-          `kitten-model:${gen.model}`,
-          `kitten-voice:${gen.voice.toLowerCase()}`,
-        ],
+      const media = await mediaLibraryService.importGeneratedAudio(generation.file, currentProjectId, {
+        tags: generation.tags,
       });
 
       await loadMediaItems();
       selectMedia([media.id]);
       // Remove from tracked URLs so unmount cleanup won't revoke a URL
       // that may be referenced by a timeline item's src
-      generationUrlsRef.current.delete(gen.objectUrl);
-      updateGeneration(gen.id, { saving: false, savedMediaId: media.id });
+      generationUrlsRef.current.delete(generation.objectUrl);
+      updateGenerationInList(setGenerations, generation.id, { saving: false, savedMediaId: media.id });
       return media;
     } catch (saveError) {
       setError(
@@ -347,13 +516,17 @@ export const AiPanel = memo(function AiPanel() {
           ? saveError.message
           : 'Failed to save audio to the media library.'
       );
-      updateGeneration(gen.id, { saving: false });
+      updateGenerationInList(setGenerations, generation.id, { saving: false });
       return null;
     }
-  }, [currentProjectId, loadMediaItems, selectMedia, updateGeneration]);
+  }, [currentProjectId, loadMediaItems, selectMedia, updateGenerationInList]);
 
-  const handleSave = useCallback(async (gen: Generation) => {
-    const media = await saveGeneration(gen);
+  const handleSave = useCallback(async (
+    generation: AudioGeneration,
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+    setError: Dispatch<SetStateAction<string | null>>,
+  ) => {
+    const media = await saveGeneration(generation, setGenerations, setError);
     if (media) {
       showNotification({
         type: 'success',
@@ -362,11 +535,15 @@ export const AiPanel = memo(function AiPanel() {
     }
   }, [saveGeneration, showNotification]);
 
-  const handleSaveAndInsert = useCallback(async (gen: Generation) => {
-    const media = await saveGeneration(gen);
+  const handleSaveAndInsert = useCallback(async (
+    generation: AudioGeneration,
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+    setError: Dispatch<SetStateAction<string | null>>,
+  ) => {
+    const media = await saveGeneration(generation, setGenerations, setError);
     if (!media) return;
 
-    const inserted = insertAudioItemAtPlayhead(media, gen.objectUrl);
+    const inserted = insertAudioItemAtPlayhead(media, generation.objectUrl);
     showNotification({
       type: inserted ? 'success' : 'warning',
       message: inserted
@@ -375,49 +552,65 @@ export const AiPanel = memo(function AiPanel() {
     });
   }, [saveGeneration, showNotification]);
 
-  const handleRemoveGeneration = useCallback((id: string) => {
+  const removeGenerationFromList = useCallback((
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+    id: string,
+  ) => {
     setGenerations((prev) => {
-      const gen = prev.find((g) => g.id === id);
-      if (gen) {
-        // Only revoke the blob URL if it hasn't been saved — saved items may
+      const generation = prev.find((entry) => entry.id === id);
+      if (generation) {
+        // Only revoke the blob URL if it has not been saved; saved items may
         // have their blob URL referenced by a timeline audio item's `src`.
-        if (!gen.savedMediaId) {
-          URL.revokeObjectURL(gen.objectUrl);
-          generationUrlsRef.current.delete(gen.objectUrl);
+        if (!generation.savedMediaId) {
+          URL.revokeObjectURL(generation.objectUrl);
+          generationUrlsRef.current.delete(generation.objectUrl);
         }
       }
-      return prev.filter((g) => g.id !== id);
+      return prev.filter((entry) => entry.id !== id);
     });
   }, []);
 
-  const handleClearAll = useCallback(() => {
-    // Only revoke blob URLs for unsaved generations — saved ones may be
+  const clearGenerationList = useCallback((
+    setGenerations: Dispatch<SetStateAction<AudioGeneration[]>>,
+  ) => {
+    // Only revoke blob URLs for unsaved generations; saved ones may be
     // referenced by timeline items.
     setGenerations((prev) => {
-      for (const gen of prev) {
-        if (!gen.savedMediaId) {
-          URL.revokeObjectURL(gen.objectUrl);
-          generationUrlsRef.current.delete(gen.objectUrl);
+      for (const generation of prev) {
+        if (!generation.savedMediaId) {
+          URL.revokeObjectURL(generation.objectUrl);
+          generationUrlsRef.current.delete(generation.objectUrl);
         }
       }
       return [];
     });
   }, []);
 
+  const handleSaveTtsGeneration = useCallback(
+    (generation: AudioGeneration) => handleSave(generation, setTtsGenerations, setTtsError),
+    [handleSave],
+  );
+  const handleSaveAndInsertTtsGeneration = useCallback(
+    (generation: AudioGeneration) => handleSaveAndInsert(generation, setTtsGenerations, setTtsError),
+    [handleSaveAndInsert],
+  );
+  const handleGenerate = handleTtsGenerate;
+  const handleClearAll = () => clearGenerationList(setTtsGenerations);
+  const handleRemoveGeneration = (id: string) => removeGenerationFromList(setTtsGenerations, id);
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-3">
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center gap-2">
+        <div className="-mx-3 -mt-3 flex items-center gap-2 bg-secondary/50 px-3 py-2">
           <h2 className="text-sm font-medium">Text to Speech</h2>
-          <Popover open={infoOpen} onOpenChange={setInfoOpen}>
+          <Popover open={ttsInfoOpen} onOpenChange={setTtsInfoOpen}>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label="Info"
-                onMouseEnter={() => setInfoOpen(true)}
-                onMouseLeave={() => setInfoOpen(false)}
+                aria-label="TTS info"
+                onMouseEnter={() => setTtsInfoOpen(true)}
+                onMouseLeave={() => setTtsInfoOpen(false)}
               >
                 <Info className="h-3.5 w-3.5" />
               </button>
@@ -426,8 +619,8 @@ export const AiPanel = memo(function AiPanel() {
               side="bottom"
               align="start"
               className="w-64 space-y-2 p-3 text-xs"
-              onMouseEnter={() => setInfoOpen(true)}
-              onMouseLeave={() => setInfoOpen(false)}
+              onMouseEnter={() => setTtsInfoOpen(true)}
+              onMouseLeave={() => setTtsInfoOpen(false)}
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
               <div className="flex flex-wrap items-center gap-1.5">
@@ -459,7 +652,7 @@ export const AiPanel = memo(function AiPanel() {
           </Popover>
         </div>
 
-        {!isWebGpuSupported && (
+        {!isTtsSupported && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
             WebGPU is not available in this browser. Kitten TTS needs Chrome 113+, Edge 113+, or Safari 26+.
           </div>
@@ -562,7 +755,7 @@ export const AiPanel = memo(function AiPanel() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-medium text-muted-foreground">
-                History ({generations.length}) — {formatBytes(totalBytes)}
+                History ({generations.length}) - {formatBytes(totalBytes)}
               </span>
               <Button
                 variant="ghost"
@@ -581,9 +774,183 @@ export const AiPanel = memo(function AiPanel() {
                 <GenerationRow
                   key={gen.id}
                   generation={gen}
-                  onSave={handleSave}
-                  onSaveAndInsert={handleSaveAndInsert}
+                  onSave={handleSaveTtsGeneration}
+                  onSaveAndInsert={handleSaveAndInsertTtsGeneration}
                   onRemove={handleRemoveGeneration}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="-mx-3 flex items-center gap-2 bg-secondary/50 px-3 py-2">
+          <h2 className="text-sm font-medium">Music Generation</h2>
+          <Popover open={musicInfoOpen} onOpenChange={setMusicInfoOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+                aria-label="Music generation info"
+                onMouseEnter={() => setMusicInfoOpen(true)}
+                onMouseLeave={() => setMusicInfoOpen(false)}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="start"
+              className="w-72 space-y-2 p-3 text-xs"
+              onMouseEnter={() => setMusicInfoOpen(true)}
+              onMouseLeave={() => setMusicInfoOpen(false)}
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  WebGPU
+                </span>
+                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Local
+                </span>
+              </div>
+              <p className="leading-relaxed text-muted-foreground">
+                Uses Xenova&apos;s browser-ready MusicGen model through Transformers.js. The first download is large, then it stays cached locally.
+              </p>
+              <table className="w-full text-[11px]">
+                <tbody>
+                  {MUSICGEN_MODEL_OPTIONS.map((option) => (
+                    <tr key={option.value} className="border-t border-border/50">
+                      <td className="py-1 pr-2 font-medium text-foreground">{option.label}</td>
+                      <td className="py-1 text-right text-muted-foreground">{option.downloadLabel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="leading-relaxed text-muted-foreground">
+                Prompt with genre, mood, tempo, and instrumentation. Shorter clips finish much faster.
+              </p>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {!isMusicSupported && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+            WebGPU is not available in this browser. MusicGen needs Chrome 113+, Edge 113+, or Safari 26+.
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="ai-music-prompt">Prompt</Label>
+            <Select
+              value=""
+              onValueChange={(value) => setMusicPrompt(value)}
+              disabled={isMusicGenerating}
+            >
+              <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:text-foreground">
+                <SelectValue placeholder="Presets" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {MUSIC_PROMPT_PRESETS.map((preset) => (
+                  <SelectItem key={preset.label} value={preset.prompt} className="text-xs">
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Textarea
+            id="ai-music-prompt"
+            value={musicPrompt}
+            onChange={(event) => setMusicPrompt(event.target.value)}
+            placeholder="Describe the kind of music you want to generate..."
+            className="min-h-24 resize-y bg-secondary/30 text-sm"
+            disabled={isMusicGenerating}
+          />
+        </div>
+
+        <SliderInput
+          label="Length"
+          value={musicDuration}
+          onChange={(value) => setMusicDuration(Math.round(value))}
+          min={currentMusicModel.minDurationSeconds}
+          max={currentMusicModel.maxDurationSeconds}
+          step={1}
+          unit="s"
+          disabled={isMusicGenerating}
+        />
+
+        <div className="flex items-center justify-end gap-2">
+          {isMusicGenerating && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleMusicCancel}
+              className="h-7 shrink-0 gap-1.5 text-muted-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancel
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => { void handleMusicGenerate(); }}
+            disabled={isMusicGenerating || !trimmedMusicPrompt || !currentProjectId || !isMusicSupported}
+            className="h-7 shrink-0 gap-1.5"
+          >
+            {isMusicGenerating
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <WandSparkles className="h-3.5 w-3.5" />}
+            {isMusicGenerating ? 'Generating...' : 'Generate Music'}
+          </Button>
+        </div>
+
+        {musicProgress && (
+          <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
+            <p className="text-xs text-muted-foreground">{musicProgress}</p>
+            {musicProgressPct != null && (
+              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear"
+                  style={{ width: `${Math.round(musicProgressPct * 100)}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {musicError && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+            {musicError}
+          </div>
+        )}
+
+        {musicGenerations.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">
+                Music History ({musicGenerations.length}) - {formatBytes(totalMusicBytes)}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+                onClick={() => clearGenerationList(setMusicGenerations)}
+                disabled={anyMusicSaving}
+              >
+                <Trash2 className="h-3 w-3" />
+                Clear all
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {musicGenerations.map((generation) => (
+                <GenerationRow
+                  key={generation.id}
+                  generation={generation}
+                  onSave={(entry) => handleSave(entry, setMusicGenerations, setMusicError)}
+                  onSaveAndInsert={(entry) => handleSaveAndInsert(entry, setMusicGenerations, setMusicError)}
+                  onRemove={(id) => removeGenerationFromList(setMusicGenerations, id)}
                 />
               ))}
             </div>
@@ -610,7 +977,7 @@ const GenerationRow = memo(function GenerationRow({
   const saved = gen.savedMediaId !== null;
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2 ${
+    <div className={`rounded-lg border p-3 space-y-2 ${
       saved
         ? 'border-emerald-500/25 bg-emerald-500/5'
         : 'border-border bg-secondary/20'
@@ -622,7 +989,7 @@ const GenerationRow = memo(function GenerationRow({
             {gen.textSnippet}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            {gen.voice} · {gen.model} · {gen.duration > 0 ? `${gen.duration.toFixed(1)}s` : '—'} · {formatBytes(gen.byteSize)}
+            {gen.voice} / {gen.model} / {gen.duration > 0 ? `${gen.duration.toFixed(1)}s` : '-'} / {formatBytes(gen.byteSize)}
           </p>
         </div>
         {!gen.saving && (

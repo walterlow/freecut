@@ -5,13 +5,18 @@ import {
   SCENE_VERIFICATION_MODEL_LABELS,
   type SceneVerificationModelId,
 } from './scene-verification-models';
+import {
+  MUSICGEN_MODEL_IDS,
+  getMusicgenModelDefinition,
+  type MusicgenModelId,
+} from './musicgen-models';
 
 export const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
 export const KITTEN_TTS_MODEL_CACHE_NAME = 'kitten-tts-models';
 export const LOCAL_MODEL_CACHE_STORAGE_LABEL = 'Browser cache storage';
 const WHISPER_CACHE_MATCH_FRAGMENTS = ['/onnx-community/whisper-'];
 
-export type LocalModelCacheId = 'whisper' | SceneVerificationModelId | 'kitten-tts';
+export type LocalModelCacheId = 'whisper' | SceneVerificationModelId | MusicgenModelId | 'kitten-tts';
 
 export interface LocalModelCacheDefinition {
   id: LocalModelCacheId;
@@ -39,6 +44,18 @@ const SCENE_VERIFICATION_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = 
   matchPathFragments: [...SCENE_VERIFICATION_MODEL_CACHE_MATCH_FRAGMENTS[id]],
 }));
 
+const MUSICGEN_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = MUSICGEN_MODEL_IDS.map((id) => {
+  const definition = getMusicgenModelDefinition(id);
+
+  return {
+    id,
+    label: definition.label,
+    description: `${definition.label} model files and tokenizers.`,
+    cacheName: TRANSFORMERS_CACHE_NAME,
+    matchPathFragments: [...definition.cacheMatchFragments],
+  };
+});
+
 export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
   {
     id: 'whisper',
@@ -48,6 +65,7 @@ export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
     matchPathFragments: WHISPER_CACHE_MATCH_FRAGMENTS,
   },
   ...SCENE_VERIFICATION_MODEL_CACHE_DEFINITIONS,
+  ...MUSICGEN_MODEL_CACHE_DEFINITIONS,
   {
     id: 'kitten-tts',
     label: 'Kitten TTS',
