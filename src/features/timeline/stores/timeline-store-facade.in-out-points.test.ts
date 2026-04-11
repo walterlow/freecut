@@ -149,4 +149,36 @@ describe('TimelineStoreFacade in/out point clamping', () => {
     expect(useMarkersStore.getState().inPoint).toBe(120);
     expect(useMarkersStore.getState().outPoint).toBe(300);
   });
+
+  it('updates stale points when the tail clip is deleted through the item store', () => {
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-1',
+        type: 'video',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 600,
+        label: 'base.mp4',
+        src: 'blob:test',
+        mediaId: 'media-1',
+      },
+      {
+        id: 'item-2',
+        type: 'video',
+        trackId: 'track-1',
+        from: 600,
+        durationInFrames: 300,
+        label: 'tail.mp4',
+        src: 'blob:test-2',
+        mediaId: 'media-2',
+      },
+    ]);
+    useMarkersStore.getState().setInPoint(120);
+    useMarkersStore.getState().setOutPoint(900);
+
+    useItemsStore.getState()._removeItems(['item-2']);
+
+    expect(useMarkersStore.getState().inPoint).toBe(120);
+    expect(useMarkersStore.getState().outPoint).toBe(600);
+  });
 });

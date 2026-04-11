@@ -11,8 +11,13 @@ import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useCompositionsStore } from './compositions-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTransitionsStore } from './transitions-store';
+import { useMarkersStore } from './markers-store';
 import { clampAudioFadeCurve, clampAudioFadeCurveX } from '@/shared/utils/audio-fade-curve';
 import { normalizeCropSettings } from '@/shared/utils/media-crop';
+import {
+  getEffectiveTimelineMaxFrame,
+  sanitizeInOutPoints,
+} from '../utils/in-out-points';
 
 function getLog() { return createLogger('ItemsStore'); }
 
@@ -1045,4 +1050,43 @@ useItemsStore.subscribe((state) => {
     mediaDependencyIds: prevItemsMediaDependencyIds,
     mediaDependencyVersion: state.mediaDependencyVersion + 1,
   });
+});
+
+function syncInOutPointsToTimelineBounds(items: TimelineItem[], fps: number) {
+  const markersState = useMarkersStore.getState();
+  const sanitizedInOutPoints = sanitizeInOutPoints({
+    inPoint: markersState.inPoint,
+    outPoint: markersState.outPoint,
+    maxFrame: getEffectiveTimelineMaxFrame(items, fps),
+  });
+
+  if (
+    sanitizedInOutPoints.inPoint === markersState.inPoint
+    && sanitizedInOutPoints.outPoint === markersState.outPoint
+  ) {
+    return;
+  }
+
+  useMarkersStore.setState({
+    inPoint: sanitizedInOutPoints.inPoint,
+    outPoint: sanitizedInOutPoints.outPoint,
+  });
+}
+
+let prevMaxItemEndFrame = useItemsStore.getState().maxItemEndFrame;
+useItemsStore.subscribe((state) => {
+  if (state.maxItemEndFrame === prevMaxItemEndFrame) {
+    return;
+  }
+
+  prevMaxItemEndFrame = state.maxItemEndFrame;
+  syncInOutPointsToTimelineBounds(state.items, useTimelineSettingsStore.getState().fps);
+});
+
+useTimelineSettingsStore.subscribe((state, prevState) => {
+  if (state.fps === prevState.fps) {
+    return;
+  }
+
+  syncInOutPointsToTimelineBounds(useItemsStore.getState().items, state.fps);
 });

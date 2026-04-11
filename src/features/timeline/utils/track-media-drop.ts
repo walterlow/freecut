@@ -148,7 +148,9 @@ export function planTrackMediaDropPlacements<T>(params: {
     const targetTrackKind = getTrackKind(targetTrack);
     const requiredPrimaryKind: TrackKind = isVisualMedia ? 'video' : 'audio';
 
-    if (targetTrackKind && targetTrackKind !== requiredPrimaryKind) {
+    const allowsLinkedAudioDrop = isVideoWithAudio && targetTrackKind === 'audio';
+
+    if (targetTrackKind && targetTrackKind !== requiredPrimaryKind && !allowsLinkedAudioDrop) {
       continue;
     }
 

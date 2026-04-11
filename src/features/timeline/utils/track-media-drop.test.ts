@@ -79,7 +79,7 @@ describe('planTrackMediaDropPlacements', () => {
     ]);
   });
 
-  it('rejects linked video dropped on an audio track', () => {
+  it('routes linked video dropped on an audio track to the matching video/audio pair', () => {
     const tracks = [
       makeTrack({ id: 'v1', name: 'V1', kind: 'video', order: 0 }),
       makeTrack({ id: 'v2', name: 'V2', kind: 'video', order: 1 }),
@@ -101,7 +101,11 @@ describe('planTrackMediaDropPlacements', () => {
       dropTargetTrackId: 'a2',
     });
 
-    expect(result.plannedItems).toEqual([]);
+    expect(result.plannedItems).toHaveLength(1);
+    expect(result.plannedItems[0]!.placements).toEqual([
+      expect.objectContaining({ trackId: 'v2', mediaType: 'video', from: 42 }),
+      expect.objectContaining({ trackId: 'a2', mediaType: 'audio', from: 42 }),
+    ]);
   });
 
   it('rejects visual media dropped on an audio track', () => {

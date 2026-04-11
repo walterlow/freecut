@@ -82,17 +82,57 @@ import {
 } from '../utils/drop-preview-owner';
 import { isDragPointInsideElement } from '../utils/effect-drop';
 import { frameToPixelsNow, pixelsToFrameNow } from '@/features/timeline/utils/zoom-conversions';
+import type { LazyContextMenuEventInit } from '../utils/lazy-context-menu';
+import {
+  captureContextMenuEventInit,
+  replayContextMenuEvent,
+} from '../utils/lazy-context-menu';
 
 /**
  * Lightweight on-demand context menu for track gaps.
  * Only mounts the Radix ContextMenu tree when the user actually right-clicks a gap,
  * avoiding the per-frame Popper/Menu provider cascade during drag operations.
  */
-function TrackGapContextMenu({ onCloseGap, onDismiss }: { onCloseGap: () => void; onDismiss: () => void }) {
+interface TrackGapContextMenuRequest {
+  frame: number;
+  pointer: LazyContextMenuEventInit;
+  token: number;
+}
+
+function TrackGapContextMenu({
+  request,
+  onCloseGap,
+  onDismiss,
+}: {
+  request: TrackGapContextMenuRequest;
+  onCloseGap: () => void;
+  onDismiss: () => void;
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!triggerRef.current) {
+      return;
+    }
+
+    replayContextMenuEvent(triggerRef.current, request.pointer);
+  }, [request]);
+
   return (
     <ContextMenu modal={false} onOpenChange={(open) => { if (!open) onDismiss(); }}>
       <ContextMenuTrigger asChild>
-        <span className="sr-only">Gap context menu anchor</span>
+        <span
+          ref={triggerRef}
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: request.pointer.clientX,
+            top: request.pointer.clientY,
+            width: 0,
+            height: 0,
+            pointerEvents: 'none',
+          }}
+        />
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onClick={onCloseGap}>
@@ -289,8 +329,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const previewOwnerId = `track:${track.id}`;
   const [isDragOver, setIsDragOver] = useState(false);
   const [isExternalDragOver, setIsExternalDragOver] = useState(false);
-  const [contextMenuFrame, setContextMenuFrame] = useState<number | null>(null);
+  const [gapContextMenuRequest, setGapContextMenuRequest] = useState<TrackGapContextMenuRequest | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const gapContextMenuTokenRef = useRef(0);
   const dragPreviewCacheRef = useRef<{
     dropFrame: number | null;
     dragData: unknown;
@@ -897,7 +938,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     // Check if clicking on a clip (has data-item-id ancestor)
     const target = e.target as HTMLElement;
-    if (target.closest('[data-item-id]')) {
+    if (target.closest('[data-item-id], [data-item-context-anchor]')) {
       // Let the clip's context menu handle it
       return;
     }
@@ -914,21 +955,27 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
     // Check if this frame is in a gap - just track the frame, let Radix handle menu
     if (isFrameInGap(clickedFrame)) {
-      setContextMenuFrame(clickedFrame);
+      e.preventDefault();
+      gapContextMenuTokenRef.current += 1;
+      setGapContextMenuRequest({
+        frame: clickedFrame,
+        pointer: captureContextMenuEventInit(e.nativeEvent),
+        token: gapContextMenuTokenRef.current,
+      });
     } else {
       // Clicked on a clip area, prevent track menu so clip menu can show
       e.preventDefault();
-      setContextMenuFrame(null);
+      setGapContextMenuRequest(null);
     }
   }, [isFrameInGap]);
 
   // Handle closing the gap
   const handleCloseGap = useCallback(() => {
-    if (contextMenuFrame !== null) {
-      closeGapAtPosition(track.id, contextMenuFrame);
-      setContextMenuFrame(null);
+    if (gapContextMenuRequest) {
+      closeGapAtPosition(track.id, gapContextMenuRequest.frame);
+      setGapContextMenuRequest(null);
     }
-  }, [contextMenuFrame, closeGapAtPosition, track.id]);
+  }, [closeGapAtPosition, gapContextMenuRequest, track.id]);
 
   const claimPreviewOwnership = useCallback((dataTransfer: DataTransfer | null) => {
     const data = getMediaDragData();
@@ -1212,8 +1259,13 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         )}
       </div>
       {/* Lazy ContextMenu: only mount Radix tree when the menu is triggered on a gap */}
-      {hasAnyItems && contextMenuFrame !== null && (
-        <TrackGapContextMenu onCloseGap={handleCloseGap} onDismiss={() => setContextMenuFrame(null)} />
+      {hasAnyItems && gapContextMenuRequest !== null && (
+        <TrackGapContextMenu
+          key={gapContextMenuRequest.token}
+          request={gapContextMenuRequest}
+          onCloseGap={handleCloseGap}
+          onDismiss={() => setGapContextMenuRequest(null)}
+        />
       )}
     </>
   );

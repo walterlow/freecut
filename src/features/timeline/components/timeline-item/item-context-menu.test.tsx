@@ -77,6 +77,8 @@ function renderContextMenu(overrides: Partial<ComponentProps<typeof ItemContextM
     </ItemContextMenu>
   );
 
+  fireEvent.contextMenu(screen.getByText('Clip'));
+
   return { onDetectScenes };
 }
 

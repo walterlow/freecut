@@ -1,4 +1,4 @@
-import { memo, ReactNode, useMemo, useState } from 'react';
+import { memo, ReactNode, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,6 +10,11 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import type { LazyContextMenuEventInit } from '../../utils/lazy-context-menu';
+import {
+  captureContextMenuEventInit,
+  replayContextMenuEvent,
+} from '../../utils/lazy-context-menu';
 import { useSelectionStore } from '@/shared/state/selection';
 import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe';
 import type { PropertyKeyframes } from '@/types/keyframe';
@@ -130,12 +135,16 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   // during normal operation (drag, playback, scrub), where context menus are never
   // needed. With 100+ items, this avoids millions of unnecessary re-renders.
   const [hasActivated, setHasActivated] = useState(false);
+  const [pendingActivation, setPendingActivation] = useState<LazyContextMenuEventInit | null>(null);
 
   if (!hasActivated) {
     return (
       <ItemContextMenuTriggerOnly
         trackLocked={trackLocked}
-        onActivate={() => setHasActivated(true)}
+        onActivate={(eventInit) => {
+          setPendingActivation(eventInit);
+          setHasActivated(true);
+        }}
       >
         {children}
       </ItemContextMenuTriggerOnly>
@@ -182,6 +191,8 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       canDetectScenes={canDetectScenes}
       isDetectingScenes={isDetectingScenes}
       onDetectScenes={onDetectScenes}
+      pendingActivation={pendingActivation}
+      onPendingActivationHandled={() => setPendingActivation(null)}
     >
       {children}
     </ItemContextMenuFull>
@@ -199,21 +210,21 @@ const ItemContextMenuTriggerOnly = memo(function ItemContextMenuTriggerOnly({
 }: {
   children: ReactNode;
   trackLocked: boolean;
-  onActivate: () => void;
+  onActivate: (eventInit: LazyContextMenuEventInit) => void;
 }) {
   return (
-    <div
-      data-item-context-pending
+    <span
+      data-item-context-anchor
       style={{ display: 'contents' }}
       onContextMenu={(e) => {
         if (trackLocked) return;
         // Prevent the browser default so Radix can handle it after activation
         e.preventDefault();
-        onActivate();
+        onActivate(captureContextMenuEventInit(e.nativeEvent));
       }}
     >
       {children}
-    </div>
+    </span>
   );
 });
 
@@ -260,7 +271,14 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   canDetectScenes,
   isDetectingScenes,
   onDetectScenes,
-}: Omit<ItemContextMenuProps, 'children'> & { children: ReactNode }) {
+  pendingActivation,
+  onPendingActivationHandled,
+}: Omit<ItemContextMenuProps, 'children'> & {
+  children: ReactNode;
+  pendingActivation?: LazyContextMenuEventInit | null;
+  onPendingActivationHandled?: () => void;
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null);
   const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
   // Filter to only properties that actually have keyframes
@@ -283,10 +301,21 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
 
   const hasKeyframes = propertiesWithKeyframes.length > 0;
 
+  useLayoutEffect(() => {
+    if (!pendingActivation || !triggerRef.current) {
+      return;
+    }
+
+    replayContextMenuEvent(triggerRef.current, pendingActivation);
+    onPendingActivationHandled?.();
+  }, [onPendingActivationHandled, pendingActivation]);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild disabled={trackLocked}>
-        {children}
+        <span ref={triggerRef} data-item-context-anchor style={{ display: 'contents' }}>
+          {children}
+        </span>
       </ContextMenuTrigger>
       <ContextMenuContent>
         {/* Join options - show based on which edge is closer */}
