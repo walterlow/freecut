@@ -118,13 +118,14 @@ export function planTrackMediaDropPlacements<T>(params: {
   dropFrame: number;
   tracks: TimelineTrack[];
   existingItems: CollisionRect[];
+  existingTrackItemsById?: Map<string, CollisionRect[]>;
   dropTargetTrackId: string;
 }): { plannedItems: Array<TrackMediaDropPlannedItem<T>>; tracks: TimelineTrack[] } {
   let currentPosition = Math.max(0, params.dropFrame);
   const reservedRanges: CollisionRect[] = [];
   const plannedItems: Array<TrackMediaDropPlannedItem<T>> = [];
   let workingTracks = [...params.tracks];
-  const baseTrackItemsById = buildCollisionTrackItemsMap(params.existingItems);
+  const baseTrackItemsById = params.existingTrackItemsById ?? buildCollisionTrackItemsMap(params.existingItems);
 
   const getTrackItemsToCheck = (trackId: string): ReadonlyArray<CollisionRect> => {
     const baseTrackItems = baseTrackItemsById.get(trackId) ?? [];
