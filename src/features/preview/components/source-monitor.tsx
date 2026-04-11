@@ -59,7 +59,7 @@ function isPatchDestinationTrack(
   track: TimelineTrack | null,
   kind: 'video' | 'audio',
 ): track is TimelineTrack {
-  if (!track || track.locked) {
+  if (!track || track.locked || track.isGroup) {
     return false;
   }
 

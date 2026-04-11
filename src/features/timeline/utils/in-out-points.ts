@@ -22,7 +22,8 @@ export function getEffectiveTimelineMaxFrame(
     (max, item) => Math.max(max, item.from + item.durationInFrames),
     0
   );
-  const minimumFrame = Math.max(1, Math.floor(MIN_TIMELINE_SECONDS * fps));
+  const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 30;
+  const minimumFrame = Math.max(1, Math.floor(MIN_TIMELINE_SECONDS * safeFps));
 
   return Math.max(contentMaxFrame, minimumFrame);
 }
@@ -35,7 +36,8 @@ export function sanitizeInOutPoints(params: {
   inPoint: number | null;
   outPoint: number | null;
 } {
-  const maxFrame = Math.max(1, Math.floor(params.maxFrame));
+  const safeMaxFrame = Number.isFinite(params.maxFrame) ? params.maxFrame : 1;
+  const maxFrame = Math.max(1, Math.floor(safeMaxFrame));
 
   let inPoint = normalizeFrame(params.inPoint);
   let outPoint = normalizeFrame(params.outPoint);

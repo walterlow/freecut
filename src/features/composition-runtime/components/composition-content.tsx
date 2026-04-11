@@ -68,20 +68,21 @@ function resolveSubCompItem(
     subItem.mediaId &&
     (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'image')
   ) {
-    const sourceSrc = blobUrlManager.get(subItem.mediaId) ?? '';
+    const sourceSrc = blobUrlManager.get(subItem.mediaId);
 
     if (subItem.type === 'video') {
       const proxySrc = nestedMediaResolutionMode === 'proxy'
         ? resolveProxyUrl(subItem.mediaId)
         : null;
-      const resolvedSrc = proxySrc || sourceSrc;
-      if (resolvedSrc !== subItem.src || subItem.audioSrc !== sourceSrc) {
-        return { ...subItem, src: resolvedSrc, audioSrc: sourceSrc };
+      const resolvedSrc = proxySrc || sourceSrc || '';
+      const resolvedAudioSrc = sourceSrc || subItem.audioSrc;
+      if (resolvedSrc !== subItem.src || subItem.audioSrc !== resolvedAudioSrc) {
+        return { ...subItem, src: resolvedSrc, audioSrc: resolvedAudioSrc };
       }
       return subItem;
     }
 
-    if (sourceSrc !== subItem.src) {
+    if (sourceSrc && sourceSrc !== subItem.src) {
       return { ...subItem, src: sourceSrc } as TimelineItem;
     }
   }

@@ -547,11 +547,13 @@ class ProxyService {
           }
 
           if (metadata.status === 'error') {
+            staleProxyIds.push(...collectMappedMediaIds(proxyKey));
             await removeProxyEntry(proxyKey, 'failed');
             continue;
           }
 
           if (metadata.status !== 'ready') {
+            staleProxyIds.push(...collectMappedMediaIds(proxyKey));
             await removeProxyEntry(proxyKey, 'invalid-status');
             continue;
           }
@@ -587,6 +589,7 @@ class ProxyService {
 
           logger.debug(`Loaded existing proxy for ${proxyKey}`);
         } catch {
+          staleProxyIds.push(...collectMappedMediaIds(proxyKey));
           await removeProxyEntry(proxyKey, 'invalid');
         }
       }

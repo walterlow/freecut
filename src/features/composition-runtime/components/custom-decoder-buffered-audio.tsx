@@ -135,7 +135,13 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       })
         .then((buffer) => {
           if (!cancelled) {
-            setAudioBuffer(buffer);
+            setAudioBuffer((current) => {
+              // Don't downgrade: if a full decode already landed, keep it.
+              if (current && current.length >= buffer.length && current.sampleRate === buffer.sampleRate) {
+                return current;
+              }
+              return buffer;
+            });
             log.info('Initial buffered audio ready', {
               mediaId,
               duration: buffer.duration.toFixed(2),

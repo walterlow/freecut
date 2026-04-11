@@ -218,7 +218,7 @@ const ItemContextMenuTriggerOnly = memo(function ItemContextMenuTriggerOnly({
       style={{ display: 'contents' }}
       onContextMenu={(e) => {
         if (trackLocked) return;
-        // Prevent the browser default so Radix can handle it after activation
+        e.stopPropagation();
         e.preventDefault();
         onActivate(captureContextMenuEventInit(e.nativeEvent));
       }}

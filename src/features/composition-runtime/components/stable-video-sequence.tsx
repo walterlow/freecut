@@ -131,7 +131,9 @@ function areGroupPropsEqual(
         (prevItem.crop?.bottom ?? 0) !== (nextItem.crop?.bottom ?? 0) ||
         (prevItem.crop?.softness ?? 0) !== (nextItem.crop?.softness ?? 0) ||
         prevItem.cornerPin !== nextItem.cornerPin ||
-        prevItem.blendMode !== nextItem.blendMode) {
+        prevItem.blendMode !== nextItem.blendMode ||
+        prevItem.src !== nextItem.src ||
+        prevItem.audioSrc !== nextItem.audioSrc) {
       return false;
     }
   }

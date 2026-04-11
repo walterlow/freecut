@@ -77,7 +77,7 @@ describe('settings-store', () => {
       useSettingsStore.getState().markProxyRecommended('media-1');
       useSettingsStore.getState().markProxyRecommended('media-2');
 
-      expect(useSettingsStore.getState().proxyRecommendedMediaIds).toEqual(['media-1', 'media-2']);
+      expect(useSettingsStore.getState().proxyRecommendedMediaIds).toEqual(['media-2', 'media-1']);
 
       useSettingsStore.getState().clearProxyRecommended('media-1');
       expect(useSettingsStore.getState().proxyRecommendedMediaIds).toEqual(['media-2']);

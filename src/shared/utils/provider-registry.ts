@@ -10,7 +10,14 @@ export class ProviderRegistry<TProvider extends NamedProvider> {
     private readonly defaultProviderId: string,
   ) {
     for (const provider of providers) {
+      if (this.providers.has(provider.id)) {
+        throw new Error(`Duplicate provider ID: "${provider.id}"`);
+      }
       this.providers.set(provider.id, provider);
+    }
+
+    if (!this.providers.has(defaultProviderId)) {
+      throw new Error(`Default provider ID "${defaultProviderId}" not found in providers`);
     }
   }
 

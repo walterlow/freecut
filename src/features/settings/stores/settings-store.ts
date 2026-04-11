@@ -156,8 +156,8 @@ export const useSettingsStore = create<SettingsStore>()(
 
         return {
           proxyRecommendedMediaIds: sanitizeProxyRecommendedMediaIds([
-            ...state.proxyRecommendedMediaIds,
             normalized,
+            ...state.proxyRecommendedMediaIds,
           ]),
         };
       }),

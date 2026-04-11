@@ -150,7 +150,11 @@ export async function detectScenes(
     return results;
   };
 
-  if (!verificationModel || deduped.length === 0 || signal?.aborted) {
+  if (signal?.aborted) {
+    return deduped;
+  }
+
+  if (!verificationModel || deduped.length === 0) {
     return cacheAndReturn(deduped);
   }
 
@@ -171,6 +175,10 @@ export async function detectScenes(
     return cacheAndReturn(verified);
   } catch (err) {
     verificationProvider.resetWorker();
+    if (signal?.aborted) {
+      log.info('VLM verification aborted', { model: verificationModel });
+      return deduped;
+    }
     log.warn('VLM verification failed, using optical flow results', { model: verificationModel, error: (err as Error).message });
     return cacheAndReturn(deduped);
   }

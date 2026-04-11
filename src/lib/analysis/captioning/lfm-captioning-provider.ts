@@ -99,16 +99,40 @@ function waitForReady(
   });
 }
 
-function captionSingle(worker: Worker, id: number, imageBlob: Blob): Promise<string> {
-  return new Promise<string>((resolve) => {
+function captionSingle(worker: Worker, id: number, imageBlob: Blob, signal?: AbortSignal): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(signal!.reason);
+    };
+
+    const cleanup = () => {
+      worker.removeEventListener('message', onMessage);
+      worker.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
+    };
+
     const onMessage = (event: MessageEvent) => {
       if (event.data.type === 'caption' && event.data.id === id) {
-        worker.removeEventListener('message', onMessage);
+        cleanup();
         resolve(event.data.caption ?? '');
       }
     };
 
+    const onError = (event: ErrorEvent) => {
+      cleanup();
+      reject(new Error(event.message || 'Caption worker error'));
+    };
+
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
     worker.addEventListener('message', onMessage);
+    worker.addEventListener('error', onError);
     worker.postMessage({ type: 'describe', id, image: imageBlob });
   });
 }
@@ -120,8 +144,11 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
     const {
       onProgress,
       signal,
-      sampleIntervalSec = DEFAULT_SAMPLE_INTERVAL_SEC,
+      sampleIntervalSec: rawSampleInterval = DEFAULT_SAMPLE_INTERVAL_SEC,
     } = options;
+    const sampleIntervalSec = Number.isFinite(rawSampleInterval) && rawSampleInterval > 0
+      ? rawSampleInterval
+      : DEFAULT_SAMPLE_INTERVAL_SEC;
 
     const worker = createLfmSceneWorker();
     try {
@@ -164,7 +191,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
           totalFrames: timestamps.length,
         });
 
-        const text = await captionSingle(worker, index, blob);
+        const text = await captionSingle(worker, index, blob, signal);
         if (text) {
           captions.push({
             timeSec: Math.round(timeSec * 10) / 10,
@@ -172,7 +199,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
           });
         }
 
-        log.info('Frame caption', { frame: index, time: timeSec.toFixed(1), text });
+        log.info('Frame caption', { frame: index, time: timeSec.toFixed(1), length: text.length });
       }
 
       return captions;
@@ -198,7 +225,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
         totalFrames: 1,
       });
 
-      const text = await captionSingle(worker, 0, imageBlob);
+      const text = await captionSingle(worker, 0, imageBlob, signal);
 
       onProgress?.({
         stage: 'captioning',
@@ -207,7 +234,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
         totalFrames: 1,
       });
 
-      log.info('Image caption', { text });
+      log.info('Image caption', { length: text.length });
       return text ? [{ timeSec: 0, text }] : [];
     } finally {
       worker.postMessage({ type: 'dispose' });

@@ -71,7 +71,6 @@ const MUSIC_PROMPT_PRESETS = [
   { label: 'Lo-fi Electro', prompt: 'Lofi slow bpm electro chill with organic samples' },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 const DEFAULT_MUSIC_PROMPT = MUSIC_PROMPT_PRESETS[0]!.prompt;
 
 interface AudioGeneration {
@@ -288,10 +287,12 @@ export const AiPanel = memo(function AiPanel() {
     ));
   }, [currentMusicModel.maxDurationSeconds, currentMusicModel.minDurationSeconds]);
 
-  // Revoke all blob URLs on unmount
+  // Abort in-flight generation and revoke all blob URLs on unmount
   useEffect(() => {
     const urls = generationUrlsRef.current;
     return () => {
+      musicAbortRef.current?.abort();
+      musicAbortRef.current = null;
       for (const url of urls) {
         URL.revokeObjectURL(url);
       }

@@ -27,7 +27,7 @@ function findFirstUnlockedTrackByKind(
   kind: TrackKind,
 ): TimelineTrack | null {
   return [...tracks]
-    .filter((track) => !track.locked && getTrackKind(track) === kind)
+    .filter((track) => !track.locked && !track.isGroup && getTrackKind(track) === kind)
     .sort((a, b) => a.order - b.order)[0] ?? null;
 }
 
@@ -37,11 +37,11 @@ function findUnlockedTrackById(
 ): TimelineTrack | null {
   if (!trackId) return null;
   const track = tracks.find((candidate) => candidate.id === trackId);
-  return track && !track.locked ? track : null;
+  return track && !track.locked && !track.isGroup ? track : null;
 }
 
 function canUseTrackForKind(track: TimelineTrack | null, kind: TrackKind): track is TimelineTrack {
-  if (!track || track.locked) {
+  if (!track || track.locked || track.isGroup) {
     return false;
   }
 
@@ -144,7 +144,7 @@ function findNearestUnlockedTrackByKind(
   direction: 'above' | 'below'
 ): TimelineTrack | null {
   const candidates = tracks
-    .filter((track) => !track.locked && getTrackKind(track) === kind)
+    .filter((track) => !track.locked && !track.isGroup && getTrackKind(track) === kind)
     .filter((track) => direction === 'above'
       ? track.order < targetTrack.order
       : track.order > targetTrack.order)
@@ -237,7 +237,7 @@ export function resolveSourceEditTrackTargets(params: {
     preferredTrackHeight,
   } = params;
   const activeTrack = activeTrackId
-    ? tracks.find((track) => track.id === activeTrackId) ?? null
+    ? (tracks.find((track) => track.id === activeTrackId && !track.isGroup) ?? null)
     : null;
   const activeKind = activeTrack ? getTrackKind(activeTrack) : null;
   const referenceTrack = activeTrack
