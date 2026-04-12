@@ -11,7 +11,10 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { createManagedWorkerPool } from '@/shared/utils/managed-worker-pool';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import {
+  getObjectUrlBlob,
+  getObjectUrlDirectFileMetadata,
+} from '@/infrastructure/browser/object-url-registry';
 
 const logger = createLogger('FilmstripCache');
 
@@ -1613,7 +1616,8 @@ class FilmstripCacheService {
         requestId,
         mediaId,
         blobUrl,
-        blob: getObjectUrlBlob(blobUrl) ?? undefined,
+        blob: getObjectUrlDirectFileMetadata(blobUrl) ? undefined : (getObjectUrlBlob(blobUrl) ?? undefined),
+        sourceMetadata: getObjectUrlDirectFileMetadata(blobUrl) ?? undefined,
         duration,
         width: FILMSTRIP_EXTRACT_WIDTH,
         height: FILMSTRIP_EXTRACT_HEIGHT,

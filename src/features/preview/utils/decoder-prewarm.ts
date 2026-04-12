@@ -16,7 +16,10 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import {
+  getObjectUrlBlob,
+  getObjectUrlDirectFileMetadata,
+} from '@/infrastructure/browser/object-url-registry';
 import { getKeyframeTimestamps } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('DecoderPrewarm');
@@ -250,6 +253,10 @@ const blobByUrl = new Map<string, Blob>();
 /** Track sources whose keyframe index has been sent to at least one worker */
 const keyframesSentForSrc = new Set<string>();
 
+function getDirectSourceMetadata(src: string) {
+  return getObjectUrlDirectFileMetadata(src) ?? undefined;
+}
+
 function getKnownBlobForUrl(src: string): Blob | null {
   const cachedBlob = blobByUrl.get(src);
   if (cachedBlob) {
@@ -350,14 +357,15 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       if (keyframeTimestamps) keyframesSentForSrc.add(src);
     }
 
+    const sourceMetadata = getDirectSourceMetadata(src);
     const postRequest = (blob?: Blob) => {
       if (!pendingRequests.has(id)) {
         return;
       }
       decoderPrewarmMetrics.workerPosts += 1;
       w.postMessage(blob
-        ? { type: 'preseek', id, src, timestamp, blob, keyframeTimestamps }
-        : { type: 'preseek', id, src, timestamp, keyframeTimestamps });
+        ? { type: 'preseek', id, src, timestamp, blob, keyframeTimestamps, sourceMetadata }
+        : { type: 'preseek', id, src, timestamp, keyframeTimestamps, sourceMetadata });
     };
 
     const failRequest = () => {
@@ -369,24 +377,28 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       pending.resolve(null);
     };
 
-    const cachedBlob = getKnownBlobForUrl(src);
-    if (cachedBlob) {
-      postRequest(cachedBlob);
-    } else if (src.startsWith('blob:')) {
-      if (unavailableBlobUrls.has(src)) {
-        failRequest();
-        return;
-      }
-
-      void resolveBlobForUrl(src).then((blob) => {
-        if (blob) {
-          postRequest(blob);
+    if (sourceMetadata) {
+      postRequest();
+    } else {
+      const cachedBlob = getKnownBlobForUrl(src);
+      if (cachedBlob) {
+        postRequest(cachedBlob);
+      } else if (src.startsWith('blob:')) {
+        if (unavailableBlobUrls.has(src)) {
+          failRequest();
           return;
         }
-        failRequest();
-      });
-    } else {
-      postRequest();
+
+        void resolveBlobForUrl(src).then((blob) => {
+          if (blob) {
+            postRequest(blob);
+            return;
+          }
+          failRequest();
+        });
+      } else {
+        postRequest();
+      }
     }
   });
   const inflightEntry: InflightPreseek = { timestamp, promise };
@@ -451,14 +463,15 @@ export function backgroundBatchPreseek(
     });
 
     const w = pw.worker;
+    const sourceMetadata = getDirectSourceMetadata(src);
     const postRequest = (blob?: Blob) => {
       if (!pendingBatchRequests.has(id)) {
         return;
       }
       decoderPrewarmMetrics.workerPosts += 1;
       const msg = blob
-        ? { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps, blob }
-        : { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps };
+        ? { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps, blob, sourceMetadata }
+        : { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps, sourceMetadata };
       w.postMessage(msg);
     };
 
@@ -471,24 +484,28 @@ export function backgroundBatchPreseek(
       pending.resolve(new Map());
     };
 
-    const cachedBlob = getKnownBlobForUrl(src);
-    if (cachedBlob) {
-      postRequest(cachedBlob);
-    } else if (src.startsWith('blob:')) {
-      if (unavailableBlobUrls.has(src)) {
-        failRequest();
-        return;
-      }
-
-      void resolveBlobForUrl(src).then((blob) => {
-        if (blob) {
-          postRequest(blob);
+    if (sourceMetadata) {
+      postRequest();
+    } else {
+      const cachedBlob = getKnownBlobForUrl(src);
+      if (cachedBlob) {
+        postRequest(cachedBlob);
+      } else if (src.startsWith('blob:')) {
+        if (unavailableBlobUrls.has(src)) {
+          failRequest();
           return;
         }
-        failRequest();
-      });
-    } else {
-      postRequest();
+
+        void resolveBlobForUrl(src).then((blob) => {
+          if (blob) {
+            postRequest(blob);
+            return;
+          }
+          failRequest();
+        });
+      } else {
+        postRequest();
+      }
     }
   });
 

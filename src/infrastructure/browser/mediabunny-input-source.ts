@@ -6,6 +6,11 @@ import {
 
 type MediabunnyModule = typeof import('mediabunny');
 
+interface MediabunnyInputSourceOptions {
+  metadata?: ObjectUrlSourceMetadata | null;
+  fallbackBlob?: Blob | null;
+}
+
 type MediabunnyInputSource =
   | InstanceType<MediabunnyModule['BlobSource']>
   | InstanceType<MediabunnyModule['StreamSource']>
@@ -101,13 +106,14 @@ function createBrowserFileStreamSource(
 export function createMediabunnyInputSource(
   mb: MediabunnyModule,
   src: string | Blob,
+  options: MediabunnyInputSourceOptions = {},
 ): MediabunnyInputSource {
   if (src instanceof Blob) {
     return new mb.BlobSource(src);
   }
 
-  const registeredBlob = getObjectUrlBlob(src);
-  const metadata = getObjectUrlSourceMetadata(src);
+  const registeredBlob = options.fallbackBlob ?? getObjectUrlBlob(src);
+  const metadata = options.metadata ?? getObjectUrlSourceMetadata(src);
 
   if (canUseDirectFileAccess(metadata)) {
     return createBrowserFileStreamSource(mb, metadata, registeredBlob);

@@ -12,7 +12,10 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { createManagedWorker } from '@/shared/utils/managed-worker';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import {
+  getObjectUrlBlob,
+  getObjectUrlDirectFileMetadata,
+} from '@/infrastructure/browser/object-url-registry';
 import {
   waveformOPFSStorage,
   WAVEFORM_LEVELS,
@@ -754,7 +757,8 @@ class WaveformCacheService {
           type: 'generate',
           requestId,
           blobUrl,
-          blob: getObjectUrlBlob(blobUrl) ?? undefined,
+          blob: getObjectUrlDirectFileMetadata(blobUrl) ? undefined : (getObjectUrlBlob(blobUrl) ?? undefined),
+          sourceMetadata: getObjectUrlDirectFileMetadata(blobUrl) ?? undefined,
           samplesPerSecond: SAMPLES_PER_SECOND,
           binDurationSec: WAVEFORM_BIN_DURATION_SEC,
         });

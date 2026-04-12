@@ -6,6 +6,9 @@
  * Returns decoded ImageBitmaps that the render loop can draw directly.
  */
 
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
+import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry';
+
 const TIMESTAMP_EPSILON = 1e-4;
 const LOOKAHEAD_TOLERANCE_SECONDS = 0.05;
 const STREAM_BACKTRACK_SECONDS = 1.0;
@@ -72,7 +75,12 @@ interface ExtractorState {
 const extractors = new Map<string, ExtractorState>();
 const initPromises = new Map<string, Promise<ExtractorState | null>>();
 
-async function getExtractor(src: string, blob?: Blob): Promise<ExtractorState | null> {
+interface WorkerSourceOptions {
+  blob?: Blob;
+  sourceMetadata?: ObjectUrlSourceMetadata;
+}
+
+async function getExtractor(src: string, options?: WorkerSourceOptions): Promise<ExtractorState | null> {
   const existing = extractors.get(src);
   if (existing) return existing;
 
@@ -81,9 +89,10 @@ async function getExtractor(src: string, blob?: Blob): Promise<ExtractorState | 
 
   const promise = (async () => {
     const mediabunny = await getMediabunny();
-    const source = blob
-      ? new mediabunny.BlobSource(blob)
-      : new mediabunny.UrlSource(src);
+    const source = createMediabunnyInputSource(mediabunny, src, {
+      metadata: options?.sourceMetadata,
+      fallbackBlob: options?.blob,
+    });
     const input = new mediabunny.Input({
       formats: mediabunny.ALL_FORMATS,
       source,
@@ -364,8 +373,13 @@ async function preseekWithState(state: ExtractorState, timestamp: number, src?: 
   }
 }
 
-async function preseek(src: string, timestamp: number, blob?: Blob): Promise<ImageBitmap | null> {
-  const state = await getExtractor(src, blob);
+async function preseek(
+  src: string,
+  timestamp: number,
+  blob?: Blob,
+  sourceMetadata?: ObjectUrlSourceMetadata,
+): Promise<ImageBitmap | null> {
+  const state = await getExtractor(src, { blob, sourceMetadata });
   if (!state) return null;
 
   const previous = state.drawLock ?? Promise.resolve();
@@ -386,9 +400,10 @@ async function batchPreseek(
   src: string,
   timestamps: number[],
   blob?: Blob,
+  sourceMetadata?: ObjectUrlSourceMetadata,
 ): Promise<Map<number, ImageBitmap>> {
   const results = new Map<number, ImageBitmap>();
-  const state = await getExtractor(src, blob);
+  const state = await getExtractor(src, { blob, sourceMetadata });
   if (!state || timestamps.length === 0) return results;
 
   // Serialize with the single-frame path via drawLock
@@ -486,7 +501,7 @@ self.onmessage = async (event: MessageEvent) => {
     }
     try {
       const sorted = [...msg.timestamps].sort((a: number, b: number) => a - b);
-      const bitmaps = await batchPreseek(msg.src, sorted, msg.blob);
+      const bitmaps = await batchPreseek(msg.src, sorted, msg.blob, msg.sourceMetadata);
       const transfer: Transferable[] = [];
       const entries: Array<{ timestamp: number; bitmap: ImageBitmap }> = [];
       for (const [ts, bitmap] of bitmaps) {
@@ -516,7 +531,7 @@ self.onmessage = async (event: MessageEvent) => {
   }
 
   try {
-    const bitmap = await preseek(msg.src, msg.timestamp, msg.blob);
+    const bitmap = await preseek(msg.src, msg.timestamp, msg.blob, msg.sourceMetadata);
     if (bitmap) {
       self.postMessage(
         { type: 'preseek_done', id: msg.id, success: true, timestamp: msg.timestamp, bitmap },

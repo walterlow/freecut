@@ -8,6 +8,11 @@ type MockWorkerMessage = {
   timestamp?: number;
   blob?: Blob;
   src?: string;
+  sourceMetadata?: {
+    storageType: 'opfs';
+    opfsPath: string;
+    fileSize?: number;
+  };
 };
 
 class MockWorker {
@@ -79,6 +84,36 @@ describe('decoder prewarm', () => {
       timestamp: 1,
       blob,
     });
+    expect(bitmap).toBe(mockBitmap);
+  });
+
+  it('prefers direct OPFS metadata over cloning blobs into the worker', async () => {
+    const blob = new Blob(['video']);
+    registerObjectUrl('blob:clip-opfs', blob, {
+      storageType: 'opfs',
+      opfsPath: 'content/aa/bb/data',
+      fileSize: blob.size,
+    });
+
+    const bitmap = await backgroundPreseek('blob:clip-opfs', 2);
+    const preseekPosts = createdWorkers
+      .flatMap((worker) => worker.postMessage.mock.calls)
+      .map(([message]) => message as MockWorkerMessage)
+      .filter((message) => message.type === 'preseek');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(preseekPosts).toHaveLength(1);
+    expect(preseekPosts[0]).toMatchObject({
+      type: 'preseek',
+      src: 'blob:clip-opfs',
+      timestamp: 2,
+      sourceMetadata: {
+        storageType: 'opfs',
+        opfsPath: 'content/aa/bb/data',
+        fileSize: blob.size,
+      },
+    });
+    expect(preseekPosts[0]?.blob).toBeUndefined();
     expect(bitmap).toBe(mockBitmap);
   });
 

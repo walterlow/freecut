@@ -6,6 +6,12 @@ export interface ObjectUrlSourceMetadata {
   fileSize?: number;
 }
 
+export interface DirectObjectUrlSourceMetadata {
+  storageType: 'opfs';
+  opfsPath: string;
+  fileSize?: number;
+}
+
 interface ObjectUrlEntry {
   blob: Blob;
   metadata?: ObjectUrlSourceMetadata;
@@ -27,6 +33,19 @@ export function getObjectUrlBlob(url: string): Blob | null {
 
 export function getObjectUrlSourceMetadata(url: string): ObjectUrlSourceMetadata | null {
   return entriesByUrl.get(url)?.metadata ?? null;
+}
+
+export function getObjectUrlDirectFileMetadata(url: string): DirectObjectUrlSourceMetadata | null {
+  const metadata = entriesByUrl.get(url)?.metadata;
+  if (!metadata?.opfsPath) {
+    return null;
+  }
+
+  return {
+    storageType: 'opfs',
+    opfsPath: metadata.opfsPath,
+    fileSize: metadata.fileSize,
+  };
 }
 
 export function unregisterObjectUrl(url: string): void {

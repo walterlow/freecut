@@ -6,6 +6,8 @@
  * Sends progressive updates as samples are processed.
  */
 
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
+import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
 
 export interface WaveformRequest {
@@ -13,6 +15,7 @@ export interface WaveformRequest {
   requestId: string;
   blobUrl: string;
   blob?: Blob;
+  sourceMetadata?: ObjectUrlSourceMetadata;
   samplesPerSecond: number;
   binDurationSec?: number;
 }
@@ -80,7 +83,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
   if (type !== 'generate') return;
 
-  const { requestId, blobUrl, blob, samplesPerSecond, binDurationSec = 30 } = event.data;
+  const { requestId, blobUrl, blob, sourceMetadata, samplesPerSecond, binDurationSec = 30 } = event.data;
   const state = { aborted: false };
   activeRequests.set(requestId, state);
 
@@ -92,13 +95,16 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
     // Load mediabunny. Register AC-3 decoder lazily only for matching codecs.
     const mediabunny = await getMediabunny();
-    const { Input, UrlSource, BlobSource, AudioSampleSink, ALL_FORMATS } = mediabunny;
+    const { Input, AudioSampleSink, ALL_FORMATS } = mediabunny;
 
     if (state.aborted) throw new Error('Aborted');
 
     // Create input from blob URL
     const input = new Input({
-      source: blob ? new BlobSource(blob) : new UrlSource(blobUrl),
+      source: createMediabunnyInputSource(mediabunny, blobUrl, {
+        metadata: sourceMetadata,
+        fallbackBlob: blob,
+      }),
       formats: ALL_FORMATS,
     });
     disposeInput = input as { dispose?: () => void };
