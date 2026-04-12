@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VideoContent } from './video-content';
@@ -133,8 +132,8 @@ vi.mock('@/features/composition-runtime/utils/dom-video-element-registry', () =>
 }));
 
 vi.mock('./video-audio-context', () => ({
-  applyVideoElementAudioVolume: vi.fn(),
-  useVideoAudioVolume: vi.fn(() => 1),
+  applyVideoElementAudioState: vi.fn(),
+  useVideoAudioState: vi.fn(() => ({ audioVolume: 1, resolvedAudioEqStages: [] })),
   connectedVideoElements: new WeakSet<HTMLVideoElement>(),
   videoAudioContexts: new WeakMap<HTMLVideoElement, AudioContext>(),
   ensureAudioContextResumed: vi.fn(),
@@ -169,6 +168,7 @@ describe('VideoContent pooled handoff', () => {
           trackId: 'track-1',
           from: 0,
           durationInFrames: 90,
+          label: 'Clip A',
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
         }}
@@ -176,6 +176,7 @@ describe('VideoContent pooled handoff', () => {
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
+        audioEqStages={[]}
       />,
     );
 
@@ -192,6 +193,7 @@ describe('VideoContent pooled handoff', () => {
           trackId: 'track-1',
           from: 30,
           durationInFrames: 60,
+          label: 'Clip B',
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
         }}
@@ -199,6 +201,7 @@ describe('VideoContent pooled handoff', () => {
         safeTrimBefore={30}
         playbackRate={1}
         sourceFps={30}
+        audioEqStages={[]}
       />,
     );
 

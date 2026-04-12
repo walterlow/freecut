@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { interpolate, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
@@ -8,11 +8,15 @@ import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import type { VideoItem } from '@/types/timeline';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
+import { resolvePreviewAudioEqStages } from '@/shared/utils/audio-eq';
 import { useMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import {
   createPreviewClipAudioGraph,
   getSharedPreviewAudioContext,
+  rampPreviewClipEq,
   rampPreviewClipGain,
+  setPreviewClipEq,
   setPreviewClipGain,
   type PreviewClipAudioGraph,
 } from '../utils/preview-audio-graph';
@@ -23,7 +27,11 @@ const connectedVideoElements = new WeakSet<HTMLVideoElement>();
 const videoAudioGraphs = new WeakMap<HTMLVideoElement, PreviewClipAudioGraph>();
 const videoAudioContexts = new WeakMap<HTMLVideoElement, AudioContext>();
 
-export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolume: number): void {
+export function applyVideoElementAudioState(
+  video: HTMLVideoElement,
+  audioVolume: number,
+  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>,
+): void {
   // Pool creates elements muted. Keep element unmuted and control via volume/gain.
   video.muted = false;
   const safeVolume = Math.max(0, audioVolume);
@@ -33,9 +41,11 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
     const graph = videoAudioGraphs.get(video);
     const audioContext = videoAudioContexts.get(video);
     if (graph && audioContext?.state === 'running') {
+      rampPreviewClipEq(graph, audioEqStages);
       rampPreviewClipGain(graph, safeVolume);
     } else if (graph) {
       // Context not running yet — direct assignment is safe (no audio output)
+      setPreviewClipEq(graph, audioEqStages);
       setPreviewClipGain(graph, safeVolume);
     }
     if (audioContext?.state === 'suspended') {
@@ -47,7 +57,7 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
   // Always route preview video audio through the shared clip graph so future
   // EQ/SFX can be inserted in one place for video and audio clips alike.
   try {
-    const graph = createPreviewClipAudioGraph();
+    const graph = createPreviewClipAudioGraph({ eqStageCount: audioEqStages.length });
     if (!graph) {
       video.volume = Math.min(1, safeVolume);
       return;
@@ -64,6 +74,7 @@ export function applyVideoElementAudioVolume(video: HTMLVideoElement, audioVolum
     if (graph.context.state === 'suspended') {
       graph.context.resume();
     }
+    setPreviewClipEq(graph, audioEqStages);
     rampPreviewClipGain(graph, safeVolume);
   } catch {
     // Fallback if Web Audio setup fails.
@@ -143,14 +154,17 @@ export function transitionSafePlay(video: HTMLVideoElement, targetRate: number):
 }
 
 /**
- * Hook to calculate video audio volume with fades and preview support.
- * Returns the final volume (0-1) to apply to the video component.
- * Applies master preview volume from playback controls.
+ * Hook to calculate video audio state with fades and preview support.
+ * Returns both the final volume and resolved EQ stage chain for the clip.
  */
-export function useVideoAudioVolume(
+export function useVideoAudioState(
   item: VideoItem & { _sequenceFrameOffset?: number; trackVolumeDb?: number },
-  muted: boolean
-): number {
+  muted: boolean,
+  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>,
+): {
+  audioVolume: number;
+  resolvedAudioEqStages: ResolvedAudioEqSettings[];
+} {
   const { fps } = useVideoConfig();
   // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
@@ -197,7 +211,22 @@ export function useVideoAudioVolume(
   const audioFadeInCurveX = preview?.audioFadeInCurveX ?? item.audioFadeInCurveX ?? 0.52;
   const audioFadeOutCurveX = preview?.audioFadeOutCurveX ?? item.audioFadeOutCurveX ?? 0.52;
 
-  if (muted) return 0;
+  const resolvedAudioEqStages = useMemo(
+    () => resolvePreviewAudioEqStages(audioEqStages, preview),
+    [
+      audioEqStages,
+      preview?.audioEqLowGainDb,
+      preview?.audioEqMidGainDb,
+      preview?.audioEqHighGainDb,
+    ],
+  );
+
+  if (muted) {
+    return {
+      audioVolume: 0,
+      resolvedAudioEqStages,
+    };
+  }
 
   // Calculate fade multiplier
   const fadeInFrames = Math.min(audioFadeIn * fps, item.durationInFrames);
@@ -251,5 +280,8 @@ export function useVideoAudioVolume(
   const trackVolumeDb = item.trackVolumeDb;
   useEffect(() => { clearMixerLiveGain(item.id); }, [trackVolumeDb, item.id]);
 
-  return itemVolume * effectiveMasterVolume * mixerGain;
+  return {
+    audioVolume: itemVolume * effectiveMasterVolume * mixerGain,
+    resolvedAudioEqStages,
+  };
 }

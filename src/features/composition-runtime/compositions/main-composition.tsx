@@ -44,6 +44,7 @@ import {
   hasLinkedAudioCompanion,
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
+import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
@@ -409,6 +410,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                      audioFadeOutCurve={segment.audioFadeOutCurve}
                      audioFadeInCurveX={segment.audioFadeInCurveX}
                      audioFadeOutCurveX={segment.audioFadeOutCurveX}
+                     audioEqStages={segment.audioEqStages}
                      clipFadeSpans={segment.clipFadeSpans}
                      contentStartOffsetFrames={segment.contentStartOffsetFrames}
                      contentEndOffsetFrames={segment.contentEndOffsetFrames}
@@ -434,6 +436,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                      audioFadeOutCurve={segment.audioFadeOutCurve}
                      audioFadeInCurveX={segment.audioFadeInCurveX}
                      audioFadeOutCurveX={segment.audioFadeOutCurveX}
+                     audioEqStages={segment.audioEqStages}
                      clipFadeSpans={segment.clipFadeSpans}
                      contentStartOffsetFrames={segment.contentStartOffsetFrames}
                      contentEndOffsetFrames={segment.contentEndOffsetFrames}
@@ -475,6 +478,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     audioFadeOutCurve={segment.audioFadeOutCurve}
                     audioFadeInCurveX={segment.audioFadeInCurveX}
                     audioFadeOutCurveX={segment.audioFadeOutCurveX}
+                    audioEqStages={segment.audioEqStages}
                     clipFadeSpans={segment.clipFadeSpans}
                   />
                 ) : (
@@ -494,6 +498,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     audioFadeOutCurve={segment.audioFadeOutCurve}
                     audioFadeInCurveX={segment.audioFadeInCurveX}
                     audioFadeOutCurveX={segment.audioFadeOutCurveX}
+                    audioEqStages={segment.audioEqStages}
                     clipFadeSpans={segment.clipFadeSpans}
                   />
                 )}
@@ -531,6 +536,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                   parentMuted={segment.muted}
                   renderMode="audio-only"
                   audioGainMultiplier={Math.pow(10, segment.volumeDb / 20)}
+                  audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(compoundItem))}
                   crossfadeFadeInFrames={segment.crossfadeFadeIn}
                   crossfadeFadeOutFrames={segment.crossfadeFadeOut}
                 />
@@ -550,6 +556,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 parentMuted={item.muted || !item.trackVisible}
                 renderMode="audio-only"
                 audioGainMultiplier={Math.pow(10, ((item.volume ?? 0) + (item.trackVolumeDb ?? 0)) / 20)}
+                audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(item))}
               />
             </Sequence>
           ))}

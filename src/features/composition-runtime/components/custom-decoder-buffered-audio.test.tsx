@@ -21,6 +21,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedAudioEqStages: [],
   },
 }));
 
@@ -62,6 +63,15 @@ describe('CustomDecoderBufferedAudio', () => {
       disconnect() {}
     }
 
+    class BiquadFilterNodeMock {
+      type: BiquadFilterType = 'peaking';
+      frequency = new AudioParamMock();
+      gain = new AudioParamMock();
+      Q = new AudioParamMock();
+      connect() {}
+      disconnect() {}
+    }
+
     class AudioBufferSourceNodeMock {
       buffer: AudioBuffer | null = null;
       playbackRate = new AudioParamMock();
@@ -78,6 +88,9 @@ describe('CustomDecoderBufferedAudio', () => {
       destination = {};
       createGain() {
         return new GainNodeMock();
+      }
+      createBiquadFilter() {
+        return new BiquadFilterNodeMock();
       }
       createBufferSource() {
         return new AudioBufferSourceNodeMock();
@@ -98,6 +111,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
     const pendingDecode = new Promise<AudioBuffer>(() => {});
     audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
@@ -214,6 +228,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(
@@ -274,6 +289,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(
@@ -295,6 +311,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(
@@ -354,6 +371,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(
@@ -375,6 +393,7 @@ describe('CustomDecoderBufferedAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(
@@ -441,6 +460,7 @@ describe('CustomDecoderBufferedAudio', () => {
         fps: 30,
         playing: false,
         resolvedVolume: 1,
+        resolvedAudioEqStages: [],
       };
 
       rerender(
@@ -458,6 +478,7 @@ describe('CustomDecoderBufferedAudio', () => {
         fps: 30,
         playing: false,
         resolvedVolume: 1,
+        resolvedAudioEqStages: [],
       };
 
       rerender(

@@ -14,6 +14,7 @@ import {
 } from '../utils/preview-audio-element-pool';
 import {
   createPreviewClipAudioGraph,
+  rampPreviewClipEq,
   rampPreviewClipGain,
   setPreviewClipGain,
   type PreviewClipAudioGraph,
@@ -84,6 +85,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
   contentEndOffsetFrames = 0,
@@ -94,7 +96,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
   liveGainItemIds,
   volumeMultiplier = 1,
 }) => {
-  const { frame, fps, playing, resolvedVolume: finalVolume } = useAudioPlaybackState({
+  const { frame, fps, playing, resolvedVolume: finalVolume, resolvedAudioEqStages } = useAudioPlaybackState({
     itemId,
     liveGainItemIds,
     volume,
@@ -106,6 +108,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
     contentEndOffsetFrames,
@@ -132,7 +135,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
 
   useEffect(() => {
     const audio = acquirePreviewAudioElement(src);
-    const graph = createPreviewClipAudioGraph();
+    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
     if (!graph) {
       releasePreviewAudioElement(audio);
       return;
@@ -167,7 +170,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
       }
       releasePreviewAudioElement(audio);
     };
-  }, [src]);
+  }, [resolvedAudioEqStages.length, src]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -181,6 +184,12 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
     const clampedVolume = muted ? 0 : Math.max(0, finalVolume);
     rampPreviewClipGain(graph, clampedVolume);
   }, [finalVolume, muted]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+    rampPreviewClipEq(graph, resolvedAudioEqStages);
+  }, [resolvedAudioEqStages]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -339,6 +348,7 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
     audioFadeOutCurve = 0,
     audioFadeInCurveX = 0.52,
     audioFadeOutCurveX = 0.52,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames = 0,
     contentEndOffsetFrames = 0,
@@ -362,6 +372,7 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
     contentEndOffsetFrames,
@@ -530,6 +541,7 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       audioFadeOutCurve={audioFadeOutCurve}
       audioFadeInCurveX={audioFadeInCurveX}
       audioFadeOutCurveX={audioFadeOutCurveX}
+      audioEqStages={audioEqStages}
       clipFadeSpans={clipFadeSpans}
       contentStartOffsetFrames={contentStartOffsetFrames}
       contentEndOffsetFrames={contentEndOffsetFrames}

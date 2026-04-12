@@ -7,6 +7,7 @@ import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import {
   createPreviewClipAudioGraph,
+  rampPreviewClipEq,
   rampPreviewClipGain,
   type PreviewClipAudioGraph,
 } from '../utils/preview-audio-graph';
@@ -46,6 +47,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
   contentEndOffsetFrames = 0,
@@ -56,7 +58,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   liveGainItemIds,
   volumeMultiplier = 1,
 }) => {
-  const { frame, fps, playing, resolvedVolume: finalVolume } = useAudioPlaybackState({
+  const { frame, fps, playing, resolvedVolume: finalVolume, resolvedAudioEqStages } = useAudioPlaybackState({
     itemId,
     liveGainItemIds,
     volume,
@@ -68,6 +70,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
     contentEndOffsetFrames,
@@ -108,7 +111,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   }, [playing]);
 
   useEffect(() => {
-    const graph = createPreviewClipAudioGraph();
+    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
     if (!graph) {
       setFallbackRequested(true);
       return;
@@ -178,7 +181,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       lastPostedPlayingRef.current = null;
       teardownNode();
     };
-  }, []);
+  }, [resolvedAudioEqStages.length]);
 
   useEffect(() => {
     const resume = () => {
@@ -203,6 +206,12 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     const clampedVolume = muted ? 0 : Math.max(0, finalVolume);
     rampPreviewClipGain(graph, clampedVolume);
   }, [finalVolume, muted]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+    rampPreviewClipEq(graph, resolvedAudioEqStages);
+  }, [resolvedAudioEqStages]);
 
   useEffect(() => {
     if (!nodeReady) return;

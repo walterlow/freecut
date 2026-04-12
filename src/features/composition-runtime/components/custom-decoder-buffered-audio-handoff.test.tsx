@@ -12,6 +12,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedAudioEqStages: [],
   },
 }));
 
@@ -67,6 +68,15 @@ describe('CustomDecoderBufferedAudio queued handoff', () => {
       disconnect() {}
     }
 
+    class BiquadFilterNodeMock {
+      type: BiquadFilterType = 'peaking';
+      frequency = new AudioParamMock();
+      gain = new AudioParamMock();
+      Q = new AudioParamMock();
+      connect() {}
+      disconnect() {}
+    }
+
     class AudioBufferSourceNodeMock {
       buffer: AudioBuffer | null = null;
       playbackRate = new AudioParamMock();
@@ -86,6 +96,9 @@ describe('CustomDecoderBufferedAudio queued handoff', () => {
       destination = {};
       createGain() {
         return new GainNodeMock();
+      }
+      createBiquadFilter() {
+        return new BiquadFilterNodeMock();
       }
       createBufferSource() {
         const source = new AudioBufferSourceNodeMock();
@@ -109,6 +122,7 @@ describe('CustomDecoderBufferedAudio queued handoff', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
     audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
   });
@@ -149,6 +163,7 @@ describe('CustomDecoderBufferedAudio queued handoff', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(

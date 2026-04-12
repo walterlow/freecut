@@ -18,6 +18,7 @@
 
 import type { Project, ProjectTimeline } from '@/types/project';
 import { DEFAULT_TRACK_HEIGHT, DEFAULT_FPS } from '@/domain/timeline/defaults';
+import { clampAudioEqGainDb } from '@/shared/utils/audio-eq';
 
 /**
  * Normalize a track to ensure all fields have valid values.
@@ -101,6 +102,15 @@ function normalizeItem(
   }
   if (normalized.audioFadeOut !== undefined) {
     normalized.audioFadeOut = Math.max(0, normalized.audioFadeOut);
+  }
+  if (normalized.audioEqLowGainDb !== undefined) {
+    normalized.audioEqLowGainDb = clampAudioEqGainDb(normalized.audioEqLowGainDb);
+  }
+  if (normalized.audioEqMidGainDb !== undefined) {
+    normalized.audioEqMidGainDb = clampAudioEqGainDb(normalized.audioEqMidGainDb);
+  }
+  if (normalized.audioEqHighGainDb !== undefined) {
+    normalized.audioEqHighGainDb = clampAudioEqGainDb(normalized.audioEqHighGainDb);
   }
 
   // Normalize transform if present

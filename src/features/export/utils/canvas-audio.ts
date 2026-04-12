@@ -7,6 +7,7 @@
 
 import type { CompositionInputProps } from '@/types/export';
 import type { VideoItem, AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/types/timeline';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { Keyframe as VolumeKeyframe } from '@/types/keyframe';
 import type { Transition } from '@/types/transition';
 import { createLogger } from '@/shared/logging/logger';
@@ -32,6 +33,7 @@ import {
 } from '@/shared/utils/linked-media';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
+import { appendResolvedAudioEqStage, applyAudioEqStages, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const log = createLogger('CanvasAudio');
 
@@ -71,6 +73,7 @@ interface AudioSegment {
   fadeOutCurve: number;
   fadeInCurveX: number;
   fadeOutCurveX: number;
+  audioEqStages: ResolvedAudioEqSettings[];
   contentStartOffsetFrames?: number;
   contentEndOffsetFrames?: number;
   fadeInDelayFrames?: number;
@@ -386,6 +389,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
       muted: entry.muted,
       type: entry.type,
       audioCodec: entry.audioCodec,
+      audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
       beforeFrames: before,
       afterFrames: after,
       volumeKeyframes: entry.volumeKeyframes,
@@ -410,6 +414,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     if (Math.abs(left.speed - right.speed) > 0.0001) return false;
     if (Math.abs(left.volume - right.volume) > 0.0001) return false;
     if (left.muted !== right.muted) return false;
+    if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false;
     if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false;
     if (left.volumeKeyframes || right.volumeKeyframes) return false;
     return true;
@@ -430,6 +435,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     fadeOutCurve: segment.fadeOutCurve,
     fadeInCurveX: segment.fadeInCurveX,
     fadeOutCurveX: segment.fadeOutCurveX,
+    audioEqStages: segment.audioEqStages,
     contentStartOffsetFrames: segment.contentStartOffsetFrames,
     contentEndOffsetFrames: segment.contentEndOffsetFrames,
     fadeInDelayFrames: segment.fadeInDelayFrames,
@@ -513,10 +519,12 @@ function appendCompositionAudioSegments(params: {
     durationInFrames: number;
   };
   fps: number;
+  audioEqStages?: ResolvedAudioEqSettings[];
   visited?: Set<string>;
 }): void {
   const { segments, track, compositionItem, subComp, fps } = params;
   const visited = params.visited ?? new Set<string>();
+  const wrapperAudioEqStages = appendResolvedAudioEqStage(params.audioEqStages, getAudioEqSettings(compositionItem));
   const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
   const compFrom = compositionItem.from;
   const wrapperSpeed = compositionItem.speed ?? 1;
@@ -588,6 +596,7 @@ function appendCompositionAudioSegments(params: {
         compositionItem: nestedWrapper,
         subComp: nestedSubComp,
         fps,
+        audioEqStages: wrapperAudioEqStages,
         visited: nestedVisited,
       });
       continue;
@@ -624,6 +633,7 @@ function appendCompositionAudioSegments(params: {
       fadeOutCurve: subItem.audioFadeOutCurve ?? 0,
       fadeInCurveX: subItem.audioFadeInCurveX ?? 0.52,
       fadeOutCurveX: subItem.audioFadeOutCurveX ?? 0.52,
+      audioEqStages: appendResolvedAudioEqStage(wrapperAudioEqStages, getAudioEqSettings(subItem)),
       contentStartOffsetFrames: 0,
       contentEndOffsetFrames: 0,
       fadeInDelayFrames: 0,
@@ -771,6 +781,7 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           fadeOutCurve: item.audioFadeOutCurve ?? 0,
           fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
           fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+          audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
           contentStartOffsetFrames: 0,
           contentEndOffsetFrames: 0,
           fadeInDelayFrames: 0,
@@ -1576,6 +1587,7 @@ export async function processAudio(
       if (segment.speed !== 1.0) {
         processedChannels = await applySpeed(processedChannels, segment.speed, decoded.sampleRate);
       }
+      processedChannels = applyAudioEqStages(processedChannels, decoded.sampleRate, segment.audioEqStages);
 
       // Apply per-channel volume, fades, and resampling
       const fadeInSamples = Math.floor(

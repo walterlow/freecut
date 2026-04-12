@@ -1,8 +1,10 @@
 import type { AudioItem, VideoItem } from '@/types/timeline';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { Transition } from '@/types/transition';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/composition-runtime/deps/timeline';
 import { resolveTransitionWindowsForItems } from './scene-assembly';
 import type { AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
+import { appendResolvedAudioEqStage, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 type ContinuousAudioItem = {
   id: string;
@@ -50,6 +52,7 @@ export interface AudioSegment {
   audioFadeOutCurve: number;
   audioFadeInCurveX: number;
   audioFadeOutCurveX: number;
+  audioEqStages: ResolvedAudioEqSettings[];
   clipFadeSpans?: AudioClipFadeSpan[];
 }
 
@@ -235,6 +238,7 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
       audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
       audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+      audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
       clipFadeSpans: [buildClipFadeSpan({
         startFrame: 0,
         durationInFrames: item.durationInFrames,
@@ -262,7 +266,8 @@ export function buildStandaloneAudioSegments(
       && active.src === segment.src
       && Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001
       && Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001
-      && active.muted === segment.muted;
+      && active.muted === segment.muted
+      && areAudioEqStagesEqual(active.audioEqStages, segment.audioEqStages);
 
     if (canMerge) {
       const activeFrom = active.from;
@@ -296,6 +301,7 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
     });
     active = { ...segment };
@@ -320,6 +326,7 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
     });
   }
@@ -424,6 +431,7 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
       audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
       audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+      audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
       clipFadeSpans: [buildClipFadeSpan({
         startFrame: before,
         durationInFrames: item.durationInFrames,
@@ -463,6 +471,7 @@ export function buildTransitionVideoAudioSegments(
       && Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001
       && Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001
       && active.muted === segment.muted
+      && areAudioEqStagesEqual(active.audioEqStages, segment.audioEqStages)
       && active.afterFrames === 0
       && segment.beforeFrames === 0;
 
@@ -502,6 +511,7 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
       contentStartOffsetFrames: active.contentStartOffsetFrames,
       contentEndOffsetFrames: active.contentEndOffsetFrames,
@@ -532,6 +542,7 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
       contentStartOffsetFrames: active.contentStartOffsetFrames,
       contentEndOffsetFrames: active.contentEndOffsetFrames,

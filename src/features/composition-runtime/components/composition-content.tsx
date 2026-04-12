@@ -1,6 +1,7 @@
 ﻿import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
 import type { AudioItem, CompositionItem as CompositionItemType, TimelineItem, ShapeItem } from '@/types/timeline';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { ResolvedTransform } from '@/types/transform';
 import { useCompositionsStore } from '@/features/composition-runtime/deps/stores';
 import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
@@ -51,6 +52,7 @@ interface CompositionContentProps {
   renderMode?: 'full' | 'visual-only' | 'audio-only';
   audioGainMultiplier?: number;
   audioGainLiveItemIds?: string[];
+  audioEqStages?: ResolvedAudioEqSettings[];
   crossfadeFadeInFrames?: number;
   crossfadeFadeOutFrames?: number;
 }
@@ -151,7 +153,7 @@ function mapSubCompItemToWrapperWindow(params: {
  * then CSS-scaled to fit the parent container dimensions. This ensures sub-items
  * use the correct coordinate space (sub-comp dimensions, not main canvas).
  */
-export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, parentVisible = true, renderDepth = 0, renderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, crossfadeFadeInFrames, crossfadeFadeOutFrames }) => {
+export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, parentVisible = true, renderDepth = 0, renderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, audioEqStages = [], crossfadeFadeInFrames, crossfadeFadeOutFrames }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
   const { width: renderWidth, height: renderHeight, fps: mainFps } = useVideoConfig();
   const nestedMediaResolutionMode = useNestedMediaResolutionMode();
@@ -435,10 +437,12 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
         renderDepth={renderDepth}
         audioGainMultiplier={effectiveAudioGainMultiplier}
         audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
+        audioEqStages={audioEqStages}
       />
     </AbsoluteFill>
   ), [
     activeMaskInfos,
+    audioEqStages,
     effectiveAudioGainLiveItemIds,
     effectiveAudioGainMultiplier,
     renderDepth,
@@ -497,6 +501,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                         compositionRenderMode={subItem.type === 'composition' && hasLinkedAudioCompanion(resolvedItems, subItem) ? 'visual-only' : 'full'}
                         audioGainMultiplier={effectiveAudioGainMultiplier}
                         audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
+                        audioEqStages={audioEqStages}
                       />
                     </Sequence>
                   ))}

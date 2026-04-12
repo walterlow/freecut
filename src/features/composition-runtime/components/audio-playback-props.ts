@@ -1,4 +1,5 @@
 import type { AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 
 /**
  * Shared clip-level playback controls used by all preview audio backends.
@@ -19,6 +20,7 @@ export interface AudioPlaybackProps {
   audioFadeOutCurve?: number;
   audioFadeInCurveX?: number;
   audioFadeOutCurveX?: number;
+  audioEqStages?: ResolvedAudioEqSettings[];
   clipFadeSpans?: AudioClipFadeSpan[];
   contentStartOffsetFrames?: number;
   contentEndOffsetFrames?: number;

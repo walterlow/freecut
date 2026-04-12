@@ -12,6 +12,7 @@ import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import {
   createPreviewClipAudioGraph,
   PREVIEW_AUDIO_GAIN_RAMP_SECONDS,
+  rampPreviewClipEq,
   rampPreviewClipGain,
   type PreviewClipAudioGraph,
 } from '../utils/preview-audio-graph';
@@ -120,6 +121,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
   contentEndOffsetFrames = 0,
@@ -130,7 +132,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   liveGainItemIds,
   volumeMultiplier = 1,
 }) => {
-  const { frame, fps, playing, resolvedVolume: audioVolume } = useAudioPlaybackState({
+  const { frame, fps, playing, resolvedVolume: audioVolume, resolvedAudioEqStages } = useAudioPlaybackState({
     itemId,
     liveGainItemIds,
     volume,
@@ -142,6 +144,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
     contentEndOffsetFrames,
@@ -542,7 +545,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, [acceptPartialSlice, audioSlice, fps, frame, mediaId, playbackRate, playing, requestPartialSlice, sourceFps, src, trimBefore]);
 
   useEffect(() => {
-    const graph = createPreviewClipAudioGraph();
+    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
     if (!graph) return;
     graphRef.current = graph;
 
@@ -644,6 +647,12 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     rampPreviewClipGain(graph, safeVolume);
   }, [audioVolume]);
 
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+    rampPreviewClipEq(graph, resolvedAudioEqStages);
+  }, [resolvedAudioEqStages]);
+
   const clearQueuedSource = useCallback(() => {
     const queuedSource = queuedSourceRef.current;
     if (!queuedSource) {
@@ -653,7 +662,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     queuedSourceRef.current = null;
     try { queuedSource.node.stop(); } catch { /* already stopped */ }
     queuedSource.node.disconnect();
-  }, []);
+  }, [resolvedAudioEqStages.length]);
 
   const stopSource = useCallback((fadeOut: boolean = true) => {
     startRequestIdRef.current += 1;
@@ -773,8 +782,9 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, [clearQueuedSource, mediaId, playbackRate]);
 
   useEffect(() => {
-    const audioBuffer = audioSlice?.buffer ?? null;
-    if (!audioBuffer) return;
+    const currentSlice = audioSlice;
+    if (!currentSlice) return;
+    const audioBuffer = currentSlice.buffer;
 
     const graph = graphRef.current;
     const ctx = graph?.context ?? null;
@@ -784,7 +794,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const effectiveSourceFps = sourceFps ?? fps;
     // IMPORTANT: trimBefore is in source FPS frames â€” must use effectiveSourceFps, not fps
     const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
-    const audioStartTime = audioSlice?.startTime ?? 0;
+    const audioStartTime = currentSlice.startTime;
     const targetOffsetInBuffer = targetTime - audioStartTime;
     const frameDelta = frame - lastObservedFrameRef.current;
     lastObservedFrameRef.current = frame;
@@ -815,7 +825,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         // Treat large frame jumps as explicit seeks and re-sync immediately.
         shouldStart = true;
       } else if (currentSource.buffer !== audioBuffer) {
-        const queued = scheduleQueuedSource(ctx, graph, currentSource, audioSlice);
+        const queued = scheduleQueuedSource(ctx, graph, currentSource, currentSlice);
         if (!queued) {
           // Buffer changed (partial -> full). Avoid immediate restart thrash;
           // only re-sync if current source is close to running out.

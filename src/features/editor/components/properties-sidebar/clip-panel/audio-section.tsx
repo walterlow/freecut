@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
 import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
+import type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 import {
   getAutoKeyframeOperation,
   type AutoKeyframeOperation,
@@ -19,6 +20,7 @@ import {
 } from '../components';
 import { getMixedValue } from '../utils';
 import { getAudioSectionItems } from './audio-section-utils';
+import { AUDIO_EQ_GAIN_DB_MAX, AUDIO_EQ_GAIN_DB_MIN } from '@/shared/utils/audio-eq';
 
 interface AudioSectionProps {
   items: TimelineItem[];
@@ -26,6 +28,7 @@ interface AudioSectionProps {
 
 const AUDIO_GAIN_DB_MIN = -60;
 const AUDIO_GAIN_DB_MAX = 12;
+type AudioEqField = 'audioEqLowGainDb' | 'audioEqMidGainDb' | 'audioEqHighGainDb';
 
 /**
  * Audio section - volume and audio fades.
@@ -92,6 +95,9 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const fadeIn = getMixedValue(audioItems, (item) => item.audioFadeIn, 0);
   const fadeOut = getMixedValue(audioItems, (item) => item.audioFadeOut, 0);
+  const eqLow = getMixedValue(audioItems, (item) => item.audioEqLowGainDb, 0);
+  const eqMid = getMixedValue(audioItems, (item) => item.audioEqMidGainDb, 0);
+  const eqHigh = getMixedValue(audioItems, (item) => item.audioEqHighGainDb, 0);
 
   // Helper: auto-keyframe volume on value change
   const autoKeyframeVolume = useCallback(
@@ -184,6 +190,25 @@ export function AudioSection({ items }: AudioSectionProps) {
     [itemIds, updateItem, clearPreview]
   );
 
+  const handleEqLiveChange = useCallback(
+    (field: AudioEqField, value: number) => {
+      const previews: Record<string, ItemPropertiesPreview> = {};
+      itemIds.forEach((id) => {
+        previews[id] = { [field]: value } as ItemPropertiesPreview;
+      });
+      setPropertiesPreviewNew(previews);
+    },
+    [itemIds, setPropertiesPreviewNew]
+  );
+
+  const handleEqChange = useCallback(
+    (field: AudioEqField, value: number) => {
+      itemIds.forEach((id) => updateItem(id, { [field]: value } as Partial<TimelineItem>));
+      queueMicrotask(() => clearPreview());
+    },
+    [itemIds, updateItem, clearPreview]
+  );
+
   // Reset volume to 0 dB
   // Read current values from store to avoid depending on audioItems (prevents callback recreation)
   const handleResetVolume = useCallback(() => {
@@ -221,6 +246,18 @@ export function AudioSection({ items }: AudioSectionProps) {
     }
   }, [itemIds, updateItem]);
 
+  const handleResetEq = useCallback((field: AudioEqField) => {
+    const tolerance = 0.01;
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some((item) => {
+      if (!itemIds.includes(item.id)) return false;
+      return Math.abs((item[field] as number | undefined) ?? 0) > tolerance;
+    });
+    if (needsUpdate) {
+      itemIds.forEach((id) => updateItem(id, { [field]: 0 } as Partial<TimelineItem>));
+    }
+  }, [itemIds, updateItem]);
+
   if (audioItems.length === 0) return null;
 
   return (
@@ -248,6 +285,78 @@ export function AudioSection({ items }: AudioSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetVolume}
+            title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label="Low EQ">
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={eqLow}
+            onChange={(value) => handleEqChange('audioEqLowGainDb', value)}
+            onLiveChange={(value) => handleEqLiveChange('audioEqLowGainDb', value)}
+            min={AUDIO_EQ_GAIN_DB_MIN}
+            max={AUDIO_EQ_GAIN_DB_MAX}
+            step={0.1}
+            unit="dB"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => handleResetEq('audioEqLowGainDb')}
+            title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label="Mid EQ">
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={eqMid}
+            onChange={(value) => handleEqChange('audioEqMidGainDb', value)}
+            onLiveChange={(value) => handleEqLiveChange('audioEqMidGainDb', value)}
+            min={AUDIO_EQ_GAIN_DB_MIN}
+            max={AUDIO_EQ_GAIN_DB_MAX}
+            step={0.1}
+            unit="dB"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => handleResetEq('audioEqMidGainDb')}
+            title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label="High EQ">
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={eqHigh}
+            onChange={(value) => handleEqChange('audioEqHighGainDb', value)}
+            onLiveChange={(value) => handleEqLiveChange('audioEqHighGainDb', value)}
+            min={AUDIO_EQ_GAIN_DB_MIN}
+            max={AUDIO_EQ_GAIN_DB_MAX}
+            step={0.1}
+            unit="dB"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => handleResetEq('audioEqHighGainDb')}
             title="Reset to 0 dB"
           >
             <RotateCcw className="w-3.5 h-3.5" />

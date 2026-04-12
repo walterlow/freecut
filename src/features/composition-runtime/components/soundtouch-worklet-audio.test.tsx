@@ -8,6 +8,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedAudioEqStages: [],
   },
 }));
 
@@ -26,8 +27,10 @@ const previewGraphMocks = vi.hoisted(() => ({
         value: 1,
       },
     },
+    eqStageNodes: [],
     dispose: vi.fn(),
   })),
+  rampPreviewClipEq: vi.fn(),
   rampPreviewClipGain: vi.fn(),
 }));
 
@@ -46,6 +49,7 @@ vi.mock('./hooks/use-audio-playback-state', () => ({
 }));
 vi.mock('../utils/preview-audio-graph', () => ({
   createPreviewClipAudioGraph: previewGraphMocks.createPreviewClipAudioGraph,
+  rampPreviewClipEq: previewGraphMocks.rampPreviewClipEq,
   rampPreviewClipGain: previewGraphMocks.rampPreviewClipGain,
 }));
 vi.mock('../utils/soundtouch-preview-worklet', () => ({
@@ -82,6 +86,7 @@ describe('SoundTouchWorkletAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
   });
 

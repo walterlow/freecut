@@ -51,6 +51,7 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   audioFadeOutCurve,
   audioFadeInCurveX,
   audioFadeOutCurveX,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames,
   contentEndOffsetFrames,
@@ -92,6 +93,7 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
       audioFadeOutCurve={audioFadeOutCurve}
       audioFadeInCurveX={audioFadeInCurveX}
       audioFadeOutCurveX={audioFadeOutCurveX}
+      audioEqStages={audioEqStages}
       clipFadeSpans={clipFadeSpans}
       contentStartOffsetFrames={contentStartOffsetFrames}
       contentEndOffsetFrames={contentEndOffsetFrames}
@@ -148,6 +150,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames,
   contentEndOffsetFrames,
@@ -168,6 +171,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
     contentEndOffsetFrames,
@@ -362,6 +366,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       audioFadeOutCurve={audioFadeOutCurve}
       audioFadeInCurveX={audioFadeInCurveX}
       audioFadeOutCurveX={audioFadeOutCurveX}
+      audioEqStages={audioEqStages}
       clipFadeSpans={clipFadeSpans}
       contentStartOffsetFrames={contentStartOffsetFrames}
       contentEndOffsetFrames={contentEndOffsetFrames}
@@ -393,6 +398,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       audioFadeOutCurve={audioFadeOutCurve}
       audioFadeInCurveX={audioFadeInCurveX}
       audioFadeOutCurveX={audioFadeOutCurveX}
+      audioEqStages={audioEqStages}
       clipFadeSpans={clipFadeSpans}
       contentStartOffsetFrames={contentStartOffsetFrames}
       contentEndOffsetFrames={contentEndOffsetFrames}

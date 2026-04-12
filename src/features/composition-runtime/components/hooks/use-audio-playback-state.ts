@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useSequenceContext } from '@/features/composition-runtime/deps/player';
 import { useVideoConfig, useIsPlaying } from '../../hooks/use-player-compat';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
@@ -7,7 +7,9 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier } from '@/shared/utils/audio-fade-curve';
+import { resolvePreviewAudioEqStages } from '@/shared/utils/audio-eq';
 import { useMixerLiveGainProduct, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { AudioPlaybackProps } from '../audio-playback-props';
 
 interface AudioPlaybackState {
@@ -15,6 +17,7 @@ interface AudioPlaybackState {
   fps: number;
   playing: boolean;
   resolvedVolume: number;
+  resolvedAudioEqStages: ResolvedAudioEqSettings[];
 }
 
 export function useAudioPlaybackState({
@@ -29,6 +32,7 @@ export function useAudioPlaybackState({
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
   contentEndOffsetFrames = 0,
@@ -100,10 +104,21 @@ export function useAudioPlaybackState({
     clearMixerLiveGain(itemId);
   }, [itemId, volume]);
 
+  const resolvedAudioEqStages = useMemo(
+    () => resolvePreviewAudioEqStages(audioEqStages, preview),
+    [
+      audioEqStages,
+      preview?.audioEqLowGainDb,
+      preview?.audioEqMidGainDb,
+      preview?.audioEqHighGainDb,
+    ],
+  );
+
   return {
     frame,
     fps,
     playing,
     resolvedVolume: itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier) * mixerGain,
+    resolvedAudioEqStages,
   };
 }

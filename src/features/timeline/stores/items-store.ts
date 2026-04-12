@@ -13,6 +13,7 @@ import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTransitionsStore } from './transitions-store';
 import { useMarkersStore } from './markers-store';
 import { clampAudioFadeCurve, clampAudioFadeCurveX } from '@/shared/utils/audio-fade-curve';
+import { clampAudioEqGainDb } from '@/shared/utils/audio-eq';
 import { normalizeCropSettings } from '@/shared/utils/media-crop';
 import {
   getEffectiveTimelineMaxFrame,
@@ -57,6 +58,9 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     audioFadeOutCurve: item.audioFadeOutCurve === undefined ? undefined : clampAudioFadeCurve(item.audioFadeOutCurve),
     audioFadeInCurveX: item.audioFadeInCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeInCurveX),
     audioFadeOutCurveX: item.audioFadeOutCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeOutCurveX),
+    audioEqLowGainDb: item.audioEqLowGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqLowGainDb),
+    audioEqMidGainDb: item.audioEqMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqMidGainDb),
+    audioEqHighGainDb: item.audioEqHighGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqHighGainDb),
   };
 
   // Legacy split clips can have sourceEnd without sourceStart.
@@ -101,6 +105,15 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   }
   if (normalized.audioFadeOutCurveX !== undefined) {
     normalized.audioFadeOutCurveX = clampAudioFadeCurveX(normalized.audioFadeOutCurveX);
+  }
+  if (normalized.audioEqLowGainDb !== undefined) {
+    normalized.audioEqLowGainDb = clampAudioEqGainDb(normalized.audioEqLowGainDb);
+  }
+  if (normalized.audioEqMidGainDb !== undefined) {
+    normalized.audioEqMidGainDb = clampAudioEqGainDb(normalized.audioEqMidGainDb);
+  }
+  if (normalized.audioEqHighGainDb !== undefined) {
+    normalized.audioEqHighGainDb = clampAudioEqGainDb(normalized.audioEqHighGainDb);
   }
 
   return normalized;

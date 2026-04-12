@@ -1,4 +1,3 @@
-import React from 'react';
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -13,6 +12,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedAudioEqStages: [],
   },
 }));
 
@@ -68,6 +68,7 @@ const previewGraphMocks = vi.hoisted(() => {
         value: 1,
       },
     },
+    eqStageNodes: [],
     dispose: vi.fn(),
   };
 
@@ -75,6 +76,7 @@ const previewGraphMocks = vi.hoisted(() => {
     graph,
     sourceNode,
     createPreviewClipAudioGraph: vi.fn(() => graph),
+    rampPreviewClipEq: vi.fn(),
     rampPreviewClipGain: vi.fn(),
     setPreviewClipGain: vi.fn(),
   };
@@ -132,6 +134,7 @@ describe('PitchCorrectedAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
   });
 

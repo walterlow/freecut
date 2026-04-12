@@ -13,6 +13,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedAudioEqStages: [],
   },
 }));
 
@@ -90,6 +91,7 @@ describe('CustomDecoderAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
     soundTouchMocks.renderFallback = false;
   });
@@ -169,6 +171,7 @@ describe('CustomDecoderAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedAudioEqStages: [],
     };
 
     rerender(

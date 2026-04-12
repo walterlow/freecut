@@ -18,6 +18,9 @@ export interface ItemPropertiesPreview {
   audioFadeOutCurve?: number;
   audioFadeInCurveX?: number;
   audioFadeOutCurveX?: number;
+  audioEqLowGainDb?: number;
+  audioEqMidGainDb?: number;
+  audioEqHighGainDb?: number;
   // Text properties
   fontSize?: number;
   letterSpacing?: number;

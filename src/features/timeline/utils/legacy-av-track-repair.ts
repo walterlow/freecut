@@ -208,6 +208,9 @@ function makeGeneratedAudioItem(video: VideoItem, trackId: string, createId: () 
     audioFadeOutCurve: video.audioFadeOutCurve,
     audioFadeInCurveX: video.audioFadeInCurveX,
     audioFadeOutCurveX: video.audioFadeOutCurveX,
+    audioEqLowGainDb: video.audioEqLowGainDb,
+    audioEqMidGainDb: video.audioEqMidGainDb,
+    audioEqHighGainDb: video.audioEqHighGainDb,
     offset: video.offset,
   };
 }

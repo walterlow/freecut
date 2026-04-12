@@ -33,6 +33,7 @@ import {
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -181,6 +182,7 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
         safeTrimBefore={safeTrimBefore}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
+        audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(item))}
       />
     </div>
   );

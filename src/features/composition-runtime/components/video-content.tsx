@@ -4,6 +4,7 @@ import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useClock } from '@/features/composition-runtime/deps/player';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/player';
@@ -24,8 +25,8 @@ import {
   unregisterDomVideoElement,
 } from '../utils/dom-video-element-registry';
 import {
-  applyVideoElementAudioVolume,
-  useVideoAudioVolume,
+  applyVideoElementAudioState,
+  useVideoAudioState,
   connectedVideoElements,
   videoAudioContexts,
   ensureAudioContextResumed,
@@ -55,6 +56,7 @@ const NativePreviewVideo: React.FC<{
   sourceFps: number;
   playbackRate: number;
   audioVolume: number;
+  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   fitMode?: 'contain' | 'fill';
@@ -69,6 +71,7 @@ const NativePreviewVideo: React.FC<{
   sourceFps,
   playbackRate,
   audioVolume,
+  audioEqStages,
   onError,
   containerRef,
   fitMode = 'contain',
@@ -86,6 +89,7 @@ const NativePreviewVideo: React.FC<{
   const preWarmTimerRef = useRef<number | null>(null);
   const preWarmGenRef = useRef(0);
   const audioVolumeRef = useRef(audioVolume);
+  const audioEqStagesRef = useRef(audioEqStages);
   const onErrorRef = useRef(onError);
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
@@ -93,6 +97,7 @@ const NativePreviewVideo: React.FC<{
   const registeredElementRef = useRef<HTMLVideoElement | null>(null);
   const registeredItemIdRef = useRef<string | null>(null);
   audioVolumeRef.current = audioVolume;
+  audioEqStagesRef.current = audioEqStages;
   onErrorRef.current = onError;
 
   // Clock instance for imperative access in rVFC callback
@@ -242,7 +247,7 @@ const NativePreviewVideo: React.FC<{
 
     elementRef.current = element;
     syncRegisteredVideoElement(itemId, element);
-    applyVideoElementAudioVolume(element, audioVolumeRef.current);
+    applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
 
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
@@ -760,8 +765,8 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
-    applyVideoElementAudioVolume(video, audioVolume);
-  }, [audioVolume]);
+    applyVideoElementAudioState(video, audioVolume, audioEqStages);
+  }, [audioEqStages, audioVolume]);
 
   // Guard: itemId is required for rendering
   if (!itemId) {
@@ -811,9 +816,10 @@ export const VideoContent: React.FC<{
   safeTrimBefore: number;
   playbackRate: number;
   sourceFps: number;
+  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
   forceCssComposite?: boolean;
-}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
-  const baseAudioVolume = useVideoAudioVolume(item, muted);
+}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, audioEqStages, forceCssComposite = false }) => {
+  const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   // During transition overlaps, the composition's audio crossfade system
   // (CustomDecoderAudio) handles audio mixing. Mute the DOM video element
   // to prevent doubling — one audio stream from the element and another
@@ -860,6 +866,7 @@ export const VideoContent: React.FC<{
       sourceFps={sourceFps}
       playbackRate={playbackRate}
       audioVolume={audioVolume}
+      audioEqStages={resolvedAudioEqStages}
       onError={handleError}
       containerRef={containerRef}
       fitMode="fill"
