@@ -70,6 +70,30 @@ describe('audio scene', () => {
     expect(segments[0]?.volumeDb).toBe(-2);
   });
 
+  it('keeps pitch settings on standalone audio segments', () => {
+    const segments = buildStandaloneAudioSegments([
+      {
+        id: 'audio-1',
+        type: 'audio',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        src: 'audio.mp3',
+        label: 'Audio 1',
+        audioPitchSemitones: 3,
+        audioPitchCents: -25,
+        muted: false,
+        trackVolumeDb: 0,
+        trackVisible: true,
+      },
+    ], 30);
+
+    expect(segments[0]).toEqual(expect.objectContaining({
+      audioPitchSemitones: 3,
+      audioPitchCents: -25,
+    }));
+  });
+
   it('expands transition video audio segments with overlap fades', () => {
     const segments = buildTransitionVideoAudioSegments([
       {

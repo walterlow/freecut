@@ -20,6 +20,9 @@ export interface AudioPlaybackProps {
   audioFadeOutCurve?: number;
   audioFadeInCurveX?: number;
   audioFadeOutCurveX?: number;
+  audioPitchSemitones?: number;
+  audioPitchCents?: number;
+  audioPitchShiftSemitones?: number;
   audioEqStages?: ResolvedAudioEqSettings[];
   clipFadeSpans?: AudioClipFadeSpan[];
   contentStartOffsetFrames?: number;

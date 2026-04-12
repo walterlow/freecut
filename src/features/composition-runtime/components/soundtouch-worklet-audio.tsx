@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
+import { getAudioPitchRatioFromSemitones } from '@/shared/utils/audio-pitch';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
@@ -47,6 +48,9 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioPitchSemitones,
+  audioPitchCents,
+  audioPitchShiftSemitones,
   audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
@@ -58,7 +62,14 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   liveGainItemIds,
   volumeMultiplier = 1,
 }) => {
-  const { frame, fps, playing, resolvedVolume: finalVolume, resolvedAudioEqStages } = useAudioPlaybackState({
+  const {
+    frame,
+    fps,
+    playing,
+    resolvedVolume: finalVolume,
+    resolvedPitchShiftSemitones,
+    resolvedAudioEqStages,
+  } = useAudioPlaybackState({
     itemId,
     liveGainItemIds,
     volume,
@@ -70,6 +81,9 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioPitchSemitones,
+    audioPitchCents,
+    audioPitchShiftSemitones,
     audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
@@ -225,6 +239,14 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       tempo: Math.max(0.01, playbackRate),
     });
   }, [nodeReady, playbackRate]);
+
+  useEffect(() => {
+    if (!nodeReady) return;
+    postMessage({
+      type: 'set-pitch',
+      pitch: getAudioPitchRatioFromSemitones(resolvedPitchShiftSemitones),
+    });
+  }, [nodeReady, resolvedPitchShiftSemitones]);
 
   useEffect(() => {
     const graph = graphRef.current;

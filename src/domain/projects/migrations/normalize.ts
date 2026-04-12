@@ -44,6 +44,10 @@ import {
   clampAudioEqGainDb,
   clampAudioEqQ,
 } from '@/shared/utils/audio-eq';
+import {
+  clampAudioPitchCents,
+  clampAudioPitchSemitones,
+} from '@/shared/utils/audio-pitch';
 
 /**
  * Normalize a track to ensure all fields have valid values.
@@ -127,6 +131,12 @@ function normalizeItem(
   }
   if (normalized.audioFadeOut !== undefined) {
     normalized.audioFadeOut = Math.max(0, normalized.audioFadeOut);
+  }
+  if (normalized.audioPitchSemitones !== undefined) {
+    normalized.audioPitchSemitones = clampAudioPitchSemitones(normalized.audioPitchSemitones);
+  }
+  if (normalized.audioPitchCents !== undefined) {
+    normalized.audioPitchCents = clampAudioPitchCents(normalized.audioPitchCents);
   }
   if (normalized.audioEqLowCutEnabled !== undefined) {
     normalized.audioEqLowCutEnabled = !!normalized.audioEqLowCutEnabled;

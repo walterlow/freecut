@@ -41,6 +41,10 @@ import {
 } from '@/shared/utils/audio-eq';
 import { normalizeCropSettings } from '@/shared/utils/media-crop';
 import {
+  clampAudioPitchCents,
+  clampAudioPitchSemitones,
+} from '@/shared/utils/audio-pitch';
+import {
   getEffectiveTimelineMaxFrame,
   sanitizeInOutPoints,
 } from '../utils/in-out-points';
@@ -83,6 +87,8 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     audioFadeOutCurve: item.audioFadeOutCurve === undefined ? undefined : clampAudioFadeCurve(item.audioFadeOutCurve),
     audioFadeInCurveX: item.audioFadeInCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeInCurveX),
     audioFadeOutCurveX: item.audioFadeOutCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeOutCurveX),
+    audioPitchSemitones: item.audioPitchSemitones === undefined ? undefined : clampAudioPitchSemitones(item.audioPitchSemitones),
+    audioPitchCents: item.audioPitchCents === undefined ? undefined : clampAudioPitchCents(item.audioPitchCents),
     audioEqLowCutEnabled: item.audioEqLowCutEnabled === undefined ? undefined : !!item.audioEqLowCutEnabled,
     audioEqLowCutFrequencyHz: item.audioEqLowCutFrequencyHz === undefined
       ? undefined
@@ -160,6 +166,12 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   }
   if (normalized.audioFadeOutCurveX !== undefined) {
     normalized.audioFadeOutCurveX = clampAudioFadeCurveX(normalized.audioFadeOutCurveX);
+  }
+  if (normalized.audioPitchSemitones !== undefined) {
+    normalized.audioPitchSemitones = clampAudioPitchSemitones(normalized.audioPitchSemitones);
+  }
+  if (normalized.audioPitchCents !== undefined) {
+    normalized.audioPitchCents = clampAudioPitchCents(normalized.audioPitchCents);
   }
   if (normalized.audioEqLowCutEnabled !== undefined) {
     normalized.audioEqLowCutEnabled = !!normalized.audioEqLowCutEnabled;

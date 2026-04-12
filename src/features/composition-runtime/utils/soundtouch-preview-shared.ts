@@ -19,6 +19,11 @@ export interface SoundTouchSetTempoMessage {
   tempo: number;
 }
 
+export interface SoundTouchSetPitchMessage {
+  type: 'set-pitch';
+  pitch: number;
+}
+
 export interface SoundTouchSetPlayingMessage {
   type: 'set-playing';
   playing: boolean;
@@ -32,5 +37,6 @@ export type SoundTouchPreviewProcessorMessage =
   | SoundTouchAppendSourceMessage
   | SoundTouchSeekMessage
   | SoundTouchSetTempoMessage
+  | SoundTouchSetPitchMessage
   | SoundTouchSetPlayingMessage
   | SoundTouchResetMessage;

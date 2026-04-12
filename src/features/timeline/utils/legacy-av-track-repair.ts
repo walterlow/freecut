@@ -208,6 +208,8 @@ function makeGeneratedAudioItem(video: VideoItem, trackId: string, createId: () 
     audioFadeOutCurve: video.audioFadeOutCurve,
     audioFadeInCurveX: video.audioFadeInCurveX,
     audioFadeOutCurveX: video.audioFadeOutCurveX,
+    audioPitchSemitones: video.audioPitchSemitones,
+    audioPitchCents: video.audioPitchCents,
     audioEqLowCutEnabled: video.audioEqLowCutEnabled,
     audioEqLowCutFrequencyHz: video.audioEqLowCutFrequencyHz,
     audioEqLowCutSlopeDbPerOct: video.audioEqLowCutSlopeDbPerOct,

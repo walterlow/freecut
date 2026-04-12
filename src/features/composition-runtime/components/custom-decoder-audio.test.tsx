@@ -13,6 +13,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedPitchShiftSemitones: 0,
     resolvedAudioEqStages: [],
   },
 }));
@@ -20,6 +21,20 @@ const playbackStateMocks = vi.hoisted(() => ({
 const soundTouchMocks = vi.hoisted(() => ({
   renderFallback: false,
 }));
+
+const storeMocks = vi.hoisted(() => {
+  const gizmoState = { activeGizmo: null, preview: null };
+  const useGizmoStore = Object.assign(
+    vi.fn((selector?: (state: typeof gizmoState) => unknown) => (
+      selector ? selector(gizmoState) : gizmoState
+    )),
+    {
+      getState: () => gizmoState,
+    },
+  );
+
+  return { useGizmoStore };
+});
 
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
@@ -54,7 +69,7 @@ vi.mock('./custom-decoder-buffered-audio', () => ({
   CustomDecoderBufferedAudio: () => <div data-testid="buffered" />,
 }));
 vi.mock('./pitch-corrected-audio', () => ({
-  PitchCorrectedAudio: ({
+  NativePitchCorrectedAudio: ({
     src,
     sourceStartOffsetSec,
   }: {
@@ -91,6 +106,7 @@ describe('CustomDecoderAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedPitchShiftSemitones: 0,
       resolvedAudioEqStages: [],
     };
     soundTouchMocks.renderFallback = false;
@@ -171,6 +187,7 @@ describe('CustomDecoderAudio', () => {
       fps: 30,
       playing: true,
       resolvedVolume: 1,
+      resolvedPitchShiftSemitones: 0,
       resolvedAudioEqStages: [],
     };
 
@@ -234,4 +251,32 @@ describe('CustomDecoderAudio', () => {
     createObjectUrlSpy.mockRestore();
     revokeObjectUrlSpy.mockRestore();
   });
+
+  it('switches to the SoundTouch path for pitch-only shifts at 1x playback', async () => {
+    audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
+      buffer: makeAudioBuffer(),
+      startTime: 0,
+      isComplete: false,
+    });
+    audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
+
+    render(
+      <CustomDecoderAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        audioPitchSemitones={3}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(document.querySelector('[data-testid="buffered"]')).toBeNull();
+    expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
+  });
 });
+vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);

@@ -45,6 +45,7 @@ import {
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
 import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch';
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
@@ -402,6 +403,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -428,6 +431,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -470,6 +475,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -490,6 +497,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -537,6 +546,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                   renderMode="audio-only"
                   audioGainMultiplier={Math.pow(10, segment.volumeDb / 20)}
                   audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(compoundItem))}
+                  audioPitchShiftSemitones={segment.audioPitchShiftSemitones}
                   crossfadeFadeInFrames={segment.crossfadeFadeIn}
                   crossfadeFadeOutFrames={segment.crossfadeFadeOut}
                 />
@@ -557,6 +567,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 renderMode="audio-only"
                 audioGainMultiplier={Math.pow(10, ((item.volume ?? 0) + (item.trackVolumeDb ?? 0)) / 20)}
                 audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(item))}
+                audioPitchShiftSemitones={getAudioPitchShiftSemitones(item)}
               />
             </Sequence>
           ))}

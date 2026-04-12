@@ -1,13 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
-import { PitchCorrectedAudio } from './pitch-corrected-audio';
+import { NativePitchCorrectedAudio } from './pitch-corrected-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
 import { audioBufferToWavBlob } from '../utils/audio-buffer-wav';
 import { createLogger } from '@/shared/logging/logger';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
+import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
+import {
+  isAudioPitchShiftActive,
+  resolvePreviewAudioPitchShiftSemitones,
+} from '@/shared/utils/audio-pitch';
 
 const log = createLogger('CustomDecoderAudio');
 const PARTIAL_WAV_READY_SECONDS = 2;
@@ -51,6 +56,9 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   audioFadeOutCurve,
   audioFadeInCurveX,
   audioFadeOutCurveX,
+  audioPitchSemitones,
+  audioPitchCents,
+  audioPitchShiftSemitones,
   audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames,
@@ -76,7 +84,7 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
   }
 
   return (
-    <PitchCorrectedAudio
+    <NativePitchCorrectedAudio
       src={decodedSrc}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
@@ -85,6 +93,9 @@ const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
       sourceStartOffsetSec={sourceStartOffsetSec}
       volume={volume}
       playbackRate={playbackRate}
+      audioPitchSemitones={audioPitchSemitones}
+      audioPitchCents={audioPitchCents}
+      audioPitchShiftSemitones={audioPitchShiftSemitones}
       muted={muted}
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}
@@ -150,6 +161,9 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioPitchSemitones,
+  audioPitchCents,
+  audioPitchShiftSemitones,
   audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames,
@@ -162,6 +176,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
 }) => {
   const { frame, fps, playing } = useAudioPlaybackState({
     itemId,
+    liveGainItemIds,
     volume,
     muted,
     durationInFrames,
@@ -171,6 +186,9 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     audioFadeOutCurve,
     audioFadeInCurveX,
     audioFadeOutCurveX,
+    audioPitchSemitones,
+    audioPitchCents,
+    audioPitchShiftSemitones,
     audioEqStages,
     clipFadeSpans,
     contentStartOffsetFrames,
@@ -358,6 +376,9 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       sourceFps={sourceFps}
       volume={volume}
       playbackRate={playbackRate}
+      audioPitchSemitones={audioPitchSemitones}
+      audioPitchCents={audioPitchCents}
+      audioPitchShiftSemitones={audioPitchShiftSemitones}
       muted={muted}
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}
@@ -390,6 +411,9 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       isComplete={decodedSource.isComplete}
       volume={volume}
       playbackRate={playbackRate}
+      audioPitchSemitones={audioPitchSemitones}
+      audioPitchCents={audioPitchCents}
+      audioPitchShiftSemitones={audioPitchShiftSemitones}
       muted={muted}
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}
@@ -422,7 +446,19 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
  */
 export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
-  const shouldUseBufferedPlayback = Math.abs(playbackRate - 1) <= 0.0001;
+  const itemPreview = useGizmoStore(
+    useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
+  );
+  const resolvedPitchShiftSemitones = resolvePreviewAudioPitchShiftSemitones({
+    base: {
+      audioPitchSemitones: props.audioPitchSemitones,
+      audioPitchCents: props.audioPitchCents,
+    },
+    preview: itemPreview?.properties,
+    additionalSemitones: props.audioPitchShiftSemitones,
+  });
+  const shouldUseBufferedPlayback = Math.abs(playbackRate - 1) <= 0.0001
+    && !isAudioPitchShiftActive(resolvedPitchShiftSemitones);
 
   if (shouldUseBufferedPlayback) {
     return <CustomDecoderBufferedAudio {...props} playbackRate={playbackRate} />;

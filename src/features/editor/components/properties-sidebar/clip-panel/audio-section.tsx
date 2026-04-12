@@ -58,6 +58,12 @@ import {
   getAudioEqPresetById,
   resolveAudioEqSettings,
 } from '@/shared/utils/audio-eq';
+import {
+  AUDIO_PITCH_CENTS_MAX,
+  AUDIO_PITCH_CENTS_MIN,
+  AUDIO_PITCH_SEMITONES_MAX,
+  AUDIO_PITCH_SEMITONES_MIN,
+} from '@/shared/utils/audio-pitch';
 
 interface AudioSectionProps {
   items: TimelineItem[];
@@ -103,6 +109,7 @@ export function AudioSection({ items }: AudioSectionProps) {
   const updateItem = useTimelineStore((s) => s.updateItem);
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
+  const clearPreviewForItems = useGizmoStore((s) => s.clearPreviewForItems);
   const currentFrame = useThrottledFrame();
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
@@ -153,6 +160,8 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const fadeIn = getMixedValue(audioItems, (item) => item.audioFadeIn, 0);
   const fadeOut = getMixedValue(audioItems, (item) => item.audioFadeOut, 0);
+  const pitchSemitones = getMixedValue(audioItems, (item) => item.audioPitchSemitones ?? 0, 0);
+  const pitchCents = getMixedValue(audioItems, (item) => item.audioPitchCents ?? 0, 0);
 
   const eqLowCutEnabled = getMixedValue(audioItems, (item) => item.audioEqLowCutEnabled ?? false, false);
   const eqLowCutFrequencyHz = getMixedValue(audioItems, (item) => item.audioEqLowCutFrequencyHz ?? AUDIO_EQ_LOW_CUT_FREQUENCY_HZ, AUDIO_EQ_LOW_CUT_FREQUENCY_HZ);
@@ -362,6 +371,50 @@ export function AudioSection({ items }: AudioSectionProps) {
     [clearPreview, itemIds, updateItem],
   );
 
+  const handleAudioPitchLiveChange = useCallback(
+    (field: 'audioPitchSemitones' | 'audioPitchCents', value: number) => {
+      const previews: Record<string, Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>> = {};
+      itemIds.forEach((id) => {
+        previews[id] = { [field]: value } as Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>;
+      });
+      setPropertiesPreviewNew(previews);
+    },
+    [itemIds, setPropertiesPreviewNew],
+  );
+
+  const handleAudioPitchChange = useCallback(
+    (field: 'audioPitchSemitones' | 'audioPitchCents', value: number) => {
+      const previews: Record<string, Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>> = {};
+      itemIds.forEach((id) => {
+        previews[id] = { [field]: value } as Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>;
+      });
+      setPropertiesPreviewNew(previews);
+      itemIds.forEach((id) => updateItem(id, { [field]: value } as Partial<TimelineItem>));
+
+      const schedule =
+        typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+          ? window.requestAnimationFrame.bind(window)
+          : (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 16);
+
+      schedule(() => {
+        schedule(() => {
+          const currentItems = useTimelineStore.getState().items;
+          const commitLanded = currentItems.every((item) =>
+            !itemIds.includes(item.id) || (item[field] ?? 0) === value,
+          );
+
+          if (!commitLanded) {
+            queueMicrotask(() => clearPreviewForItems(itemIds));
+            return;
+          }
+
+          clearPreviewForItems(itemIds);
+        });
+      });
+    },
+    [clearPreviewForItems, itemIds, setPropertiesPreviewNew, updateItem],
+  );
+
   const handleEqPatchLiveChange = useCallback(
     (patch: AudioEqPatch) => {
       const previews: Record<string, AudioEqPatch> = {};
@@ -423,6 +476,26 @@ export function AudioSection({ items }: AudioSectionProps) {
     }
   }, [itemIds, updateItem]);
 
+  const handleResetPitchSemitones = useCallback(() => {
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.audioPitchSemitones ?? 0) !== 0,
+    );
+    if (needsUpdate) {
+      itemIds.forEach((id) => updateItem(id, { audioPitchSemitones: 0 }));
+    }
+  }, [itemIds, updateItem]);
+
+  const handleResetPitchCents = useCallback(() => {
+    const currentItems = useTimelineStore.getState().items;
+    const needsUpdate = currentItems.some(
+      (item) => itemIds.includes(item.id) && (item.audioPitchCents ?? 0) !== 0,
+    );
+    if (needsUpdate) {
+      itemIds.forEach((id) => updateItem(id, { audioPitchCents: 0 }));
+    }
+  }, [itemIds, updateItem]);
+
   const handleEqFieldChange = useCallback(
     <K extends keyof AudioEqPatch>(field: K, value: NonNullable<AudioEqPatch[K]>) => {
       handleEqPatchChange({ [field]: value } as AudioEqPatch);
@@ -457,6 +530,54 @@ export function AudioSection({ items }: AudioSectionProps) {
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetVolume}
             title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label="Semi Tones">
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={pitchSemitones}
+            onChange={(value) => handleAudioPitchChange('audioPitchSemitones', value)}
+            onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchSemitones', value)}
+            min={AUDIO_PITCH_SEMITONES_MIN}
+            max={AUDIO_PITCH_SEMITONES_MAX}
+            step={1}
+            unit="st"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetPitchSemitones}
+            title="Reset semitone pitch"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label="Cents">
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={pitchCents}
+            onChange={(value) => handleAudioPitchChange('audioPitchCents', value)}
+            onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchCents', value)}
+            min={AUDIO_PITCH_CENTS_MIN}
+            max={AUDIO_PITCH_CENTS_MAX}
+            step={1}
+            unit="ct"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetPitchCents}
+            title="Reset cent pitch"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

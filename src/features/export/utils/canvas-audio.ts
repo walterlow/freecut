@@ -34,6 +34,11 @@ import {
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 import { appendResolvedAudioEqStage, applyAudioEqStages, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import {
+  getAudioPitchRatioFromSemitones,
+  getAudioPitchShiftSemitones,
+  isAudioPitchShiftActive,
+} from '@/shared/utils/audio-pitch';
 
 const log = createLogger('CanvasAudio');
 
@@ -73,6 +78,7 @@ interface AudioSegment {
   fadeOutCurve: number;
   fadeInCurveX: number;
   fadeOutCurveX: number;
+  pitchShiftSemitones: number;
   audioEqStages: ResolvedAudioEqSettings[];
   contentStartOffsetFrames?: number;
   contentEndOffsetFrames?: number;
@@ -369,6 +375,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
       fadeOutCurve: item.audioFadeOutCurve ?? 0,
       fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
       fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+      pitchShiftSemitones: getAudioPitchShiftSemitones(item),
       contentStartOffsetFrames: before,
       contentEndOffsetFrames: after,
       fadeInDelayFrames: extension.fadeInDelay,
@@ -415,6 +422,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     if (Math.abs(left.volume - right.volume) > 0.0001) return false;
     if (left.muted !== right.muted) return false;
     if (!areAudioEqStagesEqual(left.audioEqStages, right.audioEqStages)) return false;
+    if (Math.abs(left.pitchShiftSemitones - right.pitchShiftSemitones) > 0.0001) return false;
     if (left.afterFrames !== 0 || right.beforeFrames !== 0) return false;
     if (left.volumeKeyframes || right.volumeKeyframes) return false;
     return true;
@@ -435,6 +443,7 @@ function buildManagedTransitionAudioSegments<TItem extends TransitionAudioItem>(
     fadeOutCurve: segment.fadeOutCurve,
     fadeInCurveX: segment.fadeInCurveX,
     fadeOutCurveX: segment.fadeOutCurveX,
+    pitchShiftSemitones: segment.pitchShiftSemitones,
     audioEqStages: segment.audioEqStages,
     contentStartOffsetFrames: segment.contentStartOffsetFrames,
     contentEndOffsetFrames: segment.contentEndOffsetFrames,
@@ -520,11 +529,13 @@ function appendCompositionAudioSegments(params: {
   };
   fps: number;
   audioEqStages?: ResolvedAudioEqSettings[];
+  audioPitchShiftSemitones?: number;
   visited?: Set<string>;
 }): void {
   const { segments, track, compositionItem, subComp, fps } = params;
   const visited = params.visited ?? new Set<string>();
   const wrapperAudioEqStages = appendResolvedAudioEqStage(params.audioEqStages, getAudioEqSettings(compositionItem));
+  const wrapperAudioPitchShiftSemitones = (params.audioPitchShiftSemitones ?? 0) + getAudioPitchShiftSemitones(compositionItem);
   const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
   const compFrom = compositionItem.from;
   const wrapperSpeed = compositionItem.speed ?? 1;
@@ -597,6 +608,7 @@ function appendCompositionAudioSegments(params: {
         subComp: nestedSubComp,
         fps,
         audioEqStages: wrapperAudioEqStages,
+        audioPitchShiftSemitones: wrapperAudioPitchShiftSemitones,
         visited: nestedVisited,
       });
       continue;
@@ -633,6 +645,7 @@ function appendCompositionAudioSegments(params: {
       fadeOutCurve: subItem.audioFadeOutCurve ?? 0,
       fadeInCurveX: subItem.audioFadeInCurveX ?? 0.52,
       fadeOutCurveX: subItem.audioFadeOutCurveX ?? 0.52,
+      pitchShiftSemitones: wrapperAudioPitchShiftSemitones + getAudioPitchShiftSemitones(subItem),
       audioEqStages: appendResolvedAudioEqStage(wrapperAudioEqStages, getAudioEqSettings(subItem)),
       contentStartOffsetFrames: 0,
       contentEndOffsetFrames: 0,
@@ -781,6 +794,7 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           fadeOutCurve: item.audioFadeOutCurve ?? 0,
           fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
           fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
+          pitchShiftSemitones: getAudioPitchShiftSemitones(item),
           audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
           contentStartOffsetFrames: 0,
           contentEndOffsetFrames: 0,
@@ -1257,25 +1271,32 @@ function applyClipFadeSpans(
  * @param sampleRate - Sample rate for the audio
  * @returns Processed channels with the same channel count
  */
-async function applySpeed(
+async function applySpeedAndPitch(
   channels: Float32Array[],
   speed: number,
+  pitchShiftSemitones: number,
   sampleRate: number
 ): Promise<Float32Array[]> {
-  if (speed === 1.0) return channels;
+  const requiresSoundTouch = Math.abs(speed - 1) > 0.0001 || isAudioPitchShiftActive(pitchShiftSemitones);
+  if (!requiresSoundTouch) return channels;
   if (channels.length === 0 || channels[0]!.length === 0) return channels;
 
   const numChannels = channels.length;
   const samplesPerChannel = channels[0]!.length;
 
-  log.debug('Applying pitch-preserved speed change (SoundTouch)', { speed, sampleRate, numChannels });
+  log.debug('Applying speed/pitch change (SoundTouch)', {
+    speed,
+    pitchShiftSemitones,
+    sampleRate,
+    numChannels,
+  });
 
   try {
     const soundtouch = await import('soundtouchjs');
     const st = new soundtouch.SoundTouch();
 
     st.tempo = speed;
-    st.pitch = 1.0;
+    st.pitch = getAudioPitchRatioFromSemitones(pitchShiftSemitones);
     st.rate = 1.0;
 
     // SoundTouch processes interleaved stereo. Interleave all channels
@@ -1355,9 +1376,17 @@ async function applySpeed(
 
     return outputChannels;
   } catch (error) {
-    log.warn('SoundTouch failed, falling back to simple resampling', { error });
+    log.warn('SoundTouch failed, falling back to simple resampling', {
+      error,
+      speed,
+      pitchShiftSemitones,
+    });
 
-    // Fallback: simple resampling per-channel (will change pitch)
+    if (isAudioPitchShiftActive(pitchShiftSemitones)) {
+      log.warn('Independent export pitch shift was skipped because SoundTouch failed to load');
+    }
+
+    // Fallback: simple resampling per-channel (speed only, pitch shift omitted)
     const outputLength = Math.floor(samplesPerChannel / speed);
     return channels.map((samples) => {
       const output = new Float32Array(outputLength);
@@ -1584,8 +1613,13 @@ export async function processAudio(
       // Apply speed across ALL channels at once to maintain phase coherence
       // between L/R (SoundTouch WSOLA finds shared overlap windows).
       let processedChannels = decoded.samples;
-      if (segment.speed !== 1.0) {
-        processedChannels = await applySpeed(processedChannels, segment.speed, decoded.sampleRate);
+      if (Math.abs(segment.speed - 1) > 0.0001 || isAudioPitchShiftActive(segment.pitchShiftSemitones)) {
+        processedChannels = await applySpeedAndPitch(
+          processedChannels,
+          segment.speed,
+          segment.pitchShiftSemitones,
+          decoded.sampleRate,
+        );
       }
       processedChannels = applyAudioEqStages(processedChannels, decoded.sampleRate, segment.audioEqStages);
 

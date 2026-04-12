@@ -5,6 +5,21 @@ import {
 } from '../utils/soundtouch-preview-shared';
 import { QueuedStereoBufferSource } from '../utils/soundtouch-preview-source';
 
+declare abstract class AudioWorkletProcessor {
+  readonly port: MessagePort;
+  constructor(options?: unknown);
+  abstract process(
+    inputs: Float32Array[][],
+    outputs: Float32Array[][],
+    parameters: Record<string, Float32Array>
+  ): boolean;
+}
+
+declare function registerProcessor(
+  name: string,
+  processorCtor: new (options?: unknown) => AudioWorkletProcessor
+): void;
+
 class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
   private readonly source = new QueuedStereoBufferSource();
   private readonly soundTouch = new SoundTouch();
@@ -13,15 +28,21 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
   }, this.soundTouch);
   private scratch = new Float32Array(256);
   private playing = false;
+  private tempo = 1;
+  private pitch = 1;
 
   constructor() {
     super();
-    this.soundTouch.tempo = 1;
-    this.soundTouch.pitch = 1;
-    this.soundTouch.rate = 1;
+    this.applySettings();
     this.port.onmessage = (event: MessageEvent<SoundTouchPreviewProcessorMessage>) => {
       this.handleMessage(event.data);
     };
+  }
+
+  private applySettings(): void {
+    this.soundTouch.tempo = Math.max(0.01, this.tempo);
+    this.soundTouch.pitch = Math.max(0.01, this.pitch);
+    this.soundTouch.rate = 1;
   }
 
   private handleMessage(message: SoundTouchPreviewProcessorMessage): void {
@@ -41,9 +62,12 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
         this.filter.sourcePosition = Math.max(0, Math.floor(message.frame));
         break;
       case 'set-tempo':
-        this.soundTouch.tempo = Math.max(0.01, message.tempo);
-        this.soundTouch.pitch = 1;
-        this.soundTouch.rate = 1;
+        this.tempo = message.tempo;
+        this.applySettings();
+        break;
+      case 'set-pitch':
+        this.pitch = message.pitch;
+        this.applySettings();
         break;
       case 'set-playing':
         this.playing = message.playing;
@@ -63,7 +87,10 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
     }
 
     const leftOutput = output[0];
-    const rightOutput = output[1] ?? output[0];
+    if (!leftOutput) {
+      return true;
+    }
+    const rightOutput = output[1] ?? leftOutput;
     leftOutput.fill(0);
     rightOutput.fill(0);
 

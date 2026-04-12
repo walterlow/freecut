@@ -8,6 +8,7 @@ import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier } from '@/shared/utils/audio-fade-curve';
 import { resolvePreviewAudioEqStages } from '@/shared/utils/audio-eq';
+import { resolvePreviewAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch';
 import { useMixerLiveGainProduct, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
 import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { AudioPlaybackProps } from '../audio-playback-props';
@@ -17,6 +18,7 @@ interface AudioPlaybackState {
   fps: number;
   playing: boolean;
   resolvedVolume: number;
+  resolvedPitchShiftSemitones: number;
   resolvedAudioEqStages: ResolvedAudioEqSettings[];
 }
 
@@ -32,6 +34,9 @@ export function useAudioPlaybackState({
   audioFadeOutCurve = 0,
   audioFadeInCurveX = 0.52,
   audioFadeOutCurveX = 0.52,
+  audioPitchSemitones,
+  audioPitchCents,
+  audioPitchShiftSemitones,
   audioEqStages,
   clipFadeSpans,
   contentStartOffsetFrames = 0,
@@ -104,6 +109,24 @@ export function useAudioPlaybackState({
     clearMixerLiveGain(itemId);
   }, [itemId, volume]);
 
+  const resolvedPitchShiftSemitones = useMemo(
+    () => resolvePreviewAudioPitchShiftSemitones({
+      base: {
+        audioPitchSemitones,
+        audioPitchCents,
+      },
+      preview,
+      additionalSemitones: audioPitchShiftSemitones,
+    }),
+    [
+      audioPitchCents,
+      audioPitchSemitones,
+      audioPitchShiftSemitones,
+      preview?.audioPitchCents,
+      preview?.audioPitchSemitones,
+    ],
+  );
+
   const resolvedAudioEqStages = useMemo(
     () => resolvePreviewAudioEqStages(audioEqStages, preview),
     [
@@ -133,6 +156,7 @@ export function useAudioPlaybackState({
     fps,
     playing,
     resolvedVolume: itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier) * mixerGain,
+    resolvedPitchShiftSemitones,
     resolvedAudioEqStages,
   };
 }

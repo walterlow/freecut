@@ -5,6 +5,7 @@ import type { AudioItem, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { TransformProperties } from '@/types/transform';
 import { DebugOverlay } from './debug-overlay';
+import { CustomDecoderAudio } from './custom-decoder-audio';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { GifPlayer } from './gif-player';
 import { ItemVisualWrapper } from './item-visual-wrapper';
@@ -26,6 +27,8 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
 import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { getAudioPitchShiftSemitones, isAudioPitchShiftActive } from '@/shared/utils/audio-pitch';
+import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 
 function getLogger() { return createLogger('CompositionItem'); }
 
@@ -51,6 +54,7 @@ interface ItemProps {
   audioGainMultiplier?: number;
   audioGainLiveItemIds?: string[];
   audioEqStages?: ResolvedAudioEqSettings[];
+  audioPitchShiftSemitones?: number;
 }
 
 /**
@@ -67,16 +71,17 @@ interface ItemProps {
  *
  * Memoized to prevent unnecessary re-renders when parent (MainComposition) updates.
  */
-export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, audioEqStages }) => {
+export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, audioEqStages, audioPitchShiftSemitones = 0 }) => {
   // Use muted prop directly - MainComposition already passes track.muted
   // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
   // Debug overlay toggle (always false in production via store)
   const showDebugOverlay = useDebugStore((s) => s.showVideoDebugOverlay);
   const { fps: timelineFps } = useVideoConfig();
-  const mediaSourceFps = useMediaLibraryStore((s) =>
-    item.mediaId ? s.mediaItems.find((m) => m.id === item.mediaId)?.fps : undefined
+  const mediaItem = useMediaLibraryStore((s) =>
+    item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId) : undefined
   );
+  const mediaSourceFps = mediaItem?.fps;
   const itemAudioEqStages = React.useMemo(
     () => appendResolvedAudioEqStage(audioEqStages, getAudioEqSettings(item)),
     [
@@ -99,6 +104,10 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
       item.audioEqLowMidQ,
       item.audioEqMidGainDb,
     ],
+  );
+  const itemLocalPitchShiftSemitones = React.useMemo(
+    () => getAudioPitchShiftSemitones(item),
+    [item.audioPitchCents, item.audioPitchSemitones],
   );
 
   if (item.type === 'video') {
@@ -199,17 +208,82 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
       });
     }
 
+    const trackVolumeDb = ('trackVolumeDb' in item && typeof item.trackVolumeDb === 'number')
+      ? item.trackVolumeDb
+      : 0;
+    const videoAudioSrc = item.audioSrc ?? item.src;
+    const requiresPitchShiftedVideoAudio = isAudioPitchShiftActive(
+      audioPitchShiftSemitones + itemLocalPitchShiftSemitones,
+    );
+    const shouldUseCustomDecodedVideoAudio = !muted
+      && needsCustomAudioDecoder(mediaItem?.audioCodec ?? mediaItem?.codec);
+    const shouldRenderExternalVideoAudio = !muted
+      && !!videoAudioSrc
+      && (requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio);
+    const externalVideoAudio = shouldRenderExternalVideoAudio ? (
+      shouldUseCustomDecodedVideoAudio ? (
+        <CustomDecoderAudio
+          src={videoAudioSrc}
+          mediaId={item.mediaId ?? `legacy-src:${videoAudioSrc}`}
+          itemId={item.id}
+          trimBefore={safeTrimBefore}
+          volume={(item.volume ?? 0) + trackVolumeDb}
+          playbackRate={playbackRate}
+          audioPitchSemitones={item.audioPitchSemitones}
+          audioPitchCents={item.audioPitchCents}
+          audioPitchShiftSemitones={audioPitchShiftSemitones}
+          sourceFps={sourceFps}
+          muted={muted}
+          durationInFrames={item.durationInFrames}
+          audioFadeIn={item.audioFadeIn}
+          audioFadeOut={item.audioFadeOut}
+          audioFadeInCurve={item.audioFadeInCurve}
+          audioFadeOutCurve={item.audioFadeOutCurve}
+          audioFadeInCurveX={item.audioFadeInCurveX}
+          audioFadeOutCurveX={item.audioFadeOutCurveX}
+          audioEqStages={itemAudioEqStages}
+          liveGainItemIds={audioGainLiveItemIds}
+          volumeMultiplier={audioGainMultiplier}
+        />
+      ) : (
+        <PitchCorrectedAudio
+          src={videoAudioSrc}
+          mediaId={item.mediaId}
+          itemId={item.id}
+          trimBefore={safeTrimBefore}
+          volume={(item.volume ?? 0) + trackVolumeDb}
+          playbackRate={playbackRate}
+          audioPitchSemitones={item.audioPitchSemitones}
+          audioPitchCents={item.audioPitchCents}
+          audioPitchShiftSemitones={audioPitchShiftSemitones}
+          sourceFps={sourceFps}
+          muted={muted}
+          durationInFrames={item.durationInFrames}
+          audioFadeIn={item.audioFadeIn}
+          audioFadeOut={item.audioFadeOut}
+          audioFadeInCurve={item.audioFadeInCurve}
+          audioFadeOutCurve={item.audioFadeOutCurve}
+          audioFadeInCurveX={item.audioFadeInCurveX}
+          audioFadeOutCurveX={item.audioFadeOutCurveX}
+          audioEqStages={itemAudioEqStages}
+          liveGainItemIds={audioGainLiveItemIds}
+          volumeMultiplier={audioGainMultiplier}
+        />
+      )
+    ) : null;
+
     const videoContent = (
       <>
         <VideoContent
           item={item}
-          muted={muted}
+          muted={muted || shouldRenderExternalVideoAudio}
           safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
           sourceFps={sourceFps}
           audioEqStages={itemAudioEqStages}
           forceCssComposite={masks.length > 0}
         />
+        {externalVideoAudio}
         {showDebugOverlay && (
           <DebugOverlay
             id={item.id}
@@ -263,6 +337,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           audioGainMultiplier={audioGainMultiplier}
           audioGainLiveItemIds={audioGainLiveItemIds}
           audioEqStages={itemAudioEqStages}
+          audioPitchShiftSemitones={audioPitchShiftSemitones + itemLocalPitchShiftSemitones}
         />
       );
     }
@@ -292,6 +367,9 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
         trimBefore={trimBefore}
         volume={(item.volume ?? 0) + trackVolumeDb}
         playbackRate={playbackRate}
+        audioPitchSemitones={item.audioPitchSemitones}
+        audioPitchCents={item.audioPitchCents}
+        audioPitchShiftSemitones={audioPitchShiftSemitones}
         sourceFps={sourceFps}
         muted={muted}
         durationInFrames={item.durationInFrames}
@@ -423,6 +501,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           audioGainMultiplier={audioGainMultiplier}
           audioGainLiveItemIds={audioGainLiveItemIds}
           audioEqStages={itemAudioEqStages}
+          audioPitchShiftSemitones={audioPitchShiftSemitones + itemLocalPitchShiftSemitones}
         />
       </ItemVisualWrapper>
     );

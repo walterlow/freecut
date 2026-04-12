@@ -18,6 +18,8 @@ export interface ItemPropertiesPreview {
   audioFadeOutCurve?: number;
   audioFadeInCurveX?: number;
   audioFadeOutCurveX?: number;
+  audioPitchSemitones?: number;
+  audioPitchCents?: number;
   audioEqLowCutEnabled?: boolean;
   audioEqLowCutFrequencyHz?: number;
   audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24;

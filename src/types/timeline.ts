@@ -33,6 +33,8 @@ type BaseTimelineItem = {
   audioFadeOutCurve?: number; // Audio fade out curve shape (-1..1, default: 0 linear)
   audioFadeInCurveX?: number; // Audio fade in curve horizontal bias (0..1, default: ~0.52)
   audioFadeOutCurveX?: number; // Audio fade out curve horizontal bias (0..1, default: ~0.52)
+  audioPitchSemitones?: number; // Clip pitch offset in semitones (-12..12)
+  audioPitchCents?: number; // Fine pitch offset in cents (-100..100)
   audioEqLowCutEnabled?: boolean; // Enable low cut / high-pass filter
   audioEqLowCutFrequencyHz?: number; // Low cut frequency in Hz
   audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24; // Low cut slope

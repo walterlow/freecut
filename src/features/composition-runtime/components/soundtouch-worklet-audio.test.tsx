@@ -8,6 +8,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedPitchShiftSemitones: 0,
     resolvedAudioEqStages: [],
   },
 }));
@@ -86,6 +87,7 @@ describe('SoundTouchWorkletAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedPitchShiftSemitones: 0,
       resolvedAudioEqStages: [],
     };
   });

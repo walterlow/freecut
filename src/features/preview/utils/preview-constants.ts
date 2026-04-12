@@ -161,7 +161,7 @@ export function toTrackFingerprint(tracks: CompositionInputProps['tracks']): str
     for (const item of track.items) {
       const src = 'src' in item ? (item.src ?? '') : '';
       parts.push(
-        `i:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}`
+        `i:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.audioPitchSemitones ?? 0}:${item.audioPitchCents ?? 0}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}`
       );
     }
   }

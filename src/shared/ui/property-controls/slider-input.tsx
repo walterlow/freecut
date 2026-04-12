@@ -354,6 +354,7 @@ export const SliderInput = memo(function SliderInput({
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       pointerDownPos.current = { x: e.clientX, y: e.clientY };
       isClickRef.current = true;
+      localValueRef.current = null;
       setIsInteracting(true);
 
       if (trackRef.current) {
@@ -396,6 +397,7 @@ export const SliderInput = memo(function SliderInput({
         const newValue = positionToValue(e.clientX);
         const rounded = roundToStep(newValue, step);
         const pct = ((rounded - min) / (max - min)) * 100;
+        localValueRef.current = rounded;
         updateFillVisual(pct, { active: true, dragging: true });
         updateDisplayedValue(rounded);
         emitLiveChange(rounded);

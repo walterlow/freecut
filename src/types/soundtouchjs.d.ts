@@ -8,7 +8,7 @@ declare module 'soundtouchjs' {
    * Source interface for SimpleFilter
    */
   interface FilterSource {
-    extract(target: Float32Array, numFrames: number): number;
+    extract(target: Float32Array, numFrames: number, sourcePosition?: number): number;
   }
 
   /**
@@ -55,6 +55,7 @@ declare module 'soundtouchjs' {
    */
   export class SimpleFilter {
     constructor(source: FilterSource, soundTouch: SoundTouch);
+    sourcePosition: number;
     /** Extract processed samples (interleaved stereo) */
     extract(target: Float32Array, numFrames: number): number;
   }
