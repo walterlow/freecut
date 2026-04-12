@@ -1,1 +1,1 @@
-export { gifFrameCache } from './timeline-contract';
+export { gifFrameCache, filmstripCache } from './timeline-contract';

@@ -23,7 +23,7 @@ import {
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
 } from '@/infrastructure/storage/indexeddb';
-import { gifFrameCache } from '@/features/media-library/deps/timeline-services';
+import { filmstripCache, gifFrameCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { ensureFileHandlePermission, FileAccessError } from './file-access';
@@ -44,6 +44,8 @@ import {
 } from '@/features/composition-runtime/utils/audio-decode-cache';
 import { deletePreviewAudioConform } from '@/features/composition-runtime/utils/preview-audio-conform';
 export { FileAccessError } from './file-access';
+
+const IMPORT_FILMSTRIP_PREWARM_SECONDS = 12;
 
 /**
  * Media Library Service - Coordinates OPFS + IndexedDB + metadata extraction
@@ -282,6 +284,16 @@ class MediaLibraryService {
 
     // Stage 7: Associate with project
     await associateMediaWithProject(projectId, id);
+
+    if (metadata.type === 'video' && mediaMetadata.duration > 0) {
+      const warmEndTime = Math.min(mediaMetadata.duration, IMPORT_FILMSTRIP_PREWARM_SECONDS);
+      void filmstripCache.prewarmPriorityWindow(id, file, mediaMetadata.duration, {
+        startTime: 0,
+        endTime: warmEndTime,
+      }).catch((error) => {
+        logger.warn('Failed to prewarm import filmstrip:', error);
+      });
+    }
 
     const previewAudioCodec = metadata.type === 'audio'
       ? metadata.codec
@@ -746,14 +758,24 @@ class MediaLibraryService {
     // Also handle old records without storageType (treat as OPFS)
     if (media.opfsPath) {
       try {
-        const arrayBuffer = await opfsService.getFile(media.opfsPath);
-        const blob = new Blob([arrayBuffer], {
+        const blob = await opfsService.getFileBlob(media.opfsPath);
+        if (blob.type === media.mimeType || !media.mimeType) {
+          return blob;
+        }
+        return new Blob([blob], {
           type: media.mimeType,
         });
-        return blob;
       } catch (error) {
-        logger.error('Failed to get media file from OPFS:', error);
-        return null;
+        logger.warn('Failed to get OPFS media as file blob, falling back to ArrayBuffer read:', error);
+        try {
+          const arrayBuffer = await opfsService.getFile(media.opfsPath);
+          return new Blob([arrayBuffer], {
+            type: media.mimeType,
+          });
+        } catch (fallbackError) {
+          logger.error('Failed to get media file from OPFS:', fallbackError);
+          return null;
+        }
       }
     }
 

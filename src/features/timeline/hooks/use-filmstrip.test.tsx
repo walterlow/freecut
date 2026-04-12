@@ -23,6 +23,7 @@ vi.mock('./preview-work-budget', () => ({
 }));
 
 import { useFilmstrip } from './use-filmstrip';
+import { schedulePreviewWork } from './preview-work-budget';
 
 function FilmstripProbe({
   mediaId,
@@ -88,5 +89,22 @@ describe('useFilmstrip', () => {
     view.unmount();
 
     expect(filmstripCacheMocks.abort).toHaveBeenCalledWith('media-1');
+  });
+
+  it('starts visible filmstrip work without waiting on the audio startup hold', async () => {
+    render(createElement(FilmstripProbe, {
+      mediaId: 'media-1',
+      isVisible: true,
+    }));
+
+    await waitFor(() => {
+      expect(schedulePreviewWork).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          delayMs: 0,
+          ignoreAudioStartupHold: true,
+        }),
+      );
+    });
   });
 });

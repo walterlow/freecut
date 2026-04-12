@@ -1,11 +1,12 @@
 import { memo, useEffect, useState, useMemo, useCallback, useRef, type RefCallback } from 'react';
 import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
-import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
+import { resolveMediaUrl, resolveProxyUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
 import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 import { createLogger } from '@/shared/logging/logger';
 import { computeFilmstripRenderWindow } from './render-window';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 
 const logger = createLogger('ClipFilmstrip');
 
@@ -230,6 +231,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
   const [isZooming, setIsZooming] = useState(false);
   const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus.get(mediaId) ?? null);
+
+  const proxyBlobUrl = useMemo(() => {
+    if (proxyStatus !== 'ready') {
+      return null;
+    }
+    return resolveProxyUrl(mediaId);
+  }, [mediaId, proxyStatus]);
+  const filmstripSourceUrl = proxyBlobUrl ?? blobUrl;
 
   // Measure container height
   useEffect(() => {
@@ -329,7 +339,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
   // Load blob URL lazily when visible, and retry after global invalidation.
   useEffect(() => {
-    if (!isVisible || !mediaId || hasStartedLoadingRef.current) {
+    if (!isVisible || !mediaId || proxyBlobUrl || hasStartedLoadingRef.current) {
       return;
     }
     hasStartedLoadingRef.current = true;
@@ -351,15 +361,15 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     return () => {
       mounted = false;
     };
-  }, [mediaId, isVisible, blobUrlVersion, setBlobUrl]);
+  }, [mediaId, isVisible, proxyBlobUrl, blobUrlVersion, setBlobUrl]);
 
   // Use filmstrip hook
   const { frames, isLoading, isComplete, error } = useFilmstrip({
     mediaId,
-    blobUrl,
+    blobUrl: filmstripSourceUrl,
     duration: sourceDuration,
     isVisible,
-    enabled: !!blobUrl && sourceDuration > 0,
+    enabled: !!filmstripSourceUrl && sourceDuration > 0,
     priorityWindow,
   });
 

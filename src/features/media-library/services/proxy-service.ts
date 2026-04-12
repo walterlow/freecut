@@ -18,6 +18,7 @@ import { createLogger } from '@/shared/logging/logger';
 import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { registerObjectUrl, unregisterObjectUrl } from '@/infrastructure/browser/object-url-registry';
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
+import { filmstripCache } from '@/features/media-library/deps/timeline-services';
 import { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
 import {
   DEFAULT_PROXY_GENERATION_MODE,
@@ -30,6 +31,7 @@ import type {
   ProxyWorkerRequest,
   ProxyWorkerResponse,
 } from '../workers/proxy-generation-worker';
+import { useMediaLibraryStore } from '../stores/media-library-store';
 
 const logger = createLogger('ProxyService');
 
@@ -122,6 +124,7 @@ interface ProgressEmissionState {
 
 const PROXY_PROGRESS_EMIT_INTERVAL_MS = 150;
 const PROXY_PROGRESS_EMIT_MIN_DELTA = 0.01;
+const PROXY_FILMSTRIP_PREWARM_SECONDS = 12;
 const PROXY_PLAYBACK_ISSUE_SCORE_THRESHOLD = 5;
 const PROXY_PLAYBACK_ISSUE_WEIGHTS: Record<ProxyPlaybackIssue, number> = {
   'slow-seek': 2,
@@ -696,11 +699,35 @@ class ProxyService {
       registerObjectUrl(blobUrl, proxyFile);
       this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
       this.emitStatusForProxyKey(proxyKey, 'ready');
+      this.prewarmFilmstripFromProxy(proxyKey, proxyFile);
 
       logger.debug(`Proxy ready for ${proxyKey}`);
     } catch (error) {
       logger.error(`Failed to load completed proxy for ${proxyKey}:`, error);
       this.emitStatusForProxyKey(proxyKey, 'error');
+    }
+  }
+
+  private prewarmFilmstripFromProxy(proxyKey: string, proxyFile: Blob): void {
+    const mediaIds = [...(this.mediaIdsByProxyKey.get(proxyKey) ?? [])];
+    if (mediaIds.length === 0) {
+      return;
+    }
+
+    const mediaById = useMediaLibraryStore.getState().mediaById;
+    for (const mediaId of mediaIds) {
+      const media = mediaById[mediaId];
+      if (!media || !media.mimeType.startsWith('video/') || media.duration <= 0) {
+        continue;
+      }
+
+      const warmEndTime = Math.min(media.duration, PROXY_FILMSTRIP_PREWARM_SECONDS);
+      void filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
+        startTime: 0,
+        endTime: warmEndTime,
+      }).catch((error) => {
+        logger.warn(`Failed to prewarm filmstrip from proxy for ${mediaId}:`, error);
+      });
     }
   }
 

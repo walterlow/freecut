@@ -21,14 +21,26 @@ const mediaProcessorMocks = vi.hoisted(() => ({
   processMedia: vi.fn(),
 }));
 
+const proxyMocks = vi.hoisted(() => ({
+  onStatusChange: vi.fn(),
+  deleteProxy: vi.fn(),
+  clearProxyKey: vi.fn(),
+}));
+
 const gifFrameCacheMocks = vi.hoisted(() => ({
   getGifFrames: vi.fn(),
   clearMedia: vi.fn(),
 }));
 
+const filmstripCacheMocks = vi.hoisted(() => ({
+  prewarmPriorityWindow: vi.fn(async () => undefined),
+}));
+
 vi.mock('@/infrastructure/storage/indexeddb', () => ({
   getAllMedia: vi.fn(),
   getMedia: vi.fn(),
+  getTranscript: vi.fn(),
+  getTranscriptMediaIds: vi.fn(),
   createMedia: indexedDbMocks.createMedia,
   updateMedia: vi.fn(),
   deleteMedia: indexedDbMocks.deleteMedia,
@@ -44,10 +56,15 @@ vi.mock('@/infrastructure/storage/indexeddb', () => ({
   getProjectsUsingMedia: vi.fn(),
   getMediaForProject: vi.fn(),
   deleteTranscript: vi.fn(),
+  saveTranscript: vi.fn(),
 }));
 
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,
+}));
+
+vi.mock('./proxy-service', () => ({
+  proxyService: proxyMocks,
 }));
 
 vi.mock('../utils/thumbnail-generator', () => ({
@@ -60,6 +77,7 @@ vi.mock('./media-processor-service', () => ({
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
+  filmstripCache: filmstripCacheMocks,
 }));
 
 import { mediaLibraryService } from './media-library-service';

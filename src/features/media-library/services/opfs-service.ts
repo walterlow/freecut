@@ -26,6 +26,33 @@ class OPFSService {
    */
   private pendingReads = new Map<string, Promise<ArrayBuffer>>();
 
+  private async getFileHandle(
+    path: string,
+  ): Promise<FileSystemFileHandle> {
+    const root = await navigator.storage.getDirectory();
+    const parts = path.split('/').filter((part) => part);
+
+    if (parts.length === 0) {
+      throw new Error('Invalid path');
+    }
+
+    let dir = root;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const part = parts[index];
+      if (!part) {
+        continue;
+      }
+      dir = await dir.getDirectoryHandle(part);
+    }
+
+    const fileName = parts[parts.length - 1];
+    if (!fileName) {
+      throw new Error('Invalid path: missing filename');
+    }
+
+    return dir.getFileHandle(fileName);
+  }
+
   /**
    * Initialize the OPFS worker
    */
@@ -90,6 +117,17 @@ class OPFSService {
     this.pendingReads.set(path, readPromise);
 
     return readPromise;
+  }
+
+  /**
+   * Get a file from OPFS as a Blob/File without copying the full contents into JS memory.
+   *
+   * Prefer this for playback and blob URLs. It lets the browser stream from OPFS-backed
+   * file objects directly instead of forcing a full ArrayBuffer read first.
+   */
+  async getFileBlob(path: string): Promise<Blob> {
+    const fileHandle = await this.getFileHandle(path);
+    return fileHandle.getFile();
   }
 
   /**

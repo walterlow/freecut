@@ -24,6 +24,7 @@ const opfsMocks = vi.hoisted(() => ({
   saveFile: vi.fn(),
   deleteFile: vi.fn(),
   getFile: vi.fn(),
+  getFileBlob: vi.fn(),
 }));
 
 const proxyMocks = vi.hoisted(() => ({
@@ -49,6 +50,10 @@ const previewAudioConformMocks = vi.hoisted(() => ({
 const gifFrameCacheMocks = vi.hoisted(() => ({
   getGifFrames: vi.fn(),
   clearMedia: vi.fn(),
+}));
+
+const filmstripCacheMocks = vi.hoisted(() => ({
+  prewarmPriorityWindow: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
@@ -80,6 +85,7 @@ vi.mock('@/features/composition-runtime/utils/preview-audio-conform', () => ({
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
   gifFrameCache: gifFrameCacheMocks,
+  filmstripCache: filmstripCacheMocks,
 }));
 
 vi.mock('../utils/validation', () => ({
@@ -119,6 +125,7 @@ describe('MediaLibraryService', () => {
     vi.clearAllMocks();
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false);
     compositionRuntimeMocks.startPreviewAudioStartupWarm.mockResolvedValue(undefined);
+    filmstripCacheMocks.prewarmPriorityWindow.mockResolvedValue(undefined);
   });
 
   describe('getAllMedia', () => {
@@ -184,6 +191,12 @@ describe('MediaLibraryService', () => {
       expect(indexedDbMocks.createMedia).toHaveBeenCalledTimes(1);
       expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-1', result.id);
       expect(indexedDbMocks.saveThumbnail).toHaveBeenCalledTimes(1);
+      expect(filmstripCacheMocks.prewarmPriorityWindow).toHaveBeenCalledWith(
+        result.id,
+        mockFile,
+        10,
+        { startTime: 0, endTime: 10 },
+      );
     });
 
     it('returns existing media with isDuplicate flag when file already in project', async () => {
@@ -358,11 +371,28 @@ describe('MediaLibraryService', () => {
         mimeType: 'video/mp4',
       });
       indexedDbMocks.getMedia.mockResolvedValue(media);
-      opfsMocks.getFile.mockResolvedValue(new ArrayBuffer(1024));
+      opfsMocks.getFileBlob.mockResolvedValue(new File(['data'], 'video.mp4', { type: 'video/mp4' }));
 
       const result = await mediaLibraryService.getMediaFile('m1');
       expect(result).toBeInstanceOf(Blob);
       expect(result?.type).toBe('video/mp4');
+    });
+
+    it('falls back to ArrayBuffer OPFS reads when direct file access fails', async () => {
+      const media = makeMediaMetadata({
+        id: 'm1',
+        storageType: 'opfs',
+        opfsPath: 'content/ab/cd/m1/data',
+        mimeType: 'video/mp4',
+      });
+      indexedDbMocks.getMedia.mockResolvedValue(media);
+      opfsMocks.getFileBlob.mockRejectedValue(new Error('direct file unsupported'));
+      opfsMocks.getFile.mockResolvedValue(new ArrayBuffer(1024));
+
+      const result = await mediaLibraryService.getMediaFile('m1');
+      expect(result).toBeInstanceOf(Blob);
+      expect(opfsMocks.getFileBlob).toHaveBeenCalledWith('content/ab/cd/m1/data');
+      expect(opfsMocks.getFile).toHaveBeenCalledWith('content/ab/cd/m1/data');
     });
 
     it('returns null when media not found', async () => {

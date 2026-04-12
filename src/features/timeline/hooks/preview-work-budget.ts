@@ -21,6 +21,7 @@ interface PreviewAudioStartupHold {
 interface SchedulePreviewWorkOptions {
   delayMs?: number;
   idleTimeoutMs?: number;
+  ignoreAudioStartupHold?: boolean;
 }
 
 interface RegisterPreviewAudioStartupHoldOptions {
@@ -141,11 +142,13 @@ function hasActivePreviewAudioStartupHold(): boolean {
   return false;
 }
 
-export function isPreviewWorkDeferred(): boolean {
+export function isPreviewWorkDeferred(
+  options: { ignoreAudioStartupHold?: boolean } = {},
+): boolean {
   return useZoomStore.getState().isZoomInteracting
     || hasActiveTimelineGesture()
     || hasActiveEditPreview()
-    || hasActivePreviewAudioStartupHold();
+    || (!options.ignoreAudioStartupHold && hasActivePreviewAudioStartupHold());
 }
 
 export function subscribePreviewWorkBudget(callback: () => void): () => void {
@@ -271,6 +274,9 @@ export function schedulePreviewWork(
 ): () => void {
   const delayMs = options.delayMs ?? 0;
   const idleTimeoutMs = options.idleTimeoutMs ?? PREVIEW_IDLE_TIMEOUT_MS;
+  const deferOptions = {
+    ignoreAudioStartupHold: options.ignoreAudioStartupHold ?? false,
+  };
 
   let cancelled = false;
   let cancelScheduled = () => {};
@@ -285,7 +291,7 @@ export function schedulePreviewWork(
     cancelScheduled();
     cancelScheduled = scheduleOnIdle(() => {
       if (cancelled) return;
-      if (isPreviewWorkDeferred()) {
+      if (isPreviewWorkDeferred(deferOptions)) {
         waitForBudget();
         return;
       }
@@ -294,7 +300,7 @@ export function schedulePreviewWork(
   };
 
   const onBudgetChange = () => {
-    if (cancelled || isPreviewWorkDeferred()) {
+    if (cancelled || isPreviewWorkDeferred(deferOptions)) {
       return;
     }
     unsubscribeBudget();
@@ -307,7 +313,7 @@ export function schedulePreviewWork(
     unsubscribeBudget = subscribePreviewWorkBudget(onBudgetChange);
   };
 
-  if (isPreviewWorkDeferred()) {
+  if (isPreviewWorkDeferred(deferOptions)) {
     waitForBudget();
   } else {
     scheduleAttempt();

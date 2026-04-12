@@ -23,7 +23,7 @@ const VERSION_PREFIX = 'cache-version-';
  * Bump version numbers here when format changes require cache invalidation
  */
 const CACHE_VERSIONS = {
-  filmstrip: 8,    // OPFS filmstrip frames (v8: max-height extraction tiles)
+  filmstrip: 9,    // OPFS filmstrip frames (v9: invalidate incorrect partial-complete prewarms)
   waveform: 3,     // OPFS waveform data (v3: stereo interleaved L/R peaks)
   thumbnail: 1,    // IndexedDB thumbnails
   media: 1,        // OPFS media files

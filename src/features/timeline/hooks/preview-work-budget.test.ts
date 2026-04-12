@@ -6,6 +6,7 @@ import {
   _resetPreviewWorkBudgetForTest,
   isPreviewWorkDeferred,
   registerPreviewAudioStartupHold,
+  schedulePreviewWork,
   subscribePreviewWorkBudget,
 } from './preview-work-budget';
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
@@ -76,6 +77,24 @@ describe('preview work budget', () => {
     expect(isPreviewWorkDeferred()).toBe(false);
 
     unsubscribe();
+  });
+
+  it('can schedule visual work without waiting on the audio startup hold', () => {
+    const task = vi.fn();
+    registerPreviewAudioStartupHold({
+      minDurationMs: 100,
+      maxDurationMs: 500,
+    });
+
+    expect(isPreviewWorkDeferred()).toBe(true);
+    expect(isPreviewWorkDeferred({ ignoreAudioStartupHold: true })).toBe(false);
+
+    schedulePreviewWork(task, {
+      ignoreAudioStartupHold: true,
+    });
+
+    vi.runAllTimers();
+    expect(task).toHaveBeenCalledTimes(1);
   });
 
   it('defers preview work during slip, slide, and track-push previews', () => {

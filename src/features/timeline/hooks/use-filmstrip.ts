@@ -154,6 +154,7 @@ export function useFilmstrip({
 
     let cancelled = false;
     const requestMediaId = mediaId;
+    const shouldStartImmediately = !filmstrip?.frames?.length;
     const cancelScheduledStart = schedulePreviewWork(() => {
       if (cancelled || lastMediaIdRef.current !== requestMediaId) {
         hasPendingStartRef.current = false;
@@ -189,7 +190,8 @@ export function useFilmstrip({
           }
         });
     }, {
-      delayMs: getPreviewStartupDelayMs(duration),
+      delayMs: shouldStartImmediately ? 0 : getPreviewStartupDelayMs(duration),
+      ignoreAudioStartupHold: true,
     });
 
     return () => {
@@ -199,7 +201,7 @@ export function useFilmstrip({
       }
       cancelScheduledStart();
     };
-  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.isComplete, priorityRange]);
+  }, [mediaId, blobUrl, duration, isVisible, enabled, filmstrip?.frames?.length, filmstrip?.isComplete, priorityRange]);
 
   return {
     frames: filmstrip?.frames || null,
