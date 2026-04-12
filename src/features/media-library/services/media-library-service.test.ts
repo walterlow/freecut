@@ -42,6 +42,10 @@ const compositionRuntimeMocks = vi.hoisted(() => ({
   startPreviewAudioStartupWarm: vi.fn(async () => undefined),
 }));
 
+const previewAudioConformMocks = vi.hoisted(() => ({
+  deletePreviewAudioConform: vi.fn(async () => undefined),
+}));
+
 const gifFrameCacheMocks = vi.hoisted(() => ({
   getGifFrames: vi.fn(),
   clearMedia: vi.fn(),
@@ -68,6 +72,10 @@ vi.mock('@/features/composition-runtime/utils/audio-codec-detection', () => ({
 vi.mock('@/features/composition-runtime/utils/audio-decode-cache', () => ({
   startPreviewAudioConform: compositionRuntimeMocks.startPreviewAudioConform,
   startPreviewAudioStartupWarm: compositionRuntimeMocks.startPreviewAudioStartupWarm,
+}));
+
+vi.mock('@/features/composition-runtime/utils/preview-audio-conform', () => ({
+  deletePreviewAudioConform: previewAudioConformMocks.deletePreviewAudioConform,
 }));
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
@@ -259,6 +267,7 @@ describe('MediaLibraryService', () => {
 
       expect(indexedDbMocks.removeMediaFromProject).toHaveBeenCalledWith('project-1', 'm1');
       expect(indexedDbMocks.deleteMedia).toHaveBeenCalledWith('m1');
+      expect(previewAudioConformMocks.deletePreviewAudioConform).toHaveBeenCalledWith(media, { clearMetadata: false });
     });
 
     it('only removes association when other projects still use the media', async () => {

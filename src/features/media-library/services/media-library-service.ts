@@ -42,6 +42,7 @@ import {
   startPreviewAudioConform,
   startPreviewAudioStartupWarm,
 } from '@/features/composition-runtime/utils/audio-decode-cache';
+import { deletePreviewAudioConform } from '@/features/composition-runtime/utils/preview-audio-conform';
 export { FileAccessError } from './file-access';
 
 /**
@@ -542,6 +543,7 @@ class MediaLibraryService {
       await this.deleteTranscriptSafely(mediaId);
       await this.deleteThumbnailsSafely(mediaId);
       await this.clearGifFrameCacheSafely(mediaId);
+      await deletePreviewAudioConform(media, { clearMetadata: false });
       await this.deleteProxySafely(media, { preserveSharedAliases: true });
       await this.deleteOpfsContentIfUnreferenced(media);
       // For handle storage: File stays on user's disk - nothing to delete
@@ -626,6 +628,7 @@ class MediaLibraryService {
     // Handle storage: nothing to delete, file stays on disk
 
     await this.deleteThumbnailsSafely(id);
+    await deletePreviewAudioConform(media, { clearMetadata: false });
     await this.deleteProxySafely(media);
 
     await deleteMediaDB(id);
@@ -966,7 +969,11 @@ class MediaLibraryService {
     // Clean up orphaned metadata
     for (const id of orphanedMetadata) {
       try {
+        const media = await getMediaDB(id);
         await this.deleteThumbnailsSafely(id);
+        if (media) {
+          await deletePreviewAudioConform(media, { clearMetadata: false });
+        }
         await deleteMediaDB(id);
       } catch (error) {
         logger.error(`Failed to cleanup orphaned metadata ${id}:`, error);

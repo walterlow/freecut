@@ -53,6 +53,13 @@ export interface MediaMetadata {
    */
   audioCodecSupported?: boolean;
   /**
+   * Conformed preview-audio asset path for custom-decoded codecs.
+   * Points to a browser-native playable WAV stored in OPFS.
+   */
+  previewAudioOpfsPath?: string;
+  previewAudioMimeType?: string;
+  previewAudioConformedAt?: number;
+  /**
    * Sorted keyframe (sync sample / IDR) timestamps in seconds.
    * Extracted at import time via mediabunny EncodedPacketSink.
    * Used for adaptive seek backtracking instead of fixed 1-second backtrack.

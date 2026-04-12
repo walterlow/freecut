@@ -25,6 +25,7 @@ import {
 import { getMedia } from '@/infrastructure/storage/indexeddb/media';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
 import type { DecodedPreviewAudioMeta, DecodedPreviewAudioBin } from '@/types/storage';
+import { persistPreviewAudioConform } from './preview-audio-conform';
 
 const log = createLogger('PreviewAudioCache');
 export type PreviewAudioSource = string | Blob;
@@ -269,7 +270,8 @@ export async function startPreviewAudioConform(
   mediaId: string,
   src: PreviewAudioSource,
 ): Promise<void> {
-  await ensureDecodeStarted(mediaId, src);
+  const buffer = await ensureDecodeStarted(mediaId, src);
+  await persistPreviewAudioConform(mediaId, buffer);
 }
 
 export async function startPreviewAudioStartupWarm(
@@ -1008,6 +1010,8 @@ async function decodeFullAudio(
         bins: totalBins,
         sizeMB: ((storedTotalFrames * 2 * 2) / (1024 * 1024)).toFixed(1),
       });
+
+      void persistPreviewAudioConform(mediaId, combined);
 
       // Save meta last as the decode-complete marker.
       void saveDecodedPreviewAudio({

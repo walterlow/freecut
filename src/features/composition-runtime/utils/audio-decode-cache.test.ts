@@ -19,6 +19,10 @@ const objectUrlRegistryMocks = vi.hoisted(() => ({
   getObjectUrlBlob: vi.fn(() => null),
 }));
 
+const previewAudioConformMocks = vi.hoisted(() => ({
+  persistPreviewAudioConform: vi.fn(async () => undefined),
+}));
+
 const mediabunnyMocks = vi.hoisted(() => {
   let pendingBuffer: Promise<{ buffer: AudioBuffer; timestamp: number; duration: number }> | null = null;
   let pendingSamples: Array<{
@@ -127,6 +131,7 @@ vi.mock('@/infrastructure/storage/indexeddb/decoded-preview-audio', () => decode
 vi.mock('@/infrastructure/storage/indexeddb/media', () => mediaDbMocks);
 vi.mock('@/shared/media/ac3-decoder', () => ac3Mocks);
 vi.mock('@/infrastructure/browser/object-url-registry', () => objectUrlRegistryMocks);
+vi.mock('./preview-audio-conform', () => previewAudioConformMocks);
 vi.mock('mediabunny', () => mediabunnyMocks);
 
 import {
@@ -199,6 +204,8 @@ describe('audio-decode-cache targeted slice reuse', () => {
   beforeEach(() => {
     clearPreviewAudioCache();
     mediabunnyMocks.__reset();
+    previewAudioConformMocks.persistPreviewAudioConform.mockClear();
+    decodedPreviewAudioMocks.saveDecodedPreviewAudio.mockClear();
     decodedPreviewAudioMocks.getDecodedPreviewAudio.mockReset();
     decodedPreviewAudioMocks.getDecodedPreviewAudio.mockImplementation(async () => null);
   });
@@ -358,5 +365,6 @@ describe('audio-decode-cache targeted slice reuse', () => {
     expect(mediabunnyMocks.__stats.inputConstructed).toBe(1);
     expect(mediabunnyMocks.__stats.sampleSinkConstructed).toBe(1);
     expect(decodedPreviewAudioMocks.saveDecodedPreviewAudio).toHaveBeenCalled();
+    expect(previewAudioConformMocks.persistPreviewAudioConform).toHaveBeenCalled();
   });
 });

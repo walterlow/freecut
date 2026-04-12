@@ -4,3 +4,4 @@
  */
 
 export { resolveProxyUrl } from '@/features/media-library/utils/media-resolver';
+export { opfsService } from '@/features/media-library/services/opfs-service';
