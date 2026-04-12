@@ -59,7 +59,9 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     audioFadeInCurveX: item.audioFadeInCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeInCurveX),
     audioFadeOutCurveX: item.audioFadeOutCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeOutCurveX),
     audioEqLowGainDb: item.audioEqLowGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqLowGainDb),
+    audioEqLowMidGainDb: item.audioEqLowMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqLowMidGainDb),
     audioEqMidGainDb: item.audioEqMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqMidGainDb),
+    audioEqHighMidGainDb: item.audioEqHighMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqHighMidGainDb),
     audioEqHighGainDb: item.audioEqHighGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqHighGainDb),
   };
 
@@ -109,8 +111,14 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   if (normalized.audioEqLowGainDb !== undefined) {
     normalized.audioEqLowGainDb = clampAudioEqGainDb(normalized.audioEqLowGainDb);
   }
+  if (normalized.audioEqLowMidGainDb !== undefined) {
+    normalized.audioEqLowMidGainDb = clampAudioEqGainDb(normalized.audioEqLowMidGainDb);
+  }
   if (normalized.audioEqMidGainDb !== undefined) {
     normalized.audioEqMidGainDb = clampAudioEqGainDb(normalized.audioEqMidGainDb);
+  }
+  if (normalized.audioEqHighMidGainDb !== undefined) {
+    normalized.audioEqHighMidGainDb = clampAudioEqGainDb(normalized.audioEqHighMidGainDb);
   }
   if (normalized.audioEqHighGainDb !== undefined) {
     normalized.audioEqHighGainDb = clampAudioEqGainDb(normalized.audioEqHighGainDb);
@@ -195,7 +203,9 @@ function buildReplaceableCaptionClipIds(items: TimelineItem[]): Set<string> {
     }
 
     if (isCaptionableClip(item)) {
-      (clipsByMediaId[item.mediaId] ??= []).push(item);
+      const mediaId = item.mediaId;
+      if (!mediaId) continue;
+      (clipsByMediaId[mediaId] ??= []).push(item);
     }
   }
 
@@ -208,8 +218,9 @@ function buildReplaceableCaptionClipIds(items: TimelineItem[]): Set<string> {
       continue;
     }
 
+    const mediaId = item.mediaId;
     const itemEnd = item.from + item.durationInFrames;
-    const candidateClips = clipsByMediaId[item.mediaId];
+    const candidateClips = clipsByMediaId[mediaId];
     if (!candidateClips) {
       continue;
     }

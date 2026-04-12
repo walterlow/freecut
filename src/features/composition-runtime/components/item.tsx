@@ -82,7 +82,9 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
     [
       audioEqStages,
       item.audioEqHighGainDb,
+      item.audioEqHighMidGainDb,
       item.audioEqLowGainDb,
+      item.audioEqLowMidGainDb,
       item.audioEqMidGainDb,
     ],
   );

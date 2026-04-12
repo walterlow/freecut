@@ -344,7 +344,9 @@ const timelineItemSchema = z.object({
   audioFadeInCurveX: z.number().min(0).max(1).optional(),
   audioFadeOutCurveX: z.number().min(0).max(1).optional(),
   audioEqLowGainDb: z.number().min(-18).max(18).optional(),
+  audioEqLowMidGainDb: z.number().min(-18).max(18).optional(),
   audioEqMidGainDb: z.number().min(-18).max(18).optional(),
+  audioEqHighMidGainDb: z.number().min(-18).max(18).optional(),
   audioEqHighGainDb: z.number().min(-18).max(18).optional(),
   // Video properties
   fadeIn: z.number().min(0).optional(),

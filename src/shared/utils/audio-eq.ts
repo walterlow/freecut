@@ -2,24 +2,79 @@ import type { AudioEqSettings, ResolvedAudioEqSettings } from '@/types/audio';
 
 export interface AudioEqFieldSource {
   audioEqLowGainDb?: number;
+  audioEqLowMidGainDb?: number;
   audioEqMidGainDb?: number;
+  audioEqHighMidGainDb?: number;
   audioEqHighGainDb?: number;
+}
+
+export type AudioEqPresetId =
+  | 'flat'
+  | 'voice-clarity'
+  | 'warmth'
+  | 'bass-boost'
+  | 'sparkle'
+  | 'radio';
+
+export interface AudioEqPresetDefinition {
+  id: AudioEqPresetId;
+  label: string;
+  settings: ResolvedAudioEqSettings;
 }
 
 export const AUDIO_EQ_GAIN_DB_MIN = -18;
 export const AUDIO_EQ_GAIN_DB_MAX = 18;
-export const AUDIO_EQ_LOW_FREQUENCY_HZ = 200;
+export const AUDIO_EQ_LOW_FREQUENCY_HZ = 100;
+export const AUDIO_EQ_LOW_MID_FREQUENCY_HZ = 300;
 export const AUDIO_EQ_MID_FREQUENCY_HZ = 1000;
+export const AUDIO_EQ_HIGH_MID_FREQUENCY_HZ = 3000;
 export const AUDIO_EQ_MID_Q = 0.9;
-export const AUDIO_EQ_HIGH_FREQUENCY_HZ = 5000;
+export const AUDIO_EQ_LOW_MID_Q = 0.9;
+export const AUDIO_EQ_HIGH_MID_Q = 0.9;
+export const AUDIO_EQ_HIGH_FREQUENCY_HZ = 8000;
 const AUDIO_EQ_SHELF_SLOPE = 1;
 const AUDIO_EQ_ACTIVE_EPSILON = 0.001;
 
 export const DEFAULT_AUDIO_EQ_SETTINGS: Readonly<ResolvedAudioEqSettings> = Object.freeze({
   lowGainDb: 0,
+  lowMidGainDb: 0,
   midGainDb: 0,
+  highMidGainDb: 0,
   highGainDb: 0,
 });
+
+export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.freeze([
+  {
+    id: 'flat',
+    label: 'Flat',
+    settings: DEFAULT_AUDIO_EQ_SETTINGS,
+  },
+  {
+    id: 'voice-clarity',
+    label: 'Voice Clarity',
+    settings: Object.freeze({ lowGainDb: -4, lowMidGainDb: -2, midGainDb: 3, highMidGainDb: 4, highGainDb: 2 }),
+  },
+  {
+    id: 'warmth',
+    label: 'Warmth',
+    settings: Object.freeze({ lowGainDb: 3, lowMidGainDb: 2, midGainDb: 1, highMidGainDb: -1, highGainDb: -2 }),
+  },
+  {
+    id: 'bass-boost',
+    label: 'Bass Boost',
+    settings: Object.freeze({ lowGainDb: 6, lowMidGainDb: 2, midGainDb: -1, highMidGainDb: 0, highGainDb: 1 }),
+  },
+  {
+    id: 'sparkle',
+    label: 'Sparkle',
+    settings: Object.freeze({ lowGainDb: -1, lowMidGainDb: 0, midGainDb: 1, highMidGainDb: 3, highGainDb: 5 }),
+  },
+  {
+    id: 'radio',
+    label: 'Radio',
+    settings: Object.freeze({ lowGainDb: -6, lowMidGainDb: -2, midGainDb: 4, highMidGainDb: 5, highGainDb: -3 }),
+  },
+]);
 
 function clampFrequency(frequencyHz: number, sampleRate: number): number {
   return Math.max(20, Math.min(frequencyHz, sampleRate * 0.45));
@@ -33,7 +88,9 @@ export function clampAudioEqGainDb(value: number): number {
 export function getAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqSettings {
   return {
     lowGainDb: source?.audioEqLowGainDb,
+    lowMidGainDb: source?.audioEqLowMidGainDb,
     midGainDb: source?.audioEqMidGainDb,
+    highMidGainDb: source?.audioEqHighMidGainDb,
     highGainDb: source?.audioEqHighGainDb,
   };
 }
@@ -43,7 +100,9 @@ export function resolveAudioEqSettings(source?: AudioEqSettings | AudioEqFieldSo
   const fields = source as AudioEqFieldSource | null | undefined;
   return {
     lowGainDb: clampAudioEqGainDb(settings?.lowGainDb ?? fields?.audioEqLowGainDb ?? 0),
+    lowMidGainDb: clampAudioEqGainDb(settings?.lowMidGainDb ?? fields?.audioEqLowMidGainDb ?? 0),
     midGainDb: clampAudioEqGainDb(settings?.midGainDb ?? fields?.audioEqMidGainDb ?? 0),
+    highMidGainDb: clampAudioEqGainDb(settings?.highMidGainDb ?? fields?.audioEqHighMidGainDb ?? 0),
     highGainDb: clampAudioEqGainDb(settings?.highGainDb ?? fields?.audioEqHighGainDb ?? 0),
   };
 }
@@ -65,7 +124,9 @@ export function resolvePreviewAudioEqStages(
   const fallbackOwnStage = stages[stages.length - 1] ?? DEFAULT_AUDIO_EQ_SETTINGS;
   stages[stages.length - 1] = resolveAudioEqSettings({
     lowGainDb: previewSource?.audioEqLowGainDb ?? fallbackOwnStage.lowGainDb,
+    lowMidGainDb: previewSource?.audioEqLowMidGainDb ?? fallbackOwnStage.lowMidGainDb,
     midGainDb: previewSource?.audioEqMidGainDb ?? fallbackOwnStage.midGainDb,
+    highMidGainDb: previewSource?.audioEqHighMidGainDb ?? fallbackOwnStage.highMidGainDb,
     highGainDb: previewSource?.audioEqHighGainDb ?? fallbackOwnStage.highGainDb,
   });
   return stages;
@@ -75,7 +136,9 @@ export function isAudioEqStageActive(stage?: AudioEqSettings | ResolvedAudioEqSe
   if (!stage) return false;
   return (
     Math.abs(stage.lowGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
+    || Math.abs(stage.lowMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
     || Math.abs(stage.midGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
+    || Math.abs(stage.highMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
     || Math.abs(stage.highGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
   );
 }
@@ -93,13 +156,33 @@ export function areAudioEqStagesEqual(
     if (!leftStage || !rightStage) return false;
     if (
       leftStage.lowGainDb !== rightStage.lowGainDb
+      || leftStage.lowMidGainDb !== rightStage.lowMidGainDb
       || leftStage.midGainDb !== rightStage.midGainDb
+      || leftStage.highMidGainDb !== rightStage.highMidGainDb
       || leftStage.highGainDb !== rightStage.highGainDb
     ) {
       return false;
     }
   }
   return true;
+}
+
+export function getAudioEqPresetById(presetId: AudioEqPresetId): AudioEqPresetDefinition | undefined {
+  return AUDIO_EQ_PRESETS.find((preset) => preset.id === presetId);
+}
+
+export function findAudioEqPresetId(
+  source?: AudioEqSettings | AudioEqFieldSource | null,
+): AudioEqPresetId | null {
+  const resolved = resolveAudioEqSettings(source);
+  const preset = AUDIO_EQ_PRESETS.find(({ settings }) => (
+    settings.lowGainDb === resolved.lowGainDb
+    && settings.lowMidGainDb === resolved.lowMidGainDb
+    && settings.midGainDb === resolved.midGainDb
+    && settings.highMidGainDb === resolved.highMidGainDb
+    && settings.highGainDb === resolved.highGainDb
+  ));
+  return preset?.id ?? null;
 }
 
 interface BiquadCoefficients {
@@ -222,10 +305,22 @@ function applyAudioEqStage(
       buildShelfCoefficients('lowshelf', AUDIO_EQ_LOW_FREQUENCY_HZ, stage.lowGainDb, sampleRate),
     );
   }
+  if (Math.abs(stage.lowMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+    output = applyBiquad(
+      output,
+      buildPeakingCoefficients(AUDIO_EQ_LOW_MID_FREQUENCY_HZ, stage.lowMidGainDb, sampleRate, AUDIO_EQ_LOW_MID_Q),
+    );
+  }
   if (Math.abs(stage.midGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
     output = applyBiquad(
       output,
       buildPeakingCoefficients(AUDIO_EQ_MID_FREQUENCY_HZ, stage.midGainDb, sampleRate, AUDIO_EQ_MID_Q),
+    );
+  }
+  if (Math.abs(stage.highMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+    output = applyBiquad(
+      output,
+      buildPeakingCoefficients(AUDIO_EQ_HIGH_MID_FREQUENCY_HZ, stage.highMidGainDb, sampleRate, AUDIO_EQ_HIGH_MID_Q),
     );
   }
   if (Math.abs(stage.highGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {

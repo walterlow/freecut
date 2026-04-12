@@ -209,7 +209,9 @@ function makeGeneratedAudioItem(video: VideoItem, trackId: string, createId: () 
     audioFadeInCurveX: video.audioFadeInCurveX,
     audioFadeOutCurveX: video.audioFadeOutCurveX,
     audioEqLowGainDb: video.audioEqLowGainDb,
+    audioEqLowMidGainDb: video.audioEqLowMidGainDb,
     audioEqMidGainDb: video.audioEqMidGainDb,
+    audioEqHighMidGainDb: video.audioEqHighMidGainDb,
     audioEqHighGainDb: video.audioEqHighGainDb,
     offset: video.offset,
   };

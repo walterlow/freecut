@@ -1,6 +1,10 @@
 import {
   AUDIO_EQ_HIGH_FREQUENCY_HZ,
+  AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
+  AUDIO_EQ_HIGH_MID_Q,
   AUDIO_EQ_LOW_FREQUENCY_HZ,
+  AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
+  AUDIO_EQ_LOW_MID_Q,
   AUDIO_EQ_MID_FREQUENCY_HZ,
   AUDIO_EQ_MID_Q,
 } from '@/shared/utils/audio-eq';
@@ -11,7 +15,9 @@ export const PREVIEW_AUDIO_EQ_RAMP_SECONDS = 0.012;
 
 interface PreviewClipAudioEqStageNodes {
   lowShelfNode: BiquadFilterNode;
+  lowMidPeakingNode: BiquadFilterNode;
   midPeakingNode: BiquadFilterNode;
+  highMidPeakingNode: BiquadFilterNode;
   highShelfNode: BiquadFilterNode;
 }
 
@@ -52,21 +58,35 @@ function createPreviewClipAudioEqStage(context: AudioContext): PreviewClipAudioE
   lowShelfNode.type = 'lowshelf';
   lowShelfNode.frequency.value = AUDIO_EQ_LOW_FREQUENCY_HZ;
 
+  const lowMidPeakingNode = context.createBiquadFilter();
+  lowMidPeakingNode.type = 'peaking';
+  lowMidPeakingNode.frequency.value = AUDIO_EQ_LOW_MID_FREQUENCY_HZ;
+  lowMidPeakingNode.Q.value = AUDIO_EQ_LOW_MID_Q;
+
   const midPeakingNode = context.createBiquadFilter();
   midPeakingNode.type = 'peaking';
   midPeakingNode.frequency.value = AUDIO_EQ_MID_FREQUENCY_HZ;
   midPeakingNode.Q.value = AUDIO_EQ_MID_Q;
 
+  const highMidPeakingNode = context.createBiquadFilter();
+  highMidPeakingNode.type = 'peaking';
+  highMidPeakingNode.frequency.value = AUDIO_EQ_HIGH_MID_FREQUENCY_HZ;
+  highMidPeakingNode.Q.value = AUDIO_EQ_HIGH_MID_Q;
+
   const highShelfNode = context.createBiquadFilter();
   highShelfNode.type = 'highshelf';
   highShelfNode.frequency.value = AUDIO_EQ_HIGH_FREQUENCY_HZ;
 
-  lowShelfNode.connect(midPeakingNode);
-  midPeakingNode.connect(highShelfNode);
+  lowShelfNode.connect(lowMidPeakingNode);
+  lowMidPeakingNode.connect(midPeakingNode);
+  midPeakingNode.connect(highMidPeakingNode);
+  highMidPeakingNode.connect(highShelfNode);
 
   return {
     lowShelfNode,
+    lowMidPeakingNode,
     midPeakingNode,
+    highMidPeakingNode,
     highShelfNode,
   };
 }
@@ -100,7 +120,9 @@ export function createPreviewClipAudioGraph(options?: { eqStageCount?: number })
       sourceInputNode.disconnect();
       for (const stageNodes of eqStageNodes) {
         stageNodes.lowShelfNode.disconnect();
+        stageNodes.lowMidPeakingNode.disconnect();
         stageNodes.midPeakingNode.disconnect();
+        stageNodes.highMidPeakingNode.disconnect();
         stageNodes.highShelfNode.disconnect();
       }
       outputGainNode.disconnect();
@@ -150,10 +172,14 @@ export function rampPreviewClipEq(
     if (!stageNodes) continue;
     const targetStage = targetStages?.[i];
     const lowGain = targetStage?.lowGainDb ?? 0;
+    const lowMidGain = targetStage?.lowMidGainDb ?? 0;
     const midGain = targetStage?.midGainDb ?? 0;
+    const highMidGain = targetStage?.highMidGainDb ?? 0;
     const highGain = targetStage?.highGainDb ?? 0;
     rampAudioParam(stageNodes.lowShelfNode.gain, lowGain, startAt, rampSeconds);
+    rampAudioParam(stageNodes.lowMidPeakingNode.gain, lowMidGain, startAt, rampSeconds);
     rampAudioParam(stageNodes.midPeakingNode.gain, midGain, startAt, rampSeconds);
+    rampAudioParam(stageNodes.highMidPeakingNode.gain, highMidGain, startAt, rampSeconds);
     rampAudioParam(stageNodes.highShelfNode.gain, highGain, startAt, rampSeconds);
   }
 }
@@ -167,7 +193,9 @@ export function setPreviewClipEq(
     if (!stageNodes) continue;
     const targetStage = targetStages?.[i];
     stageNodes.lowShelfNode.gain.value = targetStage?.lowGainDb ?? 0;
+    stageNodes.lowMidPeakingNode.gain.value = targetStage?.lowMidGainDb ?? 0;
     stageNodes.midPeakingNode.gain.value = targetStage?.midGainDb ?? 0;
+    stageNodes.highMidPeakingNode.gain.value = targetStage?.highMidGainDb ?? 0;
     stageNodes.highShelfNode.gain.value = targetStage?.highGainDb ?? 0;
   }
 }

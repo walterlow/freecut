@@ -2,10 +2,16 @@ import { useCallback, useMemo } from 'react';
 import { Volume2, RotateCcw } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { TimelineItem } from '@/types/timeline';
 import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
-import type { ItemPropertiesPreview } from '@/features/preview/stores/gizmo-store';
 import {
   getAutoKeyframeOperation,
   type AutoKeyframeOperation,
@@ -20,7 +26,19 @@ import {
 } from '../components';
 import { getMixedValue } from '../utils';
 import { getAudioSectionItems } from './audio-section-utils';
-import { AUDIO_EQ_GAIN_DB_MAX, AUDIO_EQ_GAIN_DB_MIN } from '@/shared/utils/audio-eq';
+import {
+  AUDIO_EQ_GAIN_DB_MAX,
+  AUDIO_EQ_GAIN_DB_MIN,
+  AUDIO_EQ_HIGH_FREQUENCY_HZ,
+  AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
+  AUDIO_EQ_LOW_FREQUENCY_HZ,
+  AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
+  AUDIO_EQ_MID_FREQUENCY_HZ,
+  AUDIO_EQ_PRESETS,
+  type AudioEqPresetId,
+  findAudioEqPresetId,
+  getAudioEqPresetById,
+} from '@/shared/utils/audio-eq';
 
 interface AudioSectionProps {
   items: TimelineItem[];
@@ -28,7 +46,8 @@ interface AudioSectionProps {
 
 const AUDIO_GAIN_DB_MIN = -60;
 const AUDIO_GAIN_DB_MAX = 12;
-type AudioEqField = 'audioEqLowGainDb' | 'audioEqMidGainDb' | 'audioEqHighGainDb';
+type AudioEqField = 'audioEqLowGainDb' | 'audioEqLowMidGainDb' | 'audioEqMidGainDb' | 'audioEqHighMidGainDb' | 'audioEqHighGainDb';
+type AudioEqPreview = Partial<Record<AudioEqField, number>>;
 
 /**
  * Audio section - volume and audio fades.
@@ -96,8 +115,29 @@ export function AudioSection({ items }: AudioSectionProps) {
   const fadeIn = getMixedValue(audioItems, (item) => item.audioFadeIn, 0);
   const fadeOut = getMixedValue(audioItems, (item) => item.audioFadeOut, 0);
   const eqLow = getMixedValue(audioItems, (item) => item.audioEqLowGainDb, 0);
+  const eqLowMid = getMixedValue(audioItems, (item) => item.audioEqLowMidGainDb, 0);
   const eqMid = getMixedValue(audioItems, (item) => item.audioEqMidGainDb, 0);
+  const eqHighMid = getMixedValue(audioItems, (item) => item.audioEqHighMidGainDb, 0);
   const eqHigh = getMixedValue(audioItems, (item) => item.audioEqHighGainDb, 0);
+  const hasMixedEqSettings =
+    eqLow === 'mixed'
+    || eqLowMid === 'mixed'
+    || eqMid === 'mixed'
+    || eqHighMid === 'mixed'
+    || eqHigh === 'mixed';
+  const selectedEqPresetId = useMemo(() => {
+    if (hasMixedEqSettings) return null;
+    return findAudioEqPresetId({
+      lowGainDb: eqLow as number,
+      lowMidGainDb: eqLowMid as number,
+      midGainDb: eqMid as number,
+      highMidGainDb: eqHighMid as number,
+      highGainDb: eqHigh as number,
+    });
+  }, [eqHigh, eqHighMid, eqLow, eqLowMid, eqMid, hasMixedEqSettings]);
+  const eqPresetPlaceholder = hasMixedEqSettings
+    ? 'Mixed'
+    : (selectedEqPresetId ? getAudioEqPresetById(selectedEqPresetId)?.label ?? 'Custom' : 'Custom');
 
   // Helper: auto-keyframe volume on value change
   const autoKeyframeVolume = useCallback(
@@ -192,9 +232,9 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const handleEqLiveChange = useCallback(
     (field: AudioEqField, value: number) => {
-      const previews: Record<string, ItemPropertiesPreview> = {};
+      const previews: Record<string, AudioEqPreview> = {};
       itemIds.forEach((id) => {
-        previews[id] = { [field]: value } as ItemPropertiesPreview;
+        previews[id] = { [field]: value };
       });
       setPropertiesPreviewNew(previews);
     },
@@ -208,6 +248,20 @@ export function AudioSection({ items }: AudioSectionProps) {
     },
     [itemIds, updateItem, clearPreview]
   );
+
+  const handleEqPresetChange = useCallback((presetId: string) => {
+    const preset = getAudioEqPresetById(presetId as AudioEqPresetId);
+    if (!preset) return;
+
+    itemIds.forEach((id) => updateItem(id, {
+      audioEqLowGainDb: preset.settings.lowGainDb,
+      audioEqLowMidGainDb: preset.settings.lowMidGainDb,
+      audioEqMidGainDb: preset.settings.midGainDb,
+      audioEqHighMidGainDb: preset.settings.highMidGainDb,
+      audioEqHighGainDb: preset.settings.highGainDb,
+    }));
+    queueMicrotask(() => clearPreview());
+  }, [itemIds, updateItem, clearPreview]);
 
   // Reset volume to 0 dB
   // Read current values from store to avoid depending on audioItems (prevents callback recreation)
@@ -292,7 +346,25 @@ export function AudioSection({ items }: AudioSectionProps) {
         </div>
       </PropertyRow>
 
-      <PropertyRow label="Low EQ">
+      <PropertyRow label="Preset">
+        <Select
+          value={selectedEqPresetId ?? undefined}
+          onValueChange={handleEqPresetChange}
+        >
+          <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+            <SelectValue placeholder={eqPresetPlaceholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {AUDIO_EQ_PRESETS.map((preset) => (
+              <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                {preset.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </PropertyRow>
+
+      <PropertyRow label={`Low (${AUDIO_EQ_LOW_FREQUENCY_HZ} Hz)`}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={eqLow}
@@ -316,7 +388,31 @@ export function AudioSection({ items }: AudioSectionProps) {
         </div>
       </PropertyRow>
 
-      <PropertyRow label="Mid EQ">
+      <PropertyRow label={`Low Mid (${AUDIO_EQ_LOW_MID_FREQUENCY_HZ} Hz)`}>
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={eqLowMid}
+            onChange={(value) => handleEqChange('audioEqLowMidGainDb', value)}
+            onLiveChange={(value) => handleEqLiveChange('audioEqLowMidGainDb', value)}
+            min={AUDIO_EQ_GAIN_DB_MIN}
+            max={AUDIO_EQ_GAIN_DB_MAX}
+            step={0.1}
+            unit="dB"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => handleResetEq('audioEqLowMidGainDb')}
+            title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label={`Mid (${AUDIO_EQ_MID_FREQUENCY_HZ} Hz)`}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={eqMid}
@@ -340,7 +436,31 @@ export function AudioSection({ items }: AudioSectionProps) {
         </div>
       </PropertyRow>
 
-      <PropertyRow label="High EQ">
+      <PropertyRow label={`High Mid (${AUDIO_EQ_HIGH_MID_FREQUENCY_HZ / 1000} kHz)`}>
+        <div className="flex items-center gap-1 w-full">
+          <SliderInput
+            value={eqHighMid}
+            onChange={(value) => handleEqChange('audioEqHighMidGainDb', value)}
+            onLiveChange={(value) => handleEqLiveChange('audioEqHighMidGainDb', value)}
+            min={AUDIO_EQ_GAIN_DB_MIN}
+            max={AUDIO_EQ_GAIN_DB_MAX}
+            step={0.1}
+            unit="dB"
+            className="flex-1 min-w-0"
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={() => handleResetEq('audioEqHighMidGainDb')}
+            title="Reset to 0 dB"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </PropertyRow>
+
+      <PropertyRow label={`High (${AUDIO_EQ_HIGH_FREQUENCY_HZ / 1000} kHz)`}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={eqHigh}

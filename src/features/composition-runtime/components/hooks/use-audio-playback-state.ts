@@ -109,7 +109,9 @@ export function useAudioPlaybackState({
     [
       audioEqStages,
       preview?.audioEqLowGainDb,
+      preview?.audioEqLowMidGainDb,
       preview?.audioEqMidGainDb,
+      preview?.audioEqHighMidGainDb,
       preview?.audioEqHighGainDb,
     ],
   );

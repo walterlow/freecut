@@ -216,7 +216,9 @@ export function useVideoAudioState(
     [
       audioEqStages,
       preview?.audioEqLowGainDb,
+      preview?.audioEqLowMidGainDb,
       preview?.audioEqMidGainDb,
+      preview?.audioEqHighMidGainDb,
       preview?.audioEqHighGainDb,
     ],
   );
