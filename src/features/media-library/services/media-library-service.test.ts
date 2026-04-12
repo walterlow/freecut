@@ -36,6 +36,11 @@ const mediaProcessorMocks = vi.hoisted(() => ({
   hasUnsupportedAudioCodec: vi.fn(),
 }));
 
+const compositionRuntimeMocks = vi.hoisted(() => ({
+  needsCustomAudioDecoder: vi.fn(() => false),
+  startPreviewAudioConform: vi.fn(async () => undefined),
+}));
+
 const gifFrameCacheMocks = vi.hoisted(() => ({
   getGifFrames: vi.fn(),
   clearMedia: vi.fn(),
@@ -53,6 +58,14 @@ vi.mock('./proxy-service', () => ({
 
 vi.mock('./media-processor-service', () => ({
   mediaProcessorService: mediaProcessorMocks,
+}));
+
+vi.mock('@/features/composition-runtime/utils/audio-codec-detection', () => ({
+  needsCustomAudioDecoder: compositionRuntimeMocks.needsCustomAudioDecoder,
+}));
+
+vi.mock('@/features/composition-runtime/utils/audio-decode-cache', () => ({
+  startPreviewAudioConform: compositionRuntimeMocks.startPreviewAudioConform,
 }));
 
 vi.mock('@/features/media-library/deps/timeline-services', () => ({
@@ -94,6 +107,7 @@ function makeMediaMetadata(overrides: Partial<MediaMetadata> = {}): MediaMetadat
 describe('MediaLibraryService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false);
   });
 
   describe('getAllMedia', () => {
@@ -182,6 +196,38 @@ describe('MediaLibraryService', () => {
       expect(result.isDuplicate).toBe(true);
       expect(result.id).toBe('existing-1');
       expect(indexedDbMocks.createMedia).not.toHaveBeenCalled();
+    });
+
+    it('starts preview audio conform in background for custom-decoded imports', async () => {
+      const mockFile = new File(['audio'], 'clip.webm', { type: 'video/webm' });
+      const mockHandle = {
+        name: 'clip.webm',
+        getFile: vi.fn().mockResolvedValue(mockFile),
+        queryPermission: vi.fn().mockResolvedValue('granted'),
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as FileSystemFileHandle;
+
+      mediaProcessorMocks.processMedia.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 10,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'vp9',
+          audioCodec: 'vorbis',
+          audioCodecSupported: true,
+          bitrate: 5000,
+        },
+      });
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getMediaForProject.mockResolvedValue([]);
+      compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(true);
+
+      const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1');
+
+      expect(result.id).toBeTruthy();
+      expect(compositionRuntimeMocks.startPreviewAudioConform).toHaveBeenCalledWith(result.id, mockFile);
     });
 
     it('throws FileAccessError when permission is denied', async () => {

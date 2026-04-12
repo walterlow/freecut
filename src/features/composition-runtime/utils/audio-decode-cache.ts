@@ -27,6 +27,7 @@ import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-
 import type { DecodedPreviewAudioMeta, DecodedPreviewAudioBin } from '@/types/storage';
 
 const log = createLogger('PreviewAudioCache');
+export type PreviewAudioSource = string | Blob;
 
 const cache = new Map<string, AudioBuffer>();
 const playbackSliceCache = new Map<string, PlaybackAudioSlice>();
@@ -210,8 +211,12 @@ function sleep(ms: number): Promise<void> {
 
 function createInputSource(
   mb: Awaited<typeof import('mediabunny')>,
-  src: string,
+  src: PreviewAudioSource,
 ): InstanceType<typeof mb.BlobSource> | InstanceType<typeof mb.UrlSource> {
+  if (src instanceof Blob) {
+    return new mb.BlobSource(src);
+  }
+
   const registeredBlob = getObjectUrlBlob(src);
   if (registeredBlob) {
     return new mb.BlobSource(registeredBlob);
@@ -229,7 +234,7 @@ function createInputSource(
  * Checks: memory cache -> IndexedDB bins -> decode (persists bins progressively).
  * Concurrent calls for the same mediaId share a single promise.
  */
-function ensureDecodeStarted(mediaId: string, src: string): Promise<AudioBuffer> {
+function ensureDecodeStarted(mediaId: string, src: PreviewAudioSource): Promise<AudioBuffer> {
   const pending = pendingDecodes.get(mediaId);
   if (pending) return pending;
 
@@ -250,13 +255,20 @@ function ensureDecodeStarted(mediaId: string, src: string): Promise<AudioBuffer>
   return promise;
 }
 
-export async function getOrDecodeAudio(mediaId: string, src: string): Promise<AudioBuffer> {
+export async function getOrDecodeAudio(mediaId: string, src: PreviewAudioSource): Promise<AudioBuffer> {
   const cached = cache.get(mediaId);
   if (cached) {
     touchCacheEntry(mediaId);
     return cached;
   }
   return ensureDecodeStarted(mediaId, src);
+}
+
+export async function startPreviewAudioConform(
+  mediaId: string,
+  src: PreviewAudioSource,
+): Promise<void> {
+  await ensureDecodeStarted(mediaId, src);
 }
 
 /** Returns true when a full decode/rebuild is currently in progress. */
@@ -341,7 +353,7 @@ async function loadPartialFromBins(
 }
 async function decodeAudioWindow(
   mediaId: string,
-  src: string,
+  src: PreviewAudioSource,
   startTime: number,
   durationSeconds: number,
   ac3RetryAttempted: boolean = false,
@@ -454,7 +466,7 @@ async function decodeAudioWindow(
  */
 export async function getOrDecodeAudioSliceForPlayback(
   mediaId: string,
-  src: string,
+  src: PreviewAudioSource,
   options?: {
     minReadySeconds?: number;
     waitTimeoutMs?: number;
@@ -572,7 +584,7 @@ export async function getOrDecodeAudioSliceForPlayback(
 
 export async function getOrDecodeAudioForPlayback(
   mediaId: string,
-  src: string,
+  src: PreviewAudioSource,
   options?: {
     minReadySeconds?: number;
     waitTimeoutMs?: number;
@@ -598,7 +610,7 @@ export function clearPreviewAudioCache(): void {
 // Load from IndexedDB bins
 // ---------------------------------------------------------------------------
 
-async function loadOrDecodeAudio(mediaId: string, src: string): Promise<AudioBuffer> {
+async function loadOrDecodeAudio(mediaId: string, src: PreviewAudioSource): Promise<AudioBuffer> {
   // Try IndexedDB
   try {
     const cached = await getDecodedPreviewAudio(mediaId);
@@ -845,10 +857,15 @@ async function shouldPreRegisterAc3Decoder(mediaId: string): Promise<boolean> {
 
 async function decodeFullAudio(
   mediaId: string,
-  src: string,
+  src: PreviewAudioSource,
   ac3RetryAttempted: boolean = false,
 ): Promise<AudioBuffer> {
-  log.info('Decoding audio for preview', { mediaId, src: src.substring(0, 50) });
+  log.info('Decoding audio for preview', {
+    mediaId,
+    src: typeof src === 'string'
+      ? src.substring(0, 50)
+      : `[blob:${src.type || 'application/octet-stream'} size=${src.size}]`,
+  });
   const shouldRegisterAc3 = ac3RetryAttempted || await shouldPreRegisterAc3Decoder(mediaId);
 
   try {

@@ -131,6 +131,17 @@ describe('proxyService.loadExistingProxies', () => {
     expect(proxyService.needsProxy(1280, 720, 'video/mp4')).toBe(true);
   });
 
+  it('treats custom-decoded audio codecs as smart proxy candidates', async () => {
+    const { useSettingsStore } = await import('@/features/media-library/deps/settings-contract');
+    const { proxyService } = await import('./proxy-service');
+
+    useSettingsStore.getState().resetToDefaults();
+    useSettingsStore.getState().setSetting('proxyGenerationMode', 'smart');
+    useSettingsStore.getState().setSetting('proxyGenerationResolution', '2160p');
+
+    expect(proxyService.needsProxy(1280, 720, 'video/webm', 'vorbis')).toBe(true);
+  });
+
   it('records runtime playback trouble and auto-queues a smart proxy recommendation', async () => {
     const workerPostMessage = vi.fn();
     workerManagerMocks.getWorker.mockReturnValue({

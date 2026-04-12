@@ -5,7 +5,10 @@ import { useWaveform } from '../../hooks/use-waveform';
 import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
 import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
-import { needsCustomAudioDecoder } from '@/features/timeline/deps/composition-runtime';
+import {
+  needsCustomAudioDecoder,
+  startPreviewAudioConform,
+} from '@/features/timeline/deps/composition-runtime';
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 import { createLogger } from '@/shared/logging/logger';
 import { computeWaveformRenderWindow } from './render-window';
@@ -74,6 +77,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   pixelsPerSecondRef.current = pixelsPerSecond;
   const [height, setHeight] = useState(0);
   const [isZooming, setIsZooming] = useState(false);
+  const conformStartedRef = useRef(false);
   const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPpsRef = useRef(pixelsPerSecond);
   const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
@@ -105,6 +109,10 @@ export const ClipWaveform = memo(function ClipWaveform({
   const visibleClipWidth = clipWidth;
   const renderClipWidth = Math.max(visibleClipWidth, renderWidth ?? visibleClipWidth);
 
+  useEffect(() => {
+    conformStartedRef.current = false;
+  }, [mediaId]);
+
   // Load blob URL for the media when visible, including post-invalidation retries.
   useEffect(() => {
     // Skip if already started loading (prevents re-triggering on visibility changes)
@@ -128,8 +136,12 @@ export const ClipWaveform = memo(function ClipWaveform({
 
         // AC-3/E-AC-3 can still generate waveform via mediabunny even if old metadata
         // marked codec unsupported before custom decode was added.
+        const previewAudioCodec = media?.mimeType.startsWith('audio/')
+          ? media.codec
+          : (media?.audioCodec ?? media?.codec);
+        const requiresCustomDecode = needsCustomAudioDecoder(previewAudioCodec);
         const codecSupported = media
-          ? (media.audioCodecSupported !== false || needsCustomAudioDecoder(media.audioCodec))
+          ? (media.audioCodecSupported !== false || requiresCustomDecode)
           : true;
         setAudioCodecSupported(codecSupported);
 
@@ -141,6 +153,12 @@ export const ClipWaveform = memo(function ClipWaveform({
         const url = await resolveMediaUrl(mediaId);
         if (mounted && url) {
           setBlobUrl(url);
+          if (requiresCustomDecode && !conformStartedRef.current) {
+            conformStartedRef.current = true;
+            void startPreviewAudioConform(mediaId, url).catch((error) => {
+              logger.warn('Failed to start preview audio conform from waveform load:', error);
+            });
+          }
         }
       } catch (error) {
         logger.error('Failed to load media blob URL:', error);

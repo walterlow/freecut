@@ -4,6 +4,7 @@ import {
   getOrDecodeAudioSliceForPlayback,
   needsCustomAudioDecoder,
   prewarmPreviewAudioElement,
+  startPreviewAudioConform,
 } from '@/features/timeline/deps/composition-runtime';
 import type { DroppedMediaEntry } from './drop-execution';
 import { registerPreviewAudioStartupHold } from '../hooks/preview-work-budget';
@@ -88,6 +89,12 @@ export function prewarmDroppedTimelineAudio(
         });
       });
       customWarmups.push(warmup);
+      void startPreviewAudioConform(item.mediaId, src).catch((error) => {
+        log.warn('Failed to start background conform for dropped custom audio', {
+          mediaId: item.mediaId,
+          error,
+        });
+      });
       continue;
     }
 

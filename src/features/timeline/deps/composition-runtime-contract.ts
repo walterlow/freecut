@@ -8,5 +8,8 @@ export {
   getSourceDimensions,
 } from '@/features/composition-runtime/utils/transform-resolver';
 export { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
-export { getOrDecodeAudioSliceForPlayback } from '@/features/composition-runtime/utils/audio-decode-cache';
+export {
+  getOrDecodeAudioSliceForPlayback,
+  startPreviewAudioConform,
+} from '@/features/composition-runtime/utils/audio-decode-cache';
 export { prewarmPreviewAudioElement } from '@/features/composition-runtime/utils/preview-audio-element-pool';

@@ -37,6 +37,8 @@ import { validateMediaFile, getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { mediaProcessorService } from './media-processor-service';
 import { generateThumbnail } from '../utils/thumbnail-generator';
+import { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
+import { startPreviewAudioConform } from '@/features/composition-runtime/utils/audio-decode-cache';
 export { FileAccessError } from './file-access';
 
 /**
@@ -276,6 +278,17 @@ class MediaLibraryService {
 
     // Stage 7: Associate with project
     await associateMediaWithProject(projectId, id);
+
+    const previewAudioCodec = metadata.type === 'audio'
+      ? metadata.codec
+      : metadata.type === 'video'
+        ? metadata.audioCodec
+        : undefined;
+    if (needsCustomAudioDecoder(previewAudioCodec)) {
+      void startPreviewAudioConform(id, file).catch((error) => {
+        logger.warn('Failed to start preview audio conform after import:', error);
+      });
+    }
 
     // Pre-extract GIF frames in background
     if (resolvedMimeType === 'image/gif') {

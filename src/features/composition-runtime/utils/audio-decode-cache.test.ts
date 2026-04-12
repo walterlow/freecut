@@ -21,9 +21,17 @@ const objectUrlRegistryMocks = vi.hoisted(() => ({
 
 const mediabunnyMocks = vi.hoisted(() => {
   let pendingBuffer: Promise<{ buffer: AudioBuffer; timestamp: number; duration: number }> | null = null;
+  let pendingSamples: Array<{
+    numberOfFrames: number;
+    numberOfChannels: number;
+    sampleRate: number;
+    copyTo: (destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) => void;
+    close: () => void;
+  }> = [];
   const stats = {
     inputConstructed: 0,
     sinkConstructed: 0,
+    sampleSinkConstructed: 0,
   };
 
   class Input {
@@ -70,19 +78,46 @@ const mediabunnyMocks = vi.hoisted(() => {
     }
   }
 
+  class AudioSampleSink {
+    constructor(track: unknown) {
+      void track;
+      stats.sampleSinkConstructed += 1;
+    }
+    samples() {
+      const samples = pendingSamples;
+      return (async function* yieldSamples() {
+        for (const sample of samples) {
+          yield sample;
+        }
+      })();
+    }
+  }
+
   return {
     ALL_FORMATS: [],
     Input,
     UrlSource,
     BlobSource,
     AudioBufferSink,
+    AudioSampleSink,
     __setPendingBuffer(promise: Promise<{ buffer: AudioBuffer; timestamp: number; duration: number }>) {
       pendingBuffer = promise;
     },
+    __setPendingSamples(samples: Array<{
+      numberOfFrames: number;
+      numberOfChannels: number;
+      sampleRate: number;
+      copyTo: (destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) => void;
+      close: () => void;
+    }>) {
+      pendingSamples = samples;
+    },
     __reset() {
       pendingBuffer = null;
+      pendingSamples = [];
       stats.inputConstructed = 0;
       stats.sinkConstructed = 0;
+      stats.sampleSinkConstructed = 0;
     },
     __stats: stats,
   };
@@ -97,6 +132,7 @@ vi.mock('mediabunny', () => mediabunnyMocks);
 import {
   clearPreviewAudioCache,
   getOrDecodeAudioSliceForPlayback,
+  startPreviewAudioConform,
 } from './audio-decode-cache';
 
 function makeAudioBuffer(duration: number, sampleRate = 22050): AudioBuffer {
@@ -121,6 +157,19 @@ function createDeferred<T>() {
     resolve = res;
   });
   return { promise, resolve };
+}
+
+function makeSample(frameCount: number, sampleRate = 22050) {
+  return {
+    numberOfFrames: frameCount,
+    numberOfChannels: 2,
+    sampleRate,
+    copyTo(destination: Float32Array, options: { planeIndex: number; format: 'f32-planar' }) {
+      void options;
+      destination.fill(options.planeIndex === 0 ? 0.25 : -0.25);
+    },
+    close() {},
+  };
 }
 
 describe('audio-decode-cache targeted slice reuse', () => {
@@ -294,5 +343,20 @@ describe('audio-decode-cache targeted slice reuse', () => {
     expect(slice.isComplete).toBe(false);
     expect(mediabunnyMocks.__stats.inputConstructed).toBe(0);
     expect(mediabunnyMocks.__stats.sinkConstructed).toBe(0);
+  });
+
+  it('accepts Blob sources for background conform', async () => {
+    mediabunnyMocks.__setPendingSamples([makeSample(4)]);
+
+    await expect(
+      startPreviewAudioConform(
+        'media-blob',
+        new Blob(['audio-bytes'], { type: 'audio/webm' }),
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mediabunnyMocks.__stats.inputConstructed).toBe(1);
+    expect(mediabunnyMocks.__stats.sampleSinkConstructed).toBe(1);
+    expect(decodedPreviewAudioMocks.saveDecodedPreviewAudio).toHaveBeenCalled();
   });
 });

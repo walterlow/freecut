@@ -1,196 +1,87 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { TimelineItem } from '@/types/timeline';
-import type { MediaMetadata } from '@/types/storage';
-import type { DroppedMediaEntry } from './drop-execution';
 import { prewarmDroppedTimelineAudio } from './drop-audio-prewarm';
 
-const audioDecodeMocks = vi.hoisted(() => ({
+const compositionRuntimeMocks = vi.hoisted(() => ({
   getOrDecodeAudioSliceForPlayback: vi.fn(),
-}));
-
-const nativeWarmMocks = vi.hoisted(() => ({
+  needsCustomAudioDecoder: vi.fn(() => false),
   prewarmPreviewAudioElement: vi.fn(),
+  startPreviewAudioConform: vi.fn(async () => undefined),
 }));
 
 const previewBudgetMocks = vi.hoisted(() => ({
-  registerPreviewAudioStartupHold: vi.fn(),
+  registerPreviewAudioStartupHold: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@/features/timeline/deps/composition-runtime', async () => {
-  const actual = await vi.importActual<typeof import('@/features/timeline/deps/composition-runtime')>('@/features/timeline/deps/composition-runtime');
-  return {
-    ...actual,
-    getOrDecodeAudioSliceForPlayback: audioDecodeMocks.getOrDecodeAudioSliceForPlayback,
-    prewarmPreviewAudioElement: nativeWarmMocks.prewarmPreviewAudioElement,
-  };
-});
+vi.mock('@/features/timeline/deps/composition-runtime', () => compositionRuntimeMocks);
+vi.mock('../hooks/preview-work-budget', () => previewBudgetMocks);
 
-vi.mock('../hooks/preview-work-budget', () => ({
-  registerPreviewAudioStartupHold: previewBudgetMocks.registerPreviewAudioStartupHold,
-}));
-
-function createMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
-  return {
-    id: overrides.id ?? 'media-1',
-    storageType: overrides.storageType ?? 'opfs',
-    fileName: overrides.fileName ?? 'clip.mp4',
-    fileSize: overrides.fileSize ?? 1024,
-    mimeType: overrides.mimeType ?? 'video/mp4',
-    duration: overrides.duration ?? 4,
-    width: overrides.width ?? 1920,
-    height: overrides.height ?? 1080,
-    fps: overrides.fps ?? 30,
-    codec: overrides.codec ?? 'h264',
-    bitrate: overrides.bitrate ?? 1000,
-    audioCodec: overrides.audioCodec,
-    tags: overrides.tags ?? [],
-    createdAt: overrides.createdAt ?? Date.now(),
-    updatedAt: overrides.updatedAt ?? Date.now(),
-  };
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
-describe('drop-audio-prewarm', () => {
+describe('prewarmDroppedTimelineAudio', () => {
   beforeEach(() => {
-    audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockReset();
-    nativeWarmMocks.prewarmPreviewAudioElement.mockReset();
-    previewBudgetMocks.registerPreviewAudioStartupHold.mockReset().mockReturnValue(vi.fn());
+    vi.clearAllMocks();
+    compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false);
+    compositionRuntimeMocks.startPreviewAudioConform.mockResolvedValue(undefined);
   });
 
-  it('prewarms native dropped video audio immediately', () => {
-    const entries: DroppedMediaEntry[] = [{
-      media: createMedia({ id: 'media-1', audioCodec: 'aac' }),
-      mediaId: 'media-1',
-      mediaType: 'video',
-      label: 'clip.mp4',
-    }];
-    const items: TimelineItem[] = [{
-      id: 'item-1',
-      trackId: 'track-1',
-      type: 'video',
-      mediaId: 'media-1',
-      src: 'blob://video',
-      label: 'clip.mp4',
-      from: 0,
-      durationInFrames: 120,
-      sourceStart: 45,
-      sourceFps: 30,
-    }];
+  it('starts both startup slice warmup and background conform for custom-decoded drops', async () => {
+    const deferred = createDeferred<{ buffer: AudioBuffer; startTime: number; isComplete: boolean }>();
+    const releaseHold = vi.fn();
 
-    prewarmDroppedTimelineAudio(entries, items);
+    compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(true);
+    compositionRuntimeMocks.getOrDecodeAudioSliceForPlayback.mockImplementation(() => deferred.promise);
+    previewBudgetMocks.registerPreviewAudioStartupHold.mockReturnValue(releaseHold);
 
-    expect(previewBudgetMocks.registerPreviewAudioStartupHold).toHaveBeenCalledWith({
-      minDurationMs: 1200,
-      maxDurationMs: 6000,
-    });
-    expect(nativeWarmMocks.prewarmPreviewAudioElement).toHaveBeenCalledWith('blob://video', 1.5);
-    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
-  });
+    prewarmDroppedTimelineAudio(
+      [{
+        mediaId: 'media-1',
+        mediaType: 'video',
+        label: 'clip.webm',
+        media: {
+          id: 'media-1',
+          mimeType: 'video/webm',
+          codec: 'vp9',
+          audioCodec: 'vorbis',
+          fps: 30,
+        },
+      } as never],
+      [{
+        type: 'video',
+        mediaId: 'media-1',
+        src: 'blob:video',
+        audioSrc: 'blob:audio',
+        sourceFps: 30,
+        sourceStart: 90,
+      } as never],
+    );
 
-  it('kicks custom-decoder prewarm for unsupported codecs', () => {
-    audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
-      buffer: { duration: 8 },
+    expect(compositionRuntimeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledWith(
+      'media-1',
+      'blob:audio',
+      expect.objectContaining({
+        minReadySeconds: 2,
+        waitTimeoutMs: 6000,
+        targetTimeSeconds: 3,
+      }),
+    );
+    expect(compositionRuntimeMocks.startPreviewAudioConform).toHaveBeenCalledWith('media-1', 'blob:audio');
+    expect(previewBudgetMocks.registerPreviewAudioStartupHold).toHaveBeenCalledTimes(1);
+    expect(releaseHold).not.toHaveBeenCalled();
+
+    deferred.resolve({
+      buffer: {} as AudioBuffer,
       startTime: 0,
       isComplete: false,
     });
-
-    const entries: DroppedMediaEntry[] = [{
-      media: createMedia({
-        id: 'media-2',
-        mimeType: 'audio/ogg',
-        codec: 'vorbis',
-      }),
-      mediaId: 'media-2',
-      mediaType: 'audio',
-      label: 'track.ogg',
-    }];
-    const items: TimelineItem[] = [{
-      id: 'item-2',
-      trackId: 'track-1',
-      type: 'audio',
-      mediaId: 'media-2',
-      src: 'blob://audio',
-      label: 'track.ogg',
-      from: 0,
-      durationInFrames: 240,
-      sourceStart: 60,
-      sourceFps: 30,
-    }];
-
-    prewarmDroppedTimelineAudio(entries, items);
-
-    expect(previewBudgetMocks.registerPreviewAudioStartupHold).toHaveBeenCalledWith({
-      minDurationMs: 1200,
-      maxDurationMs: 6000,
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
     });
-    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledWith('media-2', 'blob://audio', {
-      minReadySeconds: 2,
-      waitTimeoutMs: 6000,
-      targetTimeSeconds: 2,
-    });
-    expect(nativeWarmMocks.prewarmPreviewAudioElement).not.toHaveBeenCalled();
-  });
 
-  it('deduplicates linked companions from the same dropped source', () => {
-    const entries: DroppedMediaEntry[] = [{
-      media: createMedia({ id: 'media-3', audioCodec: 'aac' }),
-      mediaId: 'media-3',
-      mediaType: 'video',
-      label: 'clip.mp4',
-    }];
-    const items: TimelineItem[] = [
-      {
-        id: 'video-1',
-        trackId: 'track-video',
-        type: 'video',
-        mediaId: 'media-3',
-        src: 'blob://shared',
-        label: 'clip.mp4',
-        from: 0,
-        durationInFrames: 120,
-        sourceFps: 30,
-      },
-      {
-        id: 'audio-1',
-        trackId: 'track-audio',
-        type: 'audio',
-        mediaId: 'media-3',
-        src: 'blob://shared',
-        label: 'clip.mp4',
-        from: 0,
-        durationInFrames: 120,
-        sourceFps: 30,
-      },
-    ];
-
-    prewarmDroppedTimelineAudio(entries, items);
-
-    expect(previewBudgetMocks.registerPreviewAudioStartupHold).toHaveBeenCalledTimes(1);
-    expect(nativeWarmMocks.prewarmPreviewAudioElement).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips the startup hold when the dropped media has no audio track', () => {
-    const entries: DroppedMediaEntry[] = [{
-      media: createMedia({ id: 'media-4', audioCodec: undefined }),
-      mediaId: 'media-4',
-      mediaType: 'video',
-      label: 'silent.mp4',
-    }];
-    const items: TimelineItem[] = [{
-      id: 'item-4',
-      trackId: 'track-1',
-      type: 'video',
-      mediaId: 'media-4',
-      src: 'blob://silent-video',
-      label: 'silent.mp4',
-      from: 0,
-      durationInFrames: 120,
-      sourceFps: 30,
-    }];
-
-    prewarmDroppedTimelineAudio(entries, items);
-
-    expect(previewBudgetMocks.registerPreviewAudioStartupHold).not.toHaveBeenCalled();
-    expect(nativeWarmMocks.prewarmPreviewAudioElement).not.toHaveBeenCalled();
-    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
+    expect(releaseHold).toHaveBeenCalledTimes(1);
   });
 });

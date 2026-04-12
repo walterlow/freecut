@@ -18,6 +18,7 @@ import { createLogger } from '@/shared/logging/logger';
 import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { registerObjectUrl, unregisterObjectUrl } from '@/infrastructure/browser/object-url-registry';
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
+import { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
 import {
   DEFAULT_PROXY_GENERATION_MODE,
   DEFAULT_PROXY_GENERATION_RESOLUTION,
@@ -348,6 +349,9 @@ class ProxyService {
 
     const normalizedAudioCodec = (audioCodec ?? '').toLowerCase();
     if (PROXY_PRIORITY_AUDIO_CODECS.has(normalizedAudioCodec)) {
+      return true;
+    }
+    if (needsCustomAudioDecoder(audioCodec)) {
       return true;
     }
 
