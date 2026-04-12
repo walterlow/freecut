@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
+import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
 import { createLogger } from '@/shared/logging/logger';
@@ -24,6 +25,134 @@ interface DecodedPitchSource {
   coverageEndSec: number;
   isComplete: boolean;
 }
+
+interface DecodedPitchFallbackAudioProps extends AudioPlaybackProps {
+  audioBuffer: AudioBuffer;
+  sourceStartOffsetSec: number;
+}
+
+function floatToInt16(value: number): number {
+  const clamped = Math.max(-1, Math.min(1, value));
+  return clamped < 0 ? Math.round(clamped * 0x8000) : Math.round(clamped * 0x7fff);
+}
+
+function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
+  const channels = Math.max(1, Math.min(2, buffer.numberOfChannels));
+  const frameCount = buffer.length;
+  const sampleRate = buffer.sampleRate;
+  const bytesPerSample = 2;
+  const blockAlign = channels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const pcmByteLength = frameCount * blockAlign;
+  const headerSize = 44;
+
+  const out = new ArrayBuffer(headerSize + pcmByteLength);
+  const view = new DataView(out);
+  const writeAscii = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) {
+      view.setUint8(offset + index, text.charCodeAt(index));
+    }
+  };
+
+  writeAscii(0, 'RIFF');
+  view.setUint32(4, 36 + pcmByteLength, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeAscii(36, 'data');
+  view.setUint32(40, pcmByteLength, true);
+
+  const left = buffer.getChannelData(0);
+  const right = channels > 1 ? buffer.getChannelData(1) : left;
+
+  let offset = headerSize;
+  for (let index = 0; index < frameCount; index += 1) {
+    view.setInt16(offset, floatToInt16(left[index] ?? 0), true);
+    offset += 2;
+    if (channels > 1) {
+      view.setInt16(offset, floatToInt16(right[index] ?? 0), true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([out], { type: 'audio/wav' });
+}
+
+const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
+  audioBuffer,
+  sourceStartOffsetSec,
+  itemId,
+  liveGainItemIds,
+  trimBefore,
+  sourceFps,
+  volume,
+  playbackRate,
+  muted,
+  durationInFrames,
+  audioFadeIn,
+  audioFadeOut,
+  audioFadeInCurve,
+  audioFadeOutCurve,
+  audioFadeInCurveX,
+  audioFadeOutCurveX,
+  clipFadeSpans,
+  contentStartOffsetFrames,
+  contentEndOffsetFrames,
+  fadeInDelayFrames,
+  fadeOutLeadFrames,
+  crossfadeFadeIn,
+  crossfadeFadeOut,
+  volumeMultiplier,
+}) => {
+  const [decodedSrc, setDecodedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer));
+    setDecodedSrc(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [audioBuffer]);
+
+  if (!decodedSrc) {
+    return null;
+  }
+
+  return (
+    <PitchCorrectedAudio
+      src={decodedSrc}
+      itemId={itemId}
+      liveGainItemIds={liveGainItemIds}
+      trimBefore={trimBefore}
+      sourceFps={sourceFps}
+      sourceStartOffsetSec={sourceStartOffsetSec}
+      volume={volume}
+      playbackRate={playbackRate}
+      muted={muted}
+      durationInFrames={durationInFrames}
+      audioFadeIn={audioFadeIn}
+      audioFadeOut={audioFadeOut}
+      audioFadeInCurve={audioFadeInCurve}
+      audioFadeOutCurve={audioFadeOutCurve}
+      audioFadeInCurveX={audioFadeInCurveX}
+      audioFadeOutCurveX={audioFadeOutCurveX}
+      clipFadeSpans={clipFadeSpans}
+      contentStartOffsetFrames={contentStartOffsetFrames}
+      contentEndOffsetFrames={contentEndOffsetFrames}
+      fadeInDelayFrames={fadeInDelayFrames}
+      fadeOutLeadFrames={fadeOutLeadFrames}
+      crossfadeFadeIn={crossfadeFadeIn}
+      crossfadeFadeOut={crossfadeFadeOut}
+      volumeMultiplier={volumeMultiplier}
+    />
+  );
+};
 
 function shouldReplaceDecodedPitchSource(
   current: DecodedPitchSource | null,
@@ -56,6 +185,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   src,
   mediaId,
   itemId,
+  liveGainItemIds,
   trimBefore = 0,
   sourceFps,
   volume = 0,
@@ -227,10 +357,41 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
 
   if (!decodedSource) return null;
 
+  const fallback = (
+    <DecodedPitchFallbackAudio
+      audioBuffer={decodedSource.buffer}
+      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+      itemId={itemId}
+      liveGainItemIds={liveGainItemIds}
+      trimBefore={trimBefore}
+      sourceFps={sourceFps}
+      volume={volume}
+      playbackRate={playbackRate}
+      muted={muted}
+      durationInFrames={durationInFrames}
+      audioFadeIn={audioFadeIn}
+      audioFadeOut={audioFadeOut}
+      audioFadeInCurve={audioFadeInCurve}
+      audioFadeOutCurve={audioFadeOutCurve}
+      audioFadeInCurveX={audioFadeInCurveX}
+      audioFadeOutCurveX={audioFadeOutCurveX}
+      clipFadeSpans={clipFadeSpans}
+      contentStartOffsetFrames={contentStartOffsetFrames}
+      contentEndOffsetFrames={contentEndOffsetFrames}
+      fadeInDelayFrames={fadeInDelayFrames}
+      fadeOutLeadFrames={fadeOutLeadFrames}
+      crossfadeFadeIn={crossfadeFadeIn}
+      crossfadeFadeOut={crossfadeFadeOut}
+      volumeMultiplier={volumeMultiplier}
+    />
+  );
+
   return (
     <SoundTouchWorkletAudio
       audioBuffer={decodedSource.buffer}
+      fallback={fallback}
       itemId={itemId}
+      liveGainItemIds={liveGainItemIds}
       trimBefore={trimBefore}
       sourceFps={sourceFps}
       sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}

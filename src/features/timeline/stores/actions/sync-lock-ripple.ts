@@ -2,6 +2,7 @@ import { useItemsStore } from '../items-store';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock';
 import type { PreviewItemUpdate } from '../../utils/item-edit-preview';
+import { applySplitBookkeeping } from './split-bookkeeping';
 
 export interface RipplePropagationResult {
   affectedIds: string[];
@@ -100,6 +101,29 @@ function setPreviewUpdate(
     ...(updatesById.get(itemId) ?? { id: itemId }),
     ...updates,
   });
+}
+
+function splitItemWithBookkeeping(
+  itemId: string,
+  splitFrame: number,
+): { leftItem: TimelineItem; rightItem: TimelineItem } | null {
+  const current = useItemsStore.getState().itemById[itemId];
+  if (!current) {
+    return null;
+  }
+
+  const result = useItemsStore.getState()._splitItem(itemId, splitFrame);
+  if (!result) {
+    return null;
+  }
+
+  applySplitBookkeeping([{
+    originalId: current.id,
+    originalLinkedGroupId: current.linkedGroupId,
+    result,
+  }]);
+
+  return result;
 }
 
 function buildRemovedIntervalPreviewUpdatesForTrack(
@@ -288,11 +312,11 @@ function removeItemsOnTrackInterval(trackId: string, interval: TimeInterval): Ri
     }
 
     if (startsBeforeInterval && endsAfterInterval) {
-      const splitAtStart = store._splitItem(current.id, interval.start);
+      const splitAtStart = splitItemWithBookkeeping(current.id, interval.start);
       if (!splitAtStart) continue;
       affectedIds.push(splitAtStart.leftItem.id, splitAtStart.rightItem.id);
 
-      const splitAtEnd = useItemsStore.getState()._splitItem(splitAtStart.rightItem.id, interval.end);
+      const splitAtEnd = splitItemWithBookkeeping(splitAtStart.rightItem.id, interval.end);
       if (!splitAtEnd) continue;
       store._removeItems([splitAtEnd.leftItem.id]);
       removedIds.push(splitAtEnd.leftItem.id);
@@ -301,7 +325,7 @@ function removeItemsOnTrackInterval(trackId: string, interval: TimeInterval): Ri
     }
 
     if (startsBeforeInterval) {
-      const split = store._splitItem(current.id, interval.start);
+      const split = splitItemWithBookkeeping(current.id, interval.start);
       if (!split) continue;
       store._removeItems([split.rightItem.id]);
       removedIds.push(split.rightItem.id);
@@ -309,7 +333,7 @@ function removeItemsOnTrackInterval(trackId: string, interval: TimeInterval): Ri
       continue;
     }
 
-    const split = store._splitItem(current.id, interval.end);
+    const split = splitItemWithBookkeeping(current.id, interval.end);
     if (!split) continue;
     store._removeItems([split.leftItem.id]);
     removedIds.push(split.leftItem.id);
@@ -401,7 +425,6 @@ export function propagateInsertedGapToSyncLockedTracks(params: {
   const affectedIds: string[] = [];
 
   for (const trackId of candidateTrackIds) {
-    const store = useItemsStore.getState();
     const straddledItems = useItemsStore.getState().items
       .filter((item) => item.trackId === trackId && item.from < cutFrame && item.from + item.durationInFrames > cutFrame)
       .sort((left, right) => left.from - right.from);
@@ -409,7 +432,7 @@ export function propagateInsertedGapToSyncLockedTracks(params: {
     for (const straddledItem of straddledItems) {
       const current = useItemsStore.getState().itemById[straddledItem.id];
       if (!current || current.trackId !== trackId) continue;
-      const splitResult = store._splitItem(current.id, cutFrame);
+      const splitResult = splitItemWithBookkeeping(current.id, cutFrame);
       if (!splitResult) continue;
       affectedIds.push(splitResult.leftItem.id, splitResult.rightItem.id);
     }

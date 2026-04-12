@@ -34,6 +34,7 @@ import {
   propagateInsertedGapToSyncLockedTracks,
   propagateRemovedIntervalsToSyncLockedTracks,
 } from './sync-lock-ripple';
+import { applySplitBookkeeping, type SplitResultEntry } from './split-bookkeeping';
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled;
@@ -146,39 +147,15 @@ export function splitItem(
     const splitResults = itemsToSplit
       .map((item) => ({
         originalId: item.id,
+        originalLinkedGroupId: item.linkedGroupId,
         result: itemsStore._splitItem(item.id, splitFrame),
       }))
-      .filter((entry): entry is { originalId: string; result: { leftItem: TimelineItem; rightItem: TimelineItem } } => entry.result !== null);
+      .filter((entry): entry is SplitResultEntry => entry.result !== null);
 
     const anchorResult = splitResults.find((entry) => entry.originalId === id)?.result ?? null;
     if (!anchorResult) return null;
 
-    // Update transitions pointing to split item
-    const transitions = useTransitionsStore.getState().transitions;
-    const splitRightByOriginalId = new Map(splitResults.map((entry) => [entry.originalId, entry.result.rightItem.id]));
-    const updatedTransitions = transitions.map((transition) => {
-      const leftReplacementId = splitRightByOriginalId.get(transition.leftClipId);
-      if (leftReplacementId) {
-        // Transition was from this clip - now from right half
-        return { ...transition, leftClipId: leftReplacementId };
-      }
-      if (splitRightByOriginalId.has(transition.rightClipId)) {
-        // Transition was to this clip - stays pointing to left half (original ID)
-        return transition;
-      }
-      return transition;
-    });
-    useTransitionsStore.getState().setTransitions(updatedTransitions);
-
-    if (itemsToSplit.some((item) => item.linkedGroupId)) {
-      const leftLinkedGroupId = splitResults.length > 1 ? crypto.randomUUID() : undefined;
-      const rightLinkedGroupId = splitResults.length > 1 ? crypto.randomUUID() : undefined;
-
-      for (const entry of splitResults) {
-        itemsStore._updateItem(entry.result.leftItem.id, { linkedGroupId: leftLinkedGroupId });
-        itemsStore._updateItem(entry.result.rightItem.id, { linkedGroupId: rightLinkedGroupId });
-      }
-    }
+    applySplitBookkeeping(splitResults);
 
     // Keep selection anchored to the split clip for immediate downstream
     // adjacency/transition detection across all split entry points.
@@ -242,23 +219,16 @@ export function splitItemAtFrames(
       const frameSplitResults = itemsToSplit
         .map((item) => ({
           originalId: item.id,
+          originalLinkedGroupId: item.linkedGroupId,
           result: useItemsStore.getState()._splitItem(item.id, frame),
         }))
-        .filter((entry): entry is { originalId: string; result: { leftItem: TimelineItem; rightItem: TimelineItem } } => entry.result !== null);
+        .filter((entry): entry is SplitResultEntry => entry.result !== null);
 
       if (frameSplitResults.length !== itemsToSplit.length) {
         continue;
       }
 
-      if (itemsToSplit.some((item) => item.linkedGroupId)) {
-        const leftLinkedGroupId = frameSplitResults.length > 1 ? crypto.randomUUID() : undefined;
-        const rightLinkedGroupId = frameSplitResults.length > 1 ? crypto.randomUUID() : undefined;
-
-        for (const entry of frameSplitResults) {
-          useItemsStore.getState()._updateItem(entry.result.leftItem.id, { linkedGroupId: leftLinkedGroupId });
-          useItemsStore.getState()._updateItem(entry.result.rightItem.id, { linkedGroupId: rightLinkedGroupId });
-        }
-      }
+      applySplitBookkeeping(frameSplitResults);
 
       splitCount++;
 
