@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
@@ -6,10 +6,14 @@ import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/aud
 import { createLogger } from '@/shared/logging/logger';
 import { getDecodedPreviewAudio } from '@/infrastructure/storage/indexeddb';
 import type { DecodedPreviewAudioBin, DecodedPreviewAudioMeta } from '@/types/storage';
+import { getAudioTargetTimeSeconds } from '../utils/video-timing';
+import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 
 const log = createLogger('CustomDecoderAudio');
 const PARTIAL_WAV_READY_SECONDS = 2;
 const PARTIAL_WAV_WAIT_TIMEOUT_MS = 6000;
+const PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS = 1.25;
+const PARTIAL_WAV_EXTENSION_READY_SECONDS = 3;
 
 interface CustomDecoderAudioProps extends AudioPlaybackProps {
   src: string;
@@ -25,6 +29,8 @@ interface DecodedWavEntry {
 interface DecodedPitchSource {
   src: string;
   sourceStartOffsetSec: number;
+  coverageEndSec: number;
+  isComplete: boolean;
 }
 
 const decodedWavUrlCache = new Map<string, DecodedWavEntry>();
@@ -54,12 +60,12 @@ function createWavHeader(sampleRate: number, channels: number, totalFrames: numb
   writeAscii(view, 8, 'WAVE');
   writeAscii(view, 12, 'fmt ');
   view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
+  view.setUint16(20, 1, true);
   view.setUint16(22, channels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, byteRate, true);
   view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true); // bits per sample
+  view.setUint16(34, 16, true);
   writeAscii(view, 36, 'data');
   view.setUint32(40, pcmByteLength, true);
   return header;
@@ -144,20 +150,18 @@ function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
   view.setUint32(4, 36 + pcmByteLength, true);
   writeAscii(view, 8, 'WAVE');
   writeAscii(view, 12, 'fmt ');
-  view.setUint32(16, 16, true); // PCM fmt chunk size
-  view.setUint16(20, 1, true); // PCM
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
   view.setUint16(22, channels, true);
   view.setUint32(24, sampleRate, true);
   view.setUint32(28, byteRate, true);
   view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true); // bits per sample
+  view.setUint16(34, 16, true);
   writeAscii(view, 36, 'data');
   view.setUint32(40, pcmByteLength, true);
 
   const left = buffer.getChannelData(0);
-  const right = channels > 1
-    ? buffer.getChannelData(1)
-    : left;
+  const right = channels > 1 ? buffer.getChannelData(1) : left;
 
   let offset = headerSize;
   for (let i = 0; i < frameCount; i++) {
@@ -170,6 +174,28 @@ function audioBufferToWavBlob(buffer: AudioBuffer): Blob {
   }
 
   return new Blob([out], { type: 'audio/wav' });
+}
+
+function shouldReplaceDecodedPitchSource(
+  current: DecodedPitchSource | null,
+  next: DecodedPitchSource,
+): boolean {
+  if (!current) {
+    return true;
+  }
+  if (current.isComplete) {
+    return next.isComplete && current.src !== next.src;
+  }
+  if (next.isComplete) {
+    return true;
+  }
+  if (next.coverageEndSec > current.coverageEndSec + 0.05) {
+    return true;
+  }
+  if (next.sourceStartOffsetSec < current.sourceStartOffsetSec - 0.05) {
+    return true;
+  }
+  return false;
 }
 
 async function getOrCreateDecodedWavUrl(mediaId: string, src: string): Promise<string> {
@@ -192,7 +218,6 @@ async function getOrCreateDecodedWavUrl(mediaId: string, src: string): Promise<s
   decodedWavUrlCache.set(mediaId, entry);
 
   entry.promise = (async () => {
-    // Fast path: rebuild WAV directly from persisted Int16 bins.
     const storedBlob = await tryBuildWavBlobFromStoredBins(mediaId);
     if (storedBlob) {
       const url = URL.createObjectURL(storedBlob);
@@ -201,7 +226,6 @@ async function getOrCreateDecodedWavUrl(mediaId: string, src: string): Promise<s
       return url;
     }
 
-    // Fallback: decode/reassemble buffer, then encode WAV.
     const audioBuffer = await getOrDecodeAudio(mediaId, src);
     const wavBlob = audioBufferToWavBlob(audioBuffer);
     const url = URL.createObjectURL(wavBlob);
@@ -265,16 +289,38 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   crossfadeFadeOut,
   volumeMultiplier = 1,
 }) => {
+  const { frame, fps, playing } = useAudioPlaybackState({
+    itemId,
+    volume,
+    muted,
+    durationInFrames,
+    audioFadeIn,
+    audioFadeOut,
+    audioFadeInCurve,
+    audioFadeOutCurve,
+    audioFadeInCurveX,
+    audioFadeOutCurveX,
+    clipFadeSpans,
+    contentStartOffsetFrames,
+    contentEndOffsetFrames,
+    fadeInDelayFrames,
+    fadeOutLeadFrames,
+    crossfadeFadeIn,
+    crossfadeFadeOut,
+    volumeMultiplier,
+  });
   const [decodedSource, setDecodedSource] = useState<DecodedPitchSource | null>(null);
+  const activePartialUrlRef = useRef<string | null>(null);
+  const pendingExtensionKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mediaId || !src) return;
 
     let cancelled = false;
-    let partialUrl: string | null = null;
     const effectiveSourceFps = sourceFps ?? 30;
     const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps);
     setDecodedSource(null);
+    pendingExtensionKeyRef.current = null;
 
     getOrDecodeAudioSliceForPlayback(mediaId, src, {
       minReadySeconds: PARTIAL_WAV_READY_SECONDS,
@@ -284,10 +330,22 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       .then((slice) => {
         if (cancelled) return;
         const url = URL.createObjectURL(audioBufferToWavBlob(slice.buffer));
-        partialUrl = url;
-        setDecodedSource((current) => current ?? {
+        const nextSource: DecodedPitchSource = {
           src: url,
           sourceStartOffsetSec: slice.startTime,
+          coverageEndSec: slice.startTime + slice.buffer.duration,
+          isComplete: slice.isComplete,
+        };
+        setDecodedSource((current) => {
+          if (!shouldReplaceDecodedPitchSource(current, nextSource)) {
+            URL.revokeObjectURL(url);
+            return current;
+          }
+          if (activePartialUrlRef.current && activePartialUrlRef.current !== url) {
+            URL.revokeObjectURL(activePartialUrlRef.current);
+          }
+          activePartialUrlRef.current = url;
+          return nextSource;
         });
         log.info('Partial decoded WAV source ready', {
           mediaId,
@@ -302,13 +360,15 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     getOrCreateDecodedWavUrl(mediaId, src)
       .then((url) => {
         if (cancelled) return;
-        if (partialUrl && partialUrl !== url) {
-          URL.revokeObjectURL(partialUrl);
-          partialUrl = null;
+        if (activePartialUrlRef.current && activePartialUrlRef.current !== url) {
+          URL.revokeObjectURL(activePartialUrlRef.current);
+          activePartialUrlRef.current = null;
         }
         setDecodedSource({
           src: url,
           sourceStartOffsetSec: 0,
+          coverageEndSec: Number.POSITIVE_INFINITY,
+          isComplete: true,
         });
         log.info('Decoded WAV source ready', { mediaId });
       })
@@ -319,12 +379,85 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
 
     return () => {
       cancelled = true;
-      if (partialUrl) {
-        URL.revokeObjectURL(partialUrl);
+      if (activePartialUrlRef.current) {
+        URL.revokeObjectURL(activePartialUrlRef.current);
+        activePartialUrlRef.current = null;
       }
       releaseDecodedWavUrl(mediaId);
     };
   }, [mediaId, src, trimBefore, sourceFps]);
+
+  useEffect(() => {
+    const currentSource = decodedSource;
+    if (!currentSource || currentSource.isComplete || !playing) {
+      pendingExtensionKeyRef.current = null;
+      return;
+    }
+
+    const effectiveSourceFps = sourceFps ?? fps;
+    const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    const remainingCoverage = currentSource.coverageEndSec - targetTime;
+    const targetOutsideSource = targetTime < currentSource.sourceStartOffsetSec || targetTime >= currentSource.coverageEndSec;
+
+    if (!targetOutsideSource && remainingCoverage > PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS) {
+      return;
+    }
+
+    const requestKey = `${mediaId}:${src}:${playbackRate}:${targetTime.toFixed(3)}`;
+    if (pendingExtensionKeyRef.current === requestKey) {
+      return;
+    }
+    pendingExtensionKeyRef.current = requestKey;
+
+    let cancelled = false;
+    getOrDecodeAudioSliceForPlayback(mediaId, src, {
+      minReadySeconds: PARTIAL_WAV_EXTENSION_READY_SECONDS,
+      waitTimeoutMs: PARTIAL_WAV_WAIT_TIMEOUT_MS,
+      targetTimeSeconds: Math.max(0, targetTime),
+    })
+      .then((slice) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(audioBufferToWavBlob(slice.buffer));
+        const nextSource: DecodedPitchSource = {
+          src: url,
+          sourceStartOffsetSec: slice.startTime,
+          coverageEndSec: slice.startTime + slice.buffer.duration,
+          isComplete: slice.isComplete,
+        };
+        setDecodedSource((current) => {
+          if (!shouldReplaceDecodedPitchSource(current, nextSource)) {
+            URL.revokeObjectURL(url);
+            return current;
+          }
+          if (activePartialUrlRef.current && activePartialUrlRef.current !== url) {
+            URL.revokeObjectURL(activePartialUrlRef.current);
+          }
+          activePartialUrlRef.current = url;
+          return nextSource;
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          log.warn('Failed to extend pitch-preserved custom decoder audio slice', {
+            mediaId,
+            targetTime,
+            err,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled && pendingExtensionKeyRef.current === requestKey) {
+          pendingExtensionKeyRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (pendingExtensionKeyRef.current === requestKey) {
+        pendingExtensionKeyRef.current = null;
+      }
+    };
+  }, [decodedSource, fps, frame, mediaId, playbackRate, playing, sourceFps, src, trimBefore]);
 
   if (!decodedSource) return null;
 

@@ -11,8 +11,20 @@ const indexedDbMocks = vi.hoisted(() => ({
   getDecodedPreviewAudio: vi.fn(async () => undefined),
 }));
 
+const playbackStateMocks = vi.hoisted(() => ({
+  current: {
+    frame: 0,
+    fps: 30,
+    playing: false,
+    resolvedVolume: 1,
+  },
+}));
+
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
+vi.mock('./hooks/use-audio-playback-state', () => ({
+  useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
+}));
 vi.mock('./pitch-corrected-audio', () => ({
   PitchCorrectedAudio: ({ src, sourceStartOffsetSec }: { src: string; sourceStartOffsetSec?: number }) => (
     <div data-testid="pitch" data-src={src} data-offset={sourceStartOffsetSec ?? 0} />
@@ -39,7 +51,15 @@ function makeAudioBuffer(durationSeconds = 8): AudioBuffer {
 describe('CustomDecoderAudio', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:partial-wav');
+    playbackStateMocks.current = {
+      frame: 0,
+      fps: 30,
+      playing: false,
+      resolvedVolume: 1,
+    };
+    vi.spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:partial-wav')
+      .mockReturnValue('blob:partial-wav-next');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   });
 
@@ -79,5 +99,69 @@ describe('CustomDecoderAudio', () => {
       expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-src', 'blob:partial-wav');
       expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-offset', '4');
     });
+  });
+
+  it('requests another pitch-preserved partial slice before the current one runs out', async () => {
+    audioDecodeMocks.getOrDecodeAudioSliceForPlayback
+      .mockResolvedValueOnce({
+        buffer: makeAudioBuffer(2),
+        startTime: 4,
+        isComplete: false,
+      })
+      .mockResolvedValueOnce({
+        buffer: makeAudioBuffer(3),
+        startTime: 5.4,
+        isComplete: false,
+      });
+    audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
+
+    const { rerender } = render(
+      <CustomDecoderAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={240}
+        playbackRate={1.5}
+        trimBefore={120}
+        sourceFps={30}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-src', 'blob:partial-wav');
+    });
+
+    playbackStateMocks.current = {
+      frame: 28,
+      fps: 30,
+      playing: true,
+      resolvedVolume: 1,
+    };
+
+    rerender(
+      <CustomDecoderAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={240}
+        playbackRate={1.5}
+        trimBefore={120}
+        sourceFps={30}
+        volumeMultiplier={1.1}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledTimes(2);
+    });
+
+    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[1]?.[2]).toEqual(
+      expect.objectContaining({
+        minReadySeconds: 3,
+        waitTimeoutMs: 6000,
+      }),
+    );
+    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[1]?.[2]?.targetTimeSeconds).toBeGreaterThan(5.39);
+    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[1]?.[2]?.targetTimeSeconds).toBeLessThan(5.41);
   });
 });
