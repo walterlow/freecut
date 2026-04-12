@@ -34,6 +34,16 @@ const mediaLibraryStoreMocks = vi.hoisted(() => ({
   })),
 }));
 
+const backgroundMediaWorkMocks = vi.hoisted(() => ({
+  enqueueBackgroundMediaWork: vi.fn((run: () => unknown) => {
+    const result = run();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void (result as PromiseLike<unknown>);
+    }
+    return vi.fn();
+  }),
+}));
+
 vi.mock('@/shared/utils/managed-worker', () => ({
   createManagedWorker: vi.fn(() => workerManagerMocks),
 }));
@@ -48,6 +58,8 @@ vi.mock('@/shared/logging/logger', () => ({
 }));
 
 vi.mock('@/features/media-library/deps/timeline-services', () => timelineServiceMocks);
+
+vi.mock('./background-media-work', () => backgroundMediaWorkMocks);
 
 vi.mock('../stores/media-library-store', () => ({
   useMediaLibraryStore: {

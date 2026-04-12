@@ -2,12 +2,14 @@ import type { MediaLibraryState, MediaLibraryActions, UnsupportedCodecFile } fro
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
+import { enqueueBackgroundMediaWork } from '../services/background-media-work';
 import { getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaImport');
+const IMPORT_PROXY_DELAY_MS = 2500;
 
 type Set = (
   partial:
@@ -88,14 +90,19 @@ function setupImportedVideoProxy(metadata: MediaMetadata): void {
   }
 
   try {
-    proxyService.generateProxy(
-      metadata.id,
-      () => mediaLibraryService.getMediaFile(metadata.id),
-      metadata.width,
-      metadata.height,
-      proxyKey,
-      { priority: 'background' },
-    );
+    enqueueBackgroundMediaWork(() => {
+      proxyService.generateProxy(
+        metadata.id,
+        () => mediaLibraryService.getMediaFile(metadata.id),
+        metadata.width,
+        metadata.height,
+        proxyKey,
+        { priority: 'background' },
+      );
+    }, {
+      priority: 'heavy',
+      delayMs: IMPORT_PROXY_DELAY_MS,
+    });
   } catch (error) {
     logger.warn(`[MediaImport] Failed to enqueue automatic proxy generation for ${metadata.id}:`, error);
   }

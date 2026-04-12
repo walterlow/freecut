@@ -45,6 +45,16 @@ const loggerMocks = vi.hoisted(() => ({
   setLevel: vi.fn(),
 }));
 
+const backgroundMediaWorkMocks = vi.hoisted(() => ({
+  enqueueBackgroundMediaWork: vi.fn((run: () => unknown) => {
+    const result = run();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void (result as PromiseLike<unknown>);
+    }
+    return vi.fn();
+  }),
+}));
+
 vi.mock('../services/media-library-service', () => ({
   mediaLibraryService: mediaLibraryServiceMocks,
 }));
@@ -52,6 +62,8 @@ vi.mock('../services/media-library-service', () => ({
 vi.mock('../services/proxy-service', () => ({
   proxyService: proxyServiceMocks,
 }));
+
+vi.mock('../services/background-media-work', () => backgroundMediaWorkMocks);
 
 vi.mock('../utils/proxy-key', () => ({
   getSharedProxyKey: vi.fn((media: { id: string }) => `proxy-${media.id}`),

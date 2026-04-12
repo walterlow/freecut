@@ -11,6 +11,7 @@ import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
 import { proxyService } from '../services/proxy-service';
+import { enqueueBackgroundMediaWork } from '../services/background-media-work';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
 import { createDeleteActions } from './media-delete-actions';
@@ -19,6 +20,7 @@ import { getTranscriptMediaIds } from '@/infrastructure/storage/indexeddb';
 import { mergeTranscriptionProgress } from '@/shared/utils/transcription-progress';
 
 const logger = createLogger('MediaLibraryStore');
+const BACKGROUND_PROXY_DELAY_MS = 2500;
 
 /** Tracked timeout for notification auto-clear */
 let notificationTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -66,14 +68,19 @@ function enqueueBackgroundProxies(
 ): void {
   videoItems.forEach((item) => {
     try {
-      proxyService.generateProxy(
-        item.id,
-        () => mediaLibraryService.getMediaFile(item.id),
-        item.width,
-        item.height,
-        getSharedProxyKey(item),
-        { priority: 'background' }
-      );
+      enqueueBackgroundMediaWork(() => {
+        proxyService.generateProxy(
+          item.id,
+          () => mediaLibraryService.getMediaFile(item.id),
+          item.width,
+          item.height,
+          getSharedProxyKey(item),
+          { priority: 'background' }
+        );
+      }, {
+        priority: 'heavy',
+        delayMs: BACKGROUND_PROXY_DELAY_MS,
+      });
     } catch (error) {
       logger.warn(`[MediaLibraryStore] Failed to enqueue ${reason} proxy generation for ${item.id}:`, error);
     }

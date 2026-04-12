@@ -32,6 +32,7 @@ import type {
   ProxyWorkerResponse,
 } from '../workers/proxy-generation-worker';
 import { useMediaLibraryStore } from '../stores/media-library-store';
+import { enqueueBackgroundMediaWork } from './background-media-work';
 
 const logger = createLogger('ProxyService');
 
@@ -125,6 +126,7 @@ interface ProgressEmissionState {
 const PROXY_PROGRESS_EMIT_INTERVAL_MS = 150;
 const PROXY_PROGRESS_EMIT_MIN_DELTA = 0.01;
 const PROXY_FILMSTRIP_PREWARM_SECONDS = 12;
+const PROXY_FILMSTRIP_PREWARM_DELAY_MS = 900;
 const PROXY_PLAYBACK_ISSUE_SCORE_THRESHOLD = 5;
 const PROXY_PLAYBACK_ISSUE_WEIGHTS: Record<ProxyPlaybackIssue, number> = {
   'slow-seek': 2,
@@ -722,11 +724,14 @@ class ProxyService {
       }
 
       const warmEndTime = Math.min(media.duration, PROXY_FILMSTRIP_PREWARM_SECONDS);
-      void filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
-        startTime: 0,
-        endTime: warmEndTime,
-      }).catch((error) => {
-        logger.warn(`Failed to prewarm filmstrip from proxy for ${mediaId}:`, error);
+      enqueueBackgroundMediaWork(() => (
+        filmstripCache.prewarmPriorityWindow(mediaId, proxyFile, media.duration, {
+          startTime: 0,
+          endTime: warmEndTime,
+        })
+      ), {
+        priority: 'warm',
+        delayMs: PROXY_FILMSTRIP_PREWARM_DELAY_MS,
       });
     }
   }

@@ -56,6 +56,16 @@ const filmstripCacheMocks = vi.hoisted(() => ({
   prewarmPriorityWindow: vi.fn(async () => undefined),
 }));
 
+const backgroundMediaWorkMocks = vi.hoisted(() => ({
+  enqueueBackgroundMediaWork: vi.fn((run: () => unknown) => {
+    const result = run();
+    if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+      void (result as PromiseLike<unknown>);
+    }
+    return vi.fn();
+  }),
+}));
+
 vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
 
 vi.mock('./opfs-service', () => ({
@@ -65,6 +75,8 @@ vi.mock('./opfs-service', () => ({
 vi.mock('./proxy-service', () => ({
   proxyService: proxyMocks,
 }));
+
+vi.mock('./background-media-work', () => backgroundMediaWorkMocks);
 
 vi.mock('./media-processor-service', () => ({
   mediaProcessorService: mediaProcessorMocks,

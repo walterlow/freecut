@@ -27,6 +27,7 @@ import { filmstripCache, gifFrameCache } from '@/features/media-library/deps/tim
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { ensureFileHandlePermission, FileAccessError } from './file-access';
+import { enqueueBackgroundMediaWork } from './background-media-work';
 import {
   buildGeneratedMediaOpfsPath,
   getGeneratedImageDimensions,
@@ -46,6 +47,8 @@ import { deletePreviewAudioConform } from '@/features/composition-runtime/utils/
 export { FileAccessError } from './file-access';
 
 const IMPORT_FILMSTRIP_PREWARM_SECONDS = 12;
+const IMPORT_BACKGROUND_WARM_DELAY_MS = 600;
+const IMPORT_BACKGROUND_HEAVY_DELAY_MS = 2200;
 
 /**
  * Media Library Service - Coordinates OPFS + IndexedDB + metadata extraction
@@ -287,11 +290,14 @@ class MediaLibraryService {
 
     if (metadata.type === 'video' && mediaMetadata.duration > 0) {
       const warmEndTime = Math.min(mediaMetadata.duration, IMPORT_FILMSTRIP_PREWARM_SECONDS);
-      void filmstripCache.prewarmPriorityWindow(id, file, mediaMetadata.duration, {
-        startTime: 0,
-        endTime: warmEndTime,
-      }).catch((error) => {
-        logger.warn('Failed to prewarm import filmstrip:', error);
+      enqueueBackgroundMediaWork(() => (
+        filmstripCache.prewarmPriorityWindow(id, file, mediaMetadata.duration, {
+          startTime: 0,
+          endTime: warmEndTime,
+        })
+      ), {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
       });
     }
 
@@ -301,22 +307,33 @@ class MediaLibraryService {
         ? metadata.audioCodec
         : undefined;
     if (needsCustomAudioDecoder(previewAudioCodec)) {
-      const startupWarmup = startPreviewAudioStartupWarm(id, file).catch((error) => {
-        logger.warn('Failed to warm preview startup audio after import:', error);
+      enqueueBackgroundMediaWork(() => (
+        startPreviewAudioStartupWarm(id, file)
+      ), {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
       });
-      void startupWarmup.finally(() => {
-        void startPreviewAudioConform(id, file).catch((error) => {
-          logger.warn('Failed to start preview audio conform after import:', error);
-        });
+      enqueueBackgroundMediaWork(() => (
+        startPreviewAudioConform(id, file)
+      ), {
+        priority: 'heavy',
+        delayMs: IMPORT_BACKGROUND_HEAVY_DELAY_MS,
       });
     }
 
     // Pre-extract GIF frames in background
     if (resolvedMimeType === 'image/gif') {
-      const blobUrl = URL.createObjectURL(file);
-      void gifFrameCache.getGifFrames(id, blobUrl)
-        .catch((err) => logger.warn('Failed to pre-extract GIF frames:', err))
-        .finally(() => URL.revokeObjectURL(blobUrl));
+      enqueueBackgroundMediaWork(async () => {
+        const blobUrl = URL.createObjectURL(file);
+        try {
+          await gifFrameCache.getGifFrames(id, blobUrl);
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }, {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
+      });
     }
 
     return {
