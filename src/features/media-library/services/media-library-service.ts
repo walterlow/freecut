@@ -38,12 +38,12 @@ import { validateMediaFile, getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { mediaProcessorService } from './media-processor-service';
 import { generateThumbnail } from '../utils/thumbnail-generator';
-import { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
 import {
+  needsCustomAudioDecoder,
   startPreviewAudioConform,
   startPreviewAudioStartupWarm,
-} from '@/features/composition-runtime/utils/audio-decode-cache';
-import { deletePreviewAudioConform } from '@/features/composition-runtime/utils/preview-audio-conform';
+  deletePreviewAudioConform,
+} from '@/features/media-library/deps/composition-runtime';
 export { FileAccessError } from './file-access';
 
 const IMPORT_FILMSTRIP_PREWARM_SECONDS = 12;

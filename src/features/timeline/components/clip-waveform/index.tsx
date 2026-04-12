@@ -13,6 +13,10 @@ import {
 import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 import { createLogger } from '@/shared/logging/logger';
 import { computeWaveformRenderWindow } from './render-window';
+import {
+  getWaveformActiveTileCount,
+  useAdaptiveWaveformRenderVersion,
+} from './adaptive-render-version';
 
 const logger = createLogger('ClipWaveform');
 
@@ -301,6 +305,17 @@ export const ClipWaveform = memo(function ClipWaveform({
     ]
   );
 
+  const activeTileCount = useMemo(() => getWaveformActiveTileCount({
+    renderWidth: renderClipWidth,
+    visibleStartPx,
+    visibleEndPx,
+  }), [renderClipWidth, visibleStartPx, visibleEndPx]);
+  const renderVersion = useAdaptiveWaveformRenderVersion({
+    baseVersion: `${loadedSamples}:${height}`,
+    pixelsPerSecond,
+    activeTileCount,
+  });
+
   // Show empty state for unsupported/failed waveforms (no infinite skeleton).
   if (!audioCodecSupported || !!error) {
     return (
@@ -329,9 +344,6 @@ export const ClipWaveform = memo(function ClipWaveform({
       </div>
     );
   }
-
-  const renderPpsKey = `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
-  const renderVersion = `${loadedSamples}:${height}:${renderPpsKey}`;
 
   return (
     <div ref={containerRef} className="absolute inset-0">

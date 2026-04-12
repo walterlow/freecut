@@ -12,6 +12,10 @@ import { getCompositionOwnedAudioSources } from '../../utils/composition-clip-su
 import { mixCompoundClipWaveformPeaks } from '../../utils/compound-clip-waveform';
 import { computeWaveformRenderWindow } from './render-window';
 import { getPreviewStartupDelayMs, schedulePreviewWork } from '../../hooks/preview-work-budget';
+import {
+  getWaveformActiveTileCount,
+  useAdaptiveWaveformRenderVersion,
+} from './adaptive-render-version';
 
 const logger = createLogger('CompoundClipWaveform');
 const WAVEFORM_VERTICAL_PADDING_PX = 3;
@@ -283,6 +287,17 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
     ctx.stroke();
   }, [height, normalizationPeak, peaks, sampleRate, sourceDuration, sourceStart]);
 
+  const activeTileCount = useMemo(() => getWaveformActiveTileCount({
+    renderWidth: renderClipWidth,
+    visibleStartPx,
+    visibleEndPx,
+  }), [renderClipWidth, visibleStartPx, visibleEndPx]);
+  const renderVersion = useAdaptiveWaveformRenderVersion({
+    baseVersion: `${peaks?.length ?? 0}:${height}:${waveformsByMediaId.size}`,
+    pixelsPerSecond,
+    activeTileCount,
+  });
+
   if (hasError) {
     return (
       <div ref={containerRef} className="absolute inset-0 flex items-center">
@@ -305,9 +320,6 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
       </div>
     );
   }
-
-  const renderPpsKey = `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
-  const renderVersion = `${peaks.length}:${height}:${waveformsByMediaId.size}:${renderPpsKey}`;
 
   return (
     <div ref={containerRef} className="absolute inset-0">

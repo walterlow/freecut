@@ -19,7 +19,7 @@ import { createManagedWorker } from '@/shared/utils/managed-worker';
 import { registerObjectUrl, unregisterObjectUrl } from '@/infrastructure/browser/object-url-registry';
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
 import { filmstripCache } from '@/features/media-library/deps/timeline-services';
-import { needsCustomAudioDecoder } from '@/features/composition-runtime/utils/audio-codec-detection';
+import { needsCustomAudioDecoder } from '@/features/media-library/deps/composition-runtime';
 import {
   DEFAULT_PROXY_GENERATION_MODE,
   DEFAULT_PROXY_GENERATION_RESOLUTION,

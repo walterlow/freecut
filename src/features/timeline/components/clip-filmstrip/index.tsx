@@ -3,7 +3,7 @@ import { FilmstripSkeleton } from './filmstrip-skeleton';
 import { useFilmstrip, type FilmstripFrame } from '../../hooks/use-filmstrip';
 import { resolveMediaUrl, resolveProxyUrl } from '@/features/timeline/deps/media-library-resolver';
 import { useMediaBlobUrl } from '../../hooks/use-media-blob-url';
-import { THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
+import { filmstripCache, THUMBNAIL_WIDTH } from '../../services/filmstrip-cache';
 import { createLogger } from '@/shared/logging/logger';
 import { computeFilmstripRenderWindow } from './render-window';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
@@ -109,6 +109,8 @@ const FilmstripTile = memo(function FilmstripTile({
   height,
   width,
   sourceWidth,
+  frameIndex,
+  onSourceError,
 }: {
   src: string;
   bitmap?: ImageBitmap;
@@ -116,6 +118,8 @@ const FilmstripTile = memo(function FilmstripTile({
   height: number;
   width: number;
   sourceWidth: number;
+  frameIndex: number;
+  onSourceError?: (frameIndex: number) => void;
 }) {
   const [errorSrc, setErrorSrc] = useState<string | null>(null);
 
@@ -134,7 +138,8 @@ const FilmstripTile = memo(function FilmstripTile({
 
   const handleError = useCallback(() => {
     setErrorSrc(src);
-  }, [src]);
+    onSourceError?.(frameIndex);
+  }, [frameIndex, onSourceError, src]);
 
   // Bitmap path: render to canvas (instant, no JPEG decode)
   if (bitmap) {
@@ -172,7 +177,16 @@ const FilmstripTile = memo(function FilmstripTile({
           backgroundSize: `${sourceWidth}px ${height}px`,
           backgroundPosition: 'left top',
         }}
-      />
+      >
+        <img
+          src={src}
+          alt=""
+          aria-hidden
+          className="absolute h-px w-px opacity-0 pointer-events-none"
+          onError={handleError}
+          style={{ left: 0, top: 0 }}
+        />
+      </div>
     );
   }
 
@@ -221,6 +235,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
   const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
   const [isZooming, setIsZooming] = useState(false);
   const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshingFrameIndicesRef = useRef<Set<number>>(new Set());
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus.get(mediaId) ?? null);
 
   const proxyBlobUrl = useMemo(() => {
@@ -458,6 +473,21 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     return map;
   }, [frames]);
 
+  const handleFrameSourceError = useCallback((frameIndex: number) => {
+    if (!mediaId || refreshingFrameIndicesRef.current.has(frameIndex)) {
+      return;
+    }
+
+    refreshingFrameIndicesRef.current.add(frameIndex);
+    void filmstripCache.refreshFrames(mediaId, [frameIndex])
+      .catch((refreshError) => {
+        logger.warn('Failed to refresh stale filmstrip frame URL:', refreshError);
+      })
+      .finally(() => {
+        refreshingFrameIndicesRef.current.delete(frameIndex);
+      });
+  }, [mediaId]);
+
   // Calculate tiles - maps each tile position to the best frame
   // Visible tiles stay locked to the clip geometry even during zoom; only the
   // extraction request density above is reduced while interaction is active.
@@ -557,6 +587,8 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
             height={height}
             width={width}
             sourceWidth={thumbnailWidth}
+            frameIndex={frame.index}
+            onSourceError={handleFrameSourceError}
           />
         ))}
       </div>

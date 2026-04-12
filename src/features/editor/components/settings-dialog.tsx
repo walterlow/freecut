@@ -110,7 +110,7 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
     import('@/infrastructure/storage/indexeddb/waveforms'),
     import('@/infrastructure/storage/indexeddb/gif-frames'),
     import('@/infrastructure/storage/indexeddb/decoded-preview-audio'),
-    import('@/features/composition-runtime/utils/preview-audio-conform'),
+    import('@/features/editor/deps/composition-runtime'),
     importGifFrameCache(),
     importFilmstripCache(),
     importWaveformCache(),

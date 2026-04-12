@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClipFilmstrip } from './index';
 
@@ -28,6 +28,10 @@ const useMediaLibraryStoreMock = vi.hoisted(() => vi.fn((selector: (state: {
   proxyStatus: new Map<string, string>(),
 })));
 
+const filmstripCacheMocks = vi.hoisted(() => ({
+  refreshFrames: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock('../../hooks/use-filmstrip', () => ({
   useFilmstrip: useFilmstripMock,
 }));
@@ -45,6 +49,11 @@ vi.mock('@/features/timeline/deps/media-library-store', () => ({
   useMediaLibraryStore: useMediaLibraryStoreMock,
 }));
 
+vi.mock('../../services/filmstrip-cache', () => ({
+  THUMBNAIL_WIDTH: 80,
+  filmstripCache: filmstripCacheMocks,
+}));
+
 describe('ClipFilmstrip', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +61,7 @@ describe('ClipFilmstrip', () => {
       observe(): void {}
       disconnect(): void {}
     });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(60);
 
     useMediaBlobUrlMock.mockReturnValue({
       blobUrl: 'blob:original',
@@ -145,5 +155,39 @@ describe('ClipFilmstrip', () => {
     expect(latestCall?.priorityWindow.startTime).toBeGreaterThan(0);
     expect(latestCall?.priorityWindow.endTime).toBeGreaterThan(latestCall?.priorityWindow.startTime);
     expect(latestCall?.targetFrameIndices).toEqual(expect.arrayContaining([expect.any(Number)]));
+  });
+
+  it('refreshes a stale frame URL when a tile source errors', async () => {
+    useFilmstripMock.mockReturnValue({
+      frames: [
+        { index: 0, timestamp: 0, url: 'blob:stale' },
+      ],
+      isLoading: false,
+      isComplete: true,
+      progress: 100,
+      error: null,
+    });
+
+    const { container } = render(
+      <ClipFilmstrip
+        mediaId="media-1"
+        clipWidth={320}
+        sourceStart={0}
+        sourceDuration={10}
+        trimStart={0}
+        speed={1}
+        fps={30}
+        isVisible
+        pixelsPerSecond={120}
+      />,
+    );
+
+    const img = container.querySelector('img[src="blob:stale"]');
+    expect(img).not.toBeNull();
+    fireEvent.error(img!);
+
+    await waitFor(() => {
+      expect(filmstripCacheMocks.refreshFrames).toHaveBeenCalledWith('media-1', [0]);
+    });
   });
 });

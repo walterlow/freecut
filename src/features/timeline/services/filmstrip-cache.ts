@@ -2267,6 +2267,83 @@ class FilmstripCacheService {
   }
 
   /**
+   * Refresh cached frame URLs from OPFS when a visible tile reports a stale source.
+   */
+  async refreshFrames(mediaId: string, frameIndices: number[]): Promise<void> {
+    const normalizedIndices = Array.from(new Set(
+      frameIndices.filter((index) => Number.isInteger(index) && index >= 0),
+    )).sort((a, b) => a - b);
+    if (normalizedIndices.length === 0) {
+      return;
+    }
+
+    const refreshedEntries = await Promise.all(normalizedIndices.map(async (index) => {
+      const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, index);
+      return frame ? [index, frame] as const : null;
+    }));
+    const refreshedByIndex = new Map(
+      refreshedEntries.filter((entry): entry is readonly [number, FilmstripFrame] => entry !== null),
+    );
+    if (refreshedByIndex.size === 0) {
+      return;
+    }
+
+    const pending = this.pendingExtractions.get(mediaId);
+    if (pending) {
+      for (const frame of refreshedByIndex.values()) {
+        pending.extractedFrames.set(frame.index, frame);
+      }
+    }
+
+    const cached = this.cache.get(mediaId);
+    if (!cached) {
+      if (!pending) {
+        return;
+      }
+
+      const frames = Array.from(pending.extractedFrames.values())
+        .sort((a, b) => a.index - b.index);
+      const targetSet = new Set(pending.targetIndices);
+      const extractedTargetCount = frames.reduce(
+        (count, frame) => (targetSet.has(frame.index) ? count + 1 : count),
+        0,
+      );
+      const progress = pending.progressFrames > 0
+        ? Math.min(99, Math.round((extractedTargetCount / pending.progressFrames) * 100))
+        : 0;
+
+      this.notifyUpdate(mediaId, {
+        frames,
+        isComplete: false,
+        isExtracting: true,
+        progress,
+      });
+      return;
+    }
+
+    let changed = false;
+    const nextFrames = cached.frames.map((frame) => {
+      const refreshed = refreshedByIndex.get(frame.index);
+      if (!refreshed) {
+        return frame;
+      }
+      if (refreshed.url !== frame.url || refreshed.bitmap !== frame.bitmap) {
+        changed = true;
+      }
+      return refreshed;
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    this.notifyUpdate(mediaId, {
+      ...cached,
+      frames: nextFrames,
+    });
+  }
+
+  /**
    * Clear filmstrip for a media item
    */
   async clearMedia(mediaId: string): Promise<void> {
