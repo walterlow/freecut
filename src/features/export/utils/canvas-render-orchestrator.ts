@@ -15,7 +15,7 @@ import type { CompositionInputProps } from '@/types/export';
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer';
 import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 import { createLogger } from '@/shared/logging/logger';
 import { hasMediaCrop } from '@/shared/utils/media-crop';
 
@@ -170,8 +170,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
   }
 
   const mediabunny: MediabunnyModule = await import('mediabunny');
-  const { Input, UrlSource, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny;
-  const registeredBlob = getObjectUrlBlob(plan.src);
+  const { Input, Output, BufferTarget, Conversion, ALL_FORMATS } = mediabunny;
 
   const format = await createOutputFormat(settings.container, { fastStart: true }) as {
     getSupportedVideoCodecs?: () => string[];
@@ -180,7 +179,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
 
   const input = new Input({
     formats: ALL_FORMATS,
-    source: registeredBlob ? new mediabunny.BlobSource(registeredBlob) : new UrlSource(plan.src),
+    source: createMediabunnyInputSource(mediabunny, plan.src),
   });
 
   let conversion: {

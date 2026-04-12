@@ -16,7 +16,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 import {
   getDecodedPreviewAudio,
   saveDecodedPreviewAudio,
@@ -214,17 +214,8 @@ function sleep(ms: number): Promise<void> {
 function createInputSource(
   mb: Awaited<typeof import('mediabunny')>,
   src: PreviewAudioSource,
-): InstanceType<typeof mb.BlobSource> | InstanceType<typeof mb.UrlSource> {
-  if (src instanceof Blob) {
-    return new mb.BlobSource(src);
-  }
-
-  const registeredBlob = getObjectUrlBlob(src);
-  if (registeredBlob) {
-    return new mb.BlobSource(registeredBlob);
-  }
-
-  return new mb.UrlSource(src);
+) {
+  return createMediabunnyInputSource(mb, src);
 }
 
 // ---------------------------------------------------------------------------

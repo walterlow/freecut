@@ -53,7 +53,13 @@ export async function resolveMediaUrl(mediaId: string): Promise<string> {
       }
 
       // Acquire blob URL through centralized manager (handles caching + ref counting)
-      const blobUrl = blobUrlManager.acquire(mediaId, blob);
+      const blobUrl = blobUrlManager.acquire(mediaId, blob, {
+        mediaId,
+        storageType: media.storageType,
+        fileHandle: media.storageType === 'handle' ? media.fileHandle : undefined,
+        opfsPath: media.storageType === 'opfs' ? media.opfsPath : undefined,
+        fileSize: media.fileSize,
+      });
 
       // Register keyframe index for adaptive seek backtracking
       if (media.keyframeTimestamps && media.keyframeTimestamps.length > 0) {

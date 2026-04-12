@@ -1,17 +1,38 @@
-const blobsByUrl = new Map<string, Blob>();
+export interface ObjectUrlSourceMetadata {
+  mediaId?: string;
+  storageType?: 'handle' | 'opfs';
+  fileHandle?: FileSystemFileHandle;
+  opfsPath?: string;
+  fileSize?: number;
+}
 
-export function registerObjectUrl(url: string, blob: Blob): void {
-  blobsByUrl.set(url, blob);
+interface ObjectUrlEntry {
+  blob: Blob;
+  metadata?: ObjectUrlSourceMetadata;
+}
+
+const entriesByUrl = new Map<string, ObjectUrlEntry>();
+
+export function registerObjectUrl(
+  url: string,
+  blob: Blob,
+  metadata?: ObjectUrlSourceMetadata,
+): void {
+  entriesByUrl.set(url, { blob, metadata });
 }
 
 export function getObjectUrlBlob(url: string): Blob | null {
-  return blobsByUrl.get(url) ?? null;
+  return entriesByUrl.get(url)?.blob ?? null;
+}
+
+export function getObjectUrlSourceMetadata(url: string): ObjectUrlSourceMetadata | null {
+  return entriesByUrl.get(url)?.metadata ?? null;
 }
 
 export function unregisterObjectUrl(url: string): void {
-  blobsByUrl.delete(url);
+  entriesByUrl.delete(url);
 }
 
 export function clearObjectUrlRegistry(): void {
-  blobsByUrl.clear();
+  entriesByUrl.clear();
 }

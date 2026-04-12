@@ -41,6 +41,10 @@ function revokeRegisteredObjectUrl(url: string): void {
   URL.revokeObjectURL(url);
 }
 
+function getProxyOpfsPath(proxyKey: string): string {
+  return `${PROXY_DIR}/${proxyKey}/proxy.mp4`;
+}
+
 const PROXY_PRIORITY_AUDIO_CODECS = new Set([
   'ac-3',
   'ac3',
@@ -594,7 +598,11 @@ class ProxyService {
           }
 
           const blobUrl = URL.createObjectURL(proxyFile);
-          registerObjectUrl(blobUrl, proxyFile);
+          registerObjectUrl(blobUrl, proxyFile, {
+            storageType: 'opfs',
+            opfsPath: getProxyOpfsPath(proxyKey),
+            fileSize: proxyFile.size,
+          });
           this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
           this.emitStatusForProxyKey(proxyKey, 'ready');
 
@@ -698,7 +706,11 @@ class ProxyService {
       }
 
       const blobUrl = URL.createObjectURL(proxyFile);
-      registerObjectUrl(blobUrl, proxyFile);
+      registerObjectUrl(blobUrl, proxyFile, {
+        storageType: 'opfs',
+        opfsPath: getProxyOpfsPath(proxyKey),
+        fileSize: proxyFile.size,
+      });
       this.proxyBlobUrlByKey.set(proxyKey, blobUrl);
       this.emitStatusForProxyKey(proxyKey, 'ready');
       this.prewarmFilmstripFromProxy(proxyKey, proxyFile);
@@ -785,7 +797,11 @@ class ProxyService {
 
           // Create fresh blob URL from OPFS
           const freshUrl = URL.createObjectURL(proxyFile);
-          registerObjectUrl(freshUrl, proxyFile);
+          registerObjectUrl(freshUrl, proxyFile, {
+            storageType: 'opfs',
+            opfsPath: getProxyOpfsPath(proxyKey),
+            fileSize: proxyFile.size,
+          });
           this.proxyBlobUrlByKey.set(proxyKey, freshUrl);
           refreshed++;
         } catch {

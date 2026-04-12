@@ -8,7 +8,7 @@
  * - No 500ms timeout fallbacks needed
  */
 
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 import { createLogger } from '@/shared/logging/logger';
 import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry';
 
@@ -93,13 +93,10 @@ export class VideoFrameExtractor {
   async init(): Promise<boolean> {
     try {
       const mb = await import('mediabunny');
-      const registeredBlob = getObjectUrlBlob(this.src);
-      const source = registeredBlob
-        ? new mb.BlobSource(registeredBlob)
-        : new mb.UrlSource(this.src);
+      const source = createMediabunnyInputSource(mb, this.src);
 
-      // Prefer BlobSource for locally managed blob URLs so Mediabunny can
-      // read straight from the Blob instead of going back through fetch().
+      // Prefer direct file-backed reads for OPFS / file handles, with BlobSource
+      // fallback for in-memory blob URLs we manage locally.
       this.input = new mb.Input({
         formats: mb.ALL_FORMATS,
         source,

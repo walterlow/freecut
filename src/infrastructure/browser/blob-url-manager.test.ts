@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { blobUrlManager } from './blob-url-manager';
-import { clearObjectUrlRegistry, getObjectUrlBlob } from './object-url-registry';
+import {
+  clearObjectUrlRegistry,
+  getObjectUrlBlob,
+  getObjectUrlSourceMetadata,
+} from './object-url-registry';
 
 // Mock URL.createObjectURL / revokeObjectURL
 let blobUrlCounter = 0;
@@ -34,6 +38,17 @@ describe('BlobUrlManager', () => {
       const url = blobUrlManager.acquire('media-1', blob);
 
       expect(getObjectUrlBlob(url)).toBe(blob);
+    });
+
+    it('registers source metadata alongside the blob', () => {
+      const metadata = {
+        storageType: 'opfs' as const,
+        opfsPath: 'content/aa/bb/file.mp4',
+        fileSize: 4,
+      };
+      const url = blobUrlManager.acquire('media-1', new Blob(['data']), metadata);
+
+      expect(getObjectUrlSourceMetadata(url)).toEqual(metadata);
     });
 
     it('returns the same URL for duplicate acquires', () => {
@@ -100,6 +115,7 @@ describe('BlobUrlManager', () => {
       blobUrlManager.invalidate('media-1');
 
       expect(getObjectUrlBlob(url)).toBeNull();
+      expect(getObjectUrlSourceMetadata(url)).toBeNull();
     });
   });
 
@@ -122,6 +138,7 @@ describe('BlobUrlManager', () => {
       blobUrlManager.release('media-1');
 
       expect(getObjectUrlBlob(url)).toBeNull();
+      expect(getObjectUrlSourceMetadata(url)).toBeNull();
     });
   });
 

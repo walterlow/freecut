@@ -31,7 +31,7 @@ import {
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
-import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
+import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 
 const log = createLogger('CanvasAudio');
 
@@ -878,11 +878,9 @@ async function decodeAudioFromSource(
 
     // Try mediabunny first for efficient range extraction
     const mb = await import('mediabunny');
-    const registeredBlob = getObjectUrlBlob(src);
-
     const input = new mb.Input({
       formats: mb.ALL_FORMATS,
-      source: registeredBlob ? new mb.BlobSource(registeredBlob) : new mb.UrlSource(src),
+      source: createMediabunnyInputSource(mb, src),
     });
     try {
       const audioTrack = await input.getPrimaryAudioTrack();

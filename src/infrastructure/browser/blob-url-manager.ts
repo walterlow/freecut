@@ -1,12 +1,18 @@
 import { useSyncExternalStore } from 'react';
 import { createLogger } from '@/shared/logging/logger';
-import { registerObjectUrl, unregisterObjectUrl } from './object-url-registry';
+import {
+  registerObjectUrl,
+  unregisterObjectUrl,
+  type ObjectUrlSourceMetadata,
+} from './object-url-registry';
 
 const logger = createLogger('BlobUrlManager');
 
 interface BlobUrlEntry {
   url: string;
   refCount: number;
+  blob: Blob;
+  metadata?: ObjectUrlSourceMetadata;
 }
 
 /**
@@ -44,16 +50,20 @@ class BlobUrlManager {
    * If one already exists, increments the reference count and returns it.
    * Otherwise, creates a new blob URL from the provided blob.
    */
-  acquire(mediaId: string, blob: Blob): string {
+  acquire(mediaId: string, blob: Blob, metadata?: ObjectUrlSourceMetadata): string {
     const existing = this.entries.get(mediaId);
     if (existing) {
       existing.refCount++;
+      if (metadata) {
+        existing.metadata = metadata;
+        registerObjectUrl(existing.url, existing.blob, metadata);
+      }
       return existing.url;
     }
 
     const url = URL.createObjectURL(blob);
-    registerObjectUrl(url, blob);
-    this.entries.set(mediaId, { url, refCount: 1 });
+    registerObjectUrl(url, blob, metadata);
+    this.entries.set(mediaId, { url, refCount: 1, blob, metadata });
     this.notify();
     return url;
   }
