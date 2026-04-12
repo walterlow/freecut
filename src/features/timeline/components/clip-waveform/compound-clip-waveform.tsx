@@ -15,13 +15,6 @@ import { getPreviewStartupDelayMs, schedulePreviewWork } from '../../hooks/previ
 
 const logger = createLogger('CompoundClipWaveform');
 const WAVEFORM_VERTICAL_PADDING_PX = 3;
-const ZOOM_SETTLE_MS = 80;
-const RENDER_PPS_QUANTUM = 5;
-
-function quantizeRenderPps(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 1;
-  return Math.max(1, Math.round(value / RENDER_PPS_QUANTUM) * RENDER_PPS_QUANTUM);
-}
 
 interface CompoundClipWaveformProps {
   composition: SubComposition;
@@ -50,13 +43,10 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
   const requestTokenRef = useRef(0);
   const pixelsPerSecondRef = useRef(pixelsPerSecond);
   pixelsPerSecondRef.current = pixelsPerSecond;
-  const lastPpsRef = useRef(pixelsPerSecond);
-  const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [height, setHeight] = useState(0);
   const [waveformsByMediaId, setWaveformsByMediaId] = useState<Map<string, CachedWaveform>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [isZooming, setIsZooming] = useState(false);
   const mediaById = useMediaLibraryStore((s) => s.mediaById);
   const compositionById = useCompositionsStore((s) => s.compositionById);
 
@@ -210,29 +200,6 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
     return maxPeak > 0 ? maxPeak : 1;
   }, [peaks]);
 
-  useEffect(() => {
-    if (lastPpsRef.current === pixelsPerSecond) return;
-    lastPpsRef.current = pixelsPerSecond;
-
-    setIsZooming(true);
-    if (zoomSettleTimeoutRef.current) {
-      clearTimeout(zoomSettleTimeoutRef.current);
-    }
-
-    zoomSettleTimeoutRef.current = setTimeout(() => {
-      setIsZooming(false);
-      zoomSettleTimeoutRef.current = null;
-    }, ZOOM_SETTLE_MS);
-  }, [pixelsPerSecond]);
-
-  useEffect(() => {
-    return () => {
-      if (zoomSettleTimeoutRef.current) {
-        clearTimeout(zoomSettleTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const renderTile = useCallback((
     ctx: CanvasRenderingContext2D,
     _tileIndex: number,
@@ -339,10 +306,7 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
     );
   }
 
-  const isActiveZoomRender = isZooming || lastPpsRef.current !== pixelsPerSecond;
-  const renderPpsKey = isActiveZoomRender
-    ? `q${quantizeRenderPps(pixelsPerSecond)}`
-    : `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
+  const renderPpsKey = `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
   const renderVersion = `${peaks.length}:${height}:${waveformsByMediaId.size}:${renderPpsKey}`;
 
   return (

@@ -18,13 +18,6 @@ const logger = createLogger('ClipWaveform');
 
 // Continuous filled-path waveform styling (NLE-style)
 const WAVEFORM_VERTICAL_PADDING_PX = 3;
-const ZOOM_SETTLE_MS = 80;
-const RENDER_PPS_QUANTUM = 5;
-
-function quantizeRenderPps(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 1;
-  return Math.max(1, Math.round(value / RENDER_PPS_QUANTUM) * RENDER_PPS_QUANTUM);
-}
 
 interface ClipWaveformProps {
   /** Media ID from the timeline item */
@@ -77,10 +70,7 @@ export const ClipWaveform = memo(function ClipWaveform({
   const pixelsPerSecondRef = useRef(pixelsPerSecond);
   pixelsPerSecondRef.current = pixelsPerSecond;
   const [height, setHeight] = useState(0);
-  const [isZooming, setIsZooming] = useState(false);
   const conformStartedRef = useRef(false);
-  const zoomSettleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPpsRef = useRef(pixelsPerSecond);
   const { blobUrl, setBlobUrl, hasStartedLoadingRef, blobUrlVersion } = useMediaBlobUrl(mediaId);
 
   // Measure container height
@@ -201,33 +191,8 @@ export const ClipWaveform = memo(function ClipWaveform({
     [renderClipWidth, visibleClipWidth, visibleStartRatio, visibleEndRatio]
   );
 
-  // During active zoom, redraw only when the quantized zoom bucket changes.
-  // Once zoom settles, force one exact redraw at the final pixels-per-second.
-  useEffect(() => {
-    if (lastPpsRef.current === pixelsPerSecond) return;
-    lastPpsRef.current = pixelsPerSecond;
-
-    setIsZooming(true);
-    if (zoomSettleTimeoutRef.current) {
-      clearTimeout(zoomSettleTimeoutRef.current);
-    }
-
-    zoomSettleTimeoutRef.current = setTimeout(() => {
-      setIsZooming(false);
-      zoomSettleTimeoutRef.current = null;
-    }, ZOOM_SETTLE_MS);
-  }, [pixelsPerSecond]);
-
-  useEffect(() => {
-    return () => {
-      if (zoomSettleTimeoutRef.current) {
-        clearTimeout(zoomSettleTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Render function for tiled canvas. Keep the callback stable through zoom
-  // changes and use versioning to decide when to redraw.
+  // changes and use versioning to trigger redraws at the current zoom level.
   const renderTile = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -365,10 +330,7 @@ export const ClipWaveform = memo(function ClipWaveform({
     );
   }
 
-  const isActiveZoomRender = isZooming || lastPpsRef.current !== pixelsPerSecond;
-  const renderPpsKey = isActiveZoomRender
-    ? `q${quantizeRenderPps(pixelsPerSecond)}`
-    : `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
+  const renderPpsKey = `e${Math.round(Math.max(1, pixelsPerSecond) * 1000)}`;
   const renderVersion = `${loadedSamples}:${height}:${renderPpsKey}`;
 
   return (
