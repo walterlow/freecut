@@ -26,6 +26,7 @@ interface SoundTouchWorkletAudioProps extends AudioPlaybackProps {
   audioBuffer: AudioBuffer;
   sourceStartOffsetSec?: number;
   isComplete?: boolean;
+  fallback?: React.ReactNode;
 }
 
 export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = React.memo(({
@@ -36,7 +37,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   trimBefore = 0,
   sourceFps,
   sourceStartOffsetSec = 0,
-  isComplete = false,
+  fallback,
   muted = false,
   durationInFrames,
   audioFadeIn = 0,
@@ -80,6 +81,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   const graphRef = useRef<PreviewClipAudioGraph | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const [nodeReady, setNodeReady] = useState(false);
+  const [fallbackRequested, setFallbackRequested] = useState(false);
   const needsInitialSyncRef = useRef(true);
   const lastSyncWallClockRef = useRef(Date.now());
   const lastSyncContextTimeRef = useRef(0);
@@ -99,7 +101,6 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     });
   };
 
-  // Force a hard resync on resume after paused scrubbing/skimming.
   useEffect(() => {
     if (playing) {
       needsInitialSyncRef.current = true;
@@ -109,38 +110,13 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   useEffect(() => {
     const graph = createPreviewClipAudioGraph();
     if (!graph) {
+      setFallbackRequested(true);
       return;
     }
     graphRef.current = graph;
 
     let cancelled = false;
-    ensureSoundTouchPreviewWorkletLoaded(graph.context)
-      .then((loaded) => {
-        if (cancelled || !loaded) {
-          return;
-        }
-        const node = new AudioWorkletNode(graph.context, SOUND_TOUCH_PREVIEW_PROCESSOR_NAME, {
-          numberOfInputs: 0,
-          numberOfOutputs: 1,
-          outputChannelCount: [2],
-          channelCount: 2,
-          channelCountMode: 'explicit',
-          channelInterpretation: 'speakers',
-        });
-        node.connect(graph.sourceInputNode);
-        nodeRef.current = node;
-        setNodeReady(true);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          log.warn('Failed to initialize SoundTouch preview node', { error });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      setNodeReady(false);
-      lastPostedPlayingRef.current = null;
+    const teardownNode = () => {
       try {
         nodeRef.current?.port.postMessage({ type: 'reset' });
       } catch {
@@ -148,8 +124,59 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       }
       nodeRef.current?.disconnect();
       nodeRef.current = null;
+      setNodeReady(false);
       graph.dispose();
-      graphRef.current = null;
+      if (graphRef.current === graph) {
+        graphRef.current = null;
+      }
+    };
+
+    ensureSoundTouchPreviewWorkletLoaded(graph.context)
+      .then((loaded) => {
+        if (cancelled) {
+          return;
+        }
+        if (!loaded) {
+          teardownNode();
+          setFallbackRequested(true);
+          return;
+        }
+
+        let node: AudioWorkletNode;
+        try {
+          node = new AudioWorkletNode(graph.context, SOUND_TOUCH_PREVIEW_PROCESSOR_NAME, {
+            numberOfInputs: 0,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            channelCount: 2,
+            channelCountMode: 'explicit',
+            channelInterpretation: 'speakers',
+          });
+        } catch (error) {
+          log.warn('Failed to construct SoundTouch preview node', { error });
+          teardownNode();
+          setFallbackRequested(true);
+          return;
+        }
+
+        node.connect(graph.sourceInputNode);
+        nodeRef.current = node;
+        setFallbackRequested(false);
+        setNodeReady(true);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          log.warn('Failed to initialize SoundTouch preview node', { error });
+          teardownNode();
+          setFallbackRequested(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      setNodeReady(false);
+      lastPostedPlayingRef.current = null;
+      teardownNode();
     };
   }, []);
 
@@ -194,43 +221,27 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
 
     const serialized = serializeAudioBufferForSoundTouchPreview(audioBuffer, graph.context.sampleRate);
     postMessage({
-      type: 'load-source',
+      type: 'append-source',
+      startFrame: Math.max(0, Math.floor(sourceStartOffsetSec * graph.context.sampleRate)),
       leftChannel: serialized.leftChannel.buffer,
       rightChannel: serialized.rightChannel.buffer,
       frameCount: serialized.frameCount,
       sampleRate: serialized.sampleRate,
     });
-
-    const effectiveSourceFps = sourceFps ?? fps;
-    const initialTargetTime = Math.max(
-      0,
-      getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, Math.max(0, frame), playbackRate, fps) - sourceStartOffsetSec,
-    );
-    const clampedTargetTime = Math.max(0, Math.min(initialTargetTime, Math.max(0, audioBuffer.duration - 0.01)));
-    postSeekSeconds(clampedTargetTime, graph.context.sampleRate);
-    postMessage({ type: 'set-tempo', tempo: Math.max(0.01, playbackRate) });
-    postMessage({ type: 'set-playing', playing });
-
-    lastPostedPlayingRef.current = playing;
-    lastStartOffsetRef.current = clampedTargetTime;
-    lastStartRateRef.current = playbackRate;
-    lastSyncContextTimeRef.current = graph.context.currentTime;
-    lastSyncWallClockRef.current = Date.now();
-    needsInitialSyncRef.current = !playing;
-  }, [audioBuffer, fps, frame, nodeReady, playbackRate, playing, sourceFps, sourceStartOffsetSec, trimBefore]);
+  }, [audioBuffer, nodeReady, sourceStartOffsetSec]);
 
   useEffect(() => {
     const graph = graphRef.current;
     if (!graph || !nodeReady) return;
 
     const effectiveSourceFps = sourceFps ?? fps;
-    const sourceTimeSeconds = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps) - sourceStartOffsetSec;
-    const clipStartTimeSeconds = Math.max(0, (trimBefore / effectiveSourceFps) - sourceStartOffsetSec);
+    const sourceTimeSeconds = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    const clipStartTimeSeconds = Math.max(0, trimBefore / effectiveSourceFps);
     const isPremounted = frame < 0;
     const targetTimeSeconds = isPremounted
       ? clipStartTimeSeconds
       : Math.max(0, sourceTimeSeconds);
-    const clampedTargetTime = Math.max(0, Math.min(targetTimeSeconds, Math.max(0, audioBuffer.duration - 0.01)));
+    const clampedTargetTime = Math.max(0, targetTimeSeconds);
 
     const frameChanged = frame !== lastFrameRef.current;
     lastFrameRef.current = frame;
@@ -243,16 +254,6 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       if (Math.abs(lastStartOffsetRef.current - clipStartTimeSeconds) > SEEK_TOLERANCE_SECONDS) {
         postSeekSeconds(clipStartTimeSeconds, graph.context.sampleRate);
         lastStartOffsetRef.current = clipStartTimeSeconds;
-      }
-      needsInitialSyncRef.current = true;
-      return;
-    }
-
-    const targetOutsideLoadedSlice = targetTimeSeconds > audioBuffer.duration - 0.01;
-    if (targetOutsideLoadedSlice && !isComplete) {
-      if (lastPostedPlayingRef.current !== false) {
-        postMessage({ type: 'set-playing', playing: false });
-        lastPostedPlayingRef.current = false;
       }
       needsInitialSyncRef.current = true;
       return;
@@ -304,7 +305,15 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
 
       needsInitialSyncRef.current = true;
     }
-  }, [audioBuffer.duration, fps, frame, isComplete, nodeReady, playbackRate, playing, sourceFps, sourceStartOffsetSec, trimBefore]);
+  }, [fps, frame, nodeReady, playbackRate, playing, sourceFps, trimBefore]);
+
+  if (fallback && (!nodeReady || fallbackRequested)) {
+    return <>{fallback}</>;
+  }
+
+  if (fallbackRequested) {
+    return null;
+  }
 
   return null;
 });

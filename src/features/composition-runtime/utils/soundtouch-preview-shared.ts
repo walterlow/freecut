@@ -1,7 +1,8 @@
 export const SOUND_TOUCH_PREVIEW_PROCESSOR_NAME = 'freecut-soundtouch-preview';
 
-export interface SoundTouchLoadSourceMessage {
-  type: 'load-source';
+export interface SoundTouchAppendSourceMessage {
+  type: 'append-source';
+  startFrame: number;
   leftChannel: ArrayBuffer;
   rightChannel: ArrayBuffer;
   frameCount: number;
@@ -28,7 +29,7 @@ export interface SoundTouchResetMessage {
 }
 
 export type SoundTouchPreviewProcessorMessage =
-  | SoundTouchLoadSourceMessage
+  | SoundTouchAppendSourceMessage
   | SoundTouchSeekMessage
   | SoundTouchSetTempoMessage
   | SoundTouchSetPlayingMessage

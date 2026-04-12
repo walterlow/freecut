@@ -3,36 +3,10 @@ import {
   SOUND_TOUCH_PREVIEW_PROCESSOR_NAME,
   type SoundTouchPreviewProcessorMessage,
 } from '../utils/soundtouch-preview-shared';
-
-class StereoBufferSource {
-  private leftChannel = new Float32Array(0);
-  private rightChannel = new Float32Array(0);
-  frameCount = 0;
-
-  load(leftChannel: Float32Array, rightChannel: Float32Array, frameCount: number): void {
-    this.leftChannel = leftChannel;
-    this.rightChannel = rightChannel;
-    this.frameCount = Math.max(0, Math.min(frameCount, leftChannel.length, rightChannel.length));
-  }
-
-  extract(target: Float32Array, numFrames: number, sourcePosition: number = 0): number {
-    const safeSourcePosition = Math.max(0, Math.floor(sourcePosition));
-    const availableFrames = Math.max(0, this.frameCount - safeSourcePosition);
-    const framesToCopy = Math.min(numFrames, availableFrames);
-
-    let outIndex = 0;
-    for (let i = 0; i < framesToCopy; i++) {
-      const sourceIndex = safeSourcePosition + i;
-      target[outIndex++] = this.leftChannel[sourceIndex] ?? 0;
-      target[outIndex++] = this.rightChannel[sourceIndex] ?? 0;
-    }
-
-    return framesToCopy;
-  }
-}
+import { QueuedStereoBufferSource } from '../utils/soundtouch-preview-source';
 
 class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
-  private readonly source = new StereoBufferSource();
+  private readonly source = new QueuedStereoBufferSource();
   private readonly soundTouch = new SoundTouch();
   private readonly filter = new SimpleFilter(this.source as {
     extract: (target: Float32Array, numFrames: number, sourcePosition?: number) => number;
@@ -52,11 +26,15 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
 
   private handleMessage(message: SoundTouchPreviewProcessorMessage): void {
     switch (message.type) {
-      case 'load-source': {
+      case 'append-source': {
         const leftChannel = new Float32Array(message.leftChannel);
         const rightChannel = new Float32Array(message.rightChannel);
-        this.source.load(leftChannel, rightChannel, message.frameCount);
-        this.filter.sourcePosition = 0;
+        this.source.append({
+          startFrame: message.startFrame,
+          leftChannel,
+          rightChannel,
+          frameCount: message.frameCount,
+        });
         break;
       }
       case 'seek':
@@ -71,6 +49,7 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
         this.playing = message.playing;
         break;
       case 'reset':
+        this.source.clear();
         this.filter.sourcePosition = 0;
         this.playing = false;
         break;

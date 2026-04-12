@@ -259,6 +259,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
     return (
       <PitchCorrectedAudio
         src={item.src}
+        mediaId={item.mediaId}
         itemId={item.id}
         trimBefore={trimBefore}
         volume={(item.volume ?? 0) + trackVolumeDb}

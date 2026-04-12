@@ -408,6 +408,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 ) : (
                   <PitchCorrectedAudio
                     src={segment.src}
+                    mediaId={decodeMediaId}
                     itemId={segment.itemId}
                     trimBefore={segment.trimBefore}
                     sourceFps={segment.sourceFps}
@@ -467,6 +468,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 ) : (
                   <PitchCorrectedAudio
                     src={segment.src}
+                    mediaId={decodeMediaId}
                     itemId={segment.itemId}
                     trimBefore={segment.trimBefore}
                     sourceFps={segment.sourceFps}
