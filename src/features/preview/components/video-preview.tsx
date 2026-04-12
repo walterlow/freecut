@@ -261,6 +261,7 @@ export const VideoPreview = memo(function VideoPreview({
     resolvedUrls,
     useProxy,
     proxyReadyCount,
+    blobUrlVersion,
     project,
   });
 

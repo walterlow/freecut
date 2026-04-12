@@ -53,6 +53,7 @@ import {
   resolveDroppedMediaEntriesFromPayload,
   type DroppedMediaEntry,
 } from '../utils/drop-execution';
+import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm';
 import {
   type ExternalDragPreviewEntry,
   getGhostHighlightClasses,
@@ -996,6 +997,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         }
 
         const dropResult = await resolveTimelineItemsForEntries(entries, dropFrame);
+        prewarmDroppedTimelineAudio(entries, dropResult.items);
         applyResolvedTimelineDrop({
           addItem,
           addItems,
@@ -1027,6 +1029,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     const dropResult = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
+    prewarmDroppedTimelineAudio(droppedEntries, dropResult.items);
     applyResolvedTimelineDrop({
       addItem,
       addItems,

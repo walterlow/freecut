@@ -1,5 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
+import {
+  acquirePreviewAudioElement,
+  markPreviewAudioElementUsesWebAudio,
+  releasePreviewAudioElement,
+} from '../utils/preview-audio-element-pool';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import type { AudioPlaybackProps } from './audio-playback-props';
@@ -25,6 +30,7 @@ function getSharedAudioContext(): AudioContext | null {
 
 interface PitchCorrectedAudioProps extends AudioPlaybackProps {
   src: string;
+  sourceStartOffsetSec?: number;
 }
 
 /**
@@ -43,6 +49,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   playbackRate = 1,
   trimBefore = 0,
   sourceFps,
+  sourceStartOffsetSec = 0,
   muted = false,
   durationInFrames,
   audioFadeIn = 0,
@@ -106,18 +113,10 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   // Export uses Canvas + WebCodecs (client-render-engine.ts) which handles audio separately.
   // Web Audio graph is created lazily only when volume boost (>1) is needed.
   useEffect(() => {
-    const audio = new window.Audio();
-    audio.src = src;
-    audio.preload = 'auto';
-    // preservesPitch is true by default in browsers, but set explicitly
-    audio.preservesPitch = true;
-    // @ts-expect-error - webkit prefix for older Safari
-    audio.webkitPreservesPitch = true;
+    const audio = acquirePreviewAudioElement(src);
     audioRef.current = audio;
 
     return () => {
-      audio.pause();
-      audio.src = '';
       audioRef.current = null;
       // Disconnect per-element nodes; shared AudioContext is reused.
       sourceNodeRef.current?.disconnect();
@@ -128,6 +127,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
         clearTimeout(preWarmTimerRef.current);
         preWarmTimerRef.current = null;
       }
+      releasePreviewAudioElement(audio);
     };
   }, [src]);
 
@@ -167,6 +167,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     try {
       const gainNode = audioContext.createGain();
       const sourceNode = audioContext.createMediaElementSource(audio);
+      markPreviewAudioElementUsesWebAudio(audio);
       sourceNode.connect(gainNode);
       gainNode.connect(audioContext.destination);
 
@@ -188,8 +189,8 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
 
     // Calculate target time in the source audio
     // IMPORTANT: trimBefore is in source FPS frames — must use effectiveSourceFps, not fps
-    const sourceTimeSeconds = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
-    const clipStartTimeSeconds = Math.max(0, trimBefore / effectiveSourceFps);
+    const sourceTimeSeconds = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps) - sourceStartOffsetSec;
+    const clipStartTimeSeconds = Math.max(0, (trimBefore / effectiveSourceFps) - sourceStartOffsetSec);
 
     // During Sequence premount, frame is negative. Keep audio paused and pre-seek to
     // clip start so playback starts immediately when frame reaches 0.
@@ -335,7 +336,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
         }, 50);
       }
     }
-  }, [frame, fps, sourceFps, playing, playbackRate, trimBefore]);
+  }, [frame, fps, sourceFps, sourceStartOffsetSec, playing, playbackRate, trimBefore]);
 
   // This component renders nothing visually
   return null;

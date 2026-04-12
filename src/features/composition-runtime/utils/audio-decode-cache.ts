@@ -16,6 +16,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
 import {
   getDecodedPreviewAudio,
   saveDecodedPreviewAudio,
@@ -57,14 +58,21 @@ function evictIfNeeded(): void {
     }
   }
 }
-const PLAYABLE_PARTIAL_POLL_MS = 150;
+const DEFAULT_PLAYABLE_PARTIAL_READY_SECONDS = 2;
 const PLAYABLE_PARTIAL_TIMEOUT_MS = 8000;
+const PLAYABLE_PARTIAL_PREROLL_SECONDS = 0.25;
 
 /** Sample rate for IndexedDB storage; 22050 Hz is sufficient for preview. */
 const STORAGE_SAMPLE_RATE = 22050;
 
 /** Bin duration in seconds for chunked IndexedDB storage. */
 const BIN_DURATION_SEC = 10;
+
+export interface PlaybackAudioSlice {
+  buffer: AudioBuffer;
+  startTime: number;
+  isComplete: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Int16 <-> Float32 conversion
@@ -135,6 +143,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function createInputSource(
+  mb: Awaited<typeof import('mediabunny')>,
+  src: string,
+): InstanceType<typeof mb.BlobSource> | InstanceType<typeof mb.UrlSource> {
+  const registeredBlob = getObjectUrlBlob(src);
+  if (registeredBlob) {
+    return new mb.BlobSource(registeredBlob);
+  }
+
+  return new mb.UrlSource(src);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,46 +270,205 @@ async function loadPartialFromBins(
   return buffer;
 }
 
+async function decodeAudioWindow(
+  mediaId: string,
+  src: string,
+  startTime: number,
+  durationSeconds: number,
+  ac3RetryAttempted: boolean = false,
+): Promise<PlaybackAudioSlice> {
+  const shouldRegisterAc3 = ac3RetryAttempted || await shouldPreRegisterAc3Decoder(mediaId);
+
+  try {
+    if (shouldRegisterAc3) {
+      await ensureAc3DecoderRegistered();
+    }
+
+    const mb = await import('mediabunny');
+    const input = new mb.Input({
+      formats: mb.ALL_FORMATS,
+      source: createInputSource(mb, src),
+    });
+
+    try {
+      const audioTrack = await input.getPrimaryAudioTrack();
+      if (!audioTrack) {
+        throw new Error(`No audio track found for media ${mediaId}`);
+      }
+
+      const safeStartTime = Math.max(0, startTime);
+      const targetCoverageEndTime = safeStartTime + Math.max(0.5, durationSeconds);
+      const sink = new mb.AudioBufferSink(audioTrack);
+
+      let sliceStartTime: number | null = null;
+      let coverageEndTime = safeStartTime;
+      let sampleRate = 48000;
+      let totalFrames = 0;
+      const leftChunks: Float32Array[] = [];
+      const rightChunks: Float32Array[] = [];
+      const seenBufferKeys = new Set<string>();
+
+      const appendWrappedBuffer = (wrappedBuffer: { buffer: AudioBuffer; timestamp: number; duration: number }) => {
+        const audioBuffer = wrappedBuffer.buffer;
+        const frameCount = audioBuffer.length;
+        const channelCount = Math.max(1, audioBuffer.numberOfChannels);
+        if (frameCount === 0) {
+          return;
+        }
+
+        const dedupeKey = `${wrappedBuffer.timestamp}:${wrappedBuffer.duration}`;
+        if (seenBufferKeys.has(dedupeKey)) {
+          return;
+        }
+        seenBufferKeys.add(dedupeKey);
+
+        if (sliceStartTime === null) {
+          sliceStartTime = wrappedBuffer.timestamp;
+        }
+        coverageEndTime = Math.max(coverageEndTime, wrappedBuffer.timestamp + wrappedBuffer.duration);
+        if (audioBuffer.sampleRate > 0) {
+          sampleRate = audioBuffer.sampleRate;
+        }
+
+        const channels: Float32Array[] = [];
+        for (let c = 0; c < channelCount; c++) {
+          channels.push(audioBuffer.getChannelData(c));
+        }
+        const { left, right } = downmixToStereo(channels, frameCount);
+        leftChunks.push(left);
+        rightChunks.push(right);
+        totalFrames += frameCount;
+      };
+
+      const initialWrappedBuffer = await sink.getBuffer(safeStartTime);
+      if (initialWrappedBuffer) {
+        appendWrappedBuffer(initialWrappedBuffer);
+      }
+
+      const iteratorStartTime = sliceStartTime ?? safeStartTime;
+      for await (const wrappedBuffer of sink.buffers(iteratorStartTime, targetCoverageEndTime)) {
+        appendWrappedBuffer(wrappedBuffer);
+        if (coverageEndTime >= targetCoverageEndTime) {
+          break;
+        }
+      }
+
+      if (totalFrames <= 0 || sliceStartTime === null) {
+        throw new Error(`Audio window decode produced no output for media ${mediaId}`);
+      }
+
+      const buffer = await buildPreviewStereoBuffer(leftChunks, rightChunks, totalFrames, sampleRate);
+      return {
+        buffer,
+        startTime: sliceStartTime,
+        isComplete: false,
+      };
+    } finally {
+      input.dispose();
+    }
+  } catch (err) {
+    if (!ac3RetryAttempted && !shouldRegisterAc3) {
+      try {
+        return await decodeAudioWindow(mediaId, src, startTime, durationSeconds, true);
+      } catch {
+        // Keep original error as primary failure.
+      }
+    }
+    throw err;
+  }
+}
+
 /**
  * Playback-first helper for custom-decoded audio:
  * returns a partial buffer as soon as enough decoded bins are available,
  * while full decode continues in the background.
  */
+export async function getOrDecodeAudioSliceForPlayback(
+  mediaId: string,
+  src: string,
+  options?: {
+    minReadySeconds?: number;
+    waitTimeoutMs?: number;
+    targetTimeSeconds?: number;
+    preRollSeconds?: number;
+  }
+): Promise<PlaybackAudioSlice> {
+  const cached = cache.get(mediaId);
+  if (cached) {
+    touchCacheEntry(mediaId);
+    return {
+      buffer: cached,
+      startTime: 0,
+      isComplete: true,
+    };
+  }
+
+  const minReadySeconds = Math.max(1, options?.minReadySeconds ?? DEFAULT_PLAYABLE_PARTIAL_READY_SECONDS);
+  const waitTimeoutMs = Math.max(0, options?.waitTimeoutMs ?? PLAYABLE_PARTIAL_TIMEOUT_MS);
+  const targetTimeSeconds = Math.max(0, options?.targetTimeSeconds ?? 0);
+  const preRollSeconds = Math.max(0, options?.preRollSeconds ?? PLAYABLE_PARTIAL_PREROLL_SECONDS);
+  const fullDecodePromise = ensureDecodeStarted(mediaId, src);
+
+  // If bins are already present from a previous run/decode, use them immediately.
+  const immediatePartial = await loadPartialFromBins(mediaId, minReadySeconds);
+  if (immediatePartial && targetTimeSeconds <= immediatePartial.duration) {
+    return {
+      buffer: immediatePartial,
+      startTime: 0,
+      isComplete: false,
+    };
+  }
+
+  const partialStartTime = Math.max(0, targetTimeSeconds - preRollSeconds);
+  const partialDurationSeconds = minReadySeconds + preRollSeconds;
+  try {
+    const partialPromise = decodeAudioWindow(
+      mediaId,
+      src,
+      partialStartTime,
+      partialDurationSeconds,
+    );
+    if (waitTimeoutMs > 0) {
+      return await Promise.race([
+        partialPromise,
+        (async () => {
+          await sleep(waitTimeoutMs);
+          return {
+            buffer: await fullDecodePromise,
+            startTime: 0,
+            isComplete: true,
+          } satisfies PlaybackAudioSlice;
+        })(),
+      ]);
+    }
+    return await partialPromise;
+  } catch (windowError) {
+    log.warn('Targeted preview audio window decode failed, falling back to full decode', {
+      mediaId,
+      targetTimeSeconds,
+      error: windowError,
+    });
+  }
+
+  return {
+    buffer: await fullDecodePromise,
+    startTime: 0,
+    isComplete: true,
+  };
+}
+
 export async function getOrDecodeAudioForPlayback(
   mediaId: string,
   src: string,
   options?: {
     minReadySeconds?: number;
     waitTimeoutMs?: number;
+    targetTimeSeconds?: number;
+    preRollSeconds?: number;
   }
 ): Promise<AudioBuffer> {
-  const cached = cache.get(mediaId);
-  if (cached) {
-    touchCacheEntry(mediaId);
-    return cached;
-  }
-
-  const minReadySeconds = Math.max(1, options?.minReadySeconds ?? 8);
-  const waitTimeoutMs = Math.max(0, options?.waitTimeoutMs ?? PLAYABLE_PARTIAL_TIMEOUT_MS);
-  const fullDecodePromise = ensureDecodeStarted(mediaId, src);
-
-  // If bins are already present from a previous run/decode, use them immediately.
-  const immediatePartial = await loadPartialFromBins(mediaId, minReadySeconds);
-  if (immediatePartial) {
-    return immediatePartial;
-  }
-
-  // Poll briefly for the first playable bins before falling back to full decode wait.
-  const deadline = Date.now() + waitTimeoutMs;
-  while (Date.now() < deadline && pendingDecodes.has(mediaId)) {
-    const partial = await loadPartialFromBins(mediaId, minReadySeconds);
-    if (partial) {
-      return partial;
-    }
-    await sleep(PLAYABLE_PARTIAL_POLL_MS);
-  }
-
-  return fullDecodePromise;
+  const slice = await getOrDecodeAudioSliceForPlayback(mediaId, src, options);
+  return slice.buffer;
 }
 
 /** Clear all cached preview audio buffers (call on project unload). */
@@ -468,6 +647,23 @@ function assembleChunks(chunks: Float32Array[], totalFrames: number): Float32Arr
   return result;
 }
 
+async function buildPreviewStereoBuffer(
+  leftChunks: Float32Array[],
+  rightChunks: Float32Array[],
+  totalFrames: number,
+  sampleRate: number,
+): Promise<AudioBuffer> {
+  const left = assembleChunks(leftChunks, totalFrames);
+  const right = assembleChunks(rightChunks, totalFrames);
+
+  const tempCtx = new OfflineAudioContext(2, totalFrames, sampleRate);
+  const tempBuffer = tempCtx.createBuffer(2, totalFrames, sampleRate);
+  tempBuffer.getChannelData(0).set(left);
+  tempBuffer.getChannelData(1).set(right);
+
+  return downsampleBuffer(tempBuffer, STORAGE_SAMPLE_RATE);
+}
+
 /**
  * Downsample, convert to Int16, and persist one bin to IndexedDB.
  * Returns persisted Int16 data so playback can be assembled without
@@ -487,16 +683,7 @@ async function persistBin(
   left: Int16Array;
   right: Int16Array;
 }> {
-  const left = assembleChunks(leftChunks, frames);
-  const right = assembleChunks(rightChunks, frames);
-
-  // Build temp AudioBuffer at source rate for downsampling
-  const tempCtx = new OfflineAudioContext(2, frames, sampleRate);
-  const tempBuffer = tempCtx.createBuffer(2, frames, sampleRate);
-  tempBuffer.getChannelData(0).set(left);
-  tempBuffer.getChannelData(1).set(right);
-
-  const downsampled = await downsampleBuffer(tempBuffer, STORAGE_SAMPLE_RATE);
+  const downsampled = await buildPreviewStereoBuffer(leftChunks, rightChunks, frames, sampleRate);
 
   const leftInt16 = float32ToInt16(downsampled.getChannelData(0));
   const rightInt16 = float32ToInt16(downsampled.getChannelData(1));
@@ -557,7 +744,7 @@ async function decodeFullAudio(
     const mb = await import('mediabunny');
     const input = new mb.Input({
       formats: mb.ALL_FORMATS,
-      source: new mb.UrlSource(src),
+      source: createInputSource(mb, src),
     });
     const audioTrack = await input.getPrimaryAudioTrack();
     try {
@@ -565,7 +752,6 @@ async function decodeFullAudio(
         throw new Error(`No audio track found for media ${mediaId}`);
       }
 
-      const duration = await input.computeDuration();
       const sink = new mb.AudioSampleSink(audioTrack);
 
       let sampleRate = 48000;
@@ -583,7 +769,7 @@ async function decodeFullAudio(
         right: Int16Array;
       }>> = [];
 
-      for await (const sample of sink.samples(0, duration)) {
+      for await (const sample of sink.samples()) {
         try {
           const sampleData = sample as {
             numberOfFrames?: number;
@@ -703,4 +889,3 @@ async function decodeFullAudio(
     throw err;
   }
 }
-

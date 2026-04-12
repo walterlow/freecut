@@ -4,6 +4,7 @@ import type { ItemEffect } from '@/types/effects';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
+import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveEffectiveTrackStates } from '@/features/preview/deps/timeline-utils';
 import { useCornerPinStore } from '../stores/corner-pin-store';
 import { useGizmoStore } from '../stores/gizmo-store';
@@ -30,8 +31,10 @@ interface BuildPreviewCompositionDataParams {
   transitions: CompositionInputProps['transitions'];
   resolvedUrls: ReadonlyMap<string, string>;
   useProxy: boolean;
+  blobUrlVersion: number;
   project: PreviewProject;
   resolveProxyUrlFn?: (mediaId: string) => string | null;
+  getBlobUrlFn?: (mediaId: string) => string | null;
 }
 
 interface UsePreviewCompositionModelParams {
@@ -43,6 +46,7 @@ interface UsePreviewCompositionModelParams {
   resolvedUrls: ReadonlyMap<string, string>;
   useProxy: boolean;
   proxyReadyCount: number;
+  blobUrlVersion: number;
   project: PreviewProject;
 }
 
@@ -90,6 +94,7 @@ export function usePreviewCompositionModel({
   resolvedUrls,
   useProxy,
   proxyReadyCount,
+  blobUrlVersion,
   project,
 }: UsePreviewCompositionModelParams) {
   const {
@@ -115,9 +120,10 @@ export function usePreviewCompositionModel({
       transitions,
       resolvedUrls,
       useProxy,
+      blobUrlVersion,
       project,
     });
-  }, [combinedTracks, fps, items, keyframes, project, proxyReadyCount, resolvedUrls, transitions, useProxy]);
+  }, [blobUrlVersion, combinedTracks, fps, items, keyframes, project, proxyReadyCount, resolvedUrls, transitions, useProxy]);
 
   const getPreviewTransformOverride = useCallback((itemId: string): Partial<ResolvedTransform> | undefined => {
     const gizmoState = useGizmoStore.getState();
@@ -208,9 +214,12 @@ export function buildPreviewCompositionData({
   transitions,
   resolvedUrls,
   useProxy,
+  blobUrlVersion,
   project,
   resolveProxyUrlFn = resolveProxyUrl,
+  getBlobUrlFn = (mediaId: string) => blobUrlManager.get(mediaId),
 }: BuildPreviewCompositionDataParams) {
+  void blobUrlVersion;
   const resolvedTrackList: CompositionInputProps['tracks'] = [];
   const fastScrubTrackList: CompositionInputProps['tracks'] = [];
   const playbackSpans: VideoSourceSpan[] = [];
@@ -229,7 +238,7 @@ export function buildPreviewCompositionData({
         continue;
       }
 
-      const sourceUrl = resolvedUrls.get(item.mediaId) ?? '';
+      const sourceUrl = resolvedUrls.get(item.mediaId) ?? getBlobUrlFn(item.mediaId) ?? '';
       const proxyUrl = item.type === 'video'
         ? (resolveProxyUrlFn(item.mediaId) || sourceUrl)
         : sourceUrl;

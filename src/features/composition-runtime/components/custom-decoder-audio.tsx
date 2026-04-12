@@ -2,12 +2,14 @@
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
-import { getOrDecodeAudio } from '../utils/audio-decode-cache';
+import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
 import { createLogger } from '@/shared/logging/logger';
 import { getDecodedPreviewAudio } from '@/infrastructure/storage/indexeddb';
 import type { DecodedPreviewAudioBin, DecodedPreviewAudioMeta } from '@/types/storage';
 
 const log = createLogger('CustomDecoderAudio');
+const PARTIAL_WAV_READY_SECONDS = 2;
+const PARTIAL_WAV_WAIT_TIMEOUT_MS = 6000;
 
 interface CustomDecoderAudioProps extends AudioPlaybackProps {
   src: string;
@@ -18,6 +20,11 @@ interface DecodedWavEntry {
   url: string | null;
   promise: Promise<string> | null;
   refs: number;
+}
+
+interface DecodedPitchSource {
+  src: string;
+  sourceStartOffsetSec: number;
 }
 
 const decodedWavUrlCache = new Map<string, DecodedWavEntry>();
@@ -258,18 +265,51 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   crossfadeFadeOut,
   volumeMultiplier = 1,
 }) => {
-  const [decodedSrc, setDecodedSrc] = useState<string | null>(null);
+  const [decodedSource, setDecodedSource] = useState<DecodedPitchSource | null>(null);
 
   useEffect(() => {
     if (!mediaId || !src) return;
 
     let cancelled = false;
-    setDecodedSrc(null);
+    let partialUrl: string | null = null;
+    const effectiveSourceFps = sourceFps ?? 30;
+    const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps);
+    setDecodedSource(null);
+
+    getOrDecodeAudioSliceForPlayback(mediaId, src, {
+      minReadySeconds: PARTIAL_WAV_READY_SECONDS,
+      waitTimeoutMs: PARTIAL_WAV_WAIT_TIMEOUT_MS,
+      targetTimeSeconds: clipStartTime,
+    })
+      .then((slice) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(audioBufferToWavBlob(slice.buffer));
+        partialUrl = url;
+        setDecodedSource((current) => current ?? {
+          src: url,
+          sourceStartOffsetSec: slice.startTime,
+        });
+        log.info('Partial decoded WAV source ready', {
+          mediaId,
+          duration: slice.buffer.duration.toFixed(2),
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        log.error('Failed to prepare partial decoded WAV source', { mediaId, err });
+      });
 
     getOrCreateDecodedWavUrl(mediaId, src)
       .then((url) => {
         if (cancelled) return;
-        setDecodedSrc(url);
+        if (partialUrl && partialUrl !== url) {
+          URL.revokeObjectURL(partialUrl);
+          partialUrl = null;
+        }
+        setDecodedSource({
+          src: url,
+          sourceStartOffsetSec: 0,
+        });
         log.info('Decoded WAV source ready', { mediaId });
       })
       .catch((err) => {
@@ -279,18 +319,22 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
 
     return () => {
       cancelled = true;
+      if (partialUrl) {
+        URL.revokeObjectURL(partialUrl);
+      }
       releaseDecodedWavUrl(mediaId);
     };
-  }, [mediaId, src]);
+  }, [mediaId, src, trimBefore, sourceFps]);
 
-  if (!decodedSrc) return null;
+  if (!decodedSource) return null;
 
   return (
     <PitchCorrectedAudio
-      src={decodedSrc}
+      src={decodedSource.src}
       itemId={itemId}
       trimBefore={trimBefore}
       sourceFps={sourceFps}
+      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
       volume={volume}
       playbackRate={playbackRate}
       muted={muted}

@@ -60,6 +60,7 @@ import {
   resolveDroppedMediaEntriesFromPayload,
   type DroppedMediaEntry,
 } from '../utils/drop-execution';
+import { prewarmDroppedTimelineAudio } from '../utils/drop-audio-prewarm';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -1171,6 +1172,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         }
 
         const dropResult = await resolveTimelineItemsForEntries(entries, dropFrame);
+        prewarmDroppedTimelineAudio(entries, dropResult.items);
         applyResolvedTimelineDrop({
           addItem,
           addItems,
@@ -1202,6 +1204,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }
 
     const dropResult = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
+    prewarmDroppedTimelineAudio(droppedEntries, dropResult.items);
     applyResolvedTimelineDrop({
       addItem,
       addItems,

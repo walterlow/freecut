@@ -7,11 +7,28 @@ const SHORT_PREVIEW_DELAY_MS = 120;
 const LONG_PREVIEW_DELAY_MS = 220;
 const VERY_LONG_PREVIEW_DELAY_MS = 360;
 const PREVIEW_IDLE_TIMEOUT_MS = 1200;
+const DEFAULT_AUDIO_STARTUP_HOLD_MIN_MS = 1200;
+
+interface PreviewAudioStartupHold {
+  releaseAtMs: number;
+  expiresAtMs: number | null;
+  releaseRequested: boolean;
+}
 
 interface SchedulePreviewWorkOptions {
   delayMs?: number;
   idleTimeoutMs?: number;
 }
+
+interface RegisterPreviewAudioStartupHoldOptions {
+  minDurationMs?: number;
+  maxDurationMs?: number;
+}
+
+const previewAudioStartupHolds = new Map<number, PreviewAudioStartupHold>();
+const previewAudioStartupListeners = new Set<() => void>();
+let nextPreviewAudioStartupHoldId = 1;
+let previewAudioStartupTimer: ReturnType<typeof setTimeout> | null = null;
 
 function hasActiveTimelineGesture(): boolean {
   return !!useSelectionStore.getState().dragState?.isDragging;
@@ -27,13 +44,94 @@ function hasActiveEditPreview(): boolean {
   return ripple.trimmedItemId !== null || ripple.handle !== null;
 }
 
+function clearPreviewAudioStartupTimer(): void {
+  if (previewAudioStartupTimer !== null) {
+    clearTimeout(previewAudioStartupTimer);
+    previewAudioStartupTimer = null;
+  }
+}
+
+function isPreviewAudioStartupHoldActive(
+  hold: PreviewAudioStartupHold,
+  nowMs: number,
+): boolean {
+  if (nowMs < hold.releaseAtMs) {
+    return true;
+  }
+  if (!hold.releaseRequested) {
+    return hold.expiresAtMs === null || nowMs < hold.expiresAtMs;
+  }
+  return false;
+}
+
+function pruneInactivePreviewAudioStartupHolds(nowMs: number = Date.now()): boolean {
+  let changed = false;
+  for (const [id, hold] of previewAudioStartupHolds) {
+    if (isPreviewAudioStartupHoldActive(hold, nowMs)) {
+      continue;
+    }
+    previewAudioStartupHolds.delete(id);
+    changed = true;
+  }
+  return changed;
+}
+
+function schedulePreviewAudioStartupTimer(): void {
+  clearPreviewAudioStartupTimer();
+  const nowMs = Date.now();
+  let nextWakeAtMs = Number.POSITIVE_INFINITY;
+
+  for (const hold of previewAudioStartupHolds.values()) {
+    if (!isPreviewAudioStartupHoldActive(hold, nowMs)) {
+      continue;
+    }
+
+    if (nowMs < hold.releaseAtMs) {
+      nextWakeAtMs = Math.min(nextWakeAtMs, hold.releaseAtMs);
+      continue;
+    }
+
+    if (hold.expiresAtMs !== null) {
+      nextWakeAtMs = Math.min(nextWakeAtMs, hold.expiresAtMs);
+    }
+  }
+
+  if (!Number.isFinite(nextWakeAtMs)) {
+    return;
+  }
+
+  previewAudioStartupTimer = setTimeout(() => {
+    previewAudioStartupTimer = null;
+    const changed = pruneInactivePreviewAudioStartupHolds();
+    schedulePreviewAudioStartupTimer();
+    if (changed) {
+      for (const listener of previewAudioStartupListeners) {
+        listener();
+      }
+    }
+  }, Math.max(0, nextWakeAtMs - nowMs));
+}
+
+function hasActivePreviewAudioStartupHold(): boolean {
+  pruneInactivePreviewAudioStartupHolds();
+  const nowMs = Date.now();
+  for (const hold of previewAudioStartupHolds.values()) {
+    if (isPreviewAudioStartupHoldActive(hold, nowMs)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isPreviewWorkDeferred(): boolean {
   return useZoomStore.getState().isZoomInteracting
     || hasActiveTimelineGesture()
-    || hasActiveEditPreview();
+    || hasActiveEditPreview()
+    || hasActivePreviewAudioStartupHold();
 }
 
 export function subscribePreviewWorkBudget(callback: () => void): () => void {
+  previewAudioStartupListeners.add(callback);
   const unsubscribers = [
     useZoomStore.subscribe(callback),
     useSelectionStore.subscribe(callback),
@@ -42,10 +140,53 @@ export function subscribePreviewWorkBudget(callback: () => void): () => void {
   ];
 
   return () => {
+    previewAudioStartupListeners.delete(callback);
     for (const unsubscribe of unsubscribers) {
       unsubscribe();
     }
   };
+}
+
+export function registerPreviewAudioStartupHold(
+  options: RegisterPreviewAudioStartupHoldOptions = {},
+): () => void {
+  const nowMs = Date.now();
+  const minDurationMs = Math.max(0, options.minDurationMs ?? DEFAULT_AUDIO_STARTUP_HOLD_MIN_MS);
+  const requestedMaxDurationMs = options.maxDurationMs;
+  const maxDurationMs = requestedMaxDurationMs == null
+    ? null
+    : Math.max(minDurationMs, requestedMaxDurationMs);
+  const holdId = nextPreviewAudioStartupHoldId++;
+
+  previewAudioStartupHolds.set(holdId, {
+    releaseAtMs: nowMs + minDurationMs,
+    expiresAtMs: maxDurationMs === null ? null : nowMs + maxDurationMs,
+    releaseRequested: false,
+  });
+  schedulePreviewAudioStartupTimer();
+
+  return () => {
+    const hold = previewAudioStartupHolds.get(holdId);
+    if (!hold) {
+      return;
+    }
+
+    hold.releaseRequested = true;
+    const changed = pruneInactivePreviewAudioStartupHolds();
+    schedulePreviewAudioStartupTimer();
+    if (changed) {
+      for (const listener of previewAudioStartupListeners) {
+        listener();
+      }
+    }
+  };
+}
+
+export function _resetPreviewWorkBudgetForTest(): void {
+  previewAudioStartupHolds.clear();
+  previewAudioStartupListeners.clear();
+  nextPreviewAudioStartupHoldId = 1;
+  clearPreviewAudioStartupTimer();
 }
 
 export function getPreviewStartupDelayMs(durationSec: number): number {

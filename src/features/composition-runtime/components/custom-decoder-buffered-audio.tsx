@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import {
   getOrDecodeAudio,
-  getOrDecodeAudioForPlayback,
+  getOrDecodeAudioSliceForPlayback,
   isPreviewAudioDecodePending,
+  type PlaybackAudioSlice,
 } from '../utils/audio-decode-cache';
 import { createLogger } from '@/shared/logging/logger';
 import type { AudioPlaybackProps } from './audio-playback-props';
@@ -17,6 +18,9 @@ const DRIFT_RESYNC_MIN_ELAPSED_SECONDS = 1.0;
 const DRIFT_RESYNC_POSITIVE_THRESHOLD_SECONDS = 1.25;
 const DRIFT_RESYNC_NEGATIVE_THRESHOLD_SECONDS = -0.75;
 const BACKGROUND_RESYNC_GRACE_MS = 250;
+const INITIAL_PLAYABLE_BUFFER_SECONDS = 2;
+const PARTIAL_BUFFER_EXTENSION_TRIGGER_SECONDS = 1.25;
+const PARTIAL_BUFFER_EXTENSION_READY_SECONDS = 3;
 // Prefer a playable partial decode first, then upgrade to the full buffer in
 // the background. This keeps custom-decoded formats like Vorbis responsive on
 // first play after import/refresh instead of waiting for the whole file.
@@ -40,6 +44,35 @@ function getSharedAudioContext(): AudioContext | null {
 interface CustomDecoderBufferedAudioProps extends AudioPlaybackProps {
   src: string;
   mediaId: string;
+}
+
+function getSliceCoverageEnd(slice: PlaybackAudioSlice): number {
+  return slice.startTime + slice.buffer.duration;
+}
+
+function shouldReplaceSlice(
+  current: PlaybackAudioSlice | null,
+  next: PlaybackAudioSlice,
+): boolean {
+  if (!current) {
+    return true;
+  }
+  if (current.isComplete) {
+    return next.isComplete && next.buffer.length !== current.buffer.length;
+  }
+  if (next.isComplete) {
+    return true;
+  }
+
+  const currentCoverageEnd = getSliceCoverageEnd(current);
+  const nextCoverageEnd = getSliceCoverageEnd(next);
+  if (nextCoverageEnd > currentCoverageEnd + 0.05) {
+    return true;
+  }
+  if (next.startTime < current.startTime - 0.05) {
+    return true;
+  }
+  return false;
 }
 
 export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProps> = React.memo(({
@@ -90,7 +123,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     volumeMultiplier,
   });
 
-  const [audioBuffer, setAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [audioSlice, setAudioSlice] = useState<PlaybackAudioSlice | null>(null);
 
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -99,21 +132,39 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const lastObservedFrameRef = useRef<number>(frame);
   const wasBackgroundedRef = useRef<boolean>(false);
   const backgroundResyncGraceUntilRef = useRef<number>(0);
+  const decodeSeedRef = useRef<{ key: string; targetTime: number } | null>(null);
 
   const lastSyncContextTimeRef = useRef<number>(0);
   const lastStartOffsetRef = useRef<number>(0);
   const lastStartRateRef = useRef<number>(playbackRate);
+  const lastBufferStartTimeRef = useRef<number>(0);
   const needsInitialSyncRef = useRef<boolean>(true);
+  const pendingExtensionKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mediaId || !src) return;
 
     let cancelled = false;
+    const effectiveSourceFps = sourceFps ?? fps;
+    const decodeSeedKey = `${mediaId}:${src}:${trimBefore}:${effectiveSourceFps}:${playbackRate}`;
+    if (decodeSeedRef.current?.key !== decodeSeedKey) {
+      decodeSeedRef.current = {
+        key: decodeSeedKey,
+        targetTime: getAudioTargetTimeSeconds(
+          trimBefore,
+          effectiveSourceFps,
+          Math.max(0, frame),
+          playbackRate,
+          fps,
+        ),
+      };
+    }
+    const initialTargetTime = decodeSeedRef.current.targetTime;
     if (WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK) {
       getOrDecodeAudio(mediaId, src)
         .then((buffer) => {
           if (!cancelled) {
-            setAudioBuffer(buffer);
+            setAudioSlice({ buffer, startTime: 0, isComplete: true });
             log.info('Full buffered audio ready', {
               mediaId,
               duration: buffer.duration.toFixed(2),
@@ -129,24 +180,25 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         });
     } else {
       // Legacy low-latency path: start from partial bins, then upgrade to full decode.
-      getOrDecodeAudioForPlayback(mediaId, src, {
-        minReadySeconds: 8,
+      getOrDecodeAudioSliceForPlayback(mediaId, src, {
+        minReadySeconds: INITIAL_PLAYABLE_BUFFER_SECONDS,
         waitTimeoutMs: 6000,
+        targetTimeSeconds: initialTargetTime,
       })
-        .then((buffer) => {
+        .then((slice) => {
           if (!cancelled) {
-            setAudioBuffer((current) => {
-              // Don't downgrade: if a full decode already landed, keep it.
-              if (current && current.length >= buffer.length && current.sampleRate === buffer.sampleRate) {
+            setAudioSlice((current) => {
+              if (!shouldReplaceSlice(current, slice)) {
                 return current;
               }
-              return buffer;
+              return slice;
             });
             log.info('Initial buffered audio ready', {
               mediaId,
-              duration: buffer.duration.toFixed(2),
-              sampleRate: buffer.sampleRate,
-              channels: buffer.numberOfChannels,
+              duration: slice.buffer.duration.toFixed(2),
+              sampleRate: slice.buffer.sampleRate,
+              channels: slice.buffer.numberOfChannels,
+              startTime: slice.startTime.toFixed(2),
             });
           }
         })
@@ -160,11 +212,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       getOrDecodeAudio(mediaId, src)
         .then((buffer) => {
           if (!cancelled) {
-            setAudioBuffer((current) => {
-              if (current && current.length === buffer.length && current.sampleRate === buffer.sampleRate) {
+            setAudioSlice((current) => {
+              if (current?.isComplete && current.buffer.length === buffer.length && current.buffer.sampleRate === buffer.sampleRate) {
                 return current;
               }
-              return buffer;
+              return { buffer, startTime: 0, isComplete: true };
             });
           }
         })
@@ -176,7 +228,74 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     }
 
     return () => { cancelled = true; };
-  }, [mediaId, src]);
+  }, [mediaId, src, trimBefore, sourceFps, fps, playbackRate]);
+
+  useEffect(() => {
+    const currentSlice = audioSlice;
+    if (!currentSlice || currentSlice.isComplete || !playing) {
+      pendingExtensionKeyRef.current = null;
+      return;
+    }
+    if (!isPreviewAudioDecodePending(mediaId)) {
+      pendingExtensionKeyRef.current = null;
+      return;
+    }
+
+    const effectiveSourceFps = sourceFps ?? fps;
+    const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    const coverageEnd = getSliceCoverageEnd(currentSlice);
+    const remainingCoverage = coverageEnd - targetTime;
+    const isTargetOutsideSlice = targetTime < currentSlice.startTime || targetTime >= coverageEnd;
+
+    if (!isTargetOutsideSlice && remainingCoverage > PARTIAL_BUFFER_EXTENSION_TRIGGER_SECONDS) {
+      return;
+    }
+
+    const requestKey = `${mediaId}:${src}:${playbackRate}:${targetTime.toFixed(3)}`;
+    if (pendingExtensionKeyRef.current === requestKey) {
+      return;
+    }
+    pendingExtensionKeyRef.current = requestKey;
+
+    let cancelled = false;
+    getOrDecodeAudioSliceForPlayback(mediaId, src, {
+      minReadySeconds: PARTIAL_BUFFER_EXTENSION_READY_SECONDS,
+      waitTimeoutMs: 6000,
+      targetTimeSeconds: Math.max(0, targetTime),
+    })
+      .then((nextSlice) => {
+        if (cancelled) {
+          return;
+        }
+        setAudioSlice((current) => {
+          if (!shouldReplaceSlice(current, nextSlice)) {
+            return current;
+          }
+          return nextSlice;
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          log.warn('Failed to extend buffered custom decoder audio slice', {
+            mediaId,
+            targetTime,
+            err,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled && pendingExtensionKeyRef.current === requestKey) {
+          pendingExtensionKeyRef.current = null;
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (pendingExtensionKeyRef.current === requestKey) {
+        pendingExtensionKeyRef.current = null;
+      }
+    };
+  }, [audioSlice, frame, fps, mediaId, playbackRate, playing, sourceFps, src, trimBefore]);
 
   useEffect(() => {
     const ctx = getSharedAudioContext();
@@ -306,6 +425,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, []);
 
   useEffect(() => {
+    const audioBuffer = audioSlice?.buffer ?? null;
     if (!audioBuffer) return;
 
     const ctx = getSharedAudioContext();
@@ -316,6 +436,8 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const effectiveSourceFps = sourceFps ?? fps;
     // IMPORTANT: trimBefore is in source FPS frames â€” must use effectiveSourceFps, not fps
     const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    const audioStartTime = audioSlice?.startTime ?? 0;
+    const targetOffsetInBuffer = targetTime - audioStartTime;
     const frameDelta = frame - lastObservedFrameRef.current;
     lastObservedFrameRef.current = frame;
     const frameSeekJumpThreshold = Math.max(8, Math.round(fps * 0.5));
@@ -348,7 +470,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         // Buffer changed (partial -> full). Avoid immediate restart thrash;
         // only re-sync if current source is close to running out.
         const sourceDuration = currentSource.buffer?.duration ?? 0;
-        const remainingCoverage = sourceDuration - targetTime;
+        const remainingCoverage = (lastBufferStartTimeRef.current + sourceDuration) - targetTime;
         if (remainingCoverage <= PARTIAL_BUFFER_HEADROOM_SECONDS) {
           shouldStart = true;
         }
@@ -358,7 +480,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         if (!shouldIgnoreBackgroundResync && !isPreviewAudioDecodePending(mediaId)) {
           const elapsedSec = ctx.currentTime - lastSyncContextTimeRef.current;
           const estimatedPosition = lastStartOffsetRef.current + elapsedSec * lastStartRateRef.current;
-          const drift = estimatedPosition - targetTime;
+          const drift = estimatedPosition - targetOffsetInBuffer;
 
           if (
             elapsedSec > DRIFT_RESYNC_MIN_ELAPSED_SECONDS
@@ -372,7 +494,10 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       if (shouldStart) {
         // If we only have a partial decode and timeline position is beyond its duration,
         // wait for more bins/full decode instead of repeatedly starting at partial tail.
-        if (targetTime >= audioBuffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS && isPreviewAudioDecodePending(mediaId)) {
+        if (
+          (targetOffsetInBuffer < 0 || targetOffsetInBuffer >= audioBuffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS)
+          && isPreviewAudioDecodePending(mediaId)
+        ) {
           stopSource();
           return;
         }
@@ -398,7 +523,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
             }
           };
 
-          const clampedOffset = Math.max(0, Math.min(targetTime, audioBuffer.duration - 0.01));
+          const clampedOffset = Math.max(0, Math.min(targetOffsetInBuffer, audioBuffer.duration - 0.01));
           const startAt = ctx.currentTime;
           const startVolume = Math.max(0, audioVolumeRef.current);
           liveGain.gain.cancelScheduledValues(startAt);
@@ -411,6 +536,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
           lastSyncContextTimeRef.current = startAt;
           lastStartOffsetRef.current = clampedOffset;
           lastStartRateRef.current = playbackRate;
+          lastBufferStartTimeRef.current = audioStartTime;
           needsInitialSyncRef.current = false;
         }).catch((err) => {
           log.warn('Failed to resume/start buffered custom decoder audio context', {
@@ -427,7 +553,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!isBackgrounded && !backgroundGraceActive && wasBackgroundedRef.current) {
       wasBackgroundedRef.current = false;
     }
-  }, [frame, fps, playing, playbackRate, trimBefore, audioBuffer, mediaId, sourceFps, stopSource]);
+  }, [audioSlice, frame, fps, playing, playbackRate, trimBefore, mediaId, sourceFps, stopSource]);
 
   return null;
 });
