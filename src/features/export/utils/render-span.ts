@@ -17,10 +17,19 @@ function isSourceTimedItem(item: TimelineItem): item is TimelineItem & {
   type: 'video' | 'audio' | 'composition';
   sourceStart?: number;
   trimStart?: number;
+  offset?: number;
   sourceFps?: number;
   speed?: number;
 } {
   return item.type === 'video' || item.type === 'audio' || item.type === 'composition';
+}
+
+function getSourceTimedItemStart(item: TimelineItem & {
+  sourceStart?: number;
+  trimStart?: number;
+  offset?: number;
+}): number {
+  return item.sourceStart ?? item.trimStart ?? item.offset ?? 0;
 }
 
 export function getItemRenderTimelineSpan(item: TimelineItem): RenderTimelineSpan {
@@ -28,7 +37,7 @@ export function getItemRenderTimelineSpan(item: TimelineItem): RenderTimelineSpa
     from: item.from,
     durationInFrames: item.durationInFrames,
     ...(isSourceTimedItem(item)
-      ? { sourceStart: item.sourceStart ?? item.trimStart ?? 0 }
+      ? { sourceStart: getSourceTimedItemStart(item) }
       : {}),
   };
 }
@@ -40,7 +49,7 @@ export function getRenderTimelineSourceStart(
   if (!isSourceTimedItem(item)) {
     return 0;
   }
-  return span?.sourceStart ?? item.sourceStart ?? item.trimStart ?? 0;
+  return span?.sourceStart ?? getSourceTimedItemStart(item);
 }
 
 export function applyRenderTimelineSpan<TItem extends TimelineItem>(
@@ -54,7 +63,7 @@ export function applyRenderTimelineSpan<TItem extends TimelineItem>(
   const hasSameTimelineWindow = item.from === span.from && item.durationInFrames === span.durationInFrames;
   const nextSourceStart = getRenderTimelineSourceStart(item, span);
   const currentSourceStart = isSourceTimedItem(item)
-    ? (item.sourceStart ?? item.trimStart ?? 0)
+    ? getSourceTimedItemStart(item)
     : undefined;
   const hasSameSourceAnchor = currentSourceStart === nextSourceStart;
 
@@ -95,10 +104,10 @@ function getTransitionParticipantSourceStart<TItem extends TimelineItem>(
 
   const beforeFrames = Math.max(0, clip.from - transitionWindow.from);
   if (beforeFrames <= 0) {
-    return clip.sourceStart ?? clip.trimStart ?? 0;
+    return getSourceTimedItemStart(clip);
   }
 
-  const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+  const sourceStart = getSourceTimedItemStart(clip);
   const speed = clip.speed ?? 1;
   const sourceFps = clip.sourceFps ?? fps;
   const prerollSourceFrames = timelineToSourceFrames(beforeFrames, speed, fps, sourceFps);
@@ -111,11 +120,12 @@ export function resolveTransitionRenderTimelineSpan<TItem extends TimelineItem>(
   fps: number,
 ): RenderTimelineSpan {
   const transitionWindow = resolveTransitionParticipantFrameWindow(clip, activeTransition);
+  const sourceStart = getTransitionParticipantSourceStart(clip, transitionWindow, fps);
   return {
     from: transitionWindow.from,
     durationInFrames: transitionWindow.durationInFrames,
-    ...(getTransitionParticipantSourceStart(clip, transitionWindow, fps) !== undefined
-      ? { sourceStart: getTransitionParticipantSourceStart(clip, transitionWindow, fps) }
+    ...(sourceStart !== undefined
+      ? { sourceStart }
       : {}),
   };
 }
