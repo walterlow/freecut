@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { RotateCcw, Volume2 } from 'lucide-react';
+import { Music, RotateCcw, Volume2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
@@ -275,135 +275,139 @@ export function AudioSection({ items }: AudioSectionProps) {
   if (audioItems.length === 0) return null;
 
   return (
-    <PropertySection title="Audio" icon={Volume2} defaultOpen={true}>
-      <PropertyRow label="Gain">
-        <div className="flex items-center gap-1 w-full">
-          <SliderInput
-            value={volume}
-            onChange={handleVolumeChange}
-            onLiveChange={handleVolumeLiveChange}
-            min={AUDIO_GAIN_DB_MIN}
-            max={AUDIO_GAIN_DB_MAX}
-            step={0.1}
-            unit="dB"
-            className="flex-1 min-w-0"
-          />
-          <KeyframeToggle
-            itemIds={itemIds}
-            property="volume"
-            currentValue={volume === 'mixed' ? 0 : volume}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetVolume}
-            title="Reset to 0 dB"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </PropertyRow>
+    <>
+      <PropertySection title="Audio" icon={Volume2} defaultOpen={true}>
+        <PropertyRow label="Gain">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={volume}
+              onChange={handleVolumeChange}
+              onLiveChange={handleVolumeLiveChange}
+              min={AUDIO_GAIN_DB_MIN}
+              max={AUDIO_GAIN_DB_MAX}
+              step={0.1}
+              unit="dB"
+              className="flex-1 min-w-0"
+            />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="volume"
+              currentValue={volume === 'mixed' ? 0 : volume}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetVolume}
+              title="Reset to 0 dB"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
 
-      <PropertyRow label="Semi Tones">
-        <div className="flex items-center gap-1 w-full">
-          <SliderInput
-            value={pitchSemitones}
-            onChange={(value) => handleAudioPitchChange('audioPitchSemitones', value)}
-            onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchSemitones', value)}
-            min={AUDIO_PITCH_SEMITONES_MIN}
-            max={AUDIO_PITCH_SEMITONES_MAX}
-            step={1}
-            unit="st"
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetPitchSemitones}
-            title="Reset semitone pitch"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </PropertyRow>
+        <PropertyRow label="Fade In">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={fadeIn}
+              onChange={handleFadeInChange}
+              onLiveChange={handleFadeInLiveChange}
+              min={0}
+              max={5}
+              step={0.1}
+              unit="s"
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetFadeIn}
+              title="Reset to 0"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
 
-      <PropertyRow label="Cents">
-        <div className="flex items-center gap-1 w-full">
-          <SliderInput
-            value={pitchCents}
-            onChange={(value) => handleAudioPitchChange('audioPitchCents', value)}
-            onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchCents', value)}
-            min={AUDIO_PITCH_CENTS_MIN}
-            max={AUDIO_PITCH_CENTS_MAX}
-            step={1}
-            unit="ct"
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetPitchCents}
-            title="Reset cent pitch"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </PropertyRow>
+        <PropertyRow label="Fade Out">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={fadeOut}
+              onChange={handleFadeOutChange}
+              onLiveChange={handleFadeOutLiveChange}
+              min={0}
+              max={5}
+              step={0.1}
+              unit="s"
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetFadeOut}
+              title="Reset to 0"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+      </PropertySection>
 
-      <div className="-mx-2 rounded-md overflow-hidden">
+      <PropertySection title="Pitch" icon={Music} defaultOpen={true}>
+        <PropertyRow label="Semi Tones">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={pitchSemitones}
+              onChange={(value) => handleAudioPitchChange('audioPitchSemitones', value)}
+              onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchSemitones', value)}
+              min={AUDIO_PITCH_SEMITONES_MIN}
+              max={AUDIO_PITCH_SEMITONES_MAX}
+              step={1}
+              unit="st"
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetPitchSemitones}
+              title="Reset semitone pitch"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+
+        <PropertyRow label="Cents">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={pitchCents}
+              onChange={(value) => handleAudioPitchChange('audioPitchCents', value)}
+              onLiveChange={(value) => handleAudioPitchLiveChange('audioPitchCents', value)}
+              min={AUDIO_PITCH_CENTS_MIN}
+              max={AUDIO_PITCH_CENTS_MAX}
+              step={1}
+              unit="ct"
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetPitchCents}
+              title="Reset cent pitch"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+      </PropertySection>
+
+      <PropertySection title="Equalizer" defaultOpen={true}>
         <AudioEqPanelContent items={items} targetLabel="" layoutMode="compact" />
-      </div>
-
-      <PropertyRow label="Fade In">
-        <div className="flex items-center gap-1 w-full">
-          <SliderInput
-            value={fadeIn}
-            onChange={handleFadeInChange}
-            onLiveChange={handleFadeInLiveChange}
-            min={0}
-            max={5}
-            step={0.1}
-            unit="s"
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetFadeIn}
-            title="Reset to 0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </PropertyRow>
-
-      <PropertyRow label="Fade Out">
-        <div className="flex items-center gap-1 w-full">
-          <SliderInput
-            value={fadeOut}
-            onChange={handleFadeOutChange}
-            onLiveChange={handleFadeOutLiveChange}
-            min={0}
-            max={5}
-            step={0.1}
-            unit="s"
-            className="flex-1 min-w-0"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetFadeOut}
-            title="Reset to 0"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </PropertyRow>
-    </PropertySection>
+      </PropertySection>
+    </>
   );
 }

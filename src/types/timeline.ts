@@ -36,6 +36,7 @@ type BaseTimelineItem = {
   audioFadeOutCurveX?: number; // Audio fade out curve horizontal bias (0..1, default: ~0.52)
   audioPitchSemitones?: number; // Clip pitch offset in semitones (-12..12)
   audioPitchCents?: number; // Fine pitch offset in cents (-100..100)
+  audioEqEnabled?: boolean; // Master clip EQ on/off (default: true)
   audioEqOutputGainDb?: number; // Post-EQ output trim in dB
   audioEqBand1Enabled?: boolean; // Outer left EQ band on/off
   audioEqBand1Type?: import('@/types/audio').AudioEqBand1Type;

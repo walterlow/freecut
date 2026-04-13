@@ -8,6 +8,7 @@ import type {
 } from '@/types/audio';
 
 export interface AudioEqFieldSource {
+  audioEqEnabled?: boolean;
   audioEqOutputGainDb?: number;
   audioEqBand1Enabled?: boolean;
   audioEqBand1Type?: AudioEqBand1Type;
@@ -245,7 +246,10 @@ function resolveBoolean(value: boolean | undefined, fallback: boolean): boolean 
 function isAudioEqSourceDisabled(
   source?: AudioEqSettings | AudioEqFieldSource | null,
 ): boolean {
-  return source != null && 'enabled' in source && source.enabled === false;
+  if (source == null) return false;
+  if ('audioEqEnabled' in source && source.audioEqEnabled === false) return true;
+  if ('enabled' in source && source.enabled === false) return true;
+  return false;
 }
 
 function getSettingsValue<
@@ -262,6 +266,7 @@ function getSettingsValue<
 
 export function getAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqSettings {
   return {
+    enabled: source?.audioEqEnabled,
     outputGainDb: source?.audioEqOutputGainDb,
     band1Enabled: source?.audioEqBand1Enabled,
     band1Type: source?.audioEqBand1Type,

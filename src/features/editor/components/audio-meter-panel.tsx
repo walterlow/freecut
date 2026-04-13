@@ -155,7 +155,7 @@ const AudioEqPanelSurface = memo(function AudioEqPanelSurface({
   }, []);
 
   return (
-    <div ref={handleRootRef} className="bg-[#1c1f25] text-zinc-100">
+    <div ref={handleRootRef} className="bg-background text-foreground">
       <AudioEqPanelContent
         targetLabel={targetLabel}
         trackEq={trackEq}

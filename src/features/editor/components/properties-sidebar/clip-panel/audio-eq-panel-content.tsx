@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -134,7 +134,7 @@ function FilterTypeSelect({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-6 w-11 items-center justify-center gap-0.5 rounded-[4px] border border-[#2e2e31] bg-[#151517] px-1 text-zinc-400 transition-colors hover:text-zinc-200"
+          className="inline-flex h-6 w-11 items-center justify-center gap-0.5 rounded-[4px] border border-border bg-background px-1 text-muted-foreground transition-colors hover:text-zinc-200"
           title={FILTER_TYPE_LABELS[value]}
         >
           <FilterTypeGlyph type={value} />
@@ -146,7 +146,7 @@ function FilterTypeSelect({
         side="bottom"
         sideOffset={4}
         container={portalContainer ?? undefined}
-        className="z-[80] w-14 min-w-14 rounded-[4px] border-[#2e2e31] bg-[#151517] p-1"
+        className="z-[80] w-14 min-w-14 rounded-[4px] border-border bg-background p-1"
       >
         {options.map((option) => (
           <DropdownMenuItem
@@ -394,12 +394,12 @@ function BandCard({
   return (
     <section
       className={cn(
-        'flex min-w-0 flex-col rounded-[6px] border border-[#2e2e31] bg-[#212124] transition-opacity',
+        'flex min-w-0 flex-col rounded-[6px] border border-border bg-secondary/50 transition-opacity',
         !active && onToggle && 'opacity-50',
       )}
     >
       <div className={cn(
-        'grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-[#28282b]',
+        'grid grid-cols-[minmax(0,1fr)_auto] items-center border-b border-border',
         compact ? 'gap-1 px-1.5 py-1.5' : 'gap-1.5 px-2 py-2',
       )}>
         <div className={cn('flex min-w-0 items-center overflow-hidden', compact ? 'gap-1' : 'gap-1.5')}>
@@ -434,7 +434,7 @@ function BandCard({
                 portalContainer={portalContainer}
               />
             ) : (
-              <div className="flex h-6 items-center rounded-[4px] border border-[#2e2e31] bg-[#151517] px-1.5 text-zinc-400">
+              <div className="flex h-6 items-center rounded-[4px] border border-border bg-background px-1.5 text-muted-foreground">
                 <FilterTypeGlyph type={filterType} />
               </div>
             )}
@@ -502,7 +502,7 @@ function CompactBandRows(props: CompactBandRowsProps) {
           { label: 'B 6', active: props.eqBand6Enabled === 'mixed' ? false : props.eqBand6Enabled, field: 'audioEqBand6Enabled' as const, current: props.eqBand6Enabled },
         ] as const).map((band) => (
           <button key={band.label} type="button" onClick={() => onFieldChange(band.field, band.current === 'mixed' ? true : !band.current)}
-            className={cn('h-7 rounded-[4px] border text-[11px] font-semibold transition-colors', band.active ? 'border-primary bg-primary text-primary-foreground' : 'border-[#2e2e31] bg-[#212124] text-muted-foreground hover:bg-[#2a2a2d]')}>
+            className={cn('h-7 rounded-[4px] border text-[11px] font-semibold transition-colors', band.active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary')}>
             {band.label}
           </button>
         ))}
@@ -577,6 +577,15 @@ export function AudioEqPanelContent({
     () => audioItems.map((item) => item.id),
     [audioItems],
   );
+
+  const clipEqEnabled = useMemo(() => {
+    if (isTrackMode || audioItems.length === 0) return true;
+    return audioItems.every((item) => item.audioEqEnabled === true);
+  }, [audioItems, isTrackMode]);
+
+  const handleClipEqEnabledChange = useCallback((checked: boolean) => {
+    itemIds.forEach((id) => updateItem(id, { audioEqEnabled: checked }));
+  }, [itemIds, updateItem]);
 
   const resolvedTrackEq = useMemo(
     () => isTrackMode ? resolveAudioEqSettings(trackEq ?? {}) : null,
@@ -772,19 +781,44 @@ export function AudioEqPanelContent({
     ? 'Mixed'
     : (selectedEqPresetId ? getAudioEqPresetById(selectedEqPresetId)?.label ?? 'Custom' : 'Custom');
 
+  const previewThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPreviewRef = useRef<AudioEqPatch | null>(null);
+
   const handleEqPatchLiveChange = useCallback((patch: AudioEqPatch) => {
     const normalizedPatch = normalizeUiEqPatch(patch);
     setLivePatch(normalizedPatch);
     if (!isTrackMode) {
-      const previews: Record<string, AudioEqPatch> = {};
-      itemIds.forEach((id) => {
-        previews[id] = normalizedPatch;
-      });
-      setPropertiesPreviewNew(previews);
+      if (isCompactLayout) {
+        // Throttle audio preview for clip EQ to avoid audio jitter during drag
+        pendingPreviewRef.current = normalizedPatch;
+        if (!previewThrottleRef.current) {
+          previewThrottleRef.current = setTimeout(() => {
+            previewThrottleRef.current = null;
+            const pending = pendingPreviewRef.current;
+            if (pending) {
+              pendingPreviewRef.current = null;
+              const previews: Record<string, AudioEqPatch> = {};
+              itemIds.forEach((id) => { previews[id] = pending; });
+              setPropertiesPreviewNew(previews);
+            }
+          }, 80);
+        }
+      } else {
+        const previews: Record<string, AudioEqPatch> = {};
+        itemIds.forEach((id) => { previews[id] = normalizedPatch; });
+        setPropertiesPreviewNew(previews);
+      }
     }
-  }, [isTrackMode, itemIds, setPropertiesPreviewNew]);
+  }, [isCompactLayout, isTrackMode, itemIds, setPropertiesPreviewNew]);
 
   const handleEqPatchChange = useCallback((patch: AudioEqPatch) => {
+    // Flush any pending throttled preview
+    if (previewThrottleRef.current) {
+      clearTimeout(previewThrottleRef.current);
+      previewThrottleRef.current = null;
+    }
+    pendingPreviewRef.current = null;
+
     setLivePatch(null);
     if (isTrackMode && onTrackEqChange) {
       onTrackEqChange(patch);
@@ -836,8 +870,8 @@ export function AudioEqPanelContent({
   }
 
   return (
-    <div className="flex flex-col bg-[#18181b] text-zinc-100">
-      {!isCompactLayout ? <div className="flex items-center gap-3 border-b border-[#2a2a2d] px-3 py-2">
+    <div className="flex flex-col bg-background text-foreground">
+      {!isCompactLayout ? <div className="flex items-center gap-3 border-b border-border px-3 py-2">
         {onEnabledChange ? (
           <Switch
             checked={eqEnabled}
@@ -848,7 +882,7 @@ export function AudioEqPanelContent({
         ) : (
           <div className="h-2.5 w-2.5 rounded-full bg-primary" />
         )}
-        <div className="text-sm font-medium text-zinc-100">
+        <div className="text-sm font-medium text-foreground">
           Equalizer{targetLabel ? ` - ${targetLabel}` : ''}
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2">
@@ -859,7 +893,7 @@ export function AudioEqPanelContent({
             value={selectedEqPresetId ?? undefined}
             onValueChange={handleEqPresetChange}
           >
-            <SelectTrigger className="h-8 w-[220px] border-[#2e2e31] bg-[#1e1e21] text-xs text-zinc-100">
+            <SelectTrigger className="h-8 w-[220px] border-border bg-secondary/30 text-xs text-foreground">
               <SelectValue placeholder={eqPresetPlaceholder} />
             </SelectTrigger>
             <SelectContent container={portalContainer ?? undefined}>
@@ -873,7 +907,7 @@ export function AudioEqPanelContent({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 px-3 text-zinc-400 hover:text-zinc-100"
+            className="h-8 shrink-0 px-3 text-muted-foreground hover:text-foreground"
             onClick={() => handleEqPresetChange('flat')}
           >
             Reset EQ
@@ -882,8 +916,41 @@ export function AudioEqPanelContent({
       </div> : null}
 
       <div className="flex-1 overflow-auto">
-        <div className="relative border-b border-[#2e2e31]">
-          {!isTrackMode ? (
+        {isCompactLayout ? (
+          <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
+            <Switch
+              checked={clipEqEnabled}
+              onCheckedChange={handleClipEqEnabledChange}
+              className="shrink-0"
+              aria-label={`Turn clip EQ ${clipEqEnabled ? 'off' : 'on'}`}
+            />
+            <Select
+              value={selectedEqPresetId ?? undefined}
+              onValueChange={handleEqPresetChange}
+            >
+              <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
+                <SelectValue placeholder={eqPresetPlaceholder} />
+              </SelectTrigger>
+              <SelectContent container={portalContainer ?? undefined}>
+                {AUDIO_EQ_PRESETS.map((preset) => (
+                  <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => handleEqPresetChange('flat')}
+            >
+              <RotateCcw className="h-3 w-3" />
+            </Button>
+          </div>
+        ) : null}
+        <div className={cn('relative', !isCompactLayout && 'border-b border-border')}>
+          {!isTrackMode && !isCompactLayout ? (
             <div className="pointer-events-none absolute right-3 top-1 z-10 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
               {audioItems.length} {audioItems.length === 1 ? 'clip' : 'clips'}
             </div>
@@ -895,7 +962,7 @@ export function AudioEqPanelContent({
                 disabled={hasMixedEqSettings}
                 className="text-zinc-300"
                 graphClassName={cn(
-                  'bg-[#141416]',
+                  'bg-background',
                   isDetachedLayout ? 'h-[clamp(288px,33vh,344px)]' : 'h-[220px]',
                 )}
                 onLiveChange={handleEqPatchLiveChange}
