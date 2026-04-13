@@ -700,6 +700,8 @@ export function AudioEqPanelContent({
     eqBand6SlopeDbPerOct,
   ].some((value) => value === 'mixed');
 
+  const eqControlsDisabled = hasMixedEqSettings || (isCompactLayout ? !clipEqEnabled : !eqEnabled);
+
   const eqCurveSettings = useMemo(
     () => resolveAudioEqSettings({
       outputGainDb: eqOutputGainDb === 'mixed' ? 0 : eqOutputGainDb,
@@ -898,8 +900,9 @@ export function AudioEqPanelContent({
           <Select
             value={selectedEqPresetId ?? undefined}
             onValueChange={handleEqPresetChange}
+            disabled={!eqEnabled}
           >
-            <SelectTrigger className="h-8 w-[220px] border-border bg-secondary/30 text-xs text-foreground">
+            <SelectTrigger className={cn('h-8 w-[220px] border-border bg-secondary/30 text-xs text-foreground', !eqEnabled && 'opacity-40')}>
               <SelectValue placeholder={eqPresetPlaceholder} />
             </SelectTrigger>
             <SelectContent container={portalContainer ?? undefined}>
@@ -913,7 +916,7 @@ export function AudioEqPanelContent({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 shrink-0 px-3 text-muted-foreground hover:text-foreground"
+            className={cn('h-8 shrink-0 px-3 text-muted-foreground hover:text-foreground', !eqEnabled && 'opacity-40 pointer-events-none')}
             onClick={() => handleEqPresetChange('flat')}
           >
             Reset EQ
@@ -933,8 +936,9 @@ export function AudioEqPanelContent({
             <Select
               value={selectedEqPresetId ?? undefined}
               onValueChange={handleEqPresetChange}
+              disabled={!clipEqEnabled}
             >
-              <SelectTrigger className="h-7 flex-1 min-w-0 text-xs">
+              <SelectTrigger className={cn('h-7 flex-1 min-w-0 text-xs', !clipEqEnabled && 'opacity-40')}>
                 <SelectValue placeholder={eqPresetPlaceholder} />
               </SelectTrigger>
               <SelectContent container={portalContainer ?? undefined}>
@@ -948,7 +952,7 @@ export function AudioEqPanelContent({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+              className={cn('h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground', !clipEqEnabled && 'opacity-40 pointer-events-none')}
               onClick={() => handleEqPresetChange('flat')}
               aria-label="Reset EQ"
             >
@@ -966,7 +970,7 @@ export function AudioEqPanelContent({
             <div className="min-w-0 flex-1">
               <AudioEqCurveEditor
                 settings={eqCurveSettings}
-                disabled={hasMixedEqSettings}
+                disabled={eqControlsDisabled}
                 className="text-zinc-300"
                 graphClassName={cn(
                   'bg-background',
@@ -979,7 +983,7 @@ export function AudioEqPanelContent({
             {!isCompactLayout ? (
               <EqOutputGainControl
                 value={eqOutputGainDb}
-                disabled={hasMixedEqSettings}
+                disabled={eqControlsDisabled}
                 compact={!isDetachedLayout}
                 onLiveChange={(value) => handleEqPatchLiveChange({ audioEqOutputGainDb: value })}
                 onChange={(value) => handleEqFieldChange('audioEqOutputGainDb', value)}
@@ -989,6 +993,7 @@ export function AudioEqPanelContent({
         </div>
 
         {isCompactLayout ? (
+          <div className={cn(eqControlsDisabled && 'pointer-events-none opacity-40')}>
           <CompactBandRows
             eqBand1Type={eqBand1Type} eqBand1Enabled={eqBand1Enabled} eqBand1FrequencyHz={eqBand1FrequencyHz} eqBand1GainDb={eqBand1GainDb} eqBand1Q={eqBand1Q}
             eqLowType={eqLowType} eqLowEnabled={eqLowEnabled} eqLowFrequencyHz={eqLowFrequencyHz} eqLow={eqLow} eqLowQ={eqLowQ} lowRange={lowRange}
@@ -998,8 +1003,9 @@ export function AudioEqPanelContent({
             eqBand6Type={eqBand6Type} eqBand6Enabled={eqBand6Enabled} eqBand6FrequencyHz={eqBand6FrequencyHz} eqBand6GainDb={eqBand6GainDb} eqBand6Q={eqBand6Q}
             onFieldChange={handleEqFieldChange} onLiveChange={handleEqPatchLiveChange} portalContainer={portalContainer}
           />
+          </div>
         ) : (
-        <div className={cn(isDetachedLayout ? 'space-y-3 p-3' : 'space-y-2 p-2')}>
+        <div className={cn(isDetachedLayout ? 'space-y-3 p-3' : 'space-y-2 p-2', eqControlsDisabled && 'pointer-events-none opacity-40')}>
           <div className={cn(isDetachedLayout && 'overflow-x-auto pb-1')}>
             <div
               className={cn(
