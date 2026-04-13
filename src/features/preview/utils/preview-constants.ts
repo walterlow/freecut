@@ -155,13 +155,17 @@ import type { CompositionInputProps } from '@/types/export';
 export function toTrackFingerprint(tracks: CompositionInputProps['tracks']): string {
   const parts: string[] = [];
   for (const track of tracks) {
+    const trackEqStr = track.audioEq ? JSON.stringify(track.audioEq) : '';
     parts.push(
-      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}:${track.volume ?? 0}`
+      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}:${track.volume ?? 0}:${trackEqStr}`
     );
     for (const item of track.items) {
       const src = 'src' in item ? (item.src ?? '') : '';
+      const eqStr = item.audioEqOutputGainDb ?? item.audioEqBand1Enabled ?? item.audioEqLowGainDb ?? item.audioEqHighGainDb ?? item.audioEqBand6Enabled
+        ? `${item.audioEqOutputGainDb ?? 0}:${item.audioEqBand1Enabled ? 1 : 0}:${item.audioEqBand1FrequencyHz ?? 0}:${item.audioEqBand1GainDb ?? 0}:${item.audioEqLowGainDb ?? 0}:${item.audioEqLowFrequencyHz ?? 0}:${item.audioEqLowMidGainDb ?? 0}:${item.audioEqLowMidFrequencyHz ?? 0}:${item.audioEqMidGainDb ?? 0}:${item.audioEqHighMidGainDb ?? 0}:${item.audioEqHighMidFrequencyHz ?? 0}:${item.audioEqHighGainDb ?? 0}:${item.audioEqHighFrequencyHz ?? 0}:${item.audioEqBand6Enabled ? 1 : 0}:${item.audioEqBand6FrequencyHz ?? 0}:${item.audioEqBand6GainDb ?? 0}`
+        : '';
       parts.push(
-        `i:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.audioPitchSemitones ?? 0}:${item.audioPitchCents ?? 0}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}`
+        `i:${item.id}:${item.type}:${item.from}:${item.durationInFrames}:${item.mediaId ?? ''}:${src}:${item.speed ?? 1}:${item.volume ?? 1}:${item.audioPitchSemitones ?? 0}:${item.audioPitchCents ?? 0}:${item.sourceStart ?? 0}:${item.sourceEnd ?? 0}:${eqStr}`
       );
     }
   }

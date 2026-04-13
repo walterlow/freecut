@@ -8,7 +8,7 @@ declare module 'soundtouchjs' {
    * Source interface for SimpleFilter
    */
   interface FilterSource {
-    extract(target: Float32Array, numFrames: number, sourcePosition?: number): number;
+    extract(target: Float32Array, numFrames: number): number;
   }
 
   /**

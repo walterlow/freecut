@@ -100,6 +100,9 @@ export function buildTimelineEqPatchFromResolvedSettings(settings: ResolvedAudio
   };
 }
 
+// Mid gain is forced to 0 because the mid band is not exposed in the 6-band UI
+// (it's a fixed-frequency peaking filter used internally). Zero it so stale
+// values from older schemas don't leak through.
 export function normalizeUiEqPatch(patch: AudioEqPatch): AudioEqPatch {
   return {
     audioEqMidGainDb: 0,

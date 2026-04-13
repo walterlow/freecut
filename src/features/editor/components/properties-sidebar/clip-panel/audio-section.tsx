@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Music, RotateCcw, Volume2 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,8 @@ export function AudioSection({ items }: AudioSectionProps) {
   const clearPreviewForItems = useGizmoStore((s) => s.clearPreviewForItems);
   const currentFrame = useThrottledFrame();
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
+
+  const pitchPreviewOpRef = useRef(0);
 
   const audioItems = useMemo(
     () => getAudioSectionItems(items),
@@ -188,6 +190,7 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const handleAudioPitchChange = useCallback(
     (field: 'audioPitchSemitones' | 'audioPitchCents', value: number) => {
+      const opId = ++pitchPreviewOpRef.current;
       const previews: Record<string, Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>> = {};
       itemIds.forEach((id) => {
         previews[id] = { [field]: value } as Pick<TimelineItem, 'audioPitchSemitones' | 'audioPitchCents'>;
@@ -202,13 +205,19 @@ export function AudioSection({ items }: AudioSectionProps) {
 
       schedule(() => {
         schedule(() => {
+          if (pitchPreviewOpRef.current !== opId) return;
+
           const currentItems = useTimelineStore.getState().items;
           const commitLanded = currentItems.every((item) =>
             !itemIds.includes(item.id) || (item[field] ?? 0) === value,
           );
 
           if (!commitLanded) {
-            queueMicrotask(() => clearPreviewForItems(itemIds));
+            queueMicrotask(() => {
+              if (pitchPreviewOpRef.current === opId) {
+                clearPreviewForItems(itemIds);
+              }
+            });
             return;
           }
 

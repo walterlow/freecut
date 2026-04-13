@@ -600,6 +600,7 @@ export function AudioEqPanelContent({
   const [gainBandControlRanges, setGainBandControlRanges] = useState<GainBandControlRanges>(DEFAULT_GAIN_BAND_CONTROL_RANGES);
 
   useEffect(() => {
+    setLivePatch(null);
     setGainBandControlRanges(DEFAULT_GAIN_BAND_CONTROL_RANGES);
   }, [targetLabel]);
 
@@ -833,6 +834,11 @@ export function AudioEqPanelContent({
     const preset = getAudioEqPresetById(presetId as AudioEqPresetId);
     if (!preset) return;
 
+    if (previewThrottleRef.current) {
+      clearTimeout(previewThrottleRef.current);
+      previewThrottleRef.current = null;
+    }
+    pendingPreviewRef.current = null;
     setLivePatch(null);
     if (isTrackMode && onTrackEqChange) {
       onTrackEqChange(buildTimelineEqPatchFromResolvedSettings(preset.settings));
@@ -944,6 +950,7 @@ export function AudioEqPanelContent({
               size="sm"
               className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => handleEqPresetChange('flat')}
+              aria-label="Reset EQ"
             >
               <RotateCcw className="h-3 w-3" />
             </Button>

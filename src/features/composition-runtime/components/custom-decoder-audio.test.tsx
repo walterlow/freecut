@@ -36,6 +36,7 @@ const storeMocks = vi.hoisted(() => {
   return { useGizmoStore };
 });
 
+vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
@@ -279,4 +280,3 @@ describe('CustomDecoderAudio', () => {
     expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
   });
 });
-vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);

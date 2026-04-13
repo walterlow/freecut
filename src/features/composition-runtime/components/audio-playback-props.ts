@@ -20,8 +20,11 @@ export interface AudioPlaybackProps {
   audioFadeOutCurve?: number;
   audioFadeInCurveX?: number;
   audioFadeOutCurveX?: number;
+  /** Pitch offset in whole semitones (-12 to +12), set per-clip by the user */
   audioPitchSemitones?: number;
+  /** Fine pitch adjustment in cents (-100 to +100), applied additively after semitones */
   audioPitchCents?: number;
+  /** Pre-computed total pitch shift in semitones (semitones + cents/100 + parent composition shift) */
   audioPitchShiftSemitones?: number;
   audioEqStages?: ResolvedAudioEqSettings[];
   clipFadeSpans?: AudioClipFadeSpan[];

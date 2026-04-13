@@ -162,7 +162,7 @@ export function WindowPortal({
 
       externalWindow = window.open('', '', features);
       if (!externalWindow) {
-        onBlockedRef.current?.();
+        (onBlockedRef.current ?? onCloseRef.current)();
         return;
       }
     }
@@ -254,9 +254,25 @@ export function WindowPortal({
       }
     }
 
+    // Observe content size changes for autoHeight windows
+    let resizeObserver: ResizeObserver | undefined;
+    if (autoHeight && root) {
+      const rootEl = root;
+      resizeObserver = new ResizeObserver(() => {
+        if (cancelled || win.closed) return;
+        const contentHeight = rootEl.scrollHeight;
+        if (contentHeight > 0) {
+          const chromeHeight = win.outerHeight - win.innerHeight;
+          win.resizeTo(win.outerWidth, contentHeight + chromeHeight);
+        }
+      });
+      resizeObserver.observe(rootEl);
+    }
+
     return () => {
       mountedRef.current = false;
       cancelled = true;
+      resizeObserver?.disconnect();
       win.removeEventListener('beforeunload', handleUnload);
       win.removeEventListener('resize', persistBounds);
       window.removeEventListener('beforeunload', handleParentUnload);

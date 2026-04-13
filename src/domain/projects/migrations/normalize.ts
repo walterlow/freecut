@@ -140,6 +140,29 @@ function normalizeItem(
   if (normalized.audioPitchCents !== undefined) {
     normalized.audioPitchCents = clampAudioPitchCents(normalized.audioPitchCents);
   }
+  if (normalized.audioEqOutputGainDb !== undefined) {
+    normalized.audioEqOutputGainDb = clampAudioEqGainDb(normalized.audioEqOutputGainDb);
+  }
+  if (normalized.audioEqBand1Enabled !== undefined) {
+    normalized.audioEqBand1Enabled = !!normalized.audioEqBand1Enabled;
+  }
+  if (normalized.audioEqBand1FrequencyHz !== undefined) {
+    normalized.audioEqBand1FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand1FrequencyHz,
+      AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand1GainDb !== undefined) {
+    normalized.audioEqBand1GainDb = clampAudioEqGainDb(normalized.audioEqBand1GainDb);
+  }
+  if (normalized.audioEqBand1Q !== undefined) {
+    normalized.audioEqBand1Q = clampAudioEqQ(normalized.audioEqBand1Q);
+  }
+  if (normalized.audioEqBand1SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand1SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand1SlopeDbPerOct);
+  }
   if (normalized.audioEqLowCutEnabled !== undefined) {
     normalized.audioEqLowCutEnabled = !!normalized.audioEqLowCutEnabled;
   }
@@ -154,6 +177,9 @@ function normalizeItem(
   if (normalized.audioEqLowCutSlopeDbPerOct !== undefined) {
     normalized.audioEqLowCutSlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqLowCutSlopeDbPerOct);
   }
+  if (normalized.audioEqLowEnabled !== undefined) {
+    normalized.audioEqLowEnabled = !!normalized.audioEqLowEnabled;
+  }
   if (normalized.audioEqLowGainDb !== undefined) {
     normalized.audioEqLowGainDb = clampAudioEqGainDb(normalized.audioEqLowGainDb);
   }
@@ -164,6 +190,12 @@ function normalizeItem(
       AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
       AUDIO_EQ_LOW_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqLowQ !== undefined) {
+    normalized.audioEqLowQ = clampAudioEqQ(normalized.audioEqLowQ);
+  }
+  if (normalized.audioEqLowMidEnabled !== undefined) {
+    normalized.audioEqLowMidEnabled = !!normalized.audioEqLowMidEnabled;
   }
   if (normalized.audioEqLowMidGainDb !== undefined) {
     normalized.audioEqLowMidGainDb = clampAudioEqGainDb(normalized.audioEqLowMidGainDb);
@@ -182,6 +214,9 @@ function normalizeItem(
   if (normalized.audioEqMidGainDb !== undefined) {
     normalized.audioEqMidGainDb = clampAudioEqGainDb(normalized.audioEqMidGainDb);
   }
+  if (normalized.audioEqHighMidEnabled !== undefined) {
+    normalized.audioEqHighMidEnabled = !!normalized.audioEqHighMidEnabled;
+  }
   if (normalized.audioEqHighMidGainDb !== undefined) {
     normalized.audioEqHighMidGainDb = clampAudioEqGainDb(normalized.audioEqHighMidGainDb);
   }
@@ -196,6 +231,9 @@ function normalizeItem(
   if (normalized.audioEqHighMidQ !== undefined) {
     normalized.audioEqHighMidQ = clampAudioEqQ(normalized.audioEqHighMidQ, AUDIO_EQ_HIGH_MID_Q);
   }
+  if (normalized.audioEqHighEnabled !== undefined) {
+    normalized.audioEqHighEnabled = !!normalized.audioEqHighEnabled;
+  }
   if (normalized.audioEqHighGainDb !== undefined) {
     normalized.audioEqHighGainDb = clampAudioEqGainDb(normalized.audioEqHighGainDb);
   }
@@ -206,6 +244,29 @@ function normalizeItem(
       AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
       AUDIO_EQ_HIGH_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqHighQ !== undefined) {
+    normalized.audioEqHighQ = clampAudioEqQ(normalized.audioEqHighQ);
+  }
+  if (normalized.audioEqBand6Enabled !== undefined) {
+    normalized.audioEqBand6Enabled = !!normalized.audioEqBand6Enabled;
+  }
+  if (normalized.audioEqBand6FrequencyHz !== undefined) {
+    normalized.audioEqBand6FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand6FrequencyHz,
+      AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand6GainDb !== undefined) {
+    normalized.audioEqBand6GainDb = clampAudioEqGainDb(normalized.audioEqBand6GainDb);
+  }
+  if (normalized.audioEqBand6Q !== undefined) {
+    normalized.audioEqBand6Q = clampAudioEqQ(normalized.audioEqBand6Q);
+  }
+  if (normalized.audioEqBand6SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand6SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand6SlopeDbPerOct);
   }
   if (normalized.audioEqHighCutEnabled !== undefined) {
     normalized.audioEqHighCutEnabled = !!normalized.audioEqHighCutEnabled;

@@ -88,7 +88,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
   );
   const itemLocalPitchShiftSemitones = React.useMemo(
     () => getAudioPitchShiftSemitones(item),
-    [item.audioPitchCents, item.audioPitchSemitones],
+    [item],
   );
 
   if (item.type === 'video') {

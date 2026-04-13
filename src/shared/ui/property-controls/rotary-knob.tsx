@@ -71,8 +71,11 @@ export function RotaryKnob({
         const s = stateRef.current;
         const dy = startY - clientY;
         const raw = startValue + (dy * (s.max - s.min)) / 120;
-        const snapped = Math.round(raw / s.step) * s.step;
-        return Math.max(s.min, Math.min(s.max, snapped));
+        const offset = raw - s.min;
+        const snappedOffset = Math.round(offset / s.step) * s.step;
+        const decimals = Math.max(0, -Math.floor(Math.log10(s.step)));
+        const value = Number((s.min + snappedOffset).toFixed(decimals));
+        return Math.max(s.min, Math.min(s.max, value));
       };
 
       const handleMove = (me: PointerEvent) => {
@@ -98,11 +101,43 @@ export function RotaryKnob({
     [isMixed, num],
   );
 
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (isMixed) return;
+      const s = stateRef.current;
+      let next: number | null = null;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+        next = Math.min(s.max, displayNum + s.step);
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+        next = Math.max(s.min, displayNum - s.step);
+      } else if (e.key === 'PageUp') {
+        next = Math.min(s.max, displayNum + s.step * 10);
+      } else if (e.key === 'PageDown') {
+        next = Math.max(s.min, displayNum - s.step * 10);
+      } else if (e.key === 'Home') {
+        next = s.min;
+      } else if (e.key === 'End') {
+        next = s.max;
+      }
+      if (next !== null) {
+        e.preventDefault();
+        s.onChange(next);
+      }
+    },
+    [isMixed, displayNum],
+  );
+
   return (
     <div
       ref={elRef}
-      className={cn('shrink-0 touch-none cursor-ns-resize select-none', isMixed && 'opacity-40', className)}
+      role="slider"
+      tabIndex={0}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={displayNum}
+      className={cn('shrink-0 touch-none cursor-ns-resize select-none outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-full', isMixed && 'opacity-40', className)}
       onPointerDown={onDown}
+      onKeyDown={onKeyDown}
     >
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
         <path

@@ -226,6 +226,8 @@ function isContinuousAudioTransition(
 
   if (left.originId && right.originId && left.originId !== right.originId) return false;
 
+  if (Math.abs(getAudioPitchShiftSemitones(left) - getAudioPitchShiftSemitones(right)) > 0.0001) return false;
+
   const expectedRightFrom = left.from + left.durationInFrames;
   if (Math.abs(right.from - expectedRightFrom) > 2) return false;
 

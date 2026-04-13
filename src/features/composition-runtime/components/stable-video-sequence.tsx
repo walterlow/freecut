@@ -34,7 +34,7 @@ import {
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
-import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings, resolveAudioEqSettings } from '@/shared/utils/audio-eq';
+import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -137,7 +137,12 @@ function areGroupPropsEqual(
         prevItem.blendMode !== nextItem.blendMode ||
         prevItem.src !== nextItem.src ||
         prevItem.audioSrc !== nextItem.audioSrc ||
-        !areAudioEqStagesEqual([resolveAudioEqSettings(prevItem)], [resolveAudioEqSettings(nextItem)])) {
+        (prevItem.audioPitchSemitones ?? 0) !== (nextItem.audioPitchSemitones ?? 0) ||
+        (prevItem.audioPitchCents ?? 0) !== (nextItem.audioPitchCents ?? 0) ||
+        !areAudioEqStagesEqual(
+          appendResolvedAudioEqSources(undefined, prevItem.trackAudioEq, getAudioEqSettings(prevItem)),
+          appendResolvedAudioEqSources(undefined, nextItem.trackAudioEq, getAudioEqSettings(nextItem)),
+        )) {
       return false;
     }
   }

@@ -104,9 +104,12 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
     }
 
     const framesExtracted = this.filter.extract(this.scratch, leftOutput.length);
+    const isMono = rightOutput === leftOutput;
     for (let i = 0; i < framesExtracted; i++) {
       leftOutput[i] = this.scratch[i * 2] ?? 0;
-      rightOutput[i] = this.scratch[i * 2 + 1] ?? 0;
+      if (!isMono) {
+        rightOutput[i] = this.scratch[i * 2 + 1] ?? 0;
+      }
     }
 
     return true;

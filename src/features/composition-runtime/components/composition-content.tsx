@@ -351,6 +351,14 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       .filter((track) => track.items.length > 0)
   ), [parentMuted, parentVisible, renderMode, resolvedItems, sortedTracks]);
 
+  const trackMergedEqStages = useMemo(() => {
+    const map = new Map<string, ResolvedAudioEqSettings[]>();
+    for (const track of sortedTracks) {
+      map.set(track.id, appendResolvedAudioEqSources(audioEqStages, track.audioEq));
+    }
+    return map;
+  }, [audioEqStages, sortedTracks]);
+
   let wrapperFadeMultiplier = 1;
   const hasCrossfadeIn = (crossfadeFadeInFrames ?? 0) > 0;
   const hasCrossfadeOut = (crossfadeFadeOutFrames ?? 0) > 0;
@@ -443,12 +451,13 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
           renderDepth={renderDepth}
           audioGainMultiplier={effectiveAudioGainMultiplier}
           audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
-          audioEqStages={appendResolvedAudioEqSources(audioEqStages, videoItem.trackAudioEq)}
+          audioEqStages={trackMergedEqStages.get(videoItem.trackId) ?? audioEqStages}
           audioPitchShiftSemitones={audioPitchShiftSemitones}
         />
     </AbsoluteFill>
   ), [
     activeMaskInfos,
+    trackMergedEqStages,
     audioEqStages,
     audioPitchShiftSemitones,
     effectiveAudioGainLiveItemIds,
@@ -509,7 +518,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                         compositionRenderMode={subItem.type === 'composition' && hasLinkedAudioCompanion(resolvedItems, subItem) ? 'visual-only' : 'full'}
                         audioGainMultiplier={effectiveAudioGainMultiplier}
                         audioGainLiveItemIds={effectiveAudioGainLiveItemIds}
-                        audioEqStages={appendResolvedAudioEqSources(audioEqStages, track.trackAudioEq)}
+                        audioEqStages={trackMergedEqStages.get(track.trackId) ?? audioEqStages}
                         audioPitchShiftSemitones={audioPitchShiftSemitones}
                       />
                     </Sequence>

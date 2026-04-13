@@ -616,23 +616,25 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const handleBusEqChange = useCallback((patch: AudioEqPatch) => {
     const snapshot = captureSnapshot();
     const eqPatch = getSparseAudioEqSettings(patch);
-    setBusAudioEq({ ...busAudioEq, ...eqPatch, midGainDb: 0 });
+    const current = usePlaybackStore.getState().busAudioEq;
+    setBusAudioEq({ ...current, ...eqPatch, midGainDb: 0 });
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_BUS_EQ', payload: {} },
       snapshot,
     );
-  }, [busAudioEq, setBusAudioEq]);
+  }, [setBusAudioEq]);
 
   const handleBusEqEnabledChange = useCallback((enabled: boolean) => {
     const snapshot = captureSnapshot();
-    setBusAudioEq({ ...(busAudioEq ?? {}), enabled });
+    const current = usePlaybackStore.getState().busAudioEq;
+    setBusAudioEq({ ...(current ?? {}), enabled });
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_BUS_EQ_ENABLED', payload: {} },
       snapshot,
     );
-  }, [busAudioEq, setBusAudioEq]);
+  }, [setBusAudioEq]);
 
   const ensureDetachedEqWindow = useCallback(() => {
     const existingWindow = eqDetachedWindowRef.current;

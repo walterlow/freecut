@@ -156,7 +156,8 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
 
 /**
  * Check if two snapshots are equal (for deduplication).
- * Uses reference equality for performance.
+ * Uses reference equality for most fields; busAudioEq uses JSON.stringify
+ * for deep comparison because it may be structurally equal across restores.
  */
 export function snapshotsEqual(a: TimelineSnapshot, b: TimelineSnapshot): boolean {
   return (

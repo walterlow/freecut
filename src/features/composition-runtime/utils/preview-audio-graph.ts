@@ -13,21 +13,15 @@ interface PreviewClipAudioEqStageNodes {
   band1BypassNode: GainNode;
   band1PassNodes: IIRFilterNode[];
   band1BiquadNode: BiquadFilterNode;
-  lowCutNodes: IIRFilterNode[];
   lowNode: BiquadFilterNode;
-  lowShelfNode: BiquadFilterNode;
   lowMidNode: BiquadFilterNode;
-  lowMidPeakingNode: BiquadFilterNode;
   midPeakingNode: BiquadFilterNode;
   highMidNode: BiquadFilterNode;
-  highMidPeakingNode: BiquadFilterNode;
   highNode: BiquadFilterNode;
-  highShelfNode: BiquadFilterNode;
   band6BypassNode: GainNode;
   band6BiquadNode: BiquadFilterNode;
   band6PassNodes: IIRFilterNode[];
   outputGainNode: GainNode;
-  highCutNodes: IIRFilterNode[];
   resolvedStage: ResolvedAudioEqSettings;
 }
 
@@ -261,16 +255,11 @@ function createPreviewClipAudioEqStage(
       resolvedStage.band1SlopeDbPerOct,
     ),
     band1BiquadNode: context.createBiquadFilter(),
-    lowCutNodes: [],
     lowNode,
-    lowShelfNode: lowNode,
     lowMidNode,
-    lowMidPeakingNode: lowMidNode,
     midPeakingNode,
     highMidNode,
-    highMidPeakingNode: highMidNode,
     highNode,
-    highShelfNode: highNode,
     band6BypassNode: context.createGain(),
     band6BiquadNode: context.createBiquadFilter(),
     band6PassNodes: createPassNodes(
@@ -281,11 +270,8 @@ function createPreviewClipAudioEqStage(
       resolvedStage.band6SlopeDbPerOct,
     ),
     outputGainNode: context.createGain(),
-    highCutNodes: [],
     resolvedStage,
   };
-  stageNodes.lowCutNodes = stageNodes.band1PassNodes;
-  stageNodes.highCutNodes = stageNodes.band6PassNodes;
 
   configureStageBiquads(stageNodes, resolvedStage, (param, value) => {
     param.value = value;

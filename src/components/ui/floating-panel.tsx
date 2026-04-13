@@ -166,6 +166,20 @@ export const FloatingPanel = memo(function FloatingPanel({
   }, [autoHeight]);
 
   useEffect(() => {
+    if (!autoHeight || !panelRef.current) return;
+    const ro = new ResizeObserver(() => {
+      if (!panelRef.current) return;
+      const contentHeight = panelRef.current.offsetHeight;
+      setBounds((prev) => clampToViewport({
+        ...prev,
+        height: contentHeight,
+      }));
+    });
+    ro.observe(panelRef.current);
+    return () => ro.disconnect();
+  }, [autoHeight]);
+
+  useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
