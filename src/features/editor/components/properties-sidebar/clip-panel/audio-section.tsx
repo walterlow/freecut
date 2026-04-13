@@ -144,7 +144,6 @@ export function AudioSection({ items }: AudioSectionProps) {
   const eqLowMid = getMixedValue(audioItems, (item) => item.audioEqLowMidGainDb ?? 0, 0);
   const eqLowMidFrequencyHz = getMixedValue(audioItems, (item) => item.audioEqLowMidFrequencyHz ?? AUDIO_EQ_LOW_MID_FREQUENCY_HZ, AUDIO_EQ_LOW_MID_FREQUENCY_HZ);
   const eqLowMidQ = getMixedValue(audioItems, (item) => item.audioEqLowMidQ ?? AUDIO_EQ_LOW_MID_Q, AUDIO_EQ_LOW_MID_Q);
-  const eqMid = getMixedValue(audioItems, (item) => item.audioEqMidGainDb ?? 0, 0);
   const eqHighMid = getMixedValue(audioItems, (item) => item.audioEqHighMidGainDb ?? 0, 0);
   const eqHighMidFrequencyHz = getMixedValue(audioItems, (item) => item.audioEqHighMidFrequencyHz ?? AUDIO_EQ_HIGH_MID_FREQUENCY_HZ, AUDIO_EQ_HIGH_MID_FREQUENCY_HZ);
   const eqHighMidQ = getMixedValue(audioItems, (item) => item.audioEqHighMidQ ?? AUDIO_EQ_HIGH_MID_Q, AUDIO_EQ_HIGH_MID_Q);
@@ -163,7 +162,6 @@ export function AudioSection({ items }: AudioSectionProps) {
     eqLowMid,
     eqLowMidFrequencyHz,
     eqLowMidQ,
-    eqMid,
     eqHighMid,
     eqHighMidFrequencyHz,
     eqHighMidQ,
@@ -185,7 +183,7 @@ export function AudioSection({ items }: AudioSectionProps) {
       lowMidGainDb: eqLowMid as number,
       lowMidFrequencyHz: eqLowMidFrequencyHz as number,
       lowMidQ: eqLowMidQ as number,
-      midGainDb: eqMid as number,
+      midGainDb: 0,
       highMidGainDb: eqHighMid as number,
       highMidFrequencyHz: eqHighMidFrequencyHz as number,
       highMidQ: eqHighMidQ as number,
@@ -212,7 +210,6 @@ export function AudioSection({ items }: AudioSectionProps) {
     eqLowMid,
     eqLowMidFrequencyHz,
     eqLowMidQ,
-    eqMid,
     hasMixedEqSettings,
   ]);
 
@@ -230,7 +227,7 @@ export function AudioSection({ items }: AudioSectionProps) {
       lowMidGainDb: eqLowMid === 'mixed' ? 0 : eqLowMid,
       lowMidFrequencyHz: eqLowMidFrequencyHz === 'mixed' ? AUDIO_EQ_LOW_MID_FREQUENCY_HZ : eqLowMidFrequencyHz,
       lowMidQ: eqLowMidQ === 'mixed' ? AUDIO_EQ_LOW_MID_Q : eqLowMidQ,
-      midGainDb: eqMid === 'mixed' ? 0 : eqMid,
+      midGainDb: 0,
       highMidGainDb: eqHighMid === 'mixed' ? 0 : eqHighMid,
       highMidFrequencyHz: eqHighMidFrequencyHz === 'mixed' ? AUDIO_EQ_HIGH_MID_FREQUENCY_HZ : eqHighMidFrequencyHz,
       highMidQ: eqHighMidQ === 'mixed' ? AUDIO_EQ_HIGH_MID_Q : eqHighMidQ,
@@ -257,7 +254,6 @@ export function AudioSection({ items }: AudioSectionProps) {
       eqLowMid,
       eqLowMidFrequencyHz,
       eqLowMidQ,
-      eqMid,
     ],
   );
 

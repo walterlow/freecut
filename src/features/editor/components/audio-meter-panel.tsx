@@ -41,7 +41,7 @@ import {
 import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
 import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-panel-content';
 import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor';
-import { getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { getSparseAudioEqSettings } from '@/shared/utils/audio-eq';
 import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
@@ -501,8 +501,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       ...snapshot,
       tracks: snapshot.tracks.map((track) => ({ ...track })),
     };
-    const eqPatch = getAudioEqSettings(patch);
-    const nextTrackEq = { ...targetTrack.audioEq, ...eqPatch };
+    const eqPatch = getSparseAudioEqSettings(patch);
+    const nextTrackEq = { ...targetTrack.audioEq, ...eqPatch, midGainDb: 0 };
     const nextTracks = currentTracks.map((track) => (
       track.id === trackId
         ? { ...track, audioEq: nextTrackEq }
@@ -543,8 +543,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const handleBusEqChange = useCallback((patch: AudioEqPatch) => {
     const snapshot = captureSnapshot();
-    const eqPatch = getAudioEqSettings(patch);
-    setBusAudioEq({ ...busAudioEq, ...eqPatch });
+    const eqPatch = getSparseAudioEqSettings(patch);
+    setBusAudioEq({ ...busAudioEq, ...eqPatch, midGainDb: 0 });
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_BUS_EQ', payload: {} },

@@ -14,6 +14,7 @@ import {
   findAudioEqPresetId,
   getAudioEqPresetById,
   getAudioEqResponseGainDb,
+  getSparseAudioEqSettings,
   prependResolvedAudioEqSources,
   resolveAudioEqSettings,
   resolvePreviewAudioEqStages,
@@ -41,6 +42,18 @@ describe('audio-eq', () => {
     expect(clampAudioEqGainDb(40)).toBe(18);
     expect(clampAudioEqGainDb(-40)).toBe(-18);
     expect(clampAudioEqGainDb(Number.NaN)).toBe(0);
+  });
+
+  it('keeps sparse EQ patches from blanking untouched fields', () => {
+    expect(getSparseAudioEqSettings({
+      audioEqHighMidGainDb: 4.5,
+      audioEqHighMidFrequencyHz: 2800,
+    })).toEqual({
+      highMidGainDb: 4.5,
+      highMidFrequencyHz: 2800,
+    });
+
+    expect(getSparseAudioEqSettings({})).toEqual({});
   });
 
   it('applies preview overrides only to the last EQ stage', () => {

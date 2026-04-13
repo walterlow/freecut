@@ -199,6 +199,13 @@ export function getAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqS
   };
 }
 
+export function getSparseAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqSettings {
+  const settings = getAudioEqSettings(source);
+  return Object.fromEntries(
+    Object.entries(settings).filter(([, value]) => value !== undefined),
+  ) as AudioEqSettings;
+}
+
 export function resolveAudioEqSettings(
   source?: AudioEqSettings | AudioEqFieldSource | null,
 ): ResolvedAudioEqSettings {

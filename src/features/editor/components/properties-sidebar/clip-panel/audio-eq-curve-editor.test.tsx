@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveAudioEqSettings } from '@/shared/utils/audio-eq';
+import { getAudioEqSettings, resolveAudioEqSettings } from '@/shared/utils/audio-eq';
 import { AudioEqCurveEditor } from './audio-eq-curve-editor';
 
 const DEFAULT_SETTINGS = resolveAudioEqSettings({});
@@ -93,6 +94,7 @@ describe('AudioEqCurveEditor', () => {
     expect(document.querySelector('[data-eq-band="high-mid"] [data-eq-band-number="4"]')).not.toBeNull();
     expect(document.querySelector('[data-eq-band="high-cut"] [data-eq-band-number="6"]')).not.toBeNull();
     expect(document.querySelector('[data-eq-band="mid"]')).toBeNull();
+    expect(screen.getByText('-80')).toBeInTheDocument();
   });
 
   it('lets gain bands move across the full EQ span instead of staying in fixed lanes', () => {
@@ -138,5 +140,64 @@ describe('AudioEqCurveEditor', () => {
       audioEqLowFrequencyHz: expect.any(Number),
     }));
     expect(onChange.mock.calls[0]?.[0].audioEqLowFrequencyHz).toBeGreaterThan(10000);
+  });
+
+  it('keeps untouched handles fixed while a band is being dragged', () => {
+    function Harness() {
+      const [settings, setSettings] = useState(resolveAudioEqSettings({
+        highGainDb: 0,
+        highFrequencyHz: 6000,
+      }));
+
+      return (
+        <AudioEqCurveEditor
+          settings={settings}
+          onLiveChange={(patch) => {
+            setSettings((current) => resolveAudioEqSettings({
+              ...current,
+              ...getAudioEqSettings(patch),
+              highGainDb: 6,
+              highFrequencyHz: 2000,
+            }));
+          }}
+          onChange={() => undefined}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null;
+    const lowMidHandle = document.querySelector('[data-eq-band="low-mid"]') as HTMLButtonElement | null;
+    const highHandle = document.querySelector('[data-eq-band="high"]') as HTMLButtonElement | null;
+
+    expect(root).not.toBeNull();
+    expect(lowMidHandle).not.toBeNull();
+    expect(highHandle).not.toBeNull();
+
+    Object.defineProperty(root!, 'getBoundingClientRect', {
+      value: () => ({
+        x: 0,
+        y: 10,
+        top: 10,
+        bottom: 150,
+        left: 0,
+        right: 320,
+        width: 320,
+        height: 140,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(root!, 'setPointerCapture', { value: vi.fn(), configurable: true });
+    Object.defineProperty(root!, 'releasePointerCapture', { value: vi.fn(), configurable: true });
+
+    const initialLeft = highHandle!.style.left;
+    const initialTop = highHandle!.style.top;
+
+    fireEvent.pointerDown(lowMidHandle!, { pointerId: 9, clientX: 140, clientY: 70 });
+    fireEvent.pointerMove(root!, { pointerId: 9, clientX: 200, clientY: 40 });
+
+    expect(highHandle!.style.left).toBe(initialLeft);
+    expect(highHandle!.style.top).toBe(initialTop);
   });
 });

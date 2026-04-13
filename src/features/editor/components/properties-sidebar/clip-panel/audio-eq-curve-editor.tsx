@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/shared/ui/cn';
 import {
-  AUDIO_EQ_GAIN_DB_MAX,
-  AUDIO_EQ_GAIN_DB_MIN,
   AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
   AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
   AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
@@ -83,13 +81,16 @@ interface CutHandleDefinition {
 type AudioEqHandleDefinition = GainHandleDefinition | CutHandleDefinition;
 
 const CURVE_WIDTH = 320;
-const CURVE_HEIGHT = 200;
+const CURVE_HEIGHT = 240;
 const CURVE_PADDING_X = 2;
 const CURVE_PADDING_TOP = 2;
-const CURVE_PADDING_BOTTOM = 20;
+const CURVE_PADDING_BOTTOM = 24;
 const CURVE_MIN_FREQUENCY_HZ = 20;
 const CURVE_MAX_FREQUENCY_HZ = 24000;
-const CURVE_GRID_LEVELS_DB = [18, 9, 0, -9, -18] as const;
+const CURVE_DISPLAY_DB_MAX = 0;
+const CURVE_DISPLAY_DB_MIN = -80;
+const CURVE_DISPLAY_EQ_BASELINE_DB = -40;
+const CURVE_GRID_LEVELS_DB = [0, -10, -20, -30, -40, -50, -60, -70, -80] as const;
 const CURVE_GRID_FREQUENCIES_HZ = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
 const KEYBOARD_GAIN_STEP_DB = 0.5;
 const KEYBOARD_FREQUENCY_RATIO = 1.06;
@@ -206,17 +207,22 @@ function xToFrequency(x: number): number {
   return CURVE_MIN_FREQUENCY_HZ * Math.pow(CURVE_MAX_FREQUENCY_HZ / CURVE_MIN_FREQUENCY_HZ, normalized);
 }
 
-function gainToY(gainDb: number): number {
-  const clamped = clampEqGainDb(gainDb);
-  const normalized = (AUDIO_EQ_GAIN_DB_MAX - clamped) / (AUDIO_EQ_GAIN_DB_MAX - AUDIO_EQ_GAIN_DB_MIN);
+function displayDbToY(displayDb: number): number {
+  const clamped = Math.max(CURVE_DISPLAY_DB_MIN, Math.min(CURVE_DISPLAY_DB_MAX, displayDb));
+  const normalized = (CURVE_DISPLAY_DB_MAX - clamped) / (CURVE_DISPLAY_DB_MAX - CURVE_DISPLAY_DB_MIN);
   return CURVE_PADDING_TOP + normalized * (CURVE_HEIGHT - CURVE_PADDING_TOP - CURVE_PADDING_BOTTOM);
+}
+
+function gainToY(gainDb: number): number {
+  return displayDbToY(CURVE_DISPLAY_EQ_BASELINE_DB + clampEqGainDb(gainDb));
 }
 
 function yToGain(y: number): number {
   const plotHeight = CURVE_HEIGHT - CURVE_PADDING_TOP - CURVE_PADDING_BOTTOM;
   const clampedY = Math.max(CURVE_PADDING_TOP, Math.min(CURVE_HEIGHT - CURVE_PADDING_BOTTOM, y));
   const normalized = (clampedY - CURVE_PADDING_TOP) / plotHeight;
-  return clampEqGainDb(AUDIO_EQ_GAIN_DB_MAX - normalized * (AUDIO_EQ_GAIN_DB_MAX - AUDIO_EQ_GAIN_DB_MIN));
+  const displayDb = CURVE_DISPLAY_DB_MAX - normalized * (CURVE_DISPLAY_DB_MAX - CURVE_DISPLAY_DB_MIN);
+  return clampEqGainDb(displayDb - CURVE_DISPLAY_EQ_BASELINE_DB);
 }
 
 function formatFrequencyLabel(frequencyHz: number): string {
@@ -257,7 +263,7 @@ function mergeDisplayedSettings(
 }
 
 function getCutHandleY(): number {
-  return gainToY(0);
+  return displayDbToY(CURVE_DISPLAY_EQ_BASELINE_DB);
 }
 
 function createPatchForPointer(
@@ -314,12 +320,16 @@ export function AudioEqCurveEditor({
   onChange,
 }: AudioEqCurveEditorProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const dragBaseSettingsRef = useRef<ResolvedAudioEqSettings | null>(null);
   const [dragState, setDragState] = useState<{ handleId: AudioEqHandleDefinition['id']; pointerId: number } | null>(null);
   const [draftPatch, setDraftPatch] = useState<AudioEqPatch | null>(null);
+  const displayedBaseSettings = dragState
+    ? (dragBaseSettingsRef.current ?? settings)
+    : settings;
 
   const displayedSettings = useMemo(
-    () => mergeDisplayedSettings(settings, draftPatch),
-    [draftPatch, settings],
+    () => mergeDisplayedSettings(displayedBaseSettings, draftPatch),
+    [displayedBaseSettings, draftPatch],
   );
 
   const responsePoints = useMemo(
@@ -357,11 +367,12 @@ export function AudioEqCurveEditor({
     if (!root || !localPointer) return;
 
     root.setPointerCapture?.(pointerId);
+    dragBaseSettingsRef.current = settings;
     const patch = createPatchForPointer(handle, localPointer.x, localPointer.y);
     setDragState({ handleId: handle.id, pointerId });
     setDraftPatch(patch);
     onLiveChange(patch);
-  }, [disabled, getLocalPointer, onLiveChange]);
+  }, [disabled, getLocalPointer, onLiveChange, settings]);
 
   const updateDrag = useCallback((clientX: number, clientY: number) => {
     if (!dragState) return;
@@ -382,6 +393,7 @@ export function AudioEqCurveEditor({
 
     const root = rootRef.current;
     root?.releasePointerCapture?.(dragState.pointerId);
+    dragBaseSettingsRef.current = null;
 
     const patch = draftPatch ?? {};
     setDragState(null);
@@ -391,6 +403,7 @@ export function AudioEqCurveEditor({
 
   const handleBandReset = useCallback((handle: AudioEqHandleDefinition) => {
     if (disabled) return;
+    dragBaseSettingsRef.current = null;
     const patch = getResetPatch(handle);
     setDraftPatch(null);
     onLiveChange(patch);
@@ -460,7 +473,7 @@ export function AudioEqCurveEditor({
         data-eq-curve-root="true"
         className={cn(
           'relative w-full overflow-hidden touch-none select-none',
-          graphClassName ?? 'h-[140px] rounded-md border border-border/60 bg-muted/20',
+          graphClassName ?? 'h-[180px] rounded-md border border-border/60 bg-muted/20',
           disabled ? 'opacity-60' : 'cursor-move',
         )}
         onPointerMove={(event) => {
@@ -484,12 +497,12 @@ export function AudioEqCurveEditor({
             <line
               key={level}
               x1={CURVE_PADDING_X}
-              y1={gainToY(level)}
+              y1={displayDbToY(level)}
               x2={CURVE_WIDTH - CURVE_PADDING_X}
-              y2={gainToY(level)}
+              y2={displayDbToY(level)}
               stroke="currentColor"
-              strokeOpacity={level === 0 ? 0.3 : 0.1}
-              strokeDasharray={level === 0 ? undefined : '2 3'}
+              strokeOpacity={level === CURVE_DISPLAY_EQ_BASELINE_DB ? 0.28 : 0.1}
+              strokeDasharray={level === CURVE_DISPLAY_EQ_BASELINE_DB ? undefined : '2 3'}
             />
           ))}
 
@@ -519,7 +532,7 @@ export function AudioEqCurveEditor({
           <div
             key={`db-${level}`}
             className="pointer-events-none absolute left-1.5 -translate-y-1/2 text-[10px] leading-none text-current opacity-40"
-            style={{ top: `${(gainToY(level) / CURVE_HEIGHT) * 100}%` }}
+            style={{ top: `${(displayDbToY(level) / CURVE_HEIGHT) * 100}%` }}
           >
             {level > 0 ? `+${level}` : level}
           </div>
@@ -592,3 +605,5 @@ export function AudioEqCurveEditor({
     </div>
   );
 }
+
+

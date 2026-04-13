@@ -287,7 +287,6 @@ export function AudioEqPanelContent({
   const eqLowMid = livePatch?.audioEqLowMidGainDb ?? (resolvedTrackEq ? resolvedTrackEq.lowMidGainDb : getMixedValue(audioItems, (item) => item.audioEqLowMidGainDb ?? 0, 0));
   const eqLowMidFrequencyHz = livePatch?.audioEqLowMidFrequencyHz ?? (resolvedTrackEq ? resolvedTrackEq.lowMidFrequencyHz : getMixedValue(audioItems, (item) => item.audioEqLowMidFrequencyHz ?? AUDIO_EQ_LOW_MID_FREQUENCY_HZ, AUDIO_EQ_LOW_MID_FREQUENCY_HZ));
   const eqLowMidQ = livePatch?.audioEqLowMidQ ?? (resolvedTrackEq ? resolvedTrackEq.lowMidQ : getMixedValue(audioItems, (item) => item.audioEqLowMidQ ?? AUDIO_EQ_LOW_MID_Q, AUDIO_EQ_LOW_MID_Q));
-  const eqMid = livePatch?.audioEqMidGainDb ?? (resolvedTrackEq ? resolvedTrackEq.midGainDb : getMixedValue(audioItems, (item) => item.audioEqMidGainDb ?? 0, 0));
   const eqHighMid = livePatch?.audioEqHighMidGainDb ?? (resolvedTrackEq ? resolvedTrackEq.highMidGainDb : getMixedValue(audioItems, (item) => item.audioEqHighMidGainDb ?? 0, 0));
   const eqHighMidFrequencyHz = livePatch?.audioEqHighMidFrequencyHz ?? (resolvedTrackEq ? resolvedTrackEq.highMidFrequencyHz : getMixedValue(audioItems, (item) => item.audioEqHighMidFrequencyHz ?? AUDIO_EQ_HIGH_MID_FREQUENCY_HZ, AUDIO_EQ_HIGH_MID_FREQUENCY_HZ));
   const eqHighMidQ = livePatch?.audioEqHighMidQ ?? (resolvedTrackEq ? resolvedTrackEq.highMidQ : getMixedValue(audioItems, (item) => item.audioEqHighMidQ ?? AUDIO_EQ_HIGH_MID_Q, AUDIO_EQ_HIGH_MID_Q));
@@ -332,7 +331,6 @@ export function AudioEqPanelContent({
     eqLowMid,
     eqLowMidFrequencyHz,
     eqLowMidQ,
-    eqMid,
     eqHighMid,
     eqHighMidFrequencyHz,
     eqHighMidQ,
@@ -354,7 +352,7 @@ export function AudioEqPanelContent({
       lowMidGainDb: eqLowMid as number,
       lowMidFrequencyHz: eqLowMidFrequencyHz as number,
       lowMidQ: eqLowMidQ as number,
-      midGainDb: eqMid as number,
+      midGainDb: 0,
       highMidGainDb: eqHighMid as number,
       highMidFrequencyHz: eqHighMidFrequencyHz as number,
       highMidQ: eqHighMidQ as number,
@@ -381,7 +379,6 @@ export function AudioEqPanelContent({
     eqLowMid,
     eqLowMidFrequencyHz,
     eqLowMidQ,
-    eqMid,
     hasMixedEqSettings,
   ]);
 
@@ -399,7 +396,7 @@ export function AudioEqPanelContent({
       lowMidGainDb: eqLowMid === 'mixed' ? 0 : eqLowMid,
       lowMidFrequencyHz: eqLowMidFrequencyHz === 'mixed' ? AUDIO_EQ_LOW_MID_FREQUENCY_HZ : eqLowMidFrequencyHz,
       lowMidQ: eqLowMidQ === 'mixed' ? AUDIO_EQ_LOW_MID_Q : eqLowMidQ,
-      midGainDb: eqMid === 'mixed' ? 0 : eqMid,
+      midGainDb: 0,
       highMidGainDb: eqHighMid === 'mixed' ? 0 : eqHighMid,
       highMidFrequencyHz: eqHighMidFrequencyHz === 'mixed' ? AUDIO_EQ_HIGH_MID_FREQUENCY_HZ : eqHighMidFrequencyHz,
       highMidQ: eqHighMidQ === 'mixed' ? AUDIO_EQ_HIGH_MID_Q : eqHighMidQ,
@@ -426,7 +423,6 @@ export function AudioEqPanelContent({
       eqLowMid,
       eqLowMidFrequencyHz,
       eqLowMidQ,
-      eqMid,
     ],
   );
 
@@ -542,7 +538,7 @@ export function AudioEqPanelContent({
             settings={eqCurveSettings}
             disabled={hasMixedEqSettings}
             className="text-zinc-300"
-            graphClassName="h-[200px] bg-[#141416]"
+            graphClassName="h-[228px] bg-[#141416]"
             onLiveChange={handleEqPatchLiveChange}
             onChange={handleEqPatchChange}
           />
@@ -694,3 +690,5 @@ export function AudioEqPanelContent({
     </div>
   );
 }
+
+
