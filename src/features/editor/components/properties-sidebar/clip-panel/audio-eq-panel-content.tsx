@@ -744,7 +744,7 @@ export function AudioEqPanelContent({
   }
 
   return (
-    <div className="flex h-full flex-col bg-[#18181b] text-zinc-100">
+    <div className="flex flex-col bg-[#18181b] text-zinc-100">
       <div className="flex items-center gap-3 border-b border-[#2a2a2d] px-3 py-2">
         {onEnabledChange ? (
           <Switch
@@ -757,7 +757,7 @@ export function AudioEqPanelContent({
           <div className="h-2.5 w-2.5 rounded-full bg-primary" />
         )}
         <div className="text-sm font-medium text-zinc-100">
-          Equalizer
+          Equalizer{targetLabel ? ` - ${targetLabel}` : ''}
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2">
           <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">

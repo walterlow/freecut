@@ -20,6 +20,8 @@ export interface WindowPortalProps {
   externalWindow?: Window | null;
   /** Called when opening a fresh external window is blocked */
   onBlocked?: () => void;
+  /** When true, window height fits content after first render */
+  autoHeight?: boolean;
   /** Called when the external window is closed by the user */
   onClose: () => void;
 }
@@ -112,6 +114,7 @@ export function WindowPortal({
   height = 500,
   storageKey,
   externalWindow: providedExternalWindow = null,
+  autoHeight = false,
   onBlocked,
   onClose,
 }: WindowPortalProps) {
@@ -182,13 +185,12 @@ export function WindowPortal({
       root = externalWindow.document.createElement('div');
       root.id = 'window-portal-root';
       root.style.width = '100vw';
-      root.style.height = '100vh';
+      root.style.height = autoHeight ? 'auto' : '100vh';
       root.style.overflow = 'hidden';
       externalWindow.document.body.appendChild(root);
     }
     setContainer(root);
 
-    // Save bounds on close & resize
     const win = externalWindow;
 
     const persistBounds = () => {
@@ -201,7 +203,7 @@ export function WindowPortal({
       });
     };
 
-    // Handle external window close (user action only)
+    // Child window closed by user
     const handleUnload = () => {
       persistBounds();
       externalWindowRef.current = null;
@@ -209,13 +211,55 @@ export function WindowPortal({
       onCloseRef.current();
     };
 
+    // Parent window refresh/close → close child
+    const handleParentUnload = () => {
+      if (!win.closed) win.close();
+    };
+
     win.addEventListener('beforeunload', handleUnload);
     win.addEventListener('resize', persistBounds);
+    window.addEventListener('beforeunload', handleParentUnload);
+
+    // autoHeight: wait for stylesheets to load, then measure content and resize
+    let cancelled = false;
+    if (autoHeight && root) {
+      const rootEl = root;
+      const fitWindowToContent = () => {
+        if (cancelled || win.closed) return;
+        const contentHeight = rootEl.scrollHeight;
+        if (contentHeight > 0) {
+          const chromeHeight = win.outerHeight - win.innerHeight;
+          win.resizeTo(win.outerWidth, contentHeight + chromeHeight);
+        }
+      };
+      // Wait for all <link> stylesheets in the popup to finish loading
+      const links = Array.from(win.document.querySelectorAll('link[rel="stylesheet"]'));
+      const pending = links.filter((link) => !(link as HTMLLinkElement).sheet);
+      if (pending.length === 0) {
+        // Styles already loaded — measure after React paints
+        setTimeout(fitWindowToContent, 50);
+      } else {
+        let remaining = pending.length;
+        const onDone = () => {
+          remaining--;
+          if (remaining <= 0) {
+            // Styles loaded — wait a frame for reflow, then measure
+            setTimeout(fitWindowToContent, 50);
+          }
+        };
+        for (const link of pending) {
+          link.addEventListener('load', onDone);
+          link.addEventListener('error', onDone);
+        }
+      }
+    }
 
     return () => {
       mountedRef.current = false;
+      cancelled = true;
       win.removeEventListener('beforeunload', handleUnload);
       win.removeEventListener('resize', persistBounds);
+      window.removeEventListener('beforeunload', handleParentUnload);
       persistBounds();
       // Don't close the window here — it may be a StrictMode remount.
       // Schedule a deferred close that only fires if the component
@@ -227,7 +271,7 @@ export function WindowPortal({
         }
       }, 50);
     };
-  }, [height, providedExternalWindow, storageKey, width]);
+  }, [autoHeight, height, providedExternalWindow, storageKey, width]);
 
   if (!container) return null;
   return createPortal(children, container);
