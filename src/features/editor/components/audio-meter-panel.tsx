@@ -428,6 +428,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         targetLabel: track.name,
         trackId: track.id,
         trackEq: track.audioEq,
+        eqEnabled: track.audioEq?.enabled !== false,
       };
     }
 
@@ -435,6 +436,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       title: 'Bus 1',
       targetLabel: 'Bus 1',
       busEq: busAudioEq,
+      eqEnabled: busAudioEq?.enabled !== false,
     };
   }, [busAudioEq, eqPanelTarget, mixerSourceTracks]);
 
@@ -515,6 +517,30 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     setTrackSnapshotVersion((version) => version + 1);
   }, []);
 
+  const handleTrackEqEnabledChange = useCallback((trackId: string, enabled: boolean) => {
+    const itemsState = useItemsStore.getState();
+    const currentTracks = itemsState.tracks;
+    const targetTrack = currentTracks.find((track) => track.id === trackId);
+    if (!targetTrack) return;
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((track) => ({ ...track })),
+    };
+    const nextTracks = currentTracks.map((track) => (
+      track.id === trackId
+        ? { ...track, audioEq: { ...(track.audioEq ?? {}), enabled } }
+        : track
+    ));
+    itemsState.setTracks(nextTracks);
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_EQ_ENABLED', payload: { id: trackId } },
+      beforeSnapshot,
+    );
+    setTrackSnapshotVersion((version) => version + 1);
+  }, []);
+
   const handleBusEqChange = useCallback((patch: AudioEqPatch) => {
     const snapshot = captureSnapshot();
     const eqPatch = getAudioEqSettings(patch);
@@ -522,6 +548,16 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_BUS_EQ', payload: {} },
+      snapshot,
+    );
+  }, [busAudioEq, setBusAudioEq]);
+
+  const handleBusEqEnabledChange = useCallback((enabled: boolean) => {
+    const snapshot = captureSnapshot();
+    setBusAudioEq({ ...(busAudioEq ?? {}), enabled });
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_BUS_EQ_ENABLED', payload: {} },
       snapshot,
     );
   }, [busAudioEq, setBusAudioEq]);
@@ -720,9 +756,13 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       <AudioEqPanelContent
         targetLabel={eqPanelDescriptor.targetLabel}
         trackEq={'trackEq' in eqPanelDescriptor ? eqPanelDescriptor.trackEq : ('busEq' in eqPanelDescriptor ? eqPanelDescriptor.busEq : undefined)}
+        enabled={eqPanelDescriptor.eqEnabled}
         onTrackEqChange={'trackId' in eqPanelDescriptor
           ? (patch) => handleTrackEqChange((eqPanelDescriptor as { trackId: string }).trackId, patch)
           : ('busEq' in eqPanelDescriptor ? handleBusEqChange : undefined)}
+        onEnabledChange={'trackId' in eqPanelDescriptor
+          ? (enabled) => handleTrackEqEnabledChange((eqPanelDescriptor as { trackId: string }).trackId, enabled)
+          : ('busEq' in eqPanelDescriptor ? handleBusEqEnabledChange : undefined)}
       />
     </FloatingPanel>
   ) : null;

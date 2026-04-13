@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/shared/ui/cn';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore } from '@/features/editor/deps/preview';
@@ -64,7 +65,9 @@ interface AudioEqPanelContentProps {
   targetLabel: string;
   items?: TimelineItem[];
   trackEq?: import('@/types/audio').AudioEqSettings;
+  enabled?: boolean;
   onTrackEqChange?: (patch: AudioEqPatch) => void;
+  onEnabledChange?: (enabled: boolean) => void;
 }
 
 type FilterType = 'low-cut' | 'low-shelf' | 'bell' | 'high-shelf' | 'high-cut';
@@ -112,16 +115,16 @@ function SlopeButtons({
   onChange: (v: 6 | 12 | 18 | 24) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-[4px]">
+    <div className="flex overflow-hidden rounded-[4px] border border-border/70">
       {AUDIO_EQ_SLOPE_OPTIONS.map((slope) => (
         <button
           key={slope}
           type="button"
           className={cn(
-            'flex-1 border-r border-[#151517] py-1 text-[10px] font-medium transition-colors last:border-r-0',
+            'flex-1 border-r border-border/70 py-1 text-[10px] font-medium transition-colors last:border-r-0',
             value === slope
-              ? 'bg-[#ff7b63] text-white'
-              : 'bg-[#252528] text-zinc-400 hover:bg-[#2a2a2d]',
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
           )}
           onClick={() => onChange(slope)}
         >
@@ -147,16 +150,16 @@ function RangeButtons({
   onChange: (value: AudioEqControlRangeId) => void;
 }) {
   return (
-    <div className="flex overflow-hidden rounded-[4px] border border-[#2e2e31]">
+    <div className="flex overflow-hidden rounded-[4px] border border-border/70">
       {AUDIO_EQ_CONTROL_RANGES.map((range) => (
         <button
           key={range.id}
           type="button"
           className={cn(
-            'flex-1 border-r border-[#151517] py-1 text-[10px] font-medium transition-colors last:border-r-0',
+            'flex-1 border-r border-border/70 py-1 text-[10px] font-medium transition-colors last:border-r-0',
             value === range.id
-              ? 'bg-[#ff7b63] text-white'
-              : 'bg-[#252528] text-zinc-400 hover:bg-[#2a2a2d]',
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary/30 text-muted-foreground hover:bg-secondary/50 hover:text-foreground',
           )}
           onClick={() => onChange(range.id)}
         >
@@ -212,14 +215,14 @@ function BandCard({
             className={cn(
               'whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors',
               active
-                ? 'bg-[#ff7b63] text-white'
-                : 'bg-[#2a2a2d] text-zinc-500 hover:bg-[#2e2e31]',
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
             )}
           >
             {title}
           </button>
         ) : (
-          <span className="whitespace-nowrap rounded-full bg-[#ff7b63] px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+          <span className="whitespace-nowrap rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold tracking-wide text-primary-foreground">
             {title}
           </span>
         )}
@@ -245,9 +248,12 @@ export function AudioEqPanelContent({
   items,
   targetLabel,
   trackEq,
+  enabled = true,
   onTrackEqChange,
+  onEnabledChange,
 }: AudioEqPanelContentProps) {
   const isTrackMode = onTrackEqChange !== undefined;
+  const eqEnabled = enabled !== false;
   const updateItem = useTimelineStore((s) => s.updateItem);
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
@@ -490,7 +496,16 @@ export function AudioEqPanelContent({
   return (
     <div className="flex h-full flex-col bg-[#18181b] text-zinc-100">
       <div className="flex items-center gap-3 border-b border-[#2a2a2d] px-3 py-2">
-        <div className="h-2.5 w-2.5 rounded-full bg-[#ff613d]" />
+        {onEnabledChange ? (
+          <Switch
+            checked={eqEnabled}
+            onCheckedChange={onEnabledChange}
+            className="h-5 w-9 shrink-0 shadow-none ring-offset-0"
+            aria-label={`Turn ${targetLabel} EQ ${eqEnabled ? 'off' : 'on'}`}
+          />
+        ) : (
+          <div className="h-2.5 w-2.5 rounded-full bg-primary" />
+        )}
         <div className="text-sm font-medium text-zinc-100">
           Equalizer
         </div>

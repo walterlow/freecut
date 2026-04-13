@@ -1,6 +1,7 @@
 export type AudioEqCutSlopeDbPerOct = 6 | 12 | 18 | 24;
 
 export interface AudioEqSettings {
+  enabled?: boolean;
   lowCutEnabled?: boolean;
   lowCutFrequencyHz?: number;
   lowCutSlopeDbPerOct?: AudioEqCutSlopeDbPerOct;

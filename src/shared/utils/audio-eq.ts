@@ -159,6 +159,12 @@ function resolveBoolean(value: boolean | undefined, fallback: boolean): boolean 
   return value === undefined ? fallback : value;
 }
 
+function isAudioEqSourceDisabled(
+  source?: AudioEqSettings | AudioEqFieldSource | null,
+): boolean {
+  return source != null && 'enabled' in source && source.enabled === false;
+}
+
 function getSettingsValue<
   TSettingsKey extends keyof AudioEqSettings,
   TFieldKey extends keyof AudioEqFieldSource,
@@ -282,6 +288,10 @@ export function appendResolvedAudioEqStage(
   stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
   source?: AudioEqSettings | AudioEqFieldSource | null,
 ): ResolvedAudioEqSettings[] {
+  if (source == null || isAudioEqSourceDisabled(source)) {
+    return [...(stages ?? [])];
+  }
+
   return [...(stages ?? []), resolveAudioEqSettings(source)];
 }
 
@@ -289,7 +299,7 @@ export function appendOptionalResolvedAudioEqStage(
   stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
   source?: AudioEqSettings | AudioEqFieldSource | null,
 ): ResolvedAudioEqSettings[] {
-  if (source == null) {
+  if (source == null || isAudioEqSourceDisabled(source)) {
     return [...(stages ?? [])];
   }
 
@@ -330,7 +340,10 @@ export function normalizeAudioEqSettings(
     return undefined;
   }
 
-  return resolveAudioEqSettings(source);
+  return {
+    ...(source && 'enabled' in source && source.enabled !== undefined ? { enabled: !!source.enabled } : {}),
+    ...resolveAudioEqSettings(source),
+  };
 }
 
 export function resolvePreviewAudioEqStages(

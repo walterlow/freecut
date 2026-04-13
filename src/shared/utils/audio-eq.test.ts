@@ -86,6 +86,19 @@ describe('audio-eq', () => {
     ]);
   });
 
+  it('skips disabled EQ sources when building stage chains', () => {
+    const stages = prependResolvedAudioEqSources(
+      [resolveAudioEqSettings({ highGainDb: 3 })],
+      { enabled: false, lowGainDb: 8 },
+      { lowMidGainDb: -2 },
+    );
+
+    expect(stages).toEqual([
+      resolveAudioEqSettings({ lowMidGainDb: -2 }),
+      resolveAudioEqSettings({ highGainDb: 3 }),
+    ]);
+  });
+
   it('compares stage arrays structurally', () => {
     expect(areAudioEqStagesEqual(
       [resolveAudioEqSettings({ lowCutEnabled: true, lowCutFrequencyHz: 70, lowGainDb: 1 })],
