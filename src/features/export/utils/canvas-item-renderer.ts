@@ -58,8 +58,13 @@ import {
   rotatePath,
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
-import { timelineToSourceFrames } from '@/features/export/deps/timeline';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
+import {
+  getItemRenderTimelineSpan,
+  getRenderTimelineSourceStart,
+  resolveTransitionRenderTimelineSpan,
+  type RenderTimelineSpan,
+} from './render-span';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -187,11 +192,7 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
   item: TItem;
   transform: ItemTransform;
   effects: ItemEffect[];
-}
-
-interface TransitionParticipantFrameWindow {
-  from: number;
-  durationInFrames: number;
+  renderSpan: RenderTimelineSpan;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,10 +213,11 @@ export async function renderItem(
   frame: number,
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
+  renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
   // Corner pin: render to temp canvas, then warp onto main canvas
   if (hasCornerPin(item.cornerPin)) {
-    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset);
+    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
     return;
   }
 
@@ -244,7 +246,7 @@ export async function renderItem(
     ctx.clip();
   }
 
-  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset);
+  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
 
   ctx.restore();
 }
@@ -259,6 +261,7 @@ async function renderItemContent(
   frame: number,
   rctx: ItemRenderContext,
   sourceFrameOffset: number,
+  renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
   const effectiveItem = (
     rctx.renderMode === 'preview'
@@ -268,7 +271,7 @@ async function renderItemContent(
 
   switch (effectiveItem.type) {
     case 'video':
-      await renderVideoItem(ctx, effectiveItem as VideoItem, transform, frame, rctx, sourceFrameOffset);
+      await renderVideoItem(ctx, effectiveItem as VideoItem, transform, frame, rctx, sourceFrameOffset, renderSpan);
       break;
     case 'image':
       renderImageItem(ctx, effectiveItem as ImageItem, transform, rctx, frame);
@@ -283,7 +286,7 @@ async function renderItemContent(
       });
       break;
     case 'composition':
-      await renderCompositionItem(ctx, effectiveItem as CompositionItem, transform, frame, rctx);
+      await renderCompositionItem(ctx, effectiveItem as CompositionItem, transform, frame, rctx, renderSpan);
       break;
   }
 }
@@ -299,6 +302,7 @@ async function renderItemWithCornerPin(
   frame: number,
   rctx: ItemRenderContext,
   sourceFrameOffset: number,
+  renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
   const itemW = Math.ceil(transform.width);
   const itemH = Math.ceil(transform.height);
@@ -321,7 +325,7 @@ async function renderItemWithCornerPin(
   };
 
   // Render content to temp canvas
-  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset);
+  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset, renderSpan);
 
   // Apply corner radius clipping on temp canvas if needed
   if (transform.cornerRadius > 0) {
@@ -498,6 +502,7 @@ async function renderVideoItem(
   frame: number,
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
+  renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
   const {
     fps,
@@ -514,11 +519,12 @@ async function renderVideoItem(
   const hasFallbackVideoElement = videoElements.has(item.id);
   const extractor = videoExtractors.get(item.id);
   let mediabunnyFailedThisFrame = false;
+  const effectiveRenderSpan = renderSpan ?? getItemRenderTimelineSpan(item);
 
   // Calculate source time
-  const localFrame = frame - item.from;
+  const localFrame = frame - effectiveRenderSpan.from;
   const localTime = localFrame / fps;
-  const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+  const sourceStart = getRenderTimelineSourceStart(item, effectiveRenderSpan);
   const sourceFps = item.sourceFps ?? fps;
   const speed = item.speed ?? 1;
 
@@ -1310,6 +1316,7 @@ async function renderCompositionItem(
   transform: ItemTransform,
   frame: number,
   rctx: ItemRenderContext,
+  renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
   const subData = rctx.subCompRenderData.get(item.compositionId);
   if (!subData) {
@@ -1326,12 +1333,17 @@ async function renderCompositionItem(
   // Calculate the local frame within the sub-composition.
   // sourceStart accounts for trim (left-edge drag) and IO marker offsets â€”
   // it tells us how many frames into the sub-comp to start playing.
-  const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
-  const localFrame = frame - item.from + sourceOffset;
+  const effectiveRenderSpan = renderSpan ?? getItemRenderTimelineSpan(item);
+  const sourceOffset = getRenderTimelineSourceStart(item, effectiveRenderSpan);
+  const localFrame = frame - effectiveRenderSpan.from + sourceOffset;
   if (localFrame < 0 || localFrame >= subData.durationInFrames) {
     if (frame < 5) {
       log.warn('renderCompositionItem: localFrame out of range', {
-        frame, itemFrom: item.from, sourceOffset, localFrame, durationInFrames: subData.durationInFrames,
+        frame,
+        itemFrom: effectiveRenderSpan.from,
+        sourceOffset,
+        localFrame,
+        durationInFrames: subData.durationInFrames,
       });
     }
     return;
@@ -1541,8 +1553,8 @@ export async function renderTransitionToCanvas(
   const prevTransitionFlag = rctx.isRenderingTransition;
   rctx.isRenderingTransition = true;
   await Promise.all([
-    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0),
-    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0),
+    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan),
+    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan),
   ]);
   rctx.isRenderingTransition = prevTransitionFlag;
 
@@ -1604,41 +1616,6 @@ export async function renderTransitionToCanvas(
   canvasPool.release(rightCanvas);
 }
 
-function resolveTransitionParticipantFrameWindow<TItem extends TimelineItem>(
-  clip: TItem,
-  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
-): TransitionParticipantFrameWindow {
-  const beforeFrames = Math.max(0, clip.from - activeTransition.transitionStart);
-  const clipEnd = clip.from + clip.durationInFrames;
-  const afterFrames = Math.max(0, activeTransition.transitionEnd - clipEnd);
-
-  return {
-    from: clip.from - beforeFrames,
-    durationInFrames: clip.durationInFrames + beforeFrames + afterFrames,
-  };
-}
-
-function getTransitionParticipantSourceStart<TItem extends TimelineItem>(
-  clip: TItem,
-  transitionWindow: TransitionParticipantFrameWindow,
-  fps: number,
-): number | undefined {
-  if (clip.type !== 'video' && clip.type !== 'audio' && clip.type !== 'composition') {
-    return undefined;
-  }
-
-  const beforeFrames = Math.max(0, clip.from - transitionWindow.from);
-  if (beforeFrames <= 0) {
-    return clip.sourceStart;
-  }
-
-  const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-  const speed = clip.speed ?? 1;
-  const sourceFps = clip.sourceFps ?? fps;
-  const prerollSourceFrames = timelineToSourceFrames(beforeFrames, speed, fps, sourceFps);
-  return Math.max(0, sourceStart - prerollSourceFrames);
-}
-
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
   clip: TItem,
   activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
@@ -1647,23 +1624,9 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
   rctx: ItemRenderContext,
 ): TransitionParticipantRenderState<TItem> {
   const currentClip = rctx.getCurrentItemSnapshot?.(clip) ?? clip;
-  const transitionWindow = resolveTransitionParticipantFrameWindow(currentClip, activeTransition);
-  const transitionSourceStart = getTransitionParticipantSourceStart(currentClip, transitionWindow, rctx.fps);
-  const transitionClip = (
-    transitionWindow.from === currentClip.from
-      && transitionWindow.durationInFrames === currentClip.durationInFrames
-  )
-    ? currentClip
-    : {
-      ...currentClip,
-      from: transitionWindow.from,
-      durationInFrames: transitionWindow.durationInFrames,
-      ...(transitionSourceStart !== undefined
-        ? { sourceStart: transitionSourceStart }
-        : {}),
-    } as TItem;
+  const renderSpan = resolveTransitionRenderTimelineSpan(currentClip, activeTransition, rctx.fps);
   const itemKeyframes = rctx.getCurrentKeyframes?.(currentClip.id) ?? rctx.keyframesMap.get(currentClip.id);
-  let transform = getAnimatedTransform(transitionClip, itemKeyframes, frame, rctx.canvasSettings);
+  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, rctx.canvasSettings, renderSpan);
 
   if (rctx.renderMode === 'preview') {
     const previewOverride = rctx.getPreviewTransformOverride?.(currentClip.id);
@@ -1676,12 +1639,12 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
     }
   }
 
-  let effectiveClip = transitionClip;
+  let effectiveClip = currentClip;
   if (rctx.renderMode === 'preview') {
     const cornerPinOverride = rctx.getPreviewCornerPinOverride?.(currentClip.id);
     if (cornerPinOverride !== undefined) {
       effectiveClip = {
-        ...transitionClip,
+        ...currentClip,
         cornerPin: cornerPinOverride,
       } as TItem;
     }
@@ -1703,6 +1666,7 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
     item: effectiveClip,
     transform,
     effects: combineEffects(itemEffects, adjustmentEffects),
+    renderSpan,
   };
 }
 

@@ -9,6 +9,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { ResolvedTransform } from '@/types/transform';
 import { resolveItemTransformAtFrame } from '@/features/export/deps/composition-runtime';
+import { applyRenderTimelineSpan, type RenderTimelineSpan } from './render-span';
 
 function clamp01(value: number): number {
   if (value <= 0) return 0;
@@ -117,9 +118,11 @@ export function getAnimatedTransform(
   item: TimelineItem,
   keyframes: ItemKeyframes | undefined,
   frame: number,
-  canvas: CanvasRenderSettings
+  canvas: CanvasRenderSettings,
+  renderSpan?: RenderTimelineSpan,
 ): ResolvedTransform {
-  const resolved = resolveItemTransformAtFrame(item, {
+  const resolvedItem = applyRenderTimelineSpan(item, renderSpan);
+  const resolved = resolveItemTransformAtFrame(resolvedItem, {
     canvas: {
       width: canvas.width,
       height: canvas.height,
@@ -129,7 +132,7 @@ export function getAnimatedTransform(
     keyframes,
   });
 
-  const fadeOpacity = getVisualFadeOpacity(item, frame, canvas.fps);
+  const fadeOpacity = getVisualFadeOpacity(resolvedItem, frame, canvas.fps);
   if (fadeOpacity >= 1) {
     return resolved;
   }

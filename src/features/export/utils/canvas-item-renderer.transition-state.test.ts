@@ -142,6 +142,11 @@ describe('resolveTransitionParticipantRenderState', () => {
     expect(result.transform.height).toBe(150);
     expect(result.transform.cornerRadius).toBe(12);
     expect(result.effects).toEqual([previewEffect]);
+    expect(result.renderSpan).toEqual({
+      from: 0,
+      durationInFrames: 90,
+      sourceStart: 0,
+    });
   });
 
   it('extends the incoming clip to the transition start so preroll frames stay visible', () => {
@@ -184,9 +189,14 @@ describe('resolveTransitionParticipantRenderState', () => {
 
     const result = resolveTransitionParticipantRenderState(incomingClip, activeTransition, 50, 4, rctx);
 
-    expect(result.item.from).toBe(50);
-    expect(result.item.durationInFrames).toBe(50);
-    expect(result.item.sourceStart).toBe(20);
+    expect(result.item.from).toBe(60);
+    expect(result.item.durationInFrames).toBe(40);
+    expect(result.item.sourceStart).toBe(30);
+    expect(result.renderSpan).toEqual({
+      from: 50,
+      durationInFrames: 50,
+      sourceStart: 20,
+    });
     expect(result.transform.opacity).toBe(1);
   });
 
@@ -230,7 +240,12 @@ describe('resolveTransitionParticipantRenderState', () => {
     const result = resolveTransitionParticipantRenderState(outgoingClip, activeTransition, 65, 4, rctx);
 
     expect(result.item.from).toBe(0);
-    expect(result.item.durationInFrames).toBe(70);
+    expect(result.item.durationInFrames).toBe(60);
+    expect(result.renderSpan).toEqual({
+      from: 0,
+      durationInFrames: 70,
+      sourceStart: 0,
+    });
     expect(result.transform.opacity).toBe(1);
   });
 
@@ -274,8 +289,13 @@ describe('resolveTransitionParticipantRenderState', () => {
 
     const result = resolveTransitionParticipantRenderState(incomingClip, activeTransition, 50, 4, rctx);
 
-    expect(result.item.from).toBe(50);
-    expect(result.item.durationInFrames).toBe(50);
-    expect(result.item.sourceStart).toBe(0);
+    expect(result.item.from).toBe(60);
+    expect(result.item.durationInFrames).toBe(40);
+    expect(result.item.sourceStart).toBe(6);
+    expect(result.renderSpan).toEqual({
+      from: 50,
+      durationInFrames: 50,
+      sourceStart: 0,
+    });
   });
 });
