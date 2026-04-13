@@ -63,8 +63,8 @@ fn clockWipeFragment(input: VertexOutput) -> @location(0) vec4f {
   // Sample both textures upfront (uniform control flow required)
   let left = textureSample(leftTex, texSampler, leftUv);
   let right = textureSample(rightTex, texSampler, rightUv);
-  let outgoingColor = vec4f(left.rgb * outgoingOpacity, left.a);
-  let incomingColor = vec4f(right.rgb * incomingOpacity, right.a);
+  let outgoingColor = vec4f(left.rgb * outgoingOpacity, left.a * outgoingOpacity);
+  let incomingColor = vec4f(right.rgb * incomingOpacity, right.a * incomingOpacity);
 
   // Swept region with soft edge: incoming; un-swept: outgoing
   let swept = clockSweepMask(normalizedAngle, sweepAngle, feather);

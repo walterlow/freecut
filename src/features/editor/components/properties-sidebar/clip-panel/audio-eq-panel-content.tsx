@@ -916,8 +916,9 @@ export function AudioEqPanelContent({
           <Button
             variant="ghost"
             size="sm"
-            className={cn('h-8 shrink-0 px-3 text-muted-foreground hover:text-foreground', !eqEnabled && 'opacity-40 pointer-events-none')}
+            className={cn('h-8 shrink-0 px-3 text-muted-foreground hover:text-foreground', !eqEnabled && 'opacity-40')}
             onClick={() => handleEqPresetChange('flat')}
+            disabled={!eqEnabled}
           >
             Reset EQ
           </Button>
@@ -952,8 +953,9 @@ export function AudioEqPanelContent({
             <Button
               variant="ghost"
               size="sm"
-              className={cn('h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground', !clipEqEnabled && 'opacity-40 pointer-events-none')}
+              className={cn('h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground', !clipEqEnabled && 'opacity-40')}
               onClick={() => handleEqPresetChange('flat')}
+              disabled={!clipEqEnabled}
               aria-label="Reset EQ"
             >
               <RotateCcw className="h-3 w-3" />

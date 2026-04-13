@@ -208,8 +208,8 @@ export const FloatingPanel = memo(function FloatingPanel({
       let { x, y, width, height } = s;
       const edge = drag.edge!;
 
-      if (edge.includes('e')) width = Math.max(minWidth, s.width + dx);
-      if (edge.includes('w')) {
+      if (!autoWidth && edge.includes('e')) width = Math.max(minWidth, s.width + dx);
+      if (!autoWidth && edge.includes('w')) {
         const newWidth = Math.max(minWidth, s.width - dx);
         x = s.x + (s.width - newWidth);
         width = newWidth;
@@ -274,7 +274,7 @@ export const FloatingPanel = memo(function FloatingPanel({
       style={{
         left: bounds.x,
         top: bounds.y,
-        ...(autoWidth ? {} : { width: bounds.width }),
+        ...(autoWidth ? { maxWidth: window.innerWidth - bounds.x - EDGE_MARGIN } : { width: bounds.width }),
         ...(autoHeight ? {} : { height: bounds.height }),
       }}
     >
@@ -282,12 +282,12 @@ export const FloatingPanel = memo(function FloatingPanel({
         <>
           {resizeHandle('n', 'top-0 left-2 right-2 h-[4px]')}
           {resizeHandle('s', 'bottom-0 left-2 right-2 h-[4px]')}
-          {resizeHandle('e', 'right-0 top-2 bottom-2 w-[4px]')}
-          {resizeHandle('w', 'left-0 top-2 bottom-2 w-[4px]')}
-          {resizeHandle('nw', 'top-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('ne', 'top-0 right-0 w-[8px] h-[8px]')}
-          {resizeHandle('sw', 'bottom-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('se', 'bottom-0 right-0 w-[8px] h-[8px]')}
+          {!autoWidth && resizeHandle('e', 'right-0 top-2 bottom-2 w-[4px]')}
+          {!autoWidth && resizeHandle('w', 'left-0 top-2 bottom-2 w-[4px]')}
+          {resizeHandle('nw', autoWidth ? 'top-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 left-0 w-[8px] h-[8px]')}
+          {resizeHandle('ne', autoWidth ? 'top-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 right-0 w-[8px] h-[8px]')}
+          {resizeHandle('sw', autoWidth ? 'bottom-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 left-0 w-[8px] h-[8px]')}
+          {resizeHandle('se', autoWidth ? 'bottom-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 right-0 w-[8px] h-[8px]')}
         </>
       ) : null}
 

@@ -35,7 +35,7 @@ interface WindowPosition {
   top: number;
 }
 
-function loadPosition(key: string, fallback: WindowPosition): WindowPosition {
+function loadPosition(key: string, fallback: WindowPosition, winWidth: number, winHeight: number): WindowPosition {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
@@ -44,8 +44,8 @@ function loadPosition(key: string, fallback: WindowPosition): WindowPosition {
       const sw = window.screen.availWidth;
       const sh = window.screen.availHeight;
       return {
-        left: Math.max(0, Math.min(parsed.left, sw - 200)),
-        top: Math.max(0, Math.min(parsed.top, sh - 100)),
+        left: Math.max(0, Math.min(parsed.left, sw - winWidth)),
+        top: Math.max(0, Math.min(parsed.top, sh - winHeight)),
       };
     }
   } catch {
@@ -139,7 +139,7 @@ export function WindowPortal({
       left: window.screenX + 100,
       top: window.screenY + 100,
     };
-    const pos = storageKey ? loadPosition(storageKey, defaultPos) : defaultPos;
+    const pos = storageKey ? loadPosition(storageKey, defaultPos, width, height) : defaultPos;
 
     // Reuse a provided window or one from a previous mount (survives StrictMode double-mount)
     let externalWindow = providedExternalWindow ?? externalWindowRef.current;

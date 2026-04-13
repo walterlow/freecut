@@ -959,7 +959,10 @@ const MixerBody = memo(function MixerBody({
 }: MixerBodyProps) {
   const stripPx = expanded ? 68 : 52;
   // Channel strips + trailing border (scale column is outside the tuckable area)
-  const naturalWidth = tracks.length * stripPx + (tracks.length > 0 ? 2 : 0);
+  const MIN_EMPTY_WIDTH = 80;
+  const naturalWidth = tracks.length > 0
+    ? tracks.length * stripPx + 2
+    : MIN_EMPTY_WIDTH;
   const [tracksWidth, setTracksWidth] = useState<number | null>(null); // null = natural
   const [animating, setAnimating] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -1008,8 +1011,11 @@ const MixerBody = memo(function MixerBody({
     <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
       {/* Drag handle — left edge of the mixer, click to toggle */}
       {tracks.length > 0 && (
-        <div
-          className="w-[5px] shrink-0 flex items-center justify-center cursor-col-resize select-none group"
+        <button
+          type="button"
+          aria-label="Tuck mixer"
+          aria-pressed={isTucked}
+          className="w-[5px] shrink-0 flex items-center justify-center cursor-col-resize select-none group border-0 bg-transparent p-0"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -1021,7 +1027,7 @@ const MixerBody = memo(function MixerBody({
               ? 'bg-primary/70 group-hover:bg-primary'
               : 'bg-primary/30 group-hover:bg-primary/60'
           }`} />
-        </div>
+        </button>
       )}
 
       {/* dB scale — always visible */}

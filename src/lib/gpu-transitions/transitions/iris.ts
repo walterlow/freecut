@@ -59,8 +59,8 @@ fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   // Sample both textures upfront (uniform control flow required)
   let left = textureSample(leftTex, texSampler, leftUv);
   let right = textureSample(rightTex, texSampler, rightUv);
-  let outgoingColor = vec4f(left.rgb * outgoingOpacity, left.a);
-  let incomingColor = vec4f(right.rgb * incomingOpacity, right.a);
+  let outgoingColor = vec4f(left.rgb * outgoingOpacity, left.a * outgoingOpacity);
+  let incomingColor = vec4f(right.rgb * incomingOpacity, right.a * incomingOpacity);
 
   // Inside circle with soft edge: incoming; outside: outgoing
   let inside = circleMask(dist, radius, feather);
