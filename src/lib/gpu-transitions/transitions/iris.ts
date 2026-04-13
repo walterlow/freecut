@@ -1,3 +1,4 @@
+import { SCALE_UV_WGSL } from '../common';
 import type { GpuTransitionDefinition } from '../types';
 
 export const iris: GpuTransitionDefinition = {
@@ -20,10 +21,7 @@ struct IrisParams {
 @group(0) @binding(2) var rightTex: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> params: IrisParams;
 
-fn scaleUv(uv: vec2f, scale: f32) -> vec2f {
-  let safeScale = max(scale, 0.001);
-  return ((uv - vec2f(0.5, 0.5)) / safeScale) + vec2f(0.5, 0.5);
-}
+${SCALE_UV_WGSL}
 
 fn circleMask(distanceFromCenter: f32, radius: f32, feather: f32) -> f32 {
   if (radius <= 0.0) {

@@ -60,3 +60,10 @@ fn fbm(p: vec2f) -> f32 {
   return value;
 }
 `;
+
+export const SCALE_UV_WGSL = /* wgsl */ `
+fn scaleUv(uv: vec2f, scale: f32) -> vec2f {
+  let safeScale = max(scale, 0.001);
+  return ((uv - vec2f(0.5, 0.5)) / safeScale) + vec2f(0.5, 0.5);
+}
+`;

@@ -964,6 +964,8 @@ const MixerBody = memo(function MixerBody({
   const [animating, setAnimating] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const didDragRef = useRef(false);
+  const tracksWidthRef = useRef<number | null>(tracksWidth);
+  tracksWidthRef.current = tracksWidth;
 
   // Reset to natural width when track count changes
   useEffect(() => {
@@ -973,11 +975,11 @@ const MixerBody = memo(function MixerBody({
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
     setAnimating(false); // kill transition during drag
-    const current = tracksWidth ?? naturalWidth;
+    const current = tracksWidthRef.current ?? naturalWidth;
     dragRef.current = { startX: e.clientX, startWidth: current };
     didDragRef.current = false;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-  }, [tracksWidth, naturalWidth]);
+  }, [naturalWidth]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const drag = dragRef.current;

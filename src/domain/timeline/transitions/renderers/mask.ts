@@ -69,6 +69,8 @@ export function getIrisMaskState(
 // Clock Wipe
 // ============================================================================
 
+// The CSS preview mirrors mask geometry and opacity only. The production WebGPU
+// shaders also apply a subtle UV zoom envelope that is intentionally shader-only.
 const clockWipeRenderer: TransitionRenderer = {
   gpuTransitionId: 'clockWipe',
   calculateStyles(progress, isOutgoing, _cw, _ch, _dir, properties): TransitionStyleCalculation {
