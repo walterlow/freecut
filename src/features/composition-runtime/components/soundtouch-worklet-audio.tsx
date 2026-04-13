@@ -125,7 +125,8 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
   }, [playing]);
 
   useEffect(() => {
-    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
+    // Keep the preview graph alive across EQ toggles; the EQ stages ramp in place below.
+    const graph = createPreviewClipAudioGraph();
     if (!graph) {
       setFallbackRequested(true);
       return;
@@ -200,7 +201,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
       lastPostedPlayingRef.current = null;
       teardownNode();
     };
-  }, [resolvedAudioEqStages.length]);
+  }, []);
 
   useEffect(() => {
     const resume = () => {

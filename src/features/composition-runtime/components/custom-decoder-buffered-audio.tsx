@@ -545,7 +545,8 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, [acceptPartialSlice, audioSlice, fps, frame, mediaId, playbackRate, playing, requestPartialSlice, sourceFps, src, trimBefore]);
 
   useEffect(() => {
-    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
+    // Keep the preview graph alive across EQ toggles; the EQ stages ramp in place below.
+    const graph = createPreviewClipAudioGraph();
     if (!graph) return;
     graphRef.current = graph;
 
@@ -569,7 +570,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       graph.dispose();
       graphRef.current = null;
     };
-  }, [resolvedAudioEqStages.length]);
+  }, []);
 
   useEffect(() => {
     const resume = () => {

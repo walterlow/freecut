@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_AUDIO_EQ_SETTINGS } from '@/shared/utils/audio-eq';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 
 const playbackStateMocks = vi.hoisted(() => ({
@@ -112,6 +113,53 @@ describe('SoundTouchWorkletAudio', () => {
     });
 
     expect(screen.queryByTestId('fallback')).toBeNull();
+  });
+
+  it('keeps the preview graph alive while EQ stages change', async () => {
+    soundTouchWorkletMocks.ensureSoundTouchPreviewWorkletLoaded.mockReturnValue(
+      new Promise<boolean>(() => {}),
+    );
+
+    const { rerender } = render(
+      <SoundTouchWorkletAudio
+        audioBuffer={makeAudioBuffer()}
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1.5}
+        volumeMultiplier={1}
+        fallback={<div data-testid="fallback" />}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    });
+
+    playbackStateMocks.current = {
+      ...playbackStateMocks.current,
+      resolvedAudioEqStages: [DEFAULT_AUDIO_EQ_SETTINGS],
+    };
+
+    rerender(
+      <SoundTouchWorkletAudio
+        audioBuffer={makeAudioBuffer()}
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1.5}
+        volumeMultiplier={1.01}
+        fallback={<div data-testid="fallback" />}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.rampPreviewClipEq).toHaveBeenLastCalledWith(
+        expect.anything(),
+        [DEFAULT_AUDIO_EQ_SETTINGS],
+      );
+    });
+
+    expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    expect(soundTouchWorkletMocks.ensureSoundTouchPreviewWorkletLoaded).toHaveBeenCalledTimes(1);
   });
 
   it('renders fallback after the worklet path fails', async () => {

@@ -139,7 +139,8 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
 
   useEffect(() => {
     const audio = acquirePreviewAudioElement(src);
-    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
+    // Keep the media element and graph alive across EQ toggles; the EQ stages ramp in place below.
+    const graph = createPreviewClipAudioGraph();
     if (!graph) {
       releasePreviewAudioElement(audio);
       return;
@@ -174,7 +175,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
       }
       releasePreviewAudioElement(audio);
     };
-  }, [resolvedAudioEqStages.length, src]);
+  }, [src]);
 
   useEffect(() => {
     if (audioRef.current) {

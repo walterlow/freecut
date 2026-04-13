@@ -1,5 +1,6 @@
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_AUDIO_EQ_SETTINGS } from '@/shared/utils/audio-eq';
 
 const audioDecodeMocks = vi.hoisted(() => ({
   getOrDecodeAudio: vi.fn(),
@@ -170,6 +171,49 @@ describe('PitchCorrectedAudio', () => {
     expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
     expect(audioDecodeMocks.getOrDecodeAudio).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
+  });
+
+  it('keeps the native preview graph alive while EQ stages change', async () => {
+    const { rerender } = render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        volumeMultiplier={1}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    });
+
+    playbackStateMocks.current = {
+      ...playbackStateMocks.current,
+      resolvedAudioEqStages: [DEFAULT_AUDIO_EQ_SETTINGS],
+    };
+
+    rerender(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        volumeMultiplier={1.01}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.rampPreviewClipEq).toHaveBeenLastCalledWith(
+        previewGraphMocks.graph,
+        [DEFAULT_AUDIO_EQ_SETTINGS],
+      );
+    });
+
+    expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledTimes(1);
   });
 
   it('uses playback-first decode for stretched clips with media ids', async () => {
