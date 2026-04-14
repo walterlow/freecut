@@ -143,8 +143,6 @@ interface StreamState {
   buffer: FrameBuffer;
   info: SourceInfo | null;
   streaming: boolean;
-  /** Frames received from worker but not yet drawn. Used for backpressure. */
-  undrawnCount: number;
   /** Timestamp (ms) of the last getFrame() call. Used for idle cleanup. */
   lastAccessMs: number;
   /** Whether a lazy auto-start is already in flight. */
@@ -225,20 +223,11 @@ export function createStreamingPlayback(): StreamingPlayback {
 
   function handleWorkerMessage(event: MessageEvent): void {
     const msg = event.data;
-    // eslint-disable-next-line no-console
-    console.log('[StreamingPlayback:msg]', msg?.type, msg?.type === 'frame' ? { ts: msg.timestamp, hasBitmap: msg.bitmap instanceof ImageBitmap } : msg);
-
     if (msg.type === 'ready') {
       diag('worker ready');
       workerReady = true;
       for (const fn of pendingStarts) fn();
       pendingStarts.length = 0;
-      return;
-    }
-
-    if (msg.type === 'debug') {
-      // eslint-disable-next-line no-console
-      console.log('[StreamingPlayback:worker-debug]', msg);
       return;
     }
 
@@ -256,21 +245,33 @@ export function createStreamingPlayback(): StreamingPlayback {
 
     if (msg.type === 'frame') {
       const state = streams.get(msg.src);
-      if (!state) return;
+      if (!state) {
+        // No stream for this source — close the frame to avoid leak
+        if (msg.videoFrame instanceof VideoFrame) msg.videoFrame.close();
+        return;
+      }
 
       totalFramesReceived++;
-      if (totalFramesReceived <= 5) {
-        diag(`frame recv #${totalFramesReceived} ts=${msg.timestamp?.toFixed(4)} hasBitmap=${msg.bitmap instanceof ImageBitmap} src=${msg.src?.slice(0, 40)}`);
+
+      // Worker sends VideoFrame (zero-copy transfer). Convert to ImageBitmap
+      // on the main thread so the VideoFrame can be closed immediately.
+      // createImageBitmap(VideoFrame) is ~0.3ms — much faster than the worker
+      // doing drawImage + transferToImageBitmap (~2-5ms).
+      const videoFrame: VideoFrame | null = msg.videoFrame instanceof VideoFrame ? msg.videoFrame : null;
+      if (videoFrame) {
+        createImageBitmap(videoFrame).then((bitmap) => {
+          videoFrame.close();
+          state.buffer.push(msg.timestamp, bitmap);
+        }).catch(() => {
+          videoFrame.close();
+        });
+        return;
       }
 
+      // Fallback: ImageBitmap from older worker version
       if (msg.bitmap instanceof ImageBitmap) {
         state.buffer.push(msg.timestamp, msg.bitmap);
-        state.undrawnCount++;
       }
-      // NOTE: We do NOT send frame_consumed here.
-      // Backpressure signals are sent in getFrame() when the render pipeline
-      // actually draws a frame. This prevents the worker from racing ahead
-      // indefinitely while the main thread is busy.
       return;
     }
 
@@ -303,7 +304,6 @@ export function createStreamingPlayback(): StreamingPlayback {
       buffer: new FrameBuffer(MAX_BUFFER_SIZE),
       info: null,
       streaming: false,
-      undrawnCount: 0,
       lastAccessMs: performance.now(),
       autoStartPending: false,
     };
@@ -390,14 +390,6 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
   }
 
-  /** Send backpressure acknowledgments for drawn frames. */
-  function ackDrawnFrames(src: string, count: number): void {
-    if (!worker || count <= 0) return;
-    for (let i = 0; i < count; i++) {
-      worker.postMessage({ type: 'frame_consumed', src });
-    }
-  }
-
   /** Stop and clean up a single source. */
   function stopSource(src: string): void {
     const state = streams.get(src);
@@ -408,7 +400,6 @@ export function createStreamingPlayback(): StreamingPlayback {
     state.streaming = false;
     state.autoStartPending = false;
     state.buffer.clear();
-    state.undrawnCount = 0;
   }
 
   /** Run idle cleanup: stop sources not accessed recently. */
@@ -445,7 +436,7 @@ export function createStreamingPlayback(): StreamingPlayback {
       const state = getOrCreateState(src);
       state.buffer.clear();
       state.streaming = true;
-      state.undrawnCount = 0;
+
       state.lastAccessMs = performance.now();
       state.autoStartPending = false;
 
@@ -460,7 +451,7 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       state.buffer.clear();
       state.streaming = true;
-      state.undrawnCount = 0;
+
       state.lastAccessMs = performance.now();
 
       worker?.postMessage({ type: 'stream_seek', src, timestamp });
@@ -513,7 +504,7 @@ export function createStreamingPlayback(): StreamingPlayback {
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {
         if (totalFramesMissed < 5 || totalFramesMissed % 30 === 0) {
-          diag(`getFrame MISS ts=${targetTimestamp.toFixed(4)} bufSize=${state.buffer.size} undrawn=${state.undrawnCount}`);
+          diag(`getFrame MISS ts=${targetTimestamp.toFixed(4)} bufSize=${state.buffer.size}`);
         }
         totalFramesMissed++;
         return null;
@@ -524,11 +515,8 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       totalFramesDrawn++;
 
-      // Prune old frames and send backpressure acks for consumed frames
-      const pruned = state.buffer.pruneOld(targetTimestamp);
-      const toAck = Math.min(state.undrawnCount, pruned + 1);
-      state.undrawnCount = Math.max(0, state.undrawnCount - toAck);
-      ackDrawnFrames(src, toAck);
+      // Prune old frames behind the playback position
+      state.buffer.pruneOld(targetTimestamp);
 
       return frame.bitmap;
     },

@@ -1,14 +1,12 @@
 /**
  * Streaming video decode worker for WebCodecs-based playback.
  *
- * Runs mediabunny's forward `samples()` generator continuously, decoding
- * frames ahead of playback and transferring ImageBitmaps to the main thread.
- * This replaces the HTML5 <video> element playback path with frame-perfect,
- * worker-decoded frames that feed directly into the canvas/GPU render pipeline.
+ * Runs mediabunny's forward `samples()` generator continuously, transferring
+ * decoded VideoFrames directly to the main thread (zero intermediate copies).
+ * The main thread ring buffer handles overflow — no backpressure needed.
  *
- * Key difference from decoder-prewarm-worker: this worker runs a continuous
- * forward decode stream (not individual frame requests), maintaining decode
- * pipeline state across frames for ~1ms/frame sequential throughput.
+ * Decode throughput: ~1ms/frame for forward sequential access once warmed.
+ * Initial keyframe seek: 200-600ms (one-time cost per stream start).
  */
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
@@ -18,13 +16,7 @@ import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-ur
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Max frames to buffer ahead before pausing decode. */
-const MAX_BUFFER_AHEAD = 15;
-/** Resume decode when buffer drops to this count. */
-const RESUME_THRESHOLD = 8;
-/** Epsilon for timestamp comparison. */
 const TIMESTAMP_EPSILON = 1e-4;
-/** Fixed backtrack from target when no keyframe index is available. */
 const STREAM_BACKTRACK_SECONDS = 1.0;
 
 // ---------------------------------------------------------------------------
@@ -39,24 +31,14 @@ interface SourceState {
   input: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sink: any;
-  canvas: OffscreenCanvas;
-  ctx: OffscreenCanvasRenderingContext2D;
   width: number;
   height: number;
   duration: number;
-  /** Whether a forward stream loop is currently running. */
   streaming: boolean;
   /** Incremented on every seek/stop to abort stale stream loops. */
   generation: number;
-  /** Timestamps of frames currently buffered on the main thread (unacknowledged). */
-  inflightCount: number;
-  /** Whether decode is paused due to buffer pressure. */
-  paused: boolean;
-  /** Resolve function to wake up a paused decode loop. */
-  resumeResolve: (() => void) | null;
 }
 
-/** Per-source keyframe index received from main thread. */
 const keyframeIndexBySrc = new Map<string, number[]>();
 
 // ---------------------------------------------------------------------------
@@ -158,37 +140,19 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
       const width = videoTrack.displayWidth || 1920;
       const height = videoTrack.displayHeight || 1080;
       const duration = videoTrack.duration || 0;
-      const canvas = new OffscreenCanvas(width, height);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        input.dispose?.();
-        return null;
-      }
 
       const state: SourceState = {
         input,
         sink,
-        canvas,
-        ctx,
         width,
         height,
         duration,
         streaming: false,
         generation: 0,
-        inflightCount: 0,
-        paused: false,
-        resumeResolve: null,
       };
       sources.set(src, state);
 
-      self.postMessage({
-        type: 'source_ready',
-        src,
-        width,
-        height,
-        duration,
-      });
-
+      self.postMessage({ type: 'source_ready', src, width, height, duration });
       return state;
     } catch (error) {
       input.dispose?.();
@@ -205,47 +169,54 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
 }
 
 // ---------------------------------------------------------------------------
-// Frame rendering
+// Frame extraction — transfer VideoFrame directly (zero copy)
 // ---------------------------------------------------------------------------
 
-function renderSampleToBitmap(state: SourceState, sample: MBSample): ImageBitmap | null {
-  let videoFrame: VideoFrame | null = null;
-  try {
-    videoFrame = typeof sample.toVideoFrame === 'function'
-      ? sample.toVideoFrame()
-      : (sample.frame ?? null);
-    if (!videoFrame) return null;
+/**
+ * Extract a VideoFrame from a mediabunny sample and compute its visible dimensions.
+ * Returns null if the sample can't produce a valid frame.
+ * Caller must close the returned VideoFrame when done.
+ */
+function extractVideoFrame(sample: MBSample): { frame: VideoFrame; width: number; height: number } | null {
+  const videoFrame: VideoFrame | null = typeof sample.toVideoFrame === 'function'
+    ? sample.toVideoFrame()
+    : (sample.frame ?? null);
+  if (!videoFrame) return null;
 
-    const visibleRect = (videoFrame as VideoFrame & {
-      visibleRect?: { x: number; y: number; width: number; height: number };
-    }).visibleRect;
+  const visibleRect = (videoFrame as VideoFrame & {
+    visibleRect?: { x: number; y: number; width: number; height: number };
+  }).visibleRect;
 
-    const width = visibleRect?.width && visibleRect.width > 0
-      ? visibleRect.width : videoFrame.displayWidth;
-    const height = visibleRect?.height && visibleRect.height > 0
-      ? visibleRect.height : videoFrame.displayHeight;
-    if (width < 1 || height < 1) return null;
+  const width = visibleRect?.width && visibleRect.width > 0
+    ? visibleRect.width : videoFrame.displayWidth;
+  const height = visibleRect?.height && visibleRect.height > 0
+    ? visibleRect.height : videoFrame.displayHeight;
 
-    // Resize canvas if dimensions changed
-    if (state.canvas.width !== width || state.canvas.height !== height) {
-      state.canvas.width = width;
-      state.canvas.height = height;
-    }
-
-    if (visibleRect && visibleRect.width > 0 && visibleRect.height > 0) {
-      state.ctx.drawImage(
-        videoFrame,
-        visibleRect.x, visibleRect.y, visibleRect.width, visibleRect.height,
-        0, 0, width, height,
-      );
-    } else {
-      state.ctx.drawImage(videoFrame, 0, 0, width, height);
-    }
-
-    return state.canvas.transferToImageBitmap();
-  } finally {
-    videoFrame?.close();
+  if (width < 1 || height < 1) {
+    videoFrame.close();
+    return null;
   }
+
+  // If visibleRect is a strict subset (codec padding), create a cropped copy
+  // so the main thread draws the correct region without needing to know the offset.
+  if (
+    visibleRect
+    && (visibleRect.x > 0 || visibleRect.y > 0
+      || visibleRect.width < videoFrame.codedWidth
+      || visibleRect.height < videoFrame.codedHeight)
+  ) {
+    try {
+      const cropped = new VideoFrame(videoFrame, {
+        visibleRect: { x: visibleRect.x, y: visibleRect.y, width, height },
+      });
+      videoFrame.close();
+      return { frame: cropped, width, height };
+    } catch {
+      // Cropping unsupported — fall through and send the full frame
+    }
+  }
+
+  return { frame: videoFrame, width, height };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,17 +226,12 @@ function renderSampleToBitmap(state: SourceState, sample: MBSample): ImageBitmap
 async function runStreamLoop(src: string, state: SourceState, startTimestamp: number): Promise<void> {
   const gen = state.generation;
   state.streaming = true;
-  state.inflightCount = 0;
-  state.paused = false;
 
   const streamStart = getStreamStart(src, startTimestamp);
-  self.postMessage({ type: 'debug', step: 'stream_loop_starting', src: src.slice(0, 50), streamStart, startTimestamp });
   const iterator = state.sink.samples(streamStart, Infinity) as AsyncGenerator<MBSample, void, unknown>;
-  let frameCount = 0;
 
   try {
     for await (const sample of iterator) {
-      // Abort if generation changed (seek or stop happened)
       if (state.generation !== gen) {
         sample.close?.();
         break;
@@ -273,55 +239,39 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
 
       const timestamp: number = sample.timestamp ?? 0;
 
-      // Skip samples before our target (we started from a keyframe before target)
+      // Skip samples before our target (decode started from a keyframe before target)
       if (timestamp + TIMESTAMP_EPSILON < startTimestamp) {
         sample.close?.();
         continue;
       }
 
-      // Render to bitmap
-      const bitmap = renderSampleToBitmap(state, sample);
+      // Extract VideoFrame directly (no intermediate canvas copy)
+      const extracted = extractVideoFrame(sample);
       sample.close?.();
 
-      if (!bitmap) continue;
+      if (!extracted) continue;
       if (state.generation !== gen) {
-        bitmap.close();
+        extracted.frame.close();
         break;
       }
 
-      // Post frame to main thread (bitmap is in data AND transfer list for zero-copy)
-      state.inflightCount++;
-      frameCount++;
-      if (frameCount <= 3) {
-        self.postMessage({ type: 'debug', step: 'posting_frame', frameCount, timestamp, bitmapWidth: bitmap.width, bitmapHeight: bitmap.height });
-      }
+      // Transfer VideoFrame to main thread (zero-copy via transferable)
       self.postMessage(
         {
           type: 'frame',
           src,
           timestamp,
-          bitmap,
+          videoFrame: extracted.frame,
+          width: extracted.width,
+          height: extracted.height,
         },
-        { transfer: [bitmap] },
+        { transfer: [extracted.frame] },
       );
 
-      // Backpressure: pause if too many frames unacknowledged
-      if (state.inflightCount >= MAX_BUFFER_AHEAD) {
-        state.paused = true;
-        await new Promise<void>((resolve) => {
-          state.resumeResolve = resolve;
-          // Safety: auto-resume after 500ms to prevent deadlock
-          setTimeout(() => {
-            if (state.resumeResolve === resolve) {
-              state.paused = false;
-              state.resumeResolve = null;
-              resolve();
-            }
-          }, 500);
-        });
-        // Check generation after waking up
-        if (state.generation !== gen) break;
-      }
+      // No backpressure — the main thread ring buffer handles overflow.
+      // At ~1ms/frame decode, the worker fills 30 frames in 30ms then
+      // the async generator naturally yields to the event loop, allowing
+      // seek/stop messages to be processed.
     }
   } catch (error) {
     if (state.generation === gen) {
@@ -363,27 +313,19 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (msg.type === 'stream_start') {
     const { src, startTimestamp, blob, sourceMetadata } = msg;
-    self.postMessage({ type: 'debug', step: 'stream_start_received', src: src?.slice(0, 50), hasBlob: !!blob, hasMetadata: !!sourceMetadata, startTimestamp });
     try {
       const state = await getOrInitSource(src, { blob, sourceMetadata });
       if (!state) {
-        self.postMessage({ type: 'error', src, message: 'Failed to init source — getOrInitSource returned null' });
+        self.postMessage({ type: 'error', src, message: 'Failed to init source' });
         return;
       }
-      self.postMessage({ type: 'debug', step: 'source_initialized', src: src?.slice(0, 50), width: state.width, height: state.height });
-      // Bump generation to abort any existing stream loop
       state.generation++;
-      if (state.resumeResolve) {
-        state.resumeResolve();
-        state.resumeResolve = null;
-      }
-      // Start new stream
       void runStreamLoop(src, state, startTimestamp);
     } catch (error) {
       self.postMessage({
         type: 'error',
         src,
-        message: `stream_start failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: error instanceof Error ? error.message : String(error),
       });
     }
     return;
@@ -393,12 +335,7 @@ self.onmessage = async (event: MessageEvent) => {
     const { src, timestamp } = msg;
     const state = sources.get(src);
     if (!state) return;
-    // Bump generation to abort current loop, start new one
     state.generation++;
-    if (state.resumeResolve) {
-      state.resumeResolve();
-      state.resumeResolve = null;
-    }
     void runStreamLoop(src, state, timestamp);
     return;
   }
@@ -408,25 +345,6 @@ self.onmessage = async (event: MessageEvent) => {
     const state = sources.get(src);
     if (!state) return;
     state.generation++;
-    if (state.resumeResolve) {
-      state.resumeResolve();
-      state.resumeResolve = null;
-    }
-    return;
-  }
-
-  if (msg.type === 'frame_consumed') {
-    const { src } = msg;
-    const state = sources.get(src);
-    if (!state) return;
-    state.inflightCount = Math.max(0, state.inflightCount - 1);
-    // Resume decode if we dropped below threshold
-    if (state.paused && state.inflightCount <= RESUME_THRESHOLD && state.resumeResolve) {
-      state.paused = false;
-      const resolve = state.resumeResolve;
-      state.resumeResolve = null;
-      resolve();
-    }
     return;
   }
 
@@ -435,10 +353,6 @@ self.onmessage = async (event: MessageEvent) => {
     const state = sources.get(src);
     if (!state) return;
     state.generation++;
-    if (state.resumeResolve) {
-      state.resumeResolve();
-      state.resumeResolve = null;
-    }
     state.input.dispose?.();
     sources.delete(src);
     return;
