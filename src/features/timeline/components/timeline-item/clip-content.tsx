@@ -58,15 +58,11 @@ export const ClipContent = memo(function ClipContent({
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
-  // Single zoom subscription: live value only for clips that need immediate rendering
-  // (e.g. during drag), settled value for everything else — avoids N re-renders per zoom tick.
-  const pixelsPerSecond = useZoomStore(
-    useCallback(
-      (s: { pixelsPerSecond: number; contentPixelsPerSecond: number }) =>
-        preferImmediateRendering ? s.pixelsPerSecond : s.contentPixelsPerSecond,
-      [preferImmediateRendering]
-    )
-  );
+  // Subscribe to live pixelsPerSecond so filmstrip/waveform content stays in sync
+  // with the CSS-variable-driven clip shell during zoom — avoids a visible catchup
+  // jump at settle. Per-item render cost is kept low by the filmstrip skip (<5px)
+  // and compact clip shell optimizations in the parent.
+  const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const clipLeftPx = useMemo(
