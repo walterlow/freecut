@@ -1,19 +1,16 @@
 /**
- * Hook to manage WebCodecs streaming playback lifecycle.
+ * Hook to manage WebCodecs streaming playback lifecycle for transitions.
  *
- * When enabled, creates a streaming decode worker that runs mediabunny's
- * forward samples() generator for each visible video source. Decoded
- * ImageBitmaps are buffered and provided to the canvas render pipeline,
- * bypassing HTML5 <video> elements entirely.
+ * Streaming decode only activates when the playhead approaches or is inside
+ * a transition window. Regular playback uses DOM <video> elements — they're
+ * lighter and handle audio, proxy toggling, and browser timing natively.
  *
- * The coordinator is self-managing: getFrame() lazily auto-starts streams
- * for new sources and idle cleanup stops streams that are no longer needed.
+ * During transitions, two clips must render simultaneously to a canvas.
+ * The streaming worker pre-decodes both clips' frames so the transition
+ * compositor can blend them without relying on DOM video timing.
  *
- * The hook exposes a `streamingFrameProviderRef` that the render pump reads
- * on each frame and sets on the renderer. This avoids timing issues with
- * renderer creation/destruction during re-renders.
- *
- * Toggle via window.__DEBUG__?.setStreamingPlayback(true)
+ * Toggle via window.__DEBUG__?.setStreamingPlayback(true) to force
+ * streaming for ALL clips (original PoC behavior).
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -21,86 +18,160 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '../utils/streaming-playback';
 import { STREAMING_PLAYBACK_ENABLED } from '../utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
-import type { TimelineTrack, VideoItem } from '@/types/timeline';
+import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveProxyUrl } from '../deps/media-library-contract';
+import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
-/** How far ahead (in seconds) to look for upcoming video clips to pre-warm.
- *  5s gives the worker enough time to init new sources (~1-2s) and buffer
- *  frames before playback reaches them. */
-const LOOKAHEAD_SECONDS = 5;
+/** How far ahead (in seconds) to start streaming transition clips.
+ *  The worker needs ~1-2s to init + buffer, so 3s provides headroom. */
+const TRANSITION_PREWARM_SECONDS = 3;
+
+/** How far ahead (in seconds) to force the canvas overlay before a transition.
+ *  By this point the streaming buffers should be warm. */
+const TRANSITION_OVERLAY_LEAD_SECONDS = 0.5;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve the best source URL for a video item (proxy when enabled). */
+function resolveVideoSrc(item: VideoItem, useProxy: boolean): string | null {
+  const mediaId = item.mediaId;
+  const proxyUrl = useProxy && mediaId ? resolveProxyUrl(mediaId) : null;
+  return proxyUrl ?? (mediaId ? blobUrlManager.get(mediaId) : null) ?? item.src;
+}
+
+/** Compute source time for a video item at a given timeline frame. */
+function computeSourceTime(item: VideoItem, timelineFrame: number, timelineFps: number): number {
+  const sourceFps = item.sourceFps ?? timelineFps;
+  const speed = item.speed ?? 1;
+  const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+  const localFrame = Math.max(0, timelineFrame - item.from);
+  return sourceStart / sourceFps + (localFrame / timelineFps) * speed;
+}
+
+interface TransitionPrewarmTarget {
+  src: string;
+  sourceTime: number;
+  mediaId?: string;
+}
 
 /**
- * Collect pre-warm targets: video items visible at the given frame,
- * plus upcoming clips within LOOKAHEAD_SECONDS that will need streams.
+ * Collect pre-warm targets: only video clips that participate in transitions
+ * within the lookahead window. For "force all" mode (debug toggle), collects
+ * ALL visible video clips.
  */
-function collectPrewarmTargets(
-  tracks: TimelineTrack[],
+function collectTransitionPrewarmTargets(
+  transitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
   timelineFrame: number,
   timelineFps: number,
   useProxy: boolean,
-): Array<{ src: string; sourceTime: number; mediaId?: string }> {
-  const targets: Array<{ src: string; sourceTime: number; mediaId?: string }> = [];
+): TransitionPrewarmTarget[] {
+  const targets: TransitionPrewarmTarget[] = [];
   const seen = new Set<string>();
-  const lookaheadFrames = Math.round(LOOKAHEAD_SECONDS * timelineFps);
+  const prewarmFrames = Math.round(TRANSITION_PREWARM_SECONDS * timelineFps);
 
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (item.type !== 'video') continue;
-      const videoItem = item as VideoItem;
+  for (const tw of transitionWindows) {
+    // Skip transitions that ended before current frame
+    if (tw.endFrame <= timelineFrame) continue;
+    // Skip transitions beyond the prewarm window
+    if (tw.startFrame > timelineFrame + prewarmFrames) continue;
 
-      // Skip clips that end before current frame
-      const clipEnd = videoItem.from + videoItem.durationInFrames;
-      if (clipEnd <= timelineFrame) continue;
+    // Both clips participate in this transition
+    for (const clip of [tw.leftClip, tw.rightClip]) {
+      if (clip.type !== 'video') continue;
+      const videoItem = clip as VideoItem;
+      const src = resolveVideoSrc(videoItem, useProxy);
+      if (!src || seen.has(src)) continue;
+      seen.add(src);
 
-      // Skip clips that start beyond the lookahead window
-      if (videoItem.from > timelineFrame + lookaheadFrames) continue;
-
-      const mediaId = videoItem.mediaId;
-      // Match the preview render pipeline: use proxy when enabled, original when not
-      const proxyUrl = useProxy && mediaId ? resolveProxyUrl(mediaId) : null;
-      const activeSrc = proxyUrl ?? (mediaId ? blobUrlManager.get(mediaId) : null) ?? videoItem.src;
-      if (!activeSrc || seen.has(activeSrc)) continue;
-      seen.add(activeSrc);
-
-      const sourceFps = videoItem.sourceFps ?? timelineFps;
-      const speed = videoItem.speed ?? 1;
-      const sourceStart = videoItem.sourceStart ?? videoItem.trimStart ?? 0;
-
-      // For visible clips, compute source time at current frame.
-      // For upcoming clips, start from their source beginning.
-      const localFrame = Math.max(0, timelineFrame - videoItem.from);
-      const sourceTime = sourceStart / sourceFps + (localFrame / timelineFps) * speed;
-
-      targets.push({ src: activeSrc, sourceTime, mediaId });
+      const sourceTime = computeSourceTime(videoItem, timelineFrame, timelineFps);
+      targets.push({ src, sourceTime, mediaId: videoItem.mediaId });
     }
   }
 
   return targets;
 }
 
+/**
+ * Collect ALL visible video clips as pre-warm targets (force-all mode).
+ */
+function collectAllPrewarmTargets(
+  tracks: TimelineTrack[],
+  timelineFrame: number,
+  timelineFps: number,
+  useProxy: boolean,
+): TransitionPrewarmTarget[] {
+  const targets: TransitionPrewarmTarget[] = [];
+  const seen = new Set<string>();
+  const lookaheadFrames = Math.round(TRANSITION_PREWARM_SECONDS * timelineFps);
+
+  for (const track of tracks) {
+    for (const item of track.items) {
+      if (item.type !== 'video') continue;
+      const videoItem = item as VideoItem;
+      const clipEnd = videoItem.from + videoItem.durationInFrames;
+      if (clipEnd <= timelineFrame) continue;
+      if (videoItem.from > timelineFrame + lookaheadFrames) continue;
+
+      const src = resolveVideoSrc(videoItem, useProxy);
+      if (!src || seen.has(src)) continue;
+      seen.add(src);
+
+      const sourceTime = computeSourceTime(videoItem, timelineFrame, timelineFps);
+      targets.push({ src, sourceTime, mediaId: videoItem.mediaId });
+    }
+  }
+
+  return targets;
+}
+
+/** Check if a frame is within the overlay-lead window of any transition. */
+function isFrameNearTransition(
+  frame: number,
+  windows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
+  leadFrames: number,
+  cooldownFrames: number,
+): boolean {
+  for (const tw of windows) {
+    if (frame >= tw.startFrame - leadFrames && frame < tw.endFrame + cooldownFrames) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
+
 interface UseStreamingPlaybackControllerParams {
   fps: number;
   combinedTracks: TimelineTrack[];
+  playbackTransitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>;
+  playbackTransitionCooldownFrames: number;
 }
 
 interface UseStreamingPlaybackControllerResult {
-  /** Whether streaming playback is enabled — when true, the canvas overlay
-   *  must be forced during playback (same as GPU effects). */
+  /** Whether the canvas overlay must be forced (near a transition during playback). */
   forceCanvasOverlay: boolean;
-  /** Ref to the streaming frame provider function. The render pump should
-   *  set this on the renderer before each frame via setStreamingFrameProvider. */
+  /** Ref to the streaming frame provider function. */
   streamingFrameProviderRef: React.RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
 }
 
 export function useStreamingPlaybackController({
   fps,
   combinedTracks,
+  playbackTransitionWindows,
+  playbackTransitionCooldownFrames,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
   const enabledRef = useRef(STREAMING_PLAYBACK_ENABLED);
+  /** When true, stream ALL clips (debug toggle). When false, only transition clips. */
+  const forceAllRef = useRef(STREAMING_PLAYBACK_ENABLED);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>(null);
 
@@ -111,23 +182,36 @@ export function useStreamingPlaybackController({
     return playbackRef.current;
   }, []);
 
-  // Frame provider callback — the coordinator handles everything internally
   const getStreamingFrame = useCallback((src: string, sourceTime: number, mediaId?: string): ImageBitmap | null => {
     if (!playbackRef.current) return null;
     return playbackRef.current.getFrame(src, sourceTime, mediaId);
   }, []);
 
-  // Pre-warm: start decoding at the current playhead so the buffer has frames
-  // before play starts. Restarts on seek. Tracks ref holds the latest value.
+  // Refs for latest values
   const tracksRef = useRef(combinedTracks);
   const fpsRef = useRef(fps);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const useProxyRef = useRef(useProxy);
+  const transitionWindowsRef = useRef(playbackTransitionWindows);
+  const cooldownFramesRef = useRef(playbackTransitionCooldownFrames);
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
   useProxyRef.current = useProxy;
+  transitionWindowsRef.current = playbackTransitionWindows;
+  cooldownFramesRef.current = playbackTransitionCooldownFrames;
+
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Collect targets based on mode: transition-only or force-all
+  const getTargets = useCallback((frame: number) => {
+    if (forceAllRef.current) {
+      return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
+    }
+    return collectTransitionPrewarmTargets(
+      transitionWindowsRef.current, frame, fpsRef.current, useProxyRef.current,
+    );
+  }, []);
 
   const prewarmAtFrame = useCallback((frame: number, seekExisting = true) => {
     if (!enabledRef.current) return;
@@ -135,7 +219,7 @@ export function useStreamingPlaybackController({
     prewarmFrameRef.current = frame;
 
     const playback = getPlayback();
-    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
+    const targets = getTargets(frame);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
@@ -143,38 +227,44 @@ export function useStreamingPlaybackController({
         playback.seekStream(src, sourceTime);
       }
     }
-  }, [getPlayback]);
+  }, [getPlayback, getTargets]);
 
-  /** During playback, periodically scan for upcoming clips and start their
-   *  decode streams early. Only starts NEW streams — existing ones keep running. */
+  /** During playback, scan for upcoming transition clips and manage overlay. */
   const runPlaybackLookahead = useCallback(() => {
     if (!enabledRef.current) return;
-    const frame = usePlaybackStore.getState().currentFrame;
+    const state = usePlaybackStore.getState();
+    const frame = state.currentFrame;
     const playback = getPlayback();
-    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
+
+    // Start streams for upcoming transition clips
+    const targets = getTargets(frame);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
       }
     }
-  }, [getPlayback]);
 
-  // Subscribe to playback state: manage streaming lifecycle and expose provider via ref.
-  // The render pump reads streamingFrameProviderRef and sets it on the renderer per-frame,
-  // avoiding timing issues with renderer creation/destruction during re-renders.
+    // Toggle canvas overlay based on proximity to transitions
+    if (!forceAllRef.current) {
+      const overlayLeadFrames = Math.round(TRANSITION_OVERLAY_LEAD_SECONDS * fpsRef.current);
+      const nearTransition = isFrameNearTransition(
+        frame, transitionWindowsRef.current, overlayLeadFrames, cooldownFramesRef.current,
+      );
+      setForceCanvasOverlay(nearTransition);
+    }
+  }, [getPlayback, getTargets]);
+
+  // Subscribe to playback state
   useEffect(() => {
     const initialState = usePlaybackStore.getState();
 
-    // Activate provider immediately — it serves both playback and scrub.
-    // During scrub, buffered streaming frames are used when available,
-    // falling through to DOM video / mediabunny on miss.
     if (enabledRef.current) {
       streamingFrameProviderRef.current = getStreamingFrame;
-
       if (initialState.isPlaying) {
         getPlayback();
-        setForceCanvasOverlay(true);
-        log.info('Playback already active on mount, streaming provider activated');
+        if (forceAllRef.current) setForceCanvasOverlay(true);
+        if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
+        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
       } else {
         prewarmAtFrame(initialState.currentFrame);
       }
@@ -189,12 +279,13 @@ export function useStreamingPlaybackController({
       if (isPlaying && !wasPlaying) {
         const playback = getPlayback();
         streamingFrameProviderRef.current = getStreamingFrame;
-        setForceCanvasOverlay(true);
-        prewarmFrameRef.current = null; // clear so next pause re-prewarms
+        prewarmFrameRef.current = null;
         playback.enableIdleSweep();
-        // Start periodic lookahead for upcoming clips during playback
+        if (forceAllRef.current) setForceCanvasOverlay(true);
         if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
-        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 1000);
+        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
+        // Run immediately to check transition proximity
+        runPlaybackLookahead();
         log.info('Playback started, streaming provider activated');
       } else if (!isPlaying && wasPlaying) {
         setForceCanvasOverlay(false);
@@ -202,7 +293,6 @@ export function useStreamingPlaybackController({
           clearInterval(lookaheadTimerRef.current);
           lookaheadTimerRef.current = null;
         }
-        // Keep streamingFrameProviderRef set — scrub uses it too
         const playback = playbackRef.current;
         if (playback) {
           const metrics = playback.getMetrics();
@@ -213,12 +303,8 @@ export function useStreamingPlaybackController({
           });
           playback.stopAll();
         }
-        // Pre-warm at the stop position
         prewarmAtFrame(state.currentFrame);
       } else if (!isPlaying && state.currentFrame !== prevState.currentFrame) {
-        // User scrubbing while paused — start new streams but don't seek
-        // active ones. Forward scrub keeps the buffer valid; backward
-        // scrub / large jumps fall through to mediabunny on miss.
         const delta = state.currentFrame - prevState.currentFrame;
         const isLargeJump = Math.abs(delta) > fpsRef.current * 2;
         const isBackward = delta < 0;
@@ -236,10 +322,7 @@ export function useStreamingPlaybackController({
     };
   }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
 
-  // When proxy toggle changes, restart streams with the correct source URLs.
-  // Disable the provider during the transition so the RAF pump doesn't auto-start
-  // streams with stale URLs from the old composition. Re-enable after the
-  // composition rebuilds with new proxy URLs (next animation frame).
+  // Restart streams when proxy toggle changes
   useEffect(() => {
     if (!enabledRef.current) return;
     const playback = playbackRef.current;
@@ -264,7 +347,7 @@ export function useStreamingPlaybackController({
     };
   }, []);
 
-  // Expose debug toggle
+  // Debug toggle
   useEffect(() => {
     if (!import.meta.env.DEV) return;
 
@@ -272,19 +355,17 @@ export function useStreamingPlaybackController({
       Record<string, unknown> | undefined;
     if (!debugApi) return;
 
-    debugApi.setStreamingPlayback = (enabled: boolean) => {
+    debugApi.setStreamingPlayback = (enabled: boolean, forceAll = false) => {
       enabledRef.current = enabled;
-      log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}`);
+      forceAllRef.current = enabled && forceAll;
+      log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}${forceAll ? ' (force all)' : ''}`);
 
       if (enabled) {
         streamingFrameProviderRef.current = getStreamingFrame;
-        // Force overlay only if already playing
         const state = usePlaybackStore.getState();
-        if (state.isPlaying) setForceCanvasOverlay(true);
-        if (!state.isPlaying) {
-          prewarmFrameRef.current = null; // force re-prewarm
-          prewarmAtFrame(state.currentFrame);
-        }
+        if (state.isPlaying && forceAll) setForceCanvasOverlay(true);
+        prewarmFrameRef.current = null;
+        prewarmAtFrame(state.currentFrame);
       } else {
         setForceCanvasOverlay(false);
         streamingFrameProviderRef.current = null;
