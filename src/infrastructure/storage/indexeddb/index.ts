@@ -41,7 +41,13 @@ export {
 } from './thumbnails';
 
 // Content exports
-export { incrementContentRef, decrementContentRef, deleteContent } from './content';
+export {
+  incrementContentRef,
+  decrementContentRef,
+  createContentRecord,
+  ensureContentRecordAndIncrement,
+  deleteContent,
+} from './content';
 
 // Project-media association exports
 export {
@@ -78,3 +84,11 @@ export {
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
 } from './decoded-preview-audio';
+
+// Transcript exports
+export {
+  getTranscript,
+  getTranscriptMediaIds,
+  saveTranscript,
+  deleteTranscript,
+} from './transcripts';

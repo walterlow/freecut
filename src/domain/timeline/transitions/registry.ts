@@ -9,6 +9,7 @@
  * - A TransitionRenderer (calculation logic for CSS styles and canvas export)
  */
 
+import { createLogger } from '@/shared/logging/logger';
 import type {
   TransitionDefinition,
   TransitionCategory,
@@ -17,6 +18,8 @@ import type {
   FlipDirection,
 } from '@/types/transition';
 import type { TransitionStyleCalculation } from './engine';
+
+const logger = createLogger('TransitionRegistry');
 
 /**
  * Renderer interface for CSS/DOM-based transitions (preview + Composition).
@@ -58,6 +61,9 @@ export interface TransitionRenderer {
 
   /** Optional GLSL fragment shader source for WebGL acceleration */
   glslShader?: string;
+
+  /** GPU transition ID for WebGPU-accelerated rendering via TransitionPipeline */
+  gpuTransitionId?: string;
 }
 
 /**
@@ -80,7 +86,7 @@ export class TransitionRegistry {
    */
   register(id: string, definition: TransitionDefinition, renderer: TransitionRenderer): void {
     if (this.entries.has(id)) {
-      console.warn(`Transition "${id}" is being overwritten`);
+      logger.warn(`Transition "${id}" is being overwritten`);
     }
     this.entries.set(id, { definition, renderer });
   }

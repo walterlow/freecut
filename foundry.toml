@@ -1,0 +1,7 @@
+# Used when running forge from repo root (e.g. forge create).
+# Resolves @openzeppelin/contracts/ to our OZ v5 in contracts/lib so imports match contracts/foundry.toml.
+[profile.default]
+remappings = [
+    "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts/contracts/"
+]
+solc = "0.8.26"

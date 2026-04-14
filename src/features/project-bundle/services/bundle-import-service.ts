@@ -1,7 +1,7 @@
-﻿/**
+/**
  * Project Bundle Import Service
  *
- * Imports a .freecut.zip bundle (ZIP archive) and creates a project with media.
+ * Imports a .pixels.zip bundle (ZIP archive) and creates a project with media.
  * Media files are extracted to a user-selected directory and referenced via
  * FileSystemFileHandle for local-first storage.
  */
@@ -25,12 +25,15 @@ import {
   updateProject,
 } from '@/infrastructure/storage/indexeddb';
 import { generateThumbnail } from '@/features/project-bundle/deps/media-library';
+import { createLogger } from '@/shared/logging/logger';
 import { fileSystemService } from './file-system-service';
+
+const logger = createLogger('BundleImportService');
 
 /**
  * Import a project bundle
  *
- * @param file - The .freecut.zip bundle file to import
+ * @param file - The .pixels.zip bundle file to import
  * @param destinationDirectory - Directory where media files will be extracted (must be provided by caller)
  * @param options - Import options (new name, etc.)
  * @param onProgress - Progress callback
@@ -87,7 +90,7 @@ export async function importProjectBundle(
       // Get the file data from the unzipped bundle
       const fileData = files[entry.relativePath];
       if (!fileData) {
-        console.warn(`Missing file in bundle: ${entry.relativePath}`);
+        logger.warn(`Missing file in bundle: ${entry.relativePath}`);
         skipped++;
         continue;
       }
@@ -132,7 +135,7 @@ export async function importProjectBundle(
         };
         await saveThumbnail(thumbnailData);
       } catch (thumbnailError) {
-        console.warn(
+        logger.warn(
           `Failed to generate thumbnail for ${entry.fileName}:`,
           thumbnailError
         );
@@ -163,7 +166,7 @@ export async function importProjectBundle(
       await createMedia(mediaMetadata);
       imported++;
     } catch (error) {
-      console.error(`Failed to import media ${entry.fileName}:`, error);
+      logger.error(`Failed to import media ${entry.fileName}:`, error);
       conflicts.push({
         type: 'media_duplicate',
         description: `Failed to import: ${entry.fileName}`,
@@ -250,7 +253,7 @@ export async function importProjectBundle(
       await updateProject(newProjectId, { thumbnailId });
     } catch (err) {
       // Thumbnail restoration is optional, continue without it
-      console.warn('Could not restore project thumbnail:', err);
+      logger.warn('Could not restore project thumbnail:', err);
     }
   }
 

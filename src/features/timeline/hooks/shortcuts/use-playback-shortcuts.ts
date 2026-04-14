@@ -8,11 +8,12 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { useItemsStore } from '../../stores/items-store';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import { getVisibleTrackIds } from '../../utils/group-utils';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 /** Compute snap points on-demand from current store state (avoids reactive subscriptions). */
 function getSnapPoints(): number[] {
@@ -35,6 +36,7 @@ function getSnapPoints(): number[] {
 export function usePlaybackShortcuts(
   callbacks: TimelineShortcutCallbacks,
 ) {
+  const hotkeys = useResolvedHotkeys();
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
@@ -48,7 +50,7 @@ export function usePlaybackShortcuts(
 
   // Playback: Space - Play/Pause
   useHotkeys(
-    HOTKEYS.PLAY_PAUSE,
+    hotkeys.PLAY_PAUSE,
     (event) => {
       event.preventDefault();
       const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
@@ -69,7 +71,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: Arrow Left - Previous frame
   useHotkeys(
-    HOTKEYS.PREVIOUS_FRAME,
+    hotkeys.PREVIOUS_FRAME,
     (event) => {
       event.preventDefault();
       const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
@@ -86,7 +88,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: Arrow Right - Next frame
   useHotkeys(
-    HOTKEYS.NEXT_FRAME,
+    hotkeys.NEXT_FRAME,
     (event) => {
       event.preventDefault();
       const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
@@ -103,7 +105,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: Home - Go to start
   useHotkeys(
-    HOTKEYS.GO_TO_START,
+    hotkeys.GO_TO_START,
     (event) => {
       event.preventDefault();
       const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
@@ -119,7 +121,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: End - Go to end of timeline (last frame of last item)
   useHotkeys(
-    HOTKEYS.GO_TO_END,
+    hotkeys.GO_TO_END,
     (event) => {
       event.preventDefault();
       const { hoveredPanel, playerMethods } = useSourcePlayerStore.getState();
@@ -140,7 +142,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: Down - Jump to next snap point (clip edge or marker)
   useHotkeys(
-    HOTKEYS.NEXT_SNAP_POINT,
+    hotkeys.NEXT_SNAP_POINT,
     (event) => {
       event.preventDefault();
       const currentFrame = usePlaybackStore.getState().currentFrame;
@@ -155,7 +157,7 @@ export function usePlaybackShortcuts(
 
   // Navigation: Up - Jump to previous snap point (clip edge or marker)
   useHotkeys(
-    HOTKEYS.PREVIOUS_SNAP_POINT,
+    hotkeys.PREVIOUS_SNAP_POINT,
     (event) => {
       event.preventDefault();
       const currentFrame = usePlaybackStore.getState().currentFrame;

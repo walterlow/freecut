@@ -1,7 +1,13 @@
 import React, { useMemo } from 'react';
 import { useVideoConfig } from '../hooks/use-player-compat';
 import type { TimelineItem } from '@/types/timeline';
-import { useItemVisualState, getScanlinesStyle } from './hooks/use-item-visual-state';
+import { BLEND_MODE_CSS } from '@/types/blend-mode-css';
+import { hasCornerPin, computeCornerPinMatrix3d } from '../utils/corner-pin';
+import { useCornerPinStore, usePlaybackStore } from '@/features/composition-runtime/deps/stores';
+import { useItemVisualState } from './hooks/use-item-visual-state';
+import {
+  renderSvgMaskPathsToDataUrl,
+} from '../utils/clip-mask-raster';
 import type { MaskInfo } from './item';
 
 interface ItemVisualWrapperProps {
@@ -32,11 +38,52 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
 
   // Get all visual state from consolidated hook
   const state = useItemVisualState(item, masks);
+  const isInteractivePreviewScrub = usePlaybackStore((s) => s.previewFrame !== null);
+  const shouldRasterizeSvgMask = state.maskType === 'svg-mask'
+    && !!state.svgMaskPaths
+    && state.maskFeather > 0
+    && !isInteractivePreviewScrub;
 
   // Compute mask style based on mask type
+  const rasterSvgMaskDataUrl = useMemo(() => {
+    if (!shouldRasterizeSvgMask || !state.svgMaskPaths) {
+      return null;
+    }
+
+    return renderSvgMaskPathsToDataUrl(
+      state.svgMaskPaths,
+      canvasWidth,
+      canvasHeight,
+      state.maskFeather,
+      state.maskInvert,
+    );
+  }, [
+    shouldRasterizeSvgMask,
+    state.svgMaskPaths,
+    state.maskFeather,
+    state.maskInvert,
+    canvasWidth,
+    canvasHeight,
+  ]);
+
   const maskStyle = useMemo((): React.CSSProperties => {
     if (state.maskType === 'clip' && state.maskClipPath) {
       return { clipPath: state.maskClipPath };
+    }
+    if (state.maskType === 'svg-mask' && rasterSvgMaskDataUrl) {
+      return {
+        maskImage: `url("${rasterSvgMaskDataUrl}")`,
+        WebkitMaskImage: `url("${rasterSvgMaskDataUrl}")`,
+        maskRepeat: 'no-repeat',
+        WebkitMaskRepeat: 'no-repeat',
+        maskSize: '100% 100%',
+        WebkitMaskSize: '100% 100%',
+        maskPosition: '0 0',
+        WebkitMaskPosition: '0 0',
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden' as const,
+        contain: 'paint',
+      };
     }
     if (state.maskType === 'svg-mask' && state.svgMaskId) {
       return {
@@ -45,62 +92,27 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       };
     }
     return {};
-  }, [state.maskType, state.maskClipPath, state.svgMaskId]);
+  }, [state.maskType, state.maskClipPath, state.svgMaskId, rasterSvgMaskDataUrl]);
 
-  // Check if any overlay effects are active
-  const hasOverlays = state.scanlinesEffect || state.halftoneStyles || state.vignetteStyle;
+  // Corner pin CSS matrix3d — use preview during drag for smooth interaction
+  const cornerPinPreview = useCornerPinStore((s) =>
+    s.editingItemId === item.id ? s.previewCornerPin : null
+  );
+  const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
 
-  // Scanlines style (or hidden)
-  const scanlinesStyle = useMemo((): React.CSSProperties => {
-    if (!state.scanlinesEffect) {
-      return { display: 'none' };
-    }
+  const cornerPinStyle = useMemo((): React.CSSProperties | null => {
+    if (!hasCornerPin(effectiveCornerPin)) return null;
+    const w = state.transform.width;
+    const h = state.transform.height;
     return {
-      position: 'absolute',
-      inset: 0,
-      pointerEvents: 'none',
-      ...getScanlinesStyle(state.scanlinesEffect.intensity),
+      transformOrigin: '0 0',
+      transform: computeCornerPinMatrix3d(w, h, effectiveCornerPin!),
     };
-  }, [state.scanlinesEffect]);
-
-  // Halftone wrapper style
-  const halftoneWrapperStyle = useMemo((): React.CSSProperties => {
-    if (!state.halftoneStyles) {
-      return { display: 'none' };
-    }
-    return {
-      position: 'absolute',
-      inset: 0,
-      overflow: 'hidden',
-      pointerEvents: 'none',
-      mixBlendMode: state.halftoneStyles.patternStyle.mixBlendMode,
-      opacity: state.halftoneStyles.patternStyle.opacity,
-    };
-  }, [state.halftoneStyles]);
-
-  // Halftone pattern style (without blendMode/opacity which is on wrapper)
-  const halftonePatternStyle = useMemo((): React.CSSProperties => {
-    if (!state.halftoneStyles) {
-      return {};
-    }
-    return {
-      ...state.halftoneStyles.patternStyle,
-      mixBlendMode: undefined,
-      opacity: undefined,
-    };
-  }, [state.halftoneStyles]);
-
-  // Vignette style (or hidden)
-  const vignetteContainerStyle = useMemo((): React.CSSProperties => {
-    if (!state.vignetteStyle) {
-      return { display: 'none' };
-    }
-    return state.vignetteStyle;
-  }, [state.vignetteStyle]);
+  }, [effectiveCornerPin, state.transform.width, state.transform.height]);
 
   // Render SVG mask defs for SVG-based masks
   const svgMaskDefs = useMemo(() => {
-    if (state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
+    if (rasterSvgMaskDataUrl || state.maskType !== 'svg-mask' || !state.svgMaskId || !state.svgMaskPaths) {
       return null;
     }
 
@@ -154,57 +166,51 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         </defs>
       </svg>
     );
-  }, [state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
+  }, [rasterSvgMaskDataUrl, state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
 
   return (
     <>
       {/* SVG mask definitions (hidden, referenced via CSS) */}
       {svgMaskDefs}
 
-      {/* Outer: Transform + Mask */}
+      {/* Outer: Transform + Mask + Blend Mode */}
       <div
         style={{
           ...state.transformStyle,
           ...maskStyle,
-          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+          overflow: state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
+          mixBlendMode: item.blendMode && item.blendMode !== 'normal'
+            ? BLEND_MODE_CSS[item.blendMode]
+            : undefined,
         }}
       >
-        {/* Inner: Effects + Content */}
+        {/* Corner Pin wrapper (only when active) */}
+        {/* When corner pin is active, will-change + backfaceVisibility force Chrome
+            to composite through the CSS pipeline instead of video hardware overlay,
+            which would otherwise ignore the matrix3d transform. */}
         <div
-          style={{
+          style={cornerPinStyle ? {
             width: '100%',
             height: '100%',
-            position: 'relative',
-            filter: state.cssFilter || undefined,
+            ...cornerPinStyle,
+            willChange: 'transform',
+            backfaceVisibility: 'hidden' as const,
+            overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+          } : {
+            width: '100%',
+            height: '100%',
           }}
         >
-          {children}
-
-          {/* Overlay container - ALWAYS rendered, hidden via CSS when unused */}
+          {/* Inner: Effects + Content */}
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              pointerEvents: 'none',
-              display: hasOverlays ? 'block' : 'none',
+              width: '100%',
+              height: '100%',
+              position: 'relative',
+              filter: state.cssFilter || undefined,
             }}
           >
-            {/* Scanlines overlay */}
-            <div style={scanlinesStyle} />
-
-            {/* Halftone pattern overlay */}
-            <div style={halftoneWrapperStyle}>
-              {state.halftoneStyles?.fadeWrapperStyle ? (
-                <div style={state.halftoneStyles.fadeWrapperStyle}>
-                  <div style={halftonePatternStyle} />
-                </div>
-              ) : (
-                <div style={halftonePatternStyle} />
-              )}
-            </div>
-
-            {/* Vignette overlay - renders on top of all other effects */}
-            <div style={vignetteContainerStyle} />
+            {children}
           </div>
         </div>
       </div>

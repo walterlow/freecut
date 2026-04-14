@@ -27,7 +27,7 @@ interface GizmoHandlesProps {
   rotation: number;
   /** Whether currently interacting (darker border color) */
   isInteracting: boolean;
-  /** Whether this is a mask shape (uses cyan instead of orange) */
+  /** Whether this is a mask shape (uses cyan instead of primary) */
   isMask?: boolean;
   /** Called when dragging starts on the border (translate) */
   onTranslateStart: (e: React.MouseEvent) => void;
@@ -84,7 +84,7 @@ export function GizmoHandles({
   // Border color based on mask state and interaction
   const borderColor = isMask
     ? (isInteracting ? '#0891b2' : '#06b6d4') // Cyan for masks
-    : (isInteracting ? '#ea580c' : '#f97316'); // Orange for regular
+    : (isInteracting ? '#EC407A' : '#EC407A'); // #EC407A for regular
 
   return (
     <>
@@ -121,7 +121,7 @@ export function GizmoHandles({
         return (
           <div
             key={handle}
-            className="bg-white border border-orange-500"
+            className="bg-white border border-[#EC407A]"
             style={{ ...getHandleStyle(handle), zIndex: 102 }}
             role="button"
             aria-label={handleLabels[handle]}
@@ -134,7 +134,7 @@ export function GizmoHandles({
 
       {/* Rotation handle */}
       <div
-        className="absolute bg-white border border-orange-500 rounded-full cursor-crosshair"
+        className="absolute bg-white border border-[#EC407A] rounded-full cursor-crosshair"
         style={{
           width: 10,
           height: 10,
@@ -152,7 +152,7 @@ export function GizmoHandles({
 
       {/* Rotation guide line */}
       <div
-        className="absolute border-l border-dashed border-orange-500 pointer-events-none"
+        className="absolute border-l border-dashed border-[#EC407A] pointer-events-none"
         style={{
           left: '50%',
           top: -ROTATION_HANDLE_OFFSET + 10,

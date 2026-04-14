@@ -12,4 +12,5 @@ export {
   GIZMO_ANIMATABLE_PROPS,
   type AutoKeyframeOperation,
 } from '@/features/keyframes/utils/auto-keyframe';
+export { isFrameInTransitionRegion } from '@/features/keyframes/utils/transition-region';
 export { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';

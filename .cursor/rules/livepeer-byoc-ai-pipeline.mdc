@@ -1,0 +1,142 @@
+---
+description: Run custom AI models on Livepeer orchestrators via BYOC: architecture, implementation patterns, hard constraints, and step-by-step setup.
+alwaysApply: false
+---
+AI Pipelines
+BYOC - Bring Your Own Container
+Run custom AI models on Livepeer orchestrators via BYOC: architecture, implementation patterns, hard constraints, and step-by-step setup.
+
+This is not model hosting in the Hugging Face sense. You are hosting an inference service, not a model artefact. The distinction matters - see How Livepeer routes by capability, not model below.
+​
+What BYOC is (and isn’t)
+BYOC (Bring Your Own Container) lets you run your own AI inference server inside a Docker container on a Livepeer orchestrator, and the network treats it as a callable AI capability. Livepeer does not restrict you to a fixed model catalogue or pre-approved models.
+Technically, any Hugging Face model can be containerised and run via BYOC. But Livepeer is optimised for low-latency, GPU-bound, real-time inference - especially for video and vision workloads. Models that violate these assumptions will be inefficient, poorly routed, or uneconomic.
+Fit	Model / workload types
+✓ Best fit	Diffusion models (SD, SDXL, StreamDiffusion), image-to-image, video-to-video, ControlNet + IP-Adapter pipelines, vision models (depth, pose, segmentation, tracking), frame-by-frame video transforms, pipelines designed for persistent GPU residency
+⚠ Conditional fit	Small to medium multimodal models (vision-heavy), audio-visual models with tight latency budgets, lightweight LLMs used as helpers (prompt routing, metadata, control)
+✗ Poor fit	Large LLMs for batch text inference, long-running training or fine-tuning jobs, workloads requiring large persistent state, high-latency multi-minute jobs
+Rule of thumb: If the workload is frame-based or stream-based, it fits Livepeer well.
+​
+How Livepeer routes by capability, not model
+Livepeer intentionally avoids model marketplaces, model-branded APIs, and centralised catalogues. Instead, it routes by capability descriptors:
+image-to-image
+video-to-video
+depth
+segmentation
+style-transfer
+Your orchestrator advertises capabilities, not model names. Gateways route on capability, price, and performance - not on which Hugging Face weights you load internally. This means:
+Models can be swapped or updated without breaking downstream apps
+No vendor lock-in at the model layer
+Performance-based competition between orchestrators
+Apps never need direct knowledge of which model runs their job
+​
+Implementation patterns
+​
+Pattern A - Real-time diffusion
+Best for style transfer, image-to-image, live video effects.
+Hugging Face SD / SDXL weights
+StreamDiffusion or ComfyUI-style pipelines
+Frame-in → frame-out processing
+Persistent GPU residency
+​
+Pattern B - Vision utility node
+Best for sub-tasks inside larger video pipelines.
+Depth, segmentation, or pose models
+Extremely fast per-frame inference
+Used as conditioning steps feeding into diffusion
+​
+Pattern C - Hybrid pipeline
+Best for differentiated orchestrator offerings.
+Vision model output feeds conditioning into diffusion
+Vision → condition → generation chain
+Strong competitive differentiation in the marketplace
+​
+Hard constraints
+Ignoring these will degrade routing priority and reduce job assignment:
+Cold starts reduce job assignment. Keep models warm. Containers that take >10s to serve first inference will be deprioritised.
+Excess VRAM usage limits parallelism. Efficient memory management means more concurrent jobs per GPU.
+Slow endpoints are deprioritised. Gateways track latency per orchestrator and route accordingly.
+Stateful jobs break retry and failover semantics. The network assumes short, repeatable units of work. Long-lived state breaks this.
+​
+Setup
+1
+Build your inference server
+
+You are packaging a server, not just a model.
+Typical stack:
+Python + FastAPI / Flask  (or gRPC)
+Torch / TensorRT / ONNX Runtime
+CUDA + cuDNN
+Model pulled from Hugging Face at build time or startup
+Your server is responsible for:
+/infer (or equivalent) endpoint
+Input validation
+GPU memory management
+Optional batching
+Warm start behaviour
+You control: precision (fp16, int8), VRAM limits, model loading strategy, fallback and error handling.
+2
+Containerise the server
+
+Build a Docker image that:
+Boots quickly
+Loads models deterministically
+Exposes a stable internal endpoint
+This container is the BYOC artefact that runs on the orchestrator.
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+RUN pip install torch torchvision fastapi uvicorn diffusers transformers
+
+COPY ./server /app
+WORKDIR /app
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+3
+Clone and set up ComfyStream (if using ComfyUI)
+
+git clone https://github.com/livepeer/comfystream
+cd comfystream
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+Install your desired model(s):
+python scripts/download.py --model whisper-large
+python scripts/download.py --model sdxl
+4
+Configure your node
+
+Edit config.yaml:
+publicKey: "0xYourEthereumAddress"
+gatewayURL: "wss://gateway.livepeer.org"
+models:
+  - whisper-large
+  - sdxl
+heartbeat: true
+For a custom inference server, set the endpoint the orchestrator will proxy:
+byoc:
+  endpoint: "http://localhost:8000/infer"
+  capabilities:
+    - image-to-image
+    - depth
+5
+Start the gateway node
+
+python run.py --adapter grpc --gpu --model whisper-large
+You should see heartbeat logs to the gateway, job claims, model execution, and result upload confirmations.
+6
+Register on-chain (optional)
+
+Register your node on Arbitrum so gateways can discover you and route work automatically:
+livepeer-cli gateway register \
+  --addr=1.2.3.4:5040 \
+  --models=whisper-large,sdxl \
+  --bond=100LPT \
+  --region=NA1
+Contract and ABI references: Contract Addresses
+​
+Pricing and discovery
+Set pricing per request, frame, or second
+Pricing is advertised off-chain
+Settlement occurs via Livepeer tickets
+Gateways discover and route to you automatically
+Applications never interact with Hugging Face or your orchestrator directly

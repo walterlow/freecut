@@ -7,7 +7,7 @@ export interface CaptureOptions {
   fullResolution?: boolean;
 }
 
-export type PreviewQuality = 1 | 0.5 | 0.25;
+export type PreviewQuality = 1 | 0.5 | 0.33 | 0.25;
 
 export interface PlaybackState {
   currentFrame: number;
@@ -33,14 +33,18 @@ export interface PlaybackState {
   captureFrame: ((options?: CaptureOptions) => Promise<string | null>) | null;
   /** Optional raw capture path that returns ImageData directly (avoids encode/decode overhead) */
   captureFrameImageData?: ((options?: CaptureOptions) => Promise<ImageData | null>) | null;
+  /** Returns the rendered OffscreenCanvas directly for GPU-accelerated scope analysis (near-zero-copy) */
+  captureCanvasSource?: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null;
   /** Whether to use proxy videos for preview playback (true = use 720p proxies when available) */
   useProxy: boolean;
-  /** Preview render resolution multiplier (1 = full, 0.5 = half, 0.25 = quarter) */
+  /** Fast-scrub render resolution multiplier (1 = full, 0.5 = half, 0.33 = third, 0.25 = quarter) */
   previewQuality: PreviewQuality;
 }
 
 export interface PlaybackActions {
   setCurrentFrame: (frame: number) => void;
+  /** Update the authoritative playhead and transient scrub preview atomically. */
+  setScrubFrame: (frame: number, itemId?: string | null) => void;
   play: () => void;
   pause: () => void;
   togglePlayPause: () => void;
@@ -55,8 +59,10 @@ export interface PlaybackActions {
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
   /** Register raw frame capture function for scopes (optional) */
   setCaptureFrameImageData?: (fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null) => void;
+  /** Register canvas source capture for GPU scopes (optional) */
+  setCaptureCanvasSource?: (fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null) => void;
   /** Toggle proxy playback mode */
   toggleUseProxy: () => void;
-  /** Set preview render quality */
+  /** Set fast-scrub render quality */
   setPreviewQuality: (quality: PreviewQuality) => void;
 }

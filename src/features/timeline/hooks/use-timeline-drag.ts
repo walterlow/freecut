@@ -8,9 +8,17 @@ import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('TimelineDrag');
 
 // Shared ref for drag offset (avoids re-renders from store updates)
 export const dragOffsetRef = { current: { x: 0, y: 0 } };
+
+// Edge-scrolling configuration (matches ruler scrubbing behavior)
+const EDGE_SCROLL_MAX_SPEED = 20; // px / frame
+const EDGE_SCROLL_ACCELERATION = 0.3;
+const EDGE_SCROLL_ZONE = 30; // px from viewport edge
 
 const DRAG_CURSOR_CLASS_BY_MODE = {
   grabbing: 'timeline-item-drag-cursor-grabbing',
@@ -29,6 +37,14 @@ function setGlobalDragCursor(mode: DragCursorMode): void {
 
 function clearGlobalDragCursor(): void {
   document.body.classList.remove(...DRAG_CURSOR_CLASSES);
+}
+
+function getTimelineXFromClientX(clientX: number, scrollContainer: HTMLElement | null): number {
+  if (scrollContainer) {
+    const rect = scrollContainer.getBoundingClientRect();
+    return (clientX - rect.left) + scrollContainer.scrollLeft;
+  }
+  return clientX;
 }
 
 /**
@@ -54,6 +70,9 @@ export function useTimelineDrag(
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const dragStateRef = useRef<DragState | null>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const pointerClientRef = useRef<{ x: number; y: number; altKey: boolean }>({ x: 0, y: 0, altKey: false });
 
   // Track Alt key state for duplication mode (dynamic toggle during drag)
   const isAltDragRef = useRef(false);
@@ -274,15 +293,123 @@ export function useTimelineDrag(
     return { snappedFrame: targetStartFrame, snapTarget: null };
   }, []);
 
+  const updateDragFromPointer = useCallback((clientX: number, clientY: number, altKey: boolean) => {
+    if (!dragStateRef.current) return;
+
+    const scrollContainer = scrollContainerRef.current;
+    const timelineX = getTimelineXFromClientX(clientX, scrollContainer);
+    const startTimelineX = dragStateRef.current.startTimelineX ?? timelineX;
+    const deltaTimelineX = timelineX - startTimelineX;
+    const deltaY = clientY - dragStateRef.current.startMouseY;
+
+    // Dynamic Alt key toggle - update state and cursor
+    const altKeyChanged = isAltDragRef.current !== altKey;
+    isAltDragRef.current = altKey;
+
+    // Show not-allowed cursor when over a group track, otherwise normal drag cursor
+    const overGroup = isMouseOverGroupTrack(clientX, clientY);
+    const desiredCursor = overGroup ? 'not-allowed' : altKey ? 'copy' : 'grabbing';
+    setGlobalDragCursor(desiredCursor);
+
+    // Calculate clamped delta to prevent visual preview from going below frame 0
+    const deltaFrames = pixelsToFrameRef.current(deltaTimelineX);
+    const draggedItems = dragStateRef.current.draggedItems;
+
+    // Find the minimum starting frame among all dragged items
+    let minInitialFrame = Infinity;
+    for (const draggedItem of draggedItems) {
+      if (draggedItem.initialFrame < minInitialFrame) {
+        minInitialFrame = draggedItem.initialFrame;
+      }
+    }
+
+    // Clamp frames so earliest item doesn't go below frame 0
+    const maxNegativeDeltaFrames = -minInitialFrame;
+    const clampedDeltaFrames = Math.max(maxNegativeDeltaFrames, deltaFrames);
+
+    // Convert back to pixels for the clamped X offset
+    const clampedDeltaX = deltaFrames !== 0
+      ? deltaTimelineX * (clampedDeltaFrames / deltaFrames)
+      : deltaTimelineX;
+
+    // Immediate visual feedback — apply transform directly to bypass React render lag
+    if (elementRef?.current && !isAltDragRef.current) {
+      elementRef.current.style.transform = `translate(${clampedDeltaX}px, ${deltaY}px)`;
+    }
+
+    // Update shared ref for other items to read (no re-renders)
+    dragOffsetRef.current = { x: clampedDeltaX, y: deltaY };
+
+    // Update React state (batched) for ghost positioning and render fallback
+    setDragOffset({ x: clampedDeltaX, y: deltaY });
+
+    dragStateRef.current.currentMouseX = clientX;
+    dragStateRef.current.currentMouseY = clientY;
+    dragStateRef.current.currentTimelineX = timelineX;
+
+    // For multi-item drag, calculate group bounding box for snap visualization
+    let snapStartFrame: number;
+    let snapDuration: number;
+
+    if (draggedItems.length > 1) {
+      // Calculate group bounds
+      let groupStartFrame = Infinity;
+      let groupEndFrame = -Infinity;
+
+      for (const draggedItem of draggedItems) {
+        const sourceItem = getItems().find((i) => i.id === draggedItem.id);
+        if (!sourceItem) continue;
+
+        const proposedStart = draggedItem.initialFrame + deltaFrames;
+        const proposedEnd = proposedStart + sourceItem.durationInFrames;
+
+        if (proposedStart < groupStartFrame) groupStartFrame = proposedStart;
+        if (proposedEnd > groupEndFrame) groupEndFrame = proposedEnd;
+      }
+
+      snapStartFrame = Math.max(0, groupStartFrame);
+      snapDuration = groupEndFrame - groupStartFrame;
+    } else {
+      snapStartFrame = Math.max(0, dragStateRef.current.startFrame + deltaFrames);
+      const draggedItem = getItems().find((i) => i.id === dragStateRef.current?.itemId);
+      snapDuration = draggedItem?.durationInFrames || 0;
+    }
+
+    const snapResult = calculateMagneticSnap(snapStartFrame, snapDuration);
+
+    // Only update store when snap target or alt state actually changes to reduce re-renders
+    const prevSnap = prevSnapTargetRef.current;
+    const newSnap = snapResult.snapTarget;
+    const snapChanged =
+      (prevSnap === null && newSnap !== null) ||
+      (prevSnap !== null && newSnap === null) ||
+      (prevSnap !== null && newSnap !== null && (prevSnap.frame !== newSnap.frame || prevSnap.type !== newSnap.type));
+
+    if (snapChanged || altKeyChanged) {
+      prevSnapTargetRef.current = newSnap ? { frame: newSnap.frame, type: newSnap.type } : null;
+      const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
+      setDragState({
+        isDragging: true,
+        draggedItemIds: draggedIds,
+        offset: { x: clampedDeltaX, y: deltaY },
+        activeSnapTarget: snapResult.snapTarget,
+        isAltDrag: altKey,
+      });
+    }
+  }, [calculateMagneticSnap, elementRef, getItems, isMouseOverGroupTrack, setDragState]);
+
   /**
-   * Handle mouse down - start dragging
+   * Handle pointer down - start dragging
    */
   const handleDragStart = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.PointerEvent) => {
       // Don't allow dragging on locked tracks
       if (trackLocked) {
         return;
       }
+
+      // Primary button only (prevents right click / secondary stylus actions)
+      if (e.button !== 0) return;
 
       // Prevent if clicking on resize handles
       const target = e.target as HTMLElement;
@@ -290,7 +417,24 @@ export function useTimelineDrag(
         return;
       }
 
+      // For touch, prevent the gesture from turning into a scroll (actual scroll blocking
+      // is primarily controlled via touch-action on the draggable surface).
+      if (e.pointerType === 'touch') {
+        e.preventDefault();
+      }
+
       e.stopPropagation();
+
+      scrollContainerRef.current =
+        elementRef?.current?.closest('.timeline-container') as HTMLElement | null;
+
+      // Capture the pointer so move/up keep firing even if the finger leaves the clip.
+      // Guard for older elements / missing ref.
+      try {
+        elementRef?.current?.setPointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore capture failures (e.g. if element is not in DOM yet)
+      }
 
       // Check if this item is in current selection
       const currentSelectedIds = selectedItemIdsRef.current;
@@ -323,6 +467,7 @@ export function useTimelineDrag(
       }>;
 
       // Initialize drag state
+      const startTimelineX = getTimelineXFromClientX(e.clientX, scrollContainerRef.current);
       dragStateRef.current = {
         itemId: item.id, // Anchor item
         startFrame: item.from,
@@ -331,25 +476,32 @@ export function useTimelineDrag(
         startMouseY: e.clientY,
         currentMouseX: e.clientX,
         currentMouseY: e.clientY,
+        startTimelineX,
+        currentTimelineX: startTimelineX,
+        pointerId: e.pointerId,
         draggedItems,
       };
 
       // Don't set cursor immediately - wait for drag threshold
 
-      // Attach a temporary mousemove listener to detect drag threshold
-      const checkDragThreshold = (e: MouseEvent) => {
+      // Attach a temporary pointer listener to detect drag threshold
+      const checkDragThreshold = (ev: PointerEvent) => {
         if (!dragStateRef.current) return;
+        if (dragStateRef.current.pointerId !== undefined && ev.pointerId !== dragStateRef.current.pointerId) return;
 
-        const deltaX = e.clientX - dragStateRef.current.startMouseX;
-        const deltaY = e.clientY - dragStateRef.current.startMouseY;
+        const currentTimelineX = getTimelineXFromClientX(ev.clientX, scrollContainerRef.current);
+        const deltaX = currentTimelineX - (dragStateRef.current.startTimelineX ?? currentTimelineX);
+        const deltaY = ev.clientY - dragStateRef.current.startMouseY;
 
         // Check if we've moved enough to start dragging
         if (Math.abs(deltaX) > DRAG_THRESHOLD_PIXELS || Math.abs(deltaY) > DRAG_THRESHOLD_PIXELS) {
           // Start the drag - track Alt key state
-          isAltDragRef.current = e.altKey;
+          isAltDragRef.current = ev.altKey;
           setIsDragging(true);
-          setGlobalDragCursor(e.altKey ? 'copy' : 'grabbing');
+          setGlobalDragCursor(ev.altKey ? 'copy' : 'grabbing');
           document.body.style.userSelect = 'none';
+
+          pointerClientRef.current = { x: ev.clientX, y: ev.clientY, altKey: ev.altKey };
 
           // Broadcast drag state to all selected items
           const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
@@ -357,144 +509,101 @@ export function useTimelineDrag(
             isDragging: true,
             draggedItemIds: draggedIds,
             offset: { x: 0, y: 0 },
-            isAltDrag: e.altKey,
+            isAltDrag: ev.altKey,
           });
 
           // Remove this listener - the main useEffect will handle it now
-          window.removeEventListener('mousemove', checkDragThreshold);
-          window.removeEventListener('mouseup', cancelDrag);
+          window.removeEventListener('pointermove', checkDragThreshold as unknown as EventListener);
+          window.removeEventListener('pointerup', cancelDrag as unknown as EventListener);
+          window.removeEventListener('pointercancel', cancelDrag as unknown as EventListener);
         }
       };
 
       const cancelDrag = () => {
         // Clean up if mouse released before threshold
         dragStateRef.current = null;
-        window.removeEventListener('mousemove', checkDragThreshold);
-        window.removeEventListener('mouseup', cancelDrag);
+        scrollContainerRef.current = null;
+        window.removeEventListener('pointermove', checkDragThreshold as unknown as EventListener);
+        window.removeEventListener('pointerup', cancelDrag as unknown as EventListener);
+        window.removeEventListener('pointercancel', cancelDrag as unknown as EventListener);
       };
 
-      window.addEventListener('mousemove', checkDragThreshold);
-      window.addEventListener('mouseup', cancelDrag);
+      window.addEventListener('pointermove', checkDragThreshold as unknown as EventListener, { passive: false });
+      window.addEventListener('pointerup', cancelDrag as unknown as EventListener);
+      window.addEventListener('pointercancel', cancelDrag as unknown as EventListener);
     },
     [item.id, item.from, item.trackId, selectItems, trackLocked, setDragState, getItems]
   );
 
   /**
-   * Handle mouse move - update drag position
+   * Handle pointer move - update drag position
    */
   useEffect(() => {
     if (!dragStateRef.current || !isDragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       if (!dragStateRef.current) return;
+      if (dragStateRef.current.pointerId !== undefined && e.pointerId !== dragStateRef.current.pointerId) return;
 
-      const deltaX = e.clientX - dragStateRef.current.startMouseX;
-      const deltaY = e.clientY - dragStateRef.current.startMouseY;
-
-      // Dynamic Alt key toggle - update state and cursor
-      const altKeyChanged = isAltDragRef.current !== e.altKey;
-      isAltDragRef.current = e.altKey;
-
-      // Show not-allowed cursor when over a group track, otherwise normal drag cursor
-      const overGroup = isMouseOverGroupTrack(e.clientX, e.clientY);
-      const desiredCursor = overGroup ? 'not-allowed' : e.altKey ? 'copy' : 'grabbing';
-      setGlobalDragCursor(desiredCursor);
-
-      // Calculate clamped delta to prevent visual preview from going below frame 0
-      const deltaFrames = pixelsToFrameRef.current(deltaX);
-      const draggedItems = dragStateRef.current.draggedItems;
-
-      // Find the minimum starting frame among all dragged items
-      let minInitialFrame = Infinity;
-      for (const draggedItem of draggedItems) {
-        if (draggedItem.initialFrame < minInitialFrame) {
-          minInitialFrame = draggedItem.initialFrame;
-        }
-      }
-
-      // Calculate the maximum allowed negative deltaX (in pixels)
-      // to prevent the earliest item from going below frame 0
-      const maxNegativeDeltaFrames = -minInitialFrame;
-      const clampedDeltaFrames = Math.max(maxNegativeDeltaFrames, deltaFrames);
-
-      // Convert back to pixels for the clamped X offset
-      // Use the ratio of clamped to original to maintain precision
-      const clampedDeltaX = deltaFrames !== 0
-        ? deltaX * (clampedDeltaFrames / deltaFrames)
-        : deltaX;
-
-      // Immediate visual feedback — apply transform directly to bypass React render lag
-      if (elementRef?.current && !isAltDragRef.current) {
-        elementRef.current.style.transform = `translate(${clampedDeltaX}px, ${deltaY}px)`;
-      }
-
-      // Update shared ref for other items to read (no re-renders)
-      dragOffsetRef.current = { x: clampedDeltaX, y: deltaY };
-
-      // Update React state (batched) for ghost positioning and render fallback
-      setDragOffset({ x: clampedDeltaX, y: deltaY });
-
-      dragStateRef.current.currentMouseX = e.clientX;
-      dragStateRef.current.currentMouseY = e.clientY;
-
-      // For multi-item drag, calculate group bounding box for snap visualization
-      // Note: deltaFrames and draggedItems already calculated above for clamping
-      let snapStartFrame: number;
-      let snapDuration: number;
-
-      if (draggedItems.length > 1) {
-        // Calculate group bounds
-        let groupStartFrame = Infinity;
-        let groupEndFrame = -Infinity;
-
-        for (const draggedItem of draggedItems) {
-          const sourceItem = getItems().find((i) => i.id === draggedItem.id);
-          if (!sourceItem) continue;
-
-          const proposedStart = draggedItem.initialFrame + deltaFrames;
-          const proposedEnd = proposedStart + sourceItem.durationInFrames;
-
-          if (proposedStart < groupStartFrame) groupStartFrame = proposedStart;
-          if (proposedEnd > groupEndFrame) groupEndFrame = proposedEnd;
-        }
-
-        snapStartFrame = Math.max(0, groupStartFrame);
-        snapDuration = groupEndFrame - groupStartFrame;
-      } else {
-        // Single item drag - use anchor item
-        snapStartFrame = Math.max(0, dragStateRef.current.startFrame + deltaFrames);
-        const draggedItem = getItems().find((i) => i.id === dragStateRef.current?.itemId);
-        snapDuration = draggedItem?.durationInFrames || 0;
-      }
-
-      const snapResult = calculateMagneticSnap(snapStartFrame, snapDuration);
-
-      // Only update store when snap target or alt state actually changes to reduce re-renders
-      const prevSnap = prevSnapTargetRef.current;
-      const newSnap = snapResult.snapTarget;
-      const snapChanged =
-        (prevSnap === null && newSnap !== null) ||
-        (prevSnap !== null && newSnap === null) ||
-        (prevSnap !== null && newSnap !== null && (prevSnap.frame !== newSnap.frame || prevSnap.type !== newSnap.type));
-
-      if (snapChanged || altKeyChanged) {
-        prevSnapTargetRef.current = newSnap ? { frame: newSnap.frame, type: newSnap.type } : null;
-        const draggedIds = dragStateRef.current?.draggedItems.map((item) => item.id) || [];
-        setDragState({
-          isDragging: true,
-          draggedItemIds: draggedIds,
-          offset: { x: clampedDeltaX, y: deltaY },
-          activeSnapTarget: snapResult.snapTarget,
-          isAltDrag: e.altKey,
-        });
-      }
+      // Keep latest pointer position for drag-while-scroll RAF loop
+      pointerClientRef.current = { x: e.clientX, y: e.clientY, altKey: e.altKey };
+      updateDragFromPointer(e.clientX, e.clientY, e.altKey);
     };
 
-    const handleMouseUp = () => {
+    const runEdgeScrollLoop = () => {
+      if (!dragStateRef.current || !isDragging) {
+        rafIdRef.current = null;
+        return;
+      }
+
+      const scrollContainer = scrollContainerRef.current;
+      if (scrollContainer) {
+        const viewportRect = scrollContainer.getBoundingClientRect();
+        const mouseClientX = pointerClientRef.current.x;
+
+        const leftEdge = viewportRect.left;
+        const rightEdge = viewportRect.right;
+
+        const distancePastLeft = leftEdge - mouseClientX;
+        const distancePastRight = mouseClientX - rightEdge;
+        const distanceFromLeftEdge = mouseClientX - leftEdge;
+        const distanceFromRightEdge = rightEdge - mouseClientX;
+
+        const canScrollLeft = scrollContainer.scrollLeft > 0;
+        const canScrollRight = scrollContainer.scrollLeft + scrollContainer.clientWidth < scrollContainer.scrollWidth;
+
+        const inLeftZone = distanceFromLeftEdge >= 0 && distanceFromLeftEdge < EDGE_SCROLL_ZONE;
+        const pastLeftEdge = distancePastLeft > 0;
+        if ((pastLeftEdge || inLeftZone) && canScrollLeft) {
+          const distance = pastLeftEdge
+            ? distancePastLeft
+            : (EDGE_SCROLL_ZONE - distanceFromLeftEdge) * 0.5;
+          const speed = Math.min(distance * EDGE_SCROLL_ACCELERATION, EDGE_SCROLL_MAX_SPEED);
+          scrollContainer.scrollLeft -= speed;
+        }
+
+        const inRightZone = distanceFromRightEdge >= 0 && distanceFromRightEdge < EDGE_SCROLL_ZONE;
+        const pastRightEdge = distancePastRight > 0;
+        if ((pastRightEdge || inRightZone) && canScrollRight) {
+          const distance = pastRightEdge
+            ? distancePastRight
+            : (EDGE_SCROLL_ZONE - distanceFromRightEdge) * 0.5;
+          const speed = Math.min(distance * EDGE_SCROLL_ACCELERATION, EDGE_SCROLL_MAX_SPEED);
+          scrollContainer.scrollLeft += speed;
+        }
+
+        // After any scroll, recompute drag from the latest pointer position so the clip stays "attached".
+        updateDragFromPointer(pointerClientRef.current.x, pointerClientRef.current.y, pointerClientRef.current.altKey);
+      }
+
+      rafIdRef.current = requestAnimationFrame(runEdgeScrollLoop);
+    };
+
+    const handlePointerUpOrCancel = () => {
       if (!dragStateRef.current || !isDragging) return;
 
       const dragState = dragStateRef.current;
-      const deltaX = dragState.currentMouseX - dragState.startMouseX;
+      const deltaX = (dragState.currentTimelineX ?? dragState.currentMouseX) - (dragState.startTimelineX ?? dragState.startMouseX);
       const isAltDrag = isAltDragRef.current;
 
       // Calculate frame delta
@@ -615,7 +724,7 @@ export function useTimelineDrag(
           );
 
           if (finalPosition === null) {
-            console.warn(isAltDrag ? 'Cannot duplicate items: no available space' : 'Cannot move items: no available space');
+            logger.warn(isAltDrag ? 'Cannot duplicate items: no available space' : 'Cannot move items: no available space');
             // Clean up and cancel - defer drag state to avoid render cascade
             if (elementRef?.current) {
               elementRef.current.style.transform = '';
@@ -697,7 +806,7 @@ export function useTimelineDrag(
           }
         } else {
           // No space available - cancel drag (keep at original position)
-          console.warn(isAltDrag ? 'Cannot duplicate item: no available space' : 'Cannot move item: no available space');
+          logger.warn(isAltDrag ? 'Cannot duplicate item: no available space' : 'Cannot move item: no available space');
         }
       }
 
@@ -713,6 +822,11 @@ export function useTimelineDrag(
       isAltDragRef.current = false; // Reset alt drag state
       clearGlobalDragCursor();
       document.body.style.userSelect = '';
+      scrollContainerRef.current = null;
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
 
       // Batch React state updates (React 18 batches these automatically)
       setIsDragging(false);
@@ -726,17 +840,26 @@ export function useTimelineDrag(
     };
 
     if (dragStateRef.current) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('pointermove', handlePointerMove as unknown as EventListener, { passive: false });
+      window.addEventListener('pointerup', handlePointerUpOrCancel as unknown as EventListener);
+      window.addEventListener('pointercancel', handlePointerUpOrCancel as unknown as EventListener);
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(runEdgeScrollLoop);
+      }
 
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('pointermove', handlePointerMove as unknown as EventListener);
+        window.removeEventListener('pointerup', handlePointerUpOrCancel as unknown as EventListener);
+        window.removeEventListener('pointercancel', handlePointerUpOrCancel as unknown as EventListener);
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
         clearGlobalDragCursor();
         document.body.style.userSelect = '';
       };
     }
-  }, [isDragging, item.id, item.durationInFrames, getTrackIdFromMouseY, isMouseOverGroupTrack, calculateMagneticSnap, elementRef, getItems, setDragState]);
+  }, [isDragging, item.id, item.durationInFrames, getTrackIdFromMouseY, updateDragFromPointer, elementRef, getItems, setDragState]);
 
   return {
     isDragging,

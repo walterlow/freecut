@@ -1,0 +1,8 @@
+[profile.default]
+src = "arbitrum"
+out = "out"
+libs = ["lib"]
+solc = "0.8.26"
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/"
+]

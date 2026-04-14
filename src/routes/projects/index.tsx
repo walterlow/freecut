@@ -1,12 +1,14 @@
-﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, FolderOpen, File, Github } from 'lucide-react';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { RequireWallet } from '@/components/require-wallet';
+import { WalletConnectButton } from '@/components/wallet-connect-button';
+import { Plus, Upload, FolderOpen, File, Share2 } from 'lucide-react';
+import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { ProjectList } from '@/features/projects/components/project-list';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import {
@@ -28,7 +30,11 @@ import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
 
 export const Route = createFileRoute('/projects/')({
-  component: ProjectsIndex,
+  component: () => (
+    <RequireWallet>
+      <ProjectsIndex />
+    </RequireWallet>
+  ),
   // Clean up any media blob URLs when returning to projects page
   beforeLoad: async () => {
     cleanupBlobUrls();
@@ -49,30 +55,30 @@ function ProjectsIndex() {
   const [projectNameFromFile, setProjectNameFromFile] = useState<string | null>(null);
   const [destinationDir, setDestinationDir] = useState<FileSystemDirectoryHandle | null>(null);
   const [destinationName, setDestinationName] = useState<string | null>(null);
-  const [useProjectsFolder, setUseProjectsFolder] = useState(true); // Create FreeCutProjects subfolder
+  const [useProjectsFolder, setUseProjectsFolder] = useState(true); // Create PixelsProjects subfolder
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const PROJECTS_FOLDER_NAME = 'FreeCutProjects';
+  const PROJECTS_FOLDER_NAME = 'PixelsProjects';
 
   // Extract project name from bundle filename
-  // Handles both "myproject.freecut.zip" and browser-renamed "myproject.freecut (1).zip"
+  // Handles both "myproject.pixels.zip" and browser-renamed "myproject.pixels (1).zip"
   const extractProjectName = (fileName: string): string => {
     // Remove .zip extension first
     let name = fileName.replace(/\.zip$/i, '');
     // Remove browser duplicate suffix like " (1)", " (2)", etc.
     name = name.replace(/\s*\(\d+\)$/, '');
-    // Remove .freecut suffix
-    name = name.replace(/\.freecut$/i, '');
+    // Remove .pixels or legacy .freecut suffix
+    name = name.replace(/\.(pixels|freecut)$/i, '');
     return name;
   };
 
-  // Check if file is a valid bundle (handles browser-renamed files like "project.freecut (1).zip")
+  // Check if file is a valid bundle (handles browser-renamed files like "project.pixels (1).zip" or legacy "project.freecut (1).zip")
   const isValidBundleFile = (fileName: string): boolean => {
-    // Match: anything.freecut.zip or anything.freecut (N).zip
-    return /\.freecut(\s*\(\d+\))?\.zip$/i.test(fileName);
+    // Match: anything.pixels.zip or anything.pixels (N).zip, or legacy .freecut
+    return /\.(pixels|freecut)(\s*\(\d+\))?\.zip$/i.test(fileName);
   };
 
   const isLoading = useProjectsLoading();
@@ -97,7 +103,7 @@ function ProjectsIndex() {
     // Reset file input for next selection
     event.target.value = '';
 
-    // Validate file extension (handles browser-renamed files like "project.freecut (1).zip")
+    // Validate file extension (handles browser-renamed files like "project.pixels (1).zip")
     if (!isValidBundleFile(file.name)) {
       setImportError(`Please select a valid ${BUNDLE_EXTENSION} file`);
       setImportDialogOpen(true);
@@ -119,7 +125,7 @@ function ProjectsIndex() {
   const handleSelectDestination = async () => {
     try {
       const dirHandle = await window.showDirectoryPicker({
-        id: 'freecut-import',
+        id: 'pixels-import',
         mode: 'readwrite',
         startIn: 'documents',
       });
@@ -151,13 +157,13 @@ function ProjectsIndex() {
     setImportProgress({ percent: 0, stage: 'validating' });
 
     try {
-      // If useProjectsFolder is enabled, create/get the FreeCutProjects subfolder first
+      // If useProjectsFolder is enabled, create/get the PixelsProjects subfolder first
       let finalDestination = destinationDir;
       if (useProjectsFolder) {
         try {
           finalDestination = await destinationDir.getDirectoryHandle(PROJECTS_FOLDER_NAME, { create: true });
         } catch (err) {
-          logger.error('Failed to create FreeCutProjects folder:', err);
+          logger.error('Failed to create PixelsProjects folder:', err);
           throw new Error(`Failed to create ${PROJECTS_FOLDER_NAME} folder. Try selecting a different location.`);
         }
       }
@@ -242,11 +248,12 @@ function ProjectsIndex() {
       <div className="min-h-screen bg-background">
         {/* Header */}
         <div className="panel-header border-b border-border">
-          <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
-            <Link to="/">
-              <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between gap-2">
+            <Link to="/" className="min-w-0 flex-shrink">
+              <PixelsLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
-            <div className="flex items-center gap-3">
+            <div className="hidden flex-shrink-0 items-center gap-2 sm:gap-3 md:flex">
+              <WalletConnectButton size="sm" compact className="h-10" />
               <Button
                 variant="outline"
                 size="icon"
@@ -254,23 +261,36 @@ function ProjectsIndex() {
                 asChild
               >
                 <a
-                  href="https://github.com/walterlow/freecut"
+                  href="https://tv.creativeplatform.xyz"
                   target="_blank"
                   rel="noopener noreferrer"
-                  data-tooltip="View on GitHub"
+                  data-tooltip="Distribute"
                   data-tooltip-side="left"
+                  aria-label="Distribute"
                 >
-                  <Github className="w-5 h-5" />
+                  <Share2 className="w-5 h-5" />
                 </a>
               </Button>
-              <Button variant="outline" size="lg" className="gap-2" onClick={handleImportClick}>
-                <Upload className="w-4 h-4" />
-                Import Project
+              <Button
+                variant="outline"
+                size="lg"
+                className="gap-2 h-10 w-10 sm:w-auto sm:h-10"
+                onClick={handleImportClick}
+                aria-label="Import Project"
+                title="Import Project"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden sm:inline">Import Project</span>
               </Button>
               <Link to="/projects/new">
-                <Button size="lg" className="gap-2">
-                  <Plus className="w-4 h-4" />
-                  New Project
+                <Button
+                  size="lg"
+                  className="gap-2 h-10 w-10 sm:w-auto sm:h-10"
+                  aria-label="New Project"
+                  title="New Project"
+                >
+                  <Plus className="w-4 h-4 flex-shrink-0" />
+                  <span className="hidden sm:inline">New Project</span>
                 </Button>
               </Link>
             </div>
@@ -288,7 +308,7 @@ function ProjectsIndex() {
 
         {/* Error state */}
         {error && (
-          <div className="max-w-[1920px] mx-auto px-6 py-4">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-4">
             <div className="panel-bg border border-destructive/50 rounded-lg p-4 text-destructive">
               <p className="font-medium">Error loading projects</p>
               <p className="text-sm mt-1">{error}</p>
@@ -298,7 +318,7 @@ function ProjectsIndex() {
 
         {/* Loading state */}
         {isLoading ? (
-          <div className="max-w-[1920px] mx-auto px-6 py-16 flex items-center justify-center">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-16 flex items-center justify-center">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
               <p className="text-muted-foreground">Loading projects...</p>
@@ -306,7 +326,7 @@ function ProjectsIndex() {
           </div>
         ) : (
           /* Projects List */
-          <div className="max-w-[1920px] mx-auto px-6 py-8">
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
             <ProjectList onEditProject={handleEditProject} />
           </div>
         )}
@@ -314,7 +334,7 @@ function ProjectsIndex() {
 
       {/* Edit Project Dialog */}
       <Dialog open={!!editingProject} onOpenChange={(open) => !open && setEditingProject(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto mx-4 max-w-[calc(100vw-2rem)] sm:mx-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Project Settings</DialogTitle>
           </DialogHeader>
@@ -340,7 +360,7 @@ function ProjectsIndex() {
       <Dialog open={importDialogOpen} onOpenChange={(open) => {
         if (!open) handleCloseImportDialog();
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md mx-4 max-w-[calc(100vw-2rem)] sm:mx-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
               {importError ? 'Import Failed' : isImporting ? 'Importing Project' : 'Import Project'}
@@ -414,7 +434,7 @@ function ProjectsIndex() {
                   )}
                 </Button>
 
-                {/* FreeCutProjects subfolder option */}
+                {/* PixelsProjects subfolder option */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"

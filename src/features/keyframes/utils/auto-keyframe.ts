@@ -1,5 +1,6 @@
 import type { AnimatableProperty, TransformAnimatableProperty, ItemKeyframes, EasingType } from '@/types/keyframe';
 import type { TimelineItem } from '@/types/timeline';
+import { isAutoKeyframeEnabled } from '../stores/auto-keyframe-store';
 
 export interface AutoKeyframeAddOperation {
   type: 'add';
@@ -34,42 +35,37 @@ interface AutoKeyframeResult {
 
 /**
  * Check if a property should be auto-keyframed and get the action to perform.
- * Does NOT perform the keyframe operation - just determines what should happen.
+ * Existing keyframes at the current frame are always updated.
+ * New keyframes are only created when the explicit dopesheet auto-key toggle is enabled.
  */
 function shouldAutoKeyframe(
+  itemId: string,
   itemKeyframes: ItemKeyframes | undefined,
   property: AnimatableProperty,
   relativeFrame: number,
   itemDurationInFrames: number
 ): AutoKeyframeResult {
-  // No keyframes for this item
-  if (!itemKeyframes) {
-    return { handled: false };
-  }
-
   // Frame is outside item bounds
   if (relativeFrame < 0 || relativeFrame >= itemDurationInFrames) {
     return { handled: false };
   }
 
   // Find keyframes for this property
-  const propKeyframes = itemKeyframes.properties.find((p) => p.property === property);
-  if (!propKeyframes || propKeyframes.keyframes.length === 0) {
-    return { handled: false };
-  }
+  const propKeyframes = itemKeyframes?.properties.find((p) => p.property === property);
 
-  // Property has keyframes - determine if we add or update
-  const existingKeyframe = propKeyframes.keyframes.find((k) => k.frame === relativeFrame);
+  const existingKeyframe = propKeyframes?.keyframes.find((k) => k.frame === relativeFrame);
   if (existingKeyframe) {
     return { handled: true, action: 'update', existingKeyframeId: existingKeyframe.id };
-  } else {
-    return { handled: true, action: 'add' };
   }
+
+  return isAutoKeyframeEnabled(itemId, property)
+    ? { handled: true, action: 'add' }
+    : { handled: false };
 }
 
 /**
  * Determines the auto-keyframe operation for a single property.
- * Returns null if this property should not be auto-keyframed.
+ * Returns null when the current edit should fall back to the base property value.
  */
 export function getAutoKeyframeOperation(
   item: TimelineItem,
@@ -79,7 +75,13 @@ export function getAutoKeyframeOperation(
   currentFrame: number
 ): AutoKeyframeOperation | null {
   const relativeFrame = currentFrame - item.from;
-  const result = shouldAutoKeyframe(itemKeyframes, property, relativeFrame, item.durationInFrames);
+  const result = shouldAutoKeyframe(
+    item.id,
+    itemKeyframes,
+    property,
+    relativeFrame,
+    item.durationInFrames
+  );
 
   if (!result.handled) {
     return null;

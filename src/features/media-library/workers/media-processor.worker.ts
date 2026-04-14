@@ -9,6 +9,10 @@
  * This prevents UI blocking when importing media files.
  */
 
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('MediaProcessorWorker');
+
 // Type definitions for mediabunny module
 interface MediabunnyVideoTrack {
   displayWidth: number;
@@ -375,7 +379,7 @@ async function processMedia(
     try {
       thumbnail = await generateVideoThumbnail(file, thumbnailMaxSize, thumbnailQuality, thumbnailTimestamp);
     } catch (err) {
-      console.warn('[MediaProcessorWorker] Failed to generate video thumbnail:', err);
+      logger.warn('Failed to generate video thumbnail:', err);
     }
   } else if (mimeType.startsWith('audio/')) {
     // Audio: metadata and thumbnail are independent

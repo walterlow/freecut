@@ -1,0 +1,109 @@
+---
+description: Upscale an image by increasing its resolution.
+alwaysApply: false
+---
+Upscale
+Upscale an image by increasing its resolution.
+
+POST
+
+https://livepeer.studio/api/beta/generate
+/
+upscale
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form Bearer <token>, where <token> is your auth token.
+
+Body
+multipart/form-data
+​
+prompt
+stringrequired
+Text prompt(s) to guide upscaled image generation.
+
+​
+image
+filerequired
+Uploaded image to modify with the pipeline.
+
+​
+model_id
+stringdefault:""
+Hugging Face model ID used for upscaled image generation.
+
+​
+safety_check
+booleandefault:true
+Perform a safety check to estimate if generated images could be offensive or harmful.
+
+​
+seed
+integer
+Seed for random number generation.
+
+​
+num_inference_steps
+integerdefault:75
+Number of denoising steps. More steps usually lead to higher quality images but slower inference. Modulated by strength.
+
+Response
+
+200
+
+application/json
+Successful Response
+
+Response model for image generation.
+
+​
+images
+Media · object[]required
+The generated images.
+
+Hide child attributes
+
+​
+images.url
+stringrequired
+The URL where the media can be accessed.
+
+​
+images.seed
+integerrequired
+The seed used to generate the media.
+
+​
+images.nsfw
+booleanrequired
+Whether the media was flagged as NSFW.
+
+const form = new FormData();
+form.append('prompt', '<string>');
+form.append('image', '<string>');
+form.append('model_id', '');
+form.append('safety_check', 'true');
+form.append('seed', '123');
+form.append('num_inference_steps', '75');
+
+const options = {method: 'POST', headers: {Authorization: 'Bearer <token>'}};
+
+options.body = form;
+
+fetch('https://livepeer.studio/api/beta/generate/upscale', options)
+  .then(res => res.json())
+  .then(res => console.log(res))
+  .catch(err => console.error(err));
+
+  {
+  "images": [
+    {
+      "url": "<string>",
+      "seed": 123,
+      "nsfw": true
+    }
+  ]
+}

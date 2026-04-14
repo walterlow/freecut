@@ -1,4 +1,4 @@
-﻿import { memo } from 'react';
+import { memo } from 'react';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -51,16 +51,18 @@ export const TrimHandles = memo(function TrimHandles({
 
   return (
     <>
-      {/* Left trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      {/* Left trim handle - w-2 (8px) visible; min-w-6 on mobile for touch target */}
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableLeft}>
           <div
             className={cn(
-              "absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+              "absolute left-0 top-0 bottom-0 w-2 min-w-6 md:min-w-0 flex items-stretch touch-none",
               showLeftHandle ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
             onMouseDown={(e) => onTrimStart(e, 'start')}
-          />
+          >
+            <div className="w-2 bg-primary cursor-ew-resize transition-opacity duration-75 shrink-0" />
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinLeft}>
@@ -70,16 +72,18 @@ export const TrimHandles = memo(function TrimHandles({
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Right trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      {/* Right trim handle - w-2 (8px) visible; min-w-6 on mobile for touch target */}
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableRight}>
           <div
             className={cn(
-              "absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
+              "absolute right-0 top-0 bottom-0 w-2 min-w-6 md:min-w-0 flex items-stretch justify-end touch-none",
               showRightHandle ? "opacity-100" : "opacity-0 pointer-events-none"
             )}
             onMouseDown={(e) => onTrimStart(e, 'end')}
-          />
+          >
+            <div className="w-2 bg-primary cursor-ew-resize transition-opacity duration-75 shrink-0" />
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinRight}>

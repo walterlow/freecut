@@ -1,0 +1,276 @@
+---
+description: Complete reference for the TypeScript SDK methods
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Methods
+
+> Complete reference for the TypeScript SDK methods
+
+# Methods Reference
+
+The `daydream.streams` namespace provides methods for creating, reading, updating, and deleting streams.
+
+## Methods Overview
+
+| Method              | Description                                |
+| ------------------- | ------------------------------------------ |
+| `streams.create()`  | Create a new stream                        |
+| `streams.getAll()`  | Get all streams for the authenticated user |
+| `streams.getById()` | Get a specific stream by ID                |
+| `streams.update()`  | Update stream parameters                   |
+| `streams.delete()`  | Delete a stream                            |
+
+## streams.create()
+
+Creates a new video processing stream.
+
+```typescript  theme={null}
+const stream = await daydream.streams.create({
+  pipeline: "streamdiffusion",
+  params: {
+    modelId: "stabilityai/sdxl-turbo",
+    prompt: "anime character",
+    // ... additional parameters
+  },
+  name: "My Stream", // optional
+});
+```
+
+### Parameters
+
+| Field            | Type                | Required | Description                |
+| ---------------- | ------------------- | -------- | -------------------------- |
+| `pipeline`       | `"streamdiffusion"` | Yes      | The processing pipeline    |
+| `params.modelId` | `string`            | Yes      | Model to use (see below)   |
+| `params.prompt`  | `string`            | No       | Text prompt for generation |
+| `name`           | `string`            | No       | Human-readable stream name |
+
+### Available Models
+
+| modelId                     | Description                                |
+| --------------------------- | ------------------------------------------ |
+| `stabilityai/sd-turbo`      | SD2.1 - Fastest, 6 ControlNets             |
+| `stabilityai/sdxl-turbo`    | SDXL - Highest quality, IP Adapter support |
+| `Lykon/dreamshaper-8`       | SD1.5 - Great for stylized effects         |
+| `prompthero/openjourney-v4` | SD1.5 - Artistic style                     |
+
+### Returns
+
+```typescript  theme={null}
+{
+  id: string;                    // Unique stream identifier
+  whipUrl: string;               // WebRTC WHIP URL for broadcasting
+  outputPlaybackId: string;      // Playback ID for viewing output
+  streamKey: string;             // Stream key
+  pipeline: "streamdiffusion";
+  params: { ... };               // Current parameters
+  createdAt: string;             // ISO timestamp
+  name: string;
+  author: string;
+  gatewayHost: string;
+}
+```
+
+***
+
+## streams.getAll()
+
+Retrieves all streams for the authenticated user.
+
+```typescript  theme={null}
+const streams = await daydream.streams.getAll();
+
+for (const stream of streams) {
+  console.log(stream.id, stream.name, stream.createdAt);
+}
+```
+
+### Returns
+
+Array of stream objects (same structure as `create()` response).
+
+***
+
+## streams.getById()
+
+Retrieves a specific stream by ID.
+
+```typescript  theme={null}
+const stream = await daydream.streams.getById("str_abc123");
+```
+
+### Parameters
+
+| Field | Type     | Required | Description |
+| ----- | -------- | -------- | ----------- |
+| `id`  | `string` | Yes      | Stream ID   |
+
+### Returns
+
+Stream object (same structure as `create()` response).
+
+***
+
+## streams.update()
+
+Updates parameters for an existing stream.
+
+```typescript  theme={null}
+await daydream.streams.update("str_abc123", {
+  pipeline: "streamdiffusion",
+  params: {
+    modelId: "stabilityai/sdxl-turbo",
+    prompt: "new prompt",
+    guidanceScale: 1.5,
+  },
+});
+```
+
+### Parameters
+
+| Field      | Type     | Required | Description                     |
+| ---------- | -------- | -------- | ------------------------------- |
+| `id`       | `string` | Yes      | Stream ID (first argument)      |
+| `pipeline` | `string` | No       | Defaults to `"streamdiffusion"` |
+| `params`   | `object` | Yes      | Parameters to update            |
+
+<Tip>
+  You only need to include the parameters you want to change. Other parameters
+  remain unchanged.
+</Tip>
+
+### Hot-Swappable Parameters
+
+These parameters update instantly without pipeline reload:
+
+* `prompt`, `negativePrompt`
+* `guidanceScale`, `delta`
+* `numInferenceSteps`, `tIndexList`
+* `seed`
+* `controlnets[].conditioningScale`
+* `ipAdapter` settings
+* `ipAdapterStyleImageUrl`
+
+All other parameters trigger a \~30s pipeline reload.
+
+***
+
+## streams.delete()
+
+Deletes a stream.
+
+```typescript  theme={null}
+await daydream.streams.delete("str_abc123");
+```
+
+### Parameters
+
+| Field | Type     | Required | Description |
+| ----- | -------- | -------- | ----------- |
+| `id`  | `string` | Yes      | Stream ID   |
+
+***
+
+## Error Handling
+
+The SDK throws typed errors for different failure scenarios:
+
+```typescript  theme={null}
+import { Daydream } from "@daydreamlive/sdk";
+import * as errors from "@daydreamlive/sdk/models/errors";
+
+const daydream = new Daydream({
+  bearer: process.env.DAYDREAM_API_KEY,
+});
+
+try {
+  const stream = await daydream.streams.create({
+    pipeline: "streamdiffusion",
+    params: { modelId: "stabilityai/sdxl-turbo" },
+  });
+} catch (error) {
+  if (error instanceof errors.BadRequestError) {
+    // 400 - Invalid request
+    console.log("Validation error:", error.data$.details);
+  } else if (error instanceof errors.UnauthorizedError) {
+    // 401 - Invalid API key
+    console.log("Check your API key");
+  } else if (error instanceof errors.TooManyRequestsError) {
+    // 429 - Rate limited
+    console.log("Slow down! Rate limit exceeded");
+  } else if (error instanceof errors.DaydreamError) {
+    // Other API errors
+    console.log(error.message, error.statusCode);
+  }
+}
+```
+
+### Error Types
+
+| Error                  | Status | Description                |
+| ---------------------- | ------ | -------------------------- |
+| `BadRequestError`      | 400    | Invalid request parameters |
+| `UnauthorizedError`    | 401    | Invalid or missing API key |
+| `ForbiddenError`       | 403    | Insufficient permissions   |
+| `NotFoundError`        | 404    | Stream not found           |
+| `ConflictError`        | 409    | Conflict (e.g., duplicate) |
+| `TooManyRequestsError` | 429    | Rate limit exceeded        |
+| `InternalServerError`  | 500    | Server error               |
+
+***
+
+## Retry Configuration
+
+Configure automatic retries for transient failures:
+
+```typescript  theme={null}
+const daydream = new Daydream({
+  bearer: process.env.DAYDREAM_API_KEY,
+  retryConfig: {
+    strategy: "backoff",
+    backoff: {
+      initialInterval: 500,
+      maxInterval: 30000,
+      exponent: 1.5,
+      maxElapsedTime: 60000,
+    },
+    retryConnectionErrors: true,
+  },
+});
+```
+
+Or per-request:
+
+```typescript  theme={null}
+const stream = await daydream.streams.create(
+  {
+    pipeline: "streamdiffusion",
+    params: { modelId: "stabilityai/sdxl-turbo" },
+  },
+  { retries: { strategy: "backoff", backoff: { maxElapsedTime: 10000 } } },
+);
+```
+
+***
+
+## TypeScript Types
+
+The SDK is fully typed. Import types for use in your application:
+
+```typescript  theme={null}
+import type {
+  CreateStreamRequest,
+  CreateStreamResponse,
+  UpdateStreamRequest,
+} from "@daydreamlive/sdk/models/components";
+```
+
+## Next Steps
+
+* [Parameters](/api/parameters/SDXL) - Full parameter documentation
+* [Browser SDK](/sdks/browser/installation) - Client-side broadcasting
+* [GitHub Repository](https://github.com/daydreamlive/daydream-typescript) - Source code and issues

@@ -9,6 +9,10 @@ import type {
   NanobananaQuality,
 } from '../types';
 import { IDLE_TASK } from '../types';
+import type { ClipBinEntry } from '../components/clip-bin';
+
+export type BridgeMode = 'realtime' | 'interpolation';
+export type RenderStatus = 'idle' | 'loading-pipeline' | 'rendering' | 'complete' | 'error';
 
 export interface GenerativeState {
   // Image nodes
@@ -34,6 +38,17 @@ export interface GenerativeState {
   // Nanobanana settings
   imageSize: NanobananaSize;
   imageQuality: NanobananaQuality;
+
+  // Prod bridge/render state
+  bridgeMode: BridgeMode;
+  renderStatus: RenderStatus;
+  renderProgress: number;
+  renderError: string | null;
+  pipelineReady: boolean;
+  /** Configurable audio delay in ms to compensate for generative round-trip latency. */
+  audioDelayMs: number;
+  /** Rendered AI clips available for drag-to-timeline. */
+  clips: ClipBinEntry[];
 }
 
 export interface GenerativeActions {
@@ -61,6 +76,18 @@ export interface GenerativeActions {
   setImageSize: (size: NanobananaSize) => void;
   setImageQuality: (quality: NanobananaQuality) => void;
 
+  // Prod bridge/render actions
+  setBridgeMode: (mode: BridgeMode) => void;
+  setRenderStatus: (status: RenderStatus) => void;
+  setRenderProgress: (progress: number) => void;
+  setRenderError: (error: string | null) => void;
+  setPipelineReady: (ready: boolean) => void;
+  setAudioDelayMs: (delay: number) => void;
+  addClip: (clip: ClipBinEntry) => void;
+  removeClip: (id: string) => void;
+  /** Look up a clip by ID (for drag-drop retrieval). */
+  getClipById: (id: string) => ClipBinEntry | undefined;
+
   // Utility
   reset: () => void;
 }
@@ -80,9 +107,16 @@ const INITIAL_STATE: GenerativeState = {
   generateAudio: true,
   imageSize: 'auto',
   imageQuality: '2K',
+  bridgeMode: 'realtime',
+  renderStatus: 'idle',
+  renderProgress: 0,
+  renderError: null,
+  pipelineReady: false,
+  audioDelayMs: 200,
+  clips: [],
 };
 
-export const useGenerativeStore = create<GenerativeState & GenerativeActions>()((set) => ({
+export const useGenerativeStore = create<GenerativeState & GenerativeActions>()((set, get) => ({
   ...INITIAL_STATE,
 
   setStartImage: (source) => set({ startImage: source }),
@@ -106,6 +140,24 @@ export const useGenerativeStore = create<GenerativeState & GenerativeActions>()(
 
   setImageSize: (size) => set({ imageSize: size }),
   setImageQuality: (quality) => set({ imageQuality: quality }),
+
+  setBridgeMode: (mode) => set({ bridgeMode: mode }),
+  setRenderStatus: (status) => set({ renderStatus: status }),
+  setRenderProgress: (progress) => set({ renderProgress: progress }),
+  setRenderError: (error) => set({ renderError: error }),
+  setPipelineReady: (ready) => set({ pipelineReady: ready }),
+  setAudioDelayMs: (delay) => set({ audioDelayMs: delay }),
+  addClip: (clip) => set((state) => ({ clips: [clip, ...state.clips] })),
+  removeClip: (id) => set((state) => ({
+    clips: state.clips.filter((c) => {
+      if (c.id === id) {
+        URL.revokeObjectURL(c.thumbnailUrl);
+        return false;
+      }
+      return true;
+    }),
+  })),
+  getClipById: (id) => get().clips.find((c) => c.id === id),
 
   reset: () => set(INITIAL_STATE),
 }));

@@ -45,7 +45,9 @@ const EditorProjectIdRoute = EditorProjectIdRouteImport.update({
   id: '/editor/$projectId',
   path: '/editor/$projectId',
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any).lazy(() =>
+  import('./routes/editor/$projectId.lazy').then((d) => d.Route),
+)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute

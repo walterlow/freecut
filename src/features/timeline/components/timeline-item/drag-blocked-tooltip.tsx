@@ -24,7 +24,7 @@ export const DragBlockedTooltip = memo(function DragBlockedTooltip({
         zIndex: 9999,
       }}
     >
-      <div className="overflow-hidden rounded-md bg-orange-500 px-3 py-1.5 text-xs text-white shadow-lg">
+      <div className="overflow-hidden rounded-md bg-[#EC407A] px-3 py-1.5 text-xs text-white shadow-lg">
         Can't move clips in rate stretch mode
       </div>
     </div>,

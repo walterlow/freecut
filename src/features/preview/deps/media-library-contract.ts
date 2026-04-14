@@ -13,3 +13,10 @@ export {
   cleanupBlobUrls,
 } from '@/features/media-library/utils/media-resolver';
 export { mediaLibraryService, FileAccessError } from '@/features/media-library/services/media-library-service';
+export {
+  extractValidMediaFileEntriesFromDataTransfer,
+  supportsFileSystemDragDrop,
+} from '@/features/media-library/utils/file-drop';
+export {
+  getMediaDragData,
+} from '@/features/media-library/utils/drag-data-cache';

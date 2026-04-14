@@ -29,6 +29,10 @@ const GAP = 8;
 const FALLBACK_CANVAS_WIDTH = 280;
 const FALLBACK_CANVAS_HEIGHT = 158;
 const STRICT_DECODE_FALLBACK_FAILURES = 2;
+/** Frame cache for edit overlay panels — instant revisits during drag reversal */
+const EDIT_PANEL_CACHE_MAX = 60;
+/** Quantize source time to ~frame-level resolution for cache keys */
+const CACHE_TIME_QUANTUM = 1 / 60;
 let previewVideoInstanceCounter = 0;
 let strictDecodeInstanceCounter = 0;
 let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
@@ -233,6 +237,10 @@ interface StrictDecodedVideoFrameProps extends VideoFrameProps {
   onDecodeFailure: () => void;
 }
 
+function quantizeTime(t: number): number {
+  return Math.round(t / CACHE_TIME_QUANTUM) * CACHE_TIME_QUANTUM;
+}
+
 function StrictDecodedVideoFrame({
   item,
   sourceTime,
@@ -252,11 +260,19 @@ function StrictDecodedVideoFrame({
   const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const decoderItemId = `${item.id}:${decodeLaneRef.current}`;
+  // Frame cache: quantized source time → ImageBitmap for instant revisits
+  const frameCacheRef = useRef<Map<number, ImageBitmap>>(new Map());
+  const frameCacheOrderRef = useRef<number[]>([]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      // Clean up cached bitmaps on unmount
+      for (const bitmap of frameCacheRef.current.values()) {
+        bitmap.close();
+      }
+      frameCacheRef.current.clear();
     };
   }, []);
 
@@ -281,7 +297,44 @@ function StrictDecodedVideoFrame({
       canvas.height = targetHeight;
     }
 
-    return extractor.drawFrame(ctx, Math.max(0, targetTime), 0, 0, canvas.width, canvas.height);
+    // Check frame cache first
+    const cacheKey = quantizeTime(targetTime);
+    const cache = frameCacheRef.current;
+    const cacheOrder = frameCacheOrderRef.current;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
+      // Move to end of LRU order
+      const idx = cacheOrder.indexOf(cacheKey);
+      if (idx !== -1) {
+        cacheOrder.splice(idx, 1);
+        cacheOrder.push(cacheKey);
+      }
+      return true;
+    }
+
+    const didDraw = await extractor.drawFrame(ctx, Math.max(0, targetTime), 0, 0, canvas.width, canvas.height);
+    if (!didDraw) return false;
+
+    // Cache the decoded frame as ImageBitmap
+    try {
+      const bitmap = await createImageBitmap(canvas);
+      cache.set(cacheKey, bitmap);
+      cacheOrder.push(cacheKey);
+      // LRU eviction
+      while (cacheOrder.length > EDIT_PANEL_CACHE_MAX) {
+        const evictKey = cacheOrder.shift()!;
+        const evicted = cache.get(evictKey);
+        if (evicted) {
+          evicted.close();
+          cache.delete(evictKey);
+        }
+      }
+    } catch {
+      // createImageBitmap can fail on empty canvas — not critical
+    }
+
+    return true;
   }, []);
 
   const pumpLatestFrame = useCallback(() => {
@@ -329,6 +382,12 @@ function StrictDecodedVideoFrame({
     pendingTimeRef.current = null;
     consecutiveDecodeFailuresRef.current = 0;
     contextRef.current = null;
+    // Clear frame cache on source change
+    for (const bitmap of frameCacheRef.current.values()) {
+      bitmap.close();
+    }
+    frameCacheRef.current.clear();
+    frameCacheOrderRef.current.length = 0;
 
     if (!blobUrl) return;
 

@@ -9,7 +9,7 @@ import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/edito
 import {
   PropertySection,
   PropertyRow,
-  NumberInput,
+  SliderInput,
 } from '../components';
 import { getMixedValue } from '../utils';
 
@@ -188,7 +188,7 @@ export function VideoSection({ items }: VideoSectionProps) {
       {/* Playback Rate - affects clip duration */}
       <PropertyRow label="Speed">
         <div className="flex items-center gap-1 w-full">
-          <NumberInput
+          <SliderInput
             value={speed}
             onChange={handleSpeedChange}
             min={MIN_SPEED}
@@ -212,7 +212,7 @@ export function VideoSection({ items }: VideoSectionProps) {
       {/* Video Fades */}
       <PropertyRow label="Fade In">
         <div className="flex items-center gap-1 w-full">
-          <NumberInput
+          <SliderInput
             value={fadeIn}
             onChange={handleFadeInChange}
             onLiveChange={handleFadeInLiveChange}
@@ -236,7 +236,7 @@ export function VideoSection({ items }: VideoSectionProps) {
 
       <PropertyRow label="Fade Out">
         <div className="flex items-center gap-1 w-full">
-          <NumberInput
+          <SliderInput
             value={fadeOut}
             onChange={handleFadeOutChange}
             onLiveChange={handleFadeOutLiveChange}

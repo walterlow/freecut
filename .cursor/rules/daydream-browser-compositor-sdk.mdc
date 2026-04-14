@@ -1,0 +1,269 @@
+---
+description: A useful helper for combining multiple video sources into a single stream
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Compositor
+
+> A useful helper for combining multiple video sources into a single stream
+
+# Compositor API
+
+The Compositor is a useful helper that lets you combine multiple video sources (camera, screen share, canvas, videos) into a single stream for AI processing.
+
+<Tip>
+  Check out the [with-compositor
+  demo](https://daydream-browser-zeta.preview.livepeer.monster) to see it in
+  action!
+</Tip>
+
+## Basic Usage
+
+```typescript  theme={null}
+import { createCompositor } from "@daydreamlive/browser";
+
+// Create a compositor with 512x512 output
+const compositor = createCompositor({
+  width: 512,
+  height: 512,
+});
+
+// Add a camera source
+const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+compositor.addSource("camera", cameraStream, {
+  x: 0,
+  y: 0,
+  width: 512,
+  height: 512,
+});
+
+// Get the composited stream
+const outputStream = compositor.getStream();
+
+// Use with broadcast
+const broadcast = createBroadcast({
+  whipUrl,
+  stream: outputStream,
+});
+await broadcast.connect();
+```
+
+## Configuration
+
+```typescript  theme={null}
+const compositor = createCompositor({
+  width: 512, // Output width
+  height: 512, // Output height
+  frameRate: 30, // Target frame rate
+  background: "#000", // Background color (CSS color or 'transparent')
+});
+```
+
+## Adding Sources
+
+### Video Source (Camera, Screen Share)
+
+```typescript  theme={null}
+const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+compositor.addSource("camera", cameraStream, {
+  x: 0, // X position
+  y: 0, // Y position
+  width: 256, // Width
+  height: 256, // Height
+  zIndex: 1, // Layer order (higher = on top)
+});
+```
+
+### Image Source
+
+```typescript  theme={null}
+const image = new Image();
+image.src = "logo.png";
+await image.decode();
+
+compositor.addSource("logo", image, {
+  x: 400,
+  y: 10,
+  width: 100,
+  height: 100,
+  zIndex: 10,
+});
+```
+
+### Canvas Source
+
+```typescript  theme={null}
+const canvas = document.createElement("canvas");
+const ctx = canvas.getContext("2d");
+
+// Draw something
+ctx.fillStyle = "red";
+ctx.fillRect(0, 0, 100, 100);
+
+compositor.addSource("canvas", canvas, {
+  x: 0,
+  y: 0,
+  width: 512,
+  height: 512,
+  zIndex: 0,
+});
+```
+
+### Video Element Source
+
+```typescript  theme={null}
+const video = document.querySelector("video#background");
+
+compositor.addSource("video", video, {
+  x: 0,
+  y: 0,
+  width: 512,
+  height: 512,
+  zIndex: 0,
+});
+```
+
+## Updating Sources
+
+```typescript  theme={null}
+// Update position/size
+compositor.updateSource("camera", {
+  x: 100,
+  y: 100,
+  width: 300,
+  height: 300,
+});
+
+// Change z-index
+compositor.updateSource("logo", { zIndex: 5 });
+```
+
+## Removing Sources
+
+```typescript  theme={null}
+compositor.removeSource("camera");
+```
+
+## Picture-in-Picture Example
+
+Create a PiP layout with screen share and camera overlay:
+
+```typescript  theme={null}
+import { createCompositor, createBroadcast } from "@daydreamlive/browser";
+
+async function startPiP(whipUrl: string) {
+  // Create compositor
+  const compositor = createCompositor({
+    width: 512,
+    height: 512,
+  });
+
+  // Add screen share as background
+  const screenStream = await navigator.mediaDevices.getDisplayMedia({
+    video: { width: 1920, height: 1080 },
+  });
+  compositor.addSource("screen", screenStream, {
+    x: 0,
+    y: 0,
+    width: 512,
+    height: 512,
+    zIndex: 0,
+  });
+
+  // Add camera as small overlay in corner
+  const cameraStream = await navigator.mediaDevices.getUserMedia({
+    video: { width: 320, height: 240 },
+  });
+  compositor.addSource("camera", cameraStream, {
+    x: 352, // Bottom-right corner
+    y: 352,
+    width: 150,
+    height: 150,
+    zIndex: 1,
+  });
+
+  // Broadcast the composited stream
+  const broadcast = createBroadcast({
+    whipUrl,
+    stream: compositor.getStream(),
+  });
+  await broadcast.connect();
+
+  return { compositor, broadcast };
+}
+```
+
+## Dynamic Canvas Drawing
+
+Combine live video with dynamic graphics:
+
+```typescript  theme={null}
+import { createCompositor, createBroadcast } from "@daydreamlive/browser";
+
+async function startWithOverlay(whipUrl: string) {
+  const compositor = createCompositor({ width: 512, height: 512 });
+
+  // Add camera
+  const camera = await navigator.mediaDevices.getUserMedia({ video: true });
+  compositor.addSource("camera", camera, {
+    x: 0,
+    y: 0,
+    width: 512,
+    height: 512,
+    zIndex: 0,
+  });
+
+  // Create overlay canvas
+  const overlay = document.createElement("canvas");
+  overlay.width = 512;
+  overlay.height = 512;
+  const ctx = overlay.getContext("2d");
+
+  compositor.addSource("overlay", overlay, {
+    x: 0,
+    y: 0,
+    width: 512,
+    height: 512,
+    zIndex: 1,
+  });
+
+  // Animate the overlay
+  function animate() {
+    ctx.clearRect(0, 0, 512, 512);
+
+    // Draw timestamp
+    ctx.font = "24px sans-serif";
+    ctx.fillStyle = "white";
+    ctx.fillText(new Date().toLocaleTimeString(), 10, 30);
+
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // Broadcast
+  const broadcast = createBroadcast({
+    whipUrl,
+    stream: compositor.getStream(),
+  });
+  await broadcast.connect();
+
+  return { compositor, broadcast };
+}
+```
+
+## Cleanup
+
+```typescript  theme={null}
+// Stop the compositor and release resources
+compositor.stop();
+```
+
+## Next Steps
+
+* [Broadcast](/sdks/browser/broadcast) - Send video to Daydream
+* [React Hooks](/sdks/browser/react-hooks) - Use with React
+* [with-compositor example](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-compositor) - Full working example

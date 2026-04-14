@@ -36,6 +36,7 @@ function getIrisMaxRadius(width: number, height: number): number {
 // ============================================================================
 
 const clockWipeRenderer: TransitionRenderer = {
+  gpuTransitionId: 'clockWipe',
   calculateStyles(progress, isOutgoing, _cw, _ch, _dir, properties): TransitionStyleCalculation {
     const p = clamp01(progress);
     const edgeSoftness = Math.max(0, getNumericProperty(properties, 'edgeSoftness', 8));
@@ -103,6 +104,7 @@ const clockWipeDef: TransitionDefinition = {
 // ============================================================================
 
 const irisRenderer: TransitionRenderer = {
+  gpuTransitionId: 'iris',
   calculateStyles(progress, isOutgoing, canvasWidth, canvasHeight, _dir, properties): TransitionStyleCalculation {
     const p = clamp01(progress);
     const edgeSoftness = Math.max(0, getNumericProperty(properties, 'edgeSoftness', 6));

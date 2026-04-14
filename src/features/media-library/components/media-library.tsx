@@ -42,7 +42,7 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
-import { validateMediaFile } from '../utils/validation';
+import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 
 function CopyButton({ text }: { text: string }) {
@@ -86,6 +86,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
+  const importFiles = useMediaLibraryStore((s) => s.importFiles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
   const searchQuery = useMediaLibraryStore((s) => s.searchQuery);
@@ -220,14 +221,34 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     };
   }, [selectedMediaIds, showDeleteDialog]);
 
-  // Import files using file picker (instant, no copy)
-  const handleImport = async () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import files: use file picker when available, else fall back to input[type=file] (e.g. mobile Safari)
+  const handleImport = useCallback(async () => {
+    if (!('showOpenFilePicker' in window)) {
+      fileInputRef.current?.click();
+      return;
+    }
     try {
       await importMedia();
     } catch (error) {
       logger.error('Import failed:', error);
     }
-  };
+  }, [importMedia]);
+
+  const handleFileInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files?.length) return;
+      try {
+        await importFiles(Array.from(files));
+      } catch (error) {
+        logger.error('Import failed:', error);
+      }
+      e.target.value = '';
+    },
+    [importFiles]
+  );
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
@@ -286,47 +307,17 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       // Not JSON data, continue with file handling
     }
 
-    // Check if getAsFileSystemHandle is supported (Chrome/Edge only)
-    const firstItem = e.dataTransfer.items[0];
-    if (!firstItem || !('getAsFileSystemHandle' in firstItem)) {
+    const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
+    if (!supported) {
       showNotification({ type: 'warning', message: 'Drag-drop not supported. Please use Google Chrome.' });
       return;
-    }
-
-    // Collect all handle promises SYNCHRONOUSLY before any await
-    const items = Array.from(e.dataTransfer.items);
-    const handlePromises: Promise<FileSystemHandle | null>[] = [];
-    for (const item of items) {
-      if ('getAsFileSystemHandle' in item) {
-        handlePromises.push(item.getAsFileSystemHandle());
-      }
-    }
-
-    const rawHandles = await Promise.all(handlePromises);
-
-    const handles: FileSystemFileHandle[] = [];
-    const errors: string[] = [];
-    for (const handle of rawHandles) {
-      if (handle?.kind === 'file') {
-        try {
-          const file = await (handle as FileSystemFileHandle).getFile();
-          const validation = validateMediaFile(file);
-          if (validation.valid) {
-            handles.push(handle as FileSystemFileHandle);
-          } else {
-            errors.push(`${file.name}: ${validation.error}`);
-          }
-        } catch (error) {
-          logger.warn('Failed to get file from handle:', error);
-        }
-      }
     }
 
     if (errors.length > 0) {
       showNotification({ type: 'error', message: `Some files were rejected: ${errors.join(', ')}` });
     }
-    if (handles.length > 0) {
-      await handleImportHandles(handles);
+    if (entries.length > 0) {
+      await handleImportHandles(entries.map((entry) => entry.handle));
     }
   }, [showNotification, handleImportHandles]);
 
@@ -421,6 +412,15 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="video/*,audio/*,image/*"
+        multiple
+        className="hidden"
+        aria-hidden
+        onChange={handleFileInputChange}
+      />
       {/* Header toolbar */}
       <div className="px-3 py-2 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2 text-xs">
@@ -534,7 +534,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {notification && (
         <div className={`mx-4 mt-3 p-2.5 rounded text-xs animate-in slide-in-from-top-2 duration-200 ${
           notification.type === 'info'
-            ? 'bg-orange-500/10 border border-orange-500/30'
+            ? 'bg-[#EC407A]/10 border border-[#EC407A]/30'
             : notification.type === 'warning'
             ? 'bg-yellow-500/10 border border-yellow-500/30'
             : notification.type === 'success'
@@ -545,7 +545,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <Info className={`w-3.5 h-3.5 flex-shrink-0 ${
                 notification.type === 'info'
-                  ? 'text-orange-500'
+                  ? 'text-[#EC407A]'
                   : notification.type === 'warning'
                   ? 'text-yellow-500'
                   : notification.type === 'success'
@@ -554,7 +554,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               }`} />
               <p className={`leading-relaxed line-clamp-2 ${
                 notification.type === 'info'
-                  ? 'text-orange-600 dark:text-orange-400'
+                  ? 'text-[#EC407A] dark:text-[#EC407A]'
                   : notification.type === 'warning'
                   ? 'text-yellow-600 dark:text-yellow-400'
                   : notification.type === 'success'
@@ -876,4 +876,3 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     </div>
   );
 });
-

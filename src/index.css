@@ -1,6 +1,13 @@
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
 @plugin "tailwindcss-animate";
+
+/* Account Kit: dark text on white (secondary/auth) buttons only; modal body stays light on dark */
+.akui-btn-secondary,
+.akui-btn-auth {
+  color: #0f0f0f;
+}
 
 /* Feature-specific theme extensions */
 @import "./features/timeline/theme.css";
@@ -23,8 +30,8 @@
     --popover: oklch(0.16 0 0);                 /* #292929 - Dropdowns */
     --popover-foreground: oklch(0.92 0 0);
 
-    /* Primary - Orange accent (playback, active states) */
-    --primary: oklch(0.68 0.19 45);             /* #FF8C3A - Vibrant orange */
+    /* Primary - Pink accent (playback, active states) */
+    --primary: oklch(0.58 0.22 350);            /* #EC407A */
     --primary-foreground: oklch(0.12 0 0);      /* Dark text on primary */
 
     /* Secondary - Subtle panel variation */
@@ -46,7 +53,7 @@
     /* Borders - Subtle separators */
     --border: oklch(0.25 0 0);                  /* #404040 - Borders */
     --input: oklch(0.24 0 0);                   /* #3d3d3d - Input borders */
-    --ring: oklch(0.68 0.19 45);                /* Orange focus ring */
+    --ring: oklch(0.58 0.22 350);               /* #EC407A focus ring */
 
     /* Panel system - Layered depth */
     --panel-bg: oklch(0.18 0 0);                /* #2e2e2e - Panels */
@@ -56,12 +63,12 @@
     /* Sidebar */
     --sidebar: oklch(0.18 0 0);
     --sidebar-foreground: oklch(0.92 0 0);
-    --sidebar-primary: oklch(0.68 0.19 45);
+    --sidebar-primary: oklch(0.58 0.22 350);
     --sidebar-primary-foreground: oklch(0.12 0 0);
     --sidebar-accent: oklch(0.22 0 0);
     --sidebar-accent-foreground: oklch(0.92 0 0);
     --sidebar-border: oklch(0.25 0 0);
-    --sidebar-ring: oklch(0.68 0.19 45);
+    --sidebar-ring: oklch(0.58 0.22 350);
 
     --radius: 0.5rem;
   }

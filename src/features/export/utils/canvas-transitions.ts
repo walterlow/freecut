@@ -7,10 +7,13 @@
 
 import type { Transition, WipeDirection, SlideDirection, FlipDirection } from '@/types/transition';
 import type { TimelineItem } from '@/types/timeline';
-import { springEasing, easeIn, easeOut, easeInOut, cubicBezier } from '@/domain/animation/easing';
 import { transitionRegistry } from '@/domain/timeline/transitions/registry';
 import { resolveTransitionWindows } from '@/domain/timeline/transitions/transition-planner';
+import {
+  resolveTransitionFrameState,
+} from '@/features/export/deps/composition-runtime';
 import { createLogger } from '@/shared/logging/logger';
+import type { TransitionPipeline } from '@/infrastructure/gpu/transitions';
 
 const log = createLogger('CanvasTransitions');
 
@@ -44,7 +47,7 @@ export interface ActiveTransition {
  * Build once per render, then reuse for every frame.
  */
 export interface TransitionFrameIndex {
-  windows: ReturnType<typeof resolveTransitionWindows>;
+  windows: ReturnType<typeof import('@/domain/timeline/transitions/transition-planner').resolveTransitionWindows>;
 }
 
 /**
@@ -89,39 +92,11 @@ export function getTransitionFrameState(
   frame: number,
   fps: number
 ): TransitionFrameState {
-  const activeTransitions: ActiveTransition[] = [];
-  const transitionClipIds = new Set<string>();
-
-  for (const window of index.windows) {
-    if (frame < window.startFrame || frame >= window.endFrame) continue;
-
-    const localFrame = frame - window.startFrame;
-    const progress = calculateProgress(
-      localFrame,
-      window.durationInFrames,
-      window.transition.timing,
-      fps,
-      window.transition.bezierPoints
-    );
-
-    activeTransitions.push({
-      transition: window.transition,
-      leftClip: window.leftClip,
-      rightClip: window.rightClip,
-      progress,
-      transitionStart: window.startFrame,
-      transitionEnd: window.endFrame,
-      durationInFrames: window.durationInFrames,
-      leftPortion: window.leftPortion,
-      rightPortion: window.rightPortion,
-      cutPoint: window.cutPoint,
-    });
-
-    transitionClipIds.add(window.transition.leftClipId);
-    transitionClipIds.add(window.transition.rightClipId);
-  }
-
-  return { activeTransitions, transitionClipIds };
+  void fps;
+  return resolveTransitionFrameState({
+    transitionWindows: index.windows,
+    frame,
+  });
 }
 
 /**
@@ -141,45 +116,6 @@ export function findActiveTransitions(
 ): ActiveTransition[] {
   const index = createTransitionFrameIndex(transitions, clipMap);
   return getTransitionFrameState(index, frame, fps).activeTransitions;
-}
-
-/**
- * Calculate transition progress with timing.
- *
- * @param localFrame - Frame within transition (0 to duration-1)
- * @param duration - Total transition duration in frames
- * @param timing - Timing type ('linear' or 'spring')
- * @param fps - Frames per second
- * @returns Progress value (0 to 1, may overshoot for spring)
- */
-function calculateProgress(
-  localFrame: number,
-  duration: number,
-  timing: string,
-  _fps: number,
-  bezierPoints?: { x1: number; y1: number; x2: number; y2: number }
-): number {
-  // Linear progress
-  const maxFrame = Math.max(1, duration - 1);
-  const linearProgress = Math.max(0, Math.min(1, localFrame / maxFrame));
-
-  switch (timing) {
-    case 'spring':
-      return springEasing(linearProgress, { tension: 180, friction: 12, mass: 1 });
-    case 'ease-in':
-      return easeIn(linearProgress);
-    case 'ease-out':
-      return easeOut(linearProgress);
-    case 'ease-in-out':
-      return easeInOut(linearProgress);
-    case 'cubic-bezier':
-      if (bezierPoints) {
-        return cubicBezier(linearProgress, bezierPoints);
-      }
-      return linearProgress;
-    default:
-      return linearProgress;
-  }
 }
 
 // ============================================================================
@@ -371,15 +307,17 @@ function getSlideOffset(
 ): { x: number; y: number } {
   const slideProgress = isOutgoing ? progress : progress - 1;
 
+  // Round to whole pixels — sub-pixel drawImage offsets cause interpolation
+  // artifacts (shimmering on edges, blurred text).
   switch (direction) {
     case 'from-left':
-      return { x: slideProgress * canvas.width, y: 0 };
+      return { x: Math.round(slideProgress * canvas.width), y: 0 };
     case 'from-right':
-      return { x: -slideProgress * canvas.width, y: 0 };
+      return { x: Math.round(-slideProgress * canvas.width), y: 0 };
     case 'from-top':
-      return { x: 0, y: slideProgress * canvas.height };
+      return { x: 0, y: Math.round(slideProgress * canvas.height) };
     case 'from-bottom':
-      return { x: 0, y: -slideProgress * canvas.height };
+      return { x: 0, y: Math.round(-slideProgress * canvas.height) };
     default:
       return { x: 0, y: 0 };
   }
@@ -571,7 +509,8 @@ export function renderTransition(
   activeTransition: ActiveTransition,
   leftCanvas: OffscreenCanvas,
   rightCanvas: OffscreenCanvas,
-  canvas: TransitionCanvasSettings
+  canvas: TransitionCanvasSettings,
+  gpuTransitionPipeline?: TransitionPipeline | null,
 ): void {
   const { transition, progress } = activeTransition;
   const presentation = transition.presentation;
@@ -588,8 +527,27 @@ export function renderTransition(
 
   // Try registry renderer first
   const renderer = transitionRegistry.getRenderer(presentation);
+
+  // GPU-accelerated path: use TransitionPipeline when available
+  if (renderer?.gpuTransitionId && gpuTransitionPipeline?.has(renderer.gpuTransitionId)) {
+    const result = gpuTransitionPipeline.render(
+      renderer.gpuTransitionId,
+      leftCanvas,
+      rightCanvas,
+      progress,
+      canvas.width,
+      canvas.height,
+      direction as string,
+      transition.properties,
+    );
+    if (result) {
+      ctx.drawImage(result, 0, 0);
+      return;
+    }
+  }
+
   if (renderer?.renderCanvas) {
-    renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas);
+    renderer.renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas, transition.properties);
     return;
   }
 
@@ -665,4 +623,3 @@ export function getTransitionClipIds(
   }
   return clipIds;
 }
-

@@ -14,6 +14,8 @@ interface NumberInputProps {
   min?: number;
   max?: number;
   step?: number;
+  formatInputValue?: (value: number) => string;
+  parseInputValue?: (rawValue: string) => number;
   disabled?: boolean;
   scrubEnabled?: boolean;
   placeholder?: string;
@@ -39,6 +41,8 @@ export function NumberInput({
   min,
   max,
   step = 1,
+  formatInputValue,
+  parseInputValue,
   disabled = false,
   scrubEnabled = true,
   placeholder,
@@ -71,16 +75,39 @@ export function NumberInput({
   // Format number for display (2 decimal places for decimal steps, integer for step=1)
   const formatValue = useCallback(
     (v: number) => {
+      if (formatInputValue) return formatInputValue(v);
       if (step >= 1) return String(Math.round(v));
       return v.toFixed(2);
     },
-    [step]
+    [formatInputValue, step]
+  );
+
+  const resetLocalValue = useCallback(() => {
+    const nextValue = value === 'mixed' ? '' : formatValue(value);
+    setLocalValue(nextValue);
+  }, [value, formatValue]);
+
+  const commitLocalValue = useCallback(
+    (rawValue: string) => {
+      const parsed = parseInputValue ? parseInputValue(rawValue) : parseFloat(rawValue);
+      if (!isNaN(parsed)) {
+        const committedValue = clamp(parsed);
+        const formattedValue = formatValue(committedValue);
+        setLocalValue(formattedValue);
+        onChange(committedValue);
+        return;
+      }
+
+      resetLocalValue();
+    },
+    [clamp, formatValue, onChange, parseInputValue, resetLocalValue]
   );
 
   // Sync local value with prop value
   useEffect(() => {
     if (!inputRef.current || document.activeElement !== inputRef.current) {
-      setLocalValue(value === 'mixed' ? '' : formatValue(value));
+      const nextValue = value === 'mixed' ? '' : formatValue(value);
+      setLocalValue(nextValue);
     }
   }, [value, formatValue]);
 
@@ -88,28 +115,26 @@ export function NumberInput({
     setLocalValue(e.target.value);
   };
 
-  const handleInputBlur = () => {
-    const parsed = parseFloat(localValue);
-    if (!isNaN(parsed)) {
-      onChange(clamp(parsed));
-    } else {
-      // Revert to original value
-      setLocalValue(value === 'mixed' ? '' : formatValue(value));
-    }
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    commitLocalValue(e.currentTarget.value);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      commitLocalValue(e.currentTarget.value);
       e.currentTarget.blur();
     } else if (e.key === 'Escape') {
-      setLocalValue(value === 'mixed' ? '' : formatValue(value));
+      resetLocalValue();
       e.currentTarget.blur();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
       const currentValue = value === 'mixed' ? 0 : value;
       const multiplier = e.shiftKey ? 10 : 1;
       const delta = e.key === 'ArrowUp' ? step * multiplier : -step * multiplier;
-      onChange(clamp(currentValue + delta));
+      const nextValue = clamp(currentValue + delta);
+      const formattedValue = formatValue(nextValue);
+      setLocalValue(formattedValue);
+      onChange(nextValue);
     }
   };
 
@@ -162,6 +187,24 @@ export function NumberInput({
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  // Scroll wheel to adjust value (Shift = fine, normal = step)
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (disabled) return;
+      // Only respond when hovered, not when text-editing
+      if (document.activeElement === inputRef.current) return;
+      e.preventDefault();
+      const currentValue = value === 'mixed' ? 0 : value;
+      const multiplier = e.shiftKey ? 0.1 : 1;
+      const direction = e.deltaY < 0 ? 1 : -1;
+      const newValue = clamp(currentValue + direction * step * multiplier);
+      const formattedValue = formatValue(newValue);
+      setLocalValue(formattedValue);
+      onChange(newValue);
+    },
+    [disabled, value, step, clamp, formatValue, onChange]
+  );
+
   const isMixed = value === 'mixed';
 
   return (
@@ -175,6 +218,7 @@ export function NumberInput({
         className
       )}
       onMouseDown={handleMouseDown}
+      onWheel={handleWheel}
     >
       {/* Label prefix */}
       {label && (
@@ -187,7 +231,7 @@ export function NumberInput({
       <input
         ref={inputRef}
         type="text"
-        inputMode="numeric"
+        inputMode="decimal"
         value={localValue}
         onChange={handleInputChange}
         onBlur={handleInputBlur}
@@ -195,7 +239,7 @@ export function NumberInput({
         disabled={disabled}
         placeholder={isMixed ? 'Mixed' : placeholder}
         className={cn(
-          'flex-1 h-full bg-transparent text-xs font-mono text-foreground outline-none',
+          'flex-1 h-full bg-transparent text-xs font-mono tabular-nums text-foreground outline-none',
           'px-1 min-w-0 cursor-text',
           isMixed && 'italic text-muted-foreground'
         )}
@@ -211,4 +255,3 @@ export function NumberInput({
     </div>
   );
 }
-

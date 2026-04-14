@@ -1,8 +1,9 @@
-﻿import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
+import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useKeyframesStore } from '../../stores/keyframes-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
@@ -14,6 +15,8 @@ import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
@@ -28,6 +31,7 @@ import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
 import { JoinIndicators } from './join-indicators';
+import { SegmentStatusOverlays } from './segment-status-overlays';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
@@ -41,16 +45,25 @@ import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
+import { useCoarsePointer } from '../../hooks/use-coarse-pointer';
 import { insertFreezeFrame } from '../../stores/actions/item-actions';
 import {
   createPreComp,
   dissolvePreComp,
 } from '../../stores/actions/composition-actions';
+import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import type { MediaTranscriptModel } from '@/types/storage';
+import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
+import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
+import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
+const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
+const EMPTY_SEGMENT_OVERLAYS = [] as const;
 
-// Width in pixels for edge hover detection (trim/rate-stretch handles)
+// Width in pixels for edge hover detection (trim/rate-stretch handles). Larger on touch.
 const EDGE_HOVER_ZONE = 8;
+const EDGE_HOVER_ZONE_TOUCH = 16;
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -74,6 +87,8 @@ interface TimelineItemProps {
  */
 export const TimelineItem = memo(function TimelineItem({ item, timelineDuration = 30, trackLocked = false, trackHidden = false }: TimelineItemProps) {
   const { timeToPixels, frameToPixels, pixelsToFrame, pixelsPerSecond } = useTimelineZoomContext();
+  const isCoarsePointer = useCoarsePointer();
+  const edgeHoverZone = isCoarsePointer ? EDGE_HOVER_ZONE_TOUCH : EDGE_HOVER_ZONE;
 
   // Granular selector: only re-render when THIS item's selection state changes
   const isSelected = useSelectionStore(
@@ -95,14 +110,43 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       [item.mediaId, item.id]
     )
   );
-
-  // Selector returns stable item keyframe entry reference when unrelated store
-  // state updates occur, avoiding object-allocation churn in selectors.
-  const itemKeyframes = useTimelineStore(
+  const transcriptStatus = useMediaLibraryStore(
     useCallback(
-      (s) => {
-        return s.keyframes.find((k) => k.itemId === item.id) ?? null;
-      },
+      (s) => (item.mediaId ? s.transcriptStatus.get(item.mediaId) ?? 'idle' : 'idle'),
+      [item.mediaId]
+    )
+  );
+  const hasGeneratedCaptions = useItemsStore(
+    useCallback(
+      (s) => s.items.some((timelineItem) =>
+        timelineItem.type === 'text'
+        && (
+          (
+            timelineItem.captionSource?.type === 'transcript'
+            && timelineItem.captionSource.clipId === item.id
+          )
+          || (
+            !timelineItem.captionSource
+            && timelineItem.mediaId === item.mediaId
+            && timelineItem.from >= item.from
+            && timelineItem.from + timelineItem.durationInFrames <= item.from + item.durationInFrames
+            && timelineItem.text.trim().length > 0
+            && timelineItem.label === timelineItem.text.slice(0, 48)
+          )
+        )
+      ),
+      [item.durationInFrames, item.from, item.id, item.mediaId]
+    )
+  );
+  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const segmentOverlays = useTimelineItemOverlayStore(
+    useCallback((s) => s.overlaysByItemId[item.id] ?? EMPTY_SEGMENT_OVERLAYS, [item.id])
+  );
+
+  // O(1) lookup via keyframesByItemId index instead of O(n) array scan
+  const itemKeyframes = useKeyframesStore(
+    useCallback(
+      (s) => s.keyframesByItemId[item.id] ?? null,
       [item.id]
     )
   );
@@ -168,6 +212,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const { isSlipSlideActive, handleSlipSlideStart } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
   const wasDraggingRef = useRef(false);
+  const touchLongPressTimeoutRef = useRef<number | null>(null);
+  const touchPointerIdRef = useRef<number | null>(null);
 
   // Track drag participation via ref subscription - NO RE-RENDERS on drag state changes
   const isAnyDragActiveRef = useRef(false);
@@ -882,14 +928,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     const x = e.clientX - rect.left;
     const itemWidth = rect.width;
 
-    if (x <= EDGE_HOVER_ZONE) {
+    if (x <= edgeHoverZone) {
       if (hoveredEdgeRef.current !== 'start') setHoveredEdge('start');
-    } else if (x >= itemWidth - EDGE_HOVER_ZONE) {
+    } else if (x >= itemWidth - edgeHoverZone) {
       if (hoveredEdgeRef.current !== 'end') setHoveredEdge('end');
     } else {
       if (hoveredEdgeRef.current !== null) setHoveredEdge(null);
     }
-  }, [trackLocked]);
+  }, [trackLocked, edgeHoverZone]);
 
   // Cursor class based on state
   const cursorClass = trackLocked
@@ -921,13 +967,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Reactive neighbor detection: recompute join indicators when adjacent items
   // change (covers deletion, moves to another track, and position shifts).
-  // The selector is O(n) but only triggers re-render when neighbor IDs change.
-  const neighborKey = useTimelineStore(
+  // Uses itemsByTrackId for O(trackItems) instead of O(allItems) lookup.
+  const neighborKey = useItemsStore(
     useCallback((s) => {
+      const trackItems = s.itemsByTrackId[item.trackId];
+      if (!trackItems) return '|';
       let leftId = '';
       let rightId = '';
-      for (const other of s.items) {
-        if (other.id === item.id || other.trackId !== item.trackId) continue;
+      for (const other of trackItems) {
+        if (other.id === item.id) continue;
         if (other.from + other.durationInFrames === item.from) leftId = other.id;
         else if (other.from === item.from + item.durationInFrames) rightId = other.id;
       }
@@ -936,19 +984,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
 
   const getNeighbors = useCallback(() => {
-    const items = useTimelineStore.getState().items;
+    const trackItems = useItemsStore.getState().itemsByTrackId[item.trackId] ?? [];
 
-    const left = items.find(
+    const left = trackItems.find(
       (other) =>
         other.id !== item.id &&
-        other.trackId === item.trackId &&
         other.from + other.durationInFrames === item.from
     ) ?? null;
 
-    const right = items.find(
+    const right = trackItems.find(
       (other) =>
         other.id !== item.id &&
-        other.trackId === item.trackId &&
         other.from === item.from + item.durationInFrames
     ) ?? null;
 
@@ -970,9 +1016,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const handleJoinSelected = useCallback(() => {
     const selectedItemIds = useSelectionStore.getState().selectedItemIds;
     if (selectedItemIds.length >= 2) {
-      const items = useTimelineStore.getState().items;
+      const itemById = useItemsStore.getState().itemById;
       const selectedItems = selectedItemIds
-        .map((id) => items.find((i) => i.id === id))
+        .map((id) => itemById[id])
         .filter((i): i is NonNullable<typeof i> => i !== undefined);
       if (canJoinMultipleItems(selectedItems)) {
         useTimelineStore.getState().joinItems(selectedItemIds);
@@ -1028,6 +1074,127 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
+  const handleCaptionGeneration = useCallback((
+    model: MediaTranscriptModel,
+    options?: {
+      forceTranscription?: boolean;
+      replaceExisting?: boolean;
+    },
+  ) => {
+    if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
+      return;
+    }
+
+    const mediaId = item.mediaId;
+    const clipId = item.id;
+    const store = useMediaLibraryStore.getState();
+    const overlayStore = useTimelineItemOverlayStore.getState();
+    const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
+    const forceTranscription = options?.forceTranscription ?? false;
+    const replaceExisting = options?.replaceExisting ?? false;
+    const overlayLabel = forceTranscription ? 'Regenerating captions' : 'Generating captions';
+
+    const run = async () => {
+      let updatedTranscriptStatus = previousStatus;
+
+      try {
+        const existingTranscript = await mediaTranscriptionService.getTranscript(mediaId);
+        const needsTranscription =
+          forceTranscription || !existingTranscript || existingTranscript.model !== model;
+
+        if (needsTranscription) {
+          overlayStore.upsertOverlay(clipId, {
+            id: CAPTION_GENERATION_OVERLAY_ID,
+            label: overlayLabel,
+            progress: 0,
+            tone: 'info',
+          });
+          store.setTranscriptStatus(mediaId, 'transcribing');
+          store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
+
+          await mediaTranscriptionService.transcribeMedia(mediaId, {
+            model,
+            onProgress: (progress) => {
+              const mediaLibraryStore = useMediaLibraryStore.getState();
+              mediaLibraryStore.setTranscriptProgress(mediaId, progress);
+              const mergedProgress = mediaLibraryStore.transcriptProgress.get(mediaId) ?? progress;
+
+              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
+                id: CAPTION_GENERATION_OVERLAY_ID,
+                label: overlayLabel,
+                progress: getTranscriptionOverallPercent(mergedProgress),
+                tone: 'info',
+              });
+            },
+          });
+
+          updatedTranscriptStatus = 'ready';
+          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
+          store.clearTranscriptProgress(mediaId);
+        } else {
+          overlayStore.upsertOverlay(clipId, {
+            id: CAPTION_GENERATION_OVERLAY_ID,
+            label: replaceExisting ? 'Replacing captions' : 'Adding captions',
+            tone: 'info',
+          });
+          updatedTranscriptStatus = 'ready';
+          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
+          store.clearTranscriptProgress(mediaId);
+        }
+
+        const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
+          clipIds: [clipId],
+          replaceExisting,
+        });
+
+        const successMessage = replaceExisting
+          ? result.insertedItemCount > 0
+            ? result.removedItemCount > 0
+              ? `Replaced ${result.removedItemCount} caption clip${result.removedItemCount === 1 ? '' : 's'} with ${result.insertedItemCount} updated clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+              : `Regenerated ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+            : `Removed ${result.removedItemCount} generated caption clip${result.removedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
+          : `Inserted ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment with ${WHISPER_MODEL_LABELS[model]}`;
+
+        store.showNotification({
+          type: 'success',
+          message: successMessage,
+        });
+      } catch (error) {
+        if (isLocalInferenceCancellationError(error)) {
+          store.setTranscriptStatus(mediaId, previousStatus);
+          store.clearTranscriptProgress(mediaId);
+          return;
+        }
+
+        store.setTranscriptStatus(mediaId, updatedTranscriptStatus === 'ready' ? 'ready' : 'error');
+        store.clearTranscriptProgress(mediaId);
+        store.showNotification({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to generate captions for segment',
+        });
+      } finally {
+        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
+      }
+    };
+
+    void run();
+  }, [item.id, item.mediaId, item.type, isBroken]);
+
+  const handleGenerateCaptions = useCallback((model: MediaTranscriptModel) => {
+    handleCaptionGeneration(model);
+  }, [handleCaptionGeneration]);
+
+  const handleRegenerateCaptions = useCallback((model: MediaTranscriptModel) => {
+    handleCaptionGeneration(model, {
+      forceTranscription: true,
+      replaceExisting: true,
+    });
+  }, [handleCaptionGeneration]);
+
+  const isCaptionGenerationActive = segmentOverlays.some(
+    (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
+  );
+
   // Composition operations
   const isCompositionItem = item.type === 'composition';
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
@@ -1063,7 +1230,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const isOnEdge = x <= EDGE_HOVER_ZONE || x >= rect.width - EDGE_HOVER_ZONE;
+      const isOnEdge = x <= edgeHoverZone || x >= rect.width - edgeHoverZone;
       if (!isOnEdge) {
         setDragBlockedTooltip({ x: e.clientX, y: e.clientY });
         return;
@@ -1072,8 +1239,55 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
     if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
-    handleDragStart(e);
-  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type]);
+    // Desktop mouse drag path (pointer events hook accepts PointerEvent-compatible data)
+    handleDragStart(e as unknown as React.PointerEvent);
+  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type, edgeHoverZone]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Only handle touch/pen here to avoid double-handling on desktop (mouse also fires onMouseDown).
+    if (e.pointerType === 'mouse') return;
+
+    // Slip/Slide tool: initiate on clip body for media items
+    if ((activeTool === 'slip' || activeTool === 'slide') && !trackLocked) return;
+
+    // Show blocked tooltip when trying to drag in rate-stretch mode
+    if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const isOnEdge = x <= edgeHoverZone || x >= rect.width - edgeHoverZone;
+      if (!isOnEdge) {
+        setDragBlockedTooltip({ x: e.clientX, y: e.clientY });
+        return;
+      }
+    }
+
+    // Rolling/Ripple edit tool: block body drag (only edge trim is allowed)
+    if ((activeTool === 'rolling-edit' || activeTool === 'ripple-edit') && !trackLocked && hoveredEdge === null) return;
+    if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
+
+    // Long-press to start drag on touch: delay actual drag start to avoid stealing simple taps.
+    if (touchLongPressTimeoutRef.current !== null) {
+      clearTimeout(touchLongPressTimeoutRef.current);
+      touchLongPressTimeoutRef.current = null;
+    }
+    touchPointerIdRef.current = e.pointerId;
+    // Keep the event alive for the timeout callback (in case of older React pooling)
+    (e as any).persist?.();
+    touchLongPressTimeoutRef.current = window.setTimeout(() => {
+      // If pointer was released before timeout, do nothing
+      if (touchPointerIdRef.current == null) return;
+      handleDragStart(e);
+    }, 250);
+  }, [activeTool, edgeHoverZone, handleDragStart, hoveredEdge, isSlipSlideActive, isStretching, isTrimming, item.type, trackLocked]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType !== 'touch') return;
+    if (touchLongPressTimeoutRef.current !== null) {
+      clearTimeout(touchLongPressTimeoutRef.current);
+      touchLongPressTimeoutRef.current = null;
+    }
+    touchPointerIdRef.current = null;
+  }, []);
 
   // Track which edge is closer when right-clicking for context menu
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -1107,6 +1321,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           return frame > item.from && frame < item.from + item.durationInFrames;
         })()}
         onFreezeFrame={handleFreezeFrame}
+        canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
+        canRegenerateCaptions={hasGeneratedCaptions}
+        isGeneratingCaptions={isCaptionGenerationActive || transcriptStatus === 'transcribing'}
+        defaultCaptionModel={defaultWhisperModel}
+        onGenerateCaptions={handleGenerateCaptions}
+        onRegenerateCaptions={handleRegenerateCaptions}
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
@@ -1120,7 +1340,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             "absolute inset-y-0 rounded overflow-hidden",
             itemColorClasses,
             cursorClass,
-            !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'
+            !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110',
+            // Prevent native pan/scroll from stealing touch drag gestures.
+            'touch-none'
           )}
           style={{
             left: `${visualLeft}px`,
@@ -1132,12 +1354,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             pointerEvents: isBeingDragged ? 'none' : 'auto',
             zIndex: isBeingDragged ? 50 : undefined,
             transition: isBeingDragged ? 'none' : undefined,
+            contain: 'layout style paint',
             contentVisibility: 'auto',
             containIntrinsicSize: `0 ${DEFAULT_TRACK_HEIGHT}px`,
           }}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoveredEdge(null)}
           onContextMenu={handleContextMenu}
@@ -1146,6 +1371,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           {isSelected && !trackLocked && (
             <div className="absolute inset-0 rounded pointer-events-none z-20 ring-2 ring-inset ring-primary" />
           )}
+
+          <SegmentStatusOverlays overlays={segmentOverlays} />
 
           {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
           {overlapLeftPixels > 0 ? (
@@ -1294,4 +1521,3 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevProps.trackHidden === nextProps.trackHidden
   );
 });
-

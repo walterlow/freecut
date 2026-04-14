@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+---
+AI Jobs & Pipelines
+AI Jobs & Pipelines Quickstart
+Start here for Livepeer AI Jobs quickstarts and pipeline documentation.
+
+​
+AI Jobs & Pipelines Quickstart
+Start here if you want to send AI inference jobs through a Livepeer gateway.
+​
+Choose a quickstart
+AI Jobs quickstart - End-to-end request flow using the AI gateway API (GitHub-validated endpoint surface; stakeholder flow signoff still required).
+AI Pipelines overview - Broader overview of the AI pipeline ecosystem on Livepeer.
+BYOC (Bring Your Own Compute) - Run your own compute and connect it to the Livepeer AI network.
+​
+What this section covers
+Sending requests to the AI gateway API
+Choosing a supported AI task endpoint (for example, text-to-image)
+Auth and base URLs
+Troubleshooting and next steps (BYOC, realtime, advanced pipelines)
+​
+Canonical references
+AI API portal
+Text-to-image endpoint reference
+AI gateway health endpoint
+Livepeer AI Runner (GitHub)
+​
+Notes
+This quickstart hub is intentionally short. The runnable workflow is in AI Jobs quickstart.
+Source precedence for the AI Jobs quickstart is GitHub-first, then DeepWiki corroboration, then repo-local docs/specs.

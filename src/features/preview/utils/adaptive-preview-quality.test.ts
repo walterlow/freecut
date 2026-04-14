@@ -68,6 +68,21 @@ describe('updateAdaptivePreviewQuality', () => {
       });
       state = next.state;
     }
+    expect(state.qualityCap).toBe(0.33);
+  });
+
+  it('steps through third quality before recovering to half', () => {
+    let state = createAdaptivePreviewQualityState(0.25);
+    for (let i = 0; i < 72; i += 1) {
+      state = updateAdaptivePreviewQuality({
+        state,
+        sampleMsPerFrame: 10,
+        frameBudgetMs: 33,
+        userQuality: 1,
+        nowMs: 4_500 + i,
+        options: { changeCooldownMs: 0 },
+      }).state;
+    }
     expect(state.qualityCap).toBe(0.5);
   });
 

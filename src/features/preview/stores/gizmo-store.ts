@@ -17,6 +17,17 @@ export interface ItemPropertiesPreview {
   letterSpacing?: number;
   lineHeight?: number;
   color?: string;
+  backgroundColor?: string;
+  textShadow?: {
+    offsetX: number;
+    offsetY: number;
+    blur: number;
+    color: string;
+  };
+  stroke?: {
+    width: number;
+    color: string;
+  };
   // Shape properties
   shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart';
   fillColor?: string;

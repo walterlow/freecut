@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Timeline Store Facade
  *
  * Provides backward-compatible access to the split timeline stores.
@@ -49,6 +49,39 @@ import { validateMediaReferences } from '@/features/timeline/utils/media-validat
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
 
+
+/**
+ * Progressive downscale a canvas to a JPEG blob.
+ * Halves dimensions repeatedly to avoid aliasing with high-frequency effects.
+ */
+async function scaleCanvasToBlob(
+  source: OffscreenCanvas | HTMLCanvasElement,
+  targetW: number,
+  targetH: number,
+  quality: number,
+): Promise<Blob> {
+  let srcW = source.width;
+  let srcH = source.height;
+  let current: OffscreenCanvas | HTMLCanvasElement = source;
+
+  while (srcW > targetW * 2 || srcH > targetH * 2) {
+    const nextW = Math.max(Math.ceil(srcW / 2), targetW);
+    const nextH = Math.max(Math.ceil(srcH / 2), targetH);
+    const step = new OffscreenCanvas(nextW, nextH);
+    const ctx = step.getContext('2d')!;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(current, 0, 0, nextW, nextH);
+    current = step;
+    srcW = nextW;
+    srcH = nextH;
+  }
+
+  const out = new OffscreenCanvas(targetW, targetH);
+  const outCtx = out.getContext('2d')!;
+  outCtx.imageSmoothingQuality = 'high';
+  outCtx.drawImage(current, 0, 0, targetW, targetH);
+  return out.convertToBlob({ type: 'image/jpeg', quality });
+}
 
 /**
  * Save timeline to project in IndexedDB.
@@ -148,35 +181,17 @@ async function saveTimeline(projectId: string): Promise<void> {
       })(),
     };
 
-    // Generate thumbnail using the client render engine (renders all layers)
+    // Generate thumbnail — prefer capturing the existing preview canvas
+    // (near-free: reuses the already-initialized scrub renderer with cached
+    // media + GPU pipeline) and fall back to a full renderSingleFrame only
+    // when the preview capture path is unavailable.
     let thumbnailId: string | undefined;
     if (itemsState.items.length > 0) {
       try {
-        const fps = project.metadata?.fps || 30;
         const width = project.metadata?.width || 1920;
         const height = project.metadata?.height || 1080;
-        const backgroundColor = project.metadata?.backgroundColor;
-
-        // Convert timeline to Composition composition format
-        const composition = convertTimelineToComposition(
-          itemsState.tracks,
-          itemsState.items,
-          transitionsState.transitions,
-          fps,
-          width,
-          height,
-          null, // inPoint - render full timeline
-          null, // outPoint
-          keyframesState.keyframes,
-          backgroundColor
-        );
-
-        // Resolve media URLs (convert mediaId to blob URLs)
-        const resolvedTracks = await resolveMediaUrls(composition.tracks);
-        const resolvedComposition = { ...composition, tracks: resolvedTracks };
 
         // Calculate thumbnail dimensions preserving project aspect ratio
-        // Fit within 320x180 bounds while maintaining aspect ratio
         const maxThumbWidth = 320;
         const maxThumbHeight = 180;
         const projectAspectRatio = width / height;
@@ -185,24 +200,54 @@ async function saveTimeline(projectId: string): Promise<void> {
         let thumbWidth: number;
         let thumbHeight: number;
         if (projectAspectRatio > targetAspectRatio) {
-          // Wider than 16:9 - constrained by width
           thumbWidth = maxThumbWidth;
           thumbHeight = Math.round(maxThumbWidth / projectAspectRatio);
         } else {
-          // Taller than 16:9 (portrait) - constrained by height
           thumbHeight = maxThumbHeight;
           thumbWidth = Math.round(maxThumbHeight * projectAspectRatio);
         }
 
-        // Render single frame at current playhead position
-        const thumbnailBlob = await renderSingleFrame({
-          composition: resolvedComposition,
-          frame: currentFrame,
-          width: thumbWidth,
-          height: thumbHeight,
-          quality: 0.85,
-          format: 'image/jpeg',
-        });
+        let thumbnailBlob: Blob | null = null;
+
+        // Fast path: capture from existing preview renderer (avoids full re-init)
+        const captureCanvasSource = usePlaybackStore.getState().captureCanvasSource;
+        if (captureCanvasSource) {
+          try {
+            const sourceCanvas = await captureCanvasSource();
+            if (sourceCanvas) {
+              thumbnailBlob = await scaleCanvasToBlob(sourceCanvas, thumbWidth, thumbHeight, 0.85);
+            }
+          } catch {
+            // Fall through to slow path
+          }
+        }
+
+        // Slow path: full render from scratch (when preview isn't available)
+        if (!thumbnailBlob) {
+          const fps = project.metadata?.fps || 30;
+          const backgroundColor = project.metadata?.backgroundColor;
+          const composition = convertTimelineToComposition(
+            itemsState.tracks,
+            itemsState.items,
+            transitionsState.transitions,
+            fps,
+            width,
+            height,
+            null, null,
+            keyframesState.keyframes,
+            backgroundColor
+          );
+          const resolvedTracks = await resolveMediaUrls(composition.tracks);
+          const resolvedComposition = { ...composition, tracks: resolvedTracks };
+          thumbnailBlob = await renderSingleFrame({
+            composition: resolvedComposition,
+            frame: currentFrame,
+            width: thumbWidth,
+            height: thumbHeight,
+            quality: 0.85,
+            format: 'image/jpeg',
+          });
+        }
 
         // Save thumbnail to IndexedDB
         thumbnailId = `project:${projectId}:cover`;
@@ -314,7 +359,6 @@ async function loadTimeline(projectId: string): Promise<void> {
       useItemsStore.getState().setTracks(sortedTracks as TimelineTrack[]);
       useItemsStore.getState().setItems((t.items || []) as TimelineItem[]);
       useTransitionsStore.getState().setTransitions((t.transitions || []) as Transition[]);
-      useTransitionsStore.getState().setPendingBreakages([]);
       useKeyframesStore.getState().setKeyframes((t.keyframes || []) as ItemKeyframes[]);
       useMarkersStore.getState().setMarkers(t.markers || []);
       useMarkersStore.getState().setInPoint(t.inPoint ?? null);
@@ -375,7 +419,6 @@ async function loadTimeline(projectId: string): Promise<void> {
       ]);
       useItemsStore.getState().setItems([]);
       useTransitionsStore.getState().setTransitions([]);
-      useTransitionsStore.getState().setPendingBreakages([]);
       useKeyframesStore.getState().setKeyframes([]);
       useMarkersStore.getState().setMarkers([]);
       useMarkersStore.getState().setInPoint(null);
@@ -429,7 +472,6 @@ let cachedSnapshot: (TimelineState & TimelineActions) | null = null;
 let lastItemsRef: unknown = null;
 let lastTracksRef: unknown = null;
 let lastTransitionsRef: unknown = null;
-let lastPendingBreakagesRef: unknown = null;
 let lastKeyframesRef: unknown = null;
 let lastMarkersRef: unknown = null;
 let lastInPointRef: unknown = null;
@@ -454,7 +496,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastItemsRef !== itemsState.items ||
     lastTracksRef !== itemsState.tracks ||
     lastTransitionsRef !== transitionsState.transitions ||
-    lastPendingBreakagesRef !== transitionsState.pendingBreakages ||
     lastKeyframesRef !== keyframesState.keyframes ||
     lastMarkersRef !== markersState.markers ||
     lastInPointRef !== markersState.inPoint ||
@@ -469,7 +510,6 @@ function getSnapshot(): TimelineState & TimelineActions {
     lastItemsRef = itemsState.items;
     lastTracksRef = itemsState.tracks;
     lastTransitionsRef = transitionsState.transitions;
-    lastPendingBreakagesRef = transitionsState.pendingBreakages;
     lastKeyframesRef = keyframesState.keyframes;
     lastMarkersRef = markersState.markers;
     lastInPointRef = markersState.inPoint;
@@ -485,7 +525,6 @@ function getSnapshot(): TimelineState & TimelineActions {
       items: itemsState.items,
       tracks: itemsState.tracks,
       transitions: transitionsState.transitions,
-      pendingBreakages: transitionsState.pendingBreakages,
       keyframes: keyframesState.keyframes,
       markers: markersState.markers,
       inPoint: markersState.inPoint,
@@ -532,6 +571,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       resetItemTransform: timelineActions.resetItemTransform,
       updateItemsTransform: timelineActions.updateItemsTransform,
       updateItemsTransformMap: timelineActions.updateItemsTransformMap,
+      commitMaskEdit: timelineActions.commitMaskEdit,
       addEffect: timelineActions.addEffect,
       addEffects: timelineActions.addEffects,
       updateEffect: timelineActions.updateEffect,
@@ -541,7 +581,6 @@ function getSnapshot(): TimelineState & TimelineActions {
       updateTransition: timelineActions.updateTransition,
       updateTransitions: timelineActions.updateTransitions,
       removeTransition: timelineActions.removeTransition,
-      clearPendingBreakages: timelineActions.clearPendingBreakages,
       addKeyframe: timelineActions.addKeyframe,
       addKeyframes: timelineActions.addKeyframes,
       updateKeyframe: timelineActions.updateKeyframe,
@@ -556,6 +595,8 @@ function getSnapshot(): TimelineState & TimelineActions {
       markClean: timelineActions.markClean,
       saveTimeline,
       loadTimeline,
+      addMediaToTimeline: timelineActions.addMediaToTimeline,
+      insertRecordedClip: timelineActions.insertRecordedClip,
     };
   }
 
@@ -662,9 +703,6 @@ function createTimelineStoreFacade(): TimelineStoreFacade {
     if ('transitions' in partial && partial.transitions !== undefined) {
       useTransitionsStore.getState().setTransitions(partial.transitions);
     }
-    if ('pendingBreakages' in partial && partial.pendingBreakages !== undefined) {
-      useTransitionsStore.getState().setPendingBreakages(partial.pendingBreakages);
-    }
     if ('keyframes' in partial && partial.keyframes !== undefined) {
       useKeyframesStore.getState().setKeyframes(partial.keyframes);
     }
@@ -712,4 +750,3 @@ export const useTimelineStore = createTimelineStoreFacade();
 
 // Re-export actions for direct use
 export * from './timeline-actions';
-

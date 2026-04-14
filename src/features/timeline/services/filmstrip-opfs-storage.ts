@@ -1,4 +1,4 @@
-﻿/**
+/**
  * OPFS Filmstrip Storage
  *
  * Simple storage for filmstrip frames. Worker handles saving,
@@ -13,6 +13,7 @@
 import { createLogger } from '@/shared/logging/logger';
 import { getCacheMigration } from '@/infrastructure/storage/cache-version';
 import { safeWrite } from '../utils/opfs-safe-write';
+import { requestIdle } from '@/shared/browser/idle-callback';
 
 const logger = createLogger('FilmstripOPFS');
 
@@ -50,6 +51,8 @@ export interface FilmstripFrame {
   timestamp: number;
   url: string; // Object URL for img src
   byteSize?: number;
+  /** Hardware-backed bitmap for instant canvas rendering (skips JPEG decode) */
+  bitmap?: ImageBitmap;
 }
 
 interface LoadedFilmstrip {
@@ -81,12 +84,7 @@ class FilmstripOPFSStorage {
       }
     };
 
-    if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(revoke, { timeout: 10_000 });
-      return;
-    }
-
-    setTimeout(revoke, 0);
+    requestIdle(() => revoke(), { timeout: 10_000 });
   }
 
   private setFrameUrl(mediaId: string, index: number, url: string): void {
@@ -421,6 +419,25 @@ class FilmstripOPFSStorage {
       timestamp: index / FRAME_RATE,
       url,
       byteSize: blob.size,
+    };
+  }
+
+  /**
+   * Create an in-memory frame from a transferred ImageBitmap.
+   * Provides instant display without JPEG encode/decode roundtrip.
+   * URL is empty — the component renders from bitmap directly via canvas.
+   * Once the JPEG blob arrives (via createFrameFromBlob), the URL is set
+   * and the bitmap can be closed.
+   */
+  createFrameFromBitmap(_mediaId: string, index: number, bitmap: ImageBitmap): FilmstripFrame | null {
+    if (!bitmap || bitmap.width === 0) return null;
+
+    return {
+      index,
+      timestamp: index / FRAME_RATE,
+      url: '',
+      byteSize: bitmap.width * bitmap.height * 4,
+      bitmap,
     };
   }
 

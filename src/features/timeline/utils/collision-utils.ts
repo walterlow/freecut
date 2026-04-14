@@ -1,4 +1,7 @@
 import type { TimelineItem } from '@/types/timeline';
+import { createLogger } from '@/shared/logging/logger';
+
+const logger = createLogger('CollisionUtils');
 
 /**
  * Collision detection utilities for timeline drag-and-drop
@@ -125,7 +128,7 @@ function findSpaceForward(
     testPosition = collision.from + collision.durationInFrames;
   }
 
-  console.error('findSpaceForward: too many iterations, aborting');
+  logger.error('findSpaceForward: too many iterations, aborting');
   return null;
 }
 

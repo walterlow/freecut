@@ -32,6 +32,7 @@ import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
 import { GroupSummaryTrack } from './group-summary-track';
 import { TimelineGuidelines } from './timeline-guidelines';
+import { TrackRowFrame } from './track-row-frame';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
@@ -41,6 +42,7 @@ import type { RazorSnapTarget } from '../utils/razor-snap';
 import { useMarkersStore } from '../stores/markers-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 
 
 interface TimelineContentProps {
@@ -51,6 +53,10 @@ interface TimelineContentProps {
     handleZoomIn: () => void;
     handleZoomOut: () => void;
     handleZoomToFit: () => void;
+  }) => void;
+  onMetricsChange?: (metrics: {
+    actualDuration: number;
+    timelineWidth: number;
   }) => void;
 }
 
@@ -66,7 +72,12 @@ interface TimelineContentProps {
  * Dynamically calculates width based on furthest item
  * Memoized to prevent re-renders when props haven't changed.
  */
-export const TimelineContent = memo(function TimelineContent({ duration, scrollRef, onZoomHandlersReady }: TimelineContentProps) {
+export const TimelineContent = memo(function TimelineContent({
+  duration,
+  scrollRef,
+  onZoomHandlersReady,
+  onMetricsChange,
+}: TimelineContentProps) {
   void duration;
 
   // Prefetch waveforms for clips approaching the viewport
@@ -82,11 +93,8 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
   // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
   // when ANY item changes. Instead, use derived selectors for specific needs.
 
-  // Derived selector: only returns the furthest item end frame (for timeline width)
-  // This only triggers re-render when the timeline's actual end position changes
-  const furthestItemEndFrame = useTimelineStore((s) =>
-    s.items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0)
-  );
+  // O(1) pre-computed value from items store instead of O(n) reduce on every change
+  const furthestItemEndFrame = useItemsStore((s) => s.maxItemEndFrame);
   const maxTimelineFrame = Math.floor(Math.max(furthestItemEndFrame / fps, 10) * fps);
   const { timeToPixels, frameToPixels, pixelsToFrame, setZoom, setZoomImmediate, zoomLevel } = useTimelineZoom({
     minZoom: 0.01,
@@ -263,13 +271,13 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     updateWidth();
 
     // Re-measure during idle in case DOM wasn't fully laid out on mount
-    const idleId = requestIdleCallback(updateWidth);
+    const idleId = requestIdle(() => updateWidth());
 
     // Measure on resize
     window.addEventListener('resize', updateWidth);
 
     return () => {
-      cancelIdleCallback(idleId);
+      cancelIdle(idleId);
       if (viewportSyncRafRef.current !== null) {
         cancelAnimationFrame(viewportSyncRafRef.current);
         viewportSyncRafRef.current = null;
@@ -725,6 +733,13 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     }
   }, []); // Empty deps - only call once on mount
 
+  useEffect(() => {
+    onMetricsChange?.({
+      actualDuration,
+      timelineWidth,
+    });
+  }, [actualDuration, onMetricsChange, timelineWidth]);
+
   // Momentum scroll/zoom loop using requestAnimationFrame
   const startMomentumScroll = useCallback(() => {
     if (momentumIdRef.current !== null) {
@@ -883,7 +898,7 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
     <div
       ref={mergedRef}
       data-timeline-scroll-container
-      className="flex-1 relative bg-background/30 timeline-container"
+      className="flex-1 relative bg-background/30 timeline-container touch-pan-x"
       style={{
         scrollBehavior: 'auto', // Disable smooth scrolling for instant zoom response
         willChange: 'scroll-position', // Hint to browser for optimization
@@ -915,13 +930,15 @@ export const TimelineContent = memo(function TimelineContent({ duration, scrollR
         >
           {/* Render all visible tracks - virtualization removed as it caused drag lag */}
           {/* Video editors typically have <10 tracks, making virtualization overhead not worth it */}
-          {tracks.map((track) =>
-            track.isGroup && track.isCollapsed ? (
-              <GroupSummaryTrack key={track.id} track={track} />
-            ) : (
-              <TimelineTrack key={track.id} track={track} timelineWidth={timelineWidth} />
-            )
-          )}
+          {tracks.map((track) => (
+            <TrackRowFrame key={track.id}>
+              {track.isGroup && track.isCollapsed ? (
+                <GroupSummaryTrack track={track} />
+              ) : (
+                <TimelineTrack track={track} timelineWidth={timelineWidth} />
+              )}
+            </TrackRowFrame>
+          ))}
 
           {/* Snap guidelines (shown during drag) */}
           {isDragging && (

@@ -31,6 +31,7 @@ dist-ssr
 # Build outputs
 build
 out
+contracts/target/*
 
 # Testing
 coverage
@@ -51,3 +52,5 @@ CLAUDE.md
 crates/*/target/
 crates/*/Cargo.lock
 .knip-report.json
+
+tmp

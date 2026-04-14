@@ -2,13 +2,17 @@ import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
+import { TimelineNavigator } from './timeline-navigator';
 import { TrackHeader } from './track-header';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
+import { TrackRowFrame } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/shared/state/selection';
+import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { HOTKEYS, HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { HOTKEY_OPTIONS } from '@/config/hotkeys';
+import { useSettingsStore, useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
@@ -16,8 +20,11 @@ import { CompositionBreadcrumbs } from './composition-breadcrumbs';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import type { TimelineTrack } from '@/types/timeline';
 import { trackDropIndexRef, trackDropGroupIdRef, trackDropParentIdRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
-import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import { getVisibleTracks, getGroupDepth, getChildTrackIds } from '../utils/group-utils';
+import { createLogger } from '@/shared/logging/logger';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+
+const logger = createLogger('Timeline');
 
 // Hoisted RegExp - avoids recreation on every render (js-hoist-regexp)
 const TRACK_NUMBER_REGEX = /^Track (\d+)$/;
@@ -27,8 +34,6 @@ interface TimelineProps {
   /** Callback when graph panel open state changes - used by parent to resize panel */
   onGraphPanelOpenChange?: (isOpen: boolean) => void;
 }
-
-type TimelineEditorTab = 'keyframes' | 'scopes';
 
 /**
  * Complete Timeline Component
@@ -41,6 +46,9 @@ type TimelineEditorTab = 'keyframes' | 'scopes';
  * Follows modular architecture with granular Zustand selectors
  */
 export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChange }: TimelineProps) {
+  const hotkeys = useResolvedHotkeys();
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
   const {
     tracks,
     addTrack,
@@ -97,10 +105,15 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     handleZoomOut: () => void;
     handleZoomToFit: () => void;
   } | null>(null);
+  const [timelineMetrics, setTimelineMetrics] = useState({
+    actualDuration: Math.max(duration, 10),
+    timelineWidth: 0,
+  });
 
   // Bottom editor panel state (Keyframes / Scopes)
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
-  const [activeEditorTab, setActiveEditorTab] = useState<TimelineEditorTab>('keyframes');
+  const colorScopesOpen = useEditorStore((s) => s.colorScopesOpen);
+  const toggleColorScopesOpen = useEditorStore((s) => s.toggleColorScopesOpen);
 
   const setEditorPanelOpen = useCallback(
     (nextOpen: boolean) => {
@@ -114,16 +127,8 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   );
 
   const handleToggleKeyframeTab = useCallback(() => {
-    const shouldClose = isEditorPanelOpen && activeEditorTab === 'keyframes';
-    setActiveEditorTab('keyframes');
-    setEditorPanelOpen(!shouldClose);
-  }, [isEditorPanelOpen, activeEditorTab, setEditorPanelOpen]);
-
-  const handleToggleScopesTab = useCallback(() => {
-    const shouldClose = isEditorPanelOpen && activeEditorTab === 'scopes';
-    setActiveEditorTab('scopes');
-    setEditorPanelOpen(!shouldClose);
-  }, [isEditorPanelOpen, activeEditorTab, setEditorPanelOpen]);
+    setEditorPanelOpen(!isEditorPanelOpen);
+  }, [isEditorPanelOpen, setEditorPanelOpen]);
 
   const handleToggleEditorPanel = useCallback(() => {
     setEditorPanelOpen(!isEditorPanelOpen);
@@ -133,9 +138,9 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     setEditorPanelOpen(false);
   }, [setEditorPanelOpen]);
 
-  // Keyboard shortcut: Ctrl/Cmd+K to toggle keyframe editor
+  // Keyboard shortcut: Ctrl/Cmd+Shift+A to toggle keyframe editor
   useHotkeys(
-    HOTKEYS.TOGGLE_KEYFRAME_EDITOR,
+    hotkeys.TOGGLE_KEYFRAME_EDITOR,
     (event) => {
       event.preventDefault();
       handleToggleKeyframeTab();
@@ -145,21 +150,22 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   );
 
   // Keyboard shortcut: Ctrl/Cmd+G to group selected tracks
+  // Needs capture: true to override browser's "Find next" shortcut
   useHotkeys(
-    HOTKEYS.GROUP_TRACKS,
+    hotkeys.GROUP_TRACKS,
     (event) => {
       event.preventDefault();
       if (canGroupSelection) {
         createGroup(selectedTrackIds);
       }
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [canGroupSelection, selectedTrackIds, createGroup]
   );
 
   // Keyboard shortcut: Ctrl/Cmd+Shift+G to ungroup
   useHotkeys(
-    HOTKEYS.UNGROUP_TRACKS,
+    hotkeys.UNGROUP_TRACKS,
     (event) => {
       event.preventDefault();
       // If active track is a group, ungroup it
@@ -168,7 +174,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         ungroup(activeTrack.id);
       }
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
     [activeTrackId, tracks, ungroup]
   );
 
@@ -387,7 +393,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     const newTrack: TimelineTrack = {
       id: `track-${Date.now()}`,
       name: getNextTrackName(),
-      height: DEFAULT_TRACK_HEIGHT,
+      height: editorLayout.timelineTrackHeight,
       locked: false,
       visible: true,
       muted: false,
@@ -467,7 +473,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     // Don't allow removing all tracks
     const tracksToRemoveSet = new Set(tracksToRemove);
     if (tracksToRemoveSet.size >= tracks.length) {
-      console.warn('Cannot remove all tracks');
+      logger.warn('Cannot remove all tracks');
       return;
     }
 
@@ -482,17 +488,21 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
   return (
 
-      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden">
+      <div
+        className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)]"
+        role="region"
+        aria-label="Timeline"
+      >
         {/* Timeline Header */}
         <TimelineHeader
           onZoomChange={zoomHandlers?.handleZoomChange}
           onZoomIn={zoomHandlers?.handleZoomIn}
           onZoomOut={zoomHandlers?.handleZoomOut}
           onZoomToFit={zoomHandlers?.handleZoomToFit}
-          isKeyframePanelOpen={isEditorPanelOpen && activeEditorTab === 'keyframes'}
+          isKeyframePanelOpen={isEditorPanelOpen}
           onToggleKeyframePanel={handleToggleKeyframeTab}
-          isScopesPanelOpen={isEditorPanelOpen && activeEditorTab === 'scopes'}
-          onToggleScopesPanel={handleToggleScopesTab}
+          isScopesPanelOpen={colorScopesOpen}
+          onToggleScopesPanel={toggleColorScopesOpen}
         />
 
         {/* Composition Breadcrumbs - shown when inside a sub-composition */}
@@ -501,9 +511,12 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       {/* Timeline Content */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Track Headers Sidebar */}
-        <div className="w-48 border-r border-border panel-bg flex-shrink-0 flex flex-col overflow-x-hidden">
+        <div className="border-r border-border panel-bg flex w-[var(--editor-timeline-sidebar-width-mobile)] flex-shrink-0 flex-col overflow-x-hidden md:w-[var(--editor-timeline-sidebar-width)]">
           {/* Tracks label with controls */}
-          <div className="h-11 flex items-center justify-between px-3 border-b border-border bg-secondary/20 flex-shrink-0">
+          <div
+            className="flex items-center justify-between px-3 border-b border-border bg-secondary/20 flex-shrink-0"
+            style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
+          >
             <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
               Tracks
             </span>
@@ -548,45 +561,46 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
               {visibleTracks.map((track) => {
                 const meta = trackMeta.get(track.id);
                 return (
-                  <TrackHeader
-                    key={track.id}
-                    track={track}
-                    isActive={activeTrackId === track.id}
-                    isSelected={selectedTrackIdsSet.has(track.id)}
-                    isDropTarget={dropTargetGroupId === track.id}
-                    groupDepth={meta?.depth ?? 0}
-                    canGroup={canGroupSelection}
-                    onToggleLock={() => toggleTrackLock(track.id)}
-                    onToggleVisibility={() => toggleTrackVisibility(track.id)}
-                    onToggleMute={() => toggleTrackMute(track.id)}
-                    onToggleSolo={() => toggleTrackSolo(track.id)}
-                    onToggleCollapse={track.isGroup ? () => toggleGroupCollapse(track.id) : undefined}
-                    onGroup={canGroupSelection ? () => createGroup(selectedTrackIds) : undefined}
-                    onCloseGaps={!track.isGroup ? () => useTimelineStore.getState().closeAllGapsOnTrack(track.id) : undefined}
-                    onUngroup={track.isGroup ? () => ungroup(track.id) : undefined}
-                    onRemoveFromGroup={track.parentTrackId ? () => removeFromGroup([track.id]) : undefined}
-                    onSelect={(e) => {
-                      // After a drag-drop, suppress the click to retain selection
-                      if (trackDragJustDroppedRef.current) return;
-                      if (e.shiftKey && activeTrackId) {
-                        // Range select from active track to clicked track
-                        const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
-                        const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
-                        if (startIdx !== -1 && endIdx !== -1) {
-                          const lo = Math.min(startIdx, endIdx);
-                          const hi = Math.max(startIdx, endIdx);
-                          const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
-                          selectTracks(rangeIds);
+                  <TrackRowFrame key={track.id}>
+                    <TrackHeader
+                      track={track}
+                      isActive={activeTrackId === track.id}
+                      isSelected={selectedTrackIdsSet.has(track.id)}
+                      isDropTarget={dropTargetGroupId === track.id}
+                      groupDepth={meta?.depth ?? 0}
+                      canGroup={canGroupSelection}
+                      onToggleLock={() => toggleTrackLock(track.id)}
+                      onToggleVisibility={() => toggleTrackVisibility(track.id)}
+                      onToggleMute={() => toggleTrackMute(track.id)}
+                      onToggleSolo={() => toggleTrackSolo(track.id)}
+                      onToggleCollapse={track.isGroup ? () => toggleGroupCollapse(track.id) : undefined}
+                      onGroup={canGroupSelection ? () => createGroup(selectedTrackIds) : undefined}
+                      onCloseGaps={!track.isGroup ? () => useTimelineStore.getState().closeAllGapsOnTrack(track.id) : undefined}
+                      onUngroup={track.isGroup ? () => ungroup(track.id) : undefined}
+                      onRemoveFromGroup={track.parentTrackId ? () => removeFromGroup([track.id]) : undefined}
+                      onSelect={(e) => {
+                        // After a drag-drop, suppress the click to retain selection
+                        if (trackDragJustDroppedRef.current) return;
+                        if (e.shiftKey && activeTrackId) {
+                          // Range select from active track to clicked track
+                          const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
+                          const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
+                          if (startIdx !== -1 && endIdx !== -1) {
+                            const lo = Math.min(startIdx, endIdx);
+                            const hi = Math.max(startIdx, endIdx);
+                            const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
+                            selectTracks(rangeIds);
+                          }
+                        } else if (e.metaKey || e.ctrlKey) {
+                          // Multi-select with Cmd/Ctrl
+                          toggleTrackSelection(track.id);
+                        } else {
+                          // Single select - set as active
+                          setActiveTrack(track.id);
                         }
-                      } else if (e.metaKey || e.ctrlKey) {
-                        // Multi-select with Cmd/Ctrl
-                        toggleTrackSelection(track.id);
-                      } else {
-                        // Single select - set as active
-                        setActiveTrack(track.id);
-                      }
-                    }}
-                  />
+                      }}
+                    />
+                  </TrackRowFrame>
                 );
               })}
 
@@ -612,17 +626,27 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           duration={duration}
           scrollRef={timelineContentRef}
           onZoomHandlersReady={setZoomHandlers}
+          onMetricsChange={setTimelineMetrics}
         />
       </div>
 
       {/* Keyframe Graph Panel */}
       <KeyframeGraphPanel
         isOpen={isEditorPanelOpen}
-        activeTab={activeEditorTab}
-        onSelectTab={setActiveEditorTab}
         onToggle={handleToggleEditorPanel}
         onClose={handleCloseEditorPanel}
       />
+
+      <div className="flex flex-shrink-0 overflow-hidden">
+        <div className="border-r border-border panel-bg w-[var(--editor-timeline-sidebar-width-mobile)] flex-shrink-0 md:w-[var(--editor-timeline-sidebar-width)]" />
+        <div className="flex-1 min-w-0">
+          <TimelineNavigator
+            actualDuration={timelineMetrics.actualDuration}
+            timelineWidth={timelineMetrics.timelineWidth}
+            scrollContainerRef={timelineContentRef}
+          />
+        </div>
+      </div>
     </div>
 
   );

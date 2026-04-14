@@ -20,21 +20,93 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
+import { type CollisionRect } from '../../utils/collision-utils';
+
+function findNextAvailableSpaceOnTrack(
+  proposedFrom: number,
+  durationInFrames: number,
+  trackItems: ReadonlyArray<CollisionRect>
+): number {
+  let nextFrom = Math.max(0, proposedFrom);
+
+  for (const item of trackItems) {
+    const itemEnd = item.from + item.durationInFrames;
+    if (itemEnd <= nextFrom) {
+      continue;
+    }
+
+    if (item.from >= nextFrom + durationInFrames) {
+      break;
+    }
+
+    nextFrom = itemEnd;
+  }
+
+  return nextFrom;
+}
+
+function placeItemsWithoutTimelineOverlap(items: TimelineItem[]): TimelineItem[] {
+  const occupiedRangesByTrack = new Map<string, CollisionRect[]>();
+  const placedItems: TimelineItem[] = [];
+
+  for (const item of useItemsStore.getState().items) {
+    const trackItems = occupiedRangesByTrack.get(item.trackId);
+    if (trackItems) {
+      trackItems.push(item);
+    } else {
+      occupiedRangesByTrack.set(item.trackId, [item]);
+    }
+  }
+
+  for (const trackItems of occupiedRangesByTrack.values()) {
+    trackItems.sort((a, b) => a.from - b.from);
+  }
+
+  for (const item of items) {
+    let trackItems = occupiedRangesByTrack.get(item.trackId);
+    if (!trackItems) {
+      trackItems = [];
+      occupiedRangesByTrack.set(item.trackId, trackItems);
+    }
+
+    const finalFrom = findNextAvailableSpaceOnTrack(
+      item.from,
+      item.durationInFrames,
+      trackItems
+    );
+    const placedItem = finalFrom === item.from
+      ? item
+      : { ...item, from: finalFrom };
+
+    placedItems.push(placedItem);
+    trackItems.push({
+      trackId: placedItem.trackId,
+      from: placedItem.from,
+      durationInFrames: placedItem.durationInFrames,
+    });
+    trackItems.sort((a, b) => a.from - b.from);
+  }
+
+  return placedItems;
+}
 
 export function addItem(item: TimelineItem): void {
+  const [placedItem] = placeItemsWithoutTimelineOverlap([item]);
+
   execute('ADD_ITEM', () => {
-    useItemsStore.getState()._addItem(item);
+    useItemsStore.getState()._addItem(placedItem);
     useTimelineSettingsStore.getState().markDirty();
-  }, { itemId: item.id, type: item.type });
+  }, { itemId: placedItem.id, type: placedItem.type });
 }
 
 export function addItems(items: TimelineItem[]): void {
   if (items.length === 0) return;
+  const placedItems = placeItemsWithoutTimelineOverlap(items);
 
   execute('ADD_ITEMS', () => {
-    useItemsStore.getState()._addItems(items);
+    useItemsStore.getState()._addItems(placedItems);
     useTimelineSettingsStore.getState().markDirty();
-  }, { count: items.length });
+  }, { count: placedItems.length });
 }
 
 export function updateItem(id: string, updates: Partial<TimelineItem>): void {
@@ -769,4 +841,3 @@ export function slideItem(
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });
 }
-

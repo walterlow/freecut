@@ -1,4 +1,4 @@
-export type PreviewRenderSource = 'player' | 'fast_scrub_overlay';
+export type PreviewRenderSource = 'player' | 'fast_scrub_overlay' | 'playback_transition_overlay';
 
 export interface RenderSourceSwitchEntry {
   ts: number;

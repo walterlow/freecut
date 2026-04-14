@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lightweight JSON Export Service
  *
  * Exports project data as JSON for debugging, testing, and sharing
@@ -141,7 +141,7 @@ export function downloadSnapshotJson(snapshot: ProjectSnapshot, filename?: strin
   const safeName = sanitizeFilename(filename || snapshot.project.name);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${safeName}.freecut.json`;
+  a.download = `${safeName}.pixels.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

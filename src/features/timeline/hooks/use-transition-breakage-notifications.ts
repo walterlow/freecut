@@ -1,57 +1,21 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { toast } from 'sonner';
-import { useTimelineStore } from '../stores/timeline-store';
-import type { TimelineState, TimelineActions } from '../types';
+import { onDomainEvent } from '@/shared/events/domain-events';
 import type { TransitionBreakage } from '@/types/transition';
 
 /**
- * Hook that monitors pendingBreakages state and shows notifications
+ * Hook that subscribes to transition breakage events and shows notifications
  * when transitions are automatically removed due to clip changes.
  *
  * This hook should be mounted once in the editor root component.
- *
- * Currently logs to console. Future enhancement: integrate with a toast library.
  */
 export function useTransitionBreakageNotifications() {
-  const pendingBreakages = useTimelineStore(
-    (s: TimelineState) => s.pendingBreakages
-  );
-  const clearPendingBreakages = useTimelineStore(
-    (s: TimelineActions) => s.clearPendingBreakages
-  );
-
-  // Track previous length to detect new breakages
-  const prevLengthRef = useRef(0);
-
   useEffect(() => {
-    // Only process if there are new breakages
-    if (pendingBreakages.length === 0) {
-      prevLengthRef.current = 0;
-      return;
-    }
-
-    // Only show notification for new breakages (not on initial mount with existing)
-    if (pendingBreakages.length === prevLengthRef.current) {
-      return;
-    }
-
-    // Get only new breakages
-    const newBreakages = pendingBreakages.slice(prevLengthRef.current);
-    prevLengthRef.current = pendingBreakages.length;
-
-    if (newBreakages.length === 0) return;
-
-    // Show notification
-    showBreakageNotification(newBreakages);
-
-    // Clear after showing (with small delay to allow undo action if implemented)
-    const timeout = setTimeout(() => {
-      clearPendingBreakages();
-      prevLengthRef.current = 0;
-    }, 100);
-
-    return () => clearTimeout(timeout);
-  }, [pendingBreakages, clearPendingBreakages]);
+    return onDomainEvent('timeline.transitionBreakagesDetected', ({ breakages }) => {
+      if (breakages.length === 0) return;
+      showBreakageNotification(breakages);
+    });
+  }, []);
 }
 
 /**

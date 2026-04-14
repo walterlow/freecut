@@ -17,10 +17,10 @@
   --color-timeline-audio: oklch(0.22 0.02 302);
   --color-timeline-image: oklch(0.62 0.17 250);
   --color-timeline-text: oklch(0.671 0 290);
-  --color-timeline-shape: oklch(0.68 0.19 45);
+  --color-timeline-shape: oklch(0.58 0.22 350);
 
   /* Playhead color */
-  --color-timeline-playhead: oklch(0.68 0.19 45);    /* Orange (matches primary) */
+  --color-timeline-playhead: oklch(0.58 0.22 350);    /* #EC407A (matches primary) */
 
   /* In/Out marker colors */
   --color-timeline-in: oklch(0.65 0.18 142);         /* Green - in point */
@@ -34,8 +34,8 @@
   --color-timeline-marker: oklch(0.65 0.20 250);     /* Blue - timeline markers */
 
   /* Snap/Join indicator colors */
-  --color-timeline-snap: #f97316;                    /* orange-500 - snap indicator */
-  --color-timeline-join: #fb923c;                    /* orange-400 - join indicator */
+  --color-timeline-snap: #EC407A;                    /* snap indicator */
+  --color-timeline-join: #EC407A;                    /* join indicator */
 
 
   --color-video-preview-background: oklch(0.1914 0 58);
@@ -84,6 +84,10 @@ body.timeline-item-drag-cursor-not-allowed * {
   overflow-y: auto;
 }
 
+.timeline-container::-webkit-scrollbar {
+  height: 0;
+}
+
 /* Waveform gradient background - darker edges, dark center */
 .bg-waveform-gradient {
   background: linear-gradient(
@@ -124,13 +128,13 @@ body.timeline-item-drag-cursor-not-allowed * {
   );
 }
 
-/* Shape clip gradient background - subtle orange tint */
+/* Shape clip gradient background - subtle pink tint (#EC407A) */
 .bg-shape-gradient {
   background: linear-gradient(
     to bottom,
-    oklch(0.20 0.02 45) 0%,
-    oklch(0.28 0.02 45) 50%,
-    oklch(0.20 0.02 45) 100%
+    oklch(0.20 0.02 350) 0%,
+    oklch(0.28 0.02 350) 50%,
+    oklch(0.20 0.02 350) 100%
   );
 }
 
@@ -140,12 +144,14 @@ body.timeline-item-drag-cursor-not-allowed * {
  */
 .timeline-item {
   content-visibility: auto;
-  contain-intrinsic-size: auto 80px; /* width auto, estimated height matches DEFAULT_TRACK_HEIGHT */
+  contain-intrinsic-size: auto var(--editor-timeline-track-height, 72px);
 }
 
 .track-header-item {
   content-visibility: auto;
-  contain-intrinsic-size: 192px 80px; /* sidebar width, estimated height matches DEFAULT_TRACK_HEIGHT */
+  contain-intrinsic-size:
+    var(--editor-timeline-sidebar-width, 176px)
+    var(--editor-timeline-track-height, 72px);
 }
 
 /* Filmstrip loading shimmer animation */

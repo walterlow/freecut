@@ -1,0 +1,100 @@
+---
+description: API reference for the audio-to-text pipeline. 
+alwaysApply: false
+---
+Audio To Text
+API reference for the audio-to-text pipeline. Accepts audio input and returns a transcript using Whisper-compatible models.
+
+POST
+
+https://livepeer.studio/api/beta/generate
+/
+audio-to-text
+
+Try it
+Authorizations
+​
+Authorization
+stringheaderrequired
+Bearer authentication header of the form Bearer <token>, where <token> is your auth token.
+
+Body
+multipart/form-data
+​
+audio
+filerequired
+Uploaded audio file to be transcribed.
+
+​
+model_id
+stringdefault:""
+Hugging Face model ID used for transcription.
+
+​
+return_timestamps
+stringdefault:true
+Return timestamps for the transcribed text. Supported values: 'sentence', 'word', or a string boolean ('true' or 'false'). Default is 'true' ('sentence'). 'false' means no timestamps. 'word' means word-based timestamps.
+
+​
+metadata
+stringdefault:{}
+Additional job information to be passed to the pipeline.
+
+Response
+
+200
+
+application/json
+Successful Response
+
+Response model for text generation.
+
+​
+text
+stringrequired
+The generated text.
+
+​
+chunks
+Chunk · object[]required
+The generated text chunks.
+
+Hide child attributes
+
+​
+chunks.timestamp
+any[]required
+The timestamp of the chunk.
+
+​
+chunks.text
+stringrequired
+The text of the chunk.
+
+const form = new FormData();
+form.append('audio', '<string>');
+form.append('model_id', '');
+form.append('return_timestamps', 'true');
+form.append('metadata', '{}');
+
+const options = {method: 'POST', headers: {Authorization: 'Bearer <token>'}};
+
+options.body = form;
+
+fetch('https://livepeer.studio/api/beta/generate/audio-to-text', options)
+  .then(res => res.json())
+  .then(res => console.log(res))
+  .catch(err => console.error(err));
+
+200:
+{
+  "text": "<string>",
+  "chunks": [
+    {
+      "timestamp": [
+        "<unknown>"
+      ],
+      "text": "<string>"
+    }
+  ]
+}

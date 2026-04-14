@@ -1,0 +1,359 @@
+---
+description: Learn how to deliver and output video from Daydream
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Delivery and Outputs
+
+> Learn how to deliver and output video from Daydream
+
+# What is Delivery and Outputs?
+
+Delivery is the mechanism that transports your livestream from the server to the viewers watching the stream.
+
+The platform takes the ingested stream and sends it to viewers at scale
+using **CDNs** (Content Delivery Networks) with servers around the world
+and handles **transcoding** (creating multiple quality versions)
+along with optimizing routing to get video to viewers quickly.
+
+### Why This Matters
+
+After you create your AI-generated stream in Daydream, there's one more important decision: how will you get it to your viewers?
+
+Think of it like choosing how to deliver a package. You could use overnight express shipping (fast but expensive) or standard shipping (slower but handles more volume). With streaming, you're choosing between speed and scale.
+
+## WHEP Output (Low Latency)
+
+**WHEP** (WebRTC HTTP Egress Protocol) is designed for ultra-low latency streaming — typically under 1 second of delay.
+How it works:
+
+Uses WebRTC technology (the same technology used for video calls)
+creates direct peer-to-peer-style connections between your stream and viewers.
+Data travels quickly with minimal buffering.
+
+| **Best For**                                             | **Trade-offs**                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------- |
+| Live auctions or betting where every second counts       | Smaller audience capacity (harder to scale to thousands of viewers) |
+| Interactive streams (gaming, live Q\&A, reactions)       | Requires more server resources per viewer                           |
+| Video conferencing or webinar-style broadcasts           | Less compatible with traditional CDNs                               |
+| Real-time collaboration where immediate feedback matters | May have more connection stability issues on poor networks          |
+
+## HLS Output (CDN Distribution)
+
+**HLS** (HTTP Live Streaming) is the industry standard for scalable, reliable delivery to large audiences.
+How it works:
+
+Breaks your stream into small video chunks (typically 2-10 seconds each)
+Distributes these chunks across CDN (Content Delivery Network) servers worldwide
+Viewers download and play chunks sequentially
+
+| **Best For**                                       | **Trade-offs**                                                                   |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Large-scale events (concerts, conferences, sports) | Higher latency (typically 10-30 seconds delay)                                   |
+| On-demand playback and DVR features                | Not suitable for real-time interaction                                           |
+| Mobile apps and broad device compatibility         | The chunked nature means slight quality adjustments as network conditions change |
+
+## Choosing the right output
+
+| **WHEP**                                                  | **HLS**                                                               |
+| --------------------------------------------------------- | --------------------------------------------------------------------- |
+| Latency under 2 seconds is critical                       | You need to reach a large audience (thousands or millions of viewers) |
+| You have a smaller, engaged audience (dozens to hundreds) | A few seconds of delay won't impact the experience                    |
+| Interaction is a key part of the experience               | You want maximum device/platform compatibility                        |
+| You're okay with higher infrastructure costs per viewer   | Reliability and scale matter more than instant feedback               |
+
+## API Examples
+
+### Create a Output with WHEP
+
+WHEP output is provided when you create a stream with the Daydream API. The `output_playback_id` provided in the response is used to pull the stream from Daydream.
+
+### How It Works
+
+```mermaid  theme={null}
+graph LR
+    OBS[OBS] -->|WHIP| Daydream[Daydream<br/>AI Proc]
+    Daydream -->|WHEP<br/>Pulling from Daydream| Client[Your Client<br/>Browser/App]
+```
+
+<Warning>
+  Make sure to keep your API Key safe and secure and not exposed to the public
+</Warning>
+
+<CodeGroup>
+  ```bash Curl Example theme={null}
+  # Step 1: Create a Daydream stream
+  DAYDREAM_API_KEY="<YOUR_DAYDREAM_API_KEY>"
+  RESPONSE=$(curl -s -X POST "https://api.daydream.live/v1/streams" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${DAYDREAM_API_KEY}" \
+    -d '{
+      "pipeline": "streamdiffusion",
+      "params": {
+        "model_id": "stabilityai/sd-turbo",
+        "prompt": "a serene mountain landscape at sunset"
+      }
+    }')
+
+  echo "=== Daydream Response ==="
+  echo $RESPONSE | jq '.'
+
+  PLAYBACK_ID=$(echo $RESPONSE | jq -r '.output_playback_id')
+  echo "=== Playback ID ==="
+  echo $PLAYBACK_ID
+
+  # Debug: See the full Livepeer response
+  echo "=== Livepeer Response ==="
+  LIVEPEER_RESPONSE=$(curl -s "https://livepeer.studio/api/playback/${PLAYBACK_ID}")
+  echo $LIVEPEER_RESPONSE | jq '.'
+
+  # Use the URL for under the WebRTC source
+  {
+    "type": "live",
+    "meta": {
+      "live": 0,
+      "source": [
+        {
+          "hrn": "WebRTC (H264)",
+          "type": "html5/video/h264",
+          "url": "https://livepeercdn.studio/webrtc/8a5eiih6kev07buv"
+        },
+      ]
+    }
+  }
+
+  ```
+
+  ```javascript JavaScript Example theme={null}
+  // Step 1: Create a Daydream stream
+  const DAYDREAM_API_KEY = "<YOUR_DAYDREAM_API_KEY>";
+
+  async function createDaydreamStream() {
+    try {
+      // Create the stream
+      const response = await fetch("https://api.daydream.live/v1/streams", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${DAYDREAM_API_KEY}`
+        },
+        body: JSON.stringify({
+          pipeline: "streamdiffusion",
+          params: {
+            model_id: "stabilityai/sd-turbo",
+            prompt: "a serene mountain landscape at sunset"
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log("=== Daydream Response ===");
+      console.log(JSON.stringify(data, null, 2));
+
+      const playbackId = data.output_playback_id;
+      console.log("=== Playback ID ===");
+      console.log(playbackId);
+
+      // Get Livepeer playback information
+      console.log("=== Livepeer Response ===");
+      const livepeerResponse = await fetch(
+        `https://livepeer.studio/api/playback/${playbackId}`
+      );
+      const livepeerData = await livepeerResponse.json();
+      console.log(JSON.stringify(livepeerData, null, 2));
+
+      // Extract WebRTC URL
+      const webrtcSource = livepeerData.meta?.source?.find(
+        s => s.hrn === "WebRTC (H264)"
+      );
+      
+      if (webrtcSource) {
+        console.log("=== WebRTC URL ===");
+        console.log(webrtcSource.url);
+        return webrtcSource.url;
+      }
+
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  }
+
+  // Run the function
+  createDaydreamStream();
+  ```
+</CodeGroup>
+
+### Create a Output with HLS
+
+HLS output is provided when you create a stream with the Daydream API. The `output_playback_id` provided in the response is used to pull the stream from Daydream for scalable CDN distribution.
+
+### How It Works
+
+```mermaid  theme={null}
+graph LR
+    OBS[OBS] -->|WHIP| Daydream[Daydream<br/>AI Proc]
+    Daydream -->|HLS<br/>Pulling from Daydream| Client[Your Client<br/>Browser/App]
+```
+
+<Warning>
+  Make sure to keep your API Key safe and secure and not exposed to the public
+</Warning>
+
+<CodeGroup>
+  ```bash Curl Example theme={null}
+  # Step 1: Create a Daydream stream
+  DAYDREAM_API_KEY="<YOUR_DAYDREAM_API_KEY>"
+  RESPONSE=$(curl -s -X POST "https://api.daydream.live/v1/streams" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${DAYDREAM_API_KEY}" \
+    -d '{
+      "pipeline": "streamdiffusion",
+      "params": {
+        "model_id": "stabilityai/sd-turbo",
+        "prompt": "a serene mountain landscape at sunset"
+      }
+    }')
+
+  echo "=== Daydream Response ==="
+  echo $RESPONSE | jq '.'
+
+  PLAYBACK_ID=$(echo $RESPONSE | jq -r '.output_playback_id')
+  echo "=== Playback ID ==="
+  echo $PLAYBACK_ID
+
+  # Debug: See the full Livepeer response
+  echo "=== Livepeer Response ==="
+  LIVEPEER_RESPONSE=$(curl -s "https://livepeer.studio/api/playback/${PLAYBACK_ID}")
+  echo $LIVEPEER_RESPONSE | jq '.'
+
+  # Use the URL for under the HLS source
+  {
+    "type": "live",
+    "meta": {
+      "live": 0,
+      "source": [
+        {
+          "hrn": "HLS (TS)",
+          "type": "html5/application/vnd.apple.mpegurl",
+          "url": "https://livepeercdn.studio/hls/8a5eiih6kev07buv/index.m3u8"
+        },
+      ]
+    }
+  }
+
+  ```
+
+  ```JavaScript JavaScript Example theme={null}
+  // Step 1: Create a Daydream stream
+  const DAYDREAM_API_KEY = "<YOUR_DAYDREAM_API_KEY>";
+
+  async function createDaydreamStream() {
+    try {
+      // Create the stream
+      const response = await fetch("https://api.daydream.live/v1/streams", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${DAYDREAM_API_KEY}`
+        },
+        body: JSON.stringify({
+          pipeline: "streamdiffusion",
+          params: {
+            model_id: "stabilityai/sd-turbo",
+            prompt: "a serene mountain landscape at sunset"
+          }
+        })
+      });
+
+      const data = await response.json();
+      console.log("=== Daydream Response ===");
+      console.log(JSON.stringify(data, null, 2));
+
+      const playbackId = data.output_playback_id;
+      console.log("=== Playback ID ===");
+      console.log(playbackId);
+
+      // Get Livepeer playback information
+      console.log("=== Livepeer Response ===");
+      const livepeerResponse = await fetch(
+        `https://livepeer.studio/api/playback/${playbackId}`
+      );
+      const livepeerData = await livepeerResponse.json();
+      console.log(JSON.stringify(livepeerData, null, 2));
+
+      // Extract HLS URL
+      const hlsSource = livepeerData.meta?.source?.find(
+        s => s.hrn === "HLS (TS)"
+      );
+      
+      if (hlsSource) {
+        console.log("=== HLS URL ===");
+        console.log(hlsSource.url);
+        return hlsSource.url;
+      }
+
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  }
+
+  // Run the function
+  createDaydreamStream();
+  ```
+</CodeGroup>
+
+### Create a Output with RTMP
+
+Using Streaming Platforms to deliver your stream.
+
+<Note>
+  You are only able to change the `output_playback_id` when creating a **NEW**
+  stream. You cannot change it on an existing stream.
+</Note>
+
+<Warning>
+  Make sure to keep your API Key safe and secure and not exposed to the public
+</Warning>
+
+<CodeGroup>
+  ```bash YouTube Example theme={null}
+  curl -X POST \
+    "https://api.daydream.live/v1/streams" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <YOUR_DAYDREAM_API_KEY>" \
+    -d '{
+      "pipeline": "streamdiffusion",
+      "output_rtmp_url": "rtmp://a.rtmp.youtube.com/live2/<YOUR_YOUTUBE_STREAM_KEY>",
+      "params": {
+        "model_id": "stabilityai/sdxl-turbo",
+        "prompt": "a serene mountain landscape at sunset"
+      }
+    }'
+  ```
+
+  ```bash Twitch Example theme={null}
+  curl -X POST \
+    "https://api.daydream.live/v1/streams" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer <YOUR_DAYDREAM_API_KEY>" \
+    -d '{
+      "pipeline": "streamdiffusion",
+      "output_rtmp_url": "rtmp://ingest.global-contribute.live-video.net/app/<YOUR_TWITCH_STREAM_KEY>",
+      "params": {
+        "model_id": "stabilityai/sdxl-turbo",
+        "prompt": "a serene mountain landscape at sunset"
+      }
+    }'
+  ```
+</CodeGroup>
+
+### How It Works
+
+```mermaid  theme={null}
+graph LR
+    OBS[OBS] -->|WHIP| Daydream[Daydream<br/>AI Proc]
+    Daydream -->|RTMP <br/>Pushing from Daydream| RTMP[RTMP Server<br/>YouTube/etc]
+```

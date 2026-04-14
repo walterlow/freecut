@@ -1,0 +1,122 @@
+---
+description: Install the Daydream Browser SDK for WebRTC streaming
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Installation
+
+> Install the Daydream Browser SDK for WebRTC streaming
+
+# Browser SDK Installation
+
+Add real-time AI video effects to your web applications.
+
+<img src="https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=1a411dfb07290f760f5ef4f21b717ff1" alt="Daydream Browser SDK" data-og-width="4320" width="4320" data-og-height="2466" height="2466" data-path="images/browser.png" data-optimize="true" data-opv="3" srcset="https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=280&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=89b9cff5b64efd11aab787d77f210fa7 280w, https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=560&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=05dfce88d12892250d8036a09ae14fe8 560w, https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=840&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=aaa24f0064f73c547abd99cffe12a537 840w, https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=1100&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=0496abc8cea8fb079049fb2fe44d780d 1100w, https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=1650&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=77ff00767774dadd70af115a8ac31dc2 1650w, https://mintcdn.com/dd/Y0gh77FDj6c-mKH7/images/browser.png?w=2500&fit=max&auto=format&n=Y0gh77FDj6c-mKH7&q=85&s=68bf898edd43c8ff508b38deb6eacd78 2500w" />
+
+The Daydream Browser SDK provides WebRTC streaming capabilities for web applications. It's split into two packages:
+
+* **`@daydreamlive/browser`** - Core WebRTC client, framework-agnostic, zero dependencies
+* **`@daydreamlive/react`** - React hooks wrapper
+
+## Installation
+
+<CodeGroup>
+  ```bash npm theme={null}
+  # Core package
+  npm install @daydreamlive/browser
+
+  # React hooks - optional, for React apps
+  npm install @daydreamlive/react
+  ```
+
+  ```bash pnpm theme={null}
+  pnpm add @daydreamlive/browser
+  pnpm add @daydreamlive/react
+  ```
+
+  ```bash yarn theme={null}
+  yarn add @daydreamlive/browser
+  yarn add @daydreamlive/react
+  ```
+</CodeGroup>
+
+## Browser Requirements
+
+The SDK works in all modern browsers that support WebRTC:
+
+* Chrome 80+
+* Firefox 80+
+* Safari 14+
+* Edge 80+
+
+## Architecture
+
+Think of it like this: your backend creates the stream and gets the connection URLs, then your frontend uses those URLs to broadcast and play video.
+
+```mermaid  theme={null}
+graph LR
+    subgraph "Your Backend"
+        SDK["@daydreamlive/sdk<br/>Create stream"]
+    end
+
+    subgraph "Your Frontend"
+        BR["@daydreamlive/browser<br/>Broadcast & Play"]
+    end
+
+    subgraph "Daydream"
+        AI["StreamDiffusion<br/>AI Processing"]
+    end
+
+    SDK -->|whipUrl| BR
+    BR -->|WHIP| AI
+    AI -->|WHEP| BR
+
+    style SDK fill:#3178C6,stroke:#235A97,color:#fff
+    style BR fill:#F7DF1E,stroke:#C9B617,color:#000
+    style AI fill:#F5A623,stroke:#C17D11,color:#000
+```
+
+## Quick Example
+
+Here's a minimal example that broadcasts your webcam and plays the AI-processed output:
+
+```typescript  theme={null}
+import { createBroadcast, createPlayer } from "@daydreamlive/browser";
+
+// Get the whipUrl from your backend (created with @daydreamlive/sdk)
+const whipUrl = "https://ai.livepeer.com/live/video-to-video/stk_xxx/whip";
+
+// Get webcam
+const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+
+// Start broadcasting
+const broadcast = createBroadcast({ whipUrl, stream });
+await broadcast.connect();
+
+// Play the AI-processed output
+const player = createPlayer(broadcast.whepUrl);
+await player.connect();
+player.attachTo(document.querySelector("video#output"));
+```
+
+## What's Next?
+
+* [Broadcast](/sdks/browser/broadcast) - Send video to Daydream
+* [Player](/sdks/browser/player) - Play AI-processed output
+* [React Hooks](/sdks/browser/react-hooks) - Use with React
+* [Compositor](/sdks/browser/compositor) - Combine multiple video sources
+
+## Live Examples
+
+Check out these working examples:
+
+| Example                                                                                                    | Description        | Demo                                                                 |
+| ---------------------------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------- |
+| [with-react](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-react)               | Basic React hooks  | [Live Demo](https://daydream-browser-kohl.preview.livepeer.monster)  |
+| [with-compositor](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-compositor)     | Canvas composition | [Live Demo](https://daydream-browser-zeta.preview.livepeer.monster)  |
+| [with-screen-share](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-screen-share) | Screen capture     | [Live Demo](https://with-screen-share-lime.preview.livepeer.monster) |
+| [with-three](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-three)               | Three.js streaming | [Live Demo](https://with-three-git-main.preview.livepeer.monster)    |
+| [with-vanilla](https://github.com/daydreamlive/daydream-browser/tree/main/examples/with-vanilla)           | Pure JS (no React) | —                                                                    |

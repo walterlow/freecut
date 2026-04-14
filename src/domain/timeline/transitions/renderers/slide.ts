@@ -19,11 +19,14 @@ function getSlideOffset(
   h: number
 ): { x: number; y: number } {
   const p = isOutgoing ? progress : progress - 1;
+  // Round to whole pixels — sub-pixel offsets cause drawImage to
+  // interpolate between source pixels, producing visible shimmering
+  // on high-frequency content (text, edges, fine detail).
   switch (direction) {
-    case 'from-left': return { x: p * w, y: 0 };
-    case 'from-right': return { x: -p * w, y: 0 };
-    case 'from-top': return { x: 0, y: p * h };
-    case 'from-bottom': return { x: 0, y: -p * h };
+    case 'from-left': return { x: Math.round(p * w), y: 0 };
+    case 'from-right': return { x: Math.round(-p * w), y: 0 };
+    case 'from-top': return { x: 0, y: Math.round(p * h) };
+    case 'from-bottom': return { x: 0, y: Math.round(-p * h) };
     default: return { x: 0, y: 0 };
   }
 }
@@ -33,10 +36,13 @@ function getSlideOffset(
 // ============================================================================
 
 const slideRenderer: TransitionRenderer = {
+  gpuTransitionId: 'slide',
   calculateStyles(progress, isOutgoing, canvasWidth, canvasHeight, direction): TransitionStyleCalculation {
     const dir = (direction as SlideDirection) || 'from-left';
     const slideProgress = isOutgoing ? progress : progress - 1;
     let transform: string;
+    // Keep sub-pixel precision — CSS GPU compositor interpolates smoothly.
+    // Only the canvas drawImage path (renderCanvas/getSlideOffset) needs rounding.
     switch (dir) {
       case 'from-left': transform = `translateX(${slideProgress * canvasWidth}px)`; break;
       case 'from-right': transform = `translateX(${-slideProgress * canvasWidth}px)`; break;

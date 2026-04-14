@@ -1,7 +1,8 @@
-﻿import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { createLogger } from '@/shared/logging/logger';
+import { cancelIdle, requestIdle } from '@/shared/browser/idle-callback';
 
 const logger = createLogger('AutoSave');
 
@@ -48,17 +49,18 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
 
       // Defer save to idle time so it doesn't interrupt active editing (e.g., dragging).
       // timeout ensures save still fires within 10s even under continuous activity.
-      idleCallbackId = requestIdleCallback(
+      idleCallbackId = requestIdle(
         async () => {
           if (isSavingRef.current) return;
           isSavingRef.current = true;
-          logger.debug(`Auto-saving (interval: ${autoSaveInterval}m)...`);
+          const event = logger.startEvent('save');
+          event.set('interval_min', autoSaveInterval);
 
           try {
             await onSave();
-            logger.debug('Auto-save completed');
+            event.success();
           } catch (error) {
-            logger.error('Auto-save failed:', error);
+            event.failure(error);
             toast.error('Auto-save failed');
           } finally {
             isSavingRef.current = false;
@@ -70,7 +72,7 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
 
     return () => {
       clearInterval(intervalId);
-      if (idleCallbackId !== undefined) cancelIdleCallback(idleCallbackId);
+      if (idleCallbackId !== undefined) cancelIdle(idleCallbackId);
     };
   }, [autoSaveInterval, isDirty, onSave, enabled]);
 }

@@ -1,0 +1,121 @@
+---
+alwaysApply: true
+---
+AI Pipelines
+AI Model Support on Livepeer
+Full compatibility matrix for AI model families on Livepeer via ComfyUI. Which models run, which are conditional, and which are incompatible - with reasons.
+
+What models can run on Livepeer, and which are better suited?
+This page lists all known model families commonly used via ComfyUI, with compatibility ratings for Livepeer’s real-time, GPU-worker constraints. Nothing here implies that a listed model is officially supported or pre-loaded on the network - it reflects whether a model’s execution shape fits Livepeer well.
+​
+Legend
+✓ Likely runnable - fits real-time / GPU-worker constraints
+⚠ Conditional - depends on latency, VRAM, orchestration, or batching
+✗ Not suitable - design mismatch: stateful, CPU-bound, or non-deterministic
+​
+1. Diffusion Models (Image / Video)
+​
+Stable Diffusion family
+Model	Fit	Notes
+Stable Diffusion 1.4 / 1.5 / 2.0 / 2.1	✓	Foundation of most ComfyUI workflows, including frame-by-frame video processing.
+SDXL (Base / Refiner / Turbo)	⚠	VRAM + latency. Higher-capacity SD variant; Turbo trades quality for speed.
+SD-Turbo / LCM / Lightning	✓	Accelerated diffusion converging in very few steps - ideal for low-latency generation.
+Kandinsky	⚠	Less optimised, heavier. Semantic understanding focus.
+DeepFloyd IF	✗	Multi-stage, extreme VRAM. Cascaded pipeline with large frozen text encoders.
+Why blocked (DeepFloyd): VRAM pressure, multi-stage graphs, inference latency.
+​
+Video diffusion models
+Model	Fit	Notes
+StreamDiffusion	✓	Real-time architecture that reuses latent states across frames - purpose-built for live video.
+Stable Video Diffusion (SVD)	⚠	Latency + frame buffering. Temporal consistency model for short clips.
+AnimateDiff	⚠	Temporal batching required. Adds motion modules to SD for animated sequences.
+VideoCrafter	✗	Offline batch generation only. Not designed for interactive use.
+Wan / Wan 2.x	⚠	VRAM heavy; real-time guarantees unclear. Emerging world-style video diffusion.
+Gen-2–style world models	✗	Stateful, non-deterministic. Maintains long-term scene memory - incompatible.
+Why blocked (batch video): temporal state, batch-only execution, non-real-time.
+​
+2. Control & Conditioning Models
+​
+ControlNet
+Model	Fit	Notes
+Canny	✓	Edge-detection conditioning. Guides diffusion using detected outlines.
+Depth	✓	Depth map conditioning for structure and spatial consistency.
+OpenPose	✓	Human body, hand, and facial keypoints from images or video.
+Normal / Lineart / Scribble	✓	Structural ControlNets using surface normals, line drawings, or sketches.
+Tile / Inpaint	⚠	Memory intensive. Tiled generation or region-specific editing for large images.
+Multi-ControlNet compositions	⚠	GPU saturation risk. Multiple simultaneous ControlNets enforcing several constraints.
+​
+T2I / I2I Adapters
+Model	Fit	Notes
+IP-Adapter	✓	Image-based style or identity guidance without retraining.
+Reference-only adapters	✓	Lightweight; biases generation toward a reference image.
+Style adapters	✓	Transfers artistic or visual style.
+​
+3. Encoders, VAEs, and Latents
+Model	Fit	Notes
+SD VAEs	✓	Standard VAEs for encoding/decoding images to/from latent space.
+Custom / fine-tuned VAEs	⚠	Memory intensive but often worth it for quality improvement.
+Latent consistency decoders	✓	Optimised for fewer diffusion steps and faster convergence.
+​
+4. Vision Models (Non-Diffusion)
+​
+Detection / Segmentation
+Model	Fit	Notes
+YOLO (v5–v8)	⚠	CPU/GPU mix. Real-time object detection; latency varies by GPU availability.
+SAM / SAM2	⚠	VRAM + latency. Pixel-level mask generation - works but heavy.
+GroundingDINO	⚠	Vision–language detection linking text prompts to detected objects.
+Detectron2	✗	CPU-heavy, batch-oriented. Research framework not suited to real-time.
+​
+Depth / Geometry
+Model	Fit	Notes
+MiDaS	✓	Monocular depth estimation from a single image. Fast and reliable.
+DepthAnything	✓	High-quality depth estimation optimised for speed and accuracy.
+ZoeDepth	⚠	Higher precision at increased compute cost.
+​
+5. Face, Pose & Human Models
+Model	Fit	Notes
+OpenPose	✓	Body, hand, and face keypoint extraction - well-suited for live video.
+DensePose	⚠	Heavy. Maps pixels to 3D body surface representation.
+Face parsing	⚠	Segments facial regions (eyes, mouth, hair, skin).
+FaceSwap / ReFace models	✗	Legal + state constraints. Identity replacement raises compliance issues.
+First Order Motion Model	✗	Temporal state. Motion transfer from driving video to source subject.
+​
+6. Audio & Music Models
+Model	Fit	Notes
+Audio diffusion (Riffusion-style)	⚠	Conditional. Generates audio via diffusion - marginal real-time fit.
+MusicGen	✗	Long-running, batch. Text-to-music generation for full clips.
+Bark / TTS models	✗	Stateful, streaming mismatch. Long context windows.
+Why blocked: long context windows, non-frame-based execution.
+For real-time audio workloads (live ASR, live translation, streaming transcription), see Workload Fit → ASR pipeline examples. These use Whisper or similar and are excellent fits.
+​
+7. Multimodal & VLMs
+Model	Fit	Notes
+CLIP	✓	Joint image–text embedding for scoring, ranking, and guidance.
+BLIP / BLIP-2	⚠	Vision–language for captioning and visual Q&A - conditional on latency.
+LLaVA	✗	LLM state + latency. Combines vision encoders with large LLMs.
+Qwen-VL	✗	Vision–language with LLM reasoning - orchestration mismatch.
+​
+8. LLMs (Text-Centric)
+Model	Fit	Notes
+LLaMA / Mistral / Qwen	✗	Autoregressive text generation; token streaming + memory residency incompatible.
+GPT-style decoders	✗	Token-by-token state - fundamental orchestration mismatch.
+Why blocked: token streaming, memory residency, orchestration mismatch.
+​
+9. 3D / NeRF / World Models
+Model	Fit	Notes
+NeRF	✗	Offline training. 3D scene reconstruction from images - multi-hour jobs.
+Gaussian Splatting	✗	Stateful scenes. Learned Gaussian primitives for 3D rendering.
+DreamFusion	✗	Multi-hour optimisation jobs. Not real-time compatible.
+​
+10. Utility / Pre/Post Models
+Model	Fit	Notes
+ESRGAN / Real-ESRGAN	⚠	Image super-resolution. Works but VRAM-intensive for large inputs.
+GFPGAN	⚠	Face restoration. Enhances facial detail in low-quality images.
+Background removal (U2Net)	⚠	Salient object detection for background isolation. Conditional on throughput.
+​
+Core takeaway
+ComfyUI can orchestrate almost any PyTorch model. But:
+Livepeer favours stateless, frame-based, deterministic inference
+Long-running, stateful, or batch-only models are fundamentally incompatible
+Real-time video imposes hard physics limits, not software ones
+This matrix is intentionally conservative. If your model doesn’t appear here, apply the Workload Fit decision tree to evaluate it.

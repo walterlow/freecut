@@ -1,5 +1,5 @@
 /**
- * Player.tsx - Main Player Component for FreeCut
+ * Player.tsx - Main Player Component for Pixels
  * 
  * A customizable video player component inspired by Composition Player
  * with support for:

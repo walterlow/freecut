@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { PixelsLogo } from '@/components/brand/pixels-logo';
 import { useSettingsStore } from '@/features/settings/stores/settings-store';
 import { HOTKEYS, HOTKEY_DESCRIPTIONS, type HotkeyKey } from '@/config/hotkeys';
 
@@ -67,10 +67,14 @@ function Settings() {
                 <ArrowLeft className="w-5 h-5" />
               </Button>
             </Link>
-            <FreeCutLogo variant="full" size="md" />
+            <PixelsLogo variant="full" size="md" />
           </div>
-          <Button variant="outline" onClick={resetToDefaults}>
-            <RotateCcw className="w-4 h-4 mr-2" />
+          <Button
+            variant="outline"
+            onClick={resetToDefaults}
+            className="hidden md:inline-flex"
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
             Reset to Defaults
           </Button>
         </div>
@@ -229,11 +233,11 @@ function Settings() {
           <h2 className="text-lg font-semibold border-b border-border pb-2">About</h2>
 
           <div className="grid gap-2 text-sm text-muted-foreground">
-            <p>FreeCut - Open Source Video Editor</p>
+            <p>Pixels - Open Source Video Editor</p>
             <p>
               Built with React and modern web technologies.{' '}
               <a
-                href="https://github.com/walterlow/freecut"
+                href="https://github.com/creativeplatform/pixels"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"

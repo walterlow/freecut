@@ -9,11 +9,13 @@ import { useSelectionStore } from '@/shared/state/selection';
 // Components
 import { TimelineInOutMarkers } from './timeline-in-out-markers';
 import { TimelineProjectMarkers } from './timeline-project-markers';
+import { useSettingsStore } from '@/features/timeline/deps/settings';
 
 // Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { formatTimecode, secondsToFrames } from '@/utils/time-utils';
 import { createScrubThrottleState, shouldCommitScrubFrame } from '../utils/scrub-throttle';
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 
 // Edge-scrolling configuration
 const EDGE_SCROLL_MAX_SPEED = 20; // Max pixels per frame at max distance
@@ -33,6 +35,8 @@ interface MarkerInterval {
 
 // Tile configuration - 1000px tiles for faster individual renders and better cache granularity
 const TILE_WIDTH = 1000;
+const MAX_VISIBLE_MINOR_MARKERS = 72;
+const MIN_MINOR_TICK_SPACING_PX = 14;
 
 // Quantize pixelsPerSecond for cache keys to avoid redrawing on every minor zoom change
 // Uses logarithmic steps for perceptually uniform quantization across zoom range
@@ -55,42 +59,42 @@ function calculateMarkerInterval(pixelsPerSecond: number): MarkerInterval {
   // At 200 pps: 5 frames = 33px, 10 frames = 67px, 15 frames = 100px
   if (pixelsPerSecond >= 180) {
     // ~100px apart at max zoom - show every 15 frames (0.5 sec at 30fps)
-    return { type: 'frame', intervalInSeconds: 15 / 30, minorTicks: 5 };
+    return { type: 'frame', intervalInSeconds: 15 / 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 120) {
     // ~100px apart - show every 25 frames (~0.83 sec)
-    return { type: 'frame', intervalInSeconds: 25 / 30, minorTicks: 5 };
+    return { type: 'frame', intervalInSeconds: 25 / 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 80) {
     // 1 second intervals with frame subdivisions
-    return { type: 'second', intervalInSeconds: 1, minorTicks: 10 };
+    return { type: 'second', intervalInSeconds: 1, minorTicks: 4 };
   }
   if (pixelsPerSecond >= 50) {
     // 2 second intervals
-    return { type: 'multi-second', intervalInSeconds: 2, minorTicks: 4 };
+    return { type: 'multi-second', intervalInSeconds: 2, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 24) {
-    return { type: 'multi-second', intervalInSeconds: 5, minorTicks: 5 };
+    return { type: 'multi-second', intervalInSeconds: 5, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 12) {
-    return { type: 'multi-second', intervalInSeconds: 10, minorTicks: 5 };
+    return { type: 'multi-second', intervalInSeconds: 10, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 4) {
-    return { type: 'multi-second', intervalInSeconds: 30, minorTicks: 6 };
+    return { type: 'multi-second', intervalInSeconds: 30, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 2) {
-    return { type: 'minute', intervalInSeconds: 60, minorTicks: 6 };
+    return { type: 'minute', intervalInSeconds: 60, minorTicks: 3 };
   }
   if (pixelsPerSecond >= 1) {
-    return { type: 'minute', intervalInSeconds: 120, minorTicks: 4 };
+    return { type: 'minute', intervalInSeconds: 120, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 0.5) {
-    return { type: 'minute', intervalInSeconds: 300, minorTicks: 5 };
+    return { type: 'minute', intervalInSeconds: 300, minorTicks: 2 };
   }
   if (pixelsPerSecond >= 0.2) {
-    return { type: 'minute', intervalInSeconds: 600, minorTicks: 10 };
+    return { type: 'minute', intervalInSeconds: 600, minorTicks: 3 };
   }
-  return { type: 'minute', intervalInSeconds: 1800, minorTicks: 6 };
+  return { type: 'minute', intervalInSeconds: 1800, minorTicks: 2 };
 }
 
 /**
@@ -126,6 +130,8 @@ function drawTile(
   // Use pre-computed marker interval (intervalInSeconds is already set correctly in config)
   const intervalInSeconds = markerConfig.intervalInSeconds;
   const markerWidthPx = timeToPixels(intervalInSeconds);
+  const minorTickTop = canvasHeight - 16;
+  const minorTickBottom = canvasHeight - 8;
 
   if (markerWidthPx <= 0) return;
 
@@ -134,9 +140,16 @@ function drawTile(
   const startMarkerIndex = Math.max(0, Math.floor(tileOffset / markerWidthPx) - 1);
   const endMarkerIndex = Math.ceil((tileOffset + actualTileWidth) / markerWidthPx);
 
-  // Performance: skip minor ticks when many markers
+  // Keep the ruler readable by hiding sub-markers when spacing gets too tight.
   const visibleMarkerCount = endMarkerIndex - startMarkerIndex + 1;
-  const showMinorTicks = visibleMarkerCount < 100;
+  const tickSpacing = markerConfig.minorTicks > 0
+    ? markerWidthPx / markerConfig.minorTicks
+    : 0;
+  const showMinorTicks = (
+    markerConfig.minorTicks > 0
+    && visibleMarkerCount < MAX_VISIBLE_MINOR_MARKERS
+    && tickSpacing >= MIN_MINOR_TICK_SPACING_PX
+  );
 
   for (let i = startMarkerIndex; i <= endMarkerIndex; i++) {
     const timeInSeconds = i * intervalInSeconds;
@@ -155,9 +168,7 @@ function drawTile(
     }
 
     // Minor ticks - check each tick individually (they may extend from markers outside tile)
-    if (showMinorTicks && markerConfig.minorTicks > 0) {
-      const tickSpacing = markerWidthPx / markerConfig.minorTicks;
-
+    if (showMinorTicks) {
       // Skip if all minor ticks would be outside tile
       const lastTickX = x + tickSpacing * (markerConfig.minorTicks - 1);
       if (lastTickX < 0 || x > actualTileWidth) continue;
@@ -170,8 +181,8 @@ function drawTile(
         if (tickX < 0 || tickX > actualTileWidth) continue;
 
         ctx.beginPath();
-        ctx.moveTo(tickX, 28);
-        ctx.lineTo(tickX, 36);
+        ctx.moveTo(tickX, minorTickTop);
+        ctx.lineTo(tickX, minorTickBottom);
         ctx.stroke();
       }
     }
@@ -182,88 +193,107 @@ function drawTile(
  * DOM labels for timeline ruler - uses quantized PPS to stay in sync with canvas ticks
  * Renders only visible labels with buffer for smooth scrolling
  */
-interface TimelineMarkerLabelsProps {
-  scrollLeft: number;
-  viewportWidth: number;
-  quantizedPPS: number; // Use quantized PPS to match canvas rendering
-  fps: number;
-}
-
 const LABEL_BUFFER = 100; // Extra pixels to render labels outside viewport
+const MAX_LABELS = 100;
 
-const TimelineMarkerLabels = memo(function TimelineMarkerLabels({
-  scrollLeft,
-  viewportWidth,
-  quantizedPPS,
-  fps,
-}: TimelineMarkerLabelsProps) {
-  // Use quantized PPS directly (same as canvas) - no deferred value needed
-  const timeToPixels = (time: number) => time * quantizedPPS;
+/**
+ * Tracks the config that was used to position existing pooled labels.
+ * When PPS/FPS haven't changed, labels are absolutely positioned within
+ * the scrolling container — their position is stable across scroll. We
+ * only need to add/remove labels at the viewport edges, not update all
+ * existing ones. When PPS or FPS changes we must update every label.
+ */
+let _labelConfigPPS = 0;
+let _labelConfigFPS = 0;
 
+/**
+ * Imperative label pool — manages timecode `<span>` elements via direct DOM
+ * manipulation instead of React reconciliation. Labels are absolutely positioned
+ * within the scrolling container so the browser handles scroll offset natively;
+ * the pool only adds/removes elements as they enter/leave the visible range.
+ *
+ * Called from the scroll RAF callback (zero React re-renders on scroll).
+ * Also called on zoom/fps changes to rebuild with new intervals.
+ *
+ * Optimization: during pure scroll (no zoom/fps change), existing labels
+ * keep their position — only edge additions/removals mutate the DOM.
+ * This cuts ~60 DOM mutations per scroll frame to ~2-4.
+ */
+function syncLabels(
+  container: HTMLDivElement,
+  pool: Map<number, HTMLSpanElement>,
+  scrollLeft: number,
+  viewportWidth: number,
+  quantizedPPS: number,
+  fps: number
+) {
   const markerConfig = calculateMarkerInterval(quantizedPPS);
   const intervalInSeconds = markerConfig.intervalInSeconds;
-  const markerWidthPx = timeToPixels(intervalInSeconds);
+  const markerWidthPx = intervalInSeconds * quantizedPPS;
 
-  // Fallback for zero viewport (initial render)
-  const effectiveViewport = viewportWidth || 1000;
+  if (markerWidthPx <= 0) return;
 
-  if (markerWidthPx <= 0) return null;
-
-  // Use actual scroll position - don't clamp too aggressively
-  // The scroll position from parent is authoritative; displayWidth may be stale during zoom
-  const effectiveScrollLeft = Math.max(0, scrollLeft);
-
-  // Calculate visible range with buffer
-  // Start from 0 if scroll is near start, otherwise use scroll position minus buffer
-  const startPx = Math.max(0, effectiveScrollLeft - LABEL_BUFFER);
-  // End at scroll position + viewport + buffer (labels outside range will just be positioned off-screen)
-  const endPx = effectiveScrollLeft + effectiveViewport + LABEL_BUFFER;
-
-  const startIndex = Math.max(0, Math.floor(startPx / markerWidthPx));
-  const endIndex = Math.ceil(endPx / markerWidthPx);
-
-  // Early exit if no valid range
-  if (endIndex < startIndex) return null;
-
-  // Limit max labels to prevent performance issues at high zoom
-  const maxLabels = 100;
-  const actualEndIndex = Math.min(endIndex, startIndex + maxLabels);
-
-  const labels: { time: number; x: number; label: string }[] = [];
-
-  for (let i = startIndex; i <= actualEndIndex; i++) {
-    const timeInSeconds = i * intervalInSeconds;
-    const x = timeToPixels(timeInSeconds);
-    const frameNumber = secondsToFrames(timeInSeconds, fps);
-    const label = formatTimecode(frameNumber, fps);
-    labels.push({ time: timeInSeconds, x, label });
+  const configChanged = quantizedPPS !== _labelConfigPPS || fps !== _labelConfigFPS;
+  if (configChanged) {
+    _labelConfigPPS = quantizedPPS;
+    _labelConfigFPS = fps;
   }
 
-  return (
-    <div
-      className="absolute inset-0 overflow-hidden pointer-events-none"
-      style={{ contain: 'layout style paint' }}
-    >
-      {labels.map(({ time, x, label }) => (
-        <span
-          key={time}
-          className="absolute text-[13px] text-white/60 select-none whitespace-nowrap"
-          style={{
-            left: `${x + 6}px`,
-            top: '2px',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-            fontFeatureSettings: '"tnum"',
-            textShadow: '1px 1px 0 rgba(0, 0, 0, 0.5)',
-            transform: 'translateZ(0)', // Force GPU layer for smoother scrolling
-            zIndex: 24,
-          }}
-        >
-          {label}
-        </span>
-      ))}
-    </div>
+  const effectiveViewport = viewportWidth || 1000;
+  const startPx = Math.max(0, scrollLeft - LABEL_BUFFER);
+  const endPx = scrollLeft + effectiveViewport + LABEL_BUFFER;
+
+  const startIndex = Math.max(0, Math.floor(startPx / markerWidthPx));
+  const endIndex = Math.min(
+    Math.ceil(endPx / markerWidthPx),
+    startIndex + MAX_LABELS
   );
-})
+
+  const visibleIndices = new Set<number>();
+
+  for (let i = startIndex; i <= endIndex; i++) {
+    visibleIndices.add(i);
+
+    let span = pool.get(i);
+    const isNew = !span;
+    if (!span) {
+      span = document.createElement('span');
+      span.className = 'absolute text-xs text-white/60 select-none whitespace-nowrap';
+      span.style.top = '2px';
+      span.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+      span.style.fontFeatureSettings = '"tnum"';
+      span.style.textShadow = '1px 1px 0 rgba(0, 0, 0, 0.5)';
+      span.style.zIndex = '24';
+      container.appendChild(span);
+      pool.set(i, span);
+    }
+
+    // Only set position + text when necessary:
+    // - New labels always need it
+    // - Config change (PPS/FPS) means existing labels have stale positions
+    // During pure scroll, labels are absolutely positioned in the scrolling
+    // container so their coordinates are stable — no DOM writes needed.
+    if (isNew || configChanged) {
+      const timeInSeconds = i * intervalInSeconds;
+      span.style.left = `${timeInSeconds * quantizedPPS + 6}px`;
+      span.textContent = formatTimecode(secondsToFrames(timeInSeconds, fps), fps);
+    }
+  }
+
+  // Remove labels that scrolled out of range
+  pool.forEach((span, index) => {
+    if (!visibleIndices.has(index)) {
+      span.remove();
+      pool.delete(index);
+    }
+  });
+}
+
+/** Clear all pooled labels (called on zoom/fps change before rebuilding). */
+function clearLabelPool(pool: Map<number, HTMLSpanElement>) {
+  pool.forEach((span) => span.remove());
+  pool.clear();
+}
 
 /**
  * Timeline Markers Component (Tiled Canvas)
@@ -272,12 +302,15 @@ const TimelineMarkerLabels = memo(function TimelineMarkerLabels({
  * Each tile is 2000px wide, only visible tiles are rendered.
  */
 export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }: TimelineMarkersProps) {
+  const editorDensity = useSettingsStore((s) => s.editorDensity);
+  const editorLayout = getEditorLayout(editorDensity);
   const { timeToPixels, pixelsPerSecond, pixelsToFrame } = useTimelineZoomContext();
   const fps = useTimelineStore((s) => s.fps);
   const inPoint = useTimelineStore((s) => s.inPoint);
   const outPoint = useTimelineStore((s) => s.outPoint);
   const markDirty = useTimelineStore((s) => s.markDirty);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
+  const setScrubFrame = usePlaybackStore((s) => s.setScrubFrame);
   const pause = usePlaybackStore((s) => s.pause);
   const selectMarker = useSelectionStore((s) => s.selectMarker);
 
@@ -287,14 +320,18 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Bitmap cache keyed by "tileIndex-pps-fps-displayWidth" for instant reuse
   const tileCacheRef = useRef<Map<string, ImageBitmap>>(new Map());
   const tileCacheVersionRef = useRef(0);
+  const labelsContainerRef = useRef<HTMLDivElement>(null);
+  const labelPoolRef = useRef<Map<number, HTMLSpanElement>>(new Map());
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  // scrollLeft is ref-only — never React state. Tile + label updates are
+  // driven imperatively from the scroll RAF callback, bypassing React render.
   const [isDragging, setIsDragging] = useState(false);
   const [isRangeDragging, setIsRangeDragging] = useState(false);
 
   // Refs for drag handlers
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setCurrentFrameRef = useRef(setCurrentFrame);
+  const setScrubFrameRef = useRef(setScrubFrame);
   const setPreviewFrameRef = useRef(usePlaybackStore.getState().setPreviewFrame);
   useEffect(() => {
     return usePlaybackStore.subscribe((state) => {
@@ -317,6 +354,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   useEffect(() => {
     pixelsToFrameRef.current = pixelsToFrame;
     setCurrentFrameRef.current = setCurrentFrame;
+    setScrubFrameRef.current = setScrubFrame;
     markDirtyRef.current = markDirty;
     pauseRef.current = pause;
     fpsRef.current = fps;
@@ -324,7 +362,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     durationRef.current = duration;
     inPointRef.current = inPoint;
     outPointRef.current = outPoint;
-  }, [pixelsToFrame, setCurrentFrame, markDirty, pause, fps, pixelsPerSecond, duration, inPoint, outPoint]);
+  }, [pixelsToFrame, setCurrentFrame, setScrubFrame, markDirty, pause, fps, pixelsPerSecond, duration, inPoint, outPoint]);
 
   // Track viewport and scroll
   const scrollLeftRef = useRef(0);
@@ -356,14 +394,15 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         if (rafIdRef.current === null) {
           rafIdRef.current = requestAnimationFrame(() => {
             rafIdRef.current = null;
-            setScrollLeft(scrollLeftRef.current);
+            syncRulerScroll();
           });
         }
       }
     };
 
     updateViewport();
-    setScrollLeft(scrollContainer.scrollLeft);
+    scrollLeftRef.current = scrollContainer.scrollLeft;
+    // Initial sync is deferred to the config-change effect (runs after first render)
 
     // Observe scroll container for viewport size changes
     const resizeObserver = new ResizeObserver(updateViewport);
@@ -382,14 +421,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Calculate dimensions
   const timelineContentWidth = timeToPixels(duration);
   const displayWidth = width || Math.max(timelineContentWidth, viewportWidth);
-  const canvasHeight = 44;
-
-  // Calculate visible tiles
-  const startTile = Math.max(0, Math.floor(scrollLeft / TILE_WIDTH));
-  const endTile = Math.min(
-    Math.ceil(displayWidth / TILE_WIDTH) - 1,
-    Math.ceil((scrollLeft + viewportWidth) / TILE_WIDTH)
-  );
+  const canvasHeight = editorLayout.timelineRulerHeight;
 
   // Quantize PPS for cache keys - allows cache reuse across similar zoom levels
   // This dramatically reduces redraws during continuous zoom
@@ -397,6 +429,18 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
 
   // Cache key uses quantized PPS for better hit rate during zoom
   const cacheKey = `${quantizedPPS.toFixed(4)}-${fps}`;
+
+  // Store config in refs so the imperative scroll handler can access them
+  const displayWidthRef = useRef(displayWidth);
+  const canvasHeightRef = useRef(canvasHeight);
+  const quantizedPPSRef = useRef(quantizedPPS);
+  const cacheKeyRef = useRef(cacheKey);
+  const viewportWidthRef = useRef(viewportWidth);
+  displayWidthRef.current = displayWidth;
+  canvasHeightRef.current = canvasHeight;
+  quantizedPPSRef.current = quantizedPPS;
+  cacheKeyRef.current = cacheKey;
+  viewportWidthRef.current = viewportWidth;
 
   // Only clear cache when fps changes (rare) - not on zoom changes
   // Individual tiles are keyed by quantized PPS so old tiles naturally become unused
@@ -429,29 +473,43 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     }
   });
 
-  // Tiled canvas rendering effect with caching
-  useEffect(() => {
-    if (!tilesContainerRef.current) return;
-
+  /**
+   * Imperative scroll sync — manages canvas tiles AND labels without any
+   * React state or re-renders. Called from:
+   *  - scroll RAF callback (every scroll frame)
+   *  - config change effect (zoom / fps / width)
+   *  - initial mount
+   */
+  const syncRulerScroll = useCallback(() => {
     const tilesContainer = tilesContainerRef.current;
+    const labelsContainer = labelsContainerRef.current;
+    if (!tilesContainer) return;
+
+    const sl = scrollLeftRef.current;
+    const vw = viewportWidthRef.current;
+    const dw = displayWidthRef.current;
+    const ch = canvasHeightRef.current;
+    const qPPS = quantizedPPSRef.current;
+    const ck = cacheKeyRef.current;
+
+    // ── Tile visibility ──
+    const startTile = Math.max(0, Math.floor(sl / TILE_WIDTH));
+    const endTile = Math.min(
+      Math.ceil(dw / TILE_WIDTH) - 1,
+      Math.ceil((sl + vw) / TILE_WIDTH)
+    );
+
     const canvasPool = canvasPoolRef.current;
     const tileCache = tileCacheRef.current;
     const visibleTileIndices = new Set<number>();
     const dpr = window.devicePixelRatio || 1;
+    const renderTimeToPixels = (time: number) => time * qPPS;
+    const markerConfig = calculateMarkerInterval(qPPS);
 
-    // Use quantized values for rendering so tiles match cache keys
-    const renderPPS = quantizedPPS;
-    const renderTimeToPixels = (time: number) => time * renderPPS;
-
-    // Pre-compute marker config once for all tiles (avoids redundant calculations)
-    const markerConfig = calculateMarkerInterval(renderPPS);
-
-    // Render visible tiles
     for (let tileIndex = startTile; tileIndex <= endTile; tileIndex++) {
       visibleTileIndices.add(tileIndex);
 
       let canvas = canvasPool.get(tileIndex);
-
       if (!canvas) {
         canvas = document.createElement('canvas');
         canvas.style.position = 'absolute';
@@ -459,56 +517,46 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         canvas.style.left = '0';
         canvas.style.pointerEvents = 'none';
         canvas.style.willChange = 'transform';
+        canvas.style.transform = `translateX(${tileIndex * TILE_WIDTH}px)`;
         canvasPool.set(tileIndex, canvas);
         tilesContainer.appendChild(canvas);
       }
+      // Existing canvases keep their transform — tileIndex is stable per pool entry
 
-      // Position tile using transform (compositor-only, avoids layout recalculation)
-      canvas.style.transform = `translateX(${tileIndex * TILE_WIDTH}px)`;
+      const tileCacheKey = `${tileIndex}-${ck}`;
 
-      // Check cache for pre-rendered bitmap
-      const tileCacheKey = `${tileIndex}-${cacheKey}`;
+      // Skip redraw if this canvas already shows the correct content.
+      // data-ck tracks the cache key used for the last successful paint.
+      if (canvas.dataset.ck === tileCacheKey) continue;
+
       const cachedBitmap = tileCache.get(tileCacheKey);
 
       if (cachedBitmap) {
-        // Use cached bitmap - much faster than redrawing
         const tileOffset = tileIndex * TILE_WIDTH;
-        const actualTileWidth = Math.min(TILE_WIDTH, displayWidth - tileOffset);
+        const actualTileWidth = Math.min(TILE_WIDTH, dw - tileOffset);
         canvas.width = Math.ceil(actualTileWidth * dpr);
-        canvas.height = Math.ceil(canvasHeight * dpr);
+        canvas.height = Math.ceil(ch * dpr);
         canvas.style.width = `${actualTileWidth}px`;
-        canvas.style.height = `${canvasHeight}px`;
+        canvas.style.height = `${ch}px`;
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(cachedBitmap, 0, 0);
-        }
+        if (ctx) ctx.drawImage(cachedBitmap, 0, 0);
+        canvas.dataset.ck = tileCacheKey;
       } else {
-        // Draw and cache the tile using quantized PPS for cache consistency
-        drawTile(
-          canvas,
-          tileIndex,
-          TILE_WIDTH,
-          canvasHeight,
-          markerConfig,
-          renderTimeToPixels,
-          displayWidth
-        );
-
-        // Cache the rendered tile as ImageBitmap (async, non-blocking)
-        createImageBitmap(canvas).then((bitmap) => {
-          // Only cache if parameters haven't changed
-          if (tileCacheRef.current === tileCache) {
-            tileCache.set(tileCacheKey, bitmap);
-          } else {
-            bitmap.close();
-          }
-        }).catch(() => {
-          // Ignore errors (e.g., if canvas is empty or too small)
-        });
+        drawTile(canvas, tileIndex, TILE_WIDTH, ch, markerConfig, renderTimeToPixels, dw);
+        canvas.dataset.ck = tileCacheKey;
+        createImageBitmap(canvas)
+          .then((bitmap) => {
+            if (tileCacheRef.current === tileCache) {
+              tileCache.set(tileCacheKey, bitmap);
+            } else {
+              bitmap.close();
+            }
+          })
+          .catch(() => {});
       }
     }
 
-    // Remove tiles that are no longer visible
+    // Remove tiles that scrolled out of range
     canvasPool.forEach((canvas, tileIndex) => {
       if (!visibleTileIndices.has(tileIndex)) {
         canvas.remove();
@@ -516,53 +564,43 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       }
     });
 
-    // Pre-render adjacent tiles during idle time for smoother scrolling
-    const maxTile = Math.ceil(displayWidth / TILE_WIDTH) - 1;
+    // Pre-render adjacent tiles during idle
+    const maxTile = Math.ceil(dw / TILE_WIDTH) - 1;
     const adjacentTiles = [startTile - 1, endTile + 1].filter(
-      (t) => t >= 0 && t <= maxTile && !tileCache.has(`${t}-${cacheKey}`)
+      (t) => t >= 0 && t <= maxTile && !tileCache.has(`${t}-${ck}`)
     );
-
     if (adjacentTiles.length > 0) {
-      const idleCallback = requestIdleCallback(
+      requestIdleCallback(
         (deadline) => {
-          for (const tileIndex of adjacentTiles) {
-            // Check if we still have time and cache hasn't changed
-            if (deadline.timeRemaining() < 10) break;
-            if (tileCacheRef.current !== tileCache) break;
-
-            const tileCacheKey = `${tileIndex}-${cacheKey}`;
-            if (tileCache.has(tileCacheKey)) continue;
-
-            // Create offscreen canvas for pre-rendering (use quantized values)
+          for (const adj of adjacentTiles) {
+            if (deadline.timeRemaining() < 10 || tileCacheRef.current !== tileCache) break;
+            const adjKey = `${adj}-${ck}`;
+            if (tileCache.has(adjKey)) continue;
             const offscreen = document.createElement('canvas');
-            drawTile(
-              offscreen,
-              tileIndex,
-              TILE_WIDTH,
-              canvasHeight,
-              markerConfig,
-              renderTimeToPixels,
-              displayWidth
-            );
-
-            // Cache the pre-rendered tile
+            drawTile(offscreen, adj, TILE_WIDTH, ch, markerConfig, renderTimeToPixels, dw);
             createImageBitmap(offscreen)
               .then((bitmap) => {
-                if (tileCacheRef.current === tileCache) {
-                  tileCache.set(tileCacheKey, bitmap);
-                } else {
-                  bitmap.close();
-                }
+                if (tileCacheRef.current === tileCache) tileCache.set(adjKey, bitmap);
+                else bitmap.close();
               })
               .catch(() => {});
           }
         },
         { timeout: 500 }
       );
-
-      return () => cancelIdleCallback(idleCallback);
     }
-  }, [startTile, endTile, quantizedPPS, fps, displayWidth, canvasHeight, cacheKey]);
+
+    // ── Labels ──
+    if (labelsContainer) {
+      syncLabels(labelsContainer, labelPoolRef.current, sl, vw, qPPS, fpsRef.current);
+    }
+  }, []);
+
+  // Trigger sync on config changes (zoom, fps, width, height).
+  // Labels update in-place (position + text) — no clear needed.
+  useEffect(() => {
+    syncRulerScroll();
+  }, [quantizedPPS, fps, displayWidth, canvasHeight, viewportWidth, syncRulerScroll]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -572,6 +610,8 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       // Clean up cached bitmaps
       tileCacheRef.current.forEach((bitmap) => bitmap.close());
       tileCacheRef.current.clear();
+      // Clean up label pool
+      clearLabelPool(labelPoolRef.current);
     };
   }, []);
 
@@ -656,8 +696,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       pixelsPerSecond: pixelsPerSecondRef.current,
       nowMs,
     })) {
-      setCurrentFrameRef.current(frame);
-      setPreviewFrameRef.current(frame);
+      setScrubFrameRef.current(frame);
     }
 
     // --- STEP 3: Continue loop while scrubbing ---
@@ -725,8 +764,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
     }
     const maxFrame = Math.floor(durationRef.current * fpsRef.current);
     const frame = Math.min(maxFrame, Math.max(0, Math.round(pixelsToFrameRef.current(x))));
-    setCurrentFrameRef.current(frame);
-    setPreviewFrameRef.current(frame);
+    setScrubFrameRef.current(frame);
     scrubThrottleStateRef.current = createScrubThrottleState({
       pointerX: x,
       frame,
@@ -828,11 +866,12 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   return (
     <div
       ref={containerRef}
-      className="h-11 border-b border-border/80 relative"
+      className="border-b border-border/80 relative"
       onMouseDown={handleMouseDown}
       style={{
         background: 'linear-gradient(to bottom, oklch(0.22 0 0 / 0.30), oklch(0.22 0 0 / 0.20), oklch(0.22 0 0 / 0.10))',
         userSelect: 'none',
+        height: EDITOR_LAYOUT_CSS_VALUES.timelineRulerHeight,
         width: width ? `${width}px` : undefined,
         minWidth: width ? `${width}px` : undefined,
       }}
@@ -844,12 +883,11 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         style={{ pointerEvents: 'none' }}
       />
 
-      {/* DOM labels layer - uses same quantized PPS as canvas for sync */}
-      <TimelineMarkerLabels
-        scrollLeft={scrollLeft}
-        viewportWidth={viewportWidth}
-        quantizedPPS={quantizedPPS}
-        fps={fps}
+      {/* Imperative label pool — managed by syncRulerScroll, zero React re-renders on scroll */}
+      <div
+        ref={labelsContainerRef}
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+        style={{ contain: 'layout style paint' }}
       />
 
       {/* Vignette effects */}

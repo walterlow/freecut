@@ -1,9 +1,14 @@
 import type { MediaMetadata } from '@/types/storage';
+import type { TranscriptionProgressSnapshot } from '@/shared/utils/transcription-progress';
 
 export interface MediaLibraryNotification {
   type: 'info' | 'success' | 'warning' | 'error';
   message: string;
 }
+
+export type MediaTranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error';
+
+export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 
 /**
  * Information about a file with an unsupported audio codec
@@ -75,6 +80,10 @@ export interface MediaLibraryState {
   proxyStatus: Map<string, 'generating' | 'ready' | 'error'>;
   proxyProgress: Map<string, number>;
 
+  // Transcript generation
+  transcriptStatus: Map<string, MediaTranscriptStatus>;
+  transcriptProgress: Map<string, MediaTranscriptProgress>;
+
 }
 
 export interface MediaLibraryActions {
@@ -93,6 +102,11 @@ export interface MediaLibraryActions {
    * Uses FileSystemFileHandle directly without file picker
    */
   importHandles: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
+  /**
+   * Import media for direct placement flows.
+   * Existing media are returned too so drop targets can place duplicates without re-importing.
+   */
+  importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
   deleteMedia: (id: string) => Promise<void>;
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 
@@ -149,4 +163,9 @@ export interface MediaLibraryActions {
   setProxyStatus: (mediaId: string, status: 'generating' | 'ready' | 'error') => void;
   clearProxyStatus: (mediaId: string) => void;
   setProxyProgress: (mediaId: string, progress: number) => void;
+
+  // Transcript generation
+  setTranscriptStatus: (mediaId: string, status: MediaTranscriptStatus) => void;
+  setTranscriptProgress: (mediaId: string, progress: MediaTranscriptProgress) => void;
+  clearTranscriptProgress: (mediaId: string) => void;
 }

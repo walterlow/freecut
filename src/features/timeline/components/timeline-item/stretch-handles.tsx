@@ -1,4 +1,4 @@
-﻿import { memo } from 'react';
+import { memo } from 'react';
 import { cn } from '@/shared/ui/cn';
 
 interface StretchHandlesProps {
@@ -43,7 +43,7 @@ export const StretchHandles = memo(function StretchHandles({
       {/* Left stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
       <div
         className={cn(
-          "absolute left-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize transition-opacity duration-75",
+          "absolute left-0 top-0 bottom-0 w-2 bg-[#EC407A] cursor-ew-resize transition-opacity duration-75",
           showLeftHandle ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onMouseDown={(e) => onStretchStart(e, 'start')}
@@ -52,7 +52,7 @@ export const StretchHandles = memo(function StretchHandles({
       {/* Right stretch handle - w-2 (8px) matches EDGE_HOVER_ZONE */}
       <div
         className={cn(
-          "absolute right-0 top-0 bottom-0 w-2 bg-orange-500 cursor-ew-resize transition-opacity duration-75",
+          "absolute right-0 top-0 bottom-0 w-2 bg-[#EC407A] cursor-ew-resize transition-opacity duration-75",
           showRightHandle ? "opacity-100" : "opacity-0 pointer-events-none"
         )}
         onMouseDown={(e) => onStretchStart(e, 'end')}

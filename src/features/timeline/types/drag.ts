@@ -20,6 +20,12 @@ export interface DragState {
   currentMouseX: number;
   /** Current mouse Y position (updated during drag) */
   currentMouseY: number;
+  /** Timeline-space X position (clientX + scrollLeft offset) at drag start */
+  startTimelineX?: number;
+  /** Current timeline-space X position */
+  currentTimelineX?: number;
+  /** Pointer id for Pointer Events (used for capture + filtering) */
+  pointerId?: number;
   /** All items being dragged (for multi-select) */
   draggedItems: Array<{
     id: string;
@@ -52,5 +58,5 @@ export interface UseTimelineDragReturn {
   /** Pixel offset for visual drag preview (CSS transform) */
   dragOffset: { x: number; y: number };
   /** Handler to start dragging */
-  handleDragStart: (e: React.MouseEvent) => void;
+  handleDragStart: (e: React.PointerEvent) => void;
 }

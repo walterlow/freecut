@@ -18,12 +18,14 @@ import type {
   CompositionItem,
 } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
+import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
+import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 // Subsystem imports
 import { getAnimatedTransform } from './canvas-keyframes';
 import {
-  applyAllEffects,
+  applyAllEffectsAsync,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
@@ -35,10 +37,19 @@ import {
 } from './canvas-transitions';
 import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
+import type { ScrubbingCache } from '@/features/export/deps/preview';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
-import { getShapePath, rotatePath } from '@/features/export/deps/composition-runtime';
+import {
+  applyPreviewPathVerticesToItem,
+  applyPreviewPathVerticesToShape,
+  hasCornerPin,
+  drawCornerPinImage,
+  getShapePath,
+  rotatePath,
+  type PreviewPathVerticesOverride,
+} from '@/features/export/deps/composition-runtime';
 
 const log = createLogger('CanvasItemRenderer');
 
@@ -84,6 +95,8 @@ const FONT_WEIGHT_MAP: Record<string, number> = {
   bold: 700,
 };
 
+const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9;
+
 // ---------------------------------------------------------------------------
 // ItemRenderContext â€“ closure state passed explicitly
 // ---------------------------------------------------------------------------
@@ -99,6 +112,7 @@ export interface ItemRenderContext {
   canvasPool: CanvasPool;
   textMeasureCache: TextMeasurementCache;
   renderMode: 'export' | 'preview';
+  scrubbingCache?: ScrubbingCache | null;
 
   // Video state
   videoExtractors: Map<string, VideoFrameSource>;
@@ -107,6 +121,7 @@ export interface ItemRenderContext {
   mediabunnyDisabledItems: Set<string>;
   mediabunnyFailureCountByItem: Map<string, number>;
   ensureVideoItemReady?: (itemId: string) => Promise<boolean>;
+  getCachedPredecodedBitmap?: (src: string, timestamp: number, toleranceSeconds?: number) => ImageBitmap | null;
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>;
@@ -115,9 +130,27 @@ export interface ItemRenderContext {
   // Keyframes & adjustment layers
   keyframesMap: Map<string, ItemKeyframes>;
   adjustmentLayers: AdjustmentLayerWithTrackOrder[];
+  getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined;
+  getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
 
   // Pre-computed sub-composition render data (built once during preload)
   subCompRenderData: Map<string, SubCompRenderData>;
+
+  // GPU effects pipeline (lazily initialized)
+  gpuPipeline?: import('@/infrastructure/gpu/effects').EffectsPipeline | null;
+
+  // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
+  gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
+
+  // DOM video element provider for zero-copy playback rendering.
+  // During playback, the Player's <video> elements are already at
+  // the correct frame — use them directly instead of mediabunny decode.
+  domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
+
+  // Set to true when rendering transition participant clips. Widens the
+  // DOM video drift threshold to prefer stale zero-copy frames over
+  // 170ms mediabunny stalls during transition ramp-up / exit.
+  isRenderingTransition?: boolean;
 }
 
 /**
@@ -129,6 +162,7 @@ export interface SubCompRenderData {
   durationInFrames: number;
   /** Tracks sorted bottom-to-top (highest order first), with items pre-assigned */
   sortedTracks: Array<{
+    order: number;
     visible: boolean;
     items: TimelineItem[];
   }>;
@@ -155,6 +189,12 @@ export async function renderItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
 ): Promise<void> {
+  // Corner pin: render to temp canvas, then warp onto main canvas
+  if (hasCornerPin(item.cornerPin)) {
+    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset);
+    return;
+  }
+
   ctx.save();
 
   // Apply opacity only if it's not the default value (1.0)
@@ -180,33 +220,171 @@ export async function renderItem(
     ctx.clip();
   }
 
-  switch (item.type) {
+  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset);
+
+  ctx.restore();
+}
+
+/**
+ * Render item content (dispatches to type-specific renderers).
+ */
+async function renderItemContent(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  sourceFrameOffset: number,
+): Promise<void> {
+  const effectiveItem = (
+    rctx.renderMode === 'preview'
+      ? applyPreviewPathVerticesToItem(item, rctx.getPreviewPathVerticesOverride)
+      : item
+  );
+
+  switch (effectiveItem.type) {
     case 'video':
-      await renderVideoItem(ctx, item as VideoItem, transform, frame, rctx, sourceFrameOffset);
+      await renderVideoItem(ctx, effectiveItem as VideoItem, transform, frame, rctx, sourceFrameOffset);
       break;
     case 'image':
-      renderImageItem(ctx, item as ImageItem, transform, rctx, frame);
+      renderImageItem(ctx, effectiveItem as ImageItem, transform, rctx, frame);
       break;
     case 'text':
-      renderTextItem(ctx, item as TextItem, transform, rctx);
+      renderTextItem(ctx, effectiveItem as TextItem, transform, rctx);
       break;
     case 'shape':
-      renderShape(ctx, item as ShapeItem, transform, {
+      renderShape(ctx, effectiveItem as ShapeItem, transform, {
         width: rctx.canvasSettings.width,
         height: rctx.canvasSettings.height,
       });
       break;
     case 'composition':
-      await renderCompositionItem(ctx, item as CompositionItem, transform, frame, rctx);
+      await renderCompositionItem(ctx, effectiveItem as CompositionItem, transform, frame, rctx);
       break;
   }
+}
 
+/**
+ * Render an item with corner pin perspective warp.
+ * Renders to a temporary canvas at item dimensions, then warps onto the main canvas.
+ */
+async function renderItemWithCornerPin(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  frame: number,
+  rctx: ItemRenderContext,
+  sourceFrameOffset: number,
+): Promise<void> {
+  const itemW = Math.ceil(transform.width);
+  const itemH = Math.ceil(transform.height);
+  if (itemW <= 0 || itemH <= 0) return;
+
+  // Render item content to a temp canvas at item dimensions
+  const tempCanvas = new OffscreenCanvas(itemW, itemH);
+  const tempCtx = tempCanvas.getContext('2d');
+  if (!tempCtx) return;
+
+  // Create a centered transform for the temp canvas
+  const tempTransform: ItemTransform = {
+    ...transform,
+    x: 0,
+    y: 0,
+  };
+  const tempRctx: ItemRenderContext = {
+    ...rctx,
+    canvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
+  };
+
+  // Render content to temp canvas
+  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset);
+
+  // Apply corner radius clipping on temp canvas if needed
+  if (transform.cornerRadius > 0) {
+    tempCtx.save();
+    tempCtx.globalCompositeOperation = 'destination-in';
+    tempCtx.beginPath();
+    tempCtx.roundRect(0, 0, itemW, itemH, transform.cornerRadius);
+    tempCtx.fill();
+    tempCtx.restore();
+  }
+
+  // Draw warped image onto main canvas
+  ctx.save();
+  if (transform.opacity !== 1) {
+    ctx.globalAlpha = transform.opacity;
+  }
+
+  // Apply rotation around item center
+  const centerX = rctx.canvasSettings.width / 2 + transform.x;
+  const centerY = rctx.canvasSettings.height / 2 + transform.y;
+  if (transform.rotation !== 0) {
+    ctx.translate(centerX, centerY);
+    ctx.rotate((transform.rotation * Math.PI) / 180);
+    ctx.translate(-centerX, -centerY);
+  }
+
+  // Item position on canvas
+  const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+
+  drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
   ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
 // Video item
 // ---------------------------------------------------------------------------
+
+function getTier2VideoFrameToleranceSeconds(sourceFps: number): number {
+  const normalizedSourceFps = Number.isFinite(sourceFps) && sourceFps > 0
+    ? sourceFps
+    : 30;
+  return (1 / normalizedSourceFps) * TIER2_VIDEO_FRAME_TOLERANCE_FACTOR;
+}
+
+function drawTier2VideoFrame(
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  frame: ImageBitmap | VideoFrame,
+  drawDimensions: { x: number; y: number; width: number; height: number },
+): boolean {
+  try {
+    const maybeVideoFrame = frame as VideoFrame & {
+      visibleRect?: { x: number; y: number; width: number; height: number };
+    };
+    const visibleRect = maybeVideoFrame.visibleRect;
+    if (
+      visibleRect
+      && Number.isFinite(visibleRect.width)
+      && Number.isFinite(visibleRect.height)
+      && visibleRect.width > 0
+      && visibleRect.height > 0
+    ) {
+      ctx.drawImage(
+        frame,
+        visibleRect.x,
+        visibleRect.y,
+        visibleRect.width,
+        visibleRect.height,
+        drawDimensions.x,
+        drawDimensions.y,
+        drawDimensions.width,
+        drawDimensions.height,
+      );
+    } else {
+      ctx.drawImage(
+        frame,
+        drawDimensions.x,
+        drawDimensions.y,
+        drawDimensions.width,
+        drawDimensions.height,
+      );
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Render video item using mediabunny (fast) or HTML5 video element (fallback).
@@ -219,10 +397,20 @@ async function renderVideoItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
 ): Promise<void> {
-  const { fps, videoExtractors, videoElements, useMediabunny, mediabunnyDisabledItems, mediabunnyFailureCountByItem, canvasSettings } = rctx;
+  const {
+    fps,
+    videoExtractors,
+    videoElements,
+    useMediabunny,
+    mediabunnyDisabledItems,
+    mediabunnyFailureCountByItem,
+    canvasSettings,
+    scrubbingCache,
+  } = rctx;
   const isPreviewMode = rctx.renderMode === 'preview';
   const allowVideoElementFallback = !isPreviewMode;
   const hasFallbackVideoElement = videoElements.has(item.id);
+  const extractor = videoExtractors.get(item.id);
   let mediabunnyFailedThisFrame = false;
 
   // Calculate source time
@@ -236,6 +424,65 @@ async function renderVideoItem(
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+  const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
+
+  // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
+  // During playback, the Player's <video> elements are already playing
+  // at the correct frame. Drawing from them avoids mediabunny decode entirely.
+  //
+  // For variable-speed clips (speed != 1), mediabunny provides frame-accurate
+  // decode. Skip DOM video when mediabunny is warmed. When mediabunny ISN'T
+  // warmed, use DOM video as a one-shot fallback to avoid a 300-500ms keyframe
+  // seek stall — mediabunny init runs async in the background so subsequent
+  // frames switch to frame-accurate decode.
+  const isVariableSpeed = Math.abs(speed - 1) >= 0.01;
+
+  // Always try DOM video for variable-speed clips during playback. Mediabunny's
+  // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
+  // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
+  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
+    const domVideo = rctx.domVideoElementProvider(item.id);
+    if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
+      const drift = Math.abs(domVideo.currentTime - sourceTime);
+      // Variable-speed clips naturally drift from their DOM video element
+      // because the browser plays at 1x while sourceTime advances at speed.
+      // Use a wider threshold proportional to speed to avoid falling back
+      // to mediabunny decode (which causes 50-500ms freezes on first decode).
+      // For variable-speed clips, use a very wide threshold to avoid EVER
+      // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
+      // is visually acceptable; mediabunny stalls are not.
+      //
+      // During transitions (entry ramp-up and exit handoff), the DOM video
+      // element may be settling — play() was just called, Chrome's decoder
+      // is ramping up.  Accept very high drift (1s) to prefer a stale
+      // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
+      // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
+      const inTransition = rctx.isRenderingTransition || domVideo.dataset.transitionHold === '1';
+      const baseDriftThreshold = inTransition ? 1.0 : 0.2;
+      const driftThreshold = Math.abs(speed) > 1.01 ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed)) : baseDriftThreshold;
+      if (drift <= driftThreshold) {
+        const drawDimensions = calculateMediaDrawDimensions(
+          domVideo.videoWidth,
+          domVideo.videoHeight,
+          transform,
+          canvasSettings,
+        );
+        ctx.drawImage(
+          domVideo,
+          drawDimensions.x,
+          drawDimensions.y,
+          drawDimensions.width,
+          drawDimensions.height,
+        );
+        // For variable-speed clips using DOM fallback during playback,
+        // DON'T kick off mediabunny init — keep using DOM video for the
+        // entire playback session. Mediabunny init + keyframe seek takes
+        // 400-500ms on the main thread, causing visible frame drops.
+        // DOM video has slight timing drift at speed != 1, but no freezes.
+        return;
+      }
+    }
+  }
 
   if (
     isPreviewMode
@@ -243,6 +490,13 @@ async function renderVideoItem(
     && !mediabunnyDisabledItems.has(item.id)
     && rctx.ensureVideoItemReady
   ) {
+    // For variable-speed clips during playback, don't block on mediabunny init.
+    // The init triggers a keyframe seek that blocks the main thread for 400ms+.
+    // Instead, skip this frame (DOM video already drew it or it's invisible).
+    if (isVariableSpeed) {
+      void rctx.ensureVideoItemReady(item.id);
+      return;
+    }
     try {
       await rctx.ensureVideoItemReady(item.id);
     } catch {
@@ -255,16 +509,55 @@ async function renderVideoItem(
   // In that window, skip drawing this item for the frame instead of logging a
   // misleading "Video element not found" warning.
   if (isPreviewMode && !useMediabunny.has(item.id) && !hasFallbackVideoElement) {
+    if (scrubbingCache && extractor) {
+      const dims = extractor.getDimensions();
+      const drawDimensions = calculateMediaDrawDimensions(
+        dims.width,
+        dims.height,
+        transform,
+        canvasSettings,
+      );
+      const cachedEntry = scrubbingCache.getVideoFrameEntry(item.id);
+      if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+        return;
+      }
+    }
     return;
+  }
+
+  // === TRY PRE-DECODED BITMAP (from background Web Worker) ===
+  // Check for a pre-decoded bitmap from the decoder prewarm worker.
+  // Only used as a fallback when the DOM video element and mediabunny are
+  // both unavailable (e.g. first frame after a large timeline jump where
+  // the worker pre-seeked off-thread). Don't check this for clips that
+  // have a live DOM video element — the 0.5s cache tolerance would show
+  // stale frames during normal playback/scrub.
+  const hasDomVideo = isPreviewMode && rctx.domVideoElementProvider
+    ? (() => { const v = rctx.domVideoElementProvider!(item.id); return v && v.readyState >= 2 && v.videoWidth > 0; })()
+    : false;
+  const hasMediabunny = useMediabunny.has(item.id);
+  if (isPreviewMode && !hasDomVideo && !hasMediabunny && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
+    const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime, tier2ToleranceSeconds);
+    if (bitmap) {
+      const drawDimensions = calculateMediaDrawDimensions(
+        bitmap.width,
+        bitmap.height,
+        transform,
+        canvasSettings,
+      );
+      ctx.drawImage(bitmap, drawDimensions.x, drawDimensions.y, drawDimensions.width, drawDimensions.height);
+      if (rctx.ensureVideoItemReady) {
+        void rctx.ensureVideoItemReady(item.id);
+      }
+      return;
+    }
   }
 
   // === TRY MEDIABUNNY FIRST (fast, precise frame access) ===
   // With the overlap model, source times are always valid during transitions
   // (both clips have real content in the overlap region), so no past-duration
   // workaround is needed.
-  if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id)) {
-    const extractor = videoExtractors.get(item.id);
-    if (extractor) {
+  if (useMediabunny.has(item.id) && !mediabunnyDisabledItems.has(item.id) && extractor) {
       const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
       const dims = extractor.getDimensions();
       const drawDimensions = calculateMediaDrawDimensions(
@@ -274,27 +567,66 @@ async function renderVideoItem(
         canvasSettings,
       );
 
+      if (isPreviewMode && scrubbingCache) {
+        const cachedEntry = scrubbingCache.getVideoFrameEntry(
+          item.id,
+          clampedTime,
+          tier2ToleranceSeconds,
+        );
+        if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+          return;
+        }
+      }
+
       if (import.meta.env.DEV && (frame < 5 || frame % 60 === 0)) {
         log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
       }
 
-      const success = await extractor.drawFrame(
-        ctx,
-        clampedTime,
-        drawDimensions.x,
-        drawDimensions.y,
-        drawDimensions.width,
-        drawDimensions.height,
+      const { success, capturedFrame, capturedSourceTime } = (
+        isPreviewMode && scrubbingCache
+          ? await extractor.drawFrameWithCapture(
+            ctx,
+            clampedTime,
+            drawDimensions.x,
+            drawDimensions.y,
+            drawDimensions.width,
+            drawDimensions.height,
+          )
+          : {
+            success: await extractor.drawFrame(
+              ctx,
+              clampedTime,
+              drawDimensions.x,
+              drawDimensions.y,
+              drawDimensions.width,
+              drawDimensions.height,
+            ),
+            capturedFrame: null,
+            capturedSourceTime: null,
+          }
       );
 
       if (success) {
         mediabunnyFailureCountByItem.set(item.id, 0);
+        if (scrubbingCache && capturedFrame) {
+          scrubbingCache.putVideoFrame(item.id, capturedFrame, capturedSourceTime ?? clampedTime);
+        }
         return;
       }
       mediabunnyFailedThisFrame = true;
 
       // Distinguish transient misses from decode failures.
       const failureKind = extractor.getLastFailureKind();
+      if (
+        isPreviewMode
+        && scrubbingCache
+        && failureKind === 'no-sample'
+      ) {
+        const cachedEntry = scrubbingCache.getVideoFrameEntry(item.id);
+        if (cachedEntry && drawTier2VideoFrame(ctx, cachedEntry.frame, drawDimensions)) {
+          return;
+        }
+      }
       if (failureKind === 'no-sample') {
         log.debug('Mediabunny had no sample for timestamp, using per-frame fallback', {
           itemId: item.id,
@@ -322,7 +654,6 @@ async function renderVideoItem(
           });
         }
       }
-    }
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
@@ -845,61 +1176,84 @@ async function renderCompositionItem(
       canvasSettings: subCanvasSettings,
     };
 
-    // Render each visible item at the local frame using pre-computed data.
-    // Collect active mask shapes and apply them as a group, matching
-    // main-composition mask behavior.
+    // Resolve all active masks up front so each item can be masked only by
+    // shapes on higher tracks.
     const activeSubMasks: Array<{
       path: Path2D;
       inverted: boolean;
       feather: number;
       maskType: 'clip' | 'alpha';
+      trackOrder: number;
     }> = [];
+    for (const track of subData.sortedTracks) {
+      if (!track.visible) continue;
+
+      for (const subItem of track.items) {
+        if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+          continue;
+        }
+        if (subItem.type !== 'shape' || !subItem.isMask) {
+          continue;
+        }
+
+        const subItemKeyframes = subData.keyframesMap.get(subItem.id);
+        const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
+        const maskType = subItem.maskType ?? 'clip';
+        const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
+        const effectiveMaskItem = (
+          rctx.renderMode === 'preview'
+            ? applyPreviewPathVerticesToShape(subItem, rctx.getPreviewPathVerticesOverride)
+            : subItem
+        );
+        let svgPath = getShapePath(
+          effectiveMaskItem,
+          {
+            x: subItemTransform.x,
+            y: subItemTransform.y,
+            width: subItemTransform.width,
+            height: subItemTransform.height,
+            rotation: 0,
+            opacity: subItemTransform.opacity,
+          },
+          {
+            canvasWidth: subCanvasSettings.width,
+            canvasHeight: subCanvasSettings.height,
+          }
+        );
+
+        if (subItemTransform.rotation !== 0) {
+          const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
+          const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
+          svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
+        }
+
+        activeSubMasks.push({
+          path: svgPathToPath2D(svgPath),
+          inverted: effectiveMaskItem.maskInvert ?? false,
+          feather,
+          maskType,
+          trackOrder: track.order,
+        });
+      }
+    }
+
     let renderedSubItems = 0;
     for (const track of subData.sortedTracks) {
       if (!track.visible) continue;
+
+      const applicableMasks = activeSubMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, track.order));
 
       for (const subItem of track.items) {
         // Check if item is visible at this local frame
         if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
           continue;
         }
+        if (subItem.type === 'shape' && subItem.isMask) {
+          continue;
+        }
 
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
-
-        if (subItem.type === 'shape' && subItem.isMask) {
-          const maskType = subItem.maskType ?? 'clip';
-          const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
-          let svgPath = getShapePath(
-            subItem,
-            {
-              x: subItemTransform.x,
-              y: subItemTransform.y,
-              width: subItemTransform.width,
-              height: subItemTransform.height,
-              rotation: 0,
-              opacity: subItemTransform.opacity,
-            },
-            {
-              canvasWidth: subCanvasSettings.width,
-              canvasHeight: subCanvasSettings.height,
-            }
-          );
-
-          if (subItemTransform.rotation !== 0) {
-            const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
-            const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
-            svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
-          }
-
-          activeSubMasks.push({
-            path: svgPathToPath2D(svgPath),
-            inverted: subItem.maskInvert ?? false,
-            feather,
-            maskType,
-          });
-          continue;
-        }
 
         if (frame === 0) {
           log.info('Rendering sub-comp item', {
@@ -914,7 +1268,17 @@ async function renderCompositionItem(
           });
         }
 
-        await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        if (applicableMasks.length === 0) {
+          await renderItem(subContentCtx, subItem, subItemTransform, localFrame, subRctx);
+        } else {
+          const { canvas: maskedItemCanvas, ctx: maskedItemCtx } = rctx.canvasPool.acquire();
+          try {
+            await renderItem(maskedItemCtx, subItem, subItemTransform, localFrame, subRctx);
+            applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+          } finally {
+            rctx.canvasPool.release(maskedItemCanvas);
+          }
+        }
         renderedSubItems++;
       }
     }
@@ -928,7 +1292,7 @@ async function renderCompositionItem(
       });
     }
 
-    applyMasks(subCtx, subContentCanvas, activeSubMasks, subMaskSettings);
+    subCtx.drawImage(subContentCanvas, 0, 0);
 
     // Draw the sub-composition result onto the main canvas at the CompositionItem's position
     const drawDimensions = calculateMediaDrawDimensions(
@@ -969,51 +1333,88 @@ export async function renderTransitionToCanvas(
   const { canvasPool, canvasSettings, keyframesMap, adjustmentLayers } = rctx;
   const { leftClip, rightClip } = activeTransition;
 
-  const leftEffectiveFrame = frame;
-  const rightEffectiveFrame = frame;
-
-  // === PERFORMANCE: Use pooled canvases for transition rendering ===
+  // === PERFORMANCE: Render both clips in parallel ===
+  // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
+  // Running both clips concurrently halves the decode wait time.
   const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
-  const leftKeyframes = keyframesMap.get(leftClip.id);
-  const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, leftEffectiveFrame, canvasSettings);
-
-  await renderItem(leftCtx, leftClip, leftTransform, leftEffectiveFrame, rctx, 0);
-
-  // Apply effects to left (outgoing) clip
-  const leftAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, leftEffectiveFrame);
-  const leftCombinedEffects = combineEffects(leftClip.effects, leftAdjEffects);
-  let leftFinalCanvas: OffscreenCanvas = leftCanvas;
-
-  if (leftCombinedEffects.length > 0) {
-    const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-    applyAllEffects(leftEffectCtx, leftCanvas, leftCombinedEffects, leftEffectiveFrame, canvasSettings);
-    leftFinalCanvas = leftEffectCanvas;
-  }
-
   const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire();
-  const rightKeyframes = keyframesMap.get(rightClip.id);
-  const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, rightEffectiveFrame, canvasSettings);
-  await renderItem(rightCtx, rightClip, rightTransform, rightEffectiveFrame, rctx, 0);
 
-  // Apply effects to right (incoming) clip
-  const rightAdjEffects = getAdjustmentLayerEffects(trackOrder, adjustmentLayers, rightEffectiveFrame);
-  const rightCombinedEffects = combineEffects(rightClip.effects, rightAdjEffects);
+  const leftKeyframes = keyframesMap.get(leftClip.id);
+  const leftTransform = getAnimatedTransform(leftClip, leftKeyframes, frame, canvasSettings);
+  const rightKeyframes = keyframesMap.get(rightClip.id);
+  const rightTransform = getAnimatedTransform(rightClip, rightKeyframes, frame, canvasSettings);
+
+  // Flag the render context so renderVideoItem uses a wider DOM video
+  // drift threshold — prefer stale zero-copy frames over mediabunny stalls.
+  const prevTransitionFlag = rctx.isRenderingTransition;
+  rctx.isRenderingTransition = true;
+  await Promise.all([
+    renderItem(leftCtx, leftClip, leftTransform, frame, rctx, 0),
+    renderItem(rightCtx, rightClip, rightTransform, frame, rctx, 0),
+  ]);
+  rctx.isRenderingTransition = prevTransitionFlag;
+
+  // Apply effects to both clips (parallel when both have effects)
+  const adjEffects = getAdjustmentLayerEffects(
+    trackOrder,
+    adjustmentLayers,
+    frame,
+    rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+  );
+  const leftCombinedEffects = combineEffects(leftClip.effects, adjEffects);
+  const rightCombinedEffects = combineEffects(rightClip.effects, adjEffects);
+
+  let leftFinalCanvas: OffscreenCanvas = leftCanvas;
   let rightFinalCanvas: OffscreenCanvas = rightCanvas;
 
-  if (rightCombinedEffects.length > 0) {
-    const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-    applyAllEffects(rightEffectCtx, rightCanvas, rightCombinedEffects, rightEffectiveFrame, canvasSettings);
-    rightFinalCanvas = rightEffectCanvas;
+  const hasLeftEffects = leftCombinedEffects.length > 0;
+  const hasRightEffects = rightCombinedEffects.length > 0;
+
+  // Track pool effect canvases separately — in GPU batch mode the final
+  // source may be a GPU output canvas (not from the pool), but the pool
+  // canvases still need to be released.
+  let leftEffectPoolCanvas: OffscreenCanvas | null = null;
+  let rightEffectPoolCanvas: OffscreenCanvas | null = null;
+
+  if (hasLeftEffects || hasRightEffects) {
+    // In GPU batch mode, applyAllEffectsAsync returns a deferred GPU canvas
+    // instead of drawing back to the effect canvas. We must capture and use
+    // the returned canvas, otherwise effects are silently dropped.
+    let leftGpuPromise: Promise<OffscreenCanvas | null> | undefined;
+    let rightGpuPromise: Promise<OffscreenCanvas | null> | undefined;
+
+    if (hasLeftEffects) {
+      const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
+      leftEffectPoolCanvas = leftEffectCanvas;
+      leftFinalCanvas = leftEffectCanvas;
+      leftGpuPromise = applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
+    }
+    if (hasRightEffects) {
+      const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
+      rightEffectPoolCanvas = rightEffectCanvas;
+      rightFinalCanvas = rightEffectCanvas;
+      rightGpuPromise = applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
+    }
+
+    const [leftGpu, rightGpu] = await Promise.all([
+      leftGpuPromise ?? Promise.resolve(null),
+      rightGpuPromise ?? Promise.resolve(null),
+    ]);
+
+    // Use deferred GPU canvas when returned (batch mode), otherwise the
+    // effect canvas already has the result drawn into it.
+    if (leftGpu) leftFinalCanvas = leftGpu;
+    if (rightGpu) rightFinalCanvas = rightGpu;
   }
 
   // Render transition with effect-applied canvases
   const transitionSettings: TransitionCanvasSettings = canvasSettings;
-  renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings);
+  renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings, rctx.gpuTransitionPipeline);
 
-  // Release all canvases back to pool
-  if (leftFinalCanvas !== leftCanvas) canvasPool.release(leftFinalCanvas);
+  // Release all pool canvases (GPU output canvases are managed by the pipeline)
+  if (leftEffectPoolCanvas) canvasPool.release(leftEffectPoolCanvas);
   canvasPool.release(leftCanvas);
-  if (rightFinalCanvas !== rightCanvas) canvasPool.release(rightFinalCanvas);
+  if (rightEffectPoolCanvas) canvasPool.release(rightEffectPoolCanvas);
   canvasPool.release(rightCanvas);
 }
 

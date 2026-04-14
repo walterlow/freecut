@@ -37,7 +37,7 @@ export const useBentoPresetsStore = create<BentoPresetsState>()(
         })),
     }),
     {
-      name: 'freecut-bento-presets',
+      name: 'pixels-bento-presets',
     }
   )
 );

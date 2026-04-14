@@ -1,5 +1,8 @@
 ﻿import { createLogger } from '@/shared/logging/logger';
-import { VideoFrameExtractor } from './canvas-video-extractor';
+import {
+  VideoFrameExtractor,
+  type DrawFrameCaptureResult,
+} from './canvas-video-extractor';
 
 const log = createLogger('SharedVideoExtractorPool');
 
@@ -15,6 +18,14 @@ export interface VideoFrameSource {
     width: number,
     height: number
   ): Promise<boolean>;
+  drawFrameWithCapture(
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    timestamp: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<DrawFrameCaptureResult>;
   getLastFailureKind(): VideoFrameFailureKind;
   getDimensions(): { width: number; height: number };
   getDuration(): number;
@@ -61,6 +72,26 @@ class SharedItemVideoSource implements VideoFrameSource {
     height: number
   ): Promise<boolean> {
     return this.pool.drawItemFrame(this.itemId, this.src, ctx, timestamp, x, y, width, height);
+  }
+
+  drawFrameWithCapture(
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    timestamp: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<DrawFrameCaptureResult> {
+    return this.pool.drawItemFrameWithCapture(
+      this.itemId,
+      this.src,
+      ctx,
+      timestamp,
+      x,
+      y,
+      width,
+      height,
+    );
   }
 
   getLastFailureKind(): VideoFrameFailureKind {
@@ -169,6 +200,42 @@ export class SharedVideoExtractorPool {
     const prev = lane.drawLock ?? Promise.resolve();
     const result = prev.then(() =>
       lane.extractor.drawFrame(ctx, timestamp, x, y, width, height)
+    );
+    lane.drawLock = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  async drawItemFrameWithCapture(
+    itemId: string,
+    src: string,
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    timestamp: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): Promise<DrawFrameCaptureResult> {
+    const state = this.ensureSourceState(src);
+    const sourceReady = await this.initSource(src);
+    if (!sourceReady) {
+      return { success: false, capturedFrame: null, capturedSourceTime: null };
+    }
+
+    let laneIndex = this.getAssignedLaneIndex(state, itemId);
+    let laneReady = await this.ensureLaneInitialized(state, laneIndex);
+
+    if (!laneReady && laneIndex !== 0) {
+      laneIndex = 0;
+      laneReady = await this.ensureLaneInitialized(state, laneIndex);
+    }
+    if (!laneReady) {
+      return { success: false, capturedFrame: null, capturedSourceTime: null };
+    }
+
+    const lane = state.lanes[laneIndex]!;
+    const prev = lane.drawLock ?? Promise.resolve();
+    const result = prev.then(() =>
+      lane.extractor.drawFrameWithCapture(ctx, timestamp, x, y, width, height)
     );
     lane.drawLock = result.then(() => undefined, () => undefined);
     return result;
@@ -303,4 +370,3 @@ export class SharedVideoExtractorPool {
     }
   }
 }
-

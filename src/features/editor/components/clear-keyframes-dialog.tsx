@@ -14,7 +14,7 @@ import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dia
 
 /**
  * Confirmation dialog for clearing keyframes from selected items.
- * Triggered by Shift+K hotkey or context menu actions.
+ * Triggered by Shift+A hotkey or context menu actions.
  */
 export function ClearKeyframesDialog() {
   const isOpen = useClearKeyframesDialogStore((s) => s.isOpen);
@@ -71,4 +71,3 @@ export function ClearKeyframesDialog() {
     </AlertDialog>
   );
 }
-

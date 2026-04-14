@@ -66,7 +66,7 @@ export const GraphTransitionRegions = memo(function GraphTransitionRegions({
   const patternId = 'transition-blocked-stripes';
 
   return (
-    <g className="graph-transition-regions">
+    <g className="graph-transition-regions" style={{ pointerEvents: 'none' }}>
       {/* Define the diagonal stripes pattern once */}
       <defs>
         <pattern

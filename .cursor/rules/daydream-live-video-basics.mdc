@@ -1,0 +1,149 @@
+---
+description: Learn how video livestreaming works
+alwaysApply: false
+---
+> ## Documentation Index
+> Fetch the complete documentation index at: https://docs.daydream.live/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Live Video Basics
+
+> Learn how video livestreaming works
+
+# How Live Video Works
+
+Live video is captured by a camera, instantly converted to digital format, split into multiple quality versions for different devices and internet speeds, then distributed through servers so viewers can watch in real-time with the quality that matches their connection.
+
+## What is live video?
+
+Live video is like watching something happen in real-time through your screen. It's the digital equivalent of being present at an event as it unfolds, seeing and hearing everything the moment it actually occurs.
+
+### Ingest  vs  Delivery  vs  Playback
+
+#### **Ingest**
+
+Ingest is the process of getting video **FROM** the broadcaster **TO** the streaming platform. Think of it as the "upload" stage.
+
+The broadcaster sends their live video stream to the platform's servers
+using protocols like **RTMP**, **SRT**, or **WebRTC (WHIP)**
+This is typically just **ONE** stream going from broadcaster to platform.
+
+* Example: A streamer using OBS to send their video to Twitch
+
+#### **Delivery**
+
+Delivery is how the platform distributes the video **TO** all the viewers. This is the "distribution" stage.
+
+The platform takes the ingested stream and sends it to potentially millions of viewers
+using **CDNs** (Content Delivery Networks) with servers around the world
+and handles **transcoding** (creating multiple quality versions)
+along with optimizing routing to get video to viewers quickly
+
+* Example: Twitch's servers sending your stream to 10,000 viewers worldwide
+
+#### **Playback**
+
+Playback is what happens on the viewer's device. This is the "watching" stage.
+
+The viewer's device receives the video stream
+The video player decodes and displays it
+Automatically adjusts quality based on internet speed
+
+* Example: You watching a stream on your phone or computer
+
+#### **Workflow Diagram**
+
+```mermaid  theme={null}
+graph LR
+        A[Broadcaster<br/>Camera/Phone] -->|INGEST<br/>Sends 1 stream| B[Streaming Platform<br/>Twitch/YouTube]
+    B -->|DELIVERY<br/>Distributes via CDN| C[PLAYBACK<br/>Viewer 1<br/>Phone]
+    B -->|DELIVERY<br/>Distributes via CDN| D[PLAYBACK<br/>Viewer 2<br/>Laptop]
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style B fill:#F5A623,stroke:#C17D11,stroke-width:2px,color:#000
+    style C fill:#7ED321,stroke:#5FA319,stroke-width:2px,color:#000
+    style D fill:#7ED321,stroke:#5FA319,stroke-width:2px,color:#000
+```
+
+## When to use WebRTC (WHIP) vs  RTMP
+
+Think of both WHIP and RTMP as different ways to send your video stream to the internet, like choosing between two different delivery trucks for your package.
+
+#### **RTMP**
+
+RTMP (Real-Time Messaging Protocol) is the older, more established option. It's been around since the mid-2000s and is like the reliable postal service everyone knows. Most streaming software like OBS Studio supports it out of the box, and almost every streaming platform (YouTube, Twitch, Facebook) accepts it. The main advantage is compatibility—it just works almost everywhere. However, it typically adds about 3-10 seconds of delay (latency) between when something happens in real life and when viewers see it.
+
+#### **WHIP**
+
+WHIP (WebRTC HTTP Ingestion Protocol) is the newer technology, built on WebRTC. Think of it as the express delivery option. Its superpower is ultra-low latency with delivery times of less than a second, sometimes just a few hundred milliseconds. This makes it perfect for real-time interactions like live auctions, video calls, remote collaboration, or gaming streams where you want to respond to chat instantly.
+
+## What WebRTC (WHEP) is and why it matters
+
+#### **WHEP**
+
+WHEP is the standardized protocol for consuming live video streams with minimal latency in WebRTC-based architectures.
+To understand the streaming workflow, consider the following components:
+
+* **WHIP** (Ingestion): Standardized method for broadcasters to **PUSH** WebRTC streams to servers using HTTP-based signaling
+* **WHEP** (Egress): Standardized method for viewers to **PULL** WebRTC streams from servers, enabling playback
+
+#### **Workflow Diagram**
+
+```mermaid  theme={null}
+graph LR
+    A[🎥 Streamer<br/>Camera/Screen] -->|WHIP<br/>WebRTC Ingestion<br/>Push Video| B[☁️ Media Server<br/>WebRTC Server]
+    
+    B -->|WHEP<br/>WebRTC Egress<br/>Pull Video| C[👤 Viewer 1<br/>Browser/App]
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,stroke-width:2px,color:#fff
+    style B fill:#F5A623,stroke:#C17D11,stroke-width:2px,color:#000
+    style C fill:#7ED321,stroke:#5FA319,stroke-width:2px,color:#000
+    
+    classDef whipLink stroke:#0288d1,stroke-width:3px
+    classDef whepLink stroke:#388e3c,stroke-width:2px
+```
+
+#### **WHEP: Technical Benefits and Use Cases**
+
+**Latency Reduction**
+
+Traditional streaming protocols (HLS, DASH) typically introduce 10-30 seconds of latency, creating synchronization issues where viewers receive notifications about live events before seeing them on screen. WHEP reduces this to sub-second levels (under 1 second), effectively eliminating the temporal disconnect between live events and viewer experience.
+
+**Enabling Bidirectional Interaction**
+
+Reduced latency transforms streaming from one-way broadcast into an interactive communication channel, enabling:
+
+* **Educational Content:** Instructors can respond to student questions with minimal delay, creating near-synchronous learning environments that approximate in-person instruction
+* **Live Entertainment:** Artists can engage with audience feedback in real-time during concerts or performances, rather than responding to outdated comments
+* **Interactive Broadcasting:** Supports time-sensitive use cases such as live Q\&A sessions, polls, or collaborative decision-making
+
+## Latency vs scale trade-offs
+
+Streaming systems face an inherent trade-off where low-latency protocols (WebRTC/WHIP/WHEP) requires significantly more server resources per viewer than high-scale protocols (HLS/DASH via CDN).
+
+#### **WebRTC (Low Latency)**
+
+Maintains persistent connections requiring dedicated server resources per viewer.
+
+* Typical capacity: Hundreds to low thousands per server node
+
+* Cost: 5-10x more per viewer than CDN delivery
+
+#### **CDN-Based Protocols (High Scale)**
+
+* Leverages edge caching and stateless HTTP delivery
+* Single origin serves millions through distributed cache hierarchy
+* Significantly lower per-viewer infrastructure cost
+
+#### **Choosing the Right Approach**
+
+**Low Latency (WebRTC)**
+
+* Real-time interaction is essential (auctions, betting, gaming)
+
+* Predictable, moderate audience size (\< 10,000 concurrent viewers)
+
+**High Scale (CDN)**
+
+* Large, unpredictable audiences (> 100,000 concurrent)
+* 10-30 second delay is acceptable
