@@ -65,6 +65,16 @@ export const PREVIEW_PERF_RENDER_SOURCE_HISTORY_MAX = 6;
 export const PREVIEW_PERF_SEEK_TIMEOUT_MS = 2500;
 export const ADAPTIVE_PREVIEW_QUALITY_ENABLED = true;
 
+/**
+ * Experimental: Use WebCodecs streaming decode for video playback instead of
+ * HTML5 <video> elements. When enabled, a background worker runs mediabunny's
+ * forward samples() generator and transfers decoded ImageBitmaps to the
+ * canvas render pipeline.
+ *
+ * Toggle via: window.__DEBUG__?.setStreamingPlayback?.(true/false)
+ */
+export const STREAMING_PLAYBACK_ENABLED = false;
+
 import type { PreviewRenderSource } from './preview-perf-metrics';
 
 export type VideoSourceSpan = { src: string; startFrame: number; endFrame: number };

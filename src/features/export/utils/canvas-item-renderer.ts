@@ -165,6 +165,12 @@ export interface ItemRenderContext {
   // the correct frame — use them directly instead of mediabunny decode.
   domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
 
+  // Streaming WebCodecs frame provider (experimental).
+  // When set, checked before DOM video and mediabunny paths.
+  // Returns a pre-decoded ImageBitmap for the given source URL and timestamp,
+  // or null if no frame is buffered yet.
+  streamingFrameProvider?: (src: string, sourceTime: number) => ImageBitmap | null;
+
   // Set to true when rendering transition participant clips. Widens the
   // DOM video drift threshold to prefer stale zero-copy frames over
   // 170ms mediabunny stalls during transition ramp-up / exit.
@@ -543,6 +549,28 @@ async function renderVideoItem(
     ? (snappedSourceFrame + 1e-4) / sourceFps
     : rawSourceTime;
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
+
+  // === TRY STREAMING WEBCODECS FRAME (experimental) ===
+  // When enabled, worker-decoded frames bypass DOM video and mediabunny entirely.
+  if (isPreviewMode && rctx.streamingFrameProvider && item.src) {
+    const streamBitmap = rctx.streamingFrameProvider(item.src, sourceTime);
+    if (streamBitmap) {
+      drawContainedMediaSource(
+        ctx,
+        streamBitmap,
+        streamBitmap.width,
+        streamBitmap.height,
+        transform,
+        canvasSettings,
+        item.crop,
+        undefined,
+        rctx.canvasPool,
+      );
+      return;
+    }
+    // Fall through to DOM video / mediabunny if no frame buffered yet
+  }
+
   const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
     ? rctx.domVideoElementProvider(item.id)
     : null;

@@ -31,6 +31,7 @@ import { usePreviewSourceWarm } from '../hooks/use-preview-source-warm';
 import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model';
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
+import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
 
 interface VideoPreviewProps {
   project: {
@@ -448,6 +449,11 @@ export const VideoPreview = memo(function VideoPreview({
     trackPlayerSeek,
     recordRenderFrameJitter,
     ...previewRuntimeRefs.renderPumpRefs,
+  });
+  useStreamingPlaybackController({
+    fps,
+    combinedTracks,
+    scrubRendererRef: previewRuntimeRefs.rendererControllerRefs.scrubRendererRef,
   });
   usePreviewMediaPreload({
     fps,
