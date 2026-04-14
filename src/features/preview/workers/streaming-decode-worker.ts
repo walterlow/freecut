@@ -360,6 +360,7 @@ self.onmessage = async (event: MessageEvent) => {
     const state = sources.get(src);
     if (!state) return;
     state.generation++;
+    state.playbackPosition = timestamp;
     void runStreamLoop(src, state, timestamp);
     return;
   }
