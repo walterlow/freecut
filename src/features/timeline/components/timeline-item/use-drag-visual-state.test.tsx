@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import type { VideoItem } from '@/types/timeline';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useItemsStore } from '../../stores/items-store';
+import { DRAG_OPACITY } from '../../constants';
 import { dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useDragVisualState } from './use-drag-visual-state';
 
@@ -42,7 +43,11 @@ function DragVisualHarness({
 
   return (
     <>
-      <div data-testid="body" ref={transformRef} style={{ opacity: initialOpacity }} />
+      <div
+        data-testid="body"
+        ref={transformRef}
+        style={{ opacity: dragVisualState.shouldDimForDrag ? String(DRAG_OPACITY) : initialOpacity }}
+      />
       <div data-testid="ghost" ref={ghostRef} />
       <div data-testid="join-state">
         {String(dragVisualState.dragAffectsJoin.left)}
@@ -116,7 +121,7 @@ describe('useDragVisualState', () => {
     const body = screen.getByTestId('body');
     await waitFor(() => {
       expect(body.style.transform).toBe('translate(18px, 6px)');
-      expect(body.style.opacity).toBe('0.8');
+      expect(body.style.opacity).toBe(String(DRAG_OPACITY));
       expect(body.style.pointerEvents).toBe('none');
       expect(body.style.zIndex).toBe('50');
     });
@@ -150,6 +155,29 @@ describe('useDragVisualState', () => {
       expect(body.style.pointerEvents).toBe('none');
       expect(ghost.style.display).toBe('block');
       expect(ghost.style.transform).toBe('translate(11px, 7px)');
+    });
+  });
+
+  it('honors updated host opacity after a drop into a dimmed track', async () => {
+    const item = makeVideoItem();
+    const { rerender } = render(<DragVisualHarness item={item} initialOpacity="1" />);
+
+    dragOffsetRef.current = { x: 12, y: 4 };
+    setDragState([item.id]);
+
+    const body = screen.getByTestId('body');
+    await waitFor(() => {
+      expect(body.style.opacity).toBe(String(DRAG_OPACITY));
+    });
+
+    rerender(<DragVisualHarness item={item} initialOpacity="0.3" />);
+
+    act(() => {
+      useSelectionStore.getState().setDragState(null);
+    });
+
+    await waitFor(() => {
+      expect(body.style.opacity).toBe('0.3');
     });
   });
 });

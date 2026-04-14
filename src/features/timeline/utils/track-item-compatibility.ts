@@ -54,7 +54,7 @@ export function findCompatibleTrackForItemType(params: {
     itemType,
     preferredTrackId,
     includeLocked = false,
-    includeHidden = false,
+    includeHidden = true,
     allowPreferredTrackFallback = true,
   } = params;
 

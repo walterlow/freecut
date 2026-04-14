@@ -46,4 +46,34 @@ describe('findCompatibleTrackForItemType', () => {
       allowPreferredTrackFallback: false,
     })).toBeNull();
   });
+
+  it('treats hidden tracks as compatible by default', () => {
+    const tracks = [
+      { ...makeTrack('video-1', 0, 'video'), visible: false },
+      makeTrack('video-2', 1, 'video'),
+    ];
+
+    expect(findCompatibleTrackForItemType({
+      tracks,
+      items: [] as TimelineItem[],
+      itemType: 'text',
+      preferredTrackId: 'video-1',
+      allowPreferredTrackFallback: false,
+    })?.id).toBe('video-1');
+  });
+
+  it('still allows callers to exclude hidden tracks explicitly', () => {
+    const tracks = [
+      { ...makeTrack('video-1', 0, 'video'), visible: false },
+      makeTrack('video-2', 1, 'video'),
+    ];
+
+    expect(findCompatibleTrackForItemType({
+      tracks,
+      items: [] as TimelineItem[],
+      itemType: 'text',
+      preferredTrackId: 'video-1',
+      includeHidden: false,
+    })?.id).toBe('video-2');
+  });
 });

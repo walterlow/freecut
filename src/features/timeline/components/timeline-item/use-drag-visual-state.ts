@@ -4,7 +4,6 @@ import type { MutableRefObject, RefObject } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { useItemsStore } from '../../stores/items-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { DRAG_OPACITY } from '../../constants';
 import { dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import {
   getTimelineItemDragParticipation,
@@ -47,7 +46,6 @@ export function useDragVisualState({
   const dragWasActiveRef = useRef(false);
   const rafIdRef = useRef<number | null>(null);
   const dragWasActiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previousOpacityRef = useRef<string | null>(null);
 
   const neighboringJoinIds = useItemsStore(
     useShallow((state) => {
@@ -114,14 +112,6 @@ export function useDragVisualState({
   }, [isDragActive]);
 
   useEffect(() => {
-    const preserveCurrentOpacity = () => {
-      if (!transformRef.current || previousOpacityRef.current !== null) {
-        return;
-      }
-
-      previousOpacityRef.current = transformRef.current.style.opacity;
-    };
-
     const cleanupDragStyles = () => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
@@ -131,10 +121,6 @@ export function useDragVisualState({
       if (transformRef.current) {
         transformRef.current.style.transition = 'none';
         transformRef.current.style.transform = '';
-        if (previousOpacityRef.current !== null) {
-          transformRef.current.style.opacity = previousOpacityRef.current;
-          previousOpacityRef.current = null;
-        }
         transformRef.current.style.pointerEvents = '';
         transformRef.current.style.zIndex = '';
       }
@@ -168,9 +154,7 @@ export function useDragVisualState({
           ghostRef.current.style.display = 'block';
         }
       } else {
-        preserveCurrentOpacity();
         transformRef.current.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
-        transformRef.current.style.opacity = String(DRAG_OPACITY);
         transformRef.current.style.transition = 'none';
         transformRef.current.style.pointerEvents = 'none';
         transformRef.current.style.zIndex = '50';
@@ -184,7 +168,6 @@ export function useDragVisualState({
     };
 
     if (dragParticipation > 0 && !isDragging) {
-      preserveCurrentOpacity();
       rafIdRef.current = requestAnimationFrame(updateTransform);
       return cleanupDragStyles;
     }

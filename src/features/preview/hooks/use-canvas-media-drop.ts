@@ -234,12 +234,12 @@ export function useCanvasMediaDrop({
       proposedFrame: playbackState.currentFrame,
       durationInFrames,
       itemType: mediaType === 'image' ? 'image' : 'video',
-    });
+      });
 
-    if (!placement) {
-      toast.warning('No unlocked visible track is available for this drop.');
-      return;
-    }
+      if (!placement) {
+        toast.warning('No unlocked compatible track is available for this drop.');
+        return;
+      }
 
     const blobUrl = await resolveMediaUrl(media.id);
     if (!blobUrl) {

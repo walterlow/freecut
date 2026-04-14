@@ -372,8 +372,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const effective = resolveEffectiveTrackStates(s.tracks).find((t) => t.id === track.id) ?? track;
     return (effective.locked ? 1 : 0) | (getIsTrackDisabled(effective) ? 2 : 0);
   });
+  const isTrackLocked = (trackInteractionState & 1) !== 0;
   const isTrackDisabled = (trackInteractionState & 2) !== 0;
-  const isDropDisabled = trackInteractionState !== 0;
+  const isDropDisabled = isTrackLocked;
   const trackKind = getTrackKind(track);
 
   // Virtualized items/transitions â€” only those overlapping the visible viewport + buffer
