@@ -237,16 +237,24 @@ export function useStreamingPlaybackController({
   }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
 
   // When proxy toggle changes, restart streams with the correct source URLs.
-  // Must restart even during playback so frames switch immediately.
+  // Disable the provider during the transition so the RAF pump doesn't auto-start
+  // streams with stale URLs from the old composition. Re-enable after the
+  // composition rebuilds with new proxy URLs (next animation frame).
   useEffect(() => {
     if (!enabledRef.current) return;
     const playback = playbackRef.current;
     if (playback) {
+      streamingFrameProviderRef.current = null;
       playback.stopAll();
       prewarmFrameRef.current = null;
       prewarmAtFrame(usePlaybackStore.getState().currentFrame);
+      requestAnimationFrame(() => {
+        if (enabledRef.current) {
+          streamingFrameProviderRef.current = getStreamingFrame;
+        }
+      });
     }
-  }, [useProxy, prewarmAtFrame]);
+  }, [useProxy, prewarmAtFrame, getStreamingFrame]);
 
   // Clean up on unmount
   useEffect(() => {
