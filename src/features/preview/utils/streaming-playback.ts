@@ -458,16 +458,18 @@ export function createStreamingPlayback(): StreamingPlayback {
     getFrame(src: string, targetTimestamp: number, mediaId?: string): ImageBitmap | null {
       if (disposed) return null;
 
-      // Resolve the active URL via mediaId. The renderer may pass a stale
-      // blob URL from a previous render cycle (e.g. after forceFastScrubOverlay flip).
+      // Look up stream by the src the renderer provides (usually the proxy URL),
+      // then fall back to the blobUrlManager URL (original). Pre-warm starts
+      // streams with proxy URLs, so checking src first avoids a miss.
       let activeSrc = src;
-      if (mediaId) {
+      let state = streams.get(src) ?? null;
+      if (!state && mediaId) {
         const currentUrl = blobUrlManager.get(mediaId);
-        if (currentUrl) activeSrc = currentUrl;
+        if (currentUrl) {
+          activeSrc = currentUrl;
+          state = streams.get(currentUrl) ?? null;
+        }
       }
-
-      // Look up stream by active URL first, then stale URL
-      let state = streams.get(activeSrc) ?? streams.get(src);
 
       // Lazy auto-start: first time we see a source, start streaming
       if (!state || (!state.streaming && !state.autoStartPending)) {

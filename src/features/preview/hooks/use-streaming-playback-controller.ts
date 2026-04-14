@@ -23,6 +23,7 @@ import { STREAMING_PLAYBACK_ENABLED } from '../utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { resolveProxyUrl } from '../deps/media-library-contract';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
@@ -57,7 +58,9 @@ function collectPrewarmTargets(
       if (videoItem.from > timelineFrame + lookaheadFrames) continue;
 
       const mediaId = videoItem.mediaId;
-      const activeSrc = (mediaId ? blobUrlManager.get(mediaId) : null) ?? videoItem.src;
+      // Prefer proxy (720p) over original — same as the preview render pipeline
+      const proxyUrl = mediaId ? resolveProxyUrl(mediaId) : null;
+      const activeSrc = proxyUrl ?? (mediaId ? blobUrlManager.get(mediaId) : null) ?? videoItem.src;
       if (!activeSrc || seen.has(activeSrc)) continue;
       seen.add(activeSrc);
 
