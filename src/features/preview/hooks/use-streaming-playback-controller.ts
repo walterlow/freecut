@@ -169,7 +169,6 @@ export function useStreamingPlaybackController({
   playbackTransitionCooldownFrames,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  const enabledRef = useRef(STREAMING_PLAYBACK_ENABLED);
   /** When true, stream ALL clips (debug toggle). When false, only transition clips. */
   const forceAllRef = useRef(STREAMING_PLAYBACK_ENABLED);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
@@ -214,7 +213,6 @@ export function useStreamingPlaybackController({
   }, []);
 
   const prewarmAtFrame = useCallback((frame: number, seekExisting = true) => {
-    if (!enabledRef.current) return;
     if (frame === prewarmFrameRef.current) return;
     prewarmFrameRef.current = frame;
 
@@ -231,7 +229,6 @@ export function useStreamingPlaybackController({
 
   /** During playback, scan for upcoming transition clips and manage overlay. */
   const runPlaybackLookahead = useCallback(() => {
-    if (!enabledRef.current) return;
     const state = usePlaybackStore.getState();
     const frame = state.currentFrame;
     const playback = getPlayback();
@@ -258,20 +255,17 @@ export function useStreamingPlaybackController({
   useEffect(() => {
     const initialState = usePlaybackStore.getState();
 
-    if (enabledRef.current) {
-      streamingFrameProviderRef.current = getStreamingFrame;
-      if (initialState.isPlaying) {
-        getPlayback();
-        if (forceAllRef.current) setForceCanvasOverlay(true);
-        if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
-        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
-      } else {
-        prewarmAtFrame(initialState.currentFrame);
-      }
+    streamingFrameProviderRef.current = getStreamingFrame;
+    if (initialState.isPlaying) {
+      getPlayback();
+      if (forceAllRef.current) setForceCanvasOverlay(true);
+      if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
+      lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
+    } else {
+      prewarmAtFrame(initialState.currentFrame);
     }
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
-      if (!enabledRef.current) return;
 
       const wasPlaying = prevState.isPlaying;
       const isPlaying = state.isPlaying;
@@ -324,7 +318,6 @@ export function useStreamingPlaybackController({
 
   // Restart streams when proxy toggle changes
   useEffect(() => {
-    if (!enabledRef.current) return;
     const playback = playbackRef.current;
     if (playback) {
       streamingFrameProviderRef.current = null;
@@ -332,9 +325,7 @@ export function useStreamingPlaybackController({
       prewarmFrameRef.current = null;
       prewarmAtFrame(usePlaybackStore.getState().currentFrame);
       requestAnimationFrame(() => {
-        if (enabledRef.current) {
-          streamingFrameProviderRef.current = getStreamingFrame;
-        }
+        streamingFrameProviderRef.current = getStreamingFrame;
       });
     }
   }, [useProxy, prewarmAtFrame, getStreamingFrame]);
@@ -355,26 +346,19 @@ export function useStreamingPlaybackController({
       Record<string, unknown> | undefined;
     if (!debugApi) return;
 
-    debugApi.setStreamingPlayback = (enabled: boolean, forceAll = false) => {
-      enabledRef.current = enabled;
-      forceAllRef.current = enabled && forceAll;
-      log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}${forceAll ? ' (force all)' : ''}`);
+    debugApi.setStreamingPlayback = (forceAll: boolean) => {
+      forceAllRef.current = forceAll;
+      log.info(`Streaming playback: ${forceAll ? 'force all clips' : 'transitions only'}`);
 
-      if (enabled) {
-        streamingFrameProviderRef.current = getStreamingFrame;
+      if (forceAll) {
         const state = usePlaybackStore.getState();
-        if (state.isPlaying && forceAll) setForceCanvasOverlay(true);
+        if (state.isPlaying) setForceCanvasOverlay(true);
         prewarmFrameRef.current = null;
         prewarmAtFrame(state.currentFrame);
       } else {
         setForceCanvasOverlay(false);
-        streamingFrameProviderRef.current = null;
         playbackRef.current?.stopAll();
         prewarmFrameRef.current = null;
-        if (lookaheadTimerRef.current) {
-          clearInterval(lookaheadTimerRef.current);
-          lookaheadTimerRef.current = null;
-        }
       }
     };
 
