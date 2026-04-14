@@ -6,7 +6,7 @@
  *
  * Key behaviors:
  * - Lazy auto-start: getFrame() for an unknown source triggers async stream init
- * - Backpressure: frame_consumed signals are sent on draw, not receive
+ * - Position-aware throttle: worker stays within 1.5s ahead of playback position
  * - Idle cleanup: sources not requested for IDLE_TIMEOUT_MS are stopped
  *
  * Usage:
@@ -226,7 +226,6 @@ export function createStreamingPlayback(): StreamingPlayback {
   function handleWorkerMessage(event: MessageEvent): void {
     const msg = event.data;
     if (msg.type === 'ready') {
-      diag('worker ready');
       workerReady = true;
       for (const fn of pendingStarts) fn();
       pendingStarts.length = 0;
@@ -326,16 +325,6 @@ export function createStreamingPlayback(): StreamingPlayback {
     return undefined;
   }
 
-  // Dev diagnostics — stash breadcrumbs on window for inspection
-  const diagLog: string[] = [];
-  if (import.meta.env.DEV) {
-    (self as unknown as Record<string, unknown>).__STREAM_LOG__ = diagLog;
-  }
-  function diag(msg: string): void {
-    diagLog.push(`${Date.now()}: ${msg}`);
-    if (diagLog.length > 100) diagLog.shift();
-  }
-
   function postStartMessage(src: string, startTimestamp: number, mediaId?: string): void {
     // Resolve the active blob URL via blobUrlManager when the passed src might be stale.
     // During re-renders (e.g. forceFastScrubOverlay flip), blob URLs get revoked and
@@ -343,19 +332,14 @@ export function createStreamingPlayback(): StreamingPlayback {
     let activeSrc = src;
     if (mediaId) {
       const currentUrl = blobUrlManager.get(mediaId);
-      if (currentUrl && currentUrl !== src) {
-        diag(`resolved stale URL via mediaId=${mediaId}: ${src.slice(0, 30)} → ${currentUrl.slice(0, 30)}`);
-        activeSrc = currentUrl;
-      }
+      if (currentUrl && currentUrl !== src) activeSrc = currentUrl;
     }
 
-    diag(`postStartMessage src=${activeSrc.slice(0, 50)} ts=${startTimestamp} workerReady=${workerReady}`);
     const sourceMetadata = getObjectUrlDirectFileMetadata(activeSrc) ?? undefined;
     const keyframeTimestamps = getKeyframeTimestamps(activeSrc) ?? getKeyframeTimestamps(src);
     const w = ensureWorker();
 
     const doPost = (blob?: Blob) => {
-      diag(`doPost hasBlob=${!!blob} hasMetadata=${!!sourceMetadata} workerReady=${workerReady}`);
       const msg = {
         type: 'stream_start' as const,
         src: activeSrc,
@@ -378,13 +362,11 @@ export function createStreamingPlayback(): StreamingPlayback {
       if (knownBlob) {
         doPost(knownBlob);
       } else if (activeSrc.startsWith('blob:')) {
-        diag(`fetching blob for ${activeSrc.slice(0, 40)}`);
         fetch(activeSrc).then((res) => res.blob()).then((blob) => {
-          diag(`blob fetched size=${blob.size}`);
           blobByUrl.set(activeSrc, blob);
           doPost(blob);
-        }).catch((err) => {
-          diag(`blob fetch FAILED: ${err}`);
+        }).catch(() => {
+          // Blob URL may have been revoked — source can't be decoded
         });
       } else {
         doPost();
@@ -487,7 +469,6 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       // Lazy auto-start: first time we see a source, start streaming
       if (!state || (!state.streaming && !state.autoStartPending)) {
-        diag(`getFrame auto-start src=${activeSrc.slice(0, 50)} mediaId=${mediaId} ts=${targetTimestamp.toFixed(3)}`);
         state = getOrCreateState(activeSrc);
         if (activeSrc !== src) streams.set(src, state);
         state.autoStartPending = true;
@@ -508,14 +489,8 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {
-        if (totalFramesMissed < 5 || totalFramesMissed % 30 === 0) {
-          diag(`getFrame MISS ts=${targetTimestamp.toFixed(4)} bufSize=${state.buffer.size}`);
-        }
         totalFramesMissed++;
         return null;
-      }
-      if (totalFramesDrawn < 3) {
-        diag(`getFrame HIT ts=${targetTimestamp.toFixed(4)} frameTs=${frame.timestamp.toFixed(4)}`);
       }
 
       totalFramesDrawn++;

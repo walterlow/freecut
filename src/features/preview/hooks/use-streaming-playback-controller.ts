@@ -26,29 +26,46 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
-/** Collect (activeSrc, sourceTime, mediaId) for video items visible at the given frame. */
-function collectVisibleVideoPrewarmTargets(
+/** How far ahead (in seconds) to look for upcoming video clips to pre-warm. */
+const LOOKAHEAD_SECONDS = 3;
+
+/**
+ * Collect pre-warm targets: video items visible at the given frame,
+ * plus upcoming clips within LOOKAHEAD_SECONDS that will need streams.
+ */
+function collectPrewarmTargets(
   tracks: TimelineTrack[],
   timelineFrame: number,
   timelineFps: number,
 ): Array<{ src: string; sourceTime: number; mediaId?: string }> {
   const targets: Array<{ src: string; sourceTime: number; mediaId?: string }> = [];
+  const seen = new Set<string>();
+  const lookaheadFrames = Math.round(LOOKAHEAD_SECONDS * timelineFps);
 
   for (const track of tracks) {
     for (const item of track.items) {
       if (item.type !== 'video') continue;
       const videoItem = item as VideoItem;
-      const localFrame = timelineFrame - videoItem.from;
-      if (localFrame < 0 || localFrame >= videoItem.durationInFrames) continue;
 
-      // Resolve active blob URL via mediaId (item.src may be stale)
+      // Skip clips that end before current frame
+      const clipEnd = videoItem.from + videoItem.durationInFrames;
+      if (clipEnd <= timelineFrame) continue;
+
+      // Skip clips that start beyond the lookahead window
+      if (videoItem.from > timelineFrame + lookaheadFrames) continue;
+
       const mediaId = videoItem.mediaId;
       const activeSrc = (mediaId ? blobUrlManager.get(mediaId) : null) ?? videoItem.src;
-      if (!activeSrc) continue;
+      if (!activeSrc || seen.has(activeSrc)) continue;
+      seen.add(activeSrc);
 
       const sourceFps = videoItem.sourceFps ?? timelineFps;
       const speed = videoItem.speed ?? 1;
       const sourceStart = videoItem.sourceStart ?? videoItem.trimStart ?? 0;
+
+      // For visible clips, compute source time at current frame.
+      // For upcoming clips, start from their source beginning.
+      const localFrame = Math.max(0, timelineFrame - videoItem.from);
       const sourceTime = sourceStart / sourceFps + (localFrame / timelineFps) * speed;
 
       targets.push({ src: activeSrc, sourceTime, mediaId });
@@ -108,7 +125,7 @@ export function useStreamingPlaybackController({
     prewarmFrameRef.current = frame;
 
     const playback = getPlayback();
-    const targets = collectVisibleVideoPrewarmTargets(tracksRef.current, frame, fpsRef.current);
+    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
