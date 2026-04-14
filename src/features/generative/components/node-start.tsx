@@ -1,20 +1,17 @@
 import { useCallback, useRef, useState, memo } from 'react';
-import { Button } from '@/components/ui/button';
-import { ImagePlus, Camera, X } from 'lucide-react';
+import { ImagePlus, X } from 'lucide-react';
 import { useGenerativeStore } from '../stores/generative-store';
-import { usePlaybackStore } from '../deps/playback-contract';
 import { ImageGenDialog } from './image-gen-dialog';
 import type { ImageSource } from '../types';
 
 /**
  * Node A: Start Image drop-zone.
- * Users can drag an image, paste from clipboard, capture from the preview canvas,
+ * Users can drag an image, paste from clipboard,
  * or generate one with AI (Nanobanana 2).
  */
 export const NodeStart = memo(function NodeStart() {
   const startImage = useGenerativeStore((s) => s.startImage);
   const setStartImage = useGenerativeStore((s) => s.setStartImage);
-  const [isCapturing, setIsCapturing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -56,22 +53,6 @@ export const NodeStart = memo(function NodeStart() {
     },
     [setStartImage, startImage],
   );
-
-  const handleCapture = useCallback(async () => {
-    setIsCapturing(true);
-    try {
-      const { captureFrame } = usePlaybackStore.getState();
-      if (!captureFrame) return;
-      const dataUrl = await captureFrame();
-      if (!dataUrl) return;
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `capture-${Date.now()}.png`, { type: 'image/png' });
-      handleFile(file);
-    } finally {
-      setIsCapturing(false);
-    }
-  }, [handleFile]);
 
   const previewUrl =
     startImage?.type === 'file'
@@ -133,19 +114,7 @@ export const NodeStart = memo(function NodeStart() {
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
       </div>
-      <div className="flex items-center gap-1">
-        <ImageGenDialog node="start" onImageGenerated={handleImageGenerated} />
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={handleCapture}
-          disabled={isCapturing}
-        >
-          <Camera className="mr-1 h-3 w-3" />
-          {isCapturing ? 'Capturing...' : 'Capture'}
-        </Button>
-      </div>
+      <ImageGenDialog node="start" onImageGenerated={handleImageGenerated} />
     </div>
   );
 });
