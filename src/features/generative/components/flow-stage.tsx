@@ -304,7 +304,7 @@ function getGuidanceText(state: {
   if (state.renderStatus === 'error') return 'Render failed. Check the AI pipeline connection and try again.';
 
   if (!state.hasStartImage) {
-    return 'Drop or click to add a Start Image, or use Capture to grab the current preview frame.';
+    return 'Drop or click to add a Start Image, or use AI Generate to create one.';
   }
   if (state.pipelineLoading) {
     return 'Loading AI pipeline...';
