@@ -236,17 +236,15 @@ export function useStreamingPlaybackController({
     };
   }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
 
-  // When proxy toggle changes, restart streams with the correct source URLs
+  // When proxy toggle changes, restart streams with the correct source URLs.
+  // Must restart even during playback so frames switch immediately.
   useEffect(() => {
     if (!enabledRef.current) return;
     const playback = playbackRef.current;
     if (playback) {
       playback.stopAll();
       prewarmFrameRef.current = null;
-      const state = usePlaybackStore.getState();
-      if (!state.isPlaying) {
-        prewarmAtFrame(state.currentFrame);
-      }
+      prewarmAtFrame(usePlaybackStore.getState().currentFrame);
     }
   }, [useProxy, prewarmAtFrame]);
 
