@@ -457,25 +457,23 @@ export function createStreamingPlayback(): StreamingPlayback {
       // Look up stream by the src the renderer provides (usually the proxy URL),
       // then fall back to the blobUrlManager URL (original). Pre-warm starts
       // streams with proxy URLs, so checking src first avoids a miss.
-      let activeSrc = src;
       let state = streams.get(src) ?? null;
       if (!state && mediaId) {
-        const currentUrl = blobUrlManager.get(mediaId);
-        if (currentUrl) {
-          activeSrc = currentUrl;
-          state = streams.get(currentUrl) ?? null;
+        const fallbackUrl = blobUrlManager.get(mediaId);
+        if (fallbackUrl) {
+          state = streams.get(fallbackUrl) ?? null;
         }
       }
 
-      // Lazy auto-start: first time we see a source, start streaming
+      // Lazy auto-start: use the renderer's src (proxy or original) — not the
+      // blobUrlManager URL which always returns the original.
       if (!state || (!state.streaming && !state.autoStartPending)) {
-        state = getOrCreateState(activeSrc);
-        if (activeSrc !== src) streams.set(src, state);
+        state = getOrCreateState(src);
         state.autoStartPending = true;
         state.lastAccessMs = performance.now();
         state.streaming = true;
         state.autoStartPending = false;
-        postStartMessage(activeSrc, targetTimestamp);
+        postStartMessage(src, targetTimestamp);
 
         totalFramesMissed++;
         return null;
@@ -484,7 +482,7 @@ export function createStreamingPlayback(): StreamingPlayback {
       state.lastAccessMs = performance.now();
 
       // Tell the worker where playback is so it throttles decode-ahead
-      worker?.postMessage({ type: 'playback_position', src: activeSrc, position: targetTimestamp });
+      worker?.postMessage({ type: 'playback_position', src, position: targetTimestamp });
 
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {

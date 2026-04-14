@@ -40,6 +40,7 @@ function collectPrewarmTargets(
   tracks: TimelineTrack[],
   timelineFrame: number,
   timelineFps: number,
+  useProxy: boolean,
 ): Array<{ src: string; sourceTime: number; mediaId?: string }> {
   const targets: Array<{ src: string; sourceTime: number; mediaId?: string }> = [];
   const seen = new Set<string>();
@@ -58,8 +59,8 @@ function collectPrewarmTargets(
       if (videoItem.from > timelineFrame + lookaheadFrames) continue;
 
       const mediaId = videoItem.mediaId;
-      // Prefer proxy (720p) over original — same as the preview render pipeline
-      const proxyUrl = mediaId ? resolveProxyUrl(mediaId) : null;
+      // Match the preview render pipeline: use proxy when enabled, original when not
+      const proxyUrl = useProxy && mediaId ? resolveProxyUrl(mediaId) : null;
       const activeSrc = proxyUrl ?? (mediaId ? blobUrlManager.get(mediaId) : null) ?? videoItem.src;
       if (!activeSrc || seen.has(activeSrc)) continue;
       seen.add(activeSrc);
@@ -120,8 +121,11 @@ export function useStreamingPlaybackController({
   // before play starts. Restarts on seek. Tracks ref holds the latest value.
   const tracksRef = useRef(combinedTracks);
   const fpsRef = useRef(fps);
+  const useProxy = usePlaybackStore((s) => s.useProxy);
+  const useProxyRef = useRef(useProxy);
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
+  useProxyRef.current = useProxy;
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -131,7 +135,7 @@ export function useStreamingPlaybackController({
     prewarmFrameRef.current = frame;
 
     const playback = getPlayback();
-    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current);
+    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
@@ -147,7 +151,7 @@ export function useStreamingPlaybackController({
     if (!enabledRef.current) return;
     const frame = usePlaybackStore.getState().currentFrame;
     const playback = getPlayback();
-    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current);
+    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
@@ -231,6 +235,20 @@ export function useStreamingPlaybackController({
       }
     };
   }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
+
+  // When proxy toggle changes, restart streams with the correct source URLs
+  useEffect(() => {
+    if (!enabledRef.current) return;
+    const playback = playbackRef.current;
+    if (playback) {
+      playback.stopAll();
+      prewarmFrameRef.current = null;
+      const state = usePlaybackStore.getState();
+      if (!state.isPlaying) {
+        prewarmAtFrame(state.currentFrame);
+      }
+    }
+  }, [useProxy, prewarmAtFrame]);
 
   // Clean up on unmount
   useEffect(() => {
