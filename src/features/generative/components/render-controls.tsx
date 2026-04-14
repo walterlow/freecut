@@ -107,7 +107,7 @@ export const RenderControls = memo(function RenderControls() {
   return (
     <div className="flex flex-col items-center gap-4">
       {/* Settings row */}
-      <div className="flex flex-wrap items-end justify-center gap-3">
+      <div className="flex w-full flex-wrap items-end justify-center gap-3 px-2 sm:w-auto sm:px-0">
         {/* Speed */}
         <div className="flex flex-col gap-1">
           <Label className="text-xs">Speed</Label>
@@ -199,7 +199,7 @@ export const RenderControls = memo(function RenderControls() {
         onClick={isGenerating ? cancel : handleGenerate}
         disabled={!isGenerating && !canGenerate}
         variant={isGenerating ? 'destructive' : 'default'}
-        className="min-w-[160px]"
+        className="min-w-[140px] sm:min-w-[160px]"
       >
         {isGenerating ? (
           <>

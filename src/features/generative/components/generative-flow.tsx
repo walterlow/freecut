@@ -25,41 +25,31 @@ export const FlowStage = memo(function FlowStage() {
   const configured = isEvolinkConfigured();
 
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-6 bg-background p-4">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-4 overflow-y-auto bg-background p-3 sm:gap-6 sm:p-4">
       {!configured && <ApiKeyInput />}
 
-      {/* Three-node horizontal layout */}
-      <div className="flex items-center gap-4">
+      {/* Three-node layout: vertical on mobile, horizontal on desktop */}
+      <div className="flex flex-col items-center gap-3 sm:flex-row sm:gap-4">
         {/* Node A: Start Image */}
         <NodeStart />
 
-        {/* Connector arrow */}
-        <svg width="40" height="2" className="text-border">
-          <line
-            x1="0"
-            y1="1"
-            x2="40"
-            y2="1"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="4 4"
-          />
+        {/* Connector: horizontal on desktop, vertical on mobile */}
+        <svg width="40" height="2" className="hidden text-border sm:block">
+          <line x1="0" y1="1" x2="40" y2="1" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
+        </svg>
+        <svg width="2" height="24" className="block text-border sm:hidden">
+          <line x1="1" y1="0" x2="1" y2="24" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
         </svg>
 
         {/* Node B: Video Generation */}
         <NodeBridge onCancelVideo={handleCancelVideo} />
 
-        {/* Connector arrow */}
-        <svg width="40" height="2" className="text-border">
-          <line
-            x1="0"
-            y1="1"
-            x2="40"
-            y2="1"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeDasharray="4 4"
-          />
+        {/* Connector: horizontal on desktop, vertical on mobile */}
+        <svg width="40" height="2" className="hidden text-border sm:block">
+          <line x1="0" y1="1" x2="40" y2="1" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
+        </svg>
+        <svg width="2" height="24" className="block text-border sm:hidden">
+          <line x1="1" y1="0" x2="1" y2="24" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" />
         </svg>
 
         {/* Node C: End Image (Optional) */}

@@ -21,7 +21,7 @@ export const NodeBridge = memo(function NodeBridge({ onCancelVideo }: NodeBridge
   return (
     <div className="flex flex-col items-center gap-2">
       <span className="text-xs font-medium text-muted-foreground">Generated Video</span>
-      <div className="relative flex h-40 w-64 items-center justify-center overflow-hidden rounded-lg border border-border bg-black">
+      <div className="relative flex h-28 w-48 items-center justify-center overflow-hidden rounded-lg border border-border bg-black sm:h-40 sm:w-64">
         {resultVideoUrl ? (
           <VideoResultPlayer url={resultVideoUrl} />
         ) : isGenerating ? (
@@ -40,7 +40,7 @@ export const NodeBridge = memo(function NodeBridge({ onCancelVideo }: NodeBridge
         )}
       </div>
 
-      <div className="flex w-64 flex-col gap-1">
+      <div className="flex w-48 flex-col gap-1 sm:w-64">
         <Label htmlFor="video-prompt" className="text-xs">
           Prompt
         </Label>

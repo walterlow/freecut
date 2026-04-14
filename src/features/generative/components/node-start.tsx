@@ -65,7 +65,7 @@ export const NodeStart = memo(function NodeStart() {
     <div className="flex flex-col items-center gap-2">
       <span className="text-xs font-medium text-muted-foreground">Start Image</span>
       <div
-        className={`relative flex h-40 w-40 items-center justify-center rounded-lg border-2 border-dashed transition-colors ${
+        className={`relative flex h-28 w-28 items-center justify-center rounded-lg border-2 border-dashed transition-colors sm:h-40 sm:w-40 ${
           dragOver
             ? 'border-primary bg-primary/10'
             : 'border-border bg-muted/30 hover:border-primary/50'
