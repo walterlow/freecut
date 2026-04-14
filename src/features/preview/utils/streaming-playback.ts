@@ -472,21 +472,21 @@ export function createStreamingPlayback(): StreamingPlayback {
     getFrame(src: string, targetTimestamp: number, mediaId?: string): ImageBitmap | null {
       if (disposed) return null;
 
-      let state = streams.get(src);
+      // Resolve the active URL via mediaId. The renderer may pass a stale
+      // blob URL from a previous render cycle (e.g. after forceFastScrubOverlay flip).
+      let activeSrc = src;
+      if (mediaId) {
+        const currentUrl = blobUrlManager.get(mediaId);
+        if (currentUrl) activeSrc = currentUrl;
+      }
+
+      // Look up stream by active URL first, then stale URL
+      let state = streams.get(activeSrc) ?? streams.get(src);
 
       // Lazy auto-start: first time we see a source, start streaming
       if (!state || (!state.streaming && !state.autoStartPending)) {
-        // Resolve the active URL via mediaId. The renderer may pass a stale
-        // blob URL from a previous render cycle. We need to key the stream
-        // state by the active URL so worker frame messages match.
-        let activeSrc = src;
-        if (mediaId) {
-          const currentUrl = blobUrlManager.get(mediaId);
-          if (currentUrl) activeSrc = currentUrl;
-        }
         diag(`getFrame auto-start src=${activeSrc.slice(0, 50)} mediaId=${mediaId} ts=${targetTimestamp.toFixed(3)}`);
         state = getOrCreateState(activeSrc);
-        // Also register the original src so future lookups with either URL find the state
         if (activeSrc !== src) streams.set(src, state);
         state.autoStartPending = true;
         state.lastAccessMs = performance.now();

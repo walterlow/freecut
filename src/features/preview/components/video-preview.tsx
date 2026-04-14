@@ -325,7 +325,10 @@ export const VideoPreview = memo(function VideoPreview({
     project.width,
   ]);
 
-  const { forceCanvasOverlay: streamingPlaybackActive, streamingFrameProviderRef } = useStreamingPlaybackController();
+  const { forceCanvasOverlay: streamingPlaybackActive, streamingFrameProviderRef } = useStreamingPlaybackController({
+    fps,
+    combinedTracks,
+  });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const {
     clearTransitionPlaybackSession,
