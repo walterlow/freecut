@@ -35,8 +35,10 @@ const log = createLogger('StreamingPlayback');
 const IDLE_TIMEOUT_MS = 3000;
 /** How often to run the idle cleanup sweep. */
 const IDLE_SWEEP_INTERVAL_MS = 1000;
-/** Maximum frames buffered per source. */
-const MAX_BUFFER_SIZE = 30;
+/** Maximum frames buffered per source. Must be larger than
+ *  MAX_DECODE_AHEAD_SECONDS * max_fps to avoid evicting frames the
+ *  worker just decoded. 90 frames covers 3s@30fps or 1.5s@60fps. */
+const MAX_BUFFER_SIZE = 90;
 /** Source time tolerance for frame lookup (seconds). */
 const FRAME_TOLERANCE_SECONDS = 0.15;
 
@@ -500,6 +502,9 @@ export function createStreamingPlayback(): StreamingPlayback {
       }
 
       state.lastAccessMs = performance.now();
+
+      // Tell the worker where playback is so it throttles decode-ahead
+      worker?.postMessage({ type: 'playback_position', src: activeSrc, position: targetTimestamp });
 
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {

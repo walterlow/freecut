@@ -18,6 +18,12 @@ import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-ur
 
 const TIMESTAMP_EPSILON = 1e-4;
 const STREAM_BACKTRACK_SECONDS = 1.0;
+/** Max seconds the worker may decode ahead of the last known playback position.
+ *  Must be less than the main thread's ring buffer capacity in seconds
+ *  (90 frames / 30fps = 3s) to prevent buffer eviction of undisplayed frames. */
+const MAX_DECODE_AHEAD_SECONDS = 1.5;
+/** How long to sleep when throttled before checking again. */
+const THROTTLE_SLEEP_MS = 50;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,6 +43,9 @@ interface SourceState {
   streaming: boolean;
   /** Incremented on every seek/stop to abort stale stream loops. */
   generation: number;
+  /** Last known playback position (seconds). Updated by main thread.
+   *  Worker throttles decode to stay within MAX_DECODE_AHEAD_SECONDS of this. */
+  playbackPosition: number;
 }
 
 const keyframeIndexBySrc = new Map<string, number[]>();
@@ -149,6 +158,7 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
         duration,
         streaming: false,
         generation: 0,
+        playbackPosition: 0,
       };
       sources.set(src, state);
 
@@ -268,10 +278,16 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
         { transfer: [extracted.frame] },
       );
 
-      // No backpressure — the main thread ring buffer handles overflow.
-      // At ~1ms/frame decode, the worker fills 30 frames in 30ms then
-      // the async generator naturally yields to the event loop, allowing
-      // seek/stop messages to be processed.
+      // Position-aware throttle: don't decode more than MAX_DECODE_AHEAD_SECONDS
+      // ahead of where playback currently is. Without this, the worker races
+      // far ahead during pre-warm, overflowing the main thread's ring buffer
+      // and causing the renderer to show frames from the distant future.
+      while (
+        state.generation === gen
+        && timestamp > state.playbackPosition + MAX_DECODE_AHEAD_SECONDS
+      ) {
+        await new Promise<void>((r) => setTimeout(r, THROTTLE_SLEEP_MS));
+      }
     }
   } catch (error) {
     if (state.generation === gen) {
@@ -311,6 +327,13 @@ self.onmessage = async (event: MessageEvent) => {
     return;
   }
 
+  if (msg.type === 'playback_position') {
+    const { src, position } = msg;
+    const state = sources.get(src);
+    if (state) state.playbackPosition = position;
+    return;
+  }
+
   if (msg.type === 'stream_start') {
     const { src, startTimestamp, blob, sourceMetadata } = msg;
     try {
@@ -320,6 +343,7 @@ self.onmessage = async (event: MessageEvent) => {
         return;
       }
       state.generation++;
+      state.playbackPosition = startTimestamp;
       void runStreamLoop(src, state, startTimestamp);
     } catch (error) {
       self.postMessage({
