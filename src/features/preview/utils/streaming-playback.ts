@@ -328,18 +328,14 @@ export function createStreamingPlayback(): StreamingPlayback {
     return undefined;
   }
 
-  function postStartMessage(src: string, startTimestamp: number, mediaId?: string): void {
-    // Resolve the active blob URL via blobUrlManager when the passed src might be stale.
-    // During re-renders (e.g. forceFastScrubOverlay flip), blob URLs get revoked and
-    // recreated. The mediaId lets us find the current active URL and its blob.
-    let activeSrc = src;
-    if (mediaId) {
-      const currentUrl = blobUrlManager.get(mediaId);
-      if (currentUrl && currentUrl !== src) activeSrc = currentUrl;
-    }
+  function postStartMessage(src: string, startTimestamp: number): void {
+    // The caller is responsible for resolving the correct URL (proxy or original).
+    // We no longer override via blobUrlManager here — that would replace proxy URLs
+    // with original URLs, defeating the proxy resolution in collectPrewarmTargets.
+    const activeSrc = src;
 
     const sourceMetadata = getObjectUrlDirectFileMetadata(activeSrc) ?? undefined;
-    const keyframeTimestamps = getKeyframeTimestamps(activeSrc) ?? getKeyframeTimestamps(src);
+    const keyframeTimestamps = getKeyframeTimestamps(activeSrc);
     const w = ensureWorker();
 
     const doPost = (blob?: Blob) => {
@@ -479,7 +475,7 @@ export function createStreamingPlayback(): StreamingPlayback {
         state.lastAccessMs = performance.now();
         state.streaming = true;
         state.autoStartPending = false;
-        postStartMessage(activeSrc, targetTimestamp, mediaId);
+        postStartMessage(activeSrc, targetTimestamp);
 
         totalFramesMissed++;
         return null;
