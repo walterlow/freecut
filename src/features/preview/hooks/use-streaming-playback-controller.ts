@@ -122,7 +122,7 @@ export function useStreamingPlaybackController({
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const prewarmAtFrame = useCallback((frame: number) => {
+  const prewarmAtFrame = useCallback((frame: number, seekExisting = true) => {
     if (!enabledRef.current) return;
     if (frame === prewarmFrameRef.current) return;
     prewarmFrameRef.current = frame;
@@ -132,7 +132,7 @@ export function useStreamingPlaybackController({
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
-      } else {
+      } else if (seekExisting) {
         playback.seekStream(src, sourceTime);
       }
     }
@@ -158,16 +158,18 @@ export function useStreamingPlaybackController({
   useEffect(() => {
     const initialState = usePlaybackStore.getState();
 
-    // If already playing on mount, activate immediately
-    if (enabledRef.current && initialState.isPlaying) {
-      getPlayback();
+    // Activate provider immediately — it serves both playback and scrub.
+    // During scrub, buffered streaming frames are used when available,
+    // falling through to DOM video / mediabunny on miss.
+    if (enabledRef.current) {
       streamingFrameProviderRef.current = getStreamingFrame;
-      log.info('Playback already active on mount, streaming provider activated');
-    }
 
-    // Pre-warm at the current frame while paused
-    if (enabledRef.current && !initialState.isPlaying) {
-      prewarmAtFrame(initialState.currentFrame);
+      if (initialState.isPlaying) {
+        getPlayback();
+        log.info('Playback already active on mount, streaming provider activated');
+      } else {
+        prewarmAtFrame(initialState.currentFrame);
+      }
     }
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
@@ -190,7 +192,7 @@ export function useStreamingPlaybackController({
           clearInterval(lookaheadTimerRef.current);
           lookaheadTimerRef.current = null;
         }
-        streamingFrameProviderRef.current = null;
+        // Keep streamingFrameProviderRef set — scrub uses it too
         const playback = playbackRef.current;
         if (playback) {
           const metrics = playback.getMetrics();
@@ -204,8 +206,13 @@ export function useStreamingPlaybackController({
         // Pre-warm at the stop position
         prewarmAtFrame(state.currentFrame);
       } else if (!isPlaying && state.currentFrame !== prevState.currentFrame) {
-        // User seeked while paused — pre-warm at new position
-        prewarmAtFrame(state.currentFrame);
+        // User scrubbing while paused — start new streams but don't seek
+        // active ones. Forward scrub keeps the buffer valid; backward
+        // scrub / large jumps fall through to mediabunny on miss.
+        const delta = state.currentFrame - prevState.currentFrame;
+        const isLargeJump = Math.abs(delta) > fpsRef.current * 2;
+        const isBackward = delta < 0;
+        prewarmAtFrame(state.currentFrame, isLargeJump || isBackward);
       }
     });
 
@@ -241,6 +248,7 @@ export function useStreamingPlaybackController({
       log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}`);
 
       if (enabled) {
+        streamingFrameProviderRef.current = getStreamingFrame;
         // Start pre-warm immediately at current playhead
         const state = usePlaybackStore.getState();
         if (!state.isPlaying) {

@@ -73,7 +73,7 @@ export const ADAPTIVE_PREVIEW_QUALITY_ENABLED = true;
  *
  * Toggle via: window.__DEBUG__?.setStreamingPlayback?.(true/false)
  */
-export const STREAMING_PLAYBACK_ENABLED = false;
+export const STREAMING_PLAYBACK_ENABLED = true;
 
 import type { PreviewRenderSource } from './preview-perf-metrics';
 
