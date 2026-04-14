@@ -45,6 +45,9 @@ interface AppSettings {
 
   // Keyboard shortcuts
   hotkeyOverrides: HotkeyOverrideMap;
+
+  // AI Generation (evolink.ai)
+  evolinkApiKey: string;
 }
 
 interface SettingsActions {
@@ -98,6 +101,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Keyboard shortcuts
   hotkeyOverrides: {},
+
+  // AI Generation
+  evolinkApiKey: '',
 };
 
 /**

@@ -1,2 +1,2 @@
-export { FlowStage } from './components/flow-stage';
+export { FlowStage } from './components/generative-flow';
 export { useGenerativeStore } from './stores/generative-store';
