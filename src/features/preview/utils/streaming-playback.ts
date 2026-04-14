@@ -454,14 +454,17 @@ export function createStreamingPlayback(): StreamingPlayback {
     getFrame(src: string, targetTimestamp: number, mediaId?: string): ImageBitmap | null {
       if (disposed) return null;
 
-      // Look up stream by the src the renderer provides (usually the proxy URL),
-      // then fall back to the blobUrlManager URL (original). Pre-warm starts
-      // streams with proxy URLs, so checking src first avoids a miss.
+      // Look up stream by the src the renderer provides, then fall back to
+      // the blobUrlManager URL. Track which URL matched so playback_position
+      // is sent with the correct key (the renderer may have a stale proxy URL
+      // after a mid-playback proxy toggle, but the stream uses the original).
+      let streamSrc = src;
       let state = streams.get(src) ?? null;
       if (!state && mediaId) {
         const fallbackUrl = blobUrlManager.get(mediaId);
         if (fallbackUrl) {
           state = streams.get(fallbackUrl) ?? null;
+          if (state) streamSrc = fallbackUrl;
         }
       }
 
@@ -481,8 +484,10 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       state.lastAccessMs = performance.now();
 
-      // Tell the worker where playback is so it throttles decode-ahead
-      worker?.postMessage({ type: 'playback_position', src, position: targetTimestamp });
+      // Tell the worker where playback is so it throttles decode-ahead.
+      // Use streamSrc (the key the stream was found by), not src (which may
+      // be a stale proxy URL from an un-rebuilt renderer composition).
+      worker?.postMessage({ type: 'playback_position', src: streamSrc, position: targetTimestamp });
 
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {
