@@ -92,14 +92,9 @@ class FrameBuffer {
       return bestBefore;
     }
 
-    // When the worker is behind (decode startup), show the newest frame we have
-    // rather than nothing. A slightly stale frame is better than a blank canvas.
-    if (bestBefore) {
-      return bestBefore;
-    }
-
-    // Fallback: closest frame overall (handles slightly-ahead frames during seek)
-    return this.frames[this.frames.length - 1] ?? null;
+    // Reject stale frames — return null so the renderer falls through to
+    // DOM video instead of showing a frozen frame from seconds ago.
+    return null;
   }
 
   /** Remove frames well behind the playback position. */
@@ -174,6 +169,10 @@ export interface StreamingPlayback {
   getSourceInfo(src: string): SourceInfo | null;
   /** Whether a source is actively streaming. */
   isStreaming(src: string): boolean;
+  /** Update the worker's playback position for a source without reading a frame.
+   *  Keeps the decode-ahead throttle advancing during DOM video playback
+   *  so the buffer is warm when the canvas overlay activates. */
+  updatePosition(src: string, position: number): void;
   /** Enable idle cleanup sweep. Call when playback starts.
    *  Disabled by default so pre-warm streams aren't killed while paused. */
   enableIdleSweep(): void;
@@ -509,6 +508,13 @@ export function createStreamingPlayback(): StreamingPlayback {
 
     isStreaming(src: string): boolean {
       return streams.get(src)?.streaming ?? false;
+    },
+
+    updatePosition(src: string, position: number): void {
+      const state = streams.get(src);
+      if (!state) return;
+      state.lastAccessMs = performance.now();
+      worker?.postMessage({ type: 'playback_position', src, position });
     },
 
     enableIdleSweep(): void {

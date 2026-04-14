@@ -19,9 +19,9 @@ import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-ur
 const TIMESTAMP_EPSILON = 1e-4;
 const STREAM_BACKTRACK_SECONDS = 1.0;
 /** Max seconds the worker may decode ahead of the last known playback position.
- *  Must be less than the main thread's ring buffer capacity in seconds
- *  (90 frames / 30fps = 3s) to prevent buffer eviction of undisplayed frames. */
-const MAX_DECODE_AHEAD_SECONDS = 1.5;
+ *  Matches the main thread's ring buffer capacity (90 frames / 30fps = 3s)
+ *  so the full transition window can be pre-buffered. */
+const MAX_DECODE_AHEAD_SECONDS = 2.5;
 /** How long to sleep when throttled before checking again. */
 const THROTTLE_SLEEP_MS = 50;
 

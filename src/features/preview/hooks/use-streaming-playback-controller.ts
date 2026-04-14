@@ -30,8 +30,9 @@ const log = createLogger('StreamingPlaybackCtrl');
 const TRANSITION_PREWARM_SECONDS = 3;
 
 /** How far ahead (in seconds) to force the canvas overlay before a transition.
- *  By this point the streaming buffers should be warm. */
-const TRANSITION_OVERLAY_LEAD_SECONDS = 0.5;
+ *  The overlay must be active for the main render path to use the streaming
+ *  provider — the transition pre-render path doesn't set it. */
+const TRANSITION_OVERLAY_LEAD_SECONDS = 1;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -60,12 +61,14 @@ interface TransitionPrewarmTarget {
 }
 
 /**
- * Collect pre-warm targets: only video clips that participate in transitions
- * within the lookahead window. For "force all" mode (debug toggle), collects
- * ALL visible video clips.
+ * Collect pre-warm targets: only video clips that overlap with upcoming
+ * transition windows. Uses transition windows for timing only, and finds
+ * the actual clips from the raw timeline tracks (which have full item
+ * properties like mediaId, src, sourceFps, etc.).
  */
 function collectTransitionPrewarmTargets(
   transitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
+  tracks: TimelineTrack[],
   timelineFrame: number,
   timelineFps: number,
   useProxy: boolean,
@@ -74,16 +77,28 @@ function collectTransitionPrewarmTargets(
   const seen = new Set<string>();
   const prewarmFrames = Math.round(TRANSITION_PREWARM_SECONDS * timelineFps);
 
+  // Collect frame ranges of upcoming transitions
+  const transitionRanges: Array<{ start: number; end: number }> = [];
   for (const tw of transitionWindows) {
-    // Skip transitions that ended before current frame
     if (tw.endFrame <= timelineFrame) continue;
-    // Skip transitions beyond the prewarm window
     if (tw.startFrame > timelineFrame + prewarmFrames) continue;
+    transitionRanges.push({ start: tw.startFrame, end: tw.endFrame });
+  }
 
-    // Both clips participate in this transition
-    for (const clip of [tw.leftClip, tw.rightClip]) {
-      if (clip.type !== 'video') continue;
-      const videoItem = clip as VideoItem;
+  if (transitionRanges.length === 0) return targets;
+
+  // Find video clips from the raw timeline that overlap any transition range
+  for (const track of tracks) {
+    for (const item of track.items) {
+      if (item.type !== 'video') continue;
+      const videoItem = item as VideoItem;
+      const clipEnd = videoItem.from + videoItem.durationInFrames;
+
+      const overlapsTransition = transitionRanges.some(
+        (tr) => videoItem.from < tr.end && clipEnd > tr.start,
+      );
+      if (!overlapsTransition) continue;
+
       const src = resolveVideoSrc(videoItem, useProxy);
       if (!src || seen.has(src)) continue;
       seen.add(src);
@@ -208,7 +223,7 @@ export function useStreamingPlaybackController({
       return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
     }
     return collectTransitionPrewarmTargets(
-      transitionWindowsRef.current, frame, fpsRef.current, useProxyRef.current,
+      transitionWindowsRef.current, tracksRef.current, frame, fpsRef.current, useProxyRef.current,
     );
   }, []);
 
@@ -233,11 +248,14 @@ export function useStreamingPlaybackController({
     const frame = state.currentFrame;
     const playback = getPlayback();
 
-    // Start streams for upcoming transition clips
+    // Start streams for upcoming transition clips, and keep existing
+    // streams decoding ahead by sending position updates.
     const targets = getTargets(frame);
     for (const { src, sourceTime } of targets) {
       if (!playback.isStreaming(src)) {
         playback.startStream(src, sourceTime);
+      } else {
+        playback.updatePosition(src, sourceTime);
       }
     }
 
