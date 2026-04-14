@@ -81,7 +81,7 @@ vi.mock('./item', async () => {
   const { useItemKeyframesFromContext } = await import('../contexts/keyframes-context');
 
   return {
-    Item: ({ item, muted }: { item: { id: string; src?: string }; muted?: boolean }) => {
+    Item: ({ item, muted }: { item: { id: string; src?: string; audioSrc?: string }; muted?: boolean }) => {
       const keyframes = useItemKeyframesFromContext(item.id);
       const keyframeCount = keyframes?.properties.reduce((count, property) => count + property.keyframes.length, 0) ?? 0;
 
@@ -91,6 +91,7 @@ vi.mock('./item', async () => {
           data-muted={muted ? 'true' : 'false'}
           data-keyframe-count={String(keyframeCount)}
           data-src={item.src ?? ''}
+          data-audio-src={item.audioSrc ?? ''}
         />
       );
     },
@@ -477,8 +478,20 @@ describe('CompositionContent keyframes', () => {
     expect(screen.getByTestId('sub-item-sub-audio-audio-only')).toBeInTheDocument();
   });
 
-  it('clears stale nested audio src until a fresh blob url exists', () => {
+  it('clears stale nested media src until fresh blob urls exist', () => {
     const subTracks: TimelineTrack[] = [
+      {
+        id: 'sub-track-video-stale',
+        name: 'V1',
+        kind: 'video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
       {
         id: 'sub-track-audio-stale',
         name: 'A1',
@@ -497,6 +510,17 @@ describe('CompositionContent keyframes', () => {
       id: 'sub-comp-stale-audio',
       name: 'Stale audio precomp',
       items: [
+        {
+          id: 'sub-video-stale',
+          type: 'video',
+          trackId: 'sub-track-video-stale',
+          from: 0,
+          durationInFrames: 60,
+          label: 'Nested video',
+          src: 'blob:stale-video',
+          audioSrc: 'blob:stale-video-audio',
+          mediaId: 'media-video-stale',
+        },
         {
           id: 'sub-audio-stale',
           type: 'audio',
@@ -528,24 +552,30 @@ describe('CompositionContent keyframes', () => {
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
         <CompositionContent
           item={{
-            id: 'parent-comp-stale-audio-wrapper',
-            type: 'audio',
-            trackId: 'parent-audio-track',
+            id: 'parent-comp-stale-wrapper',
+            type: 'composition',
+            trackId: 'parent-video-track',
             from: 0,
             durationInFrames: 60,
-            label: 'Nested stale comp audio',
+            label: 'Nested stale comp',
             compositionId: subComp.id,
-            src: '',
+            compositionWidth: 1280,
+            compositionHeight: 720,
           }}
-          renderMode="audio-only"
         />
       </VideoConfigProvider>
     );
 
+    expect(screen.getByTestId('sub-item-sub-video-stale')).toHaveAttribute('data-src', '');
+    expect(screen.getByTestId('sub-item-sub-video-stale')).toHaveAttribute('data-audio-src', '');
     expect(screen.getByTestId('sub-item-sub-audio-stale')).toHaveAttribute('data-src', '');
 
     blobUrlManagerGetSpy.mockImplementation((mediaId: string) => (
-      mediaId === 'media-stale' ? 'blob:fresh-stale-audio' : null
+      mediaId === 'media-stale'
+        ? 'blob:fresh-stale-audio'
+        : mediaId === 'media-video-stale'
+          ? 'blob:fresh-stale-video'
+          : null
     ));
 
     const refreshedSubComp: TestSubComposition = {
@@ -565,20 +595,22 @@ describe('CompositionContent keyframes', () => {
       <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
         <CompositionContent
           item={{
-            id: 'parent-comp-stale-audio-wrapper',
-            type: 'audio',
-            trackId: 'parent-audio-track',
+            id: 'parent-comp-stale-wrapper',
+            type: 'composition',
+            trackId: 'parent-video-track',
             from: 0,
             durationInFrames: 60,
-            label: 'Nested stale comp audio',
+            label: 'Nested stale comp',
             compositionId: subComp.id,
-            src: '',
+            compositionWidth: 1280,
+            compositionHeight: 720,
           }}
-          renderMode="audio-only"
         />
       </VideoConfigProvider>
     );
 
+    expect(screen.getByTestId('sub-item-sub-video-stale')).toHaveAttribute('data-src', 'blob:fresh-stale-video');
+    expect(screen.getByTestId('sub-item-sub-video-stale')).toHaveAttribute('data-audio-src', 'blob:fresh-stale-video');
     expect(screen.getByTestId('sub-item-sub-audio-stale')).toHaveAttribute('data-src', 'blob:fresh-stale-audio');
   });
 

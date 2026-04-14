@@ -984,7 +984,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
     const placementTrackId = placement.trackId;
     const eligibleTracks = resolveEffectiveTrackStates(tracks).filter(
-      (track) => track.visible !== false && !track.locked && !track.muted && !track.isGroup
+      (track) => !track.locked && !track.isGroup
     );
     const activeTrack = activeTrackId
       ? eligibleTracks.find((track) => track.id === activeTrackId)

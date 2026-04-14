@@ -108,7 +108,7 @@ describe('findBestCanvasDropPlacement', () => {
   it('allows disabled tracks when they are not locked', () => {
     const placement = findBestCanvasDropPlacement({
       tracks: [
-        makeTrack('track-1', 0, { muted: true }),
+        makeTrack('track-1', 0, { kind: 'video', visible: false }),
         makeTrack('track-2', 1),
       ],
       items: [],
@@ -121,6 +121,26 @@ describe('findBestCanvasDropPlacement', () => {
     expect(placement).toEqual({
       trackId: 'track-1',
       from: 0,
+      preservedTime: true,
+    });
+  });
+
+  it('never targets group header tracks', () => {
+    const placement = findBestCanvasDropPlacement({
+      tracks: [
+        makeTrack('group-1', 0, { isGroup: true }),
+        makeTrack('track-1', 1, { kind: 'video' }),
+      ],
+      items: [],
+      activeTrackId: 'group-1',
+      proposedFrame: 24,
+      durationInFrames: 30,
+      itemType: 'video',
+    });
+
+    expect(placement).toEqual({
+      trackId: 'track-1',
+      from: 24,
       preservedTime: true,
     });
   });

@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import type { VideoItem } from '@/types/timeline';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useItemsStore } from '../../stores/items-store';
-import { DRAG_OPACITY } from '../../constants';
+import { DRAG_OPACITY } from '@/features/timeline/constants';
 import { dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useDragVisualState } from './use-drag-visual-state';
 

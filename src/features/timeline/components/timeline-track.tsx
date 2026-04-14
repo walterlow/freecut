@@ -1247,7 +1247,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         )}
 
         {/* Render all items for this track - dimmed when the track is disabled */}
-        <TimelineTrackItems trackItems={trackItems} trackLocked={track.locked} trackHidden={isTrackDisabled} />
+        <TimelineTrackItems trackItems={trackItems} trackLocked={isTrackLocked} trackHidden={isTrackDisabled} />
 
         {/* Render transitions for this track */}
         {trackKind !== 'audio' && trackTransitions.map((transition) => (
@@ -1255,7 +1255,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         ))}
 
         {/* Locked track overlay indicator */}
-        {track.locked && (
+        {isTrackLocked && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             <div className="text-xs text-muted-foreground/50 font-mono">LOCKED</div>
           </div>
