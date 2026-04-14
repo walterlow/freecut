@@ -97,7 +97,7 @@ export function useStreamingPlaybackController({
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
   const enabledRef = useRef(STREAMING_PLAYBACK_ENABLED);
-  const [forceCanvasOverlay, setForceCanvasOverlay] = useState(STREAMING_PLAYBACK_ENABLED);
+  const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>(null);
 
   const getPlayback = useCallback((): StreamingPlayback => {
@@ -166,6 +166,7 @@ export function useStreamingPlaybackController({
 
       if (initialState.isPlaying) {
         getPlayback();
+        setForceCanvasOverlay(true);
         log.info('Playback already active on mount, streaming provider activated');
       } else {
         prewarmAtFrame(initialState.currentFrame);
@@ -181,6 +182,7 @@ export function useStreamingPlaybackController({
       if (isPlaying && !wasPlaying) {
         const playback = getPlayback();
         streamingFrameProviderRef.current = getStreamingFrame;
+        setForceCanvasOverlay(true);
         prewarmFrameRef.current = null; // clear so next pause re-prewarms
         playback.enableIdleSweep();
         // Start periodic lookahead for upcoming clips during playback
@@ -188,6 +190,7 @@ export function useStreamingPlaybackController({
         lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 1000);
         log.info('Playback started, streaming provider activated');
       } else if (!isPlaying && wasPlaying) {
+        setForceCanvasOverlay(false);
         if (lookaheadTimerRef.current) {
           clearInterval(lookaheadTimerRef.current);
           lookaheadTimerRef.current = null;
@@ -244,18 +247,19 @@ export function useStreamingPlaybackController({
 
     debugApi.setStreamingPlayback = (enabled: boolean) => {
       enabledRef.current = enabled;
-      setForceCanvasOverlay(enabled);
       log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}`);
 
       if (enabled) {
         streamingFrameProviderRef.current = getStreamingFrame;
-        // Start pre-warm immediately at current playhead
+        // Force overlay only if already playing
         const state = usePlaybackStore.getState();
+        if (state.isPlaying) setForceCanvasOverlay(true);
         if (!state.isPlaying) {
           prewarmFrameRef.current = null; // force re-prewarm
           prewarmAtFrame(state.currentFrame);
         }
       } else {
+        setForceCanvasOverlay(false);
         streamingFrameProviderRef.current = null;
         playbackRef.current?.stopAll();
         prewarmFrameRef.current = null;
