@@ -329,7 +329,6 @@ export const VideoPreview = memo(function VideoPreview({
     fps,
     combinedTracks,
     playbackTransitionWindows,
-    playbackTransitionCooldownFrames,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const {

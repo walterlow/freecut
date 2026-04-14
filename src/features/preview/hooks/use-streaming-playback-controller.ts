@@ -29,10 +29,11 @@ const log = createLogger('StreamingPlaybackCtrl');
  *  The worker needs ~1-2s to init + buffer, so 3s provides headroom. */
 const TRANSITION_PREWARM_SECONDS = 3;
 
-/** How far ahead (in seconds) to force the canvas overlay before a transition.
- *  The overlay must be active for the main render path to use the streaming
- *  provider — the transition pre-render path doesn't set it. */
-const TRANSITION_OVERLAY_LEAD_SECONDS = 1;
+// Streaming is a passive frame source — it does NOT force the canvas overlay.
+// The existing transition rendering system reads streamingFrameProviderRef
+// and uses decoded frames when available, falling through to DOM video on miss.
+// Toggling forceCanvasOverlay mid-playback causes React re-renders that disrupt
+// DOM video elements and the render pump, so we avoid it entirely.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,21 +145,6 @@ function collectAllPrewarmTargets(
   return targets;
 }
 
-/** Check if a frame is within the overlay-lead window of any transition. */
-function isFrameNearTransition(
-  frame: number,
-  windows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
-  leadFrames: number,
-  cooldownFrames: number,
-): boolean {
-  for (const tw of windows) {
-    if (frame >= tw.startFrame - leadFrames && frame < tw.endFrame + cooldownFrames) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -167,7 +153,6 @@ interface UseStreamingPlaybackControllerParams {
   fps: number;
   combinedTracks: TimelineTrack[];
   playbackTransitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>;
-  playbackTransitionCooldownFrames: number;
 }
 
 interface UseStreamingPlaybackControllerResult {
@@ -181,7 +166,6 @@ export function useStreamingPlaybackController({
   fps,
   combinedTracks,
   playbackTransitionWindows,
-  playbackTransitionCooldownFrames,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
   /** When true, stream ALL clips (debug toggle). When false, only transition clips. */
@@ -207,12 +191,10 @@ export function useStreamingPlaybackController({
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const useProxyRef = useRef(useProxy);
   const transitionWindowsRef = useRef(playbackTransitionWindows);
-  const cooldownFramesRef = useRef(playbackTransitionCooldownFrames);
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
   useProxyRef.current = useProxy;
   transitionWindowsRef.current = playbackTransitionWindows;
-  cooldownFramesRef.current = playbackTransitionCooldownFrames;
 
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -259,14 +241,8 @@ export function useStreamingPlaybackController({
       }
     }
 
-    // Toggle canvas overlay based on proximity to transitions
-    if (!forceAllRef.current) {
-      const overlayLeadFrames = Math.round(TRANSITION_OVERLAY_LEAD_SECONDS * fpsRef.current);
-      const nearTransition = isFrameNearTransition(
-        frame, transitionWindowsRef.current, overlayLeadFrames, cooldownFramesRef.current,
-      );
-      setForceCanvasOverlay(nearTransition);
-    }
+    // No overlay toggle — streaming is passive. The existing transition
+    // system handles canvas rendering and uses streamingFrameProviderRef.
   }, [getPlayback, getTargets]);
 
   // Subscribe to playback state
