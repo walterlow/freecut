@@ -1,19 +1,16 @@
-// React and external libraries
-import { useState, useCallback, useEffect, useRef, memo } from 'react';
+import { useCallback, useRef, memo, forwardRef } from 'react';
 
-// Stores and selectors
 import { useTimelineStore } from '../stores/timeline-store';
-
-// Utilities and hooks
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 
+const IO_LANE_HEIGHT = 14;
+const IO_HIT_AREA_HEIGHT = IO_LANE_HEIGHT + 6;
+const IO_HANDLE_WIDTH = 6;
+const IO_HANDLE_COLOR = 'var(--color-timeline-io-handle)';
+
 /**
- * Timeline In/Out Markers Component
- *
- * Renders in and out point markers on the timeline ruler
- * - Vertical bars with 'I' and 'O' flags
- * - Draggable for adjusting marker positions
- * - Synchronized with timeline store
+ * Timeline In/Out Markers — isolated in its own memo boundary so zoom-driven
+ * position updates only re-render these 2 marker divs, not the parent ruler.
  */
 export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
   const inPoint = useTimelineStore((s) => s.inPoint);
@@ -22,164 +19,117 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
   const setOutPoint = useTimelineStore((s) => s.setOutPoint);
   const { frameToPixels, pixelsToFrame } = useTimelineZoomContext();
 
-  const [isDraggingIn, setIsDraggingIn] = useState(false);
-  const [isDraggingOut, setIsDraggingOut] = useState(false);
   const inMarkerRef = useRef<HTMLDivElement>(null);
   const outMarkerRef = useRef<HTMLDivElement>(null);
-
-  // Use refs to avoid stale closures
   const pixelsToFrameRef = useRef(pixelsToFrame);
   const setInPointRef = useRef(setInPoint);
   const setOutPointRef = useRef(setOutPoint);
+  pixelsToFrameRef.current = pixelsToFrame;
+  setInPointRef.current = setInPoint;
+  setOutPointRef.current = setOutPoint;
 
-  // Update refs when functions change
-  useEffect(() => {
-    pixelsToFrameRef.current = pixelsToFrame;
-    setInPointRef.current = setInPoint;
-    setOutPointRef.current = setOutPoint;
-  }, [pixelsToFrame, setInPoint, setOutPoint]);
+  const startDrag = useCallback(
+    (handle: 'in' | 'out') => (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
 
-  // Handle drag start for in-point
-  const handleInMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingIn(true);
-  }, []);
-
-  // Handle drag start for out-point
-  const handleOutMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingOut(true);
-  }, []);
-
-  // Handle dragging in-point
-  useEffect(() => {
-    if (!isDraggingIn) return;
-
-    const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'col-resize';
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const container = inMarkerRef.current?.closest('.timeline-ruler');
+      const container = (handle === 'in' ? inMarkerRef : outMarkerRef)
+        .current?.closest('.timeline-ruler');
       if (!container) return;
 
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const frame = Math.max(0, pixelsToFrameRef.current(x));
+      const setter = handle === 'in' ? setInPointRef : setOutPointRef;
+      const prevCursor = document.body.style.cursor;
+      document.body.style.cursor = 'col-resize';
 
-      // setInPoint will handle validation (moving out-point to last frame if needed)
-      setInPointRef.current(frame);
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingIn(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = originalCursor;
-    };
-  }, [isDraggingIn]);
-
-  // Handle dragging out-point
-  useEffect(() => {
-    if (!isDraggingOut) return;
-
-    const originalCursor = document.body.style.cursor;
-    document.body.style.cursor = 'col-resize';
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const container = outMarkerRef.current?.closest('.timeline-ruler');
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const frame = Math.max(0, pixelsToFrameRef.current(x));
-
-      // setOutPoint will handle validation (moving in-point to frame 0 if needed)
-      setOutPointRef.current(frame);
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingOut(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = originalCursor;
-    };
-  }, [isDraggingOut]);
-
-  const ioHandleColor = 'var(--color-timeline-io-handle)';
-  const ioLaneHeight = 14;
-  const ioHitAreaHeight = ioLaneHeight + 6;
-  const ioHandleWidth = 6;
-  const ioHandleInset = 0;
-
-  const renderMarker = (
-    markerRef: React.RefObject<HTMLDivElement | null>,
-    positionPx: number,
-    onMouseDown: (e: React.MouseEvent) => void,
-    side: 'in' | 'out'
-  ) => (
-    <div
-      ref={markerRef}
-      className="absolute top-0"
-      style={{
-        left: `${positionPx}px`,
-        width: '2px',
-        height: '100%',
-        pointerEvents: 'none',
-        zIndex: 22,
-      }}
-    >
-      {/* Side grip handle aligned to range edge */}
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            bottom: '0px',
-            left: side === 'in' ? `${ioHandleInset}px` : `${-ioHandleWidth}px`,
-            width: `${ioHandleWidth}px`,
-            height: `${ioLaneHeight}px`,
-          borderRadius: '2px',
-          background: `linear-gradient(to bottom, ${ioHandleColor}, color-mix(in oklch, ${ioHandleColor} 75%, black))`,
-          boxShadow: `0 0 6px color-mix(in oklch, ${ioHandleColor} 55%, transparent)`,
-        }}
-      />
-
-      {/* Invisible hit area for dragging */}
-      <div
-        className="absolute pointer-events-auto"
-        style={{
-          bottom: '0px',
-          height: `${ioHitAreaHeight}px`,
-          left: '-8px',
-          width: '18px',
-          cursor: 'col-resize',
-        }}
-        onMouseDown={onMouseDown}
-      />
-    </div>
+      const onMove = (ev: MouseEvent) => {
+        const rect = container.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        setter.current(Math.max(0, pixelsToFrameRef.current(x)));
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        document.body.style.cursor = prevCursor;
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [],
   );
+
+  const handleInDown = useRef(startDrag('in')).current;
+  const handleOutDown = useRef(startDrag('out')).current;
 
   return (
     <>
-      {/* In-point marker */}
-      {inPoint !== null &&
-        renderMarker(inMarkerRef, frameToPixels(inPoint), handleInMouseDown, 'in')}
-
-      {/* Out-point marker */}
-      {outPoint !== null &&
-        renderMarker(outMarkerRef, frameToPixels(outPoint), handleOutMouseDown, 'out')}
+      {inPoint !== null && (
+        <IOMarker
+          ref={inMarkerRef}
+          positionPx={frameToPixels(inPoint)}
+          side="in"
+          onMouseDown={handleInDown}
+        />
+      )}
+      {outPoint !== null && (
+        <IOMarker
+          ref={outMarkerRef}
+          positionPx={frameToPixels(outPoint)}
+          side="out"
+          onMouseDown={handleOutDown}
+        />
+      )}
     </>
   );
 });
+
+interface IOMarkerProps {
+  positionPx: number;
+  side: 'in' | 'out';
+  onMouseDown: (e: React.MouseEvent) => void;
+}
+
+const IOMarker = memo(
+  forwardRef<HTMLDivElement, IOMarkerProps>(function IOMarker({ positionPx, side, onMouseDown }, ref) {
+    return (
+      <div
+        ref={ref}
+        className="absolute top-0"
+        style={{
+          left: positionPx,
+          width: '2px',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 22,
+        }}
+      >
+        {/* Side grip handle */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            bottom: 0,
+            left: side === 'in' ? 0 : -IO_HANDLE_WIDTH,
+            width: IO_HANDLE_WIDTH,
+            height: IO_LANE_HEIGHT,
+            borderRadius: '2px',
+            background: `linear-gradient(to bottom, ${IO_HANDLE_COLOR}, color-mix(in oklch, ${IO_HANDLE_COLOR} 75%, black))`,
+            boxShadow: `0 0 6px color-mix(in oklch, ${IO_HANDLE_COLOR} 55%, transparent)`,
+          }}
+        />
+
+        {/* Invisible hit area for dragging */}
+        <div
+          className="absolute pointer-events-auto"
+          style={{
+            bottom: 0,
+            height: IO_HIT_AREA_HEIGHT,
+            left: -8,
+            width: 18,
+            cursor: 'col-resize',
+          }}
+          onMouseDown={onMouseDown}
+        />
+      </div>
+    );
+  }),
+);
+IOMarker.displayName = 'IOMarker';
