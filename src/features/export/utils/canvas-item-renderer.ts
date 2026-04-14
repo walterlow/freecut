@@ -167,9 +167,10 @@ export interface ItemRenderContext {
 
   // Streaming WebCodecs frame provider (experimental).
   // When set, checked before DOM video and mediabunny paths.
-  // Returns a pre-decoded ImageBitmap for the given source URL and timestamp,
-  // or null if no frame is buffered yet.
-  streamingFrameProvider?: (src: string, sourceTime: number) => ImageBitmap | null;
+  // Returns a pre-decoded ImageBitmap for the given source URL, timestamp, and mediaId,
+  // or null if no frame is buffered yet. mediaId is used to resolve the current
+  // blob URL via blobUrlManager when the passed src is stale from a re-render.
+  streamingFrameProvider?: (src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null;
 
   // Set to true when rendering transition participant clips. Widens the
   // DOM video drift threshold to prefer stale zero-copy frames over
@@ -553,7 +554,7 @@ async function renderVideoItem(
   // === TRY STREAMING WEBCODECS FRAME (experimental) ===
   // When enabled, worker-decoded frames bypass DOM video and mediabunny entirely.
   if (isPreviewMode && rctx.streamingFrameProvider && item.src) {
-    const streamBitmap = rctx.streamingFrameProvider(item.src, sourceTime);
+    const streamBitmap = rctx.streamingFrameProvider(item.src, sourceTime, item.mediaId);
     if (streamBitmap) {
       drawContainedMediaSource(
         ctx,

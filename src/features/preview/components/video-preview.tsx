@@ -325,7 +325,8 @@ export const VideoPreview = memo(function VideoPreview({
     project.width,
   ]);
 
-  const forceFastScrubOverlay = showGpuEffectsOverlay;
+  const { forceCanvasOverlay: streamingPlaybackActive, streamingFrameProviderRef } = useStreamingPlaybackController();
+  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
@@ -448,12 +449,8 @@ export const VideoPreview = memo(function VideoPreview({
     isPausedTransitionOverlayActive,
     trackPlayerSeek,
     recordRenderFrameJitter,
+    streamingFrameProviderRef,
     ...previewRuntimeRefs.renderPumpRefs,
-  });
-  useStreamingPlaybackController({
-    fps,
-    combinedTracks,
-    scrubRendererRef: previewRuntimeRefs.rendererControllerRefs.scrubRendererRef,
   });
   usePreviewMediaPreload({
     fps,

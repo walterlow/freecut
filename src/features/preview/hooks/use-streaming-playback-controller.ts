@@ -6,71 +6,39 @@
  * ImageBitmaps are buffered and provided to the canvas render pipeline,
  * bypassing HTML5 <video> elements entirely.
  *
- * This is experimental — toggle via window.__DEBUG__?.setStreamingPlayback(true)
+ * The coordinator is self-managing: getFrame() lazily auto-starts streams
+ * for new sources and idle cleanup stops streams that are no longer needed.
+ *
+ * The hook exposes a `streamingFrameProviderRef` that the render pump reads
+ * on each frame and sets on the renderer. This avoids timing issues with
+ * renderer creation/destruction during re-renders.
+ *
+ * Toggle via window.__DEBUG__?.setStreamingPlayback(true)
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '../utils/streaming-playback';
 import { STREAMING_PLAYBACK_ENABLED } from '../utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
-import type { TimelineTrack, VideoItem } from '@/types/timeline';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
-type PreviewRenderer = {
-  setStreamingFrameProvider?: (
-    provider: ((src: string, sourceTime: number) => ImageBitmap | null) | undefined,
-  ) => void;
-};
-
-/** Collect src → startTimestamp for all video items visible at the given frame. */
-function collectVisibleVideoSources(
-  tracks: TimelineTrack[],
-  timelineFrame: number,
-  timelineFps: number,
-): Map<string, number> {
-  const sources = new Map<string, number>();
-
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (item.type !== 'video' || !item.src) continue;
-      const videoItem = item as VideoItem;
-      const localFrame = timelineFrame - videoItem.from;
-      if (localFrame < 0 || localFrame >= videoItem.durationInFrames) continue;
-
-      const sourceFps = videoItem.sourceFps ?? timelineFps;
-      const speed = videoItem.speed ?? 1;
-      const sourceStart = videoItem.sourceStart ?? videoItem.trimStart ?? 0;
-      const sourceTime = sourceStart / sourceFps + (localFrame / timelineFps) * speed;
-
-      // Keep the earliest start time per source
-      const existing = sources.get(videoItem.src);
-      if (existing === undefined || sourceTime < existing) {
-        sources.set(videoItem.src, sourceTime);
-      }
-    }
-  }
-
-  return sources;
+interface UseStreamingPlaybackControllerResult {
+  /** Whether streaming playback is enabled — when true, the canvas overlay
+   *  must be forced during playback (same as GPU effects). */
+  forceCanvasOverlay: boolean;
+  /** Ref to the streaming frame provider function. The render pump should
+   *  set this on the renderer before each frame via setStreamingFrameProvider. */
+  streamingFrameProviderRef: React.RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
 }
 
-interface UseStreamingPlaybackControllerParams {
-  fps: number;
-  combinedTracks: TimelineTrack[];
-  scrubRendererRef: React.RefObject<PreviewRenderer | null>;
-}
-
-export function useStreamingPlaybackController({
-  fps,
-  combinedTracks,
-  scrubRendererRef,
-}: UseStreamingPlaybackControllerParams): void {
+export function useStreamingPlaybackController(): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
   const enabledRef = useRef(STREAMING_PLAYBACK_ENABLED);
-  const activeSourcesRef = useRef(new Set<string>());
+  const [forceCanvasOverlay, setForceCanvasOverlay] = useState(STREAMING_PLAYBACK_ENABLED);
+  const streamingFrameProviderRef = useRef<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>(null);
 
-  // Create/get the streaming playback instance
   const getPlayback = useCallback((): StreamingPlayback => {
     if (!playbackRef.current) {
       playbackRef.current = createStreamingPlayback();
@@ -78,14 +46,23 @@ export function useStreamingPlaybackController({
     return playbackRef.current;
   }, []);
 
-  // Frame provider callback for the renderer
-  const getStreamingFrame = useCallback((src: string, sourceTime: number): ImageBitmap | null => {
+  // Frame provider callback — the coordinator handles everything internally
+  const getStreamingFrame = useCallback((src: string, sourceTime: number, mediaId?: string): ImageBitmap | null => {
     if (!playbackRef.current) return null;
-    return playbackRef.current.getFrame(src, sourceTime);
+    return playbackRef.current.getFrame(src, sourceTime, mediaId);
   }, []);
 
-  // Subscribe to playback state changes
+  // Subscribe to playback state: manage streaming lifecycle and expose provider via ref.
+  // The render pump reads streamingFrameProviderRef and sets it on the renderer per-frame,
+  // avoiding timing issues with renderer creation/destruction during re-renders.
   useEffect(() => {
+    // If already playing when this effect mounts, activate immediately
+    if (enabledRef.current && usePlaybackStore.getState().isPlaying) {
+      getPlayback();
+      streamingFrameProviderRef.current = getStreamingFrame;
+      log.info('Playback already active on mount, streaming provider activated');
+    }
+
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!enabledRef.current) return;
 
@@ -93,47 +70,29 @@ export function useStreamingPlaybackController({
       const isPlaying = state.isPlaying;
 
       if (isPlaying && !wasPlaying) {
-        // Playback started — start streaming for visible video sources
-        const playback = getPlayback();
-        const currentFrame = state.currentFrame;
-        const sources = collectVisibleVideoSources(combinedTracks, currentFrame, fps);
-
-        log.info('Starting streaming playback', {
-          frame: currentFrame,
-          sources: sources.size,
-        });
-
-        for (const [src, startTime] of sources) {
-          playback.startStream(src, startTime);
-          activeSourcesRef.current.add(src);
-        }
-
-        // Set the frame provider on the renderer
-        const renderer = scrubRendererRef.current;
-        if (renderer?.setStreamingFrameProvider) {
-          renderer.setStreamingFrameProvider(getStreamingFrame);
-        }
+        getPlayback();
+        streamingFrameProviderRef.current = getStreamingFrame;
+        log.info('Playback started, streaming provider activated');
       } else if (!isPlaying && wasPlaying) {
-        // Playback stopped — stop all streams
+        streamingFrameProviderRef.current = null;
         const playback = playbackRef.current;
         if (playback) {
-          log.info('Stopping streaming playback', {
-            metrics: playback.getMetrics(),
+          const metrics = playback.getMetrics();
+          log.info('Playback stopped', {
+            received: metrics.totalFramesReceived,
+            drawn: metrics.totalFramesDrawn,
+            missed: metrics.totalFramesMissed,
           });
           playback.stopAll();
-          activeSourcesRef.current.clear();
-        }
-
-        // Clear the frame provider
-        const renderer = scrubRendererRef.current;
-        if (renderer?.setStreamingFrameProvider) {
-          renderer.setStreamingFrameProvider(undefined);
         }
       }
     });
 
-    return unsubscribe;
-  }, [combinedTracks, fps, getPlayback, getStreamingFrame, scrubRendererRef]);
+    return () => {
+      unsubscribe();
+      streamingFrameProviderRef.current = null;
+    };
+  }, [getPlayback, getStreamingFrame]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -153,19 +112,12 @@ export function useStreamingPlaybackController({
 
     debugApi.setStreamingPlayback = (enabled: boolean) => {
       enabledRef.current = enabled;
+      setForceCanvasOverlay(enabled);
       log.info(`Streaming playback ${enabled ? 'enabled' : 'disabled'}`);
 
       if (!enabled) {
-        // Stop any active streams
-        const playback = playbackRef.current;
-        if (playback) {
-          playback.stopAll();
-          activeSourcesRef.current.clear();
-        }
-        const renderer = scrubRendererRef.current;
-        if (renderer?.setStreamingFrameProvider) {
-          renderer.setStreamingFrameProvider(undefined);
-        }
+        streamingFrameProviderRef.current = null;
+        playbackRef.current?.stopAll();
       }
     };
 
@@ -177,5 +129,7 @@ export function useStreamingPlaybackController({
       delete debugApi.setStreamingPlayback;
       delete debugApi.streamingPlaybackMetrics;
     };
-  }, [scrubRendererRef]);
+  }, []);
+
+  return { forceCanvasOverlay, streamingFrameProviderRef };
 }

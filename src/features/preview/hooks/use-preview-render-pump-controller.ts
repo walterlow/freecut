@@ -150,6 +150,9 @@ interface UsePreviewRenderPumpParams {
     transitionId: string | null,
     progress: number | null,
   ) => void;
+  /** Ref to streaming frame provider from useStreamingPlaybackController.
+   *  When non-null, the render pump sets it on the renderer before each frame. */
+  streamingFrameProviderRef?: RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
 }
 
 export function usePreviewRenderPump({
@@ -228,6 +231,7 @@ export function usePreviewRenderPump({
   isPausedTransitionOverlayActive,
   trackPlayerSeek,
   recordRenderFrameJitter,
+  streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
   useEffect(() => {
     scrubMountedRef.current = true;
@@ -598,6 +602,10 @@ export function usePreviewRenderPump({
               renderer.setDomVideoElementProvider?.(getPinnedTransitionElementForItem);
             } else {
               renderer.setDomVideoElementProvider?.(undefined);
+            }
+            // Set streaming frame provider when available (experimental WebCodecs playback)
+            if ('setStreamingFrameProvider' in renderer) {
+              renderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
             }
           }
 

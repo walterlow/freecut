@@ -259,7 +259,9 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
   state.paused = false;
 
   const streamStart = getStreamStart(src, startTimestamp);
+  self.postMessage({ type: 'debug', step: 'stream_loop_starting', src: src.slice(0, 50), streamStart, startTimestamp });
   const iterator = state.sink.samples(streamStart, Infinity) as AsyncGenerator<MBSample, void, unknown>;
+  let frameCount = 0;
 
   try {
     for await (const sample of iterator) {
@@ -289,6 +291,10 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
 
       // Post frame to main thread (bitmap is in data AND transfer list for zero-copy)
       state.inflightCount++;
+      frameCount++;
+      if (frameCount <= 3) {
+        self.postMessage({ type: 'debug', step: 'posting_frame', frameCount, timestamp, bitmapWidth: bitmap.width, bitmapHeight: bitmap.height });
+      }
       self.postMessage(
         {
           type: 'frame',
@@ -357,12 +363,14 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (msg.type === 'stream_start') {
     const { src, startTimestamp, blob, sourceMetadata } = msg;
+    self.postMessage({ type: 'debug', step: 'stream_start_received', src: src?.slice(0, 50), hasBlob: !!blob, hasMetadata: !!sourceMetadata, startTimestamp });
     try {
       const state = await getOrInitSource(src, { blob, sourceMetadata });
       if (!state) {
-        self.postMessage({ type: 'error', src, message: 'Failed to init source' });
+        self.postMessage({ type: 'error', src, message: 'Failed to init source — getOrInitSource returned null' });
         return;
       }
+      self.postMessage({ type: 'debug', step: 'source_initialized', src: src?.slice(0, 50), width: state.width, height: state.height });
       // Bump generation to abort any existing stream loop
       state.generation++;
       if (state.resumeResolve) {
@@ -375,7 +383,7 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({
         type: 'error',
         src,
-        message: error instanceof Error ? error.message : String(error),
+        message: `stream_start failed: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
     return;
