@@ -553,8 +553,8 @@ async function renderVideoItem(
 
   // === TRY STREAMING WEBCODECS FRAME ===
   // When enabled, worker-decoded frames bypass DOM video and mediabunny entirely.
-  // On buffer miss, skip DOM video fallback to avoid flicker from mixed sources.
-  // Pre-warm + 3s lookahead ensures frames are buffered before they're needed.
+  // On buffer miss, fall through to DOM video so transitions and cold-start clips
+  // show a frame rather than black.
   if (isPreviewMode && rctx.streamingFrameProvider && item.src) {
     const streamBitmap = rctx.streamingFrameProvider(item.src, sourceTime, item.mediaId);
     if (streamBitmap) {
@@ -569,10 +569,9 @@ async function renderVideoItem(
         undefined,
         rctx.canvasPool,
       );
+      return;
     }
-    // Whether we drew a frame or not, streaming owns this source —
-    // don't fall through to DOM video / mediabunny.
-    return;
+    // No frame buffered yet — fall through to DOM video / mediabunny
   }
 
   const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0

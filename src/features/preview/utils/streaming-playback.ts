@@ -174,6 +174,9 @@ export interface StreamingPlayback {
   getSourceInfo(src: string): SourceInfo | null;
   /** Whether a source is actively streaming. */
   isStreaming(src: string): boolean;
+  /** Enable idle cleanup sweep. Call when playback starts.
+   *  Disabled by default so pre-warm streams aren't killed while paused. */
+  enableIdleSweep(): void;
   /** Dispose all resources. */
   dispose(): void;
   /** Metrics for debugging. */
@@ -425,7 +428,6 @@ export function createStreamingPlayback(): StreamingPlayback {
       state.autoStartPending = false;
 
       postStartMessage(src, startTimestamp);
-      startIdleSweep();
     },
 
     seekStream(src: string, timestamp: number): void {
@@ -476,7 +478,6 @@ export function createStreamingPlayback(): StreamingPlayback {
         state.streaming = true;
         state.autoStartPending = false;
         postStartMessage(activeSrc, targetTimestamp, mediaId);
-        startIdleSweep();
 
         totalFramesMissed++;
         return null;
@@ -507,6 +508,10 @@ export function createStreamingPlayback(): StreamingPlayback {
 
     isStreaming(src: string): boolean {
       return streams.get(src)?.streaming ?? false;
+    },
+
+    enableIdleSweep(): void {
+      startIdleSweep();
     },
 
     dispose(): void {

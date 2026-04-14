@@ -26,8 +26,10 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
-/** How far ahead (in seconds) to look for upcoming video clips to pre-warm. */
-const LOOKAHEAD_SECONDS = 3;
+/** How far ahead (in seconds) to look for upcoming video clips to pre-warm.
+ *  5s gives the worker enough time to init new sources (~1-2s) and buffer
+ *  frames before playback reaches them. */
+const LOOKAHEAD_SECONDS = 5;
 
 /**
  * Collect pre-warm targets: video items visible at the given frame,
@@ -118,6 +120,7 @@ export function useStreamingPlaybackController({
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
   const prewarmFrameRef = useRef<number | null>(null);
+  const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const prewarmAtFrame = useCallback((frame: number) => {
     if (!enabledRef.current) return;
@@ -131,6 +134,20 @@ export function useStreamingPlaybackController({
         playback.startStream(src, sourceTime);
       } else {
         playback.seekStream(src, sourceTime);
+      }
+    }
+  }, [getPlayback]);
+
+  /** During playback, periodically scan for upcoming clips and start their
+   *  decode streams early. Only starts NEW streams — existing ones keep running. */
+  const runPlaybackLookahead = useCallback(() => {
+    if (!enabledRef.current) return;
+    const frame = usePlaybackStore.getState().currentFrame;
+    const playback = getPlayback();
+    const targets = collectPrewarmTargets(tracksRef.current, frame, fpsRef.current);
+    for (const { src, sourceTime } of targets) {
+      if (!playback.isStreaming(src)) {
+        playback.startStream(src, sourceTime);
       }
     }
   }, [getPlayback]);
@@ -160,11 +177,19 @@ export function useStreamingPlaybackController({
       const isPlaying = state.isPlaying;
 
       if (isPlaying && !wasPlaying) {
-        getPlayback();
+        const playback = getPlayback();
         streamingFrameProviderRef.current = getStreamingFrame;
         prewarmFrameRef.current = null; // clear so next pause re-prewarms
+        playback.enableIdleSweep();
+        // Start periodic lookahead for upcoming clips during playback
+        if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
+        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 1000);
         log.info('Playback started, streaming provider activated');
       } else if (!isPlaying && wasPlaying) {
+        if (lookaheadTimerRef.current) {
+          clearInterval(lookaheadTimerRef.current);
+          lookaheadTimerRef.current = null;
+        }
         streamingFrameProviderRef.current = null;
         const playback = playbackRef.current;
         if (playback) {
@@ -187,8 +212,12 @@ export function useStreamingPlaybackController({
     return () => {
       unsubscribe();
       streamingFrameProviderRef.current = null;
+      if (lookaheadTimerRef.current) {
+        clearInterval(lookaheadTimerRef.current);
+        lookaheadTimerRef.current = null;
+      }
     };
-  }, [getPlayback, getStreamingFrame, prewarmAtFrame]);
+  }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -222,6 +251,10 @@ export function useStreamingPlaybackController({
         streamingFrameProviderRef.current = null;
         playbackRef.current?.stopAll();
         prewarmFrameRef.current = null;
+        if (lookaheadTimerRef.current) {
+          clearInterval(lookaheadTimerRef.current);
+          lookaheadTimerRef.current = null;
+        }
       }
     };
 
