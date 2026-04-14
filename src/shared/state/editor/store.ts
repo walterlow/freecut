@@ -19,6 +19,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarWidth: loadNumber('editor:rightSidebarWidth', 320),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
+  previewMode: 'program',
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -37,4 +38,9 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   },
   setTimelineHeight: (height) => set({ timelineHeight: height }),
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
+  setPreviewMode: (mode) => set({ previewMode: mode }),
+  togglePreviewMode: () =>
+    set((state) => ({
+      previewMode: state.previewMode === 'program' ? 'flow-stage' : 'program',
+    })),
 }));

@@ -18,7 +18,9 @@ import {
   Github,
   Keyboard,
   Settings,
+  Sparkles,
 } from 'lucide-react';
+import { useEditorStore } from '@/shared/state/editor';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { SettingsDialog } from './settings-dialog';
@@ -93,6 +95,9 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
           </span>
         </div>
       </div>
+
+      {/* Flow Stage Toggle */}
+      <FlowStageToggle />
 
       <div className="flex-1" />
 
@@ -182,3 +187,22 @@ export const Toolbar = memo(function Toolbar({ project, isDirty = false, onSave,
     </div>
   );
 });
+
+function FlowStageToggle() {
+  const previewMode = useEditorStore((s) => s.previewMode);
+  const togglePreviewMode = useEditorStore((s) => s.togglePreviewMode);
+
+  return (
+    <Button
+      variant={previewMode === 'flow-stage' ? 'default' : 'outline'}
+      size="sm"
+      className="gap-1.5"
+      onClick={togglePreviewMode}
+      data-tooltip={previewMode === 'flow-stage' ? 'Switch to Program Monitor' : 'Switch to Flow Stage'}
+      data-tooltip-side="bottom"
+    >
+      <Sparkles className="w-3.5 h-3.5" />
+      Flow
+    </Button>
+  );
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, memo, useMemo, lazy, Suspense } from 'react';
 import { Columns2 } from 'lucide-react';
 import {
   VideoPreview,
@@ -10,6 +10,11 @@ import {
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useEditorStore } from '@/shared/state/editor';
+import { ErrorBoundary } from '@/components/error-boundary';
+
+const LazyFlowStage = lazy(() =>
+  import('@/features/editor/deps/generative').then((m) => ({ default: m.FlowStage }))
+);
 
 interface PreviewAreaProps {
   project: {
@@ -130,6 +135,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   );
 
   const sourcePreviewMediaId = useEditorStore((s) => s.sourcePreviewMediaId);
+  const previewMode = useEditorStore((s) => s.previewMode);
 
   // Split ratio for source/program monitors (percentage for left panel)
   const [splitPercent, setSplitPercent] = useState(50);
@@ -263,13 +269,23 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* Video Preview Canvas */}
-          <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden">
-            <VideoPreview
-              project={liveProject}
-              containerSize={containerSize}
-              suspendOverlay={isSplitDragging}
-            />
+          {/* Video Preview Canvas or Flow Stage */}
+          <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden" aria-label="Preview canvas region">
+            {previewMode === 'flow-stage' ? (
+              <ErrorBoundary level="component">
+                <Suspense fallback={null}>
+                  <LazyFlowStage />
+                </Suspense>
+              </ErrorBoundary>
+            ) : (
+              <ErrorBoundary level="component">
+                <VideoPreview
+                  project={liveProject}
+                  containerSize={containerSize}
+                  suspendOverlay={isSplitDragging}
+                />
+              </ErrorBoundary>
+            )}
           </div>
 
           {/* Playback Controls */}

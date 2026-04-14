@@ -1,3 +1,5 @@
+export type PreviewMode = 'program' | 'flow-stage';
+
 export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;
   leftSidebarOpen: boolean;
@@ -7,6 +9,7 @@ export interface EditorState {
   rightSidebarWidth: number;
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
+  previewMode: PreviewMode;
 }
 
 export interface EditorActions {
@@ -20,4 +23,6 @@ export interface EditorActions {
   setRightSidebarWidth: (width: number) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
+  setPreviewMode: (mode: PreviewMode) => void;
+  togglePreviewMode: () => void;
 }

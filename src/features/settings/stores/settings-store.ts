@@ -22,6 +22,8 @@ interface AppSettings {
   maxUndoHistory: number;
   autoSaveInterval: number; // minutes (0 = disabled)
 
+  // AI Generation (evolink.ai)
+  evolinkApiKey: string;
 }
 
 interface SettingsActions {
@@ -48,6 +50,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   // Performance
   maxUndoHistory: 50,
   autoSaveInterval: 0, // Auto-save disabled by default
+
+  // AI Generation
+  evolinkApiKey: '',
 };
 
 /**
