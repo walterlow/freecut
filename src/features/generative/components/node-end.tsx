@@ -13,10 +13,13 @@ export const NodeEnd = memo(function NodeEnd() {
   const handleFile = useCallback(
     (file: File) => {
       if (!file.type.startsWith('image/')) return;
+      if (endImage?.type === 'file') {
+        URL.revokeObjectURL(endImage.objectUrl);
+      }
       const objectUrl = URL.createObjectURL(file);
       setEndImage({ type: 'file', blob: file, objectUrl });
     },
-    [setEndImage],
+    [setEndImage, endImage],
   );
 
   const handleDrop = useCallback(

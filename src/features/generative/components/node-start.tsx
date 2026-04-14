@@ -21,10 +21,13 @@ export const NodeStart = memo(function NodeStart() {
   const handleFile = useCallback(
     (file: File) => {
       if (!file.type.startsWith('image/')) return;
+      if (startImage?.type === 'file') {
+        URL.revokeObjectURL(startImage.objectUrl);
+      }
       const objectUrl = URL.createObjectURL(file);
       setStartImage({ type: 'file', blob: file, objectUrl });
     },
-    [setStartImage],
+    [setStartImage, startImage],
   );
 
   const handleDrop = useCallback(

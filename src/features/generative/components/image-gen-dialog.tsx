@@ -68,22 +68,27 @@ export const ImageGenDialog = memo(function ImageGenDialog({
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) return;
 
-    const response = await submitImageGeneration({
-      prompt: prompt.trim(),
-      size: imageSize,
-      quality: imageQuality,
-    });
+    try {
+      const response = await submitImageGeneration({
+        prompt: prompt.trim(),
+        size: imageSize,
+        quality: imageQuality,
+      });
 
-    const resultUrl = await startPolling(response.id, (signal) =>
-      getImageTaskDetail(response.id, signal),
-    );
+      const resultUrl = await startPolling(response.id, (signal) =>
+        getImageTaskDetail(response.id, signal),
+      );
 
-    if (resultUrl) {
-      onImageGenerated({ type: 'generated', url: resultUrl, prompt: prompt.trim() });
-      setOpen(false);
-      setPrompt('');
+      if (resultUrl) {
+        onImageGenerated({ type: 'generated', url: resultUrl, prompt: prompt.trim() });
+        setOpen(false);
+        setPrompt('');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to generate image';
+      setTask({ status: 'failed', error: message });
     }
-  }, [prompt, imageSize, imageQuality, startPolling, onImageGenerated]);
+  }, [prompt, imageSize, imageQuality, startPolling, onImageGenerated, setTask]);
 
   const isGenerating = task.status === 'pending' || task.status === 'processing';
   const configured = isEvolinkConfigured();

@@ -1,22 +1,15 @@
 import { createLogger } from '@/shared/logging/logger';
+import { useSettingsStore } from '../deps/settings';
 
 const log = createLogger('EvolinkClient');
 
 const BASE_URL = 'https://api.evolink.ai/v1';
 
-/** Resolve the API key: settings store (localStorage) → env var fallback. */
+/** Resolve the API key: settings store → env var fallback. */
 function getApiKey(): string | null {
-  // Dynamic import avoided — read directly from localStorage for the persisted settings store.
-  try {
-    const raw = localStorage.getItem('freecut-settings');
-    if (raw) {
-      const parsed = JSON.parse(raw) as { state?: { evolinkApiKey?: string } };
-      const key = parsed?.state?.evolinkApiKey;
-      if (key?.trim()) return key.trim();
-    }
-  } catch {
-    // ignore parse errors
-  }
+  const key = useSettingsStore.getState().evolinkApiKey;
+  if (key?.trim()) return key.trim();
+
   // Fallback to env var (dev convenience)
   const envKey = import.meta.env.VITE_EVOLINK_API_KEY as string | undefined;
   return envKey?.trim() || null;
