@@ -17,7 +17,7 @@ export type TransitionPreviewSessionTrace = {
   startedAtMs: number;
   startFrame: number;
   endFrame: number;
-  mode: 'dom' | 'render';
+  mode: 'render';
   complex: boolean;
   leftClipId: string;
   rightClipId: string;

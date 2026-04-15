@@ -33,15 +33,12 @@ describe('frame-source-policy', () => {
     expect(decision.driftThreshold).toBe(0.2);
   });
 
-  it('widens DOM video tolerance when transition hold is active', () => {
+  it('widens DOM video tolerance while rendering a transition', () => {
     const decision = resolvePreviewDomVideoDrawDecision({
-      domVideo: makeDomVideo({
-        currentTime: 10.8,
-        dataset: { transitionHold: '1' } as DOMStringMap,
-      }),
+      domVideo: makeDomVideo({ currentTime: 10.8 }),
       sourceTime: 10,
       speed: 1,
-      isRenderingTransition: false,
+      isRenderingTransition: true,
     });
 
     expect(decision.shouldDraw).toBe(true);

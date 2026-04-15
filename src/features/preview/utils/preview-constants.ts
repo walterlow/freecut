@@ -65,27 +65,6 @@ export const PREVIEW_PERF_RENDER_SOURCE_HISTORY_MAX = 6;
 export const PREVIEW_PERF_SEEK_TIMEOUT_MS = 2500;
 export const ADAPTIVE_PREVIEW_QUALITY_ENABLED = true;
 
-export type StreamingPlaybackMode = 'all';
-
-/**
- * Experimental: Use WebCodecs streaming decode for video playback instead of
- * HTML5 <video> elements. Full-playback streaming is the only supported mode
- * so the preview uses the same mediabunny decode path for regular playback
- * and transition playback.
- */
-export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'all';
-
-export function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
-  void mode;
-  return true;
-}
-
-/**
- * Legacy boolean alias for older debug/test code paths.
- * Always true now that preview playback no longer has a rollback mode.
- */
-export const STREAMING_PLAYBACK_ENABLED = true;
-
 import type { PreviewRenderSource } from './preview-perf-metrics';
 
 export type VideoSourceSpan = { src: string; startFrame: number; endFrame: number };
@@ -94,7 +73,6 @@ export type PreviewPerfSnapshot = {
   ts: number;
   unresolvedQueue: number;
   pendingResolves: number;
-  streamingPlaybackMode: StreamingPlaybackMode;
   visualPlaybackMode: import('@/shared/state/preview-bridge').PreviewVisualPlaybackMode;
   renderSource: PreviewRenderSource;
   renderSourceSwitches: number;
@@ -150,7 +128,7 @@ export type PreviewPerfSnapshot = {
   adaptiveQualityDowngrades: number;
   adaptiveQualityRecovers: number;
   transitionSessionActive: boolean;
-  transitionSessionMode: 'none' | 'dom' | 'render';
+  transitionSessionMode: 'none' | 'render';
   transitionSessionComplex: boolean;
   transitionSessionStartFrame: number;
   transitionSessionEndFrame: number;

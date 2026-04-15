@@ -32,11 +32,6 @@ import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
-import {
-  DEFAULT_STREAMING_PLAYBACK_MODE,
-  isFullStreamingPlaybackMode,
-  type StreamingPlaybackMode,
-} from '../utils/preview-constants';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 
 interface VideoPreviewProps {
@@ -141,7 +136,6 @@ export const VideoPreview = memo(function VideoPreview({
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
   const setVisualPlaybackMode = usePreviewBridgeStore((s) => s.setVisualPlaybackMode);
   const setStreamingAudioProvider = usePreviewBridgeStore((s) => s.setStreamingAudioProvider);
-  const streamingPlaybackModeRef = useRef<StreamingPlaybackMode>(DEFAULT_STREAMING_PLAYBACK_MODE);
   const visualPlaybackModeRef = useRef<PreviewVisualPlaybackMode>('player');
 
   const {
@@ -173,7 +167,6 @@ export const VideoPreview = memo(function VideoPreview({
     recordRenderFrameJitter,
   } = usePreviewDiagnostics({
     renderSourceRef,
-    streamingPlaybackModeRef,
     visualPlaybackModeRef,
   });
 
@@ -231,7 +224,6 @@ export const VideoPreview = memo(function VideoPreview({
     transitionSessionTraceRef,
     transitionTelemetryRef,
     transitionSessionBufferedFramesRef,
-    streamingPlaybackModeRef,
     visualPlaybackModeRef,
     renderSourceRef,
     renderSourceSwitchCountRef,
@@ -339,7 +331,6 @@ export const VideoPreview = memo(function VideoPreview({
   ]);
 
   const {
-    streamingPlaybackMode,
     forceCanvasOverlay: streamingPlaybackActive,
     streamingFrameProviderRef,
     streamingAudioProvider,
@@ -348,10 +339,7 @@ export const VideoPreview = memo(function VideoPreview({
     combinedTracks,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
-  const visualPlaybackMode = isPlaying && isFullStreamingPlaybackMode(streamingPlaybackMode)
-    ? 'streaming'
-    : 'player';
-  streamingPlaybackModeRef.current = streamingPlaybackMode;
+  const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying ? 'streaming' : 'player';
   visualPlaybackModeRef.current = visualPlaybackMode;
 
   useEffect(() => {

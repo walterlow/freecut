@@ -2,7 +2,6 @@ import { useCallback, useRef, type MutableRefObject } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { PreviewPerfSnapshot } from '../utils/preview-constants';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
-import type { StreamingPlaybackMode } from '../utils/preview-constants';
 
 let devJitterMonitor: import('@/shared/logging/frame-jitter-monitor').FrameJitterMonitor | null = null;
 if (import.meta.env.DEV) {
@@ -49,13 +48,11 @@ export interface PreviewPerfStats {
 
 interface UsePreviewDiagnosticsParams {
   renderSourceRef: MutableRefObject<PreviewPerfSnapshot['renderSource']>;
-  streamingPlaybackModeRef: MutableRefObject<StreamingPlaybackMode>;
   visualPlaybackModeRef: MutableRefObject<PreviewVisualPlaybackMode>;
 }
 
 export function usePreviewDiagnostics({
   renderSourceRef,
-  streamingPlaybackModeRef,
   visualPlaybackModeRef,
 }: UsePreviewDiagnosticsParams) {
   const previewPerfRef = useRef<PreviewPerfStats>({
@@ -100,7 +97,6 @@ export function usePreviewDiagnostics({
     const nextEntry: Record<string, unknown> = {
       ts: Date.now(),
       phase,
-      streamingPlaybackMode: streamingPlaybackModeRef.current,
       visualPlaybackMode: visualPlaybackModeRef.current,
       renderSource: renderSourceRef.current,
       currentFrame: usePlaybackStore.getState().currentFrame,
@@ -108,7 +104,7 @@ export function usePreviewDiagnostics({
     };
     const history = window.__PREVIEW_TRANSITIONS__ ?? [];
     window.__PREVIEW_TRANSITIONS__ = [...history.slice(-99), nextEntry];
-  }, [renderSourceRef, streamingPlaybackModeRef, visualPlaybackModeRef]);
+  }, [renderSourceRef, visualPlaybackModeRef]);
 
   const recordRenderFrameJitter = useCallback((
     frame: number,

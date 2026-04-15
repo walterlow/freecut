@@ -10,7 +10,6 @@ import {
   PREVIEW_PERF_PUBLISH_INTERVAL_MS,
   PREVIEW_PERF_SEEK_TIMEOUT_MS,
   type PreviewPerfSnapshot,
-  type StreamingPlaybackMode,
 } from '../utils/preview-constants';
 import {
   recordSeekLatency,
@@ -71,7 +70,6 @@ interface UsePreviewPerfPublisherParams {
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>;
   transitionTelemetryRef: MutableRefObject<TransitionPreviewTelemetry>;
   transitionSessionBufferedFramesRef: MutableRefObject<Map<number, OffscreenCanvas>>;
-  streamingPlaybackModeRef: MutableRefObject<StreamingPlaybackMode>;
   visualPlaybackModeRef: MutableRefObject<PreviewVisualPlaybackMode>;
   renderSourceRef: MutableRefObject<PreviewPerfSnapshot['renderSource']>;
   renderSourceSwitchCountRef: MutableRefObject<number>;
@@ -86,7 +84,6 @@ export function usePreviewPerfPublisher({
   transitionSessionTraceRef,
   transitionTelemetryRef,
   transitionSessionBufferedFramesRef,
-  streamingPlaybackModeRef,
   visualPlaybackModeRef,
   renderSourceRef,
   renderSourceSwitchCountRef,
@@ -154,7 +151,6 @@ export function usePreviewPerfPublisher({
         ts: Date.now(),
         unresolvedQueue: getUnresolvedQueueSize(),
         pendingResolves: getPendingResolveCount(),
-        streamingPlaybackMode: streamingPlaybackModeRef.current,
         visualPlaybackMode: visualPlaybackModeRef.current,
         renderSource: renderSourceRef.current,
         renderSourceSwitches: renderSourceSwitchCountRef.current,
@@ -250,7 +246,6 @@ export function usePreviewPerfPublisher({
     transitionSessionBufferedFramesRef,
     transitionSessionTraceRef,
     transitionTelemetryRef,
-    streamingPlaybackModeRef,
     visualPlaybackModeRef,
   ]);
 

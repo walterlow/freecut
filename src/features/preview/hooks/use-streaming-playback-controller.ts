@@ -7,10 +7,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
-import {
-  DEFAULT_STREAMING_PLAYBACK_MODE,
-  type StreamingPlaybackMode,
-} from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -93,8 +89,6 @@ interface UseStreamingPlaybackControllerParams {
 }
 
 interface UseStreamingPlaybackControllerResult {
-  /** Current streaming playback mode configuration. */
-  streamingPlaybackMode: StreamingPlaybackMode;
   /** Whether the canvas overlay must be forced for streaming playback. */
   forceCanvasOverlay: boolean;
   /** Ref to the streaming frame provider function. */
@@ -108,7 +102,6 @@ export function useStreamingPlaybackController({
   combinedTracks,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  const streamingPlaybackMode: StreamingPlaybackMode = DEFAULT_STREAMING_PLAYBACK_MODE;
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
 
@@ -293,7 +286,6 @@ export function useStreamingPlaybackController({
   }, [prewarmAtFrame, syncOverlayMode]);
 
   return {
-    streamingPlaybackMode,
     forceCanvasOverlay,
     streamingFrameProviderRef,
     streamingAudioProvider,

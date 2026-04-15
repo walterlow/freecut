@@ -71,7 +71,7 @@ export function resolvePreviewDomVideoDrawDecision(
   const drift = Math.abs(domVideo.currentTime - sourceTime);
   const driftThreshold = getPreviewDomVideoDriftThreshold(
     speed,
-    isRenderingTransition || domVideo.dataset.transitionHold === '1',
+    isRenderingTransition,
   );
 
   return {
