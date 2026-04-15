@@ -50,6 +50,7 @@ export const PreviewStage = memo(function PreviewStage({
   overlayControls,
 }: PreviewStageProps) {
   const useProxy = usePlaybackStore((s) => s.useProxy);
+  const currentFrame = usePlaybackStore((s) => s.currentFrame);
 
   return (
     <div
@@ -88,6 +89,7 @@ export const PreviewStage = memo(function PreviewStage({
               ref={playerRef}
               durationInFrames={totalFrames}
               fps={fps}
+              initialFrame={currentFrame}
               width={playerRenderSize.width}
               height={playerRenderSize.height}
               autoPlay={false}
