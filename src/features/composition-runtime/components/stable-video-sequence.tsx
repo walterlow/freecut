@@ -35,6 +35,7 @@ import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -251,9 +252,11 @@ const GroupRenderer: React.FC<{
 
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
+  const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
+  const shouldUseDomTransitionSupport = visualPlaybackMode !== 'streaming';
 
   const transitionWarmupClipIds = useMemo(() => {
-    if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
+    if (!shouldUseDomTransitionSupport || isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
     const transitionClipIds = collectTransitionParticipantClipIds({
       transitionWindows,
       frame: globalFrame,
@@ -264,13 +267,13 @@ const GroupRenderer: React.FC<{
       .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
       .map(({ index }) => index)
       .join(',');
-  }, [activeItemIndex, fps, globalFrame, group.items, isPremounted, transitionWindows]);
+  }, [activeItemIndex, fps, globalFrame, group.items, isPremounted, shouldUseDomTransitionSupport, transitionWindows]);
 
   // Mount hidden transition shadows only a few frames before the overlap.
   // Pool lane warmup happens earlier; hidden DOM activation should stay late so
   // normal playback keeps using the simple single-clip path until near the cut.
   const overlapKey = useMemo(() => {
-    if (isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
+    if (!shouldUseDomTransitionSupport || isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';
     const shadowMountLookaheadFrames = SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES;
     const transitionClipIds = collectTransitionParticipantClipIds({
       transitionWindows,
@@ -283,18 +286,21 @@ const GroupRenderer: React.FC<{
       .filter(({ item, index }) => index !== activeItemIndex && transitionClipIds.has(item.id))
       .map(({ index }) => index)
       .join(',');
-  }, [isPremounted, activeItemIndex, group.items, transitionWindows, globalFrame]);
+  }, [isPremounted, activeItemIndex, globalFrame, group.items, shouldUseDomTransitionSupport, transitionWindows]);
 
   // Build adjusted shadow items — only recalculated when overlap composition changes.
   // String comparison is by value, so stable overlapKey prevents rebuilds every frame.
-  const activeTransitionClipIds = useMemo(() => (
-    collectTransitionParticipantClipIds({
+  const activeTransitionClipIds = useMemo(() => {
+    if (!shouldUseDomTransitionSupport) {
+      return new Set<string>();
+    }
+    return collectTransitionParticipantClipIds({
       transitionWindows,
       frame: globalFrame,
       lookaheadFrames: 0,
       lookbehindFrames: TRANSITION_SYNC_COOLDOWN_FRAMES,
-    })
-  ), [globalFrame, transitionWindows]);
+    });
+  }, [globalFrame, shouldUseDomTransitionSupport, transitionWindows]);
 
   const warmupShadows = useMemo(() => {
     if (!transitionWarmupClipIds) return [];
