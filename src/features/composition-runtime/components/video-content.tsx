@@ -827,8 +827,8 @@ export const VideoContent: React.FC<{
   // from the crossfade renderer.
   const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume;
   const [hasError, setHasError] = useState(false);
-  const streamingPlaybackActive = usePreviewBridgeStore((s) => s.streamingPlaybackActive);
-  const shouldDetachDomVideoForStreamingPlayback = streamingPlaybackActive;
+  const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
+  const shouldDetachDomVideoForStreamingPlayback = visualPlaybackMode === 'streaming';
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);

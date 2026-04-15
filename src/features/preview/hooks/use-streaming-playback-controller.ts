@@ -5,14 +5,17 @@
  * a transition window. Regular playback still uses the existing preview path
  * unless the debug toggle forces full-playback streaming.
  *
- * Toggle via window.__DEBUG__?.setStreamingPlayback(true/false) to switch
+ * Toggle via window.__DEBUG__?.setStreamingPlaybackMode('all' | 'transitions')
  * between full-playback streaming and transition-only mode.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
-import { STREAMING_PLAYBACK_ENABLED } from '@/features/preview/utils/preview-constants';
+import {
+  STREAMING_PLAYBACK_ENABLED,
+  type StreamingPlaybackMode,
+} from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -160,8 +163,8 @@ export function useStreamingPlaybackController({
   playbackTransitionWindows,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  /** When true, stream all playback clips. When false, use transition-only mode. */
-  const forceAllRef = useRef(STREAMING_PLAYBACK_ENABLED);
+  /** Current streaming mode: full-playback streaming or transition-only mode. */
+  const modeRef = useRef<StreamingPlaybackMode>(STREAMING_PLAYBACK_ENABLED ? 'all' : 'transitions');
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
 
@@ -191,9 +194,14 @@ export function useStreamingPlaybackController({
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const syncOverlayMode = useCallback(() => {
+    const isPlaying = usePlaybackStore.getState().isPlaying;
+    setForceCanvasOverlay(isPlaying && modeRef.current === 'all');
+  }, []);
+
   // Collect targets based on mode: full-playback streaming or transition-only mode.
   const getTargets = useCallback((frame: number) => {
-    if (forceAllRef.current) {
+    if (modeRef.current === 'all') {
       return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
     }
     return collectTransitionPrewarmTargets(
@@ -242,7 +250,7 @@ export function useStreamingPlaybackController({
     streamingFrameProviderRef.current = getStreamingFrame;
     if (initialState.isPlaying) {
       getPlayback();
-      if (forceAllRef.current) setForceCanvasOverlay(true);
+      syncOverlayMode();
       if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
       lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
     } else {
@@ -259,7 +267,7 @@ export function useStreamingPlaybackController({
         streamingFrameProviderRef.current = getStreamingFrame;
         prewarmFrameRef.current = null;
         playback.enableIdleSweep();
-        if (forceAllRef.current) setForceCanvasOverlay(true);
+        syncOverlayMode();
         if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
         lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
         // Run immediately to check transition proximity
@@ -298,7 +306,7 @@ export function useStreamingPlaybackController({
         lookaheadTimerRef.current = null;
       }
     };
-  }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead]);
+  }, [getPlayback, getStreamingFrame, prewarmAtFrame, runPlaybackLookahead, syncOverlayMode]);
 
   // Restart streams when proxy toggle changes
   useEffect(() => {
@@ -330,20 +338,23 @@ export function useStreamingPlaybackController({
       Record<string, unknown> | undefined;
     if (!debugApi) return;
 
-    debugApi.setStreamingPlayback = (forceAll: boolean) => {
-      forceAllRef.current = forceAll;
-      log.info(`Streaming playback: ${forceAll ? 'force all clips' : 'transitions only'}`);
+    const setStreamingPlaybackMode = (mode: StreamingPlaybackMode) => {
+      modeRef.current = mode;
+      log.info(`Streaming playback mode: ${mode}`);
+      syncOverlayMode();
 
-      if (forceAll) {
-        const state = usePlaybackStore.getState();
-        if (state.isPlaying) setForceCanvasOverlay(true);
-        prewarmFrameRef.current = null;
+      const state = usePlaybackStore.getState();
+      prewarmFrameRef.current = null;
+      if (mode === 'all') {
         prewarmAtFrame(state.currentFrame);
       } else {
-        setForceCanvasOverlay(false);
         playbackRef.current?.stopAll();
-        prewarmFrameRef.current = null;
       }
+    };
+
+    debugApi.setStreamingPlaybackMode = setStreamingPlaybackMode;
+    debugApi.setStreamingPlayback = (forceAll: boolean) => {
+      setStreamingPlaybackMode(forceAll ? 'all' : 'transitions');
     };
 
     debugApi.streamingPlaybackMetrics = () => {
@@ -351,10 +362,11 @@ export function useStreamingPlaybackController({
     };
 
     return () => {
+      delete debugApi.setStreamingPlaybackMode;
       delete debugApi.setStreamingPlayback;
       delete debugApi.streamingPlaybackMetrics;
     };
-  }, []);
+  }, [prewarmAtFrame, syncOverlayMode]);
 
   return { forceCanvasOverlay, streamingFrameProviderRef };
 }

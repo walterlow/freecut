@@ -133,7 +133,7 @@ export const VideoPreview = memo(function VideoPreview({
   const setCaptureFrame = usePreviewBridgeStore((s) => s.setCaptureFrame);
   const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
-  const setStreamingPlaybackActive = usePreviewBridgeStore((s) => s.setStreamingPlaybackActive);
+  const setVisualPlaybackMode = usePreviewBridgeStore((s) => s.setVisualPlaybackMode);
 
   const {
     isRenderedOverlayVisible,
@@ -332,13 +332,14 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionWindows,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
+  const visualPlaybackMode = isPlaying && streamingPlaybackActive ? 'streaming' : 'player';
 
   useEffect(() => {
-    setStreamingPlaybackActive(isPlaying && streamingPlaybackActive);
+    setVisualPlaybackMode(visualPlaybackMode);
     return () => {
-      setStreamingPlaybackActive(false);
+      setVisualPlaybackMode('player');
     };
-  }, [isPlaying, setStreamingPlaybackActive, streamingPlaybackActive]);
+  }, [setVisualPlaybackMode, visualPlaybackMode]);
 
   const {
     clearTransitionPlaybackSession,

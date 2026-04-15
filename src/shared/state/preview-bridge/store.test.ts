@@ -5,7 +5,7 @@ describe('preview-bridge-store', () => {
   beforeEach(() => {
     usePreviewBridgeStore.setState({
       displayedFrame: null,
-      streamingPlaybackActive: false,
+      visualPlaybackMode: 'player',
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
@@ -15,7 +15,7 @@ describe('preview-bridge-store', () => {
   it('has the expected initial state', () => {
     expect(usePreviewBridgeStore.getState()).toMatchObject({
       displayedFrame: null,
-      streamingPlaybackActive: false,
+      visualPlaybackMode: 'player',
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
@@ -48,11 +48,11 @@ describe('preview-bridge-store', () => {
     expect(stateA).toBe(stateB);
   });
 
-  it('avoids store churn when streamingPlaybackActive is unchanged', () => {
-    usePreviewBridgeStore.getState().setStreamingPlaybackActive(true);
+  it('avoids store churn when visualPlaybackMode is unchanged', () => {
+    usePreviewBridgeStore.getState().setVisualPlaybackMode('streaming');
     const stateA = usePreviewBridgeStore.getState();
 
-    usePreviewBridgeStore.getState().setStreamingPlaybackActive(true);
+    usePreviewBridgeStore.getState().setVisualPlaybackMode('streaming');
     const stateB = usePreviewBridgeStore.getState();
 
     expect(stateA).toBe(stateB);

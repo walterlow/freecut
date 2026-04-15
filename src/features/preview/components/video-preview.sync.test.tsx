@@ -379,7 +379,7 @@ function resetStores() {
   });
   usePreviewBridgeStore.setState({
     displayedFrame: null,
-    streamingPlaybackActive: false,
+    visualPlaybackMode: 'player',
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
@@ -1873,8 +1873,9 @@ describe('VideoPreview sync behavior', () => {
     seekToMock.mockClear();
 
     act(() => {
-      ((window as unknown as { __DEBUG__?: { setStreamingPlayback?: (forceAll: boolean) => void } }).__DEBUG__)
-        ?.setStreamingPlayback?.(true);
+      ((window as unknown as {
+        __DEBUG__?: { setStreamingPlaybackMode?: (mode: 'all' | 'transitions') => void }
+      }).__DEBUG__)?.setStreamingPlaybackMode?.('all');
       usePlaybackStore.getState().play();
       usePlaybackStore.getState().setCurrentFrame(24);
     });
@@ -1882,7 +1883,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(createCompositionRendererMock).toHaveBeenCalled();
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
-      expect(usePreviewBridgeStore.getState().streamingPlaybackActive).toBe(true);
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
     });
 
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
@@ -1897,7 +1898,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePreviewBridgeStore.getState().streamingPlaybackActive).toBe(false);
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
     });
   });
 

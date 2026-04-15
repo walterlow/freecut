@@ -28,7 +28,7 @@ const testState = vi.hoisted(() => ({
     keyframes: [] as unknown[],
   },
   previewBridgeState: {
-    streamingPlaybackActive: false,
+    visualPlaybackMode: 'player' as 'player' | 'streaming',
   },
 }));
 
@@ -162,7 +162,7 @@ describe('VideoContent pooled handoff', () => {
     gizmoState.activeGizmo = null;
     gizmoState.preview = null;
     timelineState.keyframes = [];
-    previewBridgeState.streamingPlaybackActive = false;
+    previewBridgeState.visualPlaybackMode = 'player';
   });
 
   it('keeps the acquired pool element when only itemId changes on the same pool lane', async () => {
@@ -224,7 +224,7 @@ describe('VideoContent pooled handoff', () => {
   });
 
   it('does not acquire a pooled video element while streaming playback owns visuals', () => {
-    previewBridgeState.streamingPlaybackActive = true;
+    previewBridgeState.visualPlaybackMode = 'streaming';
 
     render(
       <VideoContent
