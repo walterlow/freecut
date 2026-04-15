@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
+import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { createStreamingPlaybackAudioScheduler } from '@/features/composition-runtime/deps/streaming-playback-audio-scheduler';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import {
@@ -69,11 +70,13 @@ export const StreamingPlaybackBufferedAudio: React.FC<StreamingPlaybackBufferedA
   });
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
   const streamingAudioProvider = usePreviewBridgeStore((s) => s.streamingAudioProvider);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const graphRef = useRef<PreviewClipAudioGraph | null>(null);
   const schedulerRef = useRef(createStreamingPlaybackAudioScheduler());
 
   const shouldUseStreamingAudio = (
-    visualPlaybackMode === 'streaming'
+    isPlaying
+    && visualPlaybackMode === 'streaming'
     && streamingAudioProvider !== null
     && streamingAudioProvider.isStreaming(streamKey)
     && streamingAudioProvider.getSourceInfo(streamKey)?.hasAudio !== false

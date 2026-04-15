@@ -50,6 +50,19 @@ const schedulerMocks = vi.hoisted(() => {
   };
 });
 
+const storeMocks = vi.hoisted(() => {
+  const playbackState = {
+    isPlaying: true,
+  };
+
+  return {
+    playbackState,
+    usePlaybackStore: vi.fn((selector?: (value: typeof playbackState) => unknown) => (
+      selector ? selector(playbackState) : playbackState
+    )),
+  };
+});
+
 const previewGraphMocks = vi.hoisted(() => {
   const graph = {
     context: {
@@ -75,6 +88,7 @@ const previewGraphMocks = vi.hoisted(() => {
 });
 
 vi.mock('@/shared/state/preview-bridge', () => previewBridgeMocks);
+vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
 }));
@@ -88,6 +102,7 @@ describe('StreamingPlaybackBufferedAudio', () => {
     vi.clearAllMocks();
     previewBridgeMocks.state.visualPlaybackMode = 'player';
     previewBridgeMocks.state.streamingAudioProvider = null;
+    storeMocks.playbackState.isPlaying = true;
     playbackStateMocks.current = {
       frame: 12,
       fps: 30,
@@ -109,6 +124,29 @@ describe('StreamingPlaybackBufferedAudio', () => {
     );
 
     expect(getByTestId('fallback')).toBeInTheDocument();
+    expect(schedulerMocks.scheduler.sync).not.toHaveBeenCalled();
+  });
+
+  it('renders the fallback while paused even if the canvas owns visuals', () => {
+    storeMocks.playbackState.isPlaying = false;
+    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.streamingAudioProvider = {
+      getAudioChunks: vi.fn(() => []),
+      getSourceInfo: vi.fn(() => ({ hasAudio: true })),
+      isStreaming: vi.fn(() => true),
+    };
+
+    const { getByTestId } = render(
+      <StreamingPlaybackBufferedAudio
+        itemId="item-1"
+        streamKey="item-1"
+        durationInFrames={120}
+        fallback={<div data-testid="fallback" />}
+      />,
+    );
+
+    expect(getByTestId('fallback')).toBeInTheDocument();
+    expect(previewGraphMocks.createPreviewClipAudioGraph).not.toHaveBeenCalled();
     expect(schedulerMocks.scheduler.sync).not.toHaveBeenCalled();
   });
 
