@@ -257,6 +257,88 @@ describe('VideoContent pooled handoff', () => {
     expect(preloadSourceMock).not.toHaveBeenCalled();
   });
 
+  it('releases the pooled video element when streaming playback takes over visuals', async () => {
+    const pooledElement = createMockVideoElement();
+    acquireForClipMock.mockReturnValue(pooledElement);
+
+    const { rerender } = render(
+      <VideoContent
+        item={{
+          id: 'clip-detach-streaming',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Streaming',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-3',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
+    });
+
+    previewBridgeState.visualPlaybackMode = 'streaming';
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-detach-streaming',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Streaming',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-3',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(unregisterDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
+      expect(releaseClipMock).toHaveBeenCalledWith('group-origin-3', { delayMs: 400 });
+    });
+
+    previewBridgeState.visualPlaybackMode = 'player';
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-detach-streaming',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Streaming',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-3',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(2);
+      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
+    });
+  });
+
   it('skips DOM video audio wiring when external preview audio owns the clip', async () => {
     const pooledElement = createMockVideoElement();
     acquireForClipMock.mockReturnValue(pooledElement);

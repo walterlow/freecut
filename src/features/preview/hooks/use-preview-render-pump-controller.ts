@@ -573,9 +573,14 @@ export function usePreviewRenderPump({
           // Priority frames proceed regardless ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â their rendered content is always useful.
           if (!isPriorityFrame && isStale()) break;
 
-          // Enable DOM video element provider during playback for zero-copy rendering.
+          // Transition-only rollback can still borrow pinned DOM video
+          // elements during playback. Full-streaming playback stays fully
+          // decode-driven and never wires a DOM provider into the renderer.
           // During playback, the Player's <video> elements are already at
           // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
+          // Transition-only rollback can still borrow pinned DOM video
+          // elements during playback. Full-streaming playback stays fully
+          // decode-driven and never wires a DOM provider into the renderer.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
@@ -594,7 +599,7 @@ export function usePreviewRenderPump({
               // Only pin/clear the transition session when the rendered frame is
               // actually inside a transition window. Passing null for pre-transition
               // frames would destroy sessions that the prearm subscription just
-              // pinned, causing churn and losing the DOM video element provider
+              // pinned, causing churn and losing the rollback DOM provider
               // needed for smooth transition entry.
               if (windowForFrame) {
                 const prevSession = transitionSessionWindowRef.current;
