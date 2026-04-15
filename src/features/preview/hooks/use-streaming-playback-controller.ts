@@ -1,9 +1,8 @@
 /**
- * Hook to manage WebCodecs streaming playback lifecycle for transitions.
+ * Hook to manage WebCodecs streaming playback lifecycle for preview playback.
  *
- * Streaming decode only activates when the playhead approaches or is inside
- * a transition window. Regular playback still uses the existing preview path
- * unless the debug toggle forces full-playback streaming.
+ * Full-playback streaming is the default path. A transition-only rollback mode
+ * remains available through the debug API for comparison and fallback.
  *
  * Toggle via window.__DEBUG__?.setStreamingPlaybackMode('all' | 'transitions')
  * between full-playback streaming and transition-only mode.
@@ -168,7 +167,7 @@ export function useStreamingPlaybackController({
   playbackTransitionWindows,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  /** Current streaming mode: full-playback streaming or transition-only mode. */
+  /** Current streaming mode: full-playback streaming or transition-only rollback mode. */
   const [streamingPlaybackMode, setStreamingPlaybackModeState] = useState<StreamingPlaybackMode>(
     DEFAULT_STREAMING_PLAYBACK_MODE,
   );

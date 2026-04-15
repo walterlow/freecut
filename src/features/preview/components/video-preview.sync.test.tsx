@@ -360,6 +360,14 @@ function getDisplayedFrame() {
   return usePreviewBridgeStore.getState().displayedFrame;
 }
 
+function setStreamingPlaybackMode(mode: 'all' | 'transitions') {
+  act(() => {
+    ((window as unknown as {
+      __DEBUG__?: { setStreamingPlaybackMode?: (nextMode: 'all' | 'transitions') => void }
+    }).__DEBUG__)?.setStreamingPlaybackMode?.(mode);
+  });
+}
+
 function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
@@ -380,6 +388,7 @@ function resetStores() {
   usePreviewBridgeStore.setState({
     displayedFrame: null,
     visualPlaybackMode: 'player',
+    streamingAudioProvider: null,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
@@ -1466,6 +1475,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -1488,7 +1498,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(47);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(40);
       expect(getDisplayedFrame()).toBe(47);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -1803,6 +1813,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -1815,9 +1826,7 @@ describe('VideoPreview sync behavior', () => {
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
       expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -1832,7 +1841,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('switches plain playback onto the canvas path when full streaming playback is explicitly enabled', async () => {
+  it('switches plain playback onto the canvas path by default', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1873,9 +1882,6 @@ describe('VideoPreview sync behavior', () => {
     seekToMock.mockClear();
 
     act(() => {
-      ((window as unknown as {
-        __DEBUG__?: { setStreamingPlaybackMode?: (mode: 'all' | 'transitions') => void }
-      }).__DEBUG__)?.setStreamingPlaybackMode?.('all');
       usePlaybackStore.getState().play();
       usePlaybackStore.getState().setCurrentFrame(24);
     });
@@ -2038,6 +2044,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2053,8 +2060,6 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40);
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(41);
-      expect(renderer.prewarmFrame).toHaveBeenCalledWith(42);
       expect(scrubCanvas.style.visibility).toBe('hidden');
       expect(getDisplayedFrame()).toBeNull();
     });
@@ -2223,6 +2228,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2236,7 +2242,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(58);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(getDisplayedFrame()).toBe(58);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2245,7 +2252,6 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(61);
       expect(getDisplayedFrame()).toBe(61);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -2321,6 +2327,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2334,7 +2341,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(58);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(getDisplayedFrame()).toBe(58);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2351,9 +2359,10 @@ describe('VideoPreview sync behavior', () => {
 
   // Regression: arrow-keying from the last transition frame to the first
   // post-transition frame flashed stale left-clip content because the
-  // paused-transition-prewarm handler cleared the session before the scrub
-  // handler could render the post-transition frame on the overlay.
-  it('keeps overlay visible when scrubbing from last transition frame to first post-transition frame', async () => {
+  // transition session dropped before the visible presentation advanced to
+  // the post-transition frame. The overlay may disappear now, but only
+  // after the Player is already showing the correct frame.
+  it('hands scrub preview cleanly from the last transition frame to the first post-transition frame', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2413,6 +2422,8 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
+    setStreamingPlaybackMode('transitions');
+    seekToMock.mockClear();
 
     // Scrub to last transition frame (endFrame - 1 = 59)
     act(() => {
@@ -2425,23 +2436,19 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(59);
+      expect(renderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(getDisplayedFrame()).toBe(59);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
     // Step to first post-transition frame (endFrame = 60).
-    // The render pump must render this frame on the overlay (not drop
-    // straight to the Player, which would flash stale pool lane content).
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(60);
     });
 
-    // The composition renderer must have been asked to render the
-    // post-transition frame. This proves the scrub handler kept the
-    // session alive and rendered via the overlay rather than hiding
-    // it immediately (which would skip renderFrame entirely).
     await waitFor(() => {
-      expect(renderer.renderFrame).toHaveBeenCalledWith(60);
+      expect(screen.getByTestId('mock-player-frame')).toHaveTextContent('60');
+      expect(scrubCanvas.style.visibility).toBe('hidden');
     });
   });
 

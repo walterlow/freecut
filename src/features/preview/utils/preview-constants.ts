@@ -69,14 +69,14 @@ export type StreamingPlaybackMode = 'transitions' | 'all';
 
 /**
  * Experimental: Use WebCodecs streaming decode for video playback instead of
- * HTML5 <video> elements. The default mode remains transition-only until the
- * full-playback path is ready to graduate. When switched to `all`, a background
- * worker runs mediabunny's forward samples() generator and transfers decoded
- * ImageBitmaps to the canvas render pipeline for plain playback too.
+ * HTML5 <video> elements. Full-playback streaming is now the default so the
+ * preview uses the same mediabunny decode path for regular playback and
+ * transition playback. The `transitions` mode remains available as a rollback
+ * debug path while the migration settles.
  *
  * Toggle via: window.__DEBUG__?.setStreamingPlaybackMode?.('all' | 'transitions')
  */
-export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'transitions';
+export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'all';
 
 function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
   return mode === 'all';
