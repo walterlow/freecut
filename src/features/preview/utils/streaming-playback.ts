@@ -2,7 +2,7 @@
  * Main-thread coordinator for WebCodecs streaming playback.
  *
  * Manages streaming decode workers and provides decoded ImageBitmaps
- * to the render pipeline as a drop-in replacement for DOM video elements.
+ * to the render pipeline as the primary full-streaming playback source.
  *
  * Key behaviors:
  * - Lazy auto-start: getFrame() for an unknown source triggers async stream init
@@ -101,8 +101,8 @@ class FrameBuffer {
       return bestBefore;
     }
 
-    // Reject stale frames — return null so the renderer falls through to
-    // DOM video instead of showing a frozen frame from seconds ago.
+    // Reject stale frames so the renderer can fall through to
+    // the next presentation path instead of showing a frozen frame from seconds ago.
     return null;
   }
 
@@ -215,7 +215,7 @@ export interface StreamingPlayback {
   /**
    * Get the best decoded frame for a playback instance at a target timestamp.
    * If no stream exists for this instance, lazily starts one and returns null.
-   * Falls through to the next render path (DOM video) until frames arrive.
+   * Falls through to the next presentation path until frames arrive.
    */
   getFrame(streamKey: string, src: string, targetTimestamp: number): ImageBitmap | null;
   /** Get decoded audio chunks intersecting the requested time window. */
@@ -225,8 +225,8 @@ export interface StreamingPlayback {
   /** Whether a source is actively streaming. */
   isStreaming(streamKey: string): boolean;
   /** Update the worker's playback position for a source without reading a frame.
-   *  Keeps the decode-ahead throttle advancing during DOM video playback
-   *  so the buffer is warm when the canvas overlay activates. */
+   *  Keeps the decode-ahead throttle advancing during playback so the decode
+   *  buffer stays warm while the active presenter catches up. */
   updatePosition(streamKey: string, position: number): void;
   /** Enable idle cleanup sweep. Call when playback starts.
    *  Disabled by default so pre-warm streams aren't killed while paused. */
@@ -679,3 +679,4 @@ export function createStreamingPlayback(): StreamingPlayback {
     },
   };
 }
+

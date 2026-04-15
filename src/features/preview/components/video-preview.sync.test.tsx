@@ -1909,6 +1909,86 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('keeps transition playback on the canvas path by default', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-left-streaming',
+        label: 'Left Streaming',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 60,
+        src: 'blob:left-streaming',
+      } as TimelineItem,
+      {
+        id: 'clip-right-streaming',
+        label: 'Right Streaming',
+        type: 'video',
+        trackId: 'track-video',
+        from: 40,
+        durationInFrames: 60,
+        src: 'blob:right-streaming',
+      } as TimelineItem,
+    ]);
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'transition-streaming-default',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'clip-left-streaming',
+        rightClipId: 'clip-right-streaming',
+        trackId: 'track-video',
+        durationInFrames: 20,
+      },
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+    expect(renderer.setDomVideoElementProvider).not.toHaveBeenCalled();
+  });
+
   it('keeps the legacy debug boolean shim mapped onto streaming playback modes', async () => {
     useItemsStore.getState().setTracks([
       {

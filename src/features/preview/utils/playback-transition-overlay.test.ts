@@ -121,7 +121,7 @@ describe('resolvePlaybackTransitionOverlayState', () => {
  * 3. Play 1.23x clip mid-way:
  *    __DEBUG__.seekTo(13046); same pattern
  *    Verify: ALL frames < 5ms, no stall at any point (was 400ms+ at ~13123)
- *    Key: DOM video used throughout — mediabunny never kicks in during playback
+ *    Key: full-streaming mode should stay decode-driven throughout playback
  *
  * 4. Start on 1.23x clip:
  *    __DEBUG__.seekTo(13156); same pattern
