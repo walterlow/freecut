@@ -6,8 +6,6 @@ const testState = vi.hoisted(() => ({
   preloadSourceMock: vi.fn(() => Promise.resolve()),
   acquireForClipMock: vi.fn(),
   releaseClipMock: vi.fn(),
-  registerDomVideoElementMock: vi.fn(),
-  unregisterDomVideoElementMock: vi.fn(),
   pool: null as {
     preloadSource: ReturnType<typeof vi.fn>;
     acquireForClip: ReturnType<typeof vi.fn>;
@@ -42,8 +40,6 @@ const {
   preloadSourceMock,
   acquireForClipMock,
   releaseClipMock,
-  registerDomVideoElementMock,
-  unregisterDomVideoElementMock,
   playbackState,
   gizmoState,
   timelineState,
@@ -138,11 +134,6 @@ vi.mock('@/features/composition-runtime/deps/keyframes', () => ({
   interpolatePropertyValue: (_keyframes: unknown, _frame: number, fallback: number) => fallback,
 }));
 
-vi.mock('@/features/composition-runtime/utils/dom-video-element-registry', () => ({
-  registerDomVideoElement: testState.registerDomVideoElementMock,
-  unregisterDomVideoElement: testState.unregisterDomVideoElementMock,
-}));
-
 vi.mock('./video-audio-context', () => ({
   applyVideoElementAudioState: videoAudioContextMocks.applyVideoElementAudioStateMock,
   resetVideoElementAudioState: videoAudioContextMocks.resetVideoElementAudioStateMock,
@@ -157,8 +148,6 @@ describe('VideoContent pooled handoff', () => {
     preloadSourceMock.mockClear();
     acquireForClipMock.mockClear();
     releaseClipMock.mockClear();
-    registerDomVideoElementMock.mockClear();
-    unregisterDomVideoElementMock.mockClear();
     videoAudioContextMocks.applyVideoElementAudioStateMock.mockClear();
     videoAudioContextMocks.resetVideoElementAudioStateMock.mockClear();
     playbackState.currentFrame = 0;
@@ -198,7 +187,6 @@ describe('VideoContent pooled handoff', () => {
 
     await waitFor(() => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
     });
 
     rerender(
@@ -222,8 +210,7 @@ describe('VideoContent pooled handoff', () => {
     );
 
     await waitFor(() => {
-      expect(unregisterDomVideoElementMock).toHaveBeenCalledWith('clip-a', pooledElement);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-b', pooledElement);
+      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
     });
 
     expect(acquireForClipMock).toHaveBeenCalledTimes(1);
@@ -283,7 +270,6 @@ describe('VideoContent pooled handoff', () => {
 
     await waitFor(() => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
     });
 
     previewBridgeState.visualPlaybackMode = 'streaming';
@@ -308,7 +294,6 @@ describe('VideoContent pooled handoff', () => {
     );
 
     await waitFor(() => {
-      expect(unregisterDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
       expect(releaseClipMock).toHaveBeenCalledWith('group-origin-3', { delayMs: 400 });
     });
 
@@ -335,7 +320,6 @@ describe('VideoContent pooled handoff', () => {
 
     await waitFor(() => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(2);
-      expect(registerDomVideoElementMock).toHaveBeenCalledWith('clip-detach-streaming', pooledElement);
     });
   });
 

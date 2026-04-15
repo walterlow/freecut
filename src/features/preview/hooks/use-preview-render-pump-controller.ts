@@ -1287,6 +1287,10 @@ export function usePreviewRenderPump({
       // overlay here would switch from browser video seek (Ãƒâ€šÃ‚Â±1 frame) to
       // mediabunny (exact), causing a visible frame shift ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â especially at
       // soft-edge crop boundaries where the content difference is amplified.
+      // Without forceFastScrubOverlay, gizmo previews stay on the player-owned
+      // visual path through React props. Activating the overlay here would
+      // switch from browser video seek to exact decoder output, which can show
+      // a visible frame shift at soft-edge crop boundaries.
       if (!forceFastScrubOverlay) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
       const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
@@ -1344,8 +1348,8 @@ export function usePreviewRenderPump({
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
       // Check if playback starts inside an active transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin that
       // session immediately so prerender state is ready on entry.
-      // In full-streaming mode this primes prerender/buffer state rather than
-      // wiring a live DOM playback provider.
+      // In full-streaming mode this primes prerender/buffer state for the
+      // streaming render path.
       const activeWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
       if (activeWindow) {
         pinTransitionPlaybackSession(activeWindow);

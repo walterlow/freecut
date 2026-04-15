@@ -22,10 +22,6 @@ import {
   shouldReactOwnPlaybackRate,
 } from '../utils/video-sync-plan';
 import {
-  registerDomVideoElement,
-  unregisterDomVideoElement,
-} from '../utils/dom-video-element-registry';
-import {
   applyVideoElementAudioState,
   resetVideoElementAudioState,
   useVideoAudioState,
@@ -45,7 +41,7 @@ const supportsRVFC = typeof HTMLVideoElement !== 'undefined' &&
 
 
 /**
- * Native HTML5 video component for preview mode using VideoSourcePool.
+ * Native preview video component using VideoSourcePool.
  * Uses pooled video elements instead of creating new ones per clip.
  * Split clips from the same source share video elements for efficiency.
  */
@@ -96,8 +92,6 @@ const NativePreviewVideo: React.FC<{
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
-  const registeredElementRef = useRef<HTMLVideoElement | null>(null);
-  const registeredItemIdRef = useRef<string | null>(null);
   audioVolumeRef.current = audioVolume;
   audioEqStagesRef.current = audioEqStages;
   onErrorRef.current = onError;
@@ -146,36 +140,6 @@ const NativePreviewVideo: React.FC<{
     needsInitialSyncRef.current = true;
     lastSyncTimeRef.current = 0;
   }, [itemId]);
-
-  const syncRegisteredVideoElement = useCallback((nextItemId: string, nextElement: HTMLVideoElement | null) => {
-    const prevElement = registeredElementRef.current;
-    const prevItemId = registeredItemIdRef.current;
-
-    if (prevElement && prevItemId && (prevElement !== nextElement || prevItemId !== nextItemId)) {
-      unregisterDomVideoElement(prevItemId, prevElement);
-    }
-
-    if (nextElement && (prevElement !== nextElement || prevItemId !== nextItemId)) {
-      registerDomVideoElement(nextItemId, nextElement);
-    }
-
-    registeredElementRef.current = nextElement;
-    registeredItemIdRef.current = nextElement ? nextItemId : null;
-  }, []);
-
-  const clearRegisteredVideoElement = useCallback(() => {
-    const prevElement = registeredElementRef.current;
-    const prevItemId = registeredItemIdRef.current;
-    if (prevElement && prevItemId) {
-      unregisterDomVideoElement(prevItemId, prevElement);
-    }
-    registeredElementRef.current = null;
-    registeredItemIdRef.current = null;
-  }, []);
-
-  useLayoutEffect(() => {
-    syncRegisteredVideoElement(itemId, elementRef.current);
-  }, [itemId, syncRegisteredVideoElement]);
 
   // Acquire element from pool on mount
   useEffect(() => {
@@ -246,7 +210,6 @@ const NativePreviewVideo: React.FC<{
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
     elementRef.current = element;
-    syncRegisteredVideoElement(itemId, element);
     if (manageElementAudio) {
       applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
     } else {
@@ -420,7 +383,6 @@ const NativePreviewVideo: React.FC<{
       }
 
       // Release back to pool
-      clearRegisteredVideoElement();
       pool.releaseClip(poolClipId, { delayMs: POOL_RELEASE_STICKY_MS });
       elementRef.current = null;
 
@@ -430,7 +392,7 @@ const NativePreviewVideo: React.FC<{
     // Ongoing seeking is handled by the separate sync effect, and itemId-only
     // handoffs are handled by the registration + sync refs without tearing down
     // the element across split-boundary transitions.
-  }, [poolClipId, src, pool, containerRef, shortId, syncRegisteredVideoElement, clearRegisteredVideoElement, fitMode, manageElementAudio]);
+  }, [poolClipId, src, pool, containerRef, shortId, fitMode, manageElementAudio]);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -808,7 +770,8 @@ const NativePreviewVideo: React.FC<{
  * Video content with audio volume/fades support.
  * Separate component so we can use hooks for audio calculation.
  *
- * Uses native HTML5 video for both preview and export (via Canvas + WebCodecs).
+ * Preview uses pooled native video elements when visuals are player-owned.
+ * Export uses the canvas render engine.
  */
 export const VideoContent: React.FC<{
   item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
@@ -823,7 +786,7 @@ export const VideoContent: React.FC<{
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   const [hasError, setHasError] = useState(false);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldDetachDomVideoForStreamingPlayback = visualPlaybackMode === 'streaming';
+  const shouldDetachVideoForStreamingPlayback = visualPlaybackMode === 'streaming';
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -852,7 +815,7 @@ export const VideoContent: React.FC<{
     );
   }
 
-  if (shouldDetachDomVideoForStreamingPlayback) {
+  if (shouldDetachVideoForStreamingPlayback) {
     return (
       <div
         data-detached-streaming-video={item.id}
@@ -864,8 +827,7 @@ export const VideoContent: React.FC<{
     );
   }
 
-  // Use native HTML5 video with VideoSourcePool for element reuse
-  // Export uses Canvas + WebCodecs (client-render-engine.ts), not Composition's renderer
+  // Use native pooled video elements when the player owns visuals.
   return (
     <NativePreviewVideo
       poolClipId={item._poolClipId ?? item.id}
