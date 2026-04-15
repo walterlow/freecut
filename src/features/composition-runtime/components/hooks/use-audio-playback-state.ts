@@ -4,6 +4,7 @@ import { useVideoConfig, useIsPlaying } from '../../hooks/use-player-compat';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier } from '@/shared/utils/audio-fade-curve';
@@ -48,9 +49,13 @@ export function useAudioPlaybackState({
   volumeMultiplier = 1,
 }: AudioPlaybackProps): AudioPlaybackState {
   const sequenceContext = useSequenceContext();
-  const frame = sequenceContext?.localFrame ?? 0;
+  const playerFrame = sequenceContext?.localFrame ?? 0;
   const { fps } = useVideoConfig();
-  const playing = useIsPlaying();
+  const playerPlaying = useIsPlaying();
+  const visualPlaybackMode = usePreviewBridgeStore((state) => state.visualPlaybackMode);
+  const previewIsPlaying = usePlaybackStore((state) => state.isPlaying);
+  const frame = playerFrame;
+  const playing = visualPlaybackMode === 'streaming' ? previewIsPlaying : playerPlaying;
 
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[itemId], [itemId]),

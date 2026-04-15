@@ -162,6 +162,9 @@ export function useCustomPlayer(
       if (playbackPlan.clearPreviewFrame) {
         setPreviewFrame(null);
       }
+      if (isPlaying && !wasPlaying && !shouldUsePlayer) {
+        return;
+      }
       executePlayerCommand(playbackPlan.command);
     } catch (error) {
       logger.error('Failed to control playback:', error);
@@ -222,6 +225,25 @@ export function useCustomPlayer(
 
       if (plan.acknowledgedFrame !== null) {
         lastSyncedFrameRef.current = plan.acknowledgedFrame;
+      }
+      if (state.isPlaying) {
+        const shouldUsePlayer = getShouldUsePlayerForFrame(state.currentFrame);
+        if (!shouldUsePlayer) {
+          if (playerRef.current.isPlaying()) {
+            playerRef.current.pause();
+          }
+          return;
+        }
+        if (!playerRef.current.isPlaying()) {
+          seekPlayerToFrame(state.currentFrame, true, true);
+          if (!usePlaybackStore.getState().isPlaying) {
+            ignorePlayerUpdatesRef.current = false;
+            return;
+          }
+          playerRef.current.play();
+          ignorePlayerUpdatesRef.current = false;
+          return;
+        }
       }
       if (plan.command.type === 'seek') {
         if (!state.isPlaying && getCurrentVisualPlaybackMode() !== 'player') {

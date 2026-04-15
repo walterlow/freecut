@@ -374,7 +374,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
           adjustmentLayers={visibleAdjustmentLayers}
           sequenceFrom={sequenceFrom}
         >
-          <MaskedItem item={item} muted={true} itemTrackOrder={item.trackOrder} />
+          <MaskedItem item={item} muted={item.muted} itemTrackOrder={item.trackOrder} />
         </ItemEffectWrapper>
       </AbsoluteFill>
     );
@@ -488,6 +488,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     src={segment.src}
                     mediaId={decodeMediaId}
                     itemId={segment.itemId}
+                    streamingAudioStreamKey={segment.itemId}
                     trimBefore={segment.trimBefore}
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
@@ -510,6 +511,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     src={segment.src}
                     mediaId={decodeMediaId}
                     itemId={segment.itemId}
+                    streamingAudioStreamKey={segment.itemId}
                     trimBefore={segment.trimBefore}
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
