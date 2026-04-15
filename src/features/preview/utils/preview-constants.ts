@@ -78,7 +78,7 @@ export type StreamingPlaybackMode = 'transitions' | 'all';
  */
 export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'all';
 
-function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
+export function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
   return mode === 'all';
 }
 

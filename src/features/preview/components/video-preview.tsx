@@ -34,6 +34,7 @@ import { usePreviewTransitionSessionController } from '../hooks/use-preview-tran
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
 import {
   DEFAULT_STREAMING_PLAYBACK_MODE,
+  isFullStreamingPlaybackMode,
   type StreamingPlaybackMode,
 } from '../utils/preview-constants';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
@@ -349,7 +350,9 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionWindows,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
-  const visualPlaybackMode = isPlaying && streamingPlaybackMode === 'all' ? 'streaming' : 'player';
+  const visualPlaybackMode = isPlaying && isFullStreamingPlaybackMode(streamingPlaybackMode)
+    ? 'streaming'
+    : 'player';
   streamingPlaybackModeRef.current = streamingPlaybackMode;
   visualPlaybackModeRef.current = visualPlaybackMode;
 

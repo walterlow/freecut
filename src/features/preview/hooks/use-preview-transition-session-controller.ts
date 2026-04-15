@@ -9,7 +9,10 @@ import {
   snapSourceTime,
 } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
-import type { StreamingPlaybackMode } from '@/features/preview/utils/preview-constants';
+import {
+  isFullStreamingPlaybackMode,
+  type StreamingPlaybackMode,
+} from '@/features/preview/utils/preview-constants';
 
 const logger = createLogger('VideoPreview');
 
@@ -124,6 +127,19 @@ export function usePreviewTransitionSessionController({
   transitionSessionTraceRef,
   transitionTelemetryRef,
 }: UsePreviewTransitionSessionControllerParams) {
+  const prefersFullStreamingPlayback = isFullStreamingPlaybackMode(streamingPlaybackMode);
+  const shouldUseRenderDrivenTransitionFrames = (
+    isPlaying: boolean,
+    hasStreamingFrameProvider: boolean,
+  ) => (
+    prefersFullStreamingPlayback
+    || (
+      hasStreamingFrameProvider
+      && isPlaying
+      && forceFastScrubOverlay
+    )
+  );
+
   const clearTransitionPlaybackSession = useCallback(() => {
     const activeTrace = transitionSessionTraceRef.current;
     if (activeTrace) {
@@ -229,15 +245,11 @@ export function usePreviewTransitionSessionController({
     }
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    const shouldUseRenderDrivenTransitionFrames = (
-      streamingPlaybackMode === 'all'
-      || (
-        !!(streamingFrameProviderRef?.current)
-        && isPlaying
-        && forceFastScrubOverlay
-      )
+    const useRenderDrivenTransitionFrames = shouldUseRenderDrivenTransitionFrames(
+      isPlaying,
+      !!(streamingFrameProviderRef?.current),
     );
-    const mode = shouldUseRenderDrivenTransitionFrames
+    const mode = useRenderDrivenTransitionFrames
       ? 'render'
       : transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
 
@@ -299,7 +311,7 @@ export function usePreviewTransitionSessionController({
       rightHasEffects,
     });
     const pinnedElements = new Map<string, HTMLVideoElement | null>();
-    if (!shouldUseRenderDrivenTransitionFrames) {
+    if (!useRenderDrivenTransitionFrames) {
       for (const clip of [window.leftClip, window.rightClip]) {
         const el = getBestDomVideoElementForItem(clip.id);
         pinnedElements.set(clip.id, el);
@@ -354,15 +366,7 @@ export function usePreviewTransitionSessionController({
     }
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    const shouldUseRenderDrivenTransitionFrames = (
-      streamingPlaybackMode === 'all'
-      || (
-        !!(streamingFrameProviderRef?.current)
-        && isPlaying
-        && forceFastScrubOverlay
-      )
-    );
-    if (shouldUseRenderDrivenTransitionFrames) {
+    if (shouldUseRenderDrivenTransitionFrames(isPlaying, !!(streamingFrameProviderRef?.current))) {
       return null;
     }
     if (!isPlaying && !transitionWindowUsesDomProvider(sessionWindow ?? null)) {
@@ -526,8 +530,8 @@ export function usePreviewTransitionSessionController({
         if (!renderer || !scrubMountedRef.current) return false;
 
         const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
-        const shouldUseRenderDrivenTransitionFrames = (
-          streamingPlaybackMode === 'all'
+        const useRenderDrivenTransitionFrames = (
+          prefersFullStreamingPlayback
           || (
             isPlaybackPrepare
             && !!streamingFrameProvider
@@ -537,7 +541,7 @@ export function usePreviewTransitionSessionController({
 
         if ('setDomVideoElementProvider' in renderer && renderer.setDomVideoElementProvider) {
           renderer.setDomVideoElementProvider(
-            shouldUseRenderDrivenTransitionFrames ? undefined : getPinnedTransitionElementForItem,
+            useRenderDrivenTransitionFrames ? undefined : getPinnedTransitionElementForItem,
           );
         }
         if ('setStreamingFrameProvider' in renderer && renderer.setStreamingFrameProvider) {
@@ -600,7 +604,6 @@ export function usePreviewTransitionSessionController({
     cacheTransitionSessionFrame,
     ensureFastScrubRendererRef,
     forceFastScrubOverlay,
-    streamingPlaybackMode,
     getPinnedTransitionElementForItem,
     getTransitionWindowByStartFrame,
     pinTransitionPlaybackSession,
@@ -617,6 +620,7 @@ export function usePreviewTransitionSessionController({
     streamingFrameProviderRef,
     transitionSessionBufferedFramesRef,
     transitionSessionTraceRef,
+    prefersFullStreamingPlayback,
   ]);
 
   return {

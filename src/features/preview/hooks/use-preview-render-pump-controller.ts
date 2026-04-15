@@ -24,6 +24,7 @@ import {
   FAST_SCRUB_PREWARM_QUEUE_MAX,
   FAST_SCRUB_PREWARM_RENDER_BUDGET_MS,
   FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES,
+  isFullStreamingPlaybackMode,
   type FastScrubBoundarySource,
   type StreamingPlaybackMode,
 } from '../utils/preview-constants';
@@ -236,9 +237,10 @@ export function usePreviewRenderPump({
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
+  const prefersFullStreamingPlayback = isFullStreamingPlaybackMode(streamingPlaybackMode);
   const shouldUseRenderDrivenPausedTransitionPrep = (
     forceFastScrubOverlay
-    || streamingPlaybackMode === 'all'
+    || prefersFullStreamingPlayback
   );
 
   useEffect(() => {
@@ -585,7 +587,7 @@ export function usePreviewRenderPump({
               ? getTransitionWindowForFrame(frameToRender)
               : null;
             const shouldUseRenderDrivenPlaybackFrames = (
-              streamingPlaybackMode === 'all'
+              prefersFullStreamingPlayback
               || (
                 playbackNow.isPlaying
                 && !!streamingFrameProvider
@@ -1611,7 +1613,6 @@ export function usePreviewRenderPump({
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
     forceFastScrubOverlay,
-    streamingPlaybackMode,
     fps,
     clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
@@ -1634,5 +1635,6 @@ export function usePreviewRenderPump({
     setDisplayedFrame,
     shouldPreferPlayerForPreview,
     trackPlayerSeek,
+    prefersFullStreamingPlayback,
   ]);
 }
