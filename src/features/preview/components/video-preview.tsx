@@ -28,7 +28,6 @@ import { usePreviewPlaybackController } from '../hooks/use-preview-playback-cont
 import { usePreviewRenderPump } from '../hooks/use-preview-render-pump-controller';
 import { usePreviewRendererController } from '../hooks/use-preview-renderer-controller';
 import { usePreviewRuntimeRefs } from '../hooks/use-preview-runtime-refs';
-import { usePreviewSourceWarm } from '../hooks/use-preview-source-warm';
 import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model';
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
@@ -240,8 +239,6 @@ export const VideoPreview = memo(function VideoPreview({
   );
 
   const {
-    playbackVideoSourceSpans,
-    scrubVideoSourceSpans,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
     totalFrames,
@@ -273,23 +270,6 @@ export const VideoPreview = memo(function VideoPreview({
     project,
   });
 
-  usePreviewSourceWarm({
-    resolvedUrlCount: resolvedUrls.size,
-    playbackVideoSourceSpans,
-    scrubVideoSourceSpans,
-    fps,
-    previewPerfRef: previewPerfRef as typeof previewPerfRef & {
-      current: {
-        sourceWarmTarget: number;
-        sourceWarmKeep: number;
-        sourceWarmEvictions: number;
-        sourcePoolSources: number;
-        sourcePoolElements: number;
-        sourcePoolActiveClips: number;
-      };
-    },
-    isGizmoInteractingRef,
-  });
   const {
     playbackTransitionFingerprint,
     playbackTransitionWindows,

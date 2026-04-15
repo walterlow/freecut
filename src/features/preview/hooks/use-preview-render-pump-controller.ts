@@ -1,5 +1,4 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
@@ -424,7 +423,6 @@ export function usePreviewRenderPump({
         const enqueueBoundarySourcePrewarm = (targetFrame: number) => {
           if (fastScrubBoundarySources.length === 0) return;
 
-          const pool = getGlobalVideoSourcePool();
           const touchFrameMap = scrubPrewarmedSourceTouchFrameRef.current;
           const markBoundarySourcePrewarmed = (src: string, currentFrame: number): boolean => {
             const lastTouchedFrame = touchFrameMap.get(src);
@@ -465,12 +463,8 @@ export function usePreviewRenderPump({
           });
 
           for (const src of selectedSources) {
-            const wasPrewarmed = scrubPrewarmedSourcesRef.current.has(src);
             const touched = markBoundarySourcePrewarmed(src, targetFrame);
             if (!touched) continue;
-            if (!wasPrewarmed) {
-              pool.preloadSource(src).catch(() => {});
-            }
           }
         };
 
