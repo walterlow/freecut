@@ -151,6 +151,8 @@ interface UseStreamingPlaybackControllerParams {
 }
 
 interface UseStreamingPlaybackControllerResult {
+  /** Current streaming playback mode configuration. */
+  streamingPlaybackMode: StreamingPlaybackMode;
   /** Whether the canvas overlay must be forced for streaming playback. */
   forceCanvasOverlay: boolean;
   /** Ref to the streaming frame provider function. */
@@ -164,7 +166,10 @@ export function useStreamingPlaybackController({
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
   /** Current streaming mode: full-playback streaming or transition-only mode. */
-  const modeRef = useRef<StreamingPlaybackMode>(STREAMING_PLAYBACK_ENABLED ? 'all' : 'transitions');
+  const [streamingPlaybackMode, setStreamingPlaybackModeState] = useState<StreamingPlaybackMode>(
+    STREAMING_PLAYBACK_ENABLED ? 'all' : 'transitions',
+  );
+  const modeRef = useRef<StreamingPlaybackMode>(streamingPlaybackMode);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
 
@@ -193,6 +198,10 @@ export function useStreamingPlaybackController({
 
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    modeRef.current = streamingPlaybackMode;
+  }, [streamingPlaybackMode]);
 
   const syncOverlayMode = useCallback(() => {
     const isPlaying = usePlaybackStore.getState().isPlaying;
@@ -339,6 +348,7 @@ export function useStreamingPlaybackController({
     if (!debugApi) return;
 
     const setStreamingPlaybackMode = (mode: StreamingPlaybackMode) => {
+      setStreamingPlaybackModeState(mode);
       modeRef.current = mode;
       log.info(`Streaming playback mode: ${mode}`);
       syncOverlayMode();
@@ -368,5 +378,5 @@ export function useStreamingPlaybackController({
     };
   }, [prewarmAtFrame, syncOverlayMode]);
 
-  return { forceCanvasOverlay, streamingFrameProviderRef };
+  return { streamingPlaybackMode, forceCanvasOverlay, streamingFrameProviderRef };
 }
