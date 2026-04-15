@@ -1665,6 +1665,104 @@ describe('VideoPreview sync behavior', () => {
     expect(getDisplayedFrame()).toBeNull();
   });
 
+  it('keeps text gizmo over visible video on rendered preview', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-text',
+        name: 'Text',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-video-under-text',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Video',
+        src: 'blob:video-under-text',
+      } as TimelineItem,
+      {
+        id: 'text-gizmo-1',
+        type: 'text',
+        trackId: 'track-text',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Overlay Text',
+        text: 'Edit me',
+        color: '#ffffff',
+      } as unknown as (typeof useItemsStore.getState)['items'][number],
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      useGizmoStore.setState({
+        activeGizmo: {
+          mode: 'translate',
+          activeHandle: null,
+          startPoint: { x: 0, y: 0 },
+          startTransform: {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+            cornerRadius: 0,
+          },
+          itemId: 'text-gizmo-1',
+          itemType: 'text',
+        },
+      });
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(getDisplayedFrame()).toBe(48);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+  });
+
   it('drops the fast-scrub overlay immediately on scrub release instead of waiting for player confirmation', async () => {
     const { container } = render(
       <VideoPreview
@@ -2119,6 +2217,65 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
       expect(getDisplayedFrame()).toBe(36);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps paused visible-video scrubs on rendered preview instead of seeking the Player lane', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-scrub-canvas',
+        label: 'Scrub Canvas Clip',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 160,
+        src: 'blob:scrub-canvas',
+      } as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+      expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 

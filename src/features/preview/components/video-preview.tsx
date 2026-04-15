@@ -337,15 +337,14 @@ export const VideoPreview = memo(function VideoPreview({
   });
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const preferPlayerForTextGizmo = isGizmoInteracting && activeGizmoItemType === 'text';
-  // Keep the rendered preview path active when paused on a visible video frame.
-  // Ruler clicks briefly set previewFrame === currentFrame then clear it; treat
-  // that as still canvas-owned so the preview never tears down between seeks.
+  // Keep the rendered preview path active whenever the paused target frame owns
+  // visible video. That includes preview-frame scrubs, so ruler hover/click
+  // stays on the decoded canvas path instead of bouncing back through DOM video.
   const shouldUseRenderedPausedVideoPreview = useMemo(() => {
-    if (isPlaying || preferPlayerForTextGizmo) return false;
-    if (previewFrame !== null && previewFrame !== currentFrame) return false;
-    return hasVisibleVideoAtFrame(combinedTracks, currentFrame);
-  }, [combinedTracks, currentFrame, isPlaying, preferPlayerForTextGizmo, previewFrame]);
+    if (isPlaying) return false;
+    const pausedTargetFrame = previewFrame ?? currentFrame;
+    return hasVisibleVideoAtFrame(combinedTracks, pausedTargetFrame);
+  }, [combinedTracks, currentFrame, isPlaying, previewFrame]);
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldUseRenderedPausedVideoPreview;
   const renderedPreviewFrame = previewFrame ?? displayedFrame ?? currentFrame;
   const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(combinedTracks, renderedPreviewFrame);
