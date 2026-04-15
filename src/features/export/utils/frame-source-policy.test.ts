@@ -1,50 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  resolvePreviewDomVideoDrawDecision,
   resolvePreviewMediabunnyInitAction,
   shouldAllowPreviewVideoElementFallback,
   shouldTryPreviewWorkerBitmap,
   shouldUsePreviewStrictWaitingFallback,
 } from './frame-source-policy';
 
-function makeDomVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
-  return {
-    currentTime: 5,
-    readyState: 4,
-    videoWidth: 1920,
-    videoHeight: 1080,
-    dataset: {},
-    ...overrides,
-  } as HTMLVideoElement;
-}
-
 describe('frame-source-policy', () => {
-  it('accepts a ready DOM video when drift is within threshold', () => {
-    const decision = resolvePreviewDomVideoDrawDecision({
-      domVideo: makeDomVideo({ currentTime: 10.12 }),
-      sourceTime: 10,
-      speed: 1,
-      isRenderingTransition: false,
-    });
-
-    expect(decision.hasReadyDomVideo).toBe(true);
-    expect(decision.shouldDraw).toBe(true);
-    expect(decision.driftThreshold).toBe(0.2);
-  });
-
-  it('widens DOM video tolerance while rendering a transition', () => {
-    const decision = resolvePreviewDomVideoDrawDecision({
-      domVideo: makeDomVideo({ currentTime: 10.8 }),
-      sourceTime: 10,
-      speed: 1,
-      isRenderingTransition: true,
-    });
-
-    expect(decision.shouldDraw).toBe(true);
-    expect(decision.driftThreshold).toBe(1.0);
-  });
-
   it('warms mediabunny in the background for variable-speed preview playback', () => {
     expect(resolvePreviewMediabunnyInitAction({
       renderMode: 'preview',
@@ -83,18 +46,12 @@ describe('frame-source-policy', () => {
     })).toBe(false);
   });
 
-  it('only tries worker bitmaps when preview lacks a ready DOM video', () => {
+  it('tries worker bitmaps only in preview mode', () => {
     expect(shouldTryPreviewWorkerBitmap({
       renderMode: 'preview',
-      hasReadyDomVideo: false,
     })).toBe(true);
     expect(shouldTryPreviewWorkerBitmap({
-      renderMode: 'preview',
-      hasReadyDomVideo: true,
-    })).toBe(false);
-    expect(shouldTryPreviewWorkerBitmap({
       renderMode: 'export',
-      hasReadyDomVideo: false,
     })).toBe(false);
   });
 

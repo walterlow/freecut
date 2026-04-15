@@ -47,7 +47,6 @@ export type TransitionPreviewTelemetry = {
 type TransitionRenderer = {
   renderFrame: (frame: number) => Promise<void>;
   prewarmFrame: (frame: number) => Promise<void>;
-  setDomVideoElementProvider?: (provider: ((itemId: string) => HTMLVideoElement | null) | undefined) => void;
   setStreamingFrameProvider?: (provider: ((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | undefined) => void;
 };
 
@@ -360,7 +359,6 @@ export function usePreviewTransitionSessionController({
         if (!renderer || !scrubMountedRef.current) return false;
 
         const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
-        renderer.setDomVideoElementProvider?.(undefined);
         renderer.setStreamingFrameProvider?.(streamingFrameProvider);
 
         const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame);

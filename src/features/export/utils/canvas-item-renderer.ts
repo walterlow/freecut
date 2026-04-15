@@ -43,7 +43,6 @@ import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/time
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import {
-  resolvePreviewDomVideoDrawDecision,
   resolvePreviewMediabunnyInitAction,
   shouldAllowPreviewVideoElementFallback,
   shouldTryPreviewWorkerBitmap,
@@ -160,21 +159,11 @@ export interface ItemRenderContext {
   // GPU transition pipeline (lazily initialized, shares device with gpuPipeline)
   gpuTransitionPipeline?: import('@/infrastructure/gpu/transitions').TransitionPipeline | null;
 
-  // DOM video element provider for zero-copy playback rendering.
-  // During playback, the Player's <video> elements are already at
-  // the correct frame — use them directly instead of mediabunny decode.
-  domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
-
   // Streaming WebCodecs frame provider (experimental).
-  // When set, checked before DOM video and mediabunny paths.
+  // When set, checked before mediabunny and fallback video element paths.
   // Returns a pre-decoded ImageBitmap for the given playback instance, source URL,
   // and timestamp, or null if no frame is buffered yet.
   streamingFrameProvider?: (streamKey: string, src: string, sourceTime: number) => ImageBitmap | null;
-
-  // Set to true when rendering transition participant clips. Widens the
-  // DOM video drift threshold to prefer stale zero-copy frames over
-  // 170ms mediabunny stalls during transition ramp-up / exit.
-  isRenderingTransition?: boolean;
 }
 
 /**
@@ -551,9 +540,8 @@ async function renderVideoItem(
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
 
   // === TRY STREAMING WEBCODECS FRAME ===
-  // When enabled, worker-decoded frames bypass DOM video and mediabunny entirely.
-  // On buffer miss, fall through to DOM video so transitions and cold-start clips
-  // show a frame rather than black.
+  // When enabled, worker-decoded frames bypass mediabunny entirely.
+  // On buffer miss, fall through to mediabunny or the existing fallback element.
   if (isPreviewMode && rctx.streamingFrameProvider && item.src) {
     const streamBitmap = rctx.streamingFrameProvider(item.id, item.src, sourceTime);
     if (streamBitmap) {
@@ -570,63 +558,7 @@ async function renderVideoItem(
       );
       return;
     }
-    // No frame buffered yet — fall through to DOM video / mediabunny
-  }
-
-  const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
-    ? rctx.domVideoElementProvider(item.id)
-    : null;
-  const domVideoDecision = resolvePreviewDomVideoDrawDecision({
-    domVideo,
-    sourceTime,
-    speed,
-    isRenderingTransition: !!rctx.isRenderingTransition,
-  });
-  const hasDomVideo = domVideoDecision.hasReadyDomVideo;
-
-  // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
-  // During playback, the Player's <video> elements are already playing
-  // at the correct frame. Drawing from them avoids mediabunny decode entirely.
-  //
-  // For variable-speed clips (speed != 1), mediabunny provides frame-accurate
-  // decode. Skip DOM video when mediabunny is warmed. When mediabunny ISN'T
-  // warmed, use DOM video as a one-shot fallback to avoid a 300-500ms keyframe
-  // seek stall — mediabunny init runs async in the background so subsequent
-  // frames switch to frame-accurate decode.
-  // Always try DOM video for variable-speed clips during playback. Mediabunny's
-  // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
-  // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
-  if (domVideo && domVideoDecision.shouldDraw) {
-    // Variable-speed clips naturally drift from their DOM video element
-    // because the browser plays at 1x while sourceTime advances at speed.
-    // Use a wider threshold proportional to speed to avoid falling back
-    // to mediabunny decode (which causes 50-500ms freezes on first decode).
-    // For variable-speed clips, use a very wide threshold to avoid EVER
-    // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
-    // is visually acceptable; mediabunny stalls are not.
-    //
-    // During transitions (entry ramp-up and exit handoff), the DOM video
-    // element may be settling — play() was just called, Chrome's decoder
-    // is ramping up.  Accept very high drift (1s) to prefer a stale
-    // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
-    // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
-    drawContainedMediaSource(
-      ctx,
-      domVideo,
-      domVideo.videoWidth,
-      domVideo.videoHeight,
-      transform,
-      canvasSettings,
-      item.crop,
-      undefined,
-      rctx.canvasPool,
-    );
-    // For variable-speed clips using DOM fallback during playback,
-    // DON'T kick off mediabunny init — keep using DOM video for the
-    // entire playback session. Mediabunny init + keyframe seek takes
-    // 400-500ms on the main thread, causing visible frame drops.
-    // DOM video has slight timing drift at speed != 1, but no freezes.
-    return;
+    // No frame buffered yet — fall through to mediabunny / fallback element.
   }
 
   const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({
@@ -639,7 +571,7 @@ async function renderVideoItem(
   if (mediabunnyInitAction !== 'none' && rctx.ensureVideoItemReady) {
     // For variable-speed clips during playback, don't block on mediabunny init.
     // The init triggers a keyframe seek that blocks the main thread for 400ms+.
-    // Instead, skip this frame (DOM video already drew it or it's invisible).
+    // Warm in the background and let the current frame fall through.
     if (mediabunnyInitAction === 'warm-background-and-skip') {
       void rctx.ensureVideoItemReady(item.id);
       return;
@@ -682,7 +614,7 @@ async function renderVideoItem(
       }
     }
 
-    if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
+    if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode })) {
       const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
         ctx,
         item,
@@ -707,7 +639,7 @@ async function renderVideoItem(
   // Prefer a worker-decoded exact frame before a cold main-thread extractor draw.
   // This keeps large-jump and transition-entry stalls off the main thread while
   // preserving the same exact-frame preview path once the extractor is warm.
-  if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
+  if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode })) {
     const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
       ctx,
       item,
@@ -1573,20 +1505,15 @@ export async function renderTransitionToCanvas(
   const rightParticipant = resolveTransitionParticipantRenderState(rightClip, activeTransition, frame, trackOrder, rctx);
 
   // === PERFORMANCE: Render both clips in parallel ===
-  // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
+  // Video decode is the bottleneck.
   // Running both clips concurrently halves the decode wait time.
   const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire();
   const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire();
 
-  // Flag the render context so renderVideoItem uses a wider DOM video
-  // drift threshold — prefer stale zero-copy frames over mediabunny stalls.
-  const prevTransitionFlag = rctx.isRenderingTransition;
-  rctx.isRenderingTransition = true;
   await Promise.all([
     renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan),
     renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan),
   ]);
-  rctx.isRenderingTransition = prevTransitionFlag;
 
   // Apply effects to both clips (parallel when both have effects)
   const leftCombinedEffects = leftParticipant.effects;

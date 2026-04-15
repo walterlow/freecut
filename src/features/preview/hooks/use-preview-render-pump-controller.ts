@@ -561,7 +561,7 @@ export function usePreviewRenderPump({
           if (!isPriorityFrame && isStale()) break;
 
           // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
-          if ('setDomVideoElementProvider' in renderer) {
+          if ('setStreamingFrameProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
             const windowForFrame = playbackNow.isPlaying
@@ -591,10 +591,7 @@ export function usePreviewRenderPump({
                 }
               }
             }
-            renderer.setDomVideoElementProvider?.(undefined);
-            if ('setStreamingFrameProvider' in renderer) {
-              renderer.setStreamingFrameProvider?.(streamingFrameProvider);
-            }
+            renderer.setStreamingFrameProvider?.(streamingFrameProvider);
           }
 
           if (isPriorityFrame) {

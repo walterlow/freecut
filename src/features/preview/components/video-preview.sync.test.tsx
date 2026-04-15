@@ -92,7 +92,6 @@ const rendererMockState = vi.hoisted(() => {
     prewarmFrame: ReturnType<typeof vi.fn>;
     prewarmFrames: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
-    setDomVideoElementProvider: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
     dispose: ReturnType<typeof vi.fn>;
   };
@@ -112,7 +111,6 @@ const rendererMockState = vi.hoisted(() => {
         }
       }),
       invalidateFrameCache: vi.fn(),
-      setDomVideoElementProvider: vi.fn(),
       getScrubbingCache: () => null,
       dispose: vi.fn(),
     };
@@ -331,7 +329,6 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
-  getBestDomVideoElementForItem: vi.fn(() => null),
 }));
 
 vi.mock('./gizmo-overlay', () => ({
@@ -1885,7 +1882,6 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
-      expect(renderer.setDomVideoElementProvider).toHaveBeenCalledWith(undefined);
       expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
@@ -1971,12 +1967,10 @@ describe('VideoPreview sync behavior', () => {
       expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
     });
 
-    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
-    expect(renderer.setDomVideoElementProvider).not.toHaveBeenCalled();
   });
 
   it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {

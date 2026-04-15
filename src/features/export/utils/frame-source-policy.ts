@@ -2,20 +2,6 @@ export type RenderMode = 'export' | 'preview';
 
 export type PreviewMediabunnyInitAction = 'none' | 'await-ready' | 'warm-background-and-skip';
 
-export interface PreviewDomVideoDrawDecision {
-  hasReadyDomVideo: boolean;
-  shouldDraw: boolean;
-  drift: number | null;
-  driftThreshold: number | null;
-}
-
-export interface ResolvePreviewDomVideoDrawDecisionOptions {
-  domVideo: HTMLVideoElement | null;
-  sourceTime: number;
-  speed: number;
-  isRenderingTransition: boolean;
-}
-
 export interface ResolvePreviewMediabunnyInitActionOptions {
   renderMode: RenderMode;
   hasMediabunny: boolean;
@@ -32,7 +18,6 @@ export interface PreviewStrictWaitingFallbackOptions {
 
 export interface PreviewWorkerBitmapOptions {
   renderMode: RenderMode;
-  hasReadyDomVideo: boolean;
 }
 
 export interface PreviewVideoElementFallbackOptions {
@@ -45,41 +30,6 @@ export interface PreviewVideoElementFallbackOptions {
 
 export function isVariableSpeedPlayback(speed: number): boolean {
   return Math.abs(speed - 1) >= 0.01;
-}
-
-export function getPreviewDomVideoDriftThreshold(speed: number, isInTransition: boolean): number {
-  const baseDriftThreshold = isInTransition ? 1.0 : 0.2;
-  return Math.abs(speed) > 1.01
-    ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed))
-    : baseDriftThreshold;
-}
-
-export function resolvePreviewDomVideoDrawDecision(
-  options: ResolvePreviewDomVideoDrawDecisionOptions,
-): PreviewDomVideoDrawDecision {
-  const { domVideo, sourceTime, speed, isRenderingTransition } = options;
-
-  if (!domVideo || domVideo.readyState < 2 || domVideo.videoWidth <= 0) {
-    return {
-      hasReadyDomVideo: false,
-      shouldDraw: false,
-      drift: null,
-      driftThreshold: null,
-    };
-  }
-
-  const drift = Math.abs(domVideo.currentTime - sourceTime);
-  const driftThreshold = getPreviewDomVideoDriftThreshold(
-    speed,
-    isRenderingTransition,
-  );
-
-  return {
-    hasReadyDomVideo: true,
-    shouldDraw: drift <= driftThreshold,
-    drift,
-    driftThreshold,
-  };
 }
 
 export function resolvePreviewMediabunnyInitAction(
@@ -113,8 +63,8 @@ export function shouldUsePreviewStrictWaitingFallback(
 }
 
 export function shouldTryPreviewWorkerBitmap(options: PreviewWorkerBitmapOptions): boolean {
-  const { renderMode, hasReadyDomVideo } = options;
-  return renderMode === 'preview' && !hasReadyDomVideo;
+  const { renderMode } = options;
+  return renderMode === 'preview';
 }
 
 export function shouldAllowPreviewVideoElementFallback(

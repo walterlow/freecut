@@ -134,7 +134,6 @@ export async function createCompositionRenderer(
     getPreviewPathVerticesOverride?: PreviewPathVerticesOverride;
     getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined;
     getLiveKeyframes?: (itemId: string) => ItemKeyframes | undefined;
-    domVideoElementProvider?: (itemId: string) => HTMLVideoElement | null;
   } = {},
 ) {
   const {
@@ -151,7 +150,6 @@ export async function createCompositionRenderer(
   const getPreviewPathVerticesOverride = options.getPreviewPathVerticesOverride;
   const getLiveItemSnapshot = options.getLiveItemSnapshot;
   const getLiveKeyframes = options.getLiveKeyframes;
-  const domVideoElementProvider = options.domVideoElementProvider;
   const hasDom = typeof document !== 'undefined';
   const previewStrictDecode = renderMode === 'preview';
 
@@ -510,11 +508,10 @@ export async function createCompositionRenderer(
     adjustmentLayers,
     getPreviewEffectsOverride,
     getPreviewPathVerticesOverride,
-    subCompRenderData,
-    gpuPipeline: null,
-    gpuTransitionPipeline: null,
-    domVideoElementProvider,
-  };
+      subCompRenderData,
+      gpuPipeline: null,
+      gpuTransitionPipeline: null,
+    };
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
     if (prewarmAttempted) return prewarmCtx;
@@ -1767,10 +1764,6 @@ export async function createCompositionRenderer(
           } catch { /* best-effort fallback */ }
         }
       }
-    },
-
-    setDomVideoElementProvider(provider: ((itemId: string) => HTMLVideoElement | null) | undefined) {
-      itemRenderContext.domVideoElementProvider = provider;
     },
 
     setStreamingFrameProvider(provider: ((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | undefined) {
