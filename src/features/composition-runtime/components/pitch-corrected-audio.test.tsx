@@ -215,7 +215,7 @@ describe('PitchCorrectedAudio', () => {
     previewBridgeMocks.state.streamingAudioProvider = null;
   });
 
-  it('keeps 1x playback on the native preview path', async () => {
+  it('defaults 1x playback to the decoded buffered path', async () => {
     render(
       <PitchCorrectedAudio
         src="blob:audio"
@@ -227,15 +227,16 @@ describe('PitchCorrectedAudio', () => {
     );
 
     await waitFor(() => {
-      expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledWith('blob:audio');
+      expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-media-id', 'media-1');
     });
 
     expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
     expect(audioDecodeMocks.getOrDecodeAudio).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
+    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
-  it('keeps the native preview graph alive while EQ stages change', async () => {
+  it('keeps 1x playback on the decoded buffered path while EQ stages change', async () => {
     const { rerender } = render(
       <PitchCorrectedAudio
         src="blob:audio"
@@ -248,7 +249,7 @@ describe('PitchCorrectedAudio', () => {
     );
 
     await waitFor(() => {
-      expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-media-id', 'media-1');
     });
 
     playbackStateMocks.current = {
@@ -268,14 +269,10 @@ describe('PitchCorrectedAudio', () => {
     );
 
     await waitFor(() => {
-      expect(previewGraphMocks.rampPreviewClipEq).toHaveBeenLastCalledWith(
-        previewGraphMocks.graph,
-        [DEFAULT_AUDIO_EQ_SETTINGS],
-      );
+      expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-rate', '1');
     });
 
-    expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
-    expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledTimes(1);
+    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
   it('can force 1x video playback onto the decoded buffered path', async () => {
@@ -286,7 +283,6 @@ describe('PitchCorrectedAudio', () => {
         itemId="item-1"
         durationInFrames={120}
         playbackRate={1}
-        preferDecodedBuffering
       />,
     );
 
@@ -313,7 +309,6 @@ describe('PitchCorrectedAudio', () => {
         itemId="item-1"
         durationInFrames={120}
         playbackRate={1}
-        preferDecodedBuffering
         streamingAudioStreamKey="item-1"
       />,
     );

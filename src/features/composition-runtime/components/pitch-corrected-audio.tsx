@@ -568,7 +568,6 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 
 export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
-  const preferDecodedBuffering = props.preferDecodedBuffering === true;
   const streamingAudioStreamKey = props.streamingAudioStreamKey;
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
@@ -583,9 +582,9 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   });
   const requiresPitchCorrection = isAudioPitchShiftActive(resolvedPitchShiftSemitones);
   const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`;
-  const unshiftedFallback = preferDecodedBuffering
-    ? <CustomDecoderBufferedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />
-    : <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />;
+  const unshiftedFallback = (
+    <CustomDecoderBufferedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />
+  );
 
   if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {
     if (streamingAudioStreamKey) {
