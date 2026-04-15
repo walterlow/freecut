@@ -1773,6 +1773,10 @@ export async function createCompositionRenderer(
       itemRenderContext.domVideoElementProvider = provider;
     },
 
+    setStreamingFrameProvider(provider: ((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | undefined) {
+      itemRenderContext.streamingFrameProvider = provider;
+    },
+
     /**
      * Pre-initialize mediabunny decoders for specific item IDs and optionally
      * seek them to a target frame. This warms up the WASM decoder and positions

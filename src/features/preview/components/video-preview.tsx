@@ -31,6 +31,7 @@ import { usePreviewSourceWarm } from '../hooks/use-preview-source-warm';
 import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model';
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
+import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
 
 interface VideoPreviewProps {
   project: {
@@ -324,7 +325,12 @@ export const VideoPreview = memo(function VideoPreview({
     project.width,
   ]);
 
-  const forceFastScrubOverlay = showGpuEffectsOverlay;
+  const { forceCanvasOverlay: streamingPlaybackActive, streamingFrameProviderRef } = useStreamingPlaybackController({
+    fps,
+    combinedTracks,
+    playbackTransitionWindows,
+  });
+  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
@@ -347,6 +353,7 @@ export const VideoPreview = memo(function VideoPreview({
     getTransitionWindowByStartFrame,
     getActiveTransitionWindowForFrame,
     pushTransitionTrace,
+    streamingFrameProviderRef,
     ...previewRuntimeRefs.transitionSessionControllerRefs,
   });
   const {
@@ -447,6 +454,7 @@ export const VideoPreview = memo(function VideoPreview({
     isPausedTransitionOverlayActive,
     trackPlayerSeek,
     recordRenderFrameJitter,
+    streamingFrameProviderRef,
     ...previewRuntimeRefs.renderPumpRefs,
   });
   usePreviewMediaPreload({

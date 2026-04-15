@@ -150,6 +150,9 @@ interface UsePreviewRenderPumpParams {
     transitionId: string | null,
     progress: number | null,
   ) => void;
+  /** Ref to streaming frame provider from useStreamingPlaybackController.
+   *  When non-null, the render pump sets it on the renderer before each frame. */
+  streamingFrameProviderRef?: RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
 }
 
 export function usePreviewRenderPump({
@@ -228,6 +231,7 @@ export function usePreviewRenderPump({
   isPausedTransitionOverlayActive,
   trackPlayerSeek,
   recordRenderFrameJitter,
+  streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
   useEffect(() => {
     scrubMountedRef.current = true;
@@ -598,6 +602,10 @@ export function usePreviewRenderPump({
               renderer.setDomVideoElementProvider?.(getPinnedTransitionElementForItem);
             } else {
               renderer.setDomVideoElementProvider?.(undefined);
+            }
+            // Set streaming frame provider when available (experimental WebCodecs playback)
+            if ('setStreamingFrameProvider' in renderer) {
+              renderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
             }
           }
 
@@ -1073,6 +1081,9 @@ export function usePreviewRenderPump({
                   { requireExplicitSourceFps: true },
                 ));
                 if (!usePlaybackStore.getState().isPlaying && mainRenderer) {
+                  if ('setStreamingFrameProvider' in mainRenderer) {
+                    mainRenderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
+                  }
                   const preRenderCount = Math.min(playbackTransitionPrerenderRunwayFrames, tw.endFrame - tw.startFrame);
                   for (let fi = 0; fi < preRenderCount; fi++) {
                     if (usePlaybackStore.getState().isPlaying) break;
@@ -1435,6 +1446,9 @@ export function usePreviewRenderPump({
               try {
                 const bgRenderer = await ensureBgTransitionRenderer();
                 if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
+                  if ('setStreamingFrameProvider' in bgRenderer) {
+                    bgRenderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
+                  }
                   await bgRenderer.renderFrame(tw.startFrame);
                   cacheTransitionSessionFrame(tw.startFrame);
                   pushTransitionTrace('bg_prerender', { frame: tw.startFrame });
