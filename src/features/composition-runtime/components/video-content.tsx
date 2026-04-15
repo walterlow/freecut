@@ -787,7 +787,9 @@ export const VideoContent: React.FC<{
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   const [hasError, setHasError] = useState(false);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldDetachVideoForNonPlayerPreview = visualPlaybackMode !== 'player';
+  // The pooled DOM video path now exists only for the remaining Player-owned
+  // preview cases. Rendered-preview and streaming modes keep the element detached.
+  const shouldAttachNativePreviewVideo = visualPlaybackMode === 'player';
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -816,7 +818,7 @@ export const VideoContent: React.FC<{
     );
   }
 
-  if (shouldDetachVideoForNonPlayerPreview) {
+  if (!shouldAttachNativePreviewVideo) {
     return (
       <div
         data-detached-preview-video={item.id}
