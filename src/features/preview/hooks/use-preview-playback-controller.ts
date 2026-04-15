@@ -27,10 +27,7 @@ interface UsePreviewPlaybackControllerParams {
   preferPlayerForStyledTextScrubRef: MutableRefObject<boolean>;
   adaptiveQualityStateRef: MutableRefObject<AdaptivePreviewQualityState>;
   adaptiveFrameSampleRef: MutableRefObject<{ frame: number; tsMs: number } | null>;
-  pendingFastScrubHandoffFrameRef: MutableRefObject<number | null>;
   ignorePlayerUpdatesRef: MutableRefObject<boolean>;
-  maybeCompleteFastScrubHandoff: (resolvedFrame?: number | null) => boolean;
-  scheduleFastScrubHandoffCheck: () => void;
   resolvePendingSeekLatency: (frame: number) => void;
 }
 
@@ -48,10 +45,7 @@ export function usePreviewPlaybackController({
   preferPlayerForStyledTextScrubRef,
   adaptiveQualityStateRef,
   adaptiveFrameSampleRef,
-  pendingFastScrubHandoffFrameRef,
   ignorePlayerUpdatesRef,
-  maybeCompleteFastScrubHandoff,
-  scheduleFastScrubHandoffCheck,
   resolvePendingSeekLatency,
 }: UsePreviewPlaybackControllerParams) {
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
@@ -88,12 +82,6 @@ export function usePreviewPlaybackController({
   const handleFrameChange = useCallback((frame: number) => {
     const nextFrame = Math.round(frame);
     resolvePendingSeekLatency(nextFrame);
-    maybeCompleteFastScrubHandoff(nextFrame);
-    const pendingHandoffFrame = pendingFastScrubHandoffFrameRef.current;
-    if (pendingHandoffFrame !== null && nextFrame !== pendingHandoffFrame) {
-      scheduleFastScrubHandoffCheck();
-      return;
-    }
     if (ignorePlayerUpdatesRef.current) return;
     const playbackState = usePlaybackStore.getState();
     const runtimeSnapshot = getPreviewRuntimeSnapshotFromPlaybackState(
@@ -153,11 +141,8 @@ export function usePreviewPlaybackController({
     fps,
     ignorePlayerUpdatesRef,
     isGizmoInteractingRef,
-    maybeCompleteFastScrubHandoff,
-    pendingFastScrubHandoffFrameRef,
     previewPerfRef,
     resolvePendingSeekLatency,
-    scheduleFastScrubHandoffCheck,
   ]);
 
   const handlePlayStateChange = useCallback((playing: boolean) => {

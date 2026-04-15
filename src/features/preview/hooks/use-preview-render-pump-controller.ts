@@ -1,5 +1,4 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import type { PlayerRef } from '@/features/preview/deps/player-core';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
@@ -65,7 +64,6 @@ type PreviewPerfState = {
 };
 
 interface UsePreviewRenderPumpParams {
-  playerRef: RefObject<PlayerRef | null>;
   fps: number;
   forceFastScrubOverlay: boolean;
   combinedTracks: TimelineTrack[];
@@ -79,7 +77,6 @@ interface UsePreviewRenderPumpParams {
   isGizmoInteractingRef: MutableRefObject<boolean>;
   bypassPreviewSeekRef: MutableRefObject<boolean>;
   showFastScrubOverlayRef: MutableRefObject<boolean>;
-  pendingFastScrubHandoffFrameRef: MutableRefObject<number | null>;
   scrubCanvasRef: MutableRefObject<HTMLCanvasElement | null>;
   scrubRendererRef: RefObject<FastScrubRenderer | null>;
   scrubMountedRef: MutableRefObject<boolean>;
@@ -111,12 +108,8 @@ interface UsePreviewRenderPumpParams {
   transitionPrewarmPromiseRef: MutableRefObject<Promise<void> | null>;
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>;
   setDisplayedFrame: (frame: number | null) => void;
-  clearPendingFastScrubHandoff: () => void;
   hideFastScrubOverlay: () => void;
   hidePlaybackTransitionOverlay: () => void;
-  maybeCompleteFastScrubHandoff: (resolvedFrame?: number | null) => boolean;
-  scheduleFastScrubHandoffCheck: () => void;
-  beginFastScrubHandoff: (targetFrame: number) => void;
   showFastScrubOverlayForFrame: () => void;
   showPlaybackTransitionOverlayForFrame: () => void;
   shouldPreferPlayerForPreview: (previewFrame: number | null) => boolean;
@@ -137,7 +130,6 @@ interface UsePreviewRenderPumpParams {
     frame: number,
     playbackState: { isPlaying: boolean; previewFrame: number | null },
   ) => boolean;
-  trackPlayerSeek: (targetFrame: number) => void;
   recordRenderFrameJitter?: (
     frame: number,
     renderMs: number,
@@ -151,7 +143,6 @@ interface UsePreviewRenderPumpParams {
 }
 
 export function usePreviewRenderPump({
-  playerRef,
   fps,
   forceFastScrubOverlay,
   combinedTracks,
@@ -165,7 +156,6 @@ export function usePreviewRenderPump({
   isGizmoInteractingRef,
   bypassPreviewSeekRef,
   showFastScrubOverlayRef,
-  pendingFastScrubHandoffFrameRef,
   scrubCanvasRef,
   scrubRendererRef,
   scrubMountedRef,
@@ -197,12 +187,8 @@ export function usePreviewRenderPump({
   transitionPrewarmPromiseRef,
   transitionSessionTraceRef,
   setDisplayedFrame,
-  clearPendingFastScrubHandoff,
   hideFastScrubOverlay,
   hidePlaybackTransitionOverlay,
-  maybeCompleteFastScrubHandoff,
-  scheduleFastScrubHandoffCheck,
-  beginFastScrubHandoff,
   showFastScrubOverlayForFrame,
   showPlaybackTransitionOverlayForFrame,
   shouldPreferPlayerForPreview,
@@ -220,7 +206,6 @@ export function usePreviewRenderPump({
   ensureBgTransitionRenderer,
   pushTransitionTrace,
   isPausedTransitionOverlayActive,
-  trackPlayerSeek,
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
@@ -1079,10 +1064,9 @@ export function usePreviewRenderPump({
       if (prev.currentFrame !== state.currentFrame || prev.isPlaying !== state.isPlaying) {
         lastPausedPrearmTargetRef.current = null;
         schedulePlaybackTransitionPrepare(null);
-        // Don't clear the session when stepping out of a paused transition
-        // frame — handleScrubTargetUpdate needs the session to render the
-        // post-transition frame on the overlay before handing off to the
-        // Player. The session will be cleared there after the handoff.
+        // Preserve the session when stepping out of a paused transition
+        // frame so the render pump can still draw the immediate
+        // post-transition frame without reinitializing the transition lane.
         const wasOnTransition = !prev.isPlaying && getTransitionWindowForFrame(prev.currentFrame) !== null;
         if (!wasOnTransition) {
           clearTransitionPlaybackSession();
@@ -1116,7 +1100,6 @@ export function usePreviewRenderPump({
           hideAllOverlays();
           return;
         }
-        clearPendingFastScrubHandoff();
         if (showFastScrubOverlayRef.current) {
           hideFastScrubOverlay();
         }
@@ -1203,54 +1186,14 @@ export function usePreviewRenderPump({
 
       if (targetFrame === null) {
         resetScrubLoopState();
-        clearPendingFastScrubHandoff();
         bypassPreviewSeekRef.current = false;
-
-        // When leaving a transition frame (e.g. 12714→12715), the
-        // StableVideoSequence pool lane needs time to re-seek from the
-        // stabilized left clip position to the right clip. Render this
-        // frame on the fast-scrub overlay so the Player isn't revealed
-        // until it has caught up.
-        if (prevIsPausedInsideTransition && !isPausedInsideTransition) {
-          scrubRequestedFrameRef.current = state.currentFrame;
-          void pumpRenderLoop();
-          playerRef.current?.seekTo(state.currentFrame);
-          beginFastScrubHandoff(state.currentFrame);
-          scheduleFastScrubHandoffCheck();
-          return;
+        if (!state.isPlaying) {
+          clearTransitionPlaybackSession();
         }
-
-        try {
-          const playerFrame = playerRef.current?.getCurrentFrame();
-          const roundedFrame = Number.isFinite(playerFrame)
-            ? Math.round(playerFrame as number)
-            : null;
-          if (roundedFrame === state.currentFrame) {
-            playerRef.current?.seekTo(state.currentFrame);
-            hideAllOverlays();
-            return;
-          }
-          if (showFastScrubOverlayRef.current && roundedFrame !== state.currentFrame) {
-            beginFastScrubHandoff(state.currentFrame);
-          }
-          if (roundedFrame !== state.currentFrame) {
-            trackPlayerSeek(state.currentFrame);
-          }
-          playerRef.current?.seekTo(state.currentFrame);
-          if (!maybeCompleteFastScrubHandoff()) {
-            if (pendingFastScrubHandoffFrameRef.current !== null) {
-              scheduleFastScrubHandoffCheck();
-            } else {
-              hideAllOverlays();
-            }
-          }
-        } catch {
-          hideAllOverlays();
-        }
+        hideAllOverlays();
         return;
       }
 
-      clearPendingFastScrubHandoff();
       if (scrubRequestedFrameRef.current === targetFrame) {
         return;
       }
@@ -1527,7 +1470,6 @@ export function usePreviewRenderPump({
     return () => {
       scrubMountedRef.current = false;
       resetScrubLoopState();
-      clearPendingFastScrubHandoff();
       clearScheduledTransitionPrepare();
       clearTransitionPlaybackSession();
       hideAllOverlays();
@@ -1548,7 +1490,6 @@ export function usePreviewRenderPump({
     fastScrubBoundarySources,
     forceFastScrubOverlay,
     fps,
-    clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
     getTransitionWindowForFrame,
@@ -1558,15 +1499,11 @@ export function usePreviewRenderPump({
     pinTransitionPlaybackSession,
     preparePlaybackTransitionFrame,
     showPlaybackTransitionOverlayForFrame,
-    beginFastScrubHandoff,
-    maybeCompleteFastScrubHandoff,
-    scheduleFastScrubHandoffCheck,
     playbackTransitionCooldownFrames,
     playbackTransitionLookaheadFrames,
     playbackTransitionOverlayWindows,
     pushTransitionTrace,
     setDisplayedFrame,
     shouldPreferPlayerForPreview,
-    trackPlayerSeek,
   ]);
 }

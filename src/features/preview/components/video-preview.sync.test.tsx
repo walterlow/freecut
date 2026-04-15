@@ -1293,13 +1293,15 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('hands off scrub preview back to current frame when previewFrame is cleared', async () => {
-    render(
+  it('does not re-seek the player on scrub release when it already matches the current frame', async () => {
+    const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
         containerSize={{ width: 1280, height: 720 }}
       />
     );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
@@ -1323,8 +1325,10 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(getDisplayedFrame()).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
     });
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 
   it('keeps ruler drag on fast-scrub presentation until previewFrame is cleared', async () => {
@@ -1660,7 +1664,7 @@ describe('VideoPreview sync behavior', () => {
     expect(getDisplayedFrame()).toBeNull();
   });
 
-  it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
+  it('drops the fast-scrub overlay immediately on scrub release instead of waiting for player confirmation', async () => {
     const { container } = render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1691,9 +1695,9 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(getDisplayedFrame()).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
     });
-    expect(getDisplayedFrame()).toBe(48);
-    expect(scrubCanvas.style.visibility).toBe('visible');
 
     act(() => {
       completeDeferredPlayerSeek?.(47);
@@ -1701,8 +1705,8 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().currentFrame).toBe(48);
-      expect(getDisplayedFrame()).toBe(48);
-      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
     });
 
     act(() => {
