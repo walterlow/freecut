@@ -9,10 +9,27 @@ const originalSrc = 'blob:original';
 const proxySrc = 'blob:proxy';
 
 const createStreamingPlaybackMock = vi.hoisted(() => vi.fn());
+const mainThreadAudioSourceMocks = vi.hoisted(() => {
+  const source = {
+    warmup: vi.fn(),
+    start: vi.fn(),
+    seek: vi.fn(),
+    stop: vi.fn(),
+    stopAll: vi.fn(),
+    updatePosition: vi.fn(),
+    dispose: vi.fn(),
+  };
+
+  return {
+    source,
+    createMainThreadAudioSource: vi.fn(() => source),
+  };
+});
 
 vi.mock('@/features/preview/utils/streaming-playback', () => ({
   createStreamingPlayback: createStreamingPlaybackMock,
 }));
+vi.mock('@/features/preview/utils/main-thread-audio-source', () => mainThreadAudioSourceMocks);
 
 vi.mock('@/infrastructure/browser/blob-url-manager', () => ({
   blobUrlManager: {
@@ -51,7 +68,13 @@ function createFakeStreamingPlayback() {
     getSourceInfo: vi.fn((streamKey: string) => sourceInfoByKey.get(streamKey) ?? { hasAudio: true }),
     isStreaming: vi.fn((streamKey: string) => streamingKeys.has(streamKey)),
     updatePosition: vi.fn(),
+    pushAudioChunk: vi.fn(),
+    getStreamGeneration: vi.fn(() => 0),
+    setSourceHasAudio: vi.fn((streamKey: string, hasAudio: boolean) => {
+      sourceInfoByKey.set(streamKey, { hasAudio });
+    }),
     enableIdleSweep: vi.fn(),
+    disableIdleSweep: vi.fn(),
     dispose: vi.fn(),
     getMetrics: vi.fn(() => ({
       activeStreams: streamingKeys.size,
@@ -59,6 +82,13 @@ function createFakeStreamingPlayback() {
       totalFramesDrawn: 0,
       totalFramesMissed: 0,
       totalAudioChunksReceived: 0,
+      audioStartupSamples: 0,
+      audioStartupLastMs: 0,
+      audioStartupAvgMs: 0,
+      audioSeekSamples: 0,
+      audioSeekLastMs: 0,
+      audioSeekAvgMs: 0,
+      pendingAudioWarmups: 0,
       frameBufferSizes: new Map<string, number>(),
       audioBufferSizes: new Map<string, number>(),
     })),
@@ -128,6 +158,7 @@ describe('useStreamingPlaybackController proxy handoff', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.useRealTimers();
   });
 
   it('keeps the active stream alive until the toggled proxy stream is ready', async () => {
@@ -169,4 +200,83 @@ describe('useStreamingPlaybackController proxy handoff', () => {
     expect(latestAudioProvider?.getAudioChunks('clip-1', 0, 0.5)).toEqual([{ key: 'new-audio' }]);
     expect(playback.getAudioChunks).toHaveBeenLastCalledWith(newStreamKey, 0, 0.5);
   });
+
+  it('does not tear down the warmed stream when playback stops', async () => {
+    render(<Harness tracks={createTracks()} />);
+
+    await waitFor(() => {
+      expect(playback.startStream).toHaveBeenCalledWith(`clip-1::${originalSrc}`, originalSrc, 0);
+    });
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 15 });
+    });
+
+    await waitFor(() => {
+      expect(playback.enableIdleSweep).toHaveBeenCalled();
+    });
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: false, currentFrame: 18 });
+    });
+
+    await waitFor(() => {
+      expect(playback.disableIdleSweep).toHaveBeenCalled();
+    });
+
+    expect(playback.stopAll).not.toHaveBeenCalled();
+  });
+
+  it('uses alternate worker audio before falling back to main-thread decode', async () => {
+    usePlaybackStore.setState({
+      currentFrame: 0,
+      isPlaying: false,
+      useProxy: true,
+      previewFrame: null,
+      previewItemId: null,
+    });
+    playback.sourceInfoByKey.set(`clip-1::${proxySrc}`, { hasAudio: false });
+    playback.sourceInfoByKey.set(`clip-1::${originalSrc}`, { hasAudio: true });
+
+    render(<Harness tracks={createTracks()} />);
+
+    await waitFor(() => {
+      expect(playback.startStream).toHaveBeenCalledWith(`clip-1::${proxySrc}`, proxySrc, 0);
+      expect(playback.startStream).toHaveBeenCalledWith(`clip-1::${originalSrc}`, originalSrc, 0);
+    });
+
+    act(() => {
+      usePlaybackStore.setState({ isPlaying: true, currentFrame: 5 });
+    });
+
+    await waitFor(() => {
+      expect(playback.enableIdleSweep).toHaveBeenCalled();
+    });
+
+    expect(mainThreadAudioSourceMocks.source.start).not.toHaveBeenCalled();
+
+    playback.audioByKey.set(`clip-1::${originalSrc}`, [{ key: 'original-audio' }]);
+    expect(latestAudioProvider?.getAudioChunks('clip-1', 0, 0.5)).toEqual([{ key: 'original-audio' }]);
+    expect(playback.getAudioChunks).toHaveBeenLastCalledWith(`clip-1::${originalSrc}`, 0, 0.5);
+  });
+
+  it('prewarms main-thread fallback audio while paused when neither worker stream has audio', async () => {
+    usePlaybackStore.setState({
+      currentFrame: 0,
+      isPlaying: false,
+      useProxy: true,
+      previewFrame: null,
+      previewItemId: null,
+    });
+    playback.sourceInfoByKey.set(`clip-1::${proxySrc}`, { hasAudio: false });
+    playback.sourceInfoByKey.set(`clip-1::${originalSrc}`, { hasAudio: false });
+
+    render(<Harness tracks={createTracks()} />);
+
+    await waitFor(() => {
+      expect(mainThreadAudioSourceMocks.source.warmup).toHaveBeenCalled();
+      expect(mainThreadAudioSourceMocks.source.start).toHaveBeenCalledWith(`clip-1::${proxySrc}`, originalSrc, 0);
+    });
+  });
+
 });

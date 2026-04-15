@@ -197,6 +197,9 @@ interface StreamState {
    *  async callbacks (e.g. blob fetch) that resolve after the stream was
    *  stopped or restarted. */
   generation: number;
+  /** Timestamp when we started waiting for the first audio chunk after a start/seek. */
+  pendingAudioLatencyStartMs: number | null;
+  pendingAudioLatencyKind: 'start' | 'seek' | null;
 }
 
 interface WorkerErrorMessage {
@@ -236,9 +239,18 @@ export interface StreamingPlayback {
    *  Keeps the decode-ahead throttle advancing during playback so the decode
    *  buffer stays warm while the active presenter catches up. */
   updatePosition(streamKey: string, position: number): void;
+  /** Push an audio chunk from a main-thread decode source (e.g. AC-3).
+   *  Mirrors the worker's audio_chunk path but bypasses the worker. */
+  pushAudioChunk(streamKey: string, chunk: StreamingAudioChunk): void;
+  /** Get the current generation counter for a stream (for stale-check). */
+  getStreamGeneration(streamKey: string): number;
+  /** Override hasAudio on a stream's source info (for main-thread audio). */
+  setSourceHasAudio(streamKey: string, hasAudio: boolean): void;
   /** Enable idle cleanup sweep. Call when playback starts.
    *  Disabled by default so pre-warm streams aren't killed while paused. */
   enableIdleSweep(): void;
+  /** Disable idle cleanup sweep without tearing down active streams. */
+  disableIdleSweep(): void;
   /** Dispose all resources. */
   dispose(): void;
   /** Metrics for debugging. */
@@ -251,6 +263,13 @@ export interface StreamingPlaybackMetrics {
   totalFramesDrawn: number;
   totalFramesMissed: number;
   totalAudioChunksReceived: number;
+  audioStartupSamples: number;
+  audioStartupLastMs: number;
+  audioStartupAvgMs: number;
+  audioSeekSamples: number;
+  audioSeekLastMs: number;
+  audioSeekAvgMs: number;
+  pendingAudioWarmups: number;
   frameBufferSizes: Map<string, number>;
   audioBufferSizes: Map<string, number>;
 }
@@ -267,6 +286,12 @@ export function createStreamingPlayback(): StreamingPlayback {
   let totalFramesDrawn = 0;
   let totalFramesMissed = 0;
   let totalAudioChunksReceived = 0;
+  let audioStartupSamples = 0;
+  let audioStartupTotalMs = 0;
+  let audioStartupLastMs = 0;
+  let audioSeekSamples = 0;
+  let audioSeekTotalMs = 0;
+  let audioSeekLastMs = 0;
 
   // Blob cache (same pattern as decoder-prewarm.ts)
   const blobByUrl = new Map<string, Blob>();
@@ -342,6 +367,10 @@ export function createStreamingPlayback(): StreamingPlayback {
           duration: msg.duration,
           hasAudio: !!msg.hasAudio,
         };
+        if (!msg.hasAudio) {
+          state.pendingAudioLatencyStartMs = null;
+          state.pendingAudioLatencyKind = null;
+        }
       }
       return;
     }
@@ -396,6 +425,20 @@ export function createStreamingPlayback(): StreamingPlayback {
       }
 
       totalAudioChunksReceived++;
+      if (state.pendingAudioLatencyStartMs !== null && state.pendingAudioLatencyKind) {
+        const latencyMs = Math.max(0, performance.now() - state.pendingAudioLatencyStartMs);
+        if (state.pendingAudioLatencyKind === 'start') {
+          audioStartupSamples += 1;
+          audioStartupTotalMs += latencyMs;
+          audioStartupLastMs = latencyMs;
+        } else {
+          audioSeekSamples += 1;
+          audioSeekTotalMs += latencyMs;
+          audioSeekLastMs = latencyMs;
+        }
+        state.pendingAudioLatencyStartMs = null;
+        state.pendingAudioLatencyKind = null;
+      }
       state.audioBuffer.push({
         timestamp: msg.timestamp,
         duration: msg.duration,
@@ -416,7 +459,14 @@ export function createStreamingPlayback(): StreamingPlayback {
       return;
     }
 
+
     if (msg.type === 'error') {
+      if (msg.code === 'audio_loop_failed') {
+        const state = streams.get(msg.streamKey);
+        if (state?.info) {
+          state.info.hasAudio = false;
+        }
+      }
       if (shouldIgnoreWorkerError(msg)) {
         return;
       }
@@ -433,7 +483,7 @@ export function createStreamingPlayback(): StreamingPlayback {
   function getOrCreateState(streamKey: string, src: string): StreamState {
     const existing = streams.get(streamKey);
     if (existing) return existing;
-      const state: StreamState = {
+    const state: StreamState = {
       src,
       frameBuffer: new FrameBuffer(MAX_BUFFER_SIZE),
       audioBuffer: new AudioChunkBuffer(MAX_AUDIO_CHUNK_BUFFER_SIZE),
@@ -441,6 +491,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       streaming: false,
       lastAccessMs: performance.now(),
       generation: 0,
+      pendingAudioLatencyStartMs: null,
+      pendingAudioLatencyKind: null,
     };
     streams.set(streamKey, state);
     return state;
@@ -515,6 +567,8 @@ export function createStreamingPlayback(): StreamingPlayback {
     const state = streams.get(streamKey);
     if (!state) return;
     state.generation++;
+    state.pendingAudioLatencyStartMs = null;
+    state.pendingAudioLatencyKind = null;
     if (state.streaming) {
       worker?.postMessage({ type: 'stream_stop', streamKey });
     }
@@ -563,6 +617,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       state.audioBuffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
+      state.pendingAudioLatencyStartMs = state.lastAccessMs;
+      state.pendingAudioLatencyKind = 'start';
 
       postStartMessage(streamKey, src, startTimestamp);
     },
@@ -576,6 +632,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       state.audioBuffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
+      state.pendingAudioLatencyStartMs = state.lastAccessMs;
+      state.pendingAudioLatencyKind = 'seek';
 
       const doSeek = () => worker?.postMessage({ type: 'stream_seek', streamKey, timestamp });
       if (workerReady) {
@@ -659,8 +717,45 @@ export function createStreamingPlayback(): StreamingPlayback {
       worker?.postMessage({ type: 'playback_position', streamKey, position });
     },
 
+    pushAudioChunk(streamKey: string, chunk: StreamingAudioChunk): void {
+      if (disposed) return;
+      const state = streams.get(streamKey);
+      if (!state) return;
+      totalAudioChunksReceived++;
+      if (state.pendingAudioLatencyStartMs !== null && state.pendingAudioLatencyKind) {
+        const latencyMs = Math.max(0, performance.now() - state.pendingAudioLatencyStartMs);
+        if (state.pendingAudioLatencyKind === 'start') {
+          audioStartupSamples += 1;
+          audioStartupTotalMs += latencyMs;
+          audioStartupLastMs = latencyMs;
+        } else {
+          audioSeekSamples += 1;
+          audioSeekTotalMs += latencyMs;
+          audioSeekLastMs = latencyMs;
+        }
+        state.pendingAudioLatencyStartMs = null;
+        state.pendingAudioLatencyKind = null;
+      }
+      state.audioBuffer.push(chunk);
+    },
+
+    getStreamGeneration(streamKey: string): number {
+      return streams.get(streamKey)?.generation ?? -1;
+    },
+
+    setSourceHasAudio(streamKey: string, hasAudio: boolean): void {
+      const state = streams.get(streamKey);
+      if (state?.info) {
+        state.info.hasAudio = hasAudio;
+      }
+    },
+
     enableIdleSweep(): void {
       startIdleSweep();
+    },
+
+    disableIdleSweep(): void {
+      stopIdleSweep();
     },
 
     dispose(): void {
@@ -693,10 +788,16 @@ export function createStreamingPlayback(): StreamingPlayback {
         totalFramesDrawn,
         totalFramesMissed,
         totalAudioChunksReceived,
+        audioStartupSamples,
+        audioStartupLastMs,
+        audioStartupAvgMs: audioStartupSamples > 0 ? audioStartupTotalMs / audioStartupSamples : 0,
+        audioSeekSamples,
+        audioSeekLastMs,
+        audioSeekAvgMs: audioSeekSamples > 0 ? audioSeekTotalMs / audioSeekSamples : 0,
+        pendingAudioWarmups: [...streams.values()].filter((s) => s.pendingAudioLatencyStartMs !== null).length,
         frameBufferSizes,
         audioBufferSizes,
       };
     },
   };
 }
-

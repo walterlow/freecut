@@ -4,9 +4,10 @@
  * Full-playback streaming is the only preview playback path.
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
+import { createMainThreadAudioSource, type MainThreadAudioSource } from '@/features/preview/utils/main-thread-audio-source';
 import { createLogger } from '@/shared/logging/logger';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
@@ -19,6 +20,8 @@ const log = createLogger('StreamingPlaybackCtrl');
  *  The worker needs ~1-2s to init + buffer, so 3s provides headroom. */
 const TRANSITION_PREWARM_SECONDS = 3;
 const STREAM_KEY_SEPARATOR = '::';
+const PLAYBACK_LOOKAHEAD_INTERVAL_MS = 150;
+const MAIN_THREAD_AUDIO_RESYNC_THRESHOLD_SECONDS = 0.35;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -154,6 +157,10 @@ export function useStreamingPlaybackController({
   combinedTracks,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
+  const mainThreadAudioRef = useRef<MainThreadAudioSource | null>(null);
+  /** Stream keys that have an active main-thread audio source. */
+  const mainThreadAudioKeysRef = useRef(new Set<string>());
+  const mainThreadAudioTargetTimesRef = useRef(new Map<string, number>());
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
   const activeStreamKeyByItemRef = useRef(new Map<string, string>());
@@ -165,6 +172,13 @@ export function useStreamingPlaybackController({
     if (!playbackRef.current) {
       playbackRef.current = createStreamingPlayback();
     }
+    if (!mainThreadAudioRef.current) {
+      mainThreadAudioRef.current = createMainThreadAudioSource({
+        pushAudioChunk: (streamKey, chunk) => playbackRef.current?.pushAudioChunk(streamKey, chunk),
+        getStreamGeneration: (streamKey) => playbackRef.current?.getStreamGeneration(streamKey) ?? -1,
+      });
+    }
+    mainThreadAudioRef.current.warmup();
     return playbackRef.current;
   }, []);
 
@@ -233,19 +247,35 @@ export function useStreamingPlaybackController({
     streamSrcByKeyRef.current.set(resolvedStreamKey, resolvedSrc);
     return playback.getFrame(resolvedStreamKey, resolvedSrc, sourceTime);
   }, [getResolvedStreamKey, getResolvedStreamSrc, promoteActiveStream]);
+  /** Resolve the stream key that carries audio for an item.  When the primary
+   *  stream has no audio (e.g. proxy files strip audio), fall back to the
+   *  alternate stream which points at the original file. */
+  const getAudioStreamKey = useCallback((itemId: string): string => {
+    const primaryKey = getResolvedStreamKey(itemId);
+    const primaryInfo = playbackRef.current?.getSourceInfo(primaryKey);
+    if (primaryInfo && !primaryInfo.hasAudio) {
+      const alternateKey = alternateStreamKeyByItemRef.current.get(itemId);
+      if (alternateKey) {
+        const alternateInfo = playbackRef.current?.getSourceInfo(alternateKey);
+        if (alternateInfo?.hasAudio) return alternateKey;
+      }
+    }
+    return primaryKey;
+  }, [getResolvedStreamKey]);
+
   const streamingAudioProvider = useRef<PreviewStreamingAudioProvider>({
-    getAudioChunks: (streamKey, startTimestamp, endTimestamp) => {
-      const resolvedStreamKey = getResolvedStreamKey(streamKey);
-      return playbackRef.current?.getAudioChunks(resolvedStreamKey, startTimestamp, endTimestamp) ?? [];
+    getAudioChunks: (streamKey: string, startTimestamp: number, endTimestamp: number) => {
+      const audioKey = getAudioStreamKey(streamKey);
+      return playbackRef.current?.getAudioChunks(audioKey, startTimestamp, endTimestamp) ?? [];
     },
-    getSourceInfo: (streamKey) => {
-      const resolvedStreamKey = getResolvedStreamKey(streamKey);
-      const info = playbackRef.current?.getSourceInfo(resolvedStreamKey) ?? null;
+    getSourceInfo: (streamKey: string) => {
+      const audioKey = getAudioStreamKey(streamKey);
+      const info = playbackRef.current?.getSourceInfo(audioKey) ?? null;
       return info ? { hasAudio: info.hasAudio } : null;
     },
-    isStreaming: (streamKey) => {
-      const resolvedStreamKey = getResolvedStreamKey(streamKey);
-      return playbackRef.current?.isStreaming(resolvedStreamKey) ?? false;
+    isStreaming: (streamKey: string) => {
+      const audioKey = getAudioStreamKey(streamKey);
+      return playbackRef.current?.isStreaming(audioKey) ?? false;
     },
   }).current;
 
@@ -254,9 +284,22 @@ export function useStreamingPlaybackController({
   const fpsRef = useRef(fps);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const useProxyRef = useRef(useProxy);
+  const videoItemsById = useMemo(() => {
+    const byId = new Map<string, VideoItem>();
+    for (const track of combinedTracks) {
+      for (const item of track.items) {
+        if (item.type === 'video') {
+          byId.set(item.id, item as VideoItem);
+        }
+      }
+    }
+    return byId;
+  }, [combinedTracks]);
+  const videoItemsByIdRef = useRef(videoItemsById);
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
   useProxyRef.current = useProxy;
+  videoItemsByIdRef.current = videoItemsById;
 
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -329,6 +372,108 @@ export function useStreamingPlaybackController({
     alternateStreamKeyByItemRef.current = nextAlternateKeysByItem;
   }, [getAlternateTargets, getPlayback]);
 
+  const prunePausedStreams = useCallback((frame: number) => {
+    const playback = playbackRef.current;
+    if (!playback) return;
+
+    const keepKeys = new Set<string>([
+      ...getTargets(frame).map((target) => target.streamKey),
+      ...getAlternateTargets(frame).map((target) => target.streamKey),
+    ]);
+
+    for (const [streamKey] of streamSrcByKeyRef.current) {
+      if (keepKeys.has(streamKey)) continue;
+      playback.stopStream(streamKey);
+      streamSrcByKeyRef.current.delete(streamKey);
+      if (mainThreadAudioKeysRef.current.has(streamKey)) {
+        mainThreadAudioRef.current?.stop(streamKey);
+        mainThreadAudioKeysRef.current.delete(streamKey);
+      }
+      mainThreadAudioTargetTimesRef.current.delete(streamKey);
+    }
+
+    for (const [itemId, streamKey] of desiredStreamKeyByItemRef.current) {
+      if (!keepKeys.has(streamKey)) desiredStreamKeyByItemRef.current.delete(itemId);
+    }
+    for (const [itemId, streamKey] of alternateStreamKeyByItemRef.current) {
+      if (!keepKeys.has(streamKey)) alternateStreamKeyByItemRef.current.delete(itemId);
+    }
+    for (const [itemId, streamKey] of activeStreamKeyByItemRef.current) {
+      if (!keepKeys.has(streamKey)) activeStreamKeyByItemRef.current.delete(itemId);
+    }
+  }, [getAlternateTargets, getTargets]);
+
+  /** Helper: compute source time for an item at a frame. */
+  const computeSourceTimeForItem = useCallback((itemId: string, frame: number): number | null => {
+    const item = videoItemsByIdRef.current.get(itemId);
+    if (item) return computeSourceTime(item, frame, fpsRef.current);
+    return null;
+  }, []);
+
+  /** Check each active stream and start main-thread audio decoding for streams
+   *  whose worker reports hasAudio=false (e.g. proxy files or unsupported codecs).
+   *  Uses the original file URL (alternate src) as the audio source. */
+  const syncMainThreadAudio = useCallback((frame: number) => {
+    const playback = playbackRef.current;
+    const mtAudio = mainThreadAudioRef.current;
+    if (!playback || !mtAudio) return;
+
+    for (const [itemId, streamKey] of desiredStreamKeyByItemRef.current) {
+      const primaryInfo = playback.getSourceInfo(streamKey);
+      const alternateKey = alternateStreamKeyByItemRef.current.get(itemId);
+      const alternateInfo = alternateKey ? playback.getSourceInfo(alternateKey) : null;
+
+      // Prefer worker-decoded audio whenever either stream can already supply it.
+      // The main-thread fallback is only for cases where neither worker stream
+      // has usable audio.
+      if (primaryInfo?.hasAudio || alternateInfo?.hasAudio) {
+        if (mainThreadAudioKeysRef.current.has(streamKey)) {
+          mtAudio.stop(streamKey);
+          mainThreadAudioKeysRef.current.delete(streamKey);
+          mainThreadAudioTargetTimesRef.current.delete(streamKey);
+        }
+        continue;
+      }
+
+      if (mainThreadAudioKeysRef.current.has(streamKey)) {
+        const sourceTime = computeSourceTimeForItem(itemId, frame);
+        if (sourceTime !== null) {
+          const previousTargetTime = mainThreadAudioTargetTimesRef.current.get(streamKey);
+          if (
+            previousTargetTime === undefined
+            || Math.abs(sourceTime - previousTargetTime) > MAIN_THREAD_AUDIO_RESYNC_THRESHOLD_SECONDS
+          ) {
+            mtAudio.seek(streamKey, sourceTime);
+          } else {
+            mtAudio.updatePosition(streamKey, sourceTime);
+          }
+          mainThreadAudioTargetTimesRef.current.set(streamKey, sourceTime);
+        }
+        continue;
+      }
+
+      // Wait until the worker has reported source info before deciding it truly
+      // cannot supply audio.
+      if (!primaryInfo) continue;
+
+      // Worker can't decode audio — find the original file's src for audio
+      const audioSrc = alternateKey
+        ? streamSrcByKeyRef.current.get(alternateKey)
+        : streamSrcByKeyRef.current.get(streamKey);
+      if (!audioSrc) continue;
+
+      const sourceTime = computeSourceTimeForItem(itemId, frame);
+      if (sourceTime === null) continue;
+
+      // Mark hasAudio=true on the primary stream so the scheduler knows audio is available
+      playback.setSourceHasAudio(streamKey, true);
+      mainThreadAudioKeysRef.current.add(streamKey);
+      mainThreadAudioTargetTimesRef.current.set(streamKey, sourceTime);
+      mtAudio.start(streamKey, audioSrc, sourceTime);
+      log.info('Started main-thread audio decode', { streamKey: streamKey.substring(0, 20), audioSrc: audioSrc.substring(0, 40) });
+    }
+  }, [computeSourceTimeForItem]);
+
   /** During playback, scan for upcoming clips and keep stream positions advancing. */
   const runPlaybackLookahead = useCallback(() => {
     const state = usePlaybackStore.getState();
@@ -348,8 +493,9 @@ export function useStreamingPlaybackController({
     }
 
     prewarmAlternateAtFrame(frame);
+    syncMainThreadAudio(frame);
 
-  }, [getPlayback, getTargets, markDesiredStream, prewarmAlternateAtFrame]);
+  }, [getPlayback, getTargets, markDesiredStream, prewarmAlternateAtFrame, syncMainThreadAudio]);
 
   // Subscribe to playback state
   useEffect(() => {
@@ -360,11 +506,13 @@ export function useStreamingPlaybackController({
       getPlayback();
       syncOverlayMode();
       if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
-      lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
+      lookaheadTimerRef.current = setInterval(runPlaybackLookahead, PLAYBACK_LOOKAHEAD_INTERVAL_MS);
       prewarmAlternateAtFrame(initialState.currentFrame);
+      syncMainThreadAudio(initialState.currentFrame);
     } else {
       prewarmAtFrame(initialState.currentFrame);
       prewarmAlternateAtFrame(initialState.currentFrame);
+      syncMainThreadAudio(initialState.currentFrame);
     }
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
@@ -379,7 +527,7 @@ export function useStreamingPlaybackController({
         playback.enableIdleSweep();
         syncOverlayMode();
         if (lookaheadTimerRef.current) clearInterval(lookaheadTimerRef.current);
-        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, 500);
+        lookaheadTimerRef.current = setInterval(runPlaybackLookahead, PLAYBACK_LOOKAHEAD_INTERVAL_MS);
         // Run immediately to check transition proximity
         runPlaybackLookahead();
         log.info('Playback started, streaming handoff path active');
@@ -391,23 +539,32 @@ export function useStreamingPlaybackController({
         }
         const playback = playbackRef.current;
         if (playback) {
+          playback.disableIdleSweep();
           const metrics = playback.getMetrics();
           log.info('Playback stopped', {
             received: metrics.totalFramesReceived,
             drawn: metrics.totalFramesDrawn,
             missed: metrics.totalFramesMissed,
+            audioChunksReceived: metrics.totalAudioChunksReceived,
+            audioStartupLastMs: metrics.audioStartupLastMs,
+            audioStartupAvgMs: metrics.audioStartupAvgMs,
+            audioSeekLastMs: metrics.audioSeekLastMs,
+            audioSeekAvgMs: metrics.audioSeekAvgMs,
+            pendingAudioWarmups: metrics.pendingAudioWarmups,
           });
-          playback.stopAll();
         }
-        clearStreamMappings();
-        prewarmAtFrame(state.currentFrame);
+        prewarmAtFrame(state.currentFrame, false);
         prewarmAlternateAtFrame(state.currentFrame);
+        prunePausedStreams(state.currentFrame);
+        syncMainThreadAudio(state.currentFrame);
       } else if (!isPlaying && state.currentFrame !== prevState.currentFrame) {
         const delta = state.currentFrame - prevState.currentFrame;
         const isLargeJump = Math.abs(delta) > fpsRef.current * 2;
         const isBackward = delta < 0;
         prewarmAtFrame(state.currentFrame, isLargeJump || isBackward);
         prewarmAlternateAtFrame(state.currentFrame);
+        prunePausedStreams(state.currentFrame);
+        syncMainThreadAudio(state.currentFrame);
       }
     });
 
@@ -419,8 +576,9 @@ export function useStreamingPlaybackController({
         lookaheadTimerRef.current = null;
       }
       clearStreamMappings();
+      mainThreadAudioTargetTimesRef.current.clear();
     };
-  }, [clearStreamMappings, getPlayback, getStreamingFrame, prewarmAlternateAtFrame, prewarmAtFrame, runPlaybackLookahead, syncOverlayMode]);
+  }, [clearStreamMappings, getPlayback, getStreamingFrame, prewarmAlternateAtFrame, prewarmAtFrame, prunePausedStreams, runPlaybackLookahead, syncMainThreadAudio, syncOverlayMode]);
 
   // Refresh desired and alternate stream candidates when proxy preference changes.
   useEffect(() => {
@@ -434,6 +592,10 @@ export function useStreamingPlaybackController({
   // Clean up on unmount
   useEffect(() => {
     return () => {
+      mainThreadAudioRef.current?.dispose();
+      mainThreadAudioRef.current = null;
+      mainThreadAudioKeysRef.current.clear();
+      mainThreadAudioTargetTimesRef.current.clear();
       playbackRef.current?.dispose();
       playbackRef.current = null;
     };

@@ -73,6 +73,24 @@ async function getMediabunny() {
   return mb;
 }
 
+function workerCanUseAudioBuffer(): boolean {
+  return typeof AudioBuffer === 'function';
+}
+
+/** Register the AC-3 WASM decoder once so mediabunny can decode AC-3/E-AC-3
+ *  audio tracks in this worker. Without this, `canDecode()` returns false. */
+let ac3Registration: Promise<void> | null = null;
+function ensureAc3Decoder(): Promise<void> {
+  if (!ac3Registration) {
+    ac3Registration = import('@mediabunny/ac3')
+      .then(({ registerAc3Decoder }) => {
+        try { registerAc3Decoder(); } catch { /* already registered */ }
+      })
+      .catch(() => { /* AC-3 decoder unavailable — non-fatal */ });
+  }
+  return ac3Registration;
+}
+
 // ---------------------------------------------------------------------------
 // Source management
 // ---------------------------------------------------------------------------
@@ -177,11 +195,16 @@ async function getOrInitSource(streamKey: string, src: string, options?: InitSou
       }
 
       const audioTrack = await input.getPrimaryAudioTrack().catch(() => null);
+      // Register AC-3 decoder before canDecode() so AC-3/E-AC-3 tracks pass.
+      if (audioTrack) {
+        await ensureAc3Decoder();
+      }
+      const audioBufferSupported = workerCanUseAudioBuffer();
       const audioCanDecode = audioTrack && typeof audioTrack.canDecode === 'function'
         ? await audioTrack.canDecode().catch(() => false)
         : !!audioTrack;
       const videoSink = new mediabunny.VideoSampleSink(videoTrack);
-      const audioSink = audioTrack && audioCanDecode
+      const audioSink = audioTrack && audioCanDecode && audioBufferSupported
         ? new mediabunny.AudioBufferSink(audioTrack)
         : null;
       const width = videoTrack.displayWidth || 1920;
@@ -210,7 +233,16 @@ async function getOrInitSource(streamKey: string, src: string, options?: InitSou
       };
       sources.set(streamKey, state);
 
-      self.postMessage({ type: 'source_ready', streamKey, src, width, height, duration, hasAudio: !!audioSink });
+      self.postMessage({
+        type: 'source_ready',
+        streamKey,
+        src,
+        width,
+        height,
+        duration,
+        hasAudio: !!audioSink,
+        workerAudioBufferSupported: audioBufferSupported,
+      });
       return state;
     } catch (error) {
       input.dispose?.();
@@ -495,6 +527,7 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (msg.type === 'warmup') {
     void getMediabunny();
+    void ensureAc3Decoder();
     return;
   }
 

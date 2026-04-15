@@ -71,6 +71,7 @@ beforeEach(() => {
 afterEach(() => {
   consoleWarnSpy?.mockRestore();
   consoleWarnSpy = null;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -214,6 +215,104 @@ describe('streaming playback audio transport', () => {
         message: 'boom',
       }),
     );
+
+    playback.dispose();
+  });
+
+  it('marks worker audio unavailable after an audio loop failure', async () => {
+    const playback = createStreamingPlayback();
+    playback.startStream('clip-e', 'https://example.com/clip-e.mp4', 0);
+    await flushMicrotasks();
+
+    const worker = createdWorkers[0]!;
+    worker.dispatch({
+      type: 'source_ready',
+      streamKey: 'clip-e',
+      src: 'https://example.com/clip-e.mp4',
+      width: 1920,
+      height: 1080,
+      duration: 10,
+      hasAudio: true,
+    });
+
+    expect(playback.getSourceInfo('clip-e')).toMatchObject({ hasAudio: true });
+
+    worker.dispatch({
+      type: 'error',
+      streamKey: 'clip-e',
+      src: 'https://example.com/clip-e.mp4',
+      code: 'audio_loop_failed',
+      message: 'AudioBuffer is not defined',
+    });
+
+    expect(playback.getSourceInfo('clip-e')).toMatchObject({ hasAudio: false });
+    playback.dispose();
+  });
+
+  it('tracks audio warmup latency for starts and seeks', async () => {
+    let now = 100;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+
+    const playback = createStreamingPlayback();
+    playback.startStream('clip-d', 'https://example.com/clip-d.mp4', 0);
+    await flushMicrotasks();
+
+    const worker = createdWorkers[0]!;
+    worker.dispatch({
+      type: 'source_ready',
+      streamKey: 'clip-d',
+      src: 'https://example.com/clip-d.mp4',
+      width: 1920,
+      height: 1080,
+      duration: 10,
+      hasAudio: true,
+    });
+
+    now = 225;
+    worker.dispatch({
+      type: 'audio_chunk',
+      streamKey: 'clip-d',
+      src: 'https://example.com/clip-d.mp4',
+      timestamp: 0,
+      duration: 0.5,
+      sampleRate: 48000,
+      frameCount: 2,
+      numberOfChannels: 2,
+      channelData: [
+        new Float32Array([0.1, 0.2]).buffer,
+        new Float32Array([0.3, 0.4]).buffer,
+      ],
+    });
+
+    now = 300;
+    playback.seekStream('clip-d', 2);
+
+    now = 360;
+    worker.dispatch({
+      type: 'audio_chunk',
+      streamKey: 'clip-d',
+      src: 'https://example.com/clip-d.mp4',
+      timestamp: 2,
+      duration: 0.5,
+      sampleRate: 48000,
+      frameCount: 2,
+      numberOfChannels: 2,
+      channelData: [
+        new Float32Array([0.9, 1.0]).buffer,
+        new Float32Array([1.1, 1.2]).buffer,
+      ],
+    });
+
+    expect(playback.getMetrics()).toMatchObject({
+      totalAudioChunksReceived: 2,
+      audioStartupSamples: 1,
+      audioStartupLastMs: 125,
+      audioStartupAvgMs: 125,
+      audioSeekSamples: 1,
+      audioSeekLastMs: 60,
+      audioSeekAvgMs: 60,
+      pendingAudioWarmups: 0,
+    });
 
     playback.dispose();
   });
