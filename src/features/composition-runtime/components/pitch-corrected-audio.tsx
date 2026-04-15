@@ -20,6 +20,7 @@ import {
   type PreviewClipAudioGraph,
 } from '../utils/preview-audio-graph';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
+import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import {
@@ -565,6 +566,7 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 
 export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
+  const preferDecodedBuffering = props.preferDecodedBuffering === true;
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
   );
@@ -580,6 +582,9 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`;
 
   if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {
+    if (preferDecodedBuffering) {
+      return <CustomDecoderBufferedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />;
+    }
     return <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />;
   }
 

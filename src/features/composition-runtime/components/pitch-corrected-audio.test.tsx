@@ -125,6 +125,21 @@ vi.mock('./soundtouch-worklet-audio', () => ({
     />
   ),
 }));
+vi.mock('./custom-decoder-buffered-audio', () => ({
+  CustomDecoderBufferedAudio: ({
+    mediaId,
+    playbackRate,
+  }: {
+    mediaId: string;
+    playbackRate?: number;
+  }) => (
+    <div
+      data-testid="decoded-buffered"
+      data-media-id={mediaId}
+      data-rate={playbackRate ?? 1}
+    />
+  ),
+}));
 
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 
@@ -191,7 +206,7 @@ describe('PitchCorrectedAudio', () => {
 
     playbackStateMocks.current = {
       ...playbackStateMocks.current,
-      resolvedAudioEqStages: [DEFAULT_AUDIO_EQ_SETTINGS],
+      resolvedAudioEqStages: [DEFAULT_AUDIO_EQ_SETTINGS] as typeof playbackStateMocks.current.resolvedAudioEqStages,
     };
 
     rerender(
@@ -214,6 +229,26 @@ describe('PitchCorrectedAudio', () => {
 
     expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
     expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledTimes(1);
+  });
+
+  it('can force 1x video playback onto the decoded buffered path', async () => {
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        preferDecodedBuffering
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-media-id', 'media-1');
+    });
+
+    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
   });
 
   it('uses playback-first decode for stretched clips with media ids', async () => {
