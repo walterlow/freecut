@@ -34,6 +34,7 @@ import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
 import { hasVisibleVideoAtFrame } from '../utils/visible-video-ownership';
+import { shouldShowRenderedPreviewCanvas } from '../utils/rendered-preview-canvas-visibility';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 
 interface VideoPreviewProps {
@@ -354,6 +355,13 @@ export const VideoPreview = memo(function VideoPreview({
       || (isRenderedOverlayVisible && renderedPreviewOwnsVisibleVideo))
       ? 'rendered_preview'
       : 'player';
+  const shouldShowRenderedCanvas = shouldShowRenderedPreviewCanvas({
+    visualPlaybackMode,
+    isRenderedOverlayVisible,
+    displayedFrame,
+    previewFrame,
+    currentFrame,
+  });
   visualPlaybackModeRef.current = visualPlaybackMode;
 
   useEffect(() => {
@@ -559,7 +567,7 @@ export const VideoPreview = memo(function VideoPreview({
       totalFrames={totalFrames}
       fps={fps}
       isResolving={isResolving}
-      isRenderedOverlayVisible={isRenderedOverlayVisible}
+      shouldShowRenderedCanvas={shouldShowRenderedCanvas}
       inputProps={inputProps}
       onBackgroundClick={handleBackgroundClick}
       onFrameChange={handleFrameChange}

@@ -61,7 +61,7 @@ describe('PreviewStage', () => {
         totalFrames={120}
         fps={30}
         isResolving={false}
-        isRenderedOverlayVisible={false}
+        shouldShowRenderedCanvas={false}
         inputProps={createInputProps()}
         onBackgroundClick={() => {}}
         onFrameChange={() => {}}
@@ -71,5 +71,32 @@ describe('PreviewStage', () => {
     );
 
     expect(screen.getByTestId('main-composition')).toHaveAttribute('data-use-proxy-media', 'true');
+  });
+
+  it('shows the rendered preview canvas when the stage is told it owns presentation', () => {
+    const { container } = render(
+      <PreviewStage
+        backgroundRef={createRef<HTMLDivElement>()}
+        playerRef={createRef()}
+        scrubCanvasRef={createRef<HTMLCanvasElement>()}
+        gpuEffectsCanvasRef={createRef<HTMLCanvasElement>()}
+        needsOverflow={false}
+        playerSize={{ width: 1280, height: 720 }}
+        playerRenderSize={{ width: 1280, height: 720 }}
+        totalFrames={120}
+        fps={30}
+        isResolving={false}
+        shouldShowRenderedCanvas
+        inputProps={createInputProps()}
+        onBackgroundClick={() => {}}
+        onFrameChange={() => {}}
+        onPlayStateChange={() => {}}
+        setPlayerContainerRefCallback={() => {}}
+      />
+    );
+
+    const scrubCanvas = container.querySelector('canvas');
+    expect(scrubCanvas).not.toBeNull();
+    expect(scrubCanvas).toHaveStyle({ visibility: 'visible' });
   });
 });

@@ -17,7 +17,7 @@ interface PreviewStageProps {
   totalFrames: number;
   fps: number;
   isResolving: boolean;
-  isRenderedOverlayVisible: boolean;
+  shouldShowRenderedCanvas: boolean;
   inputProps: CompositionInputProps;
   onBackgroundClick: MouseEventHandler<HTMLDivElement>;
   onFrameChange: (frame: number) => void;
@@ -39,7 +39,7 @@ export const PreviewStage = memo(function PreviewStage({
   totalFrames,
   fps,
   isResolving,
-  isRenderedOverlayVisible,
+  shouldShowRenderedCanvas,
   inputProps,
   onBackgroundClick,
   onFrameChange,
@@ -111,7 +111,7 @@ export const PreviewStage = memo(function PreviewStage({
                   width: '100%',
                   height: '100%',
                   zIndex: 4,
-                  visibility: isRenderedOverlayVisible ? 'visible' : 'hidden',
+                  visibility: shouldShowRenderedCanvas ? 'visible' : 'hidden',
                 }}
               />
             )}
