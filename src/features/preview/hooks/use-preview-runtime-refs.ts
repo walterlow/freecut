@@ -60,9 +60,6 @@ export function usePreviewRuntimeRefs() {
   const deferredPlaybackTransitionPrepareFrameRef = useRef<number | null>(null);
   const transitionPrepareTimeoutRef = useRef<number | null>(null);
   const transitionSessionWindowRef = useRef<TransitionWindow | null>(null);
-  const transitionSessionPinnedElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const transitionExitElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
-  const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
   const transitionPrewarmPromiseRef = useRef<Promise<void> | null>(null);
   const transitionSessionTraceRef = useRef<TransitionPreviewSessionTrace | null>(null);
@@ -92,9 +89,6 @@ export function usePreviewRuntimeRefs() {
     playbackTransitionPreparePromiseRef,
     playbackTransitionPreparingFrameRef,
     transitionSessionWindowRef,
-    transitionSessionPinnedElementsRef,
-    transitionExitElementsRef,
-    transitionSessionStallCountRef,
     transitionSessionBufferedFramesRef,
     transitionPrewarmPromiseRef,
     transitionSessionTraceRef,
@@ -172,8 +166,6 @@ export function usePreviewRuntimeRefs() {
     deferredPlaybackTransitionPrepareFrameRef,
     transitionPrepareTimeoutRef,
     transitionSessionWindowRef,
-    transitionSessionPinnedElementsRef,
-    transitionSessionStallCountRef,
     transitionSessionBufferedFramesRef,
     transitionPrewarmPromiseRef,
     transitionSessionTraceRef,

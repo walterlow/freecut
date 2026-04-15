@@ -308,7 +308,6 @@ export const VideoPreview = memo(function VideoPreview({
     playingComplexTransitionPrearmFrames,
     playbackTransitionPrerenderRunwayFrames,
     playbackTransitionComplexStartFrames,
-    transitionWindowUsesDomProvider,
     getTransitionWindowByStartFrame,
     getTransitionWindowForFrame,
     getActiveTransitionWindowForFrame,
@@ -347,7 +346,6 @@ export const VideoPreview = memo(function VideoPreview({
   } = useStreamingPlaybackController({
     fps,
     combinedTracks,
-    playbackTransitionWindows,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const visualPlaybackMode = isPlaying && isFullStreamingPlaybackMode(streamingPlaybackMode)
@@ -373,23 +371,19 @@ export const VideoPreview = memo(function VideoPreview({
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
-    getPinnedTransitionElementForItem,
     getPausedTransitionPrewarmStartFrame,
     getPlayingAnyTransitionPrewarmStartFrame,
     isPausedTransitionOverlayActive,
     cacheTransitionSessionFrame,
     preparePlaybackTransitionFrame,
   } = usePreviewTransitionSessionController({
-    fps,
     forceFastScrubOverlay,
-    streamingPlaybackMode,
     pausedTransitionPrearmFrames,
     playingComplexTransitionPrearmFrames,
     playbackTransitionWindows,
     playbackTransitionComplexStartFrames,
     playbackTransitionPrerenderRunwayFrames,
     playbackTransitionCooldownFrames,
-    transitionWindowUsesDomProvider,
     getTransitionWindowByStartFrame,
     getActiveTransitionWindowForFrame,
     pushTransitionTrace,
@@ -457,7 +451,6 @@ export const VideoPreview = memo(function VideoPreview({
   usePreviewRenderPump({
     fps,
     forceFastScrubOverlay,
-    streamingPlaybackMode,
     combinedTracks,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
@@ -483,7 +476,6 @@ export const VideoPreview = memo(function VideoPreview({
     getTransitionWindowForFrame,
     getPlayingAnyTransitionPrewarmStartFrame,
     getPausedTransitionPrewarmStartFrame,
-    getPinnedTransitionElementForItem,
     pinTransitionPlaybackSession,
     clearTransitionPlaybackSession,
     cacheTransitionSessionFrame,

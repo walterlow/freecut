@@ -42,11 +42,6 @@ export function usePreviewTransitionModel({
     });
   }, [fastScrubScaledTracks, fps, transitions]);
 
-  const transitionWindowUsesDomProvider = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
-    if (!window) return true;
-    return !playbackTransitionComplexStartFrames.has(window.startFrame);
-  }, [playbackTransitionComplexStartFrames]);
-
   const getTransitionWindowByStartFrame = useCallback((startFrame: number | null) => {
     if (startFrame === null) return null;
     return playbackTransitionWindows.find((window) => window.startFrame === startFrame) ?? null;
@@ -92,7 +87,6 @@ export function usePreviewTransitionModel({
     playingComplexTransitionPrearmFrames,
     playbackTransitionPrerenderRunwayFrames,
     playbackTransitionComplexStartFrames,
-    transitionWindowUsesDomProvider,
     getTransitionWindowByStartFrame,
     getTransitionCooldownForWindow,
     getTransitionWindowForFrame,

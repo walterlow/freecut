@@ -3,16 +3,7 @@ import { useCallback, type MutableRefObject } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import { usePlaybackStore } from '@/shared/state/playback';
-import {
-  getBestDomVideoElementForItem,
-  transitionSafePlay,
-  snapSourceTime,
-} from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
-import {
-  isFullStreamingPlaybackMode,
-  type StreamingPlaybackMode,
-} from '@/features/preview/utils/preview-constants';
 
 const logger = createLogger('VideoPreview');
 
@@ -61,16 +52,13 @@ type TransitionRenderer = {
 };
 
 interface UsePreviewTransitionSessionControllerParams {
-  fps: number;
   forceFastScrubOverlay: boolean;
-  streamingPlaybackMode: StreamingPlaybackMode;
   pausedTransitionPrearmFrames: number;
   playingComplexTransitionPrearmFrames: number;
   playbackTransitionWindows: ResolvedTransitionWindow<TimelineItem>[];
   playbackTransitionComplexStartFrames: Set<number>;
   playbackTransitionPrerenderRunwayFrames: number;
   playbackTransitionCooldownFrames: number;
-  transitionWindowUsesDomProvider: (window: ResolvedTransitionWindow<TimelineItem> | null) => boolean;
   getTransitionWindowByStartFrame: (startFrame: number) => ResolvedTransitionWindow<TimelineItem> | null;
   getActiveTransitionWindowForFrame: (frame: number) => ResolvedTransitionWindow<TimelineItem> | null;
   pushTransitionTrace: (phase: string, data?: Record<string, unknown>) => void;
@@ -85,9 +73,6 @@ interface UsePreviewTransitionSessionControllerParams {
   playbackTransitionPreparePromiseRef: MutableRefObject<Promise<boolean> | null>;
   playbackTransitionPreparingFrameRef: MutableRefObject<number | null>;
   transitionSessionWindowRef: MutableRefObject<ResolvedTransitionWindow<TimelineItem> | null>;
-  transitionSessionPinnedElementsRef: MutableRefObject<Map<string, HTMLVideoElement | null>>;
-  transitionExitElementsRef: MutableRefObject<Map<string, HTMLVideoElement | null>>;
-  transitionSessionStallCountRef: MutableRefObject<Map<string, { ct: number; count: number }>>;
   transitionSessionBufferedFramesRef: MutableRefObject<Map<number, OffscreenCanvas>>;
   transitionPrewarmPromiseRef: MutableRefObject<Promise<void> | null>;
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>;
@@ -95,16 +80,13 @@ interface UsePreviewTransitionSessionControllerParams {
 }
 
 export function usePreviewTransitionSessionController({
-  fps,
   forceFastScrubOverlay,
-  streamingPlaybackMode,
   pausedTransitionPrearmFrames,
   playingComplexTransitionPrearmFrames,
   playbackTransitionWindows,
   playbackTransitionComplexStartFrames,
   playbackTransitionPrerenderRunwayFrames,
   playbackTransitionCooldownFrames,
-  transitionWindowUsesDomProvider,
   getTransitionWindowByStartFrame,
   getActiveTransitionWindowForFrame,
   pushTransitionTrace,
@@ -119,27 +101,11 @@ export function usePreviewTransitionSessionController({
   playbackTransitionPreparePromiseRef,
   playbackTransitionPreparingFrameRef,
   transitionSessionWindowRef,
-  transitionSessionPinnedElementsRef,
-  transitionExitElementsRef,
-  transitionSessionStallCountRef,
   transitionSessionBufferedFramesRef,
   transitionPrewarmPromiseRef,
   transitionSessionTraceRef,
   transitionTelemetryRef,
 }: UsePreviewTransitionSessionControllerParams) {
-  const prefersFullStreamingPlayback = isFullStreamingPlaybackMode(streamingPlaybackMode);
-  const shouldUseRenderDrivenTransitionFrames = (
-    isPlaying: boolean,
-    hasStreamingFrameProvider: boolean,
-  ) => (
-    prefersFullStreamingPlayback
-    || (
-      hasStreamingFrameProvider
-      && isPlaying
-      && forceFastScrubOverlay
-    )
-  );
-
   const clearTransitionPlaybackSession = useCallback(() => {
     const activeTrace = transitionSessionTraceRef.current;
     if (activeTrace) {
@@ -187,52 +153,13 @@ export function usePreviewTransitionSessionController({
       transitionSessionTraceRef.current = null;
     }
 
-    const window = transitionSessionWindowRef.current;
-    if (window) {
-      const currentFrame = usePlaybackStore.getState().currentFrame;
-      for (const clip of [window.leftClip, window.rightClip]) {
-        if (clip.type !== 'video') continue;
-        const el = transitionSessionPinnedElementsRef.current.get(clip.id);
-        if (!el) continue;
-        const localFrame = currentFrame - clip.from;
-        if (localFrame < 0) continue;
-        if (localFrame >= clip.durationInFrames) continue;
-        const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
-        const sourceFps = clip.sourceFps ?? fps;
-        const clipSpeed = clip.speed ?? 1;
-        const targetTime = snapSourceTime((sourceStart / sourceFps) + (localFrame * clipSpeed / fps), sourceFps);
-        const videoDuration = el.duration || Infinity;
-        const clamped = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
-        const drift = Math.abs(el.currentTime - clamped);
-        if (drift > 0.15) {
-          try {
-            el.currentTime = clamped;
-          } catch {
-            // Element may be settling — ignore transient seek failures.
-          }
-        } else if (drift > 0.016) {
-          el.playbackRate = clipSpeed;
-        }
-      }
-    }
-
     transitionSessionWindowRef.current = null;
-    for (const el of transitionSessionPinnedElementsRef.current.values()) {
-      if (el) delete el.dataset.transitionHold;
-    }
-    transitionExitElementsRef.current = new Map(transitionSessionPinnedElementsRef.current);
-    transitionSessionPinnedElementsRef.current.clear();
-    transitionSessionStallCountRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
     transitionPrewarmPromiseRef.current = null;
   }, [
-    fps,
     pushTransitionTrace,
-    transitionExitElementsRef,
     transitionPrewarmPromiseRef,
     transitionSessionBufferedFramesRef,
-    transitionSessionPinnedElementsRef,
-    transitionSessionStallCountRef,
     transitionSessionTraceRef,
     transitionSessionWindowRef,
     transitionTelemetryRef,
@@ -244,15 +171,7 @@ export function usePreviewTransitionSessionController({
       return null;
     }
 
-    const isPlaying = usePlaybackStore.getState().isPlaying;
-    const useRenderDrivenTransitionFrames = shouldUseRenderDrivenTransitionFrames(
-      isPlaying,
-      !!(streamingFrameProviderRef?.current),
-    );
-    const mode = useRenderDrivenTransitionFrames
-      ? 'render'
-      : transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
-
+    const mode = 'render';
     const activeWindow = transitionSessionWindowRef.current;
     if (
       activeWindow?.transition.id === window.transition.id
@@ -271,7 +190,7 @@ export function usePreviewTransitionSessionController({
     const rightSpeed = window.rightClip.speed ?? 1;
     const leftHasEffects = Boolean(window.leftClip.effects?.some((effect) => effect.enabled));
     const rightHasEffects = Boolean(window.rightClip.effects?.some((effect) => effect.enabled));
-    const complex = mode === 'render';
+    const complex = true;
     transitionTelemetryRef.current.sessionCount += 1;
     transitionSessionTraceRef.current = {
       opId,
@@ -310,104 +229,15 @@ export function usePreviewTransitionSessionController({
       leftHasEffects,
       rightHasEffects,
     });
-    const pinnedElements = new Map<string, HTMLVideoElement | null>();
-    if (!useRenderDrivenTransitionFrames) {
-      for (const clip of [window.leftClip, window.rightClip]) {
-        const el = getBestDomVideoElementForItem(clip.id);
-        pinnedElements.set(clip.id, el);
-        if (el && isPlaying) {
-          el.dataset.transitionHold = '1';
-          const clipSpeed = clip.speed ?? 1;
-          if (el.readyState >= 2) {
-            transitionSafePlay(el, clipSpeed);
-          } else {
-            const onCanPlay = () => {
-              el.removeEventListener('canplay', onCanPlay);
-              if (el.dataset.transitionHold === '1' && el.paused) {
-                transitionSafePlay(el, clipSpeed);
-              }
-            };
-            el.addEventListener('canplay', onCanPlay, { once: true });
-          }
-        }
-      }
-    }
-    transitionSessionPinnedElementsRef.current = pinnedElements;
     transitionSessionBufferedFramesRef.current.clear();
     return window;
   }, [
     clearTransitionPlaybackSession,
-    forceFastScrubOverlay,
     pushTransitionTrace,
-    streamingFrameProviderRef,
     transitionSessionBufferedFramesRef,
-    transitionSessionPinnedElementsRef,
     transitionSessionTraceRef,
     transitionSessionWindowRef,
     transitionTelemetryRef,
-    transitionWindowUsesDomProvider,
-  ]);
-
-  const getPinnedTransitionElementForItem = useCallback((itemId: string) => {
-    const sessionWindow = transitionSessionWindowRef.current;
-    const isSessionParticipant = sessionWindow?.leftClip.id === itemId || sessionWindow?.rightClip.id === itemId;
-    if (!isSessionParticipant) {
-      const registryEl = getBestDomVideoElementForItem(itemId);
-      if (registryEl) {
-        transitionExitElementsRef.current.delete(itemId);
-        return registryEl;
-      }
-      const exitEl = transitionExitElementsRef.current.get(itemId);
-      if (exitEl?.isConnected && exitEl.readyState >= 2) {
-        return exitEl;
-      }
-      transitionExitElementsRef.current.delete(itemId);
-      return null;
-    }
-
-    const isPlaying = usePlaybackStore.getState().isPlaying;
-    if (shouldUseRenderDrivenTransitionFrames(isPlaying, !!(streamingFrameProviderRef?.current))) {
-      return null;
-    }
-    if (!isPlaying && !transitionWindowUsesDomProvider(sessionWindow ?? null)) {
-      return null;
-    }
-
-    const clipSpeed = (
-      sessionWindow?.leftClip.id === itemId ? (sessionWindow.leftClip.speed ?? 1)
-        : sessionWindow?.rightClip.id === itemId ? (sessionWindow.rightClip.speed ?? 1)
-          : 1
-    );
-
-    const ensurePlaying = (el: HTMLVideoElement) => {
-      if (isPlaying) {
-        el.dataset.transitionHold = '1';
-        transitionSafePlay(el, clipSpeed);
-      }
-    };
-
-    const pinned = transitionSessionPinnedElementsRef.current.get(itemId) ?? null;
-    if (pinned && pinned.isConnected && pinned.readyState >= 2 && pinned.videoWidth > 0) {
-      ensurePlaying(pinned);
-      return pinned;
-    }
-
-    const next = getBestDomVideoElementForItem(itemId);
-    if (pinned && pinned !== next) {
-      delete pinned.dataset.transitionHold;
-    }
-    if (next && next.readyState >= 2) {
-      ensurePlaying(next);
-    }
-    transitionSessionPinnedElementsRef.current.set(itemId, next);
-    return next;
-  }, [
-    forceFastScrubOverlay,
-    streamingFrameProviderRef,
-    transitionExitElementsRef,
-    transitionSessionPinnedElementsRef,
-    transitionSessionWindowRef,
-    transitionWindowUsesDomProvider,
   ]);
 
   const getUpcomingTransitionStartFrame = useCallback((
@@ -530,23 +360,8 @@ export function usePreviewTransitionSessionController({
         if (!renderer || !scrubMountedRef.current) return false;
 
         const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
-        const useRenderDrivenTransitionFrames = (
-          prefersFullStreamingPlayback
-          || (
-            isPlaybackPrepare
-            && !!streamingFrameProvider
-            && transitionWindow !== null
-          )
-        );
-
-        if ('setDomVideoElementProvider' in renderer && renderer.setDomVideoElementProvider) {
-          renderer.setDomVideoElementProvider(
-            useRenderDrivenTransitionFrames ? undefined : getPinnedTransitionElementForItem,
-          );
-        }
-        if ('setStreamingFrameProvider' in renderer && renderer.setStreamingFrameProvider) {
-          renderer.setStreamingFrameProvider(streamingFrameProvider);
-        }
+        renderer.setDomVideoElementProvider?.(undefined);
+        renderer.setStreamingFrameProvider?.(streamingFrameProvider);
 
         const isComplexTransitionStart = playbackTransitionComplexStartFrames.has(targetFrame);
         const shouldRenderFullTargetFrame = forceFastScrubOverlay || isComplexTransitionStart;
@@ -604,7 +419,6 @@ export function usePreviewTransitionSessionController({
     cacheTransitionSessionFrame,
     ensureFastScrubRendererRef,
     forceFastScrubOverlay,
-    getPinnedTransitionElementForItem,
     getTransitionWindowByStartFrame,
     pinTransitionPlaybackSession,
     playbackTransitionComplexStartFrames,
@@ -620,13 +434,11 @@ export function usePreviewTransitionSessionController({
     streamingFrameProviderRef,
     transitionSessionBufferedFramesRef,
     transitionSessionTraceRef,
-    prefersFullStreamingPlayback,
   ]);
 
   return {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
-    getPinnedTransitionElementForItem,
     getPausedTransitionPrewarmStartFrame,
     getPlayingAnyTransitionPrewarmStartFrame,
     isPausedTransitionOverlayActive,

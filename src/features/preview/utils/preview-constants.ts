@@ -65,28 +65,26 @@ export const PREVIEW_PERF_RENDER_SOURCE_HISTORY_MAX = 6;
 export const PREVIEW_PERF_SEEK_TIMEOUT_MS = 2500;
 export const ADAPTIVE_PREVIEW_QUALITY_ENABLED = true;
 
-export type StreamingPlaybackMode = 'transitions' | 'all';
+export type StreamingPlaybackMode = 'all';
 
 /**
  * Experimental: Use WebCodecs streaming decode for video playback instead of
- * HTML5 <video> elements. Full-playback streaming is now the default so the
- * preview uses the same mediabunny decode path for regular playback and
- * transition playback. The `transitions` mode remains available as a rollback
- * debug path while the migration settles.
- *
- * Toggle via: window.__DEBUG__?.setStreamingPlaybackMode?.('all' | 'transitions')
+ * HTML5 <video> elements. Full-playback streaming is the only supported mode
+ * so the preview uses the same mediabunny decode path for regular playback
+ * and transition playback.
  */
 export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'all';
 
 export function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
-  return mode === 'all';
+  void mode;
+  return true;
 }
 
 /**
  * Legacy boolean alias for older debug/test code paths.
- * `true` means the default mode is full-playback streaming.
+ * Always true now that preview playback no longer has a rollback mode.
  */
-export const STREAMING_PLAYBACK_ENABLED = isFullStreamingPlaybackMode(DEFAULT_STREAMING_PLAYBACK_MODE);
+export const STREAMING_PLAYBACK_ENABLED = true;
 
 import type { PreviewRenderSource } from './preview-perf-metrics';
 

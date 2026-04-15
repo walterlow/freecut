@@ -1,11 +1,7 @@
 /**
  * Hook to manage WebCodecs streaming playback lifecycle for preview playback.
  *
- * Full-playback streaming is the default path. A transition-only rollback mode
- * remains available through the debug API for comparison and fallback.
- *
- * Toggle via window.__DEBUG__?.setStreamingPlaybackMode('all' | 'transitions')
- * between full-playback streaming and transition-only mode.
+ * Full-playback streaming is the only preview playback path.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -13,19 +9,17 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
 import {
   DEFAULT_STREAMING_PLAYBACK_MODE,
-  isFullStreamingPlaybackMode,
   type StreamingPlaybackMode,
 } from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
-import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
+import type { TimelineTrack, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveProxyUrl } from '@/features/preview/deps/media-library-contract';
-import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import type { PreviewStreamingAudioProvider } from '@/shared/state/preview-bridge';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
-/** How far ahead (in seconds) to start streaming transition clips.
+/** How far ahead (in seconds) to start streaming playback clips.
  *  The worker needs ~1-2s to init + buffer, so 3s provides headroom. */
 const TRANSITION_PREWARM_SECONDS = 3;
 
@@ -49,62 +43,10 @@ function computeSourceTime(item: VideoItem, timelineFrame: number, timelineFps: 
   return sourceStart / sourceFps + (localFrame / timelineFps) * speed;
 }
 
-interface TransitionPrewarmTarget {
+interface PlaybackPrewarmTarget {
   streamKey: string;
   src: string;
   sourceTime: number;
-}
-
-/**
- * Collect pre-warm targets for the fallback transition-only mode. Uses
- * transition windows for timing only, and finds the actual clips from the
- * raw timeline tracks (which have full item properties like mediaId, src,
- * sourceFps, etc.).
- */
-function collectTransitionPrewarmTargets(
-  transitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
-  tracks: TimelineTrack[],
-  timelineFrame: number,
-  timelineFps: number,
-  useProxy: boolean,
-): TransitionPrewarmTarget[] {
-  const targets: TransitionPrewarmTarget[] = [];
-  const seen = new Set<string>();
-  const prewarmFrames = Math.round(TRANSITION_PREWARM_SECONDS * timelineFps);
-
-  // Collect frame ranges of upcoming transitions
-  const transitionRanges: Array<{ start: number; end: number }> = [];
-  for (const tw of transitionWindows) {
-    if (tw.endFrame <= timelineFrame) continue;
-    if (tw.startFrame > timelineFrame + prewarmFrames) continue;
-    transitionRanges.push({ start: tw.startFrame, end: tw.endFrame });
-  }
-
-  if (transitionRanges.length === 0) return targets;
-
-  // Find video clips from the raw timeline that overlap any transition range
-  for (const track of tracks) {
-    for (const item of track.items) {
-      if (item.type !== 'video') continue;
-      const videoItem = item as VideoItem;
-      const clipEnd = videoItem.from + videoItem.durationInFrames;
-
-      const overlapsTransition = transitionRanges.some(
-        (tr) => videoItem.from < tr.end && clipEnd > tr.start,
-      );
-      if (!overlapsTransition) continue;
-
-      const src = resolveVideoSrc(videoItem, useProxy);
-      const streamKey = videoItem.id;
-      if (!src || seen.has(streamKey)) continue;
-      seen.add(streamKey);
-
-      const sourceTime = computeSourceTime(videoItem, timelineFrame, timelineFps);
-      targets.push({ streamKey, src, sourceTime });
-    }
-  }
-
-  return targets;
 }
 
 /**
@@ -115,8 +57,8 @@ function collectAllPrewarmTargets(
   timelineFrame: number,
   timelineFps: number,
   useProxy: boolean,
-): TransitionPrewarmTarget[] {
-  const targets: TransitionPrewarmTarget[] = [];
+): PlaybackPrewarmTarget[] {
+  const targets: PlaybackPrewarmTarget[] = [];
   const seen = new Set<string>();
   const lookaheadFrames = Math.round(TRANSITION_PREWARM_SECONDS * timelineFps);
 
@@ -148,7 +90,6 @@ function collectAllPrewarmTargets(
 interface UseStreamingPlaybackControllerParams {
   fps: number;
   combinedTracks: TimelineTrack[];
-  playbackTransitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>;
 }
 
 interface UseStreamingPlaybackControllerResult {
@@ -165,14 +106,9 @@ interface UseStreamingPlaybackControllerResult {
 export function useStreamingPlaybackController({
   fps,
   combinedTracks,
-  playbackTransitionWindows,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  /** Current streaming mode: full-playback streaming or transition-only rollback mode. */
-  const [streamingPlaybackMode, setStreamingPlaybackModeState] = useState<StreamingPlaybackMode>(
-    DEFAULT_STREAMING_PLAYBACK_MODE,
-  );
-  const modeRef = useRef<StreamingPlaybackMode>(streamingPlaybackMode);
+  const streamingPlaybackMode: StreamingPlaybackMode = DEFAULT_STREAMING_PLAYBACK_MODE;
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
 
@@ -203,32 +139,20 @@ export function useStreamingPlaybackController({
   const fpsRef = useRef(fps);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const useProxyRef = useRef(useProxy);
-  const transitionWindowsRef = useRef(playbackTransitionWindows);
   tracksRef.current = combinedTracks;
   fpsRef.current = fps;
   useProxyRef.current = useProxy;
-  transitionWindowsRef.current = playbackTransitionWindows;
 
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    modeRef.current = streamingPlaybackMode;
-  }, [streamingPlaybackMode]);
-
   const syncOverlayMode = useCallback(() => {
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    setForceCanvasOverlay(isPlaying && isFullStreamingPlaybackMode(modeRef.current));
+    setForceCanvasOverlay(isPlaying);
   }, []);
 
-  // Collect targets based on mode: full-playback streaming or transition-only mode.
   const getTargets = useCallback((frame: number) => {
-    if (isFullStreamingPlaybackMode(modeRef.current)) {
-      return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
-    }
-    return collectTransitionPrewarmTargets(
-      transitionWindowsRef.current, tracksRef.current, frame, fpsRef.current, useProxyRef.current,
-    );
+    return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
   }, []);
 
   const prewarmAtFrame = useCallback((frame: number, seekExisting = true) => {
@@ -352,7 +276,6 @@ export function useStreamingPlaybackController({
     };
   }, []);
 
-  // Debug toggle
   useEffect(() => {
     if (!import.meta.env.DEV) return;
 
@@ -360,33 +283,11 @@ export function useStreamingPlaybackController({
       Record<string, unknown> | undefined;
     if (!debugApi) return;
 
-    const setStreamingPlaybackMode = (mode: StreamingPlaybackMode) => {
-      setStreamingPlaybackModeState(mode);
-      modeRef.current = mode;
-      log.info(`Streaming playback mode: ${mode}`);
-      syncOverlayMode();
-
-      const state = usePlaybackStore.getState();
-      prewarmFrameRef.current = null;
-      if (isFullStreamingPlaybackMode(mode)) {
-        prewarmAtFrame(state.currentFrame);
-      } else {
-        playbackRef.current?.stopAll();
-      }
-    };
-
-    debugApi.setStreamingPlaybackMode = setStreamingPlaybackMode;
-    debugApi.setStreamingPlayback = (forceAll: boolean) => {
-      setStreamingPlaybackMode(forceAll ? 'all' : 'transitions');
-    };
-
     debugApi.streamingPlaybackMetrics = () => {
       return playbackRef.current?.getMetrics() ?? null;
     };
 
     return () => {
-      delete debugApi.setStreamingPlaybackMode;
-      delete debugApi.setStreamingPlayback;
       delete debugApi.streamingPlaybackMetrics;
     };
   }, [prewarmAtFrame, syncOverlayMode]);

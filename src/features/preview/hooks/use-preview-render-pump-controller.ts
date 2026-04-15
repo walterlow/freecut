@@ -24,9 +24,7 @@ import {
   FAST_SCRUB_PREWARM_QUEUE_MAX,
   FAST_SCRUB_PREWARM_RENDER_BUDGET_MS,
   FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES,
-  isFullStreamingPlaybackMode,
   type FastScrubBoundarySource,
-  type StreamingPlaybackMode,
 } from '../utils/preview-constants';
 import {
   isAtomicPreviewTarget,
@@ -43,7 +41,6 @@ import {
   collectPlaybackStartVariableSpeedPreseekTargets,
   collectPlaybackStartVariableSpeedPrewarmItemIds,
   collectVisibleTrackVideoSourceTimesBySrc,
-  getVideoItemSourceTimeSeconds,
   resolvePausedVariableSpeedPrewarmPlan,
 } from '../utils/render-pump-preseek';
 import type { TransitionPreviewSessionTrace } from './use-preview-transition-session-controller';
@@ -71,7 +68,6 @@ interface UsePreviewRenderPumpParams {
   playerRef: RefObject<PlayerRef | null>;
   fps: number;
   forceFastScrubOverlay: boolean;
-  streamingPlaybackMode: StreamingPlaybackMode;
   combinedTracks: TimelineTrack[];
   fastScrubBoundaryFrames: number[];
   fastScrubBoundarySources: FastScrubBoundarySource[];
@@ -112,8 +108,6 @@ interface UsePreviewRenderPumpParams {
   deferredPlaybackTransitionPrepareFrameRef: MutableRefObject<number | null>;
   transitionPrepareTimeoutRef: MutableRefObject<number | null>;
   transitionSessionWindowRef: MutableRefObject<TransitionWindow | null>;
-  transitionSessionPinnedElementsRef: MutableRefObject<Map<string, HTMLVideoElement | null>>;
-  transitionSessionStallCountRef: MutableRefObject<Map<string, { ct: number; count: number }>>;
   transitionSessionBufferedFramesRef: MutableRefObject<Map<number, OffscreenCanvas>>;
   transitionPrewarmPromiseRef: MutableRefObject<Promise<void> | null>;
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>;
@@ -132,7 +126,6 @@ interface UsePreviewRenderPumpParams {
   getTransitionWindowForFrame: (frame: number) => TransitionWindow | null;
   getPlayingAnyTransitionPrewarmStartFrame: (frame: number) => number | null;
   getPausedTransitionPrewarmStartFrame: (frame: number) => number | null;
-  getPinnedTransitionElementForItem: (itemId: string) => HTMLVideoElement | null;
   pinTransitionPlaybackSession: (window: TransitionWindow | null) => TransitionWindow | null;
   clearTransitionPlaybackSession: () => void;
   cacheTransitionSessionFrame: (frame: number) => void;
@@ -162,7 +155,6 @@ export function usePreviewRenderPump({
   playerRef,
   fps,
   forceFastScrubOverlay,
-  streamingPlaybackMode,
   combinedTracks,
   fastScrubBoundaryFrames,
   fastScrubBoundarySources,
@@ -203,8 +195,6 @@ export function usePreviewRenderPump({
   deferredPlaybackTransitionPrepareFrameRef,
   transitionPrepareTimeoutRef,
   transitionSessionWindowRef,
-  transitionSessionPinnedElementsRef,
-  transitionSessionStallCountRef,
   transitionSessionBufferedFramesRef,
   transitionPrewarmPromiseRef,
   transitionSessionTraceRef,
@@ -223,7 +213,6 @@ export function usePreviewRenderPump({
   getTransitionWindowForFrame,
   getPlayingAnyTransitionPrewarmStartFrame,
   getPausedTransitionPrewarmStartFrame,
-  getPinnedTransitionElementForItem,
   pinTransitionPlaybackSession,
   clearTransitionPlaybackSession,
   cacheTransitionSessionFrame,
@@ -237,11 +226,7 @@ export function usePreviewRenderPump({
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
-  const prefersFullStreamingPlayback = isFullStreamingPlaybackMode(streamingPlaybackMode);
-  const shouldUseRenderDrivenPausedTransitionPrep = (
-    forceFastScrubOverlay
-    || prefersFullStreamingPlayback
-  );
+  const shouldUseRenderDrivenPausedTransitionPrep = true;
 
   useEffect(() => {
     scrubMountedRef.current = true;
@@ -575,10 +560,6 @@ export function usePreviewRenderPump({
           // Priority frames proceed regardless ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â their rendered content is always useful.
           if (!isPriorityFrame && isStale()) break;
 
-          // Transition-only rollback can still borrow pinned DOM video
-          // elements during playback. Full-streaming playback stays fully
-          // decode-driven and never wires a DOM provider into the renderer.
-          // During playback, the Player's <video> elements are already at
           // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
@@ -586,20 +567,7 @@ export function usePreviewRenderPump({
             const windowForFrame = playbackNow.isPlaying
               ? getTransitionWindowForFrame(frameToRender)
               : null;
-            const shouldUseRenderDrivenPlaybackFrames = (
-              prefersFullStreamingPlayback
-              || (
-                playbackNow.isPlaying
-                && !!streamingFrameProvider
-                && windowForFrame !== null
-              )
-            );
             if (playbackNow.isPlaying) {
-              // Only pin/clear the transition session when the rendered frame is
-              // actually inside a transition window. Passing null for pre-transition
-              // frames would destroy sessions that the prearm subscription just
-              // pinned, causing churn and losing the rollback DOM provider
-              // needed for smooth transition entry.
               if (windowForFrame) {
                 const prevSession = transitionSessionWindowRef.current;
                 const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
@@ -622,12 +590,8 @@ export function usePreviewRenderPump({
                   );
                 }
               }
-              renderer.setDomVideoElementProvider?.(
-                shouldUseRenderDrivenPlaybackFrames ? undefined : getPinnedTransitionElementForItem,
-              );
-            } else {
-              renderer.setDomVideoElementProvider?.(undefined);
             }
+            renderer.setDomVideoElementProvider?.(undefined);
             if ('setStreamingFrameProvider' in renderer) {
               renderer.setStreamingFrameProvider?.(streamingFrameProvider);
             }
@@ -959,48 +923,6 @@ export function usePreviewRenderPump({
           fps,
           { requireExplicitSourceFps: true },
         ));
-      }
-
-      const sessionWindow = transitionSessionWindowRef.current;
-      if (sessionWindow && transitionSessionPinnedElementsRef.current.size > 0) {
-        for (const clip of [sessionWindow.leftClip, sessionWindow.rightClip]) {
-          if (clip.type !== 'video') continue;
-          const el = transitionSessionPinnedElementsRef.current.get(clip.id);
-          if (!el || el.dataset.transitionHold !== '1') continue;
-          const clipSpeed = clip.speed ?? 1;
-          const targetTime = getVideoItemSourceTimeSeconds(clip, state.currentFrame, fps);
-          if (targetTime === null) continue;
-
-          const stallEntry = transitionSessionStallCountRef.current.get(clip.id);
-          if (stallEntry && Math.abs(el.currentTime - stallEntry.ct) < 0.001) {
-            const newCount = stallEntry.count + 1;
-            transitionSessionStallCountRef.current.set(clip.id, { ct: stallEntry.ct, count: newCount });
-            if (newCount >= 3) {
-              try { el.currentTime = targetTime; } catch { /* settling */ }
-              el.playbackRate = clipSpeed;
-              el.play().catch(() => { /* best effort */ });
-              transitionSessionStallCountRef.current.set(clip.id, { ct: targetTime, count: 0 });
-              continue;
-            }
-          } else {
-            transitionSessionStallCountRef.current.set(clip.id, { ct: el.currentTime, count: 0 });
-          }
-
-          const drift = el.currentTime - targetTime;
-          if (Math.abs(drift) > 0.2) {
-            try { el.currentTime = targetTime; } catch { /* settling */ }
-            el.playbackRate = clipSpeed;
-          } else if (Math.abs(drift) > 0.016) {
-            const correction = -drift * 0.25;
-            const maxAdj = Math.max(0.03, clipSpeed * 0.06);
-            el.playbackRate = Math.max(
-              clipSpeed - maxAdj,
-              Math.min(clipSpeed + maxAdj, clipSpeed + correction),
-            );
-          }
-        }
-      } else if (transitionSessionStallCountRef.current.size > 0) {
-        transitionSessionStallCountRef.current.clear();
       }
 
       const prearmStartFrame = (!activeTransitionWindow && !transitionSessionWindowRef.current)
@@ -1617,7 +1539,6 @@ export function usePreviewRenderPump({
     clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     getPausedTransitionPrewarmStartFrame,
-    getPinnedTransitionElementForItem,
     getTransitionWindowForFrame,
     hideFastScrubOverlay,
     hidePlaybackTransitionOverlay,
@@ -1635,6 +1556,5 @@ export function usePreviewRenderPump({
     setDisplayedFrame,
     shouldPreferPlayerForPreview,
     trackPlayerSeek,
-    prefersFullStreamingPlayback,
   ]);
 }

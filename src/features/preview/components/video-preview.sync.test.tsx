@@ -360,14 +360,6 @@ function getDisplayedFrame() {
   return usePreviewBridgeStore.getState().displayedFrame;
 }
 
-function setStreamingPlaybackMode(mode: 'all' | 'transitions') {
-  act(() => {
-    ((window as unknown as {
-      __DEBUG__?: { setStreamingPlaybackMode?: (nextMode: 'all' | 'transitions') => void }
-    }).__DEBUG__)?.setStreamingPlaybackMode?.(mode);
-  });
-}
-
 function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
@@ -1475,7 +1467,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -1754,7 +1745,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('shows the playback transition overlay only while a transition is active during playback', async () => {
+  it('keeps playback on the canvas path after a transition during playback', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -1813,7 +1804,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -1836,8 +1826,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(getDisplayedFrame()).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(getDisplayedFrame()).toBe(70);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
@@ -1989,83 +1979,6 @@ describe('VideoPreview sync behavior', () => {
     expect(renderer.setDomVideoElementProvider).not.toHaveBeenCalled();
   });
 
-  it('keeps the legacy debug boolean shim mapped onto streaming playback modes', async () => {
-    useItemsStore.getState().setTracks([
-      {
-        id: 'track-video',
-        name: 'Video',
-        height: 60,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: 0,
-        items: [],
-      },
-    ]);
-    useItemsStore.getState().setItems([
-      {
-        id: 'clip-streaming-legacy',
-        label: 'Streaming Clip Legacy',
-        type: 'video',
-        trackId: 'track-video',
-        from: 0,
-        durationInFrames: 120,
-        src: 'blob:streaming-legacy',
-      } as TimelineItem,
-    ]);
-
-    const { container } = render(
-      <VideoPreview
-        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
-        containerSize={{ width: 1280, height: 720 }}
-      />
-    );
-
-    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
-    const debugApi = (window as unknown as {
-      __DEBUG__?: {
-        setStreamingPlayback?: (forceAll: boolean) => void;
-      }
-    }).__DEBUG__;
-
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
-    seekToMock.mockClear();
-
-    act(() => {
-      debugApi?.setStreamingPlayback?.(true);
-      usePlaybackStore.getState().play();
-      usePlaybackStore.getState().setCurrentFrame(24);
-    });
-
-    await waitFor(() => {
-      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
-      expect(scrubCanvas.style.visibility).toBe('visible');
-    });
-
-    act(() => {
-      usePlaybackStore.getState().pause();
-    });
-
-    await waitFor(() => {
-      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
-    });
-
-    act(() => {
-      debugApi?.setStreamingPlayback?.(false);
-      usePlaybackStore.getState().play();
-      usePlaybackStore.getState().setCurrentFrame(48);
-    });
-
-    await waitFor(() => {
-      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
-      expect(getDisplayedFrame()).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
-    });
-  });
-
   it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -2125,7 +2038,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2141,8 +2053,8 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40);
-      expect(scrubCanvas.style.visibility).toBe('hidden');
-      expect(getDisplayedFrame()).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBe(35);
     });
 
     const prerenderedStartFrameCalls = renderer.renderFrame.mock.calls.filter(
@@ -2309,7 +2221,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2342,8 +2253,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(getDisplayedFrame()).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(getDisplayedFrame()).toBe(64);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
@@ -2408,7 +2319,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     act(() => {
@@ -2433,8 +2343,8 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(getDisplayedFrame()).toBeNull();
-      expect(scrubCanvas.style.visibility).toBe('hidden');
+      expect(getDisplayedFrame()).toBe(80);
+      expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
 
@@ -2503,7 +2413,6 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalled();
     });
-    setStreamingPlaybackMode('transitions');
     seekToMock.mockClear();
 
     // Scrub to last transition frame (endFrame - 1 = 59)
