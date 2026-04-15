@@ -178,6 +178,11 @@ export function useCustomPlayer(
   // Wait for timeline to finish loading before syncing frame position.
   // Without this, the Player would seek to frame 0 (the default) before
   // loadTimeline() restores the saved currentFrame from IndexedDB.
+  //
+  // This initial seek remains intentional even when the rendered preview
+  // currently owns visible video. A number of paused-preview paths still use
+  // the hidden Player as the ready/seek handshake before later handoff logic
+  // decides who should keep authority.
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
   // Timeline → Player: Sync frame position

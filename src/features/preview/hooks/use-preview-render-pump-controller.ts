@@ -209,6 +209,8 @@ export function usePreviewRenderPump({
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
+  // Paused transition prewarm is currently locked to the render-driven path.
+  // The alternate branch remains only as legacy cleanup work.
   const shouldUseRenderDrivenPausedTransitionPrep = true;
 
   useEffect(() => {
@@ -1403,28 +1405,24 @@ export function usePreviewRenderPump({
       const playbackState = usePlaybackStore.getState();
       const playbackTransitionState = getPlaybackTransitionStateForFrame(playbackState.currentFrame);
       if (playbackState.isPlaying && playbackTransitionState.shouldPrewarm && playbackTransitionState.nextTransitionStartFrame !== null) {
-        if (forceFastScrubOverlay) {
-          // Non-blocking prewarm path
-          const tw = getTransitionWindowByStartFrame(playbackTransitionState.nextTransitionStartFrame);
-          if (tw) {
-            pinTransitionPlaybackSession(tw);
-            const renderer = scrubRendererRef.current;
-            if (renderer && 'prewarmItems' in renderer) {
-              void renderer.prewarmItems?.(
-                [tw.leftClip.id, tw.rightClip.id],
-                tw.startFrame,
-              );
-            }
+        // Non-blocking prewarm path
+        const tw = getTransitionWindowByStartFrame(playbackTransitionState.nextTransitionStartFrame);
+        if (tw) {
+          pinTransitionPlaybackSession(tw);
+          const renderer = scrubRendererRef.current;
+          if (renderer && 'prewarmItems' in renderer) {
+            void renderer.prewarmItems?.(
+              [tw.leftClip.id, tw.rightClip.id],
+              tw.startFrame,
+            );
           }
-        } else {
-          schedulePlaybackTransitionPrepare(playbackTransitionState.nextTransitionStartFrame);
         }
       }
       const initialFrame = playbackState.previewFrame ?? playbackState.currentFrame;
       scrubRequestedFrameRef.current = initialFrame;
       void pumpRenderLoop();
       // Start rAF pump if already playing
-      if (playbackState.isPlaying && forceFastScrubOverlay && playbackRafId === null) {
+      if (playbackState.isPlaying && playbackRafId === null) {
         playbackRafId = requestAnimationFrame(playbackRafPump);
       }
     } else if (usePlaybackStore.getState().isPlaying && !forceFastScrubOverlay) {
