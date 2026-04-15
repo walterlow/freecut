@@ -570,6 +570,12 @@ export function usePreviewRenderPump({
           // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
+            const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
+            const shouldPreferStreamingTransitionFrames = (
+              playbackNow.isPlaying
+              && forceFastScrubOverlay
+              && !!streamingFrameProvider
+            );
             if (playbackNow.isPlaying) {
               // Only pin/clear the transition session when the rendered frame is
               // actually inside a transition window. Passing null for pre-transition
@@ -599,13 +605,14 @@ export function usePreviewRenderPump({
                   );
                 }
               }
-              renderer.setDomVideoElementProvider?.(getPinnedTransitionElementForItem);
+              renderer.setDomVideoElementProvider?.(
+                shouldPreferStreamingTransitionFrames ? undefined : getPinnedTransitionElementForItem,
+              );
             } else {
               renderer.setDomVideoElementProvider?.(undefined);
             }
-            // Set streaming frame provider when available (experimental WebCodecs playback)
             if ('setStreamingFrameProvider' in renderer) {
-              renderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
+              renderer.setStreamingFrameProvider?.(streamingFrameProvider);
             }
           }
 
