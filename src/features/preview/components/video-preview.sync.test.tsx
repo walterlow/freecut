@@ -2065,6 +2065,59 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('does not background-seek the player while paused rendered preview owns video frames', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-paused-canvas',
+        label: 'Paused Canvas Clip',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:paused-canvas',
+      } as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(36);
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
+      expect(getDisplayedFrame()).toBe(36);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    expect(seekToMock).not.toHaveBeenCalled();
+  });
+
   it('keeps transition playback on the canvas path by default', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -2600,7 +2653,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('mock-player-frame')).toHaveTextContent('60');
+      expect(getDisplayedFrame()).toBe(60);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });

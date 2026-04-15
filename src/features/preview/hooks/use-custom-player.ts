@@ -11,6 +11,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
 import { resolvePreviewTransitionFromPlaybackStates } from '../utils/preview-state-coordinator';
 import {
@@ -32,6 +33,7 @@ export function useCustomPlayer(
   onPlayerSeek?: (targetFrame: number) => void,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
 
   const [playerReady, setPlayerReady] = useState(false);
   const lastSyncedFrameRef = useRef<number>(0);
@@ -198,6 +200,23 @@ export function useCustomPlayer(
     }
   }, [isPlaying, playerRef, executePlayerCommand, flushPreviewWarmSeek, getPlayerFrame]);
 
+  useEffect(() => {
+    if (!playerReady || !playerRef.current || isPlaying || visualPlaybackMode !== 'player') {
+      return;
+    }
+
+    clearScheduledPreviewWarmSeek();
+    const currentFrame = usePlaybackStore.getState().currentFrame;
+    seekPlayerToFrame(currentFrame);
+  }, [
+    clearScheduledPreviewWarmSeek,
+    isPlaying,
+    playerReady,
+    playerRef,
+    seekPlayerToFrame,
+    visualPlaybackMode,
+  ]);
+
   // Wait for timeline to finish loading before syncing frame position.
   // Without this, the Player would seek to frame 0 (the default) before
   // loadTimeline() restores the saved currentFrame from IndexedDB.
@@ -235,13 +254,17 @@ export function useCustomPlayer(
         lastSyncedFrameRef.current = plan.acknowledgedFrame;
       }
       if (plan.command.type === 'seek') {
+        if (!state.isPlaying && visualPlaybackMode !== 'player') {
+          clearScheduledPreviewWarmSeek();
+          return;
+        }
         clearScheduledPreviewWarmSeek();
         seekPlayerToFrame(plan.command.targetFrame);
       }
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, clearScheduledPreviewWarmSeek, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek]);
+  }, [playerReady, isTimelineLoading, playerRef, clearScheduledPreviewWarmSeek, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
