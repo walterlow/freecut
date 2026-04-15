@@ -88,6 +88,96 @@ export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-
 
 function getLog() { return createLogger('ClientRenderEngine'); }
 
+const FALLBACK_VIDEO_LOAD_TIMEOUT_MS = 2000;
+
+type FallbackVideoPreloadScope = 'main' | 'subcomp';
+
+async function preloadFallbackVideoElements(
+  entries: Map<HTMLVideoElement, string>,
+  scope: FallbackVideoPreloadScope,
+): Promise<void> {
+  if (entries.size === 0) return;
+
+  const scopeLabel = scope === 'subcomp' ? 'Sub-comp fallback video preload' : 'Fallback video preload';
+  const timeoutLabel = scope === 'subcomp' ? 'Sub-comp video load timeout' : 'Video load timeout';
+  const errorLabel = scope === 'subcomp' ? 'Sub-comp video load error' : 'Video load error';
+  const startedAt = performance.now();
+  const stats = {
+    total: entries.size,
+    alreadyReady: 0,
+    waited: 0,
+    errored: 0,
+    timedOut: 0,
+    maxWaitMs: 0,
+  };
+
+  const loadPromises = Array.from(entries.entries()).map(([video, itemId]) => (
+    new Promise<void>((resolve) => {
+      if (video.readyState >= 2) {
+        stats.alreadyReady += 1;
+        resolve();
+        return;
+      }
+
+      const waitStartedAt = performance.now();
+      let settled = false;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+      const finalize = (outcome: 'loaded' | 'error' | 'timeout') => {
+        if (settled) return;
+        settled = true;
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        video.removeEventListener('loadeddata', onLoadedData);
+        video.removeEventListener('error', onError);
+
+        const waitMs = Math.max(0, performance.now() - waitStartedAt);
+        stats.maxWaitMs = Math.max(stats.maxWaitMs, waitMs);
+        if (outcome === 'loaded') {
+          stats.waited += 1;
+        } else if (outcome === 'error') {
+          stats.errored += 1;
+        } else {
+          stats.timedOut += 1;
+        }
+        resolve();
+      };
+
+      const onLoadedData = () => finalize('loaded');
+      const onError = () => {
+        getLog().error(errorLabel, { itemId });
+        finalize('error');
+      };
+
+      timeoutId = setTimeout(() => {
+        getLog().warn(timeoutLabel, {
+          itemId,
+          timeoutMs: FALLBACK_VIDEO_LOAD_TIMEOUT_MS,
+        });
+        finalize('timeout');
+      }, FALLBACK_VIDEO_LOAD_TIMEOUT_MS);
+
+      video.addEventListener('loadeddata', onLoadedData, { once: true });
+      video.addEventListener('error', onError, { once: true });
+      video.load();
+    })
+  ));
+
+  await Promise.all(loadPromises);
+
+  getLog().info(scopeLabel, {
+    total: stats.total,
+    alreadyReady: stats.alreadyReady,
+    waited: stats.waited,
+    errored: stats.errored,
+    timedOut: stats.timedOut,
+    maxWaitMs: Math.round(stats.maxWaitMs),
+    totalElapsedMs: Math.round(Math.max(0, performance.now() - startedAt)),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -725,33 +815,7 @@ export async function createCompositionRenderer(
             uniqueVideoEntries.set(video, itemId);
           }
         }
-
-        const videoLoadPromises = Array.from(uniqueVideoEntries.entries()).map(
-          ([video, itemId]) => new Promise<void>((resolve) => {
-            const timeout = setTimeout(() => {
-              getLog().warn('Video load timeout', { itemId });
-              resolve();
-            }, 10000);
-
-            if (video.readyState >= 2) {
-              clearTimeout(timeout);
-              resolve();
-            } else {
-              video.addEventListener('loadeddata', () => {
-                clearTimeout(timeout);
-                resolve();
-              }, { once: true });
-              video.addEventListener('error', () => {
-                clearTimeout(timeout);
-                getLog().error('Video load error', { itemId });
-                resolve();
-              }, { once: true });
-              video.load();
-            }
-          })
-        );
-
-        await Promise.all(videoLoadPromises);
+        await preloadFallbackVideoElements(uniqueVideoEntries, 'main');
       }
 
       // Load GIF frames for animated GIFs (main thread only)
@@ -943,32 +1007,7 @@ export async function createCompositionRenderer(
                 uniqueSubVideos.set(video, itemId);
               }
             }
-
-            const subVideoLoadPromises = Array.from(uniqueSubVideos.entries()).map(([video, itemId]) =>
-              new Promise<void>((resolve) => {
-                const timeout = setTimeout(() => {
-                  getLog().warn('Sub-comp video load timeout', { itemId });
-                  resolve();
-                }, 10000);
-
-                if (video.readyState >= 2) {
-                  clearTimeout(timeout);
-                  resolve();
-                } else {
-                  video.addEventListener('loadeddata', () => {
-                    clearTimeout(timeout);
-                    resolve();
-                  }, { once: true });
-                  video.addEventListener('error', () => {
-                    clearTimeout(timeout);
-                    getLog().error('Sub-comp video load error', { itemId });
-                    resolve();
-                  }, { once: true });
-                  video.load();
-                }
-              })
-            );
-            await Promise.all(subVideoLoadPromises);
+            await preloadFallbackVideoElements(uniqueSubVideos, 'subcomp');
           }
         }
 
