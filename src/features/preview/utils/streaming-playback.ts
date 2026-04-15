@@ -38,8 +38,12 @@ const IDLE_SWEEP_INTERVAL_MS = 1000;
  *  MAX_DECODE_AHEAD_SECONDS * max_fps to avoid evicting frames the
  *  worker just decoded. 90 frames covers 3s@30fps or 1.5s@60fps. */
 const MAX_BUFFER_SIZE = 90;
+/** Maximum decoded audio chunks buffered per source. */
+const MAX_AUDIO_CHUNK_BUFFER_SIZE = 64;
 /** Source time tolerance for frame lookup (seconds). */
 const FRAME_TOLERANCE_SECONDS = 0.15;
+/** Small look-behind retained for audio scheduling / seek reuse. */
+const AUDIO_CHUNK_LOOKBEHIND_SECONDS = 0.25;
 
 // ---------------------------------------------------------------------------
 // Frame buffer
@@ -48,6 +52,12 @@ const FRAME_TOLERANCE_SECONDS = 0.15;
 interface BufferedFrame {
   timestamp: number;
   bitmap: ImageBitmap;
+}
+
+export interface StreamingAudioChunk {
+  timestamp: number;
+  duration: number;
+  buffer: AudioBuffer;
 }
 
 /** Per-source ring buffer of decoded frames. */
@@ -125,6 +135,45 @@ class FrameBuffer {
   }
 }
 
+class AudioChunkBuffer {
+  private chunks: StreamingAudioChunk[] = [];
+  private readonly maxSize: number;
+
+  constructor(maxSize = MAX_AUDIO_CHUNK_BUFFER_SIZE) {
+    this.maxSize = maxSize;
+  }
+
+  push(chunk: StreamingAudioChunk): void {
+    if (this.chunks.length >= this.maxSize) {
+      this.chunks.shift();
+    }
+    this.chunks.push(chunk);
+  }
+
+  getChunks(startTimestamp: number, endTimestamp: number): StreamingAudioChunk[] {
+    if (this.chunks.length === 0) return [];
+    return this.chunks.filter((chunk) => {
+      const chunkEnd = chunk.timestamp + chunk.duration;
+      return chunkEnd >= startTimestamp - 1e-4 && chunk.timestamp <= endTimestamp + 1e-4;
+    });
+  }
+
+  pruneOld(currentTimestamp: number): number {
+    const cutoff = currentTimestamp - AUDIO_CHUNK_LOOKBEHIND_SECONDS;
+    const previousLength = this.chunks.length;
+    this.chunks = this.chunks.filter((chunk) => (chunk.timestamp + chunk.duration) >= cutoff);
+    return previousLength - this.chunks.length;
+  }
+
+  clear(): void {
+    this.chunks = [];
+  }
+
+  get size(): number {
+    return this.chunks.length;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Source state
 // ---------------------------------------------------------------------------
@@ -133,11 +182,13 @@ interface SourceInfo {
   width: number;
   height: number;
   duration: number;
+  hasAudio: boolean;
 }
 
 interface StreamState {
   src: string;
-  buffer: FrameBuffer;
+  frameBuffer: FrameBuffer;
+  audioBuffer: AudioChunkBuffer;
   info: SourceInfo | null;
   streaming: boolean;
   /** Timestamp (ms) of the last getFrame() call. Used for idle cleanup. */
@@ -167,6 +218,8 @@ export interface StreamingPlayback {
    * Falls through to the next render path (DOM video) until frames arrive.
    */
   getFrame(streamKey: string, src: string, targetTimestamp: number): ImageBitmap | null;
+  /** Get decoded audio chunks intersecting the requested time window. */
+  getAudioChunks(streamKey: string, startTimestamp: number, endTimestamp: number): StreamingAudioChunk[];
   /** Get source info (dimensions, duration) if available. */
   getSourceInfo(streamKey: string): SourceInfo | null;
   /** Whether a source is actively streaming. */
@@ -189,7 +242,9 @@ export interface StreamingPlaybackMetrics {
   totalFramesReceived: number;
   totalFramesDrawn: number;
   totalFramesMissed: number;
-  bufferSizes: Map<string, number>;
+  totalAudioChunksReceived: number;
+  frameBufferSizes: Map<string, number>;
+  audioBufferSizes: Map<string, number>;
 }
 
 export function createStreamingPlayback(): StreamingPlayback {
@@ -203,6 +258,7 @@ export function createStreamingPlayback(): StreamingPlayback {
   let totalFramesReceived = 0;
   let totalFramesDrawn = 0;
   let totalFramesMissed = 0;
+  let totalAudioChunksReceived = 0;
 
   // Blob cache (same pattern as decoder-prewarm.ts)
   const blobByUrl = new Map<string, Blob>();
@@ -228,6 +284,34 @@ export function createStreamingPlayback(): StreamingPlayback {
     return worker;
   }
 
+  function createAudioBufferFromChunk(msg: {
+    sampleRate: number;
+    frameCount: number;
+    numberOfChannels: number;
+    channelData: ArrayBuffer[];
+  }): AudioBuffer | null {
+    const AudioBufferCtor = globalThis.AudioBuffer;
+    if (typeof AudioBufferCtor !== 'function') {
+      return null;
+    }
+
+    try {
+      const buffer = new AudioBufferCtor({
+        length: msg.frameCount,
+        sampleRate: msg.sampleRate,
+        numberOfChannels: Math.max(1, msg.numberOfChannels),
+      });
+      for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+        const channelBuffer = msg.channelData[channel];
+        if (!channelBuffer) continue;
+        buffer.copyToChannel(new Float32Array(channelBuffer), channel);
+      }
+      return buffer;
+    } catch {
+      return null;
+    }
+  }
+
   function handleWorkerMessage(event: MessageEvent): void {
     const msg = event.data;
     if (msg.type === 'ready') {
@@ -244,6 +328,7 @@ export function createStreamingPlayback(): StreamingPlayback {
           width: msg.width,
           height: msg.height,
           duration: msg.duration,
+          hasAudio: !!msg.hasAudio,
         };
       }
       return;
@@ -270,7 +355,7 @@ export function createStreamingPlayback(): StreamingPlayback {
           // Guard: state may have been removed from `streams` by stopAll()
           // while this createImageBitmap was in-flight.
           if (streams.has(msg.streamKey)) {
-            state.buffer.push(msg.timestamp, bitmap);
+            state.frameBuffer.push(msg.timestamp, bitmap);
           } else {
             bitmap.close();
           }
@@ -282,8 +367,28 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       // Fallback: ImageBitmap from older worker version
       if (msg.bitmap instanceof ImageBitmap) {
-        state.buffer.push(msg.timestamp, msg.bitmap);
+        state.frameBuffer.push(msg.timestamp, msg.bitmap);
       }
+      return;
+    }
+
+    if (msg.type === 'audio_chunk') {
+      const state = streams.get(msg.streamKey);
+      if (!state) {
+        return;
+      }
+
+      const buffer = createAudioBufferFromChunk(msg);
+      if (!buffer) {
+        return;
+      }
+
+      totalAudioChunksReceived++;
+      state.audioBuffer.push({
+        timestamp: msg.timestamp,
+        duration: msg.duration,
+        buffer,
+      });
       return;
     }
 
@@ -308,9 +413,10 @@ export function createStreamingPlayback(): StreamingPlayback {
   function getOrCreateState(streamKey: string, src: string): StreamState {
     const existing = streams.get(streamKey);
     if (existing) return existing;
-    const state: StreamState = {
+      const state: StreamState = {
       src,
-      buffer: new FrameBuffer(MAX_BUFFER_SIZE),
+      frameBuffer: new FrameBuffer(MAX_BUFFER_SIZE),
+      audioBuffer: new AudioChunkBuffer(MAX_AUDIO_CHUNK_BUFFER_SIZE),
       info: null,
       streaming: false,
       lastAccessMs: performance.now(),
@@ -393,7 +499,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       worker?.postMessage({ type: 'stream_stop', streamKey });
     }
     state.streaming = false;
-    state.buffer.clear();
+    state.frameBuffer.clear();
+    state.audioBuffer.clear();
   }
 
   /** Run idle cleanup: stop sources not accessed recently. */
@@ -432,7 +539,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       const state = getOrCreateState(streamKey, src);
       state.generation++;
       state.src = src;
-      state.buffer.clear();
+      state.frameBuffer.clear();
+      state.audioBuffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
 
@@ -444,7 +552,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       const state = streams.get(streamKey);
       if (!state) return;
 
-      state.buffer.clear();
+      state.frameBuffer.clear();
+      state.audioBuffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
 
@@ -490,16 +599,29 @@ export function createStreamingPlayback(): StreamingPlayback {
       state.lastAccessMs = performance.now();
       worker?.postMessage({ type: 'playback_position', streamKey, position: targetTimestamp });
 
-      const frame = state.buffer.getFrame(targetTimestamp);
+      const frame = state.frameBuffer.getFrame(targetTimestamp);
       if (!frame) {
         totalFramesMissed++;
         return null;
       }
 
       totalFramesDrawn++;
-      state.buffer.pruneOld(targetTimestamp);
+      state.frameBuffer.pruneOld(targetTimestamp);
+      state.audioBuffer.pruneOld(targetTimestamp);
 
       return frame.bitmap;
+    },
+
+    getAudioChunks(streamKey: string, startTimestamp: number, endTimestamp: number): StreamingAudioChunk[] {
+      if (disposed) return [];
+      const state = streams.get(streamKey);
+      if (!state) return [];
+
+      state.lastAccessMs = performance.now();
+      worker?.postMessage({ type: 'playback_position', streamKey, position: startTimestamp });
+      const chunks = state.audioBuffer.getChunks(startTimestamp, endTimestamp);
+      state.audioBuffer.pruneOld(startTimestamp);
+      return chunks;
     },
 
     getSourceInfo(streamKey: string): SourceInfo | null {
@@ -525,7 +647,8 @@ export function createStreamingPlayback(): StreamingPlayback {
       disposed = true;
       stopIdleSweep();
       for (const [, state] of streams) {
-        state.buffer.clear();
+        state.frameBuffer.clear();
+        state.audioBuffer.clear();
       }
       streams.clear();
       blobByUrl.clear();
@@ -538,16 +661,20 @@ export function createStreamingPlayback(): StreamingPlayback {
     },
 
     getMetrics(): StreamingPlaybackMetrics {
-      const bufferSizes = new Map<string, number>();
+      const frameBufferSizes = new Map<string, number>();
+      const audioBufferSizes = new Map<string, number>();
       for (const [streamKey, state] of streams) {
-        bufferSizes.set(streamKey, state.buffer.size);
+        frameBufferSizes.set(streamKey, state.frameBuffer.size);
+        audioBufferSizes.set(streamKey, state.audioBuffer.size);
       }
       return {
         activeStreams: [...streams.values()].filter((s) => s.streaming).length,
         totalFramesReceived,
         totalFramesDrawn,
         totalFramesMissed,
-        bufferSizes,
+        totalAudioChunksReceived,
+        frameBufferSizes,
+        audioBufferSizes,
       };
     },
   };

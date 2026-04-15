@@ -38,10 +38,13 @@ interface SourceState {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   input: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sink: any;
+  videoSink: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  audioSink: any | null;
   width: number;
   height: number;
   duration: number;
+  hasAudio: boolean;
   streaming: boolean;
   /** Incremented on every seek/stop to abort stale stream loops. */
   generation: number;
@@ -151,7 +154,14 @@ async function getOrInitSource(streamKey: string, src: string, options?: InitSou
         }
       }
 
-      const sink = new mediabunny.VideoSampleSink(videoTrack);
+      const audioTrack = await input.getPrimaryAudioTrack().catch(() => null);
+      const audioCanDecode = audioTrack && typeof audioTrack.canDecode === 'function'
+        ? await audioTrack.canDecode().catch(() => false)
+        : !!audioTrack;
+      const videoSink = new mediabunny.VideoSampleSink(videoTrack);
+      const audioSink = audioTrack && audioCanDecode
+        ? new mediabunny.AudioBufferSink(audioTrack)
+        : null;
       const width = videoTrack.displayWidth || 1920;
       const height = videoTrack.displayHeight || 1080;
       const duration = videoTrack.duration || 0;
@@ -166,17 +176,19 @@ async function getOrInitSource(streamKey: string, src: string, options?: InitSou
         streamKey,
         src,
         input,
-        sink,
+        videoSink,
+        audioSink,
         width,
         height,
         duration,
+        hasAudio: !!audioSink,
         streaming: false,
         generation: 0,
         playbackPosition: 0,
       };
       sources.set(streamKey, state);
 
-      self.postMessage({ type: 'source_ready', streamKey, src, width, height, duration });
+      self.postMessage({ type: 'source_ready', streamKey, src, width, height, duration, hasAudio: !!audioSink });
       return state;
     } catch (error) {
       input.dispose?.();
@@ -243,17 +255,60 @@ function extractVideoFrame(sample: MBSample): { frame: VideoFrame; width: number
   return { frame: videoFrame, width, height };
 }
 
+function downmixToStereo(
+  channels: Float32Array[],
+  totalFrames: number,
+): { left: Float32Array; right: Float32Array } {
+  const numCh = channels.length;
+  if (numCh <= 2) {
+    const left = channels[0] ?? new Float32Array(totalFrames);
+    const right = channels[1] ?? left;
+    return { left, right };
+  }
+
+  const centerGain = 0.7071;
+  const surroundGain = 0.7071;
+
+  const left = new Float32Array(totalFrames);
+  const right = new Float32Array(totalFrames);
+
+  const L = channels[0]!;
+  const R = channels[1]!;
+  const C = channels[2];
+  const Ls = channels[4];
+  const Rs = channels[5];
+  const Lrs = channels[6];
+  const Rrs = channels[7];
+
+  for (let i = 0; i < totalFrames; i++) {
+    let l = L[i]!;
+    let r = R[i]!;
+
+    if (C) {
+      const c = C[i]! * centerGain;
+      l += c;
+      r += c;
+    }
+    if (Ls) l += Ls[i]! * surroundGain;
+    if (Rs) r += Rs[i]! * surroundGain;
+    if (Lrs) l += Lrs[i]! * surroundGain;
+    if (Rrs) r += Rrs[i]! * surroundGain;
+
+    left[i] = l;
+    right[i] = r;
+  }
+
+  return { left, right };
+}
+
 // ---------------------------------------------------------------------------
 // Streaming decode loop
 // ---------------------------------------------------------------------------
 
-async function runStreamLoop(state: SourceState, startTimestamp: number): Promise<void> {
+async function runVideoStreamLoop(state: SourceState, startTimestamp: number, gen: number): Promise<void> {
   const { streamKey, src } = state;
-  const gen = state.generation;
-  state.streaming = true;
-
   const streamStart = getStreamStart(src, startTimestamp);
-  const iterator = state.sink.samples(streamStart, Infinity) as AsyncGenerator<MBSample, void, unknown>;
+  const iterator = state.videoSink.samples(streamStart, Infinity) as AsyncGenerator<MBSample, void, unknown>;
 
   try {
     for await (const sample of iterator) {
@@ -316,6 +371,90 @@ async function runStreamLoop(state: SourceState, startTimestamp: number): Promis
     }
   } finally {
     void iterator.return?.();
+  }
+}
+
+async function runAudioStreamLoop(state: SourceState, startTimestamp: number, gen: number): Promise<void> {
+  if (!state.audioSink) return;
+
+  const { streamKey, src } = state;
+  const streamStart = getStreamStart(src, startTimestamp);
+  const iterator = state.audioSink.buffers(streamStart, Infinity) as AsyncGenerator<{
+    buffer: AudioBuffer;
+    timestamp: number;
+    duration: number;
+  }, void, unknown>;
+
+  try {
+    for await (const wrappedBuffer of iterator) {
+      if (state.generation !== gen) {
+        break;
+      }
+
+      const timestamp = wrappedBuffer.timestamp ?? 0;
+      const duration = wrappedBuffer.duration ?? wrappedBuffer.buffer.duration ?? 0;
+      if (timestamp + TIMESTAMP_EPSILON < startTimestamp) {
+        continue;
+      }
+
+      const audioBuffer = wrappedBuffer.buffer;
+      if (audioBuffer.length <= 0) {
+        continue;
+      }
+
+      const channels: Float32Array[] = [];
+      for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
+        channels.push(audioBuffer.getChannelData(channel));
+      }
+      const { left, right } = downmixToStereo(channels, audioBuffer.length);
+
+      self.postMessage(
+        {
+          type: 'audio_chunk',
+          streamKey,
+          src,
+          timestamp,
+          duration,
+          sampleRate: audioBuffer.sampleRate,
+          frameCount: audioBuffer.length,
+          numberOfChannels: 2,
+          channelData: [left.buffer, right.buffer],
+        },
+        { transfer: [left.buffer, right.buffer] },
+      );
+
+      while (
+        state.generation === gen
+        && (timestamp + duration) > state.playbackPosition + MAX_DECODE_AHEAD_SECONDS
+      ) {
+        await new Promise<void>((r) => setTimeout(r, THROTTLE_SLEEP_MS));
+      }
+    }
+  } catch (error) {
+    if (state.generation === gen) {
+      self.postMessage({
+        type: 'error',
+        streamKey,
+        src,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    void iterator.return?.();
+  }
+}
+
+async function runStreamLoop(state: SourceState, startTimestamp: number): Promise<void> {
+  const { streamKey, src } = state;
+  const gen = state.generation;
+  state.streaming = true;
+
+  try {
+    await Promise.all([
+      runVideoStreamLoop(state, startTimestamp, gen),
+      runAudioStreamLoop(state, startTimestamp, gen),
+    ]);
+  } finally {
     if (state.generation === gen) {
       state.streaming = false;
       self.postMessage({ type: 'stream_ended', streamKey, src });
