@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { PlayerRef } from '@/features/preview/deps/player-core';
+import type { PlayerRef as PreviewHostRef } from '@/features/preview/deps/player-core';
 import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import { createAdaptivePreviewQualityState } from '../utils/adaptive-preview-quality';
@@ -12,7 +12,7 @@ import type {
 type TransitionWindow = ResolvedTransitionWindow<TimelineItem>;
 
 export function usePreviewRuntimeRefs() {
-  const playerRef = useRef<PlayerRef>(null);
+  const hostRef = useRef<PreviewHostRef>(null);
   const scrubCanvasRef = useRef<HTMLCanvasElement>(null);
   const gpuEffectsCanvasRef = useRef<HTMLCanvasElement>(null);
   const scrubFrameDirtyRef = useRef(false);
@@ -134,7 +134,7 @@ export function usePreviewRuntimeRefs() {
   }), []);
 
   const renderPumpRefs = useMemo(() => ({
-    playerRef,
+    hostRef,
     isGizmoInteractingRef,
     bypassPreviewSeekRef,
     scrubCanvasRef,
@@ -175,7 +175,7 @@ export function usePreviewRuntimeRefs() {
   }), []);
 
   return {
-    playerRef,
+    hostRef,
     scrubCanvasRef,
     gpuEffectsCanvasRef,
     scrubFrameDirtyRef,

@@ -8,7 +8,7 @@ import { FAST_SCRUB_RENDERER_ENABLED } from '../utils/preview-constants';
 
 interface PreviewStageProps {
   backgroundRef: RefObject<HTMLDivElement | null>;
-  playerRef: RefObject<PlayerRef | null>;
+  hostRef: RefObject<PlayerRef | null>;
   scrubCanvasRef: RefObject<HTMLCanvasElement | null>;
   gpuEffectsCanvasRef: RefObject<HTMLCanvasElement | null>;
   needsOverflow: boolean;
@@ -30,7 +30,7 @@ interface PreviewStageProps {
 
 export const PreviewStage = memo(function PreviewStage({
   backgroundRef,
-  playerRef,
+  hostRef,
   scrubCanvasRef,
   gpuEffectsCanvasRef,
   needsOverflow,
@@ -86,7 +86,7 @@ export const PreviewStage = memo(function PreviewStage({
             )}
 
             <Player
-              ref={playerRef}
+              ref={hostRef}
               durationInFrames={totalFrames}
               fps={fps}
               initialFrame={currentFrame}

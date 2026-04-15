@@ -99,7 +99,7 @@ export function usePreviewPerfPublisher({
     timeouts: 0,
   });
 
-  const trackPlayerSeek = useCallback((targetFrame: number) => {
+  const trackHostSeek = useCallback((targetFrame: number) => {
     if (!import.meta.env.DEV) return;
     pendingSeekLatencyRef.current = {
       targetFrame,
@@ -250,7 +250,7 @@ export function usePreviewPerfPublisher({
   ]);
 
   return {
-    trackPlayerSeek,
+    trackHostSeek,
     resolvePendingSeekLatency,
   };
 }

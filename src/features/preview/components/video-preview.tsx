@@ -69,7 +69,7 @@ export const VideoPreview = memo(function VideoPreview({
 }: VideoPreviewProps) {
   const previewRuntimeRefs = usePreviewRuntimeRefs();
   const {
-    playerRef,
+    hostRef,
     scrubCanvasRef,
     gpuEffectsCanvasRef,
     scrubFrameDirtyRef,
@@ -217,7 +217,7 @@ export const VideoPreview = memo(function VideoPreview({
   });
 
   const {
-    trackPlayerSeek,
+    trackHostSeek,
     resolvePendingSeekLatency,
   } = usePreviewPerfPublisher({
     previewPerfRef,
@@ -234,11 +234,11 @@ export const VideoPreview = memo(function VideoPreview({
   });
 
   const { ignoreHostUpdatesRef, hostSeekTargetRef } = usePreviewHostSync(
-    playerRef,
+    hostRef,
     bypassPreviewSeekRef,
     preferPlayerForStyledTextScrubRef,
     isGizmoInteractingRef,
-    trackPlayerSeek,
+    trackHostSeek,
     visualPlaybackModeRef,
     shouldUsePlayerForFrame,
   );
@@ -554,7 +554,7 @@ export const VideoPreview = memo(function VideoPreview({
   return (
     <PreviewStage
       backgroundRef={backgroundRef}
-      playerRef={playerRef}
+      hostRef={hostRef}
       scrubCanvasRef={scrubCanvasRef}
       gpuEffectsCanvasRef={gpuEffectsCanvasRef}
       needsOverflow={needsOverflow}

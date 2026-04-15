@@ -52,7 +52,7 @@ describe('PreviewStage', () => {
     render(
       <PreviewStage
         backgroundRef={createRef<HTMLDivElement>()}
-        playerRef={createRef()}
+        hostRef={createRef()}
         scrubCanvasRef={createRef<HTMLCanvasElement>()}
         gpuEffectsCanvasRef={createRef<HTMLCanvasElement>()}
         needsOverflow={false}
@@ -77,7 +77,7 @@ describe('PreviewStage', () => {
     const { container } = render(
       <PreviewStage
         backgroundRef={createRef<HTMLDivElement>()}
-        playerRef={createRef()}
+        hostRef={createRef()}
         scrubCanvasRef={createRef<HTMLCanvasElement>()}
         gpuEffectsCanvasRef={createRef<HTMLCanvasElement>()}
         needsOverflow={false}
