@@ -15,7 +15,6 @@ import { PREVIEW_PERF_RENDER_SOURCE_HISTORY_MAX } from '../utils/preview-constan
 
 interface UsePreviewOverlayControllerParams {
   bypassPreviewSeekRef: MutableRefObject<boolean>;
-  setDisplayedFrame: (frame: number | null) => void;
 }
 
 interface UsePreviewOverlayControllerResult {
@@ -33,7 +32,6 @@ interface UsePreviewOverlayControllerResult {
 
 export function usePreviewOverlayController({
   bypassPreviewSeekRef,
-  setDisplayedFrame,
 }: UsePreviewOverlayControllerParams): UsePreviewOverlayControllerResult {
   const [showFastScrubOverlay, setShowFastScrubOverlay] = useState(false);
   const [showPlaybackTransitionOverlay, setShowPlaybackTransitionOverlay] = useState(false);
@@ -96,13 +94,6 @@ export function usePreviewOverlayController({
     }
     renderSourceRef.current = nextSource;
   }, [showFastScrubOverlay, showPlaybackTransitionOverlay]);
-
-  useEffect(() => {
-    if (!isRenderedOverlayVisible) {
-      setDisplayedFrame(null);
-    }
-  }, [isRenderedOverlayVisible, setDisplayedFrame]);
-
   return {
     isRenderedOverlayVisible,
     showFastScrubOverlayRef,

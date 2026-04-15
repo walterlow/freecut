@@ -13,6 +13,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
+import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 import { useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
 import { resolvePreviewTransitionFromPlaybackStates } from '../utils/preview-state-coordinator';
 import {
@@ -31,6 +32,7 @@ export function useCustomPlayer(
   preferPlayerForStyledTextScrubRef?: React.RefObject<boolean>,
   isGizmoInteractingRef?: React.RefObject<boolean>,
   onPlayerSeek?: (targetFrame: number) => void,
+  visualPlaybackModeRef?: React.RefObject<PreviewVisualPlaybackMode>,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
@@ -47,6 +49,10 @@ export function useCustomPlayer(
     const frame = playerRef.current?.getCurrentFrame();
     return Number.isFinite(frame) ? Math.round(frame!) : null;
   }, [playerRef]);
+
+  const getCurrentVisualPlaybackMode = useCallback(() => {
+    return visualPlaybackModeRef?.current ?? usePreviewBridgeStore.getState().visualPlaybackMode;
+  }, [visualPlaybackModeRef]);
 
   const seekPlayerToFrame = useCallback((
     targetFrame: number,
@@ -206,7 +212,7 @@ export function useCustomPlayer(
         lastSyncedFrameRef.current = plan.acknowledgedFrame;
       }
       if (plan.command.type === 'seek') {
-        if (!state.isPlaying && visualPlaybackMode !== 'player') {
+        if (!state.isPlaying && getCurrentVisualPlaybackMode() !== 'player') {
           return;
         }
         seekPlayerToFrame(plan.command.targetFrame);
@@ -214,7 +220,7 @@ export function useCustomPlayer(
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode]);
+  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode, getCurrentVisualPlaybackMode]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
@@ -249,14 +255,14 @@ export function useCustomPlayer(
         if (plan.shouldBypassPlayerSeek) {
           return;
         }
-        if (visualPlaybackMode !== 'player') {
+        if (getCurrentVisualPlaybackMode() !== 'player') {
           return;
         }
         seekPlayerToFrame(plan.command.targetFrame);
         return;
       }
     });
-  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef, visualPlaybackMode]);
+  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef, visualPlaybackMode, getCurrentVisualPlaybackMode]);
 
   return { ignorePlayerUpdatesRef };
 }

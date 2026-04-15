@@ -155,7 +155,6 @@ export const VideoPreview = memo(function VideoPreview({
     showPlaybackTransitionOverlayForFrame,
   } = usePreviewOverlayController({
     bypassPreviewSeekRef,
-    setDisplayedFrame,
   });
 
   const {
@@ -235,6 +234,7 @@ export const VideoPreview = memo(function VideoPreview({
     preferPlayerForStyledTextScrubRef,
     isGizmoInteractingRef,
     trackPlayerSeek,
+    visualPlaybackModeRef,
   );
 
   const {
@@ -380,6 +380,12 @@ export const VideoPreview = memo(function VideoPreview({
     };
   }, [setStreamingAudioProvider, streamingAudioProvider, visualPlaybackMode]);
 
+  useEffect(() => {
+    if (!shouldShowRenderedCanvas) {
+      setDisplayedFrame(null);
+    }
+  }, [setDisplayedFrame, shouldShowRenderedCanvas]);
+
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,
@@ -421,6 +427,7 @@ export const VideoPreview = memo(function VideoPreview({
     adaptiveFrameSampleRef: previewRuntimeRefs.adaptiveFrameSampleRef,
     ignorePlayerUpdatesRef,
     resolvePendingSeekLatency,
+    visualPlaybackModeRef,
   });
 
   const setCaptureCanvasSource = usePreviewBridgeStore((s) => s.setCaptureCanvasSource);
