@@ -173,7 +173,7 @@ export const VideoPreview = memo(function VideoPreview({
     mediaById,
   });
 
-  const shouldPrimeHiddenPlayerOnReady = useCallback((frame: number) => {
+  const shouldUsePlayerForFrame = useCallback((frame: number) => {
     return !hasVisibleVideoAtFrame(combinedTracks, frame, { compositionById, fps });
   }, [combinedTracks, compositionById, fps]);
 
@@ -240,7 +240,7 @@ export const VideoPreview = memo(function VideoPreview({
     isGizmoInteractingRef,
     trackPlayerSeek,
     visualPlaybackModeRef,
-    shouldPrimeHiddenPlayerOnReady,
+    shouldUsePlayerForFrame,
   );
 
   const {

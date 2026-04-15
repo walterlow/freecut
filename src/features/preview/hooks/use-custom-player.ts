@@ -33,7 +33,7 @@ export function useCustomPlayer(
   isGizmoInteractingRef?: React.RefObject<boolean>,
   onPlayerSeek?: (targetFrame: number) => void,
   visualPlaybackModeRef?: React.RefObject<PreviewVisualPlaybackMode>,
-  shouldPrimePlayerOnReady?: (frame: number) => boolean,
+  shouldUsePlayerForFrame?: (frame: number) => boolean,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
@@ -54,6 +54,13 @@ export function useCustomPlayer(
   const getCurrentVisualPlaybackMode = useCallback(() => {
     return visualPlaybackModeRef?.current ?? usePreviewBridgeStore.getState().visualPlaybackMode;
   }, [visualPlaybackModeRef]);
+
+  const getShouldUsePlayerForFrame = useCallback((frame: number) => {
+    if (shouldUsePlayerForFrame) {
+      return shouldUsePlayerForFrame(frame);
+    }
+    return getCurrentVisualPlaybackMode() === 'player';
+  }, [getCurrentVisualPlaybackMode, shouldUsePlayerForFrame]);
 
   const seekPlayerToFrame = useCallback((
     targetFrame: number,
@@ -159,7 +166,7 @@ export function useCustomPlayer(
     } catch (error) {
       logger.error('Failed to control playback:', error);
     }
-  }, [isPlaying, playerRef, executePlayerCommand, getPlayerFrame]);
+  }, [isPlaying, playerRef, executePlayerCommand, getPlayerFrame, getShouldUsePlayerForFrame]);
 
   useEffect(() => {
     if (!playerReady || !playerRef.current || isPlaying || visualPlaybackMode !== 'player') {
@@ -191,10 +198,7 @@ export function useCustomPlayer(
     lastSyncedFrameRef.current = initialFrame;
     lastSeekTargetRef.current = initialFrame;
 
-    const shouldPrimePlayer = isPlaying
-      || (shouldPrimePlayerOnReady
-        ? shouldPrimePlayerOnReady(initialFrame)
-        : getCurrentVisualPlaybackMode() === 'player');
+    const shouldPrimePlayer = isPlaying || getShouldUsePlayerForFrame(initialFrame);
 
     if (playerFrame !== initialFrame && shouldPrimePlayer) {
       onPlayerSeek?.(initialFrame);
@@ -228,7 +232,7 @@ export function useCustomPlayer(
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, isPlaying, onPlayerSeek, visualPlaybackMode, getCurrentVisualPlaybackMode, shouldPrimePlayerOnReady]);
+  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, isPlaying, onPlayerSeek, visualPlaybackMode, getCurrentVisualPlaybackMode, getShouldUsePlayerForFrame]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
