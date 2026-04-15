@@ -9,6 +9,7 @@ import {
   snapSourceTime,
 } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
+import type { StreamingPlaybackMode } from '@/features/preview/utils/preview-constants';
 
 const logger = createLogger('VideoPreview');
 
@@ -59,6 +60,7 @@ type TransitionRenderer = {
 interface UsePreviewTransitionSessionControllerParams {
   fps: number;
   forceFastScrubOverlay: boolean;
+  streamingPlaybackMode: StreamingPlaybackMode;
   pausedTransitionPrearmFrames: number;
   playingComplexTransitionPrearmFrames: number;
   playbackTransitionWindows: ResolvedTransitionWindow<TimelineItem>[];
@@ -92,6 +94,7 @@ interface UsePreviewTransitionSessionControllerParams {
 export function usePreviewTransitionSessionController({
   fps,
   forceFastScrubOverlay,
+  streamingPlaybackMode,
   pausedTransitionPrearmFrames,
   playingComplexTransitionPrearmFrames,
   playbackTransitionWindows,
@@ -500,7 +503,8 @@ export function usePreviewTransitionSessionController({
         scrubRenderInFlightRef.current = true;
       }
       try {
-        pinTransitionPlaybackSession(getTransitionWindowByStartFrame(targetFrame));
+        const transitionWindow = getTransitionWindowByStartFrame(targetFrame);
+        pinTransitionPlaybackSession(transitionWindow);
         const prepareStartedAtMs = performance.now();
         const trace = transitionSessionTraceRef.current;
         if (trace) {
@@ -516,7 +520,11 @@ export function usePreviewTransitionSessionController({
         if (!renderer || !scrubMountedRef.current) return false;
 
         const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
-        const shouldPreferStreamingTransitionFrames = isPlaybackPrepare && !!streamingFrameProvider;
+        const shouldPreferStreamingTransitionFrames = (
+          isPlaybackPrepare
+          && !!streamingFrameProvider
+          && (streamingPlaybackMode === 'all' || transitionWindow !== null)
+        );
 
         if ('setDomVideoElementProvider' in renderer && renderer.setDomVideoElementProvider) {
           renderer.setDomVideoElementProvider(
@@ -583,6 +591,7 @@ export function usePreviewTransitionSessionController({
     cacheTransitionSessionFrame,
     ensureFastScrubRendererRef,
     forceFastScrubOverlay,
+    streamingPlaybackMode,
     getPinnedTransitionElementForItem,
     getTransitionWindowByStartFrame,
     pinTransitionPlaybackSession,

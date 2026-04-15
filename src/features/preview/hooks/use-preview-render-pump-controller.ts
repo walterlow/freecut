@@ -25,6 +25,7 @@ import {
   FAST_SCRUB_PREWARM_RENDER_BUDGET_MS,
   FAST_SCRUB_SOURCE_TOUCH_COOLDOWN_FRAMES,
   type FastScrubBoundarySource,
+  type StreamingPlaybackMode,
 } from '../utils/preview-constants';
 import {
   isAtomicPreviewTarget,
@@ -69,6 +70,7 @@ interface UsePreviewRenderPumpParams {
   playerRef: RefObject<PlayerRef | null>;
   fps: number;
   forceFastScrubOverlay: boolean;
+  streamingPlaybackMode: StreamingPlaybackMode;
   combinedTracks: TimelineTrack[];
   fastScrubBoundaryFrames: number[];
   fastScrubBoundarySources: FastScrubBoundarySource[];
@@ -159,6 +161,7 @@ export function usePreviewRenderPump({
   playerRef,
   fps,
   forceFastScrubOverlay,
+  streamingPlaybackMode,
   combinedTracks,
   fastScrubBoundaryFrames,
   fastScrubBoundarySources,
@@ -571,10 +574,13 @@ export function usePreviewRenderPump({
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
+            const windowForFrame = playbackNow.isPlaying
+              ? getTransitionWindowForFrame(frameToRender)
+              : null;
             const shouldPreferStreamingTransitionFrames = (
               playbackNow.isPlaying
-              && forceFastScrubOverlay
               && !!streamingFrameProvider
+              && (streamingPlaybackMode === 'all' || windowForFrame !== null)
             );
             if (playbackNow.isPlaying) {
               // Only pin/clear the transition session when the rendered frame is
@@ -582,7 +588,6 @@ export function usePreviewRenderPump({
               // frames would destroy sessions that the prearm subscription just
               // pinned, causing churn and losing the DOM video element provider
               // needed for smooth transition entry.
-              const windowForFrame = getTransitionWindowForFrame(frameToRender);
               if (windowForFrame) {
                 const prevSession = transitionSessionWindowRef.current;
                 const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
@@ -1594,6 +1599,7 @@ export function usePreviewRenderPump({
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
     forceFastScrubOverlay,
+    streamingPlaybackMode,
     fps,
     clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,

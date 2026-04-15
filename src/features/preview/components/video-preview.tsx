@@ -357,6 +357,7 @@ export const VideoPreview = memo(function VideoPreview({
   } = usePreviewTransitionSessionController({
     fps,
     forceFastScrubOverlay,
+    streamingPlaybackMode,
     pausedTransitionPrearmFrames,
     playingComplexTransitionPrearmFrames,
     playbackTransitionWindows,
@@ -431,6 +432,7 @@ export const VideoPreview = memo(function VideoPreview({
   usePreviewRenderPump({
     fps,
     forceFastScrubOverlay,
+    streamingPlaybackMode,
     combinedTracks,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
