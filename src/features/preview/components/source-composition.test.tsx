@@ -89,7 +89,7 @@ vi.mock('@/features/preview/deps/media-library', () => ({
 
 import { SourceComposition } from './source-composition';
 
-describe('SourceComposition paused canvas ownership', () => {
+describe('SourceComposition source monitor transport', () => {
   beforeEach(() => {
     isPlaying = false;
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
@@ -107,7 +107,7 @@ describe('SourceComposition paused canvas ownership', () => {
     pooledVideo.remove();
   });
 
-  it('keeps the canvas visible while paused', async () => {
+  it('shows the paused canvas while keeping DOM media elements hidden', async () => {
     const { container } = render(
       <SourceComposition
         mediaId="media-1"
@@ -124,11 +124,12 @@ describe('SourceComposition paused canvas ownership', () => {
     const canvas = container.querySelector('canvas');
     expect(canvas).toBeTruthy();
     expect(canvas?.style.display).toBe('block');
+    expect(container.querySelector('audio')).toBeTruthy();
     expect(pooledVideo.parentElement).toBeTruthy();
     expect((pooledVideo.parentElement as HTMLDivElement).style.display).toBe('none');
   });
 
-  it('shows the transport container again during playback', async () => {
+  it('shows the DOM video transport during playback', async () => {
     isPlaying = true;
 
     const { container } = render(
@@ -147,6 +148,7 @@ describe('SourceComposition paused canvas ownership', () => {
     const canvas = container.querySelector('canvas');
     expect(canvas).toBeTruthy();
     expect(canvas?.style.display).toBe('none');
+    expect(container.querySelector('audio')).toBeTruthy();
     expect(pooledVideo.parentElement).toBeTruthy();
     expect((pooledVideo.parentElement as HTMLDivElement).style.display).toBe('block');
   });

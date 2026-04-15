@@ -322,7 +322,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     void run();
   }, [drawDecodedFrame]);
 
-  // Acquire/release pooled element when source changes.
   useEffect(() => {
     if (!activeSrc) return;
 
@@ -488,7 +487,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       lastCanvasFrameTimeRef.current = null;
       pool.releaseItem(decoderItemId);
     };
-  }, [activeSrc, decoderItemId, paintTransportFrameToCanvas, pumpLatestDecodedFrame]);
+  }, [activeSrc, decoderItemId, pumpLatestDecodedFrame]);
 
   const syncSourceFrame = useCallback((frame: number) => {
     const video = videoRef.current;
@@ -527,15 +526,18 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       }
     };
 
-    if (!video || !activeSrc) {
+    if (!activeSrc) {
       syncAudioTime();
       return;
     }
 
-    const canSeek = video.readyState >= 1;
-    if (!canSeek) return;
-
     if (!playingRef.current && hasFreshCanvasFrame) {
+      syncAudioTime();
+      return;
+    }
+
+    const canSeek = video?.readyState ? video.readyState >= 1 : false;
+    if (!video || !canSeek) {
       syncAudioTime();
       return;
     }
@@ -556,15 +558,12 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
 
     try {
-      poolRef.current.seekClip(poolClipIdRef.current, frame / fps, { fast: true });
+      poolRef.current.seekClip(poolClipIdRef.current, targetTime, { fast: true });
     } catch {
       // Ignore seek errors while media is loading
     }
 
-    if (!playingRef.current) {
-      paintTransportFrameToCanvas(targetTime);
-    }
-
+    paintTransportFrameToCanvas(targetTime);
     syncAudioTime();
   }, [activeSrc, clearCanvasFrame, fps, isCanvasFrameFresh, paintTransportFrameToCanvas, pumpLatestDecodedFrame, reportPlaybackIssue, src]);
 
@@ -579,7 +578,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     syncSourceFrame(clock.currentFrame);
   }, [clock, playing, syncSourceFrame]);
 
-  // Handle play/pause sync
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !activeSrc) return;
@@ -623,8 +621,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
   }, [playbackRate, playing, src]);
 
-  const showPausedCanvas = !playing;
-
   return (
     <AbsoluteFill>
       <div
@@ -641,7 +637,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
         style={{
           width: '100%',
           height: '100%',
-          display: showPausedCanvas ? 'block' : 'none',
+          display: playing ? 'none' : 'block',
         }}
       />
       <audio ref={audioRef} src={src} preload="auto" style={{ display: 'none' }} />
@@ -703,7 +699,6 @@ function AudioSource({ src, fileName }: { src: string; fileName: string }) {
     syncAudioFrame(clock.currentFrame);
   }, [clock, playing, syncAudioFrame]);
 
-  // Handle play/pause
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !src) return;
