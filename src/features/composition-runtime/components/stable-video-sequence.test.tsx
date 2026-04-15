@@ -392,7 +392,8 @@ describe('StableVideoSequence', () => {
     expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalledWith([], 0, 30);
   });
 
-  it('keeps shadow DOM and transition sync while paused rendered preview owns the frame', () => {
+  it('skips shadow DOM and transition sync while paused rendered preview owns the frame', () => {
+    previewBridgeState.visualPlaybackMode = 'rendered_preview';
     previewBridgeState.displayedFrame = 28;
     const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
 
@@ -453,7 +454,7 @@ describe('StableVideoSequence', () => {
     );
 
     expect(screen.getByTestId('render-left')).toBeInTheDocument();
-    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument();
-    expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalled();
+    expect(screen.queryByTestId('shadow-video-right')).not.toBeInTheDocument();
+    expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalledWith([], 0, 30);
   });
 });

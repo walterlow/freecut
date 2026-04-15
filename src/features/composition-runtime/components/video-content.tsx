@@ -787,7 +787,7 @@ export const VideoContent: React.FC<{
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   const [hasError, setHasError] = useState(false);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldDetachVideoForRenderedPreview = visualPlaybackMode === 'streaming';
+  const shouldDetachVideoForRenderedPreview = visualPlaybackMode !== 'player';
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -828,9 +828,6 @@ export const VideoContent: React.FC<{
     );
   }
 
-  // Keep native pooled video mounted during paused rendered preview so a
-  // transient overlay miss does not reveal a black underlay. Full playback
-  // streaming still detaches DOM video entirely.
   return (
     <NativePreviewVideo
       poolClipId={item._poolClipId ?? item.id}
