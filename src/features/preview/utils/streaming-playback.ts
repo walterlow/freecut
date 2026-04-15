@@ -199,6 +199,14 @@ interface StreamState {
   generation: number;
 }
 
+interface WorkerErrorMessage {
+  type: 'error';
+  streamKey: string;
+  src: string;
+  message: string;
+  code?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Streaming playback coordinator
 // ---------------------------------------------------------------------------
@@ -265,6 +273,10 @@ export function createStreamingPlayback(): StreamingPlayback {
 
   // Idle sweep timer
   let idleSweepTimer: ReturnType<typeof setInterval> | null = null;
+
+  function shouldIgnoreWorkerError(msg: WorkerErrorMessage): boolean {
+    return msg.code === 'aborted_init';
+  }
 
   function ensureWorker(): Worker | null {
     if (typeof Worker === 'undefined') return null;
@@ -405,7 +417,15 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
 
     if (msg.type === 'error') {
-      log.warn('Streaming decode error', { streamKey: msg.streamKey, src: msg.src, message: msg.message });
+      if (shouldIgnoreWorkerError(msg)) {
+        return;
+      }
+      log.warn('Streaming decode error', {
+        streamKey: msg.streamKey,
+        src: msg.src,
+        code: msg.code ?? 'unknown',
+        message: msg.message,
+      });
       return;
     }
   }

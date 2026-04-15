@@ -46,6 +46,7 @@ class MockWorker {
 }
 
 let createdWorkers: MockWorker[] = [];
+let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
@@ -54,6 +55,7 @@ async function flushMicrotasks(): Promise<void> {
 
 beforeEach(() => {
   createdWorkers = [];
+  consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
   class WorkerStub extends MockWorker {
     constructor() {
@@ -67,6 +69,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  consoleWarnSpy?.mockRestore();
+  consoleWarnSpy = null;
   vi.unstubAllGlobals();
 });
 
@@ -172,6 +176,44 @@ describe('streaming playback audio transport', () => {
 
     playback.stopStream('clip-b');
     expect(playback.getAudioChunks('clip-b', 1.9, 2.6)).toHaveLength(0);
+
+    playback.dispose();
+  });
+
+  it('ignores aborted init worker errors but still logs real decode errors', async () => {
+    const playback = createStreamingPlayback();
+    playback.startStream('clip-c', 'https://example.com/clip-c.mp4', 0);
+    await flushMicrotasks();
+
+    const worker = createdWorkers[0]!;
+    worker.dispatch({
+      type: 'error',
+      streamKey: 'clip-c',
+      src: 'https://example.com/clip-c.mp4',
+      code: 'aborted_init',
+      message: 'Source init aborted during disposal',
+    });
+
+    expect(consoleWarnSpy).not.toHaveBeenCalled();
+
+    worker.dispatch({
+      type: 'error',
+      streamKey: 'clip-c',
+      src: 'https://example.com/clip-c.mp4',
+      code: 'video_loop_failed',
+      message: 'boom',
+    });
+
+    expect(consoleWarnSpy).toHaveBeenCalledOnce();
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[StreamingPlayback] Streaming decode error',
+      expect.objectContaining({
+        streamKey: 'clip-c',
+        src: 'https://example.com/clip-c.mp4',
+        code: 'video_loop_failed',
+        message: 'boom',
+      }),
+    );
 
     playback.dispose();
   });

@@ -53,6 +53,13 @@ interface SourceState {
   playbackPosition: number;
 }
 
+type WorkerErrorCode =
+  | 'aborted_init'
+  | 'init_failed'
+  | 'video_loop_failed'
+  | 'audio_loop_failed'
+  | 'init_exception';
+
 const keyframeIndexBySrc = new Map<string, number[]>();
 
 // ---------------------------------------------------------------------------
@@ -76,6 +83,21 @@ const initPromises = new Map<string, Promise<SourceState | null>>();
 const disposedSources = new Set<string>();
 /** Queued seek targets for sources still initializing. */
 const pendingSeeks = new Map<string, number>();
+
+function postWorkerError(
+  streamKey: string,
+  src: string,
+  code: WorkerErrorCode,
+  message: string,
+): void {
+  self.postMessage({
+    type: 'error',
+    streamKey,
+    src,
+    code,
+    message,
+  });
+}
 
 function nearestKeyframeBefore(timestamps: number[], target: number): number | null {
   if (timestamps.length === 0 || timestamps[0]! > target) return null;
@@ -362,12 +384,12 @@ async function runVideoStreamLoop(state: SourceState, startTimestamp: number, ge
     }
   } catch (error) {
     if (state.generation === gen) {
-      self.postMessage({
-        type: 'error',
+      postWorkerError(
         streamKey,
         src,
-        message: error instanceof Error ? error.message : String(error),
-      });
+        'video_loop_failed',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   } finally {
     void iterator.return?.();
@@ -432,12 +454,12 @@ async function runAudioStreamLoop(state: SourceState, startTimestamp: number, ge
     }
   } catch (error) {
     if (state.generation === gen) {
-      self.postMessage({
-        type: 'error',
+      postWorkerError(
         streamKey,
         src,
-        message: error instanceof Error ? error.message : String(error),
-      });
+        'audio_loop_failed',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   } finally {
     void iterator.return?.();
@@ -496,7 +518,11 @@ self.onmessage = async (event: MessageEvent) => {
     try {
       const state = await getOrInitSource(streamKey, src, { blob, sourceMetadata });
       if (!state) {
-        self.postMessage({ type: 'error', streamKey, src, message: 'Failed to init source' });
+        if (disposedSources.has(streamKey)) {
+          postWorkerError(streamKey, src, 'aborted_init', 'Source init aborted during disposal');
+          return;
+        }
+        postWorkerError(streamKey, src, 'init_failed', 'Failed to init source');
         return;
       }
       // Apply any seek that arrived while the source was initializing
@@ -507,12 +533,16 @@ self.onmessage = async (event: MessageEvent) => {
       state.playbackPosition = effectiveStart;
       void runStreamLoop(state, effectiveStart);
     } catch (error) {
-      self.postMessage({
-        type: 'error',
+      if (disposedSources.has(streamKey)) {
+        postWorkerError(streamKey, src, 'aborted_init', 'Source init aborted during disposal');
+        return;
+      }
+      postWorkerError(
         streamKey,
         src,
-        message: error instanceof Error ? error.message : String(error),
-      });
+        'init_exception',
+        error instanceof Error ? error.message : String(error),
+      );
     }
     return;
   }
