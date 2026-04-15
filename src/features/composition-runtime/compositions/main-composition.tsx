@@ -457,6 +457,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                      audioFadeInCurveX={segment.audioFadeInCurveX}
                      audioFadeOutCurveX={segment.audioFadeOutCurveX}
                      audioEqStages={segment.audioEqStages}
+                     preferDecodedBuffering
                      clipFadeSpans={segment.clipFadeSpans}
                      contentStartOffsetFrames={segment.contentStartOffsetFrames}
                      contentEndOffsetFrames={segment.contentEndOffsetFrames}
@@ -523,6 +524,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     audioFadeInCurveX={segment.audioFadeInCurveX}
                     audioFadeOutCurveX={segment.audioFadeOutCurveX}
                     audioEqStages={segment.audioEqStages}
+                    preferDecodedBuffering
                     clipFadeSpans={segment.clipFadeSpans}
                   />
                 )}
