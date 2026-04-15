@@ -1660,6 +1660,7 @@ describe('VideoPreview sync behavior', () => {
       expect(seekToMock).toHaveBeenCalledWith(48);
     });
 
+    expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
     expect(scrubCanvas.style.visibility).toBe('hidden');
     expect(getDisplayedFrame()).toBeNull();
   });

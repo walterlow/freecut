@@ -33,6 +33,7 @@ import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
+import { hasVisibleVideoAtFrame } from '../utils/visible-video-ownership';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 
 interface VideoPreviewProps {
@@ -336,27 +337,17 @@ export const VideoPreview = memo(function VideoPreview({
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const preferPlayerForTextGizmo = isGizmoInteracting && activeGizmoItemType === 'text';
-  const hasVisibleVideoAtFrame = useCallback((frame: number) => {
-    return combinedTracks.some((track) => {
-      if (!track.visible) return false;
-      return track.items.some((item) =>
-        item.type === 'video'
-        && frame >= item.from
-        && frame < (item.from + item.durationInFrames),
-      );
-    });
-  }, [combinedTracks]);
   // Keep the rendered preview path active when paused on a visible video frame.
   // Ruler clicks briefly set previewFrame === currentFrame then clear it; treat
   // that as still canvas-owned so the preview never tears down between seeks.
   const shouldUseRenderedPausedVideoPreview = useMemo(() => {
     if (isPlaying || preferPlayerForTextGizmo) return false;
     if (previewFrame !== null && previewFrame !== currentFrame) return false;
-    return hasVisibleVideoAtFrame(currentFrame);
-  }, [currentFrame, hasVisibleVideoAtFrame, isPlaying, preferPlayerForTextGizmo, previewFrame]);
+    return hasVisibleVideoAtFrame(combinedTracks, currentFrame);
+  }, [combinedTracks, currentFrame, isPlaying, preferPlayerForTextGizmo, previewFrame]);
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldUseRenderedPausedVideoPreview;
   const renderedPreviewFrame = previewFrame ?? displayedFrame ?? currentFrame;
-  const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(renderedPreviewFrame);
+  const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(combinedTracks, renderedPreviewFrame);
   const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying
     ? 'streaming'
     : ((forceFastScrubOverlay && renderedPreviewOwnsVisibleVideo)
