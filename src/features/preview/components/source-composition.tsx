@@ -322,6 +322,8 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     void run();
   }, [drawDecodedFrame]);
 
+  // Source monitor keeps the pooled DOM transport for live play/seek responsiveness,
+  // while paused presentation stays canvas-owned via the exact-frame decoder.
   useEffect(() => {
     if (!activeSrc) return;
 

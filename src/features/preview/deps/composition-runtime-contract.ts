@@ -10,9 +10,7 @@ export {
 } from '@/features/composition-runtime/utils/transform-resolver';
 export {
   getSharedPreviewAudioContext,
-  createPreviewClipAudioGraph,
 } from '@/features/composition-runtime/utils/preview-audio-graph';
-export type { PreviewClipAudioGraph } from '@/features/composition-runtime/utils/preview-audio-graph';
 export {
   applyTransformOverride,
   resolveItemTransformAtFrame,
