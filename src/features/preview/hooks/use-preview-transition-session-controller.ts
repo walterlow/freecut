@@ -225,29 +225,34 @@ export function usePreviewTransitionSessionController({
       return null;
     }
 
-    const activeWindow = transitionSessionWindowRef.current;
-    if (activeWindow?.transition.id === window.transition.id && activeWindow.startFrame === window.startFrame) {
-      return activeWindow;
-    }
-
-    clearTransitionPlaybackSession();
-
-    transitionSessionWindowRef.current = window;
     const isPlaying = usePlaybackStore.getState().isPlaying;
     const shouldPreferStreamingTransitionFrames = (
       isPlaying
       && forceFastScrubOverlay
       && !!(streamingFrameProviderRef?.current)
     );
+    const mode = shouldPreferStreamingTransitionFrames
+      ? 'render'
+      : transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
+
+    const activeWindow = transitionSessionWindowRef.current;
+    if (
+      activeWindow?.transition.id === window.transition.id
+      && activeWindow.startFrame === window.startFrame
+      && transitionSessionTraceRef.current?.mode === mode
+    ) {
+      return activeWindow;
+    }
+
+    clearTransitionPlaybackSession();
+
+    transitionSessionWindowRef.current = window;
     const opId = createOperationId();
     const event = logger.startEvent('preview_transition_session', opId) as TransitionPreviewEvent;
     const leftSpeed = window.leftClip.speed ?? 1;
     const rightSpeed = window.rightClip.speed ?? 1;
     const leftHasEffects = Boolean(window.leftClip.effects?.some((effect) => effect.enabled));
     const rightHasEffects = Boolean(window.rightClip.effects?.some((effect) => effect.enabled));
-    const mode = shouldPreferStreamingTransitionFrames
-      ? 'render'
-      : transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
     const complex = mode === 'render';
     transitionTelemetryRef.current.sessionCount += 1;
     transitionSessionTraceRef.current = {

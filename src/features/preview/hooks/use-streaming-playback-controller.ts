@@ -2,15 +2,11 @@
  * Hook to manage WebCodecs streaming playback lifecycle for transitions.
  *
  * Streaming decode only activates when the playhead approaches or is inside
- * a transition window. Regular playback uses DOM <video> elements — they're
- * lighter and handle audio, proxy toggling, and browser timing natively.
+ * a transition window. Regular playback still uses the existing preview path
+ * unless the debug toggle forces full-playback streaming.
  *
- * During transitions, two clips must render simultaneously to a canvas.
- * The streaming worker pre-decodes both clips' frames so the transition
- * compositor can blend them without relying on DOM video timing.
- *
- * Toggle via window.__DEBUG__?.setStreamingPlayback(true) to force
- * streaming for ALL clips (original PoC behavior).
+ * Toggle via window.__DEBUG__?.setStreamingPlayback(true/false) to switch
+ * between full-playback streaming and transition-only mode.
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -28,12 +24,6 @@ const log = createLogger('StreamingPlaybackCtrl');
 /** How far ahead (in seconds) to start streaming transition clips.
  *  The worker needs ~1-2s to init + buffer, so 3s provides headroom. */
 const TRANSITION_PREWARM_SECONDS = 3;
-
-// Streaming is a passive frame source — it does NOT force the canvas overlay.
-// The existing transition rendering system reads streamingFrameProviderRef
-// and uses decoded frames when available, falling through to DOM video on miss.
-// Toggling forceCanvasOverlay mid-playback causes React re-renders that disrupt
-// DOM video elements and the render pump, so we avoid it entirely.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,10 +52,10 @@ interface TransitionPrewarmTarget {
 }
 
 /**
- * Collect pre-warm targets: only video clips that overlap with upcoming
- * transition windows. Uses transition windows for timing only, and finds
- * the actual clips from the raw timeline tracks (which have full item
- * properties like mediaId, src, sourceFps, etc.).
+ * Collect pre-warm targets for the fallback transition-only mode. Uses
+ * transition windows for timing only, and finds the actual clips from the
+ * raw timeline tracks (which have full item properties like mediaId, src,
+ * sourceFps, etc.).
  */
 function collectTransitionPrewarmTargets(
   transitionWindows: ReadonlyArray<ResolvedTransitionWindow<TimelineItem>>,
@@ -114,7 +104,7 @@ function collectTransitionPrewarmTargets(
 }
 
 /**
- * Collect ALL visible video clips as pre-warm targets (force-all mode).
+ * Collect all visible video clips as playback pre-warm targets.
  */
 function collectAllPrewarmTargets(
   tracks: TimelineTrack[],
@@ -158,7 +148,7 @@ interface UseStreamingPlaybackControllerParams {
 }
 
 interface UseStreamingPlaybackControllerResult {
-  /** Whether the canvas overlay must be forced (near a transition during playback). */
+  /** Whether the canvas overlay must be forced for streaming playback. */
   forceCanvasOverlay: boolean;
   /** Ref to the streaming frame provider function. */
   streamingFrameProviderRef: React.RefObject<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>;
@@ -170,7 +160,7 @@ export function useStreamingPlaybackController({
   playbackTransitionWindows,
 }: UseStreamingPlaybackControllerParams): UseStreamingPlaybackControllerResult {
   const playbackRef = useRef<StreamingPlayback | null>(null);
-  /** When true, stream ALL clips (debug toggle). When false, only transition clips. */
+  /** When true, stream all playback clips. When false, use transition-only mode. */
   const forceAllRef = useRef(STREAMING_PLAYBACK_ENABLED);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
   const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
@@ -201,7 +191,7 @@ export function useStreamingPlaybackController({
   const prewarmFrameRef = useRef<number | null>(null);
   const lookaheadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Collect targets based on mode: transition-only or force-all
+  // Collect targets based on mode: full-playback streaming or transition-only mode.
   const getTargets = useCallback((frame: number) => {
     if (forceAllRef.current) {
       return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
@@ -226,13 +216,13 @@ export function useStreamingPlaybackController({
     }
   }, [getPlayback, getTargets]);
 
-  /** During playback, scan for upcoming transition clips and manage overlay. */
+  /** During playback, scan for upcoming clips and keep stream positions advancing. */
   const runPlaybackLookahead = useCallback(() => {
     const state = usePlaybackStore.getState();
     const frame = state.currentFrame;
     const playback = getPlayback();
 
-    // Start streams for upcoming transition clips, and keep existing
+    // Start streams for upcoming playback clips, and keep existing
     // streams decoding ahead by sending position updates.
     const targets = getTargets(frame);
     for (const { streamKey, src, sourceTime } of targets) {
@@ -243,8 +233,6 @@ export function useStreamingPlaybackController({
       }
     }
 
-    // No overlay toggle — streaming is passive. The existing transition
-    // system handles canvas rendering and uses streamingFrameProviderRef.
   }, [getPlayback, getTargets]);
 
   // Subscribe to playback state
