@@ -3,7 +3,6 @@ import {
   SharedVideoExtractorPool,
   type VideoFrameSource,
 } from '@/features/preview/deps/export';
-import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
@@ -33,7 +32,6 @@ const STRICT_DECODE_FALLBACK_FAILURES = 2;
 const EDIT_PANEL_CACHE_MAX = 60;
 /** Quantize source time to ~frame-level resolution for cache keys */
 const CACHE_TIME_QUANTUM = 1 / 60;
-let previewVideoInstanceCounter = 0;
 let strictDecodeInstanceCounter = 0;
 let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
 
@@ -210,18 +208,18 @@ interface VideoFrameProps {
 }
 
 function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
-  const [useLegacyFallback, setUseLegacyFallback] = useState(false);
+  const [decodeFailed, setDecodeFailed] = useState(false);
 
   useEffect(() => {
-    setUseLegacyFallback(false);
+    setDecodeFailed(false);
   }, [item.id, item.mediaId]);
 
   const handleStrictDecodeFailure = useCallback(() => {
-    setUseLegacyFallback((prev) => (prev ? prev : true));
+    setDecodeFailed((prev) => (prev ? prev : true));
   }, []);
 
-  if (useLegacyFallback) {
-    return <LegacySeekVideoFrame item={item} sourceTime={sourceTime} />;
+  if (decodeFailed) {
+    return <TypePlaceholder type="video" text="Preview unavailable" />;
   }
 
   return (
@@ -429,126 +427,6 @@ function StrictDecodedVideoFrame({
       pumpLatestFrame();
     }
   }, [sourceTime, pumpLatestFrame]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full object-contain"
-      style={{ imageRendering: 'auto' }}
-    />
-  );
-}
-
-function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const poolRef = useRef(getGlobalVideoSourcePool());
-  const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const useProxy = usePlaybackStore((s) => s.useProxy);
-  const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
-  const contextRef = useRef<CanvasRenderingContext2D | null>(null);
-  const seekingRef = useRef(false);
-  const pendingTimeRef = useRef<number | null>(null);
-  const latestTargetTimeRef = useRef(0);
-
-  const drawFrame = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas || video.readyState < 2) return;
-
-    let ctx = contextRef.current;
-    if (!ctx) {
-      ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      contextRef.current = ctx;
-    }
-
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || FALLBACK_CANVAS_WIDTH;
-      canvas.height = video.videoHeight || FALLBACK_CANVAS_HEIGHT;
-    }
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  }, []);
-
-  const requestSeek = useCallback((targetTime: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const tolerance = 0.001;
-    if (seekingRef.current) {
-      pendingTimeRef.current = targetTime;
-      return;
-    }
-
-    if (Math.abs(video.currentTime - targetTime) < tolerance) {
-      drawFrame();
-      return;
-    }
-
-    seekingRef.current = true;
-    video.currentTime = targetTime;
-  }, [drawFrame]);
-
-  useEffect(() => {
-    if (!blobUrl) return;
-
-    const pool = poolRef.current;
-    const clipId = poolClipIdRef.current;
-    seekingRef.current = false;
-    pendingTimeRef.current = null;
-
-    pool.preloadSource(blobUrl).catch(() => {});
-
-    const video = pool.acquireForClip(clipId, blobUrl);
-    if (!video) return;
-
-    video.preload = 'auto';
-    video.muted = true;
-    video.playsInline = true;
-    videoRef.current = video;
-
-    const handleSeeked = () => {
-      seekingRef.current = false;
-      drawFrame();
-
-      if (pendingTimeRef.current !== null) {
-        const next = pendingTimeRef.current;
-        pendingTimeRef.current = null;
-        requestSeek(next);
-      }
-    };
-
-    // Fallback for seeking to time 0 on a new video: currentTime is already 0,
-    // so browsers may not dispatch "seeked". Draw once data is available.
-    const handleLoadedData = () => {
-      if (Math.abs(video.currentTime - latestTargetTimeRef.current) < 0.001) {
-        drawFrame();
-      }
-    };
-
-    video.addEventListener('seeked', handleSeeked);
-    video.addEventListener('loadeddata', handleLoadedData);
-
-    return () => {
-      video.removeEventListener('seeked', handleSeeked);
-      video.removeEventListener('loadeddata', handleLoadedData);
-      video.pause();
-      videoRef.current = null;
-      seekingRef.current = false;
-      pendingTimeRef.current = null;
-      pool.releaseClip(clipId);
-    };
-  }, [blobUrl, drawFrame, requestSeek]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !blobUrl) return;
-
-    const targetTime = Math.max(0, sourceTime);
-    latestTargetTimeRef.current = targetTime;
-    requestSeek(targetTime);
-  }, [sourceTime, blobUrl, requestSeek]);
 
   return (
     <canvas

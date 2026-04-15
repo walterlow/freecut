@@ -112,7 +112,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const lastFrameRef = useRef(clock.currentFrame);
   const playingRef = useRef(playing);
   const decoderItemId = `${mediaId ?? 'source-monitor'}:${decodeLaneRef.current}`;
-  const [useLegacyPausedSeek, setUseLegacyPausedSeek] = useState(false);
   const [strictDecodeReady, setStrictDecodeReady] = useState(false);
   const [hasDecodedFrame, setHasDecodedFrame] = useState(false);
 
@@ -148,7 +147,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   }, []);
 
   useEffect(() => {
-    setUseLegacyPausedSeek(false);
     setHasDecodedFrame(false);
   }, [activeSrc, mediaId]);
 
@@ -250,7 +248,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
             if (consecutiveDecodeFailuresRef.current >= SOURCE_MONITOR_STRICT_DECODE_FALLBACK_FAILURES) {
               decoderReadyRef.current = false;
               setStrictDecodeReady(false);
-              setUseLegacyPausedSeek((prev) => (prev ? prev : true));
               return;
             }
           }
@@ -414,10 +411,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     void extractor.init()
       .then((ready) => {
         if (cancelled || !mountedRef.current) return;
-        if (!ready) {
-          setUseLegacyPausedSeek((prev) => (prev ? prev : true));
-          return;
-        }
+        if (!ready) return;
         decoderReadyRef.current = true;
         setStrictDecodeReady(true);
         pendingTimeRef.current = latestTargetTimeRef.current;
@@ -427,7 +421,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
-        setUseLegacyPausedSeek((prev) => (prev ? prev : true));
+        setStrictDecodeReady(false);
       });
 
     return () => {
@@ -448,7 +442,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
 
     lastFrameRef.current = frame;
 
-    if (!playingRef.current && !useLegacyPausedSeek) {
+    if (!playingRef.current) {
       pendingTimeRef.current = targetTime;
       if (decoderReadyRef.current) {
         pumpLatestDecodedFrame();
@@ -481,7 +475,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     const canSeek = video.readyState >= 1;
     if (!canSeek) return;
 
-    if (!playingRef.current && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek) {
+    if (!playingRef.current && strictDecodeReady && hasDecodedFrame) {
       syncAudioTime();
       return;
     }
@@ -508,7 +502,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
 
     syncAudioTime();
-  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, reportPlaybackIssue, src, strictDecodeReady, useLegacyPausedSeek]);
+  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, reportPlaybackIssue, src, strictDecodeReady]);
 
   useEffect(() => {
     syncSourceFrame(clock.currentFrame);
@@ -560,7 +554,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
   }, [playbackRate, playing, src]);
 
-  const showDecodedCanvas = !playing && strictDecodeReady && hasDecodedFrame && !useLegacyPausedSeek;
+  const showDecodedCanvas = !playing && strictDecodeReady && hasDecodedFrame;
 
   return (
     <AbsoluteFill>
