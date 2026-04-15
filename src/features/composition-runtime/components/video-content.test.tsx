@@ -164,11 +164,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -188,11 +186,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
         }}
-        muted={false}
         safeTrimBefore={30}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -220,11 +216,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-1',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -248,11 +242,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-overlay',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -276,11 +268,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-3',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -301,11 +291,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-3',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -326,11 +314,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-3',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -355,11 +341,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-overlay-2',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -381,11 +365,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-overlay-2',
         }}
-        muted={false}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 
@@ -410,11 +392,9 @@ describe('VideoContent pooled handoff', () => {
           src: 'blob:test',
           _poolClipId: 'group-origin-2',
         }}
-        muted={true}
         safeTrimBefore={0}
         playbackRate={1}
         sourceFps={30}
-        audioEqStages={[]}
       />,
     );
 

@@ -27,7 +27,6 @@ export interface AudioPlaybackProps {
   /** Pre-computed total pitch shift in semitones (semitones + cents/100 + parent composition shift) */
   audioPitchShiftSemitones?: number;
   audioEqStages?: ResolvedAudioEqSettings[];
-  preferDecodedBuffering?: boolean;
   streamingAudioStreamKey?: string;
   clipFadeSpans?: AudioClipFadeSpan[];
   contentStartOffsetFrames?: number;

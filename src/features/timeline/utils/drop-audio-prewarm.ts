@@ -1,10 +1,9 @@
 import type { TimelineItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import {
-  getOrDecodeAudioSliceForPlayback,
   needsCustomAudioDecoder,
-  prewarmPreviewAudioElement,
   startPreviewAudioConform,
+  startPreviewAudioStartupWarm,
 } from '@/features/timeline/deps/composition-runtime';
 import type { DroppedMediaEntry } from './drop-execution';
 import { registerPreviewAudioStartupHold } from '../hooks/preview-work-budget';
@@ -35,7 +34,7 @@ export function prewarmDroppedTimelineAudio(
 
   const entryByMediaId = new Map(entries.map((entry) => [entry.mediaId, entry]));
   const warmedKeys = new Set<string>();
-  const customWarmups: Promise<unknown>[] = [];
+  const startupWarmups: Promise<unknown>[] = [];
   let releasePreviewHold: (() => void) | null = null;
 
   for (const item of items) {
@@ -77,18 +76,19 @@ export function prewarmDroppedTimelineAudio(
     }
 
     const codec = entry.media.audioCodec ?? entry.media.codec;
-    if (needsCustomAudioDecoder(codec)) {
-      const warmup = getOrDecodeAudioSliceForPlayback(item.mediaId, src, {
-        minReadySeconds: PARTIAL_AUDIO_READY_SECONDS,
-        waitTimeoutMs: PARTIAL_AUDIO_WAIT_TIMEOUT_MS,
-        targetTimeSeconds,
-      }).catch((error) => {
-        log.warn('Failed to prewarm custom-decoded drop audio', {
-          mediaId: item.mediaId,
-          error,
-        });
+    const requiresBackgroundConform = needsCustomAudioDecoder(codec);
+    const warmup = startPreviewAudioStartupWarm(item.mediaId, src, {
+      minReadySeconds: PARTIAL_AUDIO_READY_SECONDS,
+      targetTimeSeconds,
+    }).catch((error) => {
+      log.warn('Failed to prewarm dropped preview audio', {
+        mediaId: item.mediaId,
+        error,
       });
-      customWarmups.push(warmup);
+    });
+    startupWarmups.push(warmup);
+
+    if (requiresBackgroundConform) {
       void warmup.finally(() => {
         void startPreviewAudioConform(item.mediaId, src).catch((error) => {
           log.warn('Failed to start background conform for dropped custom audio', {
@@ -97,10 +97,7 @@ export function prewarmDroppedTimelineAudio(
           });
         });
       });
-      continue;
     }
-
-    prewarmPreviewAudioElement(src, targetTimeSeconds);
   }
 
   const releaseHold = releasePreviewHold;
@@ -108,12 +105,12 @@ export function prewarmDroppedTimelineAudio(
     return;
   }
 
-  if (customWarmups.length === 0) {
+  if (startupWarmups.length === 0) {
     releaseHold();
     return;
   }
 
-  void Promise.allSettled(customWarmups).finally(() => {
+  void Promise.allSettled(startupWarmups).finally(() => {
     releaseHold();
   });
 }

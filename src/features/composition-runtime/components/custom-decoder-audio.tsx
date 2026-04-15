@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
-import { NativePitchCorrectedAudio } from './pitch-corrected-audio';
 import { StreamingPlaybackBufferedAudio } from './streaming-playback-buffered-audio';
 import { StreamingSoundTouchWorkletAudio } from './streaming-soundtouch-worklet-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
-import { audioBufferToWavBlob } from '../utils/audio-buffer-wav';
 import { createLogger } from '@/shared/logging/logger';
 import { getAudioTargetTimeSeconds } from '../utils/video-timing';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
@@ -35,89 +33,6 @@ interface DecodedPitchSource {
   coverageEndSec: number;
   isComplete: boolean;
 }
-
-interface DecodedPitchFallbackAudioProps extends AudioPlaybackProps {
-  audioBuffer: AudioBuffer;
-  sourceStartOffsetSec: number;
-}
-
-const DecodedPitchFallbackAudio: React.FC<DecodedPitchFallbackAudioProps> = ({
-  audioBuffer,
-  sourceStartOffsetSec,
-  itemId,
-  liveGainItemIds,
-  trimBefore,
-  sourceFps,
-  volume,
-  playbackRate,
-  muted,
-  durationInFrames,
-  audioFadeIn,
-  audioFadeOut,
-  audioFadeInCurve,
-  audioFadeOutCurve,
-  audioFadeInCurveX,
-  audioFadeOutCurveX,
-  audioPitchSemitones,
-  audioPitchCents,
-  audioPitchShiftSemitones,
-  audioEqStages,
-  clipFadeSpans,
-  contentStartOffsetFrames,
-  contentEndOffsetFrames,
-  fadeInDelayFrames,
-  fadeOutLeadFrames,
-  crossfadeFadeIn,
-  crossfadeFadeOut,
-  volumeMultiplier,
-}) => {
-  const [decodedSrc, setDecodedSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    const url = URL.createObjectURL(audioBufferToWavBlob(audioBuffer));
-    setDecodedSrc(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [audioBuffer]);
-
-  if (!decodedSrc) {
-    return null;
-  }
-
-  return (
-    <NativePitchCorrectedAudio
-      src={decodedSrc}
-      itemId={itemId}
-      liveGainItemIds={liveGainItemIds}
-      trimBefore={trimBefore}
-      sourceFps={sourceFps}
-      sourceStartOffsetSec={sourceStartOffsetSec}
-      volume={volume}
-      playbackRate={playbackRate}
-      audioPitchSemitones={audioPitchSemitones}
-      audioPitchCents={audioPitchCents}
-      audioPitchShiftSemitones={audioPitchShiftSemitones}
-      muted={muted}
-      durationInFrames={durationInFrames}
-      audioFadeIn={audioFadeIn}
-      audioFadeOut={audioFadeOut}
-      audioFadeInCurve={audioFadeInCurve}
-      audioFadeOutCurve={audioFadeOutCurve}
-      audioFadeInCurveX={audioFadeInCurveX}
-      audioFadeOutCurveX={audioFadeOutCurveX}
-      audioEqStages={audioEqStages}
-      clipFadeSpans={clipFadeSpans}
-      contentStartOffsetFrames={contentStartOffsetFrames}
-      contentEndOffsetFrames={contentEndOffsetFrames}
-      fadeInDelayFrames={fadeInDelayFrames}
-      fadeOutLeadFrames={fadeOutLeadFrames}
-      crossfadeFadeIn={crossfadeFadeIn}
-      crossfadeFadeOut={crossfadeFadeOut}
-      volumeMultiplier={volumeMultiplier}
-    />
-  );
-};
 
 function shouldReplaceDecodedPitchSource(
   current: DecodedPitchSource | null,
@@ -369,18 +284,16 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   if (!decodedSource) return null;
 
   const fallback = (
-    <DecodedPitchFallbackAudio
-      audioBuffer={decodedSource.buffer}
-      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
+    <CustomDecoderBufferedAudio
+      src={src}
+      mediaId={mediaId}
       itemId={itemId}
       liveGainItemIds={liveGainItemIds}
       trimBefore={trimBefore}
       sourceFps={sourceFps}
+      sourceStartOffsetSec={decodedSource.sourceStartOffsetSec}
       volume={volume}
       playbackRate={playbackRate}
-      audioPitchSemitones={audioPitchSemitones}
-      audioPitchCents={audioPitchCents}
-      audioPitchShiftSemitones={audioPitchShiftSemitones}
       muted={muted}
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}

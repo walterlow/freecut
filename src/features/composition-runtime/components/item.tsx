@@ -246,7 +246,6 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           audioFadeInCurveX={item.audioFadeInCurveX}
           audioFadeOutCurveX={item.audioFadeOutCurveX}
           audioEqStages={itemAudioEqStages}
-          preferDecodedBuffering
           liveGainItemIds={audioGainLiveItemIds}
           volumeMultiplier={audioGainMultiplier}
         />
@@ -359,7 +358,6 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
         audioFadeInCurveX={item.audioFadeInCurveX}
         audioFadeOutCurveX={item.audioFadeOutCurveX}
         audioEqStages={itemAudioEqStages}
-        preferDecodedBuffering
         liveGainItemIds={audioGainLiveItemIds}
         volumeMultiplier={audioGainMultiplier}
       />

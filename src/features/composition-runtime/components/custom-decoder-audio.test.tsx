@@ -114,21 +114,6 @@ vi.mock('./streaming-soundtouch-worklet-audio', () => ({
     </div>
   ),
 }));
-vi.mock('./pitch-corrected-audio', () => ({
-  NativePitchCorrectedAudio: ({
-    src,
-    sourceStartOffsetSec,
-  }: {
-    src: string;
-    sourceStartOffsetSec?: number;
-  }) => (
-    <div
-      data-testid="native-fallback"
-      data-src={src}
-      data-offset={sourceStartOffsetSec ?? 0}
-    />
-  ),
-}));
 
 import { CustomDecoderAudio } from './custom-decoder-audio';
 
@@ -266,7 +251,7 @@ describe('CustomDecoderAudio', () => {
     expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mock.calls[1]?.[2]?.targetTimeSeconds).toBeLessThan(5.41);
   });
 
-  it('renders the fallback pitch-corrected path when the SoundTouch worklet cannot be used', async () => {
+  it('renders the buffered fallback path when the SoundTouch worklet cannot be used', async () => {
     soundTouchMocks.renderFallback = true;
     audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
       buffer: makeAudioBuffer(),
@@ -274,8 +259,6 @@ describe('CustomDecoderAudio', () => {
       isComplete: false,
     });
     audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
-    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fallback-wav');
-    const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 
     render(
       <CustomDecoderAudio
@@ -290,14 +273,8 @@ describe('CustomDecoderAudio', () => {
     );
 
     await waitFor(() => {
-      expect(createObjectUrlSpy).toHaveBeenCalledTimes(1);
+      expect(document.querySelector('[data-testid="buffered"]')).toBeInTheDocument();
     });
-
-    expect(document.querySelector('[data-testid="native-fallback"]')).toHaveAttribute('data-src', 'blob:fallback-wav');
-    expect(document.querySelector('[data-testid="native-fallback"]')).toHaveAttribute('data-offset', '4');
-    expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
-    createObjectUrlSpy.mockRestore();
-    revokeObjectUrlSpy.mockRestore();
   });
 
   it('switches to the SoundTouch path for pitch-only shifts at 1x playback', async () => {

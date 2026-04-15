@@ -4,7 +4,6 @@ import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { useVideoConfig, useIsPlaying } from '../hooks/use-player-compat';
 import { useClock } from '@/features/composition-runtime/deps/player';
-import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/player';
@@ -722,11 +721,9 @@ const NativePreviewVideo: React.FC<{
  */
 export const VideoContent: React.FC<{
   item: VideoItem & { _sequenceFrameOffset?: number; _poolClipId?: string };
-  muted: boolean;
   safeTrimBefore: number;
   playbackRate: number;
   sourceFps: number;
-  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
   forceCssComposite?: boolean;
 }> = ({ item, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
   const [hasError, setHasError] = useState(false);

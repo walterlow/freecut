@@ -1,10 +1,9 @@
 import { prewarmDroppedTimelineAudio } from './drop-audio-prewarm';
 
 const compositionRuntimeMocks = vi.hoisted(() => ({
-  getOrDecodeAudioSliceForPlayback: vi.fn(),
   needsCustomAudioDecoder: vi.fn(() => false),
-  prewarmPreviewAudioElement: vi.fn(),
   startPreviewAudioConform: vi.fn(async () => undefined),
+  startPreviewAudioStartupWarm: vi.fn(async () => undefined),
 }));
 
 const previewBudgetMocks = vi.hoisted(() => ({
@@ -29,12 +28,12 @@ describe('prewarmDroppedTimelineAudio', () => {
     compositionRuntimeMocks.startPreviewAudioConform.mockResolvedValue(undefined);
   });
 
-  it('starts both startup slice warmup and background conform for custom-decoded drops', async () => {
-    const deferred = createDeferred<{ buffer: AudioBuffer; startTime: number; isComplete: boolean }>();
+  it('starts both startup warmup and background conform for custom-decoded drops', async () => {
+    const deferred = createDeferred<void>();
     const releaseHold = vi.fn();
 
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(true);
-    compositionRuntimeMocks.getOrDecodeAudioSliceForPlayback.mockImplementation(() => deferred.promise);
+    compositionRuntimeMocks.startPreviewAudioStartupWarm.mockImplementation(() => deferred.promise);
     previewBudgetMocks.registerPreviewAudioStartupHold.mockReturnValue(releaseHold);
 
     prewarmDroppedTimelineAudio(
@@ -60,24 +59,19 @@ describe('prewarmDroppedTimelineAudio', () => {
       } as never],
     );
 
-    expect(compositionRuntimeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledWith(
+    expect(compositionRuntimeMocks.startPreviewAudioStartupWarm).toHaveBeenCalledWith(
       'media-1',
       'blob:audio',
-      expect.objectContaining({
+      {
         minReadySeconds: 1,
-        waitTimeoutMs: 6000,
         targetTimeSeconds: 3,
-      }),
+      },
     );
     expect(compositionRuntimeMocks.startPreviewAudioConform).not.toHaveBeenCalled();
     expect(previewBudgetMocks.registerPreviewAudioStartupHold).toHaveBeenCalledTimes(1);
     expect(releaseHold).not.toHaveBeenCalled();
 
-    deferred.resolve({
-      buffer: {} as AudioBuffer,
-      startTime: 0,
-      isComplete: false,
-    });
+    deferred.resolve();
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });

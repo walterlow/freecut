@@ -18,72 +18,6 @@ const playbackStateMocks = vi.hoisted(() => ({
   },
 }));
 
-const previewAudioMocks = vi.hoisted(() => {
-  const state: { current: HTMLAudioElement | null } = { current: null };
-  const createAudio = () => ({
-    volume: 1,
-    muted: false,
-    playbackRate: 1,
-    currentTime: 0,
-    readyState: 4,
-    paused: true,
-    seeking: false,
-    play: vi.fn().mockImplementation(function (this: { paused: boolean }) {
-      this.paused = false;
-      return Promise.resolve();
-    }),
-    pause: vi.fn().mockImplementation(function (this: { paused: boolean }) {
-      this.paused = true;
-    }),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as HTMLAudioElement;
-
-  return {
-    state,
-    acquirePreviewAudioElement: vi.fn(() => {
-      const audio = createAudio();
-      state.current = audio;
-      return audio;
-    }),
-    releasePreviewAudioElement: vi.fn(),
-    markPreviewAudioElementUsesWebAudio: vi.fn(),
-  };
-});
-
-const previewGraphMocks = vi.hoisted(() => {
-  const sourceNode = {
-    connect: vi.fn(),
-    disconnect: vi.fn(),
-  };
-
-  const graph = {
-    context: {
-      state: 'running' as const,
-      currentTime: 0,
-      resume: vi.fn(() => Promise.resolve()),
-      createMediaElementSource: vi.fn(() => sourceNode),
-    },
-    sourceInputNode: {},
-    outputGainNode: {
-      gain: {
-        value: 1,
-      },
-    },
-    eqStageNodes: [],
-    dispose: vi.fn(),
-  };
-
-  return {
-    graph,
-    sourceNode,
-    createPreviewClipAudioGraph: vi.fn(() => graph),
-    rampPreviewClipEq: vi.fn(),
-    rampPreviewClipGain: vi.fn(),
-    setPreviewClipGain: vi.fn(),
-  };
-});
-
 const storeMocks = vi.hoisted(() => {
   const gizmoState = { activeGizmo: null, preview: null };
   const useGizmoStore = Object.assign(
@@ -125,8 +59,6 @@ vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
 }));
-vi.mock('../utils/preview-audio-element-pool', () => previewAudioMocks);
-vi.mock('../utils/preview-audio-graph', () => previewGraphMocks);
 vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
 vi.mock('@/shared/state/preview-bridge', () => previewBridgeMocks);
 vi.mock('./soundtouch-worklet-audio', () => ({
@@ -233,7 +165,6 @@ describe('PitchCorrectedAudio', () => {
     expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
     expect(audioDecodeMocks.getOrDecodeAudio).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
-    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
   it('keeps 1x playback on the decoded buffered path while EQ stages change', async () => {
@@ -271,8 +202,6 @@ describe('PitchCorrectedAudio', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-rate', '1');
     });
-
-    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
   it('can force 1x video playback onto the decoded buffered path', async () => {
@@ -290,7 +219,6 @@ describe('PitchCorrectedAudio', () => {
       expect(document.querySelector('[data-testid="decoded-buffered"]')).toHaveAttribute('data-media-id', 'media-1');
     });
 
-    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
   });
 
@@ -318,7 +246,6 @@ describe('PitchCorrectedAudio', () => {
     });
 
     expect(document.querySelector('[data-testid="decoded-buffered"]')).toBeInTheDocument();
-    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
   it('uses playback-first decode for stretched clips with media ids', async () => {
