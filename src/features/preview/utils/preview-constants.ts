@@ -69,13 +69,24 @@ export type StreamingPlaybackMode = 'transitions' | 'all';
 
 /**
  * Experimental: Use WebCodecs streaming decode for video playback instead of
- * HTML5 <video> elements. When enabled, a background worker runs mediabunny's
- * forward samples() generator and transfers decoded ImageBitmaps to the
- * canvas render pipeline.
+ * HTML5 <video> elements. The default mode remains transition-only until the
+ * full-playback path is ready to graduate. When switched to `all`, a background
+ * worker runs mediabunny's forward samples() generator and transfers decoded
+ * ImageBitmaps to the canvas render pipeline for plain playback too.
  *
  * Toggle via: window.__DEBUG__?.setStreamingPlaybackMode?.('all' | 'transitions')
  */
-export const STREAMING_PLAYBACK_ENABLED = false;
+export const DEFAULT_STREAMING_PLAYBACK_MODE: StreamingPlaybackMode = 'transitions';
+
+function isFullStreamingPlaybackMode(mode: StreamingPlaybackMode): boolean {
+  return mode === 'all';
+}
+
+/**
+ * Legacy boolean alias for older debug/test code paths.
+ * `true` means the default mode is full-playback streaming.
+ */
+export const STREAMING_PLAYBACK_ENABLED = isFullStreamingPlaybackMode(DEFAULT_STREAMING_PLAYBACK_MODE);
 
 import type { PreviewRenderSource } from './preview-perf-metrics';
 
@@ -85,6 +96,8 @@ export type PreviewPerfSnapshot = {
   ts: number;
   unresolvedQueue: number;
   pendingResolves: number;
+  streamingPlaybackMode: StreamingPlaybackMode;
+  visualPlaybackMode: import('@/shared/state/preview-bridge').PreviewVisualPlaybackMode;
   renderSource: PreviewRenderSource;
   renderSourceSwitches: number;
   renderSourceHistory: import('./preview-perf-metrics').RenderSourceSwitchEntry[];

@@ -3,12 +3,14 @@ import type { PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore } from '@/features/preview/deps/timeline-store';
 import { createLogger } from '@/shared/logging/logger';
+import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 import { getDecoderPrewarmMetricsSnapshot } from '../utils/decoder-prewarm';
 import { getEffectivePreviewQuality, getFrameBudgetMs } from '../utils/adaptive-preview-quality';
 import {
   PREVIEW_PERF_PUBLISH_INTERVAL_MS,
   PREVIEW_PERF_SEEK_TIMEOUT_MS,
   type PreviewPerfSnapshot,
+  type StreamingPlaybackMode,
 } from '../utils/preview-constants';
 import {
   recordSeekLatency,
@@ -69,6 +71,8 @@ interface UsePreviewPerfPublisherParams {
   transitionSessionTraceRef: MutableRefObject<TransitionPreviewSessionTrace | null>;
   transitionTelemetryRef: MutableRefObject<TransitionPreviewTelemetry>;
   transitionSessionBufferedFramesRef: MutableRefObject<Map<number, OffscreenCanvas>>;
+  streamingPlaybackModeRef: MutableRefObject<StreamingPlaybackMode>;
+  visualPlaybackModeRef: MutableRefObject<PreviewVisualPlaybackMode>;
   renderSourceRef: MutableRefObject<PreviewPerfSnapshot['renderSource']>;
   renderSourceSwitchCountRef: MutableRefObject<number>;
   renderSourceHistoryRef: MutableRefObject<PreviewPerfSnapshot['renderSourceHistory']>;
@@ -82,6 +86,8 @@ export function usePreviewPerfPublisher({
   transitionSessionTraceRef,
   transitionTelemetryRef,
   transitionSessionBufferedFramesRef,
+  streamingPlaybackModeRef,
+  visualPlaybackModeRef,
   renderSourceRef,
   renderSourceSwitchCountRef,
   renderSourceHistoryRef,
@@ -148,6 +154,8 @@ export function usePreviewPerfPublisher({
         ts: Date.now(),
         unresolvedQueue: getUnresolvedQueueSize(),
         pendingResolves: getPendingResolveCount(),
+        streamingPlaybackMode: streamingPlaybackModeRef.current,
+        visualPlaybackMode: visualPlaybackModeRef.current,
         renderSource: renderSourceRef.current,
         renderSourceSwitches: renderSourceSwitchCountRef.current,
         renderSourceHistory: [...renderSourceHistoryRef.current],
@@ -242,6 +250,8 @@ export function usePreviewPerfPublisher({
     transitionSessionBufferedFramesRef,
     transitionSessionTraceRef,
     transitionTelemetryRef,
+    streamingPlaybackModeRef,
+    visualPlaybackModeRef,
   ]);
 
   return {

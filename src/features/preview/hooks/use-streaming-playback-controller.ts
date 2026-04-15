@@ -13,7 +13,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
 import {
-  STREAMING_PLAYBACK_ENABLED,
+  DEFAULT_STREAMING_PLAYBACK_MODE,
   type StreamingPlaybackMode,
 } from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
@@ -167,7 +167,7 @@ export function useStreamingPlaybackController({
   const playbackRef = useRef<StreamingPlayback | null>(null);
   /** Current streaming mode: full-playback streaming or transition-only mode. */
   const [streamingPlaybackMode, setStreamingPlaybackModeState] = useState<StreamingPlaybackMode>(
-    STREAMING_PLAYBACK_ENABLED ? 'all' : 'transitions',
+    DEFAULT_STREAMING_PLAYBACK_MODE,
   );
   const modeRef = useRef<StreamingPlaybackMode>(streamingPlaybackMode);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);

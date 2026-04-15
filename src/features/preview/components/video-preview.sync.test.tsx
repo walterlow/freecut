@@ -1902,6 +1902,83 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('keeps the legacy debug boolean shim mapped onto streaming playback modes', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-streaming-legacy',
+        label: 'Streaming Clip Legacy',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:streaming-legacy',
+      } as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+    const debugApi = (window as unknown as {
+      __DEBUG__?: {
+        setStreamingPlayback?: (forceAll: boolean) => void;
+      }
+    }).__DEBUG__;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      debugApi?.setStreamingPlayback?.(true);
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().pause();
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
+    });
+
+    act(() => {
+      debugApi?.setStreamingPlayback?.(false);
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('player');
+      expect(getDisplayedFrame()).toBeNull();
+      expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
   it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {
     useItemsStore.getState().setTracks([
       {

@@ -32,6 +32,8 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
     : snapshot.transitionSessionMode === 'dom'
       ? 'DOM'
       : 'Canvas';
+  const streamingModeLabel = snapshot.streamingPlaybackMode === 'all' ? 'All' : 'Transitions';
+  const visualModeLabel = snapshot.visualPlaybackMode === 'streaming' ? 'Streaming' : 'Player';
 
   return (
     <div
@@ -65,6 +67,10 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
             {' '}Scrub {snapshot.scrubDroppedFrames}/{snapshot.scrubUpdates} dropped
           </span>
         )}
+      </div>
+
+      <div style={{ color: '#a1a1aa' }}>
+        Stream {streamingModeLabel} / Visual {visualModeLabel}
       </div>
 
       <div>

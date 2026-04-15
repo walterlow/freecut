@@ -1,2 +1,6 @@
 export { usePreviewBridgeStore } from './store';
-export type { PreviewBridgeActions, PreviewBridgeState } from './types';
+export type {
+  PreviewBridgeActions,
+  PreviewBridgeState,
+  PreviewVisualPlaybackMode,
+} from './types';

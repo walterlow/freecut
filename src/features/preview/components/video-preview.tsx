@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, memo } from 'react';
+import { useMemo, useCallback, useEffect, useRef, memo } from 'react';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
@@ -32,6 +32,11 @@ import { usePreviewTransitionModel } from '../hooks/use-preview-transition-model
 import { usePreviewViewModel } from '../hooks/use-preview-view-model';
 import { usePreviewTransitionSessionController } from '../hooks/use-preview-transition-session-controller';
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
+import {
+  DEFAULT_STREAMING_PLAYBACK_MODE,
+  type StreamingPlaybackMode,
+} from '../utils/preview-constants';
+import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 
 interface VideoPreviewProps {
   project: {
@@ -134,6 +139,8 @@ export const VideoPreview = memo(function VideoPreview({
   const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
   const setVisualPlaybackMode = usePreviewBridgeStore((s) => s.setVisualPlaybackMode);
+  const streamingPlaybackModeRef = useRef<StreamingPlaybackMode>(DEFAULT_STREAMING_PLAYBACK_MODE);
+  const visualPlaybackModeRef = useRef<PreviewVisualPlaybackMode>('player');
 
   const {
     isRenderedOverlayVisible,
@@ -164,6 +171,8 @@ export const VideoPreview = memo(function VideoPreview({
     recordRenderFrameJitter,
   } = usePreviewDiagnostics({
     renderSourceRef,
+    streamingPlaybackModeRef,
+    visualPlaybackModeRef,
   });
 
   const { combinedTracks, mediaResolveCostById } = usePreviewCompositionBaseModel({
@@ -220,6 +229,8 @@ export const VideoPreview = memo(function VideoPreview({
     transitionSessionTraceRef,
     transitionTelemetryRef,
     transitionSessionBufferedFramesRef,
+    streamingPlaybackModeRef,
+    visualPlaybackModeRef,
     renderSourceRef,
     renderSourceSwitchCountRef,
     renderSourceHistoryRef,
@@ -337,6 +348,8 @@ export const VideoPreview = memo(function VideoPreview({
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
   const visualPlaybackMode = isPlaying && streamingPlaybackMode === 'all' ? 'streaming' : 'player';
+  streamingPlaybackModeRef.current = streamingPlaybackMode;
+  visualPlaybackModeRef.current = visualPlaybackMode;
 
   useEffect(() => {
     setVisualPlaybackMode(visualPlaybackMode);
