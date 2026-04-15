@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   AbsoluteFill,
 } from '@/features/preview/deps/player-core';
@@ -105,6 +105,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const renderInFlightRef = useRef(false);
   const pendingTimeRef = useRef<number | null>(null);
   const latestTargetTimeRef = useRef(0);
+  const lastCanvasFrameTimeRef = useRef<number | null>(null);
   const consecutiveDecodeFailuresRef = useRef(0);
   const frameCacheRef = useRef<Map<number, ImageBitmap>>(new Map());
   const frameCacheOrderRef = useRef<number[]>([]);
@@ -112,8 +113,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   const lastFrameRef = useRef(clock.currentFrame);
   const playingRef = useRef(playing);
   const decoderItemId = `${mediaId ?? 'source-monitor'}:${decodeLaneRef.current}`;
-  const [strictDecodeReady, setStrictDecodeReady] = useState(false);
-  const [hasDecodedFrame, setHasDecodedFrame] = useState(false);
 
   const reportPlaybackIssue = useCallback((
     issue: 'slow-seek' | 'slow-decode' | 'playback-resync' | 'waiting' | 'stalled' | 'dropped-frames',
@@ -146,9 +145,61 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     };
   }, []);
 
+  const isCanvasFrameFresh = useCallback((targetTime: number) => {
+    const lastCanvasFrameTime = lastCanvasFrameTimeRef.current;
+    return lastCanvasFrameTime !== null && Math.abs(lastCanvasFrameTime - targetTime) * fps < 0.5;
+  }, [fps]);
+
+  const clearCanvasFrame = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      lastCanvasFrameTimeRef.current = null;
+      return;
+    }
+
+    let ctx = contextRef.current;
+    if (!ctx) {
+      ctx = canvas.getContext('2d');
+      if (!ctx) {
+        lastCanvasFrameTimeRef.current = null;
+        return;
+      }
+      contextRef.current = ctx;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lastCanvasFrameTimeRef.current = null;
+  }, []);
+
+  const paintTransportFrameToCanvas = useCallback((targetTime: number) => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return false;
+    if (Math.abs(video.currentTime - targetTime) * fps > 1.25) return false;
+
+    let ctx = contextRef.current;
+    if (!ctx) {
+      ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+      contextRef.current = ctx;
+    }
+
+    const targetWidth = Math.max(1, Math.round(video.videoWidth || canvas.width || 640));
+    const targetHeight = Math.max(1, Math.round(video.videoHeight || canvas.height || 360));
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    lastCanvasFrameTimeRef.current = targetTime;
+    return true;
+  }, [fps]);
+
   useEffect(() => {
-    setHasDecodedFrame(false);
-  }, [activeSrc, mediaId]);
+    clearCanvasFrame();
+  }, [activeSrc, clearCanvasFrame, mediaId]);
 
   const drawDecodedFrame = useCallback(async (targetTime: number) => {
     const extractor = extractorRef.current;
@@ -178,6 +229,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     if (cached) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(cached, 0, 0, canvas.width, canvas.height);
+      lastCanvasFrameTimeRef.current = targetTime;
       const cacheIndex = cacheOrder.indexOf(cacheKey);
       if (cacheIndex !== -1) {
         cacheOrder.splice(cacheIndex, 1);
@@ -200,6 +252,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       reportPlaybackIssue('slow-decode');
     }
     if (!didDraw) return false;
+    lastCanvasFrameTimeRef.current = targetTime;
 
     try {
       const bitmap = await createImageBitmap(canvas);
@@ -238,7 +291,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
           const didDraw = await drawDecodedFrame(targetTime).catch(() => false);
           if (didDraw) {
             consecutiveDecodeFailuresRef.current = 0;
-            setHasDecodedFrame(true);
             continue;
           }
 
@@ -247,7 +299,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
             consecutiveDecodeFailuresRef.current += 1;
             if (consecutiveDecodeFailuresRef.current >= SOURCE_MONITOR_STRICT_DECODE_FALLBACK_FAILURES) {
               decoderReadyRef.current = false;
-              setStrictDecodeReady(false);
               return;
             }
           }
@@ -338,6 +389,13 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       if (seekLatencyMs >= SOURCE_MONITOR_SLOW_SEEK_MS) {
         reportPlaybackIssue('slow-seek');
       }
+      paintTransportFrameToCanvas(latestTargetTimeRef.current);
+    };
+
+    const handleLoadedData = () => {
+      if (!playingRef.current) {
+        paintTransportFrameToCanvas(latestTargetTimeRef.current);
+      }
     };
 
     const samplePlaybackQuality = () => {
@@ -367,6 +425,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     video.addEventListener('stalled', handleStalled);
     video.addEventListener('seeking', handleSeeking);
     video.addEventListener('seeked', handleSeeked);
+    video.addEventListener('loadeddata', handleLoadedData);
     samplePlaybackQuality();
 
     return () => {
@@ -374,6 +433,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       video.removeEventListener('stalled', handleStalled);
       video.removeEventListener('seeking', handleSeeking);
       video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('loadeddata', handleLoadedData);
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
@@ -384,12 +444,10 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       pool.releaseClip(clipId);
       videoRef.current = null;
     };
-  }, [activeSrc, reportPlaybackIssue]);
+  }, [activeSrc, paintTransportFrameToCanvas, reportPlaybackIssue]);
 
   useEffect(() => {
     decoderReadyRef.current = false;
-    setStrictDecodeReady(false);
-    setHasDecodedFrame(false);
     extractorRef.current = null;
     pendingTimeRef.current = null;
     consecutiveDecodeFailuresRef.current = 0;
@@ -413,7 +471,6 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
         if (cancelled || !mountedRef.current) return;
         if (!ready) return;
         decoderReadyRef.current = true;
-        setStrictDecodeReady(true);
         pendingTimeRef.current = latestTargetTimeRef.current;
         if (!playingRef.current) {
           pumpLatestDecodedFrame();
@@ -421,29 +478,32 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
-        setStrictDecodeReady(false);
       });
 
     return () => {
       cancelled = true;
       decoderReadyRef.current = false;
-      setStrictDecodeReady(false);
       extractorRef.current = null;
       pendingTimeRef.current = null;
+      lastCanvasFrameTimeRef.current = null;
       pool.releaseItem(decoderItemId);
     };
-  }, [activeSrc, decoderItemId, pumpLatestDecodedFrame]);
+  }, [activeSrc, decoderItemId, paintTransportFrameToCanvas, pumpLatestDecodedFrame]);
 
   const syncSourceFrame = useCallback((frame: number) => {
     const video = videoRef.current;
     const audio = audioRef.current;
     const targetTime = frame / fps;
+    const hasFreshCanvasFrame = isCanvasFrameFresh(targetTime);
     latestTargetTimeRef.current = targetTime;
 
     lastFrameRef.current = frame;
 
     if (!playingRef.current) {
       pendingTimeRef.current = targetTime;
+      if (!hasFreshCanvasFrame) {
+        clearCanvasFrame();
+      }
       if (decoderReadyRef.current) {
         pumpLatestDecodedFrame();
       }
@@ -475,7 +535,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     const canSeek = video.readyState >= 1;
     if (!canSeek) return;
 
-    if (!playingRef.current && strictDecodeReady && hasDecodedFrame) {
+    if (!playingRef.current && hasFreshCanvasFrame) {
       syncAudioTime();
       return;
     }
@@ -501,8 +561,12 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       // Ignore seek errors while media is loading
     }
 
+    if (!playingRef.current) {
+      paintTransportFrameToCanvas(targetTime);
+    }
+
     syncAudioTime();
-  }, [activeSrc, fps, hasDecodedFrame, pumpLatestDecodedFrame, reportPlaybackIssue, src, strictDecodeReady]);
+  }, [activeSrc, clearCanvasFrame, fps, isCanvasFrameFresh, paintTransportFrameToCanvas, pumpLatestDecodedFrame, reportPlaybackIssue, src]);
 
   useEffect(() => {
     syncSourceFrame(clock.currentFrame);
@@ -532,8 +596,13 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
       video.play().catch(() => {});
     } else {
       video.pause();
+      paintTransportFrameToCanvas(latestTargetTimeRef.current);
+      pendingTimeRef.current = latestTargetTimeRef.current;
+      if (decoderReadyRef.current) {
+        pumpLatestDecodedFrame();
+      }
     }
-  }, [activeSrc, playbackRate, playing]);
+  }, [activeSrc, paintTransportFrameToCanvas, playbackRate, playing, pumpLatestDecodedFrame]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -554,7 +623,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
     }
   }, [playbackRate, playing, src]);
 
-  const showDecodedCanvas = !playing && strictDecodeReady && hasDecodedFrame;
+  const showPausedCanvas = !playing;
 
   return (
     <AbsoluteFill>
@@ -564,7 +633,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
           width: '100%',
           height: '100%',
           position: 'relative',
-          display: showDecodedCanvas ? 'none' : 'block',
+          display: playing ? 'block' : 'none',
         }}
       />
       <canvas
@@ -572,7 +641,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
         style={{
           width: '100%',
           height: '100%',
-          display: showDecodedCanvas ? 'block' : 'none',
+          display: showPausedCanvas ? 'block' : 'none',
         }}
       />
       <audio ref={audioRef} src={src} preload="auto" style={{ display: 'none' }} />
