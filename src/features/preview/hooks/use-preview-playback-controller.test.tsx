@@ -92,8 +92,8 @@ function HookHarness({
   const preferPlayerForStyledTextScrubRef = useRef(false);
   const adaptiveQualityStateRef = useRef(createAdaptivePreviewQualityState(1));
   const adaptiveFrameSampleRef = useRef<{ frame: number; tsMs: number } | null>(null);
-  const ignorePlayerUpdatesRef = useRef(false);
-  const playerSeekTargetRef = useRef<number | null>(null);
+  const ignoreHostUpdatesRef = useRef(false);
+  const hostSeekTargetRef = useRef<number | null>(null);
   const visualPlaybackModeRef = useRef<PreviewVisualPlaybackMode>(visualPlaybackMode);
   visualPlaybackModeRef.current = visualPlaybackMode;
 
@@ -113,8 +113,8 @@ function HookHarness({
     preferPlayerForStyledTextScrubRef,
     adaptiveQualityStateRef,
     adaptiveFrameSampleRef,
-    ignorePlayerUpdatesRef,
-    playerSeekTargetRef,
+    ignoreHostUpdatesRef,
+    hostSeekTargetRef,
     resolvePendingSeekLatency: () => {},
     visualPlaybackModeRef,
   });

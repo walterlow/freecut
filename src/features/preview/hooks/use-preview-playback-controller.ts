@@ -31,8 +31,8 @@ interface UsePreviewPlaybackControllerParams {
   preferPlayerForStyledTextScrubRef: MutableRefObject<boolean>;
   adaptiveQualityStateRef: MutableRefObject<AdaptivePreviewQualityState>;
   adaptiveFrameSampleRef: MutableRefObject<{ frame: number; tsMs: number } | null>;
-  ignorePlayerUpdatesRef: MutableRefObject<boolean>;
-  playerSeekTargetRef: MutableRefObject<number | null>;
+  ignoreHostUpdatesRef: MutableRefObject<boolean>;
+  hostSeekTargetRef: MutableRefObject<number | null>;
   resolvePendingSeekLatency: (frame: number) => void;
   visualPlaybackModeRef: MutableRefObject<PreviewVisualPlaybackMode>;
 }
@@ -53,8 +53,8 @@ export function usePreviewPlaybackController({
   preferPlayerForStyledTextScrubRef,
   adaptiveQualityStateRef,
   adaptiveFrameSampleRef,
-  ignorePlayerUpdatesRef,
-  playerSeekTargetRef,
+  ignoreHostUpdatesRef,
+  hostSeekTargetRef,
   resolvePendingSeekLatency,
   visualPlaybackModeRef,
 }: UsePreviewPlaybackControllerParams) {
@@ -197,7 +197,7 @@ export function usePreviewPlaybackController({
   const handleFrameChange = useCallback((frame: number) => {
     const nextFrame = Math.round(frame);
     resolvePendingSeekLatency(nextFrame);
-    if (ignorePlayerUpdatesRef.current) return;
+    if (ignoreHostUpdatesRef.current) return;
     const playbackState = usePlaybackStore.getState();
     const visualPlaybackMode = visualPlaybackModeRef.current;
     if (playbackState.isPlaying && visualPlaybackMode === 'streaming' && streamingClockActiveRef.current) {
@@ -207,13 +207,13 @@ export function usePreviewPlaybackController({
       return;
     }
     if (!playbackState.isPlaying && playbackState.previewFrame === null) {
-      const expectedPlayerFrame = playerSeekTargetRef.current;
+      const expectedHostFrame = hostSeekTargetRef.current;
       if (
-        expectedPlayerFrame !== null
-        && playbackState.currentFrame === expectedPlayerFrame
-        && nextFrame !== expectedPlayerFrame
+        expectedHostFrame !== null
+        && playbackState.currentFrame === expectedHostFrame
+        && nextFrame !== expectedHostFrame
       ) {
-        // The hidden Player can finish an older seek after the rendered preview
+        // The preview host can finish an older seek after the rendered preview
         // has already claimed the paused frame. Ignore that stale callback so
         // the store doesn't jump backward and flash an outdated frame.
         return;
@@ -274,9 +274,9 @@ export function usePreviewPlaybackController({
     adaptiveFrameSampleRef,
     adaptiveQualityStateRef,
     fps,
-    ignorePlayerUpdatesRef,
+    ignoreHostUpdatesRef,
     isGizmoInteractingRef,
-    playerSeekTargetRef,
+    hostSeekTargetRef,
     previewPerfRef,
     resolvePendingSeekLatency,
     stopStreamingClock,

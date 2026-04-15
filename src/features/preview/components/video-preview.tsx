@@ -17,7 +17,7 @@ import {
   usePreviewCompositionBaseModel,
   usePreviewCompositionModel,
 } from '../hooks/use-preview-composition-model';
-import { useCustomPlayer } from '../hooks/use-custom-player';
+import { usePreviewHostSync } from '../hooks/use-preview-host-sync';
 import { usePreviewDiagnostics } from '../hooks/use-preview-diagnostics';
 import { usePreviewMediaResolution } from '../hooks/use-preview-media-resolution';
 import { usePreviewMediaPreload } from '../hooks/use-preview-media-preload';
@@ -233,7 +233,7 @@ export const VideoPreview = memo(function VideoPreview({
     getPendingResolveCount,
   });
 
-  const { ignorePlayerUpdatesRef, playerSeekTargetRef } = useCustomPlayer(
+  const { ignoreHostUpdatesRef, hostSeekTargetRef } = usePreviewHostSync(
     playerRef,
     bypassPreviewSeekRef,
     preferPlayerForStyledTextScrubRef,
@@ -413,8 +413,8 @@ export const VideoPreview = memo(function VideoPreview({
     preferPlayerForStyledTextScrubRef,
     adaptiveQualityStateRef,
     adaptiveFrameSampleRef: previewRuntimeRefs.adaptiveFrameSampleRef,
-    ignorePlayerUpdatesRef,
-    playerSeekTargetRef,
+    ignoreHostUpdatesRef,
+    hostSeekTargetRef,
     resolvePendingSeekLatency,
     visualPlaybackModeRef,
   });

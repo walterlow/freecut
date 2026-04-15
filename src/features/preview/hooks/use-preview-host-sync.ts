@@ -4,7 +4,7 @@ import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 import { useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
 import { createLogger } from '@/shared/logging/logger';
 
-const logger = createLogger('useCustomPlayer');
+const logger = createLogger('usePreviewHostSync');
 
 interface PreviewPlayerRef {
   seekTo: (frame: number) => void;
@@ -14,72 +14,72 @@ interface PreviewPlayerRef {
   isPlaying: () => boolean;
 }
 
-export function useCustomPlayer(
-  playerRef: React.RefObject<PreviewPlayerRef | null>,
+export function usePreviewHostSync(
+  hostRef: React.RefObject<PreviewPlayerRef | null>,
   bypassPreviewSeekRef?: React.RefObject<boolean>,
   preferPlayerForStyledTextScrubRef?: React.RefObject<boolean>,
   _isGizmoInteractingRef?: React.RefObject<boolean>,
-  onPlayerSeek?: (targetFrame: number) => void,
+  onHostSeek?: (targetFrame: number) => void,
   _visualPlaybackModeRef?: React.RefObject<PreviewVisualPlaybackMode>,
   _shouldUsePlayerForFrame?: (frame: number) => boolean,
 ) {
   void _visualPlaybackModeRef;
   void _shouldUsePlayerForFrame;
-  const [playerReady, setPlayerReady] = useState(false);
-  const lastSeekTargetRef = useRef<number | null>(null);
-  const ignorePlayerUpdatesRef = useRef(false);
+  const [hostReady, setHostReady] = useState(false);
+  const hostSeekTargetRef = useRef<number | null>(null);
+  const ignoreHostUpdatesRef = useRef(false);
 
-  const getPlayerFrame = useCallback(() => {
-    const frame = playerRef.current?.getCurrentFrame();
+  const getHostFrame = useCallback(() => {
+    const frame = hostRef.current?.getCurrentFrame();
     return Number.isFinite(frame) ? Math.round(frame!) : null;
-  }, [playerRef]);
+  }, [hostRef]);
 
-  const releaseIgnoredPlayerUpdates = useCallback(() => {
+  const releaseIgnoredHostUpdates = useCallback(() => {
     requestAnimationFrame(() => {
-      ignorePlayerUpdatesRef.current = false;
+      ignoreHostUpdatesRef.current = false;
     });
   }, []);
 
-  const seekPlayerToFrame = useCallback((
+  const seekHostToFrame = useCallback((
     targetFrame: number,
     options?: {
       holdIgnoreUntilReleased?: boolean;
       force?: boolean;
     },
   ) => {
-    if (!playerRef.current) return;
+    if (!hostRef.current) return;
     const nextFrame = Math.max(0, Math.round(targetFrame));
-    const playerFrame = getPlayerFrame();
-    if (playerFrame !== null && playerFrame === nextFrame) {
-      lastSeekTargetRef.current = nextFrame;
+    const hostFrame = getHostFrame();
+    if (hostFrame !== null && hostFrame === nextFrame) {
+      hostSeekTargetRef.current = nextFrame;
       return;
     }
-    if (!options?.force && lastSeekTargetRef.current === nextFrame && ignorePlayerUpdatesRef.current) {
+    if (!options?.force && hostSeekTargetRef.current === nextFrame && ignoreHostUpdatesRef.current) {
       return;
     }
 
-    ignorePlayerUpdatesRef.current = true;
+    ignoreHostUpdatesRef.current = true;
     try {
-      onPlayerSeek?.(nextFrame);
-      playerRef.current.seekTo(nextFrame);
-      lastSeekTargetRef.current = nextFrame;
+      onHostSeek?.(nextFrame);
+      hostRef.current.seekTo(nextFrame);
+      hostSeekTargetRef.current = nextFrame;
     } catch (error) {
       logger.error('Failed to seek preview host:', error);
     }
 
     if (!options?.holdIgnoreUntilReleased) {
-      releaseIgnoredPlayerUpdates();
+      releaseIgnoredHostUpdates();
     }
-  }, [getPlayerFrame, onPlayerSeek, playerRef, releaseIgnoredPlayerUpdates]);
+  }, [getHostFrame, hostRef, onHostSeek, releaseIgnoredHostUpdates]);
 
   useEffect(() => {
-    if (playerRef.current && !playerReady) {
-      setPlayerReady(true);
+    if (hostRef.current && !hostReady) {
+      setHostReady(true);
     }
 
     const checkReady = setInterval(() => {
-      if (playerRef.current) {
-        setPlayerReady(true);
+      if (hostRef.current) {
+        setHostReady(true);
         clearInterval(checkReady);
       }
     }, 50);
@@ -89,14 +89,14 @@ export function useCustomPlayer(
       clearInterval(checkReady);
       clearTimeout(timeout);
     };
-  }, [playerReady, playerRef]);
+  }, [hostReady, hostRef]);
 
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
   useEffect(() => {
-    if (!playerReady || !playerRef.current || isTimelineLoading) return;
+    if (!hostReady || !hostRef.current || isTimelineLoading) return;
 
-    const syncPausedPlayerFrame = (state: ReturnType<typeof usePlaybackStore.getState>) => {
+    const syncPausedHostFrame = (state: ReturnType<typeof usePlaybackStore.getState>) => {
       if (_visualPlaybackModeRef?.current && _visualPlaybackModeRef.current !== 'player') {
         return;
       }
@@ -123,23 +123,23 @@ export function useCustomPlayer(
       const targetFrame = state.previewFrame !== null && state.previewFrameEpoch >= state.currentFrameEpoch
         ? state.previewFrame
         : state.currentFrame;
-      seekPlayerToFrame(targetFrame);
+      seekHostToFrame(targetFrame);
     };
 
     const initialState = usePlaybackStore.getState();
     if (initialState.isPlaying) {
-      seekPlayerToFrame(initialState.currentFrame, { holdIgnoreUntilReleased: true, force: true });
+      seekHostToFrame(initialState.currentFrame, { holdIgnoreUntilReleased: true, force: true });
       try {
-        playerRef.current.play();
+        hostRef.current.play();
       } finally {
-        ignorePlayerUpdatesRef.current = false;
+        ignoreHostUpdatesRef.current = false;
       }
     } else {
-      syncPausedPlayerFrame(initialState);
+      syncPausedHostFrame(initialState);
     }
 
     return usePlaybackStore.subscribe((state, prevState) => {
-      if (!playerRef.current) return;
+      if (!hostRef.current) return;
 
       const startedPlaying = state.isPlaying && !prevState.isPlaying;
       const stoppedPlaying = !state.isPlaying && prevState.isPlaying;
@@ -149,42 +149,42 @@ export function useCustomPlayer(
       }
 
       if (state.isPlaying) {
-        const playerFrame = getPlayerFrame();
+        const hostFrame = getHostFrame();
         const needsSeek = (
           startedPlaying
-          || playerFrame === null
-          || Math.abs(playerFrame - state.currentFrame) > 2
+          || hostFrame === null
+          || Math.abs(hostFrame - state.currentFrame) > 2
         );
         if (needsSeek) {
-          seekPlayerToFrame(state.currentFrame, {
+          seekHostToFrame(state.currentFrame, {
             holdIgnoreUntilReleased: true,
             force: startedPlaying,
           });
         }
-        if (!playerRef.current.isPlaying()) {
-          playerRef.current.play();
+        if (!hostRef.current.isPlaying()) {
+          hostRef.current.play();
         }
-        ignorePlayerUpdatesRef.current = false;
+        ignoreHostUpdatesRef.current = false;
         return;
       }
 
-      if (stoppedPlaying && playerRef.current.isPlaying()) {
-        playerRef.current.pause();
+      if (stoppedPlaying && hostRef.current.isPlaying()) {
+        hostRef.current.pause();
       }
-      syncPausedPlayerFrame(state);
+      syncPausedHostFrame(state);
     });
   }, [
     bypassPreviewSeekRef,
-    getPlayerFrame,
+    getHostFrame,
     isTimelineLoading,
-    playerReady,
-    playerRef,
+    hostReady,
+    hostRef,
     preferPlayerForStyledTextScrubRef,
-    seekPlayerToFrame,
+    seekHostToFrame,
   ]);
 
   return {
-    ignorePlayerUpdatesRef,
-    playerSeekTargetRef: lastSeekTargetRef,
+    ignoreHostUpdatesRef,
+    hostSeekTargetRef,
   };
 }
