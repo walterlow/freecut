@@ -375,11 +375,13 @@ export const VideoPreview = memo(function VideoPreview({
   }, [setVisualPlaybackMode, visualPlaybackMode]);
 
   useEffect(() => {
-    setStreamingAudioProvider(streamingAudioProvider);
+    setStreamingAudioProvider(
+      visualPlaybackMode === 'streaming' ? streamingAudioProvider : null,
+    );
     return () => {
       setStreamingAudioProvider(null);
     };
-  }, [setStreamingAudioProvider, streamingAudioProvider]);
+  }, [setStreamingAudioProvider, streamingAudioProvider, visualPlaybackMode]);
 
   const {
     clearTransitionPlaybackSession,

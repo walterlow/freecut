@@ -2045,6 +2045,7 @@ describe('VideoPreview sync behavior', () => {
       expect(createCompositionRendererMock).toHaveBeenCalled();
       expect(rendererMockState.instances.length).toBeGreaterThan(0);
       expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('streaming');
+      expect(usePreviewBridgeStore.getState().streamingAudioProvider).not.toBeNull();
     });
 
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
@@ -2060,6 +2061,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
+      expect(usePreviewBridgeStore.getState().streamingAudioProvider).toBeNull();
     });
   });
 
