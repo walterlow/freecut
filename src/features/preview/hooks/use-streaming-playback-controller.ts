@@ -13,6 +13,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
 import {
   DEFAULT_STREAMING_PLAYBACK_MODE,
+  isFullStreamingPlaybackMode,
   type StreamingPlaybackMode,
 } from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
@@ -217,12 +218,12 @@ export function useStreamingPlaybackController({
 
   const syncOverlayMode = useCallback(() => {
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    setForceCanvasOverlay(isPlaying && modeRef.current === 'all');
+    setForceCanvasOverlay(isPlaying && isFullStreamingPlaybackMode(modeRef.current));
   }, []);
 
   // Collect targets based on mode: full-playback streaming or transition-only mode.
   const getTargets = useCallback((frame: number) => {
-    if (modeRef.current === 'all') {
+    if (isFullStreamingPlaybackMode(modeRef.current)) {
       return collectAllPrewarmTargets(tracksRef.current, frame, fpsRef.current, useProxyRef.current);
     }
     return collectTransitionPrewarmTargets(
@@ -367,7 +368,7 @@ export function useStreamingPlaybackController({
 
       const state = usePlaybackStore.getState();
       prewarmFrameRef.current = null;
-      if (mode === 'all') {
+      if (isFullStreamingPlaybackMode(mode)) {
         prewarmAtFrame(state.currentFrame);
       } else {
         playbackRef.current?.stopAll();

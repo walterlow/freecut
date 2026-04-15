@@ -1424,7 +1424,7 @@ export function usePreviewRenderPump({
     const initialPlaybackState = usePlaybackStore.getState();
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
       // Check if playback starts inside an active transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin that
-      // session immediately so the render pump has the DOM video provider.
+      // session immediately so prerender state is ready on entry.
       // In full-streaming mode this primes prerender/buffer state rather than
       // wiring a live DOM playback provider.
       const activeWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
