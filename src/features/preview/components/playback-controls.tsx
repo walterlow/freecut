@@ -101,8 +101,6 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
-  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
-
   // Note: Automatic playback loop is now handled by Composition Player
   // The Player controls frame advancement via frameupdate events
 
@@ -111,9 +109,9 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
 
   const commitTimelineSeek = (frame: number) => {
     // Transport seeks should exit hover-scrub state so Player rendering
-    // follows the actual playhead immediately.
+    // follows the actual playhead immediately. Keep the last rendered frame
+    // visible until the paused-preview renderer commits the new one.
     setPreviewFrame(null);
-    setDisplayedFrame(null);
     setCurrentFrame(frame);
   };
 

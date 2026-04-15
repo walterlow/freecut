@@ -113,4 +113,24 @@ describe('PlaybackControls frame capture', () => {
     expect(sonnerMocks.success).toHaveBeenCalledTimes(1);
     expect(sonnerMocks.error).not.toHaveBeenCalled();
   });
+
+  it('keeps the last rendered frame latched during transport seeks', () => {
+    usePlaybackStore.setState({
+      currentFrame: 12,
+      previewFrame: 12,
+    });
+    usePreviewBridgeStore.setState({
+      displayedFrame: 12,
+    });
+
+    render(<PlaybackControls totalFrames={1000} fps={30} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next frame' }));
+
+    expect(usePlaybackStore.getState()).toMatchObject({
+      currentFrame: 13,
+      previewFrame: null,
+    });
+    expect(usePreviewBridgeStore.getState().displayedFrame).toBe(12);
+  });
 });

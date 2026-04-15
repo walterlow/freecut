@@ -231,7 +231,10 @@ export function usePreviewRenderPump({
   useEffect(() => {
     scrubMountedRef.current = true;
 
-    const drawSourceToDisplay = (source: OffscreenCanvas | HTMLCanvasElement, renderedFrame: number) => {
+    const drawSourceToDisplay = (
+      source: OffscreenCanvas | HTMLCanvasElement | ImageBitmap,
+      renderedFrame: number,
+    ) => {
       const displayCanvas = scrubCanvasRef.current;
       if (!displayCanvas) return;
       const displayCtx = displayCanvas.getContext('2d');
@@ -692,6 +695,27 @@ export function usePreviewRenderPump({
             ) {
               previewPerfRef.current.staleScrubOverlayDrops += 1;
               hideAllOverlays();
+              continue;
+            }
+
+            // Commit-time stale guard: the request ref is cleared as soon as a
+            // priority frame starts rendering, so it cannot by itself tell us
+            // whether this frame is still current by the time presentation
+            // happens. Re-resolve the latest target from playback state and
+            // refuse to present older paused-seek frames after a newer ruler
+            // click / seek has already superseded them.
+            const latestPlaybackState = usePlaybackStore.getState();
+            const latestIsPausedInsideTransition = isPausedTransitionOverlayActive(
+              latestPlaybackState.currentFrame,
+              latestPlaybackState,
+            );
+            const latestTargetFrame = resolveRenderPumpTargetFrame({
+              state: latestPlaybackState,
+              forceFastScrubOverlay,
+              isPausedInsideTransition: latestIsPausedInsideTransition,
+            });
+            if (latestTargetFrame !== null && latestTargetFrame !== frameToRender) {
+              previewPerfRef.current.staleScrubOverlayDrops += 1;
               continue;
             }
 
@@ -1162,6 +1186,19 @@ export function usePreviewRenderPump({
           targetFrame,
           scrubDirectionRef.current,
         );
+      }
+
+      if (
+        targetFrame !== null
+        && !state.isPlaying
+        && scrubRendererRef.current
+        && 'getScrubbingCache' in scrubRendererRef.current
+      ) {
+        const cachedFrame = scrubRendererRef.current.getScrubbingCache()?.getFrame(targetFrame);
+        if (cachedFrame) {
+          drawSourceToDisplay(cachedFrame, targetFrame);
+          showFastScrubOverlayForFrame();
+        }
       }
 
       const preserveHighFidelityBackwardPreview = shouldPreserveHighFidelityBackwardPreview(

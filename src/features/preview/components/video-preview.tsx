@@ -1,4 +1,5 @@
 import { useMemo, useCallback, useEffect, useRef, memo } from 'react';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
@@ -338,8 +339,28 @@ export const VideoPreview = memo(function VideoPreview({
     fps,
     combinedTracks,
   });
-  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
-  const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying ? 'streaming' : 'player';
+  const currentFrame = usePlaybackStore((s) => s.currentFrame);
+  const previewFrame = usePlaybackStore((s) => s.previewFrame);
+  const preferPlayerForTextGizmo = isGizmoInteracting && activeGizmoItemType === 'text';
+  // Keep the rendered overlay active when paused on a visible video frame.
+  // This avoids the DOM video seek delay that causes stale-frame flashes on
+  // ruler clicks. Ruler clicks briefly set previewFrame === currentFrame then
+  // clear it; treat that as "still paused" so the overlay never tears down.
+  // Only bail for active scrub where previewFrame diverges from currentFrame.
+  const shouldRenderPausedPreview = useMemo(() => {
+    if (isPlaying || preferPlayerForTextGizmo) return false;
+    if (previewFrame !== null && previewFrame !== currentFrame) return false;
+    return combinedTracks.some((track) => {
+      if (!track.visible) return false;
+      return track.items.some((item) =>
+        item.type === 'video'
+        && currentFrame >= item.from
+        && currentFrame < (item.from + item.durationInFrames),
+      );
+    });
+  }, [isPlaying, preferPlayerForTextGizmo, previewFrame, currentFrame, combinedTracks]);
+  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldRenderPausedPreview;
+  const visualPlaybackMode: PreviewVisualPlaybackMode = (isPlaying || forceFastScrubOverlay) ? 'streaming' : 'player';
   visualPlaybackModeRef.current = visualPlaybackMode;
 
   useEffect(() => {

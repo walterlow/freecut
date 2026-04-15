@@ -7,6 +7,9 @@ const ensureReadyLanesMock = vi.fn(() => Promise.resolve());
 const hoistedState = vi.hoisted(() => ({
   transitionParticipantSyncMock: vi.fn(),
 }));
+const playbackState = {
+  isPlaying: false,
+};
 const previewBridgeState = {
   visualPlaybackMode: 'player' as 'player' | 'streaming',
   displayedFrame: null as number | null,
@@ -27,6 +30,9 @@ vi.mock('../hooks/use-transition-participant-sync', () => ({
 }));
 
 vi.mock('@/features/composition-runtime/deps/stores', () => ({
+  usePlaybackStore: (selector: (state: typeof playbackState) => unknown) => (
+    selector(playbackState)
+  ),
   useMediaLibraryStore: (selector: (state: { mediaItems: Array<{ id: string; fps: number }> }) => unknown) => (
     selector({ mediaItems: [] })
   ),
@@ -54,6 +60,7 @@ describe('StableVideoSequence', () => {
     ensureReadyLanesMock.mockClear();
     hoistedState.transitionParticipantSyncMock.mockClear();
     sequenceContextValue.localFrame = 28;
+    playbackState.isPlaying = false;
     previewBridgeState.visualPlaybackMode = 'player';
     previewBridgeState.displayedFrame = null;
   });
@@ -320,6 +327,7 @@ describe('StableVideoSequence', () => {
   });
 
   it('skips shadow DOM and transition sync while streaming playback owns visuals', () => {
+    playbackState.isPlaying = true;
     previewBridgeState.visualPlaybackMode = 'streaming';
     const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
 
@@ -384,7 +392,7 @@ describe('StableVideoSequence', () => {
     expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalledWith([], 0, 30);
   });
 
-  it('skips shadow DOM and transition sync while the rendered preview overlay owns the frame', () => {
+  it('keeps shadow DOM and transition sync while paused rendered preview owns the frame', () => {
     previewBridgeState.displayedFrame = 28;
     const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
 
@@ -445,7 +453,7 @@ describe('StableVideoSequence', () => {
     );
 
     expect(screen.getByTestId('render-left')).toBeInTheDocument();
-    expect(screen.queryByTestId('shadow-video-right')).not.toBeInTheDocument();
-    expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalledWith([], 0, 30);
+    expect(screen.getByTestId('shadow-video-right')).toBeInTheDocument();
+    expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalled();
   });
 });

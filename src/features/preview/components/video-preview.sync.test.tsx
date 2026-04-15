@@ -1742,6 +1742,168 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('does not briefly present an older paused seek frame after a newer ruler click supersedes it', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-stale-guard',
+        label: 'Clip',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 160,
+        src: 'blob:stale-guard',
+      } as TimelineItem,
+    ]);
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    let resolveOlderFrame: (() => void) | null = null;
+    renderer.renderFrame.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveOlderFrame = resolve;
+    }));
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(48);
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(72);
+    });
+
+    expect(getDisplayedFrame()).toBe(24);
+
+    await act(async () => {
+      resolveOlderFrame?.();
+      await Promise.resolve();
+    });
+
+    expect(getDisplayedFrame()).not.toBe(48);
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(72);
+      expect(getDisplayedFrame()).toBe(72);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('presents a cached paused seek frame immediately while the async render catches up', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-cache-hit',
+        label: 'Clip',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 160,
+        src: 'blob:cache-hit',
+      } as TimelineItem,
+    ]);
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    let resolveTargetRender: (() => void) | null = null;
+    renderer.renderFrame.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveTargetRender = resolve;
+    }));
+
+    const cachedBitmap = { label: 'cached-72' } as unknown as ImageBitmap;
+    const getFrame = vi.fn((frame: number) => (frame === 72 ? cachedBitmap : null));
+    const setEvictionHint = vi.fn();
+    renderer.getScrubbingCache = () => ({
+      getFrame,
+      setEvictionHint,
+    });
+
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(72);
+    });
+
+    await waitFor(() => {
+      expect(getFrame).toHaveBeenCalledWith(72);
+      expect(getDisplayedFrame()).toBe(72);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    await act(async () => {
+      resolveTargetRender?.();
+      await Promise.resolve();
+    });
+  });
+
   it('keeps playback on the canvas path after a transition during playback', async () => {
     useItemsStore.getState().setTracks([
       {

@@ -1125,8 +1125,25 @@ export const TimelineContent = memo(function TimelineContent({
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseDownCapture = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
-    if (usePlaybackStore.getState().previewFrame !== null) {
+    if (previewRafRef.current !== null) {
+      cancelAnimationFrame(previewRafRef.current);
+      previewRafRef.current = null;
+    }
+    const playback = usePlaybackStore.getState();
+    if (playback.previewFrame !== null) {
       setPreviewFrameRef.current(null);
+
+      const target = e.target as HTMLElement | null;
+      if (!playback.isPlaying && target?.closest('.timeline-ruler')) {
+        const scrollContainer = e.currentTarget as HTMLDivElement;
+        const rect = scrollContainer.getBoundingClientRect();
+        const x = (e.clientX - rect.left) + scrollContainer.scrollLeft;
+        const frame = Math.max(
+          0,
+          Math.min(Math.round(pixelsToFrameRef.current(x)), maxTimelineFrameRef.current),
+        );
+        playback.setCurrentFrame(frame);
+      }
     }
   }, []);
 

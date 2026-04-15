@@ -1,5 +1,5 @@
 import { createRef, type ReactNode } from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useEditorStore } from '@/shared/state/editor';
@@ -213,6 +213,84 @@ describe('TimelineContent playback selection behavior', () => {
 
     await waitFor(() => {
       expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id]);
+    });
+  });
+
+  it('cancels a pending hover preview frame when ruler click capture begins', () => {
+    const queuedRafs = new Map<number, FrameRequestCallback>();
+    let nextRafId = 1;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      const id = nextRafId++;
+      queuedRafs.set(id, callback);
+      return id;
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = ((id: number) => {
+      queuedRafs.delete(id);
+    }) as typeof window.cancelAnimationFrame;
+
+    try {
+      const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+      const timelineContainer = container.querySelector('[data-timeline-scroll-container]') as HTMLDivElement | null;
+      expect(timelineContainer).toBeTruthy();
+
+      fireEvent.mouseMove(timelineContainer!, { clientX: 80, clientY: 12 });
+      expect(queuedRafs.size).toBe(1);
+
+      fireEvent.mouseDown(timelineContainer!, { button: 0, clientX: 120, clientY: 12 });
+
+      act(() => {
+        for (const callback of queuedRafs.values()) {
+          callback(performance.now());
+        }
+      });
+
+      expect(usePlaybackStore.getState().previewFrame).toBeNull();
+    } finally {
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
+
+  it('commits the clicked ruler frame immediately when dismissing a hover preview', () => {
+    usePlaybackStore.setState({
+      currentFrame: 10,
+      previewFrame: 30,
+      previewFrameEpoch: 1,
+      currentFrameEpoch: 0,
+      frameUpdateEpoch: 1,
+      isPlaying: false,
+    });
+
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+    const timelineContainer = container.querySelector('[data-timeline-scroll-container]') as HTMLDivElement | null;
+    const ruler = container.querySelector('.timeline-ruler') as HTMLDivElement | null;
+    expect(timelineContainer).toBeTruthy();
+    expect(ruler).toBeTruthy();
+
+    Object.defineProperty(timelineContainer!, 'scrollLeft', {
+      configurable: true,
+      value: 0,
+    });
+    vi.spyOn(timelineContainer!, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 400,
+      bottom: 80,
+      width: 400,
+      height: 80,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.mouseDown(ruler!, { button: 0, clientX: 80, clientY: 10 });
+
+    expect(usePlaybackStore.getState()).toMatchObject({
+      currentFrame: 40,
+      previewFrame: null,
     });
   });
 

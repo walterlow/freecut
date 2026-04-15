@@ -220,6 +220,7 @@ describe('VideoContent pooled handoff', () => {
   });
 
   it('does not acquire a pooled video element while streaming playback owns visuals', () => {
+    playbackState.isPlaying = true;
     previewBridgeState.visualPlaybackMode = 'streaming';
 
     render(
@@ -246,7 +247,7 @@ describe('VideoContent pooled handoff', () => {
     expect(preloadSourceMock).not.toHaveBeenCalled();
   });
 
-  it('does not acquire a pooled video element while the rendered preview overlay owns the frame', () => {
+  it('keeps a pooled video element mounted while paused rendered preview owns the frame', async () => {
     previewBridgeState.displayedFrame = 12;
 
     render(
@@ -269,8 +270,9 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
-    expect(acquireForClipMock).not.toHaveBeenCalled();
-    expect(preloadSourceMock).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('releases the pooled video element when streaming playback takes over visuals', async () => {
@@ -352,7 +354,7 @@ describe('VideoContent pooled handoff', () => {
     });
   });
 
-  it('releases the pooled video element when the rendered preview overlay takes over visuals', async () => {
+  it('keeps the pooled video element when paused rendered preview takes over visuals', async () => {
     const pooledElement = createMockVideoElement();
     acquireForClipMock.mockReturnValue(pooledElement);
 
@@ -401,34 +403,8 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(releaseClipMock).toHaveBeenCalledWith('group-origin-overlay-2', { delayMs: 400 });
-    });
-
-    previewBridgeState.displayedFrame = null;
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-detach-overlay',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Overlay',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-overlay-2',
-        }}
-        muted={false}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-        audioEqStages={[]}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(2);
-    });
+    expect(releaseClipMock).not.toHaveBeenCalled();
+    expect(acquireForClipMock).toHaveBeenCalledTimes(1);
   });
 
   it('skips DOM video audio wiring when external preview audio owns the clip', async () => {

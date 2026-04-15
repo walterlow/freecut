@@ -5,7 +5,6 @@
 import { useCallback } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useItemsStore } from '../../stores/items-store';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
@@ -41,13 +40,11 @@ export function usePlaybackShortcuts(
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
-  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const commitTimelineSeek = useCallback((frame: number) => {
     setPreviewFrame(null);
-    setDisplayedFrame(null);
     setCurrentFrame(frame);
-  }, [setPreviewFrame, setDisplayedFrame, setCurrentFrame]);
+  }, [setPreviewFrame, setCurrentFrame]);
 
   // Playback: Space - Play/Pause
   useHotkeys(
