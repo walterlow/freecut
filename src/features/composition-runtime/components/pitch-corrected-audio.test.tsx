@@ -172,6 +172,19 @@ vi.mock('./streaming-playback-buffered-audio', () => ({
     </div>
   ),
 }));
+vi.mock('./streaming-soundtouch-worklet-audio', () => ({
+  StreamingSoundTouchWorkletAudio: ({
+    streamKey,
+    fallback,
+  }: {
+    streamKey: string;
+    fallback: React.ReactNode;
+  }) => (
+    <div data-testid="streaming-soundtouch" data-stream-key={streamKey}>
+      {fallback}
+    </div>
+  ),
+}));
 
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 
@@ -408,5 +421,29 @@ describe('PitchCorrectedAudio', () => {
     });
 
     expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
+  });
+
+  it('can route pitch-preserved preview audio through the streaming SoundTouch bridge', async () => {
+    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.streamingAudioProvider = {
+      getAudioChunks: vi.fn(() => []),
+      getSourceInfo: vi.fn(() => ({ hasAudio: true })),
+      isStreaming: vi.fn(() => true),
+    };
+
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1.25}
+        streamingAudioStreamKey="item-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="streaming-soundtouch"]')).toHaveAttribute('data-stream-key', 'item-1');
+    });
   });
 });

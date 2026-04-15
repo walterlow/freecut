@@ -22,6 +22,7 @@ import {
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
 import { StreamingPlaybackBufferedAudio } from './streaming-playback-buffered-audio';
+import { StreamingSoundTouchWorkletAudio } from './streaming-soundtouch-worklet-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import {
@@ -599,6 +600,17 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
       );
     }
     return unshiftedFallback;
+  }
+
+  if (streamingAudioStreamKey) {
+    return (
+      <StreamingSoundTouchWorkletAudio
+        {...props}
+        streamKey={streamingAudioStreamKey}
+        playbackRate={playbackRate}
+        fallback={<DecodedPitchCorrectedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />}
+      />
+    );
   }
 
   return <DecodedPitchCorrectedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />;
