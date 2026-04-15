@@ -135,6 +135,7 @@ export const VideoPreview = memo(function VideoPreview({
   const setCaptureFrame = usePreviewBridgeStore((s) => s.setCaptureFrame);
   const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const setVisualPlaybackMode = usePreviewBridgeStore((s) => s.setVisualPlaybackMode);
   const setStreamingAudioProvider = usePreviewBridgeStore((s) => s.setStreamingAudioProvider);
   const visualPlaybackModeRef = useRef<PreviewVisualPlaybackMode>('player');
@@ -335,27 +336,31 @@ export const VideoPreview = memo(function VideoPreview({
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const preferPlayerForTextGizmo = isGizmoInteracting && activeGizmoItemType === 'text';
-  // Keep the rendered overlay active when paused on a visible video frame.
-  // This avoids the DOM video seek delay that causes stale-frame flashes on
-  // ruler clicks. Ruler clicks briefly set previewFrame === currentFrame then
-  // clear it; treat that as "still paused" so the overlay never tears down.
-  // Only bail for active scrub where previewFrame diverges from currentFrame.
-  const shouldRenderPausedPreview = useMemo(() => {
-    if (isPlaying || preferPlayerForTextGizmo) return false;
-    if (previewFrame !== null && previewFrame !== currentFrame) return false;
+  const hasVisibleVideoAtFrame = useCallback((frame: number) => {
     return combinedTracks.some((track) => {
       if (!track.visible) return false;
       return track.items.some((item) =>
         item.type === 'video'
-        && currentFrame >= item.from
-        && currentFrame < (item.from + item.durationInFrames),
+        && frame >= item.from
+        && frame < (item.from + item.durationInFrames),
       );
     });
-  }, [isPlaying, preferPlayerForTextGizmo, previewFrame, currentFrame, combinedTracks]);
-  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldRenderPausedPreview;
+  }, [combinedTracks]);
+  // Keep the rendered preview path active when paused on a visible video frame.
+  // Ruler clicks briefly set previewFrame === currentFrame then clear it; treat
+  // that as still canvas-owned so the preview never tears down between seeks.
+  const shouldUseRenderedPausedVideoPreview = useMemo(() => {
+    if (isPlaying || preferPlayerForTextGizmo) return false;
+    if (previewFrame !== null && previewFrame !== currentFrame) return false;
+    return hasVisibleVideoAtFrame(currentFrame);
+  }, [currentFrame, hasVisibleVideoAtFrame, isPlaying, preferPlayerForTextGizmo, previewFrame]);
+  const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldUseRenderedPausedVideoPreview;
+  const renderedPreviewFrame = previewFrame ?? displayedFrame ?? currentFrame;
+  const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(renderedPreviewFrame);
   const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying
     ? 'streaming'
-    : forceFastScrubOverlay
+    : ((forceFastScrubOverlay && renderedPreviewOwnsVisibleVideo)
+      || (isRenderedOverlayVisible && renderedPreviewOwnsVisibleVideo))
       ? 'rendered_preview'
       : 'player';
   visualPlaybackModeRef.current = visualPlaybackMode;

@@ -2649,6 +2649,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(40);
+      expect(usePreviewBridgeStore.getState().visualPlaybackMode).toBe('rendered_preview');
       expect(getDisplayedFrame()).toBe(59);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
