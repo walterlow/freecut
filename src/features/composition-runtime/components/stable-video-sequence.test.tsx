@@ -9,6 +9,7 @@ const hoistedState = vi.hoisted(() => ({
 }));
 const previewBridgeState = {
   visualPlaybackMode: 'player' as 'player' | 'streaming',
+  displayedFrame: null as number | null,
 };
 
 vi.mock('@/features/composition-runtime/deps/player', () => ({
@@ -54,6 +55,7 @@ describe('StableVideoSequence', () => {
     hoistedState.transitionParticipantSyncMock.mockClear();
     sequenceContextValue.localFrame = 28;
     previewBridgeState.visualPlaybackMode = 'player';
+    previewBridgeState.displayedFrame = null;
   });
 
   it('uses a lightweight hidden bridge for shadow participants instead of renderItem', () => {
@@ -319,6 +321,71 @@ describe('StableVideoSequence', () => {
 
   it('skips shadow DOM and transition sync while streaming playback owns visuals', () => {
     previewBridgeState.visualPlaybackMode = 'streaming';
+    const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
+
+    render(
+      <StableVideoSequence
+        items={[
+          {
+            id: 'left',
+            label: 'Left',
+            mediaId: 'media-1',
+            originId: 'origin-1',
+            type: 'video',
+            trackId: 'track-1',
+            from: 0,
+            durationInFrames: 60,
+            src: 'blob:left',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+          {
+            id: 'right',
+            label: 'Right',
+            mediaId: 'media-1',
+            originId: 'origin-1',
+            type: 'video',
+            trackId: 'track-1',
+            from: 30,
+            durationInFrames: 60,
+            src: 'blob:right',
+            zIndex: 1,
+            muted: false,
+            trackOrder: 0,
+            trackVisible: true,
+          },
+        ]}
+        transitionWindows={[
+          {
+            startFrame: 30,
+            endFrame: 50,
+            durationInFrames: 20,
+            leftClip: { id: 'left' },
+            rightClip: { id: 'right' },
+            leftPortion: 0.5,
+            rightPortion: 0.5,
+            cutPoint: 40,
+            transition: {
+              id: 'transition-1',
+              leftClipId: 'left',
+              rightClipId: 'right',
+              timing: 'linear',
+            },
+          } as never,
+        ]}
+        renderItem={renderItem}
+      />,
+    );
+
+    expect(screen.getByTestId('render-left')).toBeInTheDocument();
+    expect(screen.queryByTestId('shadow-video-right')).not.toBeInTheDocument();
+    expect(hoistedState.transitionParticipantSyncMock).toHaveBeenCalledWith([], 0, 30);
+  });
+
+  it('skips shadow DOM and transition sync while the rendered preview overlay owns the frame', () => {
+    previewBridgeState.displayedFrame = 28;
     const renderItem = vi.fn((item: { id: string }) => <div data-testid={`render-${item.id}`}>{item.id}</div>);
 
     render(

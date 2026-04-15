@@ -252,7 +252,8 @@ const GroupRenderer: React.FC<{
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldUseDomTransitionSupport = visualPlaybackMode !== 'streaming';
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
+  const shouldUseDomTransitionSupport = visualPlaybackMode !== 'streaming' && displayedFrame === null;
 
   const transitionWarmupClipIds = useMemo(() => {
     if (!shouldUseDomTransitionSupport || isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';

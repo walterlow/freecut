@@ -770,7 +770,8 @@ const NativePreviewVideo: React.FC<{
  * Video content with audio volume/fades support.
  * Separate component so we can use hooks for audio calculation.
  *
- * Preview uses pooled native video elements when visuals are player-owned.
+ * Preview uses pooled native video elements only when no rendered preview
+ * overlay currently owns the visible frame.
  * Export uses the canvas render engine.
  */
 export const VideoContent: React.FC<{
@@ -786,7 +787,8 @@ export const VideoContent: React.FC<{
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   const [hasError, setHasError] = useState(false);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldDetachVideoForStreamingPlayback = visualPlaybackMode === 'streaming';
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
+  const shouldDetachVideoForRenderedPreview = visualPlaybackMode === 'streaming' || displayedFrame !== null;
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -815,7 +817,7 @@ export const VideoContent: React.FC<{
     );
   }
 
-  if (shouldDetachVideoForStreamingPlayback) {
+  if (shouldDetachVideoForRenderedPreview) {
     return (
       <div
         data-detached-streaming-video={item.id}

@@ -27,6 +27,7 @@ const testState = vi.hoisted(() => ({
   },
   previewBridgeState: {
     visualPlaybackMode: 'player' as 'player' | 'streaming',
+    displayedFrame: null as number | null,
   },
 }));
 
@@ -159,6 +160,7 @@ describe('VideoContent pooled handoff', () => {
     gizmoState.preview = null;
     timelineState.keyframes = [];
     previewBridgeState.visualPlaybackMode = 'player';
+    previewBridgeState.displayedFrame = null;
   });
 
   it('keeps the acquired pool element when only itemId changes on the same pool lane', async () => {
@@ -244,6 +246,33 @@ describe('VideoContent pooled handoff', () => {
     expect(preloadSourceMock).not.toHaveBeenCalled();
   });
 
+  it('does not acquire a pooled video element while the rendered preview overlay owns the frame', () => {
+    previewBridgeState.displayedFrame = 12;
+
+    render(
+      <VideoContent
+        item={{
+          id: 'clip-overlay-owned',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Overlay Owned',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-overlay',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    expect(acquireForClipMock).not.toHaveBeenCalled();
+    expect(preloadSourceMock).not.toHaveBeenCalled();
+  });
+
   it('releases the pooled video element when streaming playback takes over visuals', async () => {
     const pooledElement = createMockVideoElement();
     acquireForClipMock.mockReturnValue(pooledElement);
@@ -309,6 +338,85 @@ describe('VideoContent pooled handoff', () => {
           label: 'Clip Detach Streaming',
           src: 'blob:test',
           _poolClipId: 'group-origin-3',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('releases the pooled video element when the rendered preview overlay takes over visuals', async () => {
+    const pooledElement = createMockVideoElement();
+    acquireForClipMock.mockReturnValue(pooledElement);
+
+    const { rerender } = render(
+      <VideoContent
+        item={{
+          id: 'clip-detach-overlay',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Overlay',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-overlay-2',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+    });
+
+    previewBridgeState.displayedFrame = 24;
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-detach-overlay',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Overlay',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-overlay-2',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(releaseClipMock).toHaveBeenCalledWith('group-origin-overlay-2', { delayMs: 400 });
+    });
+
+    previewBridgeState.displayedFrame = null;
+    rerender(
+      <VideoContent
+        item={{
+          id: 'clip-detach-overlay',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Detach Overlay',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-overlay-2',
         }}
         muted={false}
         safeTrimBefore={0}
