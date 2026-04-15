@@ -379,6 +379,7 @@ function resetStores() {
   });
   usePreviewBridgeStore.setState({
     displayedFrame: null,
+    streamingPlaybackActive: false,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
@@ -452,6 +453,7 @@ describe('VideoPreview sync behavior', () => {
     });
     localStorage.clear();
     setDocumentVisibility(false);
+    (window as unknown as { __DEBUG__?: Record<string, unknown> }).__DEBUG__ = {};
     resetStores();
     (globalThis as unknown as { OffscreenCanvas: typeof HTMLCanvasElement }).OffscreenCanvas = function OffscreenCanvasMock(
       width: number,
@@ -1827,6 +1829,75 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
+    });
+  });
+
+  it('switches plain playback onto the canvas path when full streaming playback is explicitly enabled', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'clip-streaming',
+        label: 'Streaming Clip',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:streaming',
+      } as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      ((window as unknown as { __DEBUG__?: { setStreamingPlayback?: (forceAll: boolean) => void } }).__DEBUG__)
+        ?.setStreamingPlayback?.(true);
+      usePlaybackStore.getState().play();
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      expect(usePreviewBridgeStore.getState().streamingPlaybackActive).toBe(true);
+    });
+
+    const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      usePlaybackStore.getState().pause();
+    });
+
+    await waitFor(() => {
+      expect(usePreviewBridgeStore.getState().streamingPlaybackActive).toBe(false);
     });
   });
 
