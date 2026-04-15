@@ -225,7 +225,7 @@ export function findCompatibleCaptionTrack(
 export function findCompatibleCaptionTrackForRanges(
   tracks: readonly TimelineTrack[],
   items: readonly TimelineItem[],
-  ranges: readonly Array<{ startFrame: number; endFrame: number }>,
+  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
 ): TimelineTrack | null {
   const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
 
