@@ -313,7 +313,7 @@ export async function createCompositionRenderer(
   const videoSourceByItemId = new Map<string, string>();
   const videoItemIdsBySource = new Map<string, Set<string>>();
   const videoItemsById = new Map<string, VideoItem>();
-  // Keep video elements as fallback if mediabunny fails
+  // Keep video elements as an export/main-thread fallback if mediabunny fails.
   const videoElements = new Map<string, HTMLVideoElement>();
   const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
   const fallbackVideoBySrc = new Set<string>();
@@ -380,7 +380,7 @@ export async function createCompositionRenderer(
           // Create item-bound wrapper backed by a shared per-source extractor pool.
           registerVideoItem(item.id, videoItem.src);
 
-          // Also create fallback video element in case mediabunny fails (main thread only).
+          // Also create a fallback video element for non-preview DOM render paths.
           if (hasDom && !previewStrictDecode) {
             bindFallbackVideoElement(item.id, videoItem.src);
           }
@@ -707,9 +707,9 @@ export async function createCompositionRenderer(
 
       assertPreviewStrictDecode();
 
-      // === Preload ALL fallback video elements ===
-      // Load every video element (not just those that failed mediabunny init)
-      // so the HTML5 fallback is ready if mediabunny fails mid-export.
+      // === Preload export fallback video elements ===
+      // Load every fallback video element (not just those that failed mediabunny init)
+      // so the HTML5 fallback is ready if mediabunny fails mid-render.
       // This is critical for transitions where the outgoing clip's extractor
       // may fail past the source duration boundary.
       const allVideoIds = Array.from(videoElements.keys());

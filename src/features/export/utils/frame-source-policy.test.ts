@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   resolvePreviewMediabunnyInitAction,
-  shouldAllowPreviewVideoElementFallback,
+  shouldAllowVideoElementFallback,
   shouldTryPreviewWorkerBitmap,
   shouldUsePreviewStrictWaitingFallback,
 } from './frame-source-policy';
@@ -28,21 +28,18 @@ describe('frame-source-policy', () => {
     })).toBe('await-ready');
   });
 
-  it('uses strict waiting fallback only when preview has no decoder or fallback element', () => {
+  it('uses strict waiting fallback only when preview has no decoder', () => {
     expect(shouldUsePreviewStrictWaitingFallback({
       renderMode: 'preview',
       hasMediabunny: false,
-      hasFallbackVideoElement: false,
     })).toBe(true);
     expect(shouldUsePreviewStrictWaitingFallback({
       renderMode: 'preview',
       hasMediabunny: true,
-      hasFallbackVideoElement: false,
     })).toBe(false);
     expect(shouldUsePreviewStrictWaitingFallback({
       renderMode: 'export',
       hasMediabunny: false,
-      hasFallbackVideoElement: false,
     })).toBe(false);
   });
 
@@ -55,16 +52,14 @@ describe('frame-source-policy', () => {
     })).toBe(false);
   });
 
-  it('allows preview video element fallback when mediabunny is unavailable', () => {
-    expect(shouldAllowPreviewVideoElementFallback({
-      renderMode: 'preview',
+  it('allows video element fallback when mediabunny is unavailable', () => {
+    expect(shouldAllowVideoElementFallback({
       hasFallbackVideoElement: true,
       hasMediabunny: false,
       isMediabunnyDisabled: false,
       mediabunnyFailedThisFrame: false,
     })).toBe(true);
-    expect(shouldAllowPreviewVideoElementFallback({
-      renderMode: 'preview',
+    expect(shouldAllowVideoElementFallback({
       hasFallbackVideoElement: true,
       hasMediabunny: true,
       isMediabunnyDisabled: false,

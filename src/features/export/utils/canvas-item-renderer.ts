@@ -44,7 +44,7 @@ import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import {
   resolvePreviewMediabunnyInitAction,
-  shouldAllowPreviewVideoElementFallback,
+  shouldAllowVideoElementFallback,
   shouldTryPreviewWorkerBitmap,
   shouldUsePreviewStrictWaitingFallback,
 } from './frame-source-policy';
@@ -592,7 +592,6 @@ async function renderVideoItem(
   if (shouldUsePreviewStrictWaitingFallback({
     renderMode: rctx.renderMode,
     hasMediabunny: useMediabunny.has(item.id),
-    hasFallbackVideoElement,
   })) {
     if (scrubbingCache && extractor) {
       const dims = extractor.getDimensions();
@@ -825,14 +824,13 @@ async function renderVideoItem(
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
-  const allowPreviewFallback = shouldAllowPreviewVideoElementFallback({
-    renderMode: rctx.renderMode,
+  const allowVideoElementRenderFallback = shouldAllowVideoElementFallback({
     hasFallbackVideoElement,
     hasMediabunny: useMediabunny.has(item.id),
     isMediabunnyDisabled: mediabunnyDisabledItems.has(item.id),
     mediabunnyFailedThisFrame,
   });
-  if (!allowVideoElementFallback && !allowPreviewFallback) {
+  if (!allowVideoElementFallback && !allowVideoElementRenderFallback) {
     return;
   }
 

@@ -13,7 +13,6 @@ export interface ResolvePreviewMediabunnyInitActionOptions {
 export interface PreviewStrictWaitingFallbackOptions {
   renderMode: RenderMode;
   hasMediabunny: boolean;
-  hasFallbackVideoElement: boolean;
 }
 
 export interface PreviewWorkerBitmapOptions {
@@ -21,7 +20,6 @@ export interface PreviewWorkerBitmapOptions {
 }
 
 export interface PreviewVideoElementFallbackOptions {
-  renderMode: RenderMode;
   hasFallbackVideoElement: boolean;
   hasMediabunny: boolean;
   isMediabunnyDisabled: boolean;
@@ -58,8 +56,8 @@ export function resolvePreviewMediabunnyInitAction(
 export function shouldUsePreviewStrictWaitingFallback(
   options: PreviewStrictWaitingFallbackOptions,
 ): boolean {
-  const { renderMode, hasMediabunny, hasFallbackVideoElement } = options;
-  return renderMode === 'preview' && !hasMediabunny && !hasFallbackVideoElement;
+  const { renderMode, hasMediabunny } = options;
+  return renderMode === 'preview' && !hasMediabunny;
 }
 
 export function shouldTryPreviewWorkerBitmap(options: PreviewWorkerBitmapOptions): boolean {
@@ -67,18 +65,16 @@ export function shouldTryPreviewWorkerBitmap(options: PreviewWorkerBitmapOptions
   return renderMode === 'preview';
 }
 
-export function shouldAllowPreviewVideoElementFallback(
+export function shouldAllowVideoElementFallback(
   options: PreviewVideoElementFallbackOptions,
 ): boolean {
   const {
-    renderMode,
     hasFallbackVideoElement,
     hasMediabunny,
     isMediabunnyDisabled,
     mediabunnyFailedThisFrame,
   } = options;
 
-  return renderMode === 'preview'
-    && hasFallbackVideoElement
+  return hasFallbackVideoElement
     && (mediabunnyFailedThisFrame || !hasMediabunny || isMediabunnyDisabled);
 }
