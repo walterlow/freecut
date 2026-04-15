@@ -67,6 +67,10 @@ async function getMediabunny() {
 
 const sources = new Map<string, SourceState>();
 const initPromises = new Map<string, Promise<SourceState | null>>();
+/** Sources disposed while an init was in-flight — prevents resurrection. */
+const disposedSources = new Set<string>();
+/** Queued seek targets for sources still initializing. */
+const pendingSeeks = new Map<string, number>();
 
 function nearestKeyframeBefore(timestamps: number[], target: number): number | null {
   if (timestamps.length === 0 || timestamps[0]! > target) return null;
@@ -149,6 +153,12 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
       const width = videoTrack.displayWidth || 1920;
       const height = videoTrack.displayHeight || 1080;
       const duration = videoTrack.duration || 0;
+
+      // Guard: source may have been disposed while init was in-flight
+      if (disposedSources.has(src)) {
+        input.dispose?.();
+        return null;
+      }
 
       const state: SourceState = {
         input,
@@ -336,15 +346,20 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (msg.type === 'stream_start') {
     const { src, startTimestamp, blob, sourceMetadata } = msg;
+    disposedSources.delete(src);
     try {
       const state = await getOrInitSource(src, { blob, sourceMetadata });
       if (!state) {
         self.postMessage({ type: 'error', src, message: 'Failed to init source' });
         return;
       }
+      // Apply any seek that arrived while the source was initializing
+      const pendingSeek = pendingSeeks.get(src);
+      pendingSeeks.delete(src);
+      const effectiveStart = pendingSeek ?? startTimestamp;
       state.generation++;
-      state.playbackPosition = startTimestamp;
-      void runStreamLoop(src, state, startTimestamp);
+      state.playbackPosition = effectiveStart;
+      void runStreamLoop(src, state, effectiveStart);
     } catch (error) {
       self.postMessage({
         type: 'error',
@@ -358,7 +373,13 @@ self.onmessage = async (event: MessageEvent) => {
   if (msg.type === 'stream_seek') {
     const { src, timestamp } = msg;
     const state = sources.get(src);
-    if (!state) return;
+    if (!state) {
+      // Source still initializing — queue the seek for when init completes
+      if (initPromises.has(src)) {
+        pendingSeeks.set(src, timestamp);
+      }
+      return;
+    }
     state.generation++;
     state.playbackPosition = timestamp;
     void runStreamLoop(src, state, timestamp);
@@ -375,6 +396,9 @@ self.onmessage = async (event: MessageEvent) => {
 
   if (msg.type === 'dispose_source') {
     const { src } = msg;
+    disposedSources.add(src);
+    keyframeIndexBySrc.delete(src);
+    pendingSeeks.delete(src);
     const state = sources.get(src);
     if (!state) return;
     state.generation++;

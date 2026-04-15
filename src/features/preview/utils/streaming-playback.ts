@@ -142,8 +142,10 @@ interface StreamState {
   streaming: boolean;
   /** Timestamp (ms) of the last getFrame() call. Used for idle cleanup. */
   lastAccessMs: number;
-  /** Whether a lazy auto-start is already in flight. */
-  autoStartPending: boolean;
+  /** Monotonic counter bumped on every start/stop — used to detect stale
+   *  async callbacks (e.g. blob fetch) that resolve after the stream was
+   *  stopped or restarted. */
+  generation: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +210,8 @@ export function createStreamingPlayback(): StreamingPlayback {
   // Idle sweep timer
   let idleSweepTimer: ReturnType<typeof setInterval> | null = null;
 
-  function ensureWorker(): Worker {
+  function ensureWorker(): Worker | null {
+    if (typeof Worker === 'undefined') return null;
     if (worker) return worker;
 
     worker = new Worker(
@@ -264,7 +267,13 @@ export function createStreamingPlayback(): StreamingPlayback {
       if (videoFrame) {
         createImageBitmap(videoFrame).then((bitmap) => {
           videoFrame.close();
-          state.buffer.push(msg.timestamp, bitmap);
+          // Guard: state may have been removed from `streams` by stopAll()
+          // while this createImageBitmap was in-flight.
+          if (streams.has(msg.src)) {
+            state.buffer.push(msg.timestamp, bitmap);
+          } else {
+            bitmap.close();
+          }
         }).catch(() => {
           videoFrame.close();
         });
@@ -292,10 +301,6 @@ export function createStreamingPlayback(): StreamingPlayback {
 
     if (msg.type === 'error') {
       log.warn('Streaming decode error', { src: msg.src, message: msg.message });
-      const state = streams.get(msg.src);
-      if (state) {
-        state.autoStartPending = false;
-      }
       return;
     }
   }
@@ -308,7 +313,7 @@ export function createStreamingPlayback(): StreamingPlayback {
       info: null,
       streaming: false,
       lastAccessMs: performance.now(),
-      autoStartPending: false,
+      generation: 0,
     };
     streams.set(src, state);
     return state;
@@ -336,6 +341,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     const sourceMetadata = getObjectUrlDirectFileMetadata(activeSrc) ?? undefined;
     const keyframeTimestamps = getKeyframeTimestamps(activeSrc);
     const w = ensureWorker();
+    if (!w) return;
 
     const doPost = (blob?: Blob) => {
       const msg = {
@@ -360,7 +366,11 @@ export function createStreamingPlayback(): StreamingPlayback {
       if (knownBlob) {
         doPost(knownBlob);
       } else if (activeSrc.startsWith('blob:')) {
+        // Capture generation so we can detect stop/restart during the async fetch.
+        const gen = streams.get(activeSrc)?.generation ?? -1;
         fetch(activeSrc).then((res) => res.blob()).then((blob) => {
+          const current = streams.get(activeSrc);
+          if (!current || current.generation !== gen) return;
           blobByUrl.set(activeSrc, blob);
           doPost(blob);
         }).catch(() => {
@@ -376,11 +386,11 @@ export function createStreamingPlayback(): StreamingPlayback {
   function stopSource(src: string): void {
     const state = streams.get(src);
     if (!state) return;
+    state.generation++;
     if (state.streaming) {
       worker?.postMessage({ type: 'stream_stop', src });
     }
     state.streaming = false;
-    state.autoStartPending = false;
     state.buffer.clear();
   }
 
@@ -396,6 +406,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     for (const src of toStop) {
       log.debug('Stopping idle stream', { src: src.slice(0, 30) });
       stopSource(src);
+      worker?.postMessage({ type: 'dispose_source', src });
       streams.delete(src);
     }
   }
@@ -416,11 +427,10 @@ export function createStreamingPlayback(): StreamingPlayback {
     startStream(src: string, startTimestamp: number): void {
       if (disposed) return;
       const state = getOrCreateState(src);
+      state.generation++;
       state.buffer.clear();
       state.streaming = true;
-
       state.lastAccessMs = performance.now();
-      state.autoStartPending = false;
 
       postStartMessage(src, startTimestamp);
     },
@@ -432,10 +442,14 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       state.buffer.clear();
       state.streaming = true;
-
       state.lastAccessMs = performance.now();
 
-      worker?.postMessage({ type: 'stream_seek', src, timestamp });
+      const doSeek = () => worker?.postMessage({ type: 'stream_seek', src, timestamp });
+      if (workerReady) {
+        doSeek();
+      } else {
+        pendingStarts.push(doSeek);
+      }
     },
 
     stopStream(src: string): void {
@@ -445,6 +459,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     stopAll(): void {
       for (const [src] of streams) {
         stopSource(src);
+        worker?.postMessage({ type: 'dispose_source', src });
       }
       streams.clear();
       stopIdleSweep();
@@ -469,12 +484,11 @@ export function createStreamingPlayback(): StreamingPlayback {
 
       // Lazy auto-start: use the renderer's src (proxy or original) — not the
       // blobUrlManager URL which always returns the original.
-      if (!state || (!state.streaming && !state.autoStartPending)) {
+      if (!state || !state.streaming) {
         state = getOrCreateState(src);
-        state.autoStartPending = true;
+        state.generation++;
         state.lastAccessMs = performance.now();
         state.streaming = true;
-        state.autoStartPending = false;
         postStartMessage(src, targetTimestamp);
 
         totalFramesMissed++;

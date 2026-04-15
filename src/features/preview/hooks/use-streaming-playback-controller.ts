@@ -15,12 +15,12 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { createStreamingPlayback, type StreamingPlayback } from '../utils/streaming-playback';
-import { STREAMING_PLAYBACK_ENABLED } from '../utils/preview-constants';
+import { createStreamingPlayback, type StreamingPlayback } from '@/features/preview/utils/streaming-playback';
+import { STREAMING_PLAYBACK_ENABLED } from '@/features/preview/utils/preview-constants';
 import { createLogger } from '@/shared/logging/logger';
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { resolveProxyUrl } from '../deps/media-library-contract';
+import { resolveProxyUrl } from '@/features/preview/deps/media-library-contract';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 
 const log = createLogger('StreamingPlaybackCtrl');

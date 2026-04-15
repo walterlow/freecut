@@ -1081,6 +1081,9 @@ export function usePreviewRenderPump({
                   { requireExplicitSourceFps: true },
                 ));
                 if (!usePlaybackStore.getState().isPlaying && mainRenderer) {
+                  if ('setStreamingFrameProvider' in mainRenderer) {
+                    mainRenderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
+                  }
                   const preRenderCount = Math.min(playbackTransitionPrerenderRunwayFrames, tw.endFrame - tw.startFrame);
                   for (let fi = 0; fi < preRenderCount; fi++) {
                     if (usePlaybackStore.getState().isPlaying) break;
@@ -1443,6 +1446,9 @@ export function usePreviewRenderPump({
               try {
                 const bgRenderer = await ensureBgTransitionRenderer();
                 if (bgRenderer && !usePlaybackStore.getState().isPlaying) {
+                  if ('setStreamingFrameProvider' in bgRenderer) {
+                    bgRenderer.setStreamingFrameProvider?.(streamingFrameProviderRef?.current ?? undefined);
+                  }
                   await bgRenderer.renderFrame(tw.startFrame);
                   cacheTransitionSessionFrame(tw.startFrame);
                   pushTransitionTrace('bg_prerender', { frame: tw.startFrame });
