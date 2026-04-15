@@ -27,6 +27,7 @@ import {
 } from '../utils/dom-video-element-registry';
 import {
   applyVideoElementAudioState,
+  resetVideoElementAudioState,
   useVideoAudioState,
   connectedVideoElements,
   videoAudioContexts,
@@ -58,6 +59,7 @@ const NativePreviewVideo: React.FC<{
   playbackRate: number;
   audioVolume: number;
   audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
+  manageElementAudio?: boolean;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   fitMode?: 'contain' | 'fill';
@@ -73,6 +75,7 @@ const NativePreviewVideo: React.FC<{
   playbackRate,
   audioVolume,
   audioEqStages,
+  manageElementAudio = true,
   onError,
   containerRef,
   fitMode = 'contain',
@@ -213,20 +216,18 @@ const NativePreviewVideo: React.FC<{
 
     videoLog.debug(`[${shortId}] acquired:`, element.readyState);
 
-    // CRITICAL: Unmute video element immediately after acquisition
-    // Pool creates elements muted, and we need audio to work.
-    // Item-id-only handoffs reuse the same acquired element and are handled
-    // by registration/sync effects below, so this only runs when the actual
-    // pool lane/source changes.
-    element.muted = false;
-
-    // Also resume AudioContext if this element was previously connected
-    // (e.g., when crossing split boundary and reusing the same video element)
-    if (connectedVideoElements.has(element)) {
-      const audioContext = videoAudioContexts.get(element);
-      if (audioContext?.state === 'suspended') {
-        audioContext.resume();
+    if (manageElementAudio) {
+      // Pool creates elements muted. When the video element owns audio, unmute
+      // and keep any existing Web Audio graph warm across pooled reuse.
+      element.muted = false;
+      if (connectedVideoElements.has(element)) {
+        const audioContext = videoAudioContexts.get(element);
+        if (audioContext?.state === 'suspended') {
+          audioContext.resume();
+        }
       }
+    } else {
+      resetVideoElementAudioState(element);
     }
 
     // Check if this is a split boundary crossing during playback.
@@ -248,7 +249,11 @@ const NativePreviewVideo: React.FC<{
 
     elementRef.current = element;
     syncRegisteredVideoElement(itemId, element);
-    applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
+    if (manageElementAudio) {
+      applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
+    } else {
+      resetVideoElementAudioState(element);
+    }
 
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
@@ -427,7 +432,7 @@ const NativePreviewVideo: React.FC<{
     // Ongoing seeking is handled by the separate sync effect, and itemId-only
     // handoffs are handled by the registration + sync refs without tearing down
     // the element across split-boundary transitions.
-  }, [poolClipId, src, pool, containerRef, shortId, syncRegisteredVideoElement, clearRegisteredVideoElement, fitMode]);
+  }, [poolClipId, src, pool, containerRef, shortId, syncRegisteredVideoElement, clearRegisteredVideoElement, fitMode, manageElementAudio]);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -766,8 +771,12 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     const video = elementRef.current;
     if (!video) return;
-    applyVideoElementAudioState(video, audioVolume, audioEqStages);
-  }, [audioEqStages, audioVolume]);
+    if (manageElementAudio) {
+      applyVideoElementAudioState(video, audioVolume, audioEqStages);
+    } else {
+      resetVideoElementAudioState(video);
+    }
+  }, [audioEqStages, audioVolume, manageElementAudio]);
 
   // Guard: itemId is required for rendering
   if (!itemId) {
@@ -818,8 +827,9 @@ export const VideoContent: React.FC<{
   playbackRate: number;
   sourceFps: number;
   audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
+  manageElementAudio?: boolean;
   forceCssComposite?: boolean;
-}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, audioEqStages, forceCssComposite = false }) => {
+}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, audioEqStages, manageElementAudio = true, forceCssComposite = false }) => {
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   // During transition overlaps, the composition's audio crossfade system
   // (CustomDecoderAudio) handles audio mixing. Mute the DOM video element
@@ -882,6 +892,7 @@ export const VideoContent: React.FC<{
       playbackRate={playbackRate}
       audioVolume={audioVolume}
       audioEqStages={resolvedAudioEqStages}
+      manageElementAudio={manageElementAudio}
       onError={handleError}
       containerRef={containerRef}
       fitMode="fill"

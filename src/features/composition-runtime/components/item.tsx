@@ -259,6 +259,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           playbackRate={playbackRate}
           sourceFps={sourceFps}
           audioEqStages={itemAudioEqStages}
+          manageElementAudio={!shouldRenderExternalVideoAudio}
           forceCssComposite={masks.length > 0}
         />
         {externalVideoAudio}

@@ -26,6 +26,32 @@ import {
 const connectedVideoElements = new WeakSet<HTMLVideoElement>();
 const videoAudioGraphs = new WeakMap<HTMLVideoElement, PreviewClipAudioGraph>();
 const videoAudioContexts = new WeakMap<HTMLVideoElement, AudioContext>();
+const videoAudioSourceNodes = new WeakMap<HTMLVideoElement, MediaElementAudioSourceNode>();
+
+export function resetVideoElementAudioState(video: HTMLVideoElement): void {
+  const graph = videoAudioGraphs.get(video);
+  const sourceNode = videoAudioSourceNodes.get(video);
+
+  try {
+    sourceNode?.disconnect();
+  } catch {
+    // Ignore disconnect races from pooled element reuse.
+  }
+
+  try {
+    graph?.dispose();
+  } catch {
+    // Best-effort cleanup only.
+  }
+
+  connectedVideoElements.delete(video);
+  videoAudioGraphs.delete(video);
+  videoAudioContexts.delete(video);
+  videoAudioSourceNodes.delete(video);
+
+  video.volume = 0;
+  video.muted = true;
+}
 
 export function applyVideoElementAudioState(
   video: HTMLVideoElement,
@@ -70,6 +96,7 @@ export function applyVideoElementAudioState(
     connectedVideoElements.add(video);
     videoAudioGraphs.set(video, graph);
     videoAudioContexts.set(video, graph.context);
+    videoAudioSourceNodes.set(video, sourceNode);
 
     if (graph.context.state === 'suspended') {
       graph.context.resume();

@@ -49,6 +49,10 @@ const {
   timelineState,
   previewBridgeState,
 } = testState;
+const videoAudioContextMocks = vi.hoisted(() => ({
+  applyVideoElementAudioStateMock: vi.fn(),
+  resetVideoElementAudioStateMock: vi.fn(),
+}));
 
 function createStoreHook<TState extends object>(state: TState) {
   const hook = ((selector?: (value: TState) => unknown) => (
@@ -140,7 +144,8 @@ vi.mock('@/features/composition-runtime/utils/dom-video-element-registry', () =>
 }));
 
 vi.mock('./video-audio-context', () => ({
-  applyVideoElementAudioState: vi.fn(),
+  applyVideoElementAudioState: videoAudioContextMocks.applyVideoElementAudioStateMock,
+  resetVideoElementAudioState: videoAudioContextMocks.resetVideoElementAudioStateMock,
   useVideoAudioState: vi.fn(() => ({ audioVolume: 1, resolvedAudioEqStages: [] })),
   connectedVideoElements: new WeakSet<HTMLVideoElement>(),
   videoAudioContexts: new WeakMap<HTMLVideoElement, AudioContext>(),
@@ -154,6 +159,8 @@ describe('VideoContent pooled handoff', () => {
     releaseClipMock.mockClear();
     registerDomVideoElementMock.mockClear();
     unregisterDomVideoElementMock.mockClear();
+    videoAudioContextMocks.applyVideoElementAudioStateMock.mockClear();
+    videoAudioContextMocks.resetVideoElementAudioStateMock.mockClear();
     playbackState.currentFrame = 0;
     playbackState.isPlaying = true;
     playbackState.previewFrame = null;
@@ -248,5 +255,38 @@ describe('VideoContent pooled handoff', () => {
 
     expect(acquireForClipMock).not.toHaveBeenCalled();
     expect(preloadSourceMock).not.toHaveBeenCalled();
+  });
+
+  it('skips DOM video audio wiring when external preview audio owns the clip', async () => {
+    const pooledElement = createMockVideoElement();
+    acquireForClipMock.mockReturnValue(pooledElement);
+
+    render(
+      <VideoContent
+        item={{
+          id: 'clip-external-audio',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip External Audio',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-2',
+        }}
+        muted={true}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+        manageElementAudio={false}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+      expect(videoAudioContextMocks.resetVideoElementAudioStateMock).toHaveBeenCalledWith(pooledElement);
+    });
+
+    expect(videoAudioContextMocks.applyVideoElementAudioStateMock).not.toHaveBeenCalled();
   });
 });
