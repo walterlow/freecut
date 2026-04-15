@@ -139,10 +139,10 @@ describe('resolvePlaybackTransitionOverlayState', () => {
  *
  * == KEY INVARIANTS ==
  *
- * - Variable-speed clips (speed != 1) ALWAYS use DOM video during playback
- *   (drift threshold: 0.5s * |speed|). Never fall through to mediabunny.
- * - 1x speed clips use DOM video during playback (drift threshold: 0.2s).
- *   Fall through to mediabunny only if DOM video drift is excessive.
+ * - Full-streaming playback renders video through mediabunny/canvas rather
+ *   than live DOM video providers.
+ * - Transition-only rollback may still borrow pinned DOM video elements for
+ *   playback transitions while the fallback path remains available.
  * - Transition sessions are pinned by prearm subscription and cleaned up
  *   when playhead passes transition endFrame.
  * - rAF render pump drives playback rendering at display vsync rate.

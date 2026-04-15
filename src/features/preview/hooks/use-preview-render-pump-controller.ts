@@ -578,9 +578,6 @@ export function usePreviewRenderPump({
           // decode-driven and never wires a DOM provider into the renderer.
           // During playback, the Player's <video> elements are already at
           // the correct frame ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â reading from them avoids mediabunny decode entirely.
-          // Transition-only rollback can still borrow pinned DOM video
-          // elements during playback. Full-streaming playback stays fully
-          // decode-driven and never wires a DOM provider into the renderer.
           if ('setDomVideoElementProvider' in renderer) {
             const playbackNow = usePlaybackStore.getState();
             const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
@@ -1426,6 +1423,8 @@ export function usePreviewRenderPump({
     if (initialPlaybackState.isPlaying && forceFastScrubOverlay) {
       // Check if playback starts inside an active transition ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin that
       // session immediately so the render pump has the DOM video provider.
+      // In full-streaming mode this primes prerender/buffer state rather than
+      // wiring a live DOM playback provider.
       const activeWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
       if (activeWindow) {
         pinTransitionPlaybackSession(activeWindow);
