@@ -1,4 +1,4 @@
-import type { StreamingAudioChunk, StreamingPlayback } from './streaming-playback';
+import type { StreamingAudioChunk } from './streaming-playback';
 
 const AUDIO_LOOKAHEAD_SECONDS = 0.75;
 const AUDIO_LOOKBEHIND_SECONDS = 0.1;
@@ -20,7 +20,13 @@ export interface StreamingPlaybackAudioSchedulerMetrics {
 
 export interface StreamingPlaybackAudioScheduler {
   sync(args: {
-    playback: StreamingPlayback;
+    playback: {
+      getAudioChunks: (
+        streamKey: string,
+        startTimestamp: number,
+        endTimestamp: number,
+      ) => StreamingAudioChunk[];
+    };
     streamKey: string;
     targetTime: number;
     graph: {

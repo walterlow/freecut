@@ -139,6 +139,7 @@ export const VideoPreview = memo(function VideoPreview({
   const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
   const setVisualPlaybackMode = usePreviewBridgeStore((s) => s.setVisualPlaybackMode);
+  const setStreamingAudioProvider = usePreviewBridgeStore((s) => s.setStreamingAudioProvider);
   const streamingPlaybackModeRef = useRef<StreamingPlaybackMode>(DEFAULT_STREAMING_PLAYBACK_MODE);
   const visualPlaybackModeRef = useRef<PreviewVisualPlaybackMode>('player');
 
@@ -341,6 +342,7 @@ export const VideoPreview = memo(function VideoPreview({
     streamingPlaybackMode,
     forceCanvasOverlay: streamingPlaybackActive,
     streamingFrameProviderRef,
+    streamingAudioProvider,
   } = useStreamingPlaybackController({
     fps,
     combinedTracks,
@@ -357,6 +359,13 @@ export const VideoPreview = memo(function VideoPreview({
       setVisualPlaybackMode('player');
     };
   }, [setVisualPlaybackMode, visualPlaybackMode]);
+
+  useEffect(() => {
+    setStreamingAudioProvider(streamingAudioProvider);
+    return () => {
+      setStreamingAudioProvider(null);
+    };
+  }, [setStreamingAudioProvider, streamingAudioProvider]);
 
   const {
     clearTransitionPlaybackSession,

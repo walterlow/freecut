@@ -103,6 +103,24 @@ const storeMocks = vi.hoisted(() => {
   };
 });
 
+const previewBridgeMocks = vi.hoisted(() => {
+  const state = {
+    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    streamingAudioProvider: null as null | {
+      getAudioChunks: ReturnType<typeof vi.fn>;
+      getSourceInfo: ReturnType<typeof vi.fn>;
+      isStreaming: ReturnType<typeof vi.fn>;
+    },
+  };
+
+  return {
+    state,
+    usePreviewBridgeStore: vi.fn((selector?: (value: typeof state) => unknown) => (
+      selector ? selector(state) : state
+    )),
+  };
+});
+
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
@@ -110,6 +128,7 @@ vi.mock('./hooks/use-audio-playback-state', () => ({
 vi.mock('../utils/preview-audio-element-pool', () => previewAudioMocks);
 vi.mock('../utils/preview-audio-graph', () => previewGraphMocks);
 vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
+vi.mock('@/shared/state/preview-bridge', () => previewBridgeMocks);
 vi.mock('./soundtouch-worklet-audio', () => ({
   SoundTouchWorkletAudio: ({
     audioBuffer,
@@ -140,6 +159,19 @@ vi.mock('./custom-decoder-buffered-audio', () => ({
     />
   ),
 }));
+vi.mock('./streaming-playback-buffered-audio', () => ({
+  StreamingPlaybackBufferedAudio: ({
+    streamKey,
+    fallback,
+  }: {
+    streamKey: string;
+    fallback: React.ReactNode;
+  }) => (
+    <div data-testid="streaming-buffered" data-stream-key={streamKey}>
+      {fallback}
+    </div>
+  ),
+}));
 
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
 
@@ -166,6 +198,8 @@ describe('PitchCorrectedAudio', () => {
       resolvedPitchShiftSemitones: 0,
       resolvedAudioEqStages: [],
     };
+    previewBridgeMocks.state.visualPlaybackMode = 'player';
+    previewBridgeMocks.state.streamingAudioProvider = null;
   });
 
   it('keeps 1x playback on the native preview path', async () => {
@@ -249,6 +283,34 @@ describe('PitchCorrectedAudio', () => {
 
     expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
+  });
+
+  it('can route 1x video playback through the streaming worker audio bridge', async () => {
+    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.streamingAudioProvider = {
+      getAudioChunks: vi.fn(() => []),
+      getSourceInfo: vi.fn(() => ({ hasAudio: true })),
+      isStreaming: vi.fn(() => true),
+    };
+
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        preferDecodedBuffering
+        streamingAudioStreamKey="item-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="streaming-buffered"]')).toHaveAttribute('data-stream-key', 'item-1');
+    });
+
+    expect(document.querySelector('[data-testid="decoded-buffered"]')).toBeInTheDocument();
+    expect(previewAudioMocks.acquirePreviewAudioElement).not.toHaveBeenCalled();
   });
 
   it('uses playback-first decode for stretched clips with media ids', async () => {

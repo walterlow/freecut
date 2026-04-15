@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
 import { NativePitchCorrectedAudio } from './pitch-corrected-audio';
+import { StreamingPlaybackBufferedAudio } from './streaming-playback-buffered-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { getOrDecodeAudio, getOrDecodeAudioSliceForPlayback } from '../utils/audio-decode-cache';
 import { audioBufferToWavBlob } from '../utils/audio-buffer-wav';
@@ -446,6 +447,7 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
  */
 export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
+  const streamingAudioStreamKey = props.streamingAudioStreamKey;
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
   );
@@ -461,7 +463,18 @@ export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo(
     && !isAudioPitchShiftActive(resolvedPitchShiftSemitones);
 
   if (shouldUseBufferedPlayback) {
-    return <CustomDecoderBufferedAudio {...props} playbackRate={playbackRate} />;
+    const fallback = <CustomDecoderBufferedAudio {...props} playbackRate={playbackRate} />;
+    if (streamingAudioStreamKey) {
+      return (
+        <StreamingPlaybackBufferedAudio
+          {...props}
+          streamKey={streamingAudioStreamKey}
+          playbackRate={playbackRate}
+          fallback={fallback}
+        />
+      );
+    }
+    return fallback;
   }
 
   return <CustomDecoderPitchPreservedAudio {...props} playbackRate={playbackRate} />;

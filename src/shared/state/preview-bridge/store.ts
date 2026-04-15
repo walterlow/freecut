@@ -15,6 +15,7 @@ function normalizeFrame(frame: number | null): number | null {
 export const usePreviewBridgeStore = create<PreviewBridgeState & PreviewBridgeActions>()((set) => ({
   displayedFrame: null,
   visualPlaybackMode: 'player',
+  streamingAudioProvider: null,
   captureFrame: null,
   captureFrameImageData: null,
   captureCanvasSource: null,
@@ -28,6 +29,10 @@ export const usePreviewBridgeStore = create<PreviewBridgeState & PreviewBridgeAc
   setVisualPlaybackMode: (mode) =>
     set((state) => (
       state.visualPlaybackMode === mode ? state : { visualPlaybackMode: mode }
+    )),
+  setStreamingAudioProvider: (provider) =>
+    set((state) => (
+      state.streamingAudioProvider === provider ? state : { streamingAudioProvider: provider }
     )),
   setCaptureFrame: (fn) => set({ captureFrame: fn }),
   setCaptureFrameImageData: (fn) => set({ captureFrameImageData: fn }),

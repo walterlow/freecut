@@ -21,6 +21,7 @@ import {
 } from '../utils/preview-audio-graph';
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import { CustomDecoderBufferedAudio } from './custom-decoder-buffered-audio';
+import { StreamingPlaybackBufferedAudio } from './streaming-playback-buffered-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
 import {
@@ -567,6 +568,7 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
   const preferDecodedBuffering = props.preferDecodedBuffering === true;
+  const streamingAudioStreamKey = props.streamingAudioStreamKey;
   const itemPreview = useGizmoStore(
     useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
   );
@@ -580,12 +582,23 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   });
   const requiresPitchCorrection = isAudioPitchShiftActive(resolvedPitchShiftSemitones);
   const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`;
+  const unshiftedFallback = preferDecodedBuffering
+    ? <CustomDecoderBufferedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />
+    : <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />;
 
   if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {
-    if (preferDecodedBuffering) {
-      return <CustomDecoderBufferedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />;
+    if (streamingAudioStreamKey) {
+      return (
+        <StreamingPlaybackBufferedAudio
+          {...props}
+          streamKey={streamingAudioStreamKey}
+          sourceStartOffsetSec={props.sourceStartOffsetSec}
+          playbackRate={playbackRate}
+          fallback={unshiftedFallback}
+        />
+      );
     }
-    return <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />;
+    return unshiftedFallback;
   }
 
   return <DecodedPitchCorrectedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />;

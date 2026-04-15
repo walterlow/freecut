@@ -28,6 +28,7 @@ export interface AudioPlaybackProps {
   audioPitchShiftSemitones?: number;
   audioEqStages?: ResolvedAudioEqSettings[];
   preferDecodedBuffering?: boolean;
+  streamingAudioStreamKey?: string;
   clipFadeSpans?: AudioClipFadeSpan[];
   contentStartOffsetFrames?: number;
   contentEndOffsetFrames?: number;

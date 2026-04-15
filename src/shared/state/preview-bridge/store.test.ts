@@ -6,6 +6,7 @@ describe('preview-bridge-store', () => {
     usePreviewBridgeStore.setState({
       displayedFrame: null,
       visualPlaybackMode: 'player',
+      streamingAudioProvider: null,
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
@@ -16,6 +17,7 @@ describe('preview-bridge-store', () => {
     expect(usePreviewBridgeStore.getState()).toMatchObject({
       displayedFrame: null,
       visualPlaybackMode: 'player',
+      streamingAudioProvider: null,
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
@@ -71,5 +73,16 @@ describe('preview-bridge-store', () => {
     expect(await state.captureFrame?.()).toBe('data:image/png;base64,abc');
     expect(await state.captureFrameImageData?.()).toBeNull();
     expect(await state.captureCanvasSource?.()).toBeNull();
+  });
+
+  it('stores the streaming audio provider', () => {
+    const provider = {
+      getAudioChunks: vi.fn(() => []),
+      getSourceInfo: vi.fn(() => ({ hasAudio: true })),
+      isStreaming: vi.fn(() => true),
+    };
+
+    usePreviewBridgeStore.getState().setStreamingAudioProvider(provider);
+    expect(usePreviewBridgeStore.getState().streamingAudioProvider).toBe(provider);
   });
 });

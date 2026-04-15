@@ -36,7 +36,26 @@ const storeMocks = vi.hoisted(() => {
   return { useGizmoStore };
 });
 
+const previewBridgeMocks = vi.hoisted(() => {
+  const state = {
+    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    streamingAudioProvider: null as null | {
+      getAudioChunks: ReturnType<typeof vi.fn>;
+      getSourceInfo: ReturnType<typeof vi.fn>;
+      isStreaming: ReturnType<typeof vi.fn>;
+    },
+  };
+
+  return {
+    state,
+    usePreviewBridgeStore: vi.fn((selector?: (value: typeof state) => unknown) => (
+      selector ? selector(state) : state
+    )),
+  };
+});
+
 vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
+vi.mock('@/shared/state/preview-bridge', () => previewBridgeMocks);
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
@@ -68,6 +87,19 @@ vi.mock('./soundtouch-worklet-audio', () => ({
 }));
 vi.mock('./custom-decoder-buffered-audio', () => ({
   CustomDecoderBufferedAudio: () => <div data-testid="buffered" />,
+}));
+vi.mock('./streaming-playback-buffered-audio', () => ({
+  StreamingPlaybackBufferedAudio: ({
+    streamKey,
+    fallback,
+  }: {
+    streamKey: string;
+    fallback: React.ReactNode;
+  }) => (
+    <div data-testid="streaming-buffered" data-stream-key={streamKey}>
+      {fallback}
+    </div>
+  ),
 }));
 vi.mock('./pitch-corrected-audio', () => ({
   NativePitchCorrectedAudio: ({
@@ -111,6 +143,8 @@ describe('CustomDecoderAudio', () => {
       resolvedAudioEqStages: [],
     };
     soundTouchMocks.renderFallback = false;
+    previewBridgeMocks.state.visualPlaybackMode = 'player';
+    previewBridgeMocks.state.streamingAudioProvider = null;
   });
 
   it('uses playback-first partial decode for pitch-preserved custom audio', async () => {
@@ -278,5 +312,31 @@ describe('CustomDecoderAudio', () => {
 
     expect(document.querySelector('[data-testid="buffered"]')).toBeNull();
     expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
+  });
+
+  it('can route buffered custom-decoder playback through the streaming worker bridge', async () => {
+    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.streamingAudioProvider = {
+      getAudioChunks: vi.fn(() => []),
+      getSourceInfo: vi.fn(() => ({ hasAudio: true })),
+      isStreaming: vi.fn(() => true),
+    };
+
+    render(
+      <CustomDecoderAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        streamingAudioStreamKey="item-1"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="streaming-buffered"]')).toHaveAttribute('data-stream-key', 'item-1');
+    });
+
+    expect(document.querySelector('[data-testid="buffered"]')).toBeInTheDocument();
   });
 });

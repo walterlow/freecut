@@ -21,6 +21,7 @@ import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { resolveProxyUrl } from '@/features/preview/deps/media-library-contract';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
+import type { PreviewStreamingAudioProvider } from '@/shared/state/preview-bridge';
 
 const log = createLogger('StreamingPlaybackCtrl');
 
@@ -157,6 +158,8 @@ interface UseStreamingPlaybackControllerResult {
   forceCanvasOverlay: boolean;
   /** Ref to the streaming frame provider function. */
   streamingFrameProviderRef: React.RefObject<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>;
+  /** Stable audio provider backed by the active streaming playback session. */
+  streamingAudioProvider: PreviewStreamingAudioProvider;
 }
 
 export function useStreamingPlaybackController({
@@ -184,6 +187,16 @@ export function useStreamingPlaybackController({
     if (!playbackRef.current) return null;
     return playbackRef.current.getFrame(streamKey, src, sourceTime);
   }, []);
+  const streamingAudioProvider = useRef<PreviewStreamingAudioProvider>({
+    getAudioChunks: (streamKey, startTimestamp, endTimestamp) => (
+      playbackRef.current?.getAudioChunks(streamKey, startTimestamp, endTimestamp) ?? []
+    ),
+    getSourceInfo: (streamKey) => {
+      const info = playbackRef.current?.getSourceInfo(streamKey) ?? null;
+      return info ? { hasAudio: info.hasAudio } : null;
+    },
+    isStreaming: (streamKey) => playbackRef.current?.isStreaming(streamKey) ?? false,
+  }).current;
 
   // Refs for latest values
   const tracksRef = useRef(combinedTracks);
@@ -378,5 +391,10 @@ export function useStreamingPlaybackController({
     };
   }, [prewarmAtFrame, syncOverlayMode]);
 
-  return { streamingPlaybackMode, forceCanvasOverlay, streamingFrameProviderRef };
+  return {
+    streamingPlaybackMode,
+    forceCanvasOverlay,
+    streamingFrameProviderRef,
+    streamingAudioProvider,
+  };
 }

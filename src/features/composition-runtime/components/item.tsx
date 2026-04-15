@@ -204,6 +204,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           src={videoAudioSrc}
           mediaId={item.mediaId ?? `legacy-src:${videoAudioSrc}`}
           itemId={item.id}
+          streamingAudioStreamKey={item.id}
           trimBefore={safeTrimBefore}
           volume={(item.volume ?? 0) + trackVolumeDb}
           playbackRate={playbackRate}
@@ -228,6 +229,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           src={videoAudioSrc}
           mediaId={item.mediaId}
           itemId={item.id}
+          streamingAudioStreamKey={item.id}
           trimBefore={safeTrimBefore}
           volume={(item.volume ?? 0) + trackVolumeDb}
           playbackRate={playbackRate}
