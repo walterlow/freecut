@@ -229,11 +229,15 @@ export function usePreviewTransitionSessionController({
     }
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    const shouldPreferStreamingTransitionFrames = (
-      !!(streamingFrameProviderRef?.current)
-      && (streamingPlaybackMode === 'all' || (isPlaying && forceFastScrubOverlay))
+    const shouldUseRenderDrivenTransitionFrames = (
+      streamingPlaybackMode === 'all'
+      || (
+        !!(streamingFrameProviderRef?.current)
+        && isPlaying
+        && forceFastScrubOverlay
+      )
     );
-    const mode = shouldPreferStreamingTransitionFrames
+    const mode = shouldUseRenderDrivenTransitionFrames
       ? 'render'
       : transitionWindowUsesDomProvider(window) ? 'dom' : 'render';
 
@@ -295,7 +299,7 @@ export function usePreviewTransitionSessionController({
       rightHasEffects,
     });
     const pinnedElements = new Map<string, HTMLVideoElement | null>();
-    if (!shouldPreferStreamingTransitionFrames) {
+    if (!shouldUseRenderDrivenTransitionFrames) {
       for (const clip of [window.leftClip, window.rightClip]) {
         const el = getBestDomVideoElementForItem(clip.id);
         pinnedElements.set(clip.id, el);
@@ -350,11 +354,15 @@ export function usePreviewTransitionSessionController({
     }
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
-    const shouldPreferStreamingTransitionFrames = (
-      !!(streamingFrameProviderRef?.current)
-      && (streamingPlaybackMode === 'all' || (isPlaying && forceFastScrubOverlay))
+    const shouldUseRenderDrivenTransitionFrames = (
+      streamingPlaybackMode === 'all'
+      || (
+        !!(streamingFrameProviderRef?.current)
+        && isPlaying
+        && forceFastScrubOverlay
+      )
     );
-    if (shouldPreferStreamingTransitionFrames) {
+    if (shouldUseRenderDrivenTransitionFrames) {
       return null;
     }
     if (!isPlaying && !transitionWindowUsesDomProvider(sessionWindow ?? null)) {
@@ -518,15 +526,18 @@ export function usePreviewTransitionSessionController({
         if (!renderer || !scrubMountedRef.current) return false;
 
         const streamingFrameProvider = streamingFrameProviderRef?.current ?? undefined;
-        const shouldPreferStreamingTransitionFrames = (
-          isPlaybackPrepare
-          && !!streamingFrameProvider
-          && (streamingPlaybackMode === 'all' || transitionWindow !== null)
+        const shouldUseRenderDrivenTransitionFrames = (
+          streamingPlaybackMode === 'all'
+          || (
+            isPlaybackPrepare
+            && !!streamingFrameProvider
+            && transitionWindow !== null
+          )
         );
 
         if ('setDomVideoElementProvider' in renderer && renderer.setDomVideoElementProvider) {
           renderer.setDomVideoElementProvider(
-            shouldPreferStreamingTransitionFrames ? undefined : getPinnedTransitionElementForItem,
+            shouldUseRenderDrivenTransitionFrames ? undefined : getPinnedTransitionElementForItem,
           );
         }
         if ('setStreamingFrameProvider' in renderer && renderer.setStreamingFrameProvider) {

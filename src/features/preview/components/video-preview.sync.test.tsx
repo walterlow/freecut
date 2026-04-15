@@ -1895,6 +1895,7 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(renderer.setDomVideoElementProvider).toHaveBeenCalledWith(undefined);
       expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });

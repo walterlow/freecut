@@ -582,10 +582,13 @@ export function usePreviewRenderPump({
             const windowForFrame = playbackNow.isPlaying
               ? getTransitionWindowForFrame(frameToRender)
               : null;
-            const shouldPreferStreamingTransitionFrames = (
-              playbackNow.isPlaying
-              && !!streamingFrameProvider
-              && (streamingPlaybackMode === 'all' || windowForFrame !== null)
+            const shouldUseRenderDrivenPlaybackFrames = (
+              streamingPlaybackMode === 'all'
+              || (
+                playbackNow.isPlaying
+                && !!streamingFrameProvider
+                && windowForFrame !== null
+              )
             );
             if (playbackNow.isPlaying) {
               // Only pin/clear the transition session when the rendered frame is
@@ -616,7 +619,7 @@ export function usePreviewRenderPump({
                 }
               }
               renderer.setDomVideoElementProvider?.(
-                shouldPreferStreamingTransitionFrames ? undefined : getPinnedTransitionElementForItem,
+                shouldUseRenderDrivenPlaybackFrames ? undefined : getPinnedTransitionElementForItem,
               );
             } else {
               renderer.setDomVideoElementProvider?.(undefined);
