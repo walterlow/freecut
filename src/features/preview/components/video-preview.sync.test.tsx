@@ -1351,10 +1351,10 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
       expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
+    expect(seekToMock).not.toHaveBeenCalled();
     seekToMock.mockClear();
 
     act(() => {
@@ -1409,6 +1409,7 @@ describe('VideoPreview sync behavior', () => {
       expect(getDisplayedFrame()).toBe(46);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 
   it('keeps backward hover preview frame-accurate for transition frames', async () => {
@@ -1714,7 +1715,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('replays the latest scrub seek on play start when the warm seek has not landed yet', async () => {
+  it('seeks the player to the latest scrub frame on play start after overlay-only scrub', async () => {
     render(
       <VideoPreview
         project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
@@ -1733,8 +1734,9 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(48);
+      expect(getDisplayedFrame()).toBe(48);
     });
+    expect(seekToMock).not.toHaveBeenCalled();
     seekToMock.mockClear();
 
     act(() => {

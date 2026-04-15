@@ -31,7 +31,7 @@ export interface BackwardScrubSeekState {
 export interface PlayerPreviewFrameSyncPlan {
   command: Extract<PlayerCommand, { type: 'noop' | 'seek' }>;
   backwardScrubState: BackwardScrubSeekState;
-  useBackgroundWarmSeek: boolean;
+  shouldBypassPlayerSeek: boolean;
 }
 
 export function planPlaybackStateCommand(input: {
@@ -142,7 +142,7 @@ export function planPreviewFrameSyncCommand(input: {
     return {
       command: { type: 'noop' },
       backwardScrubState,
-      useBackgroundWarmSeek: false,
+      shouldBypassPlayerSeek: false,
     };
   }
 
@@ -151,7 +151,7 @@ export function planPreviewFrameSyncCommand(input: {
     return {
       command: { type: 'noop' },
       backwardScrubState: resetBackwardScrubState,
-      useBackgroundWarmSeek: false,
+      shouldBypassPlayerSeek: false,
     };
   }
 
@@ -162,17 +162,17 @@ export function planPreviewFrameSyncCommand(input: {
     && currentFrame === previewFrame
     && currentFrameEpoch === previewFrameEpoch
   );
-  const useBackgroundWarmSeek = (
+  const shouldBypassPlayerSeek = (
     interactionMode === 'scrubbing'
     && (bypassPreviewSeek || shouldUseFastScrubOnly)
   );
 
   const targetFrame = transition.next.anchorFrame;
-  if (useBackgroundWarmSeek) {
+  if (shouldBypassPlayerSeek) {
     return {
       command: { type: 'seek', targetFrame },
       backwardScrubState: resetBackwardScrubState,
-      useBackgroundWarmSeek: true,
+      shouldBypassPlayerSeek: true,
     };
   }
 
@@ -195,7 +195,7 @@ export function planPreviewFrameSyncCommand(input: {
       return {
         command: { type: 'noop' },
         backwardScrubState,
-        useBackgroundWarmSeek,
+        shouldBypassPlayerSeek: false,
       };
     }
 
@@ -205,13 +205,13 @@ export function planPreviewFrameSyncCommand(input: {
         lastSeekAtMs: nowMs,
         lastSeekFrame: quantizedFrame,
       },
-      useBackgroundWarmSeek,
+      shouldBypassPlayerSeek: false,
     };
   }
 
   return {
     command: { type: 'seek', targetFrame },
     backwardScrubState: resetBackwardScrubState,
-    useBackgroundWarmSeek,
+    shouldBypassPlayerSeek: false,
   };
 }

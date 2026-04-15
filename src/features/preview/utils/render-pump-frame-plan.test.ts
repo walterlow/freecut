@@ -76,7 +76,7 @@ describe('render pump frame plan', () => {
     });
   });
 
-  it('falls back to player only for non-atomic backward scrubs without forced overlay', () => {
+  it('suppresses background prewarm for backward scrubs without changing the target owner', () => {
     expect(resolveBackwardScrubFlags({
       scrubDirection: -1,
       forceFastScrubOverlay: false,
@@ -84,7 +84,6 @@ describe('render pump frame plan', () => {
       preserveHighFidelityBackwardPreview: false,
     })).toEqual({
       suppressBackgroundPrewarm: true,
-      fallbackToPlayer: true,
     });
 
     expect(resolveBackwardScrubFlags({
@@ -92,7 +91,7 @@ describe('render pump frame plan', () => {
       forceFastScrubOverlay: true,
       isAtomicScrubTarget: false,
       preserveHighFidelityBackwardPreview: false,
-    }).fallbackToPlayer).toBe(false);
+    }).suppressBackgroundPrewarm).toBe(true);
   });
 
   it('quantizes and throttles backward scrub renders', () => {

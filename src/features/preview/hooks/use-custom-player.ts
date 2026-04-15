@@ -23,7 +23,6 @@ import {
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('useCustomPlayer');
-const BACKGROUND_PREVIEW_WARM_SEEK_THROTTLE_MS = 50;
 
 export function useCustomPlayer(
   playerRef: React.RefObject<{ seekTo: (frame: number) => void; play: () => void; pause: () => void; getCurrentFrame: () => number; isPlaying: () => boolean } | null>,
@@ -42,9 +41,6 @@ export function useCustomPlayer(
   const lastBackwardScrubSeekFrameRef = useRef<number | null>(null);
   const ignorePlayerUpdatesRef = useRef<boolean>(false);
   const wasPlayingRef = useRef(isPlaying);
-  const pendingPreviewWarmSeekTargetRef = useRef<number | null>(null);
-  const previewWarmSeekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPreviewWarmSeekAtRef = useRef<number>(0);
 
   const getPlayerFrame = useCallback(() => {
     const frame = playerRef.current?.getCurrentFrame();
@@ -83,46 +79,6 @@ export function useCustomPlayer(
       });
     }
   }, [playerRef, getPlayerFrame, onPlayerSeek]);
-
-  const clearScheduledPreviewWarmSeek = useCallback(() => {
-    pendingPreviewWarmSeekTargetRef.current = null;
-    if (previewWarmSeekTimerRef.current !== null) {
-      clearTimeout(previewWarmSeekTimerRef.current);
-      previewWarmSeekTimerRef.current = null;
-    }
-  }, []);
-
-  const flushPreviewWarmSeek = useCallback(() => {
-    const targetFrame = pendingPreviewWarmSeekTargetRef.current;
-    clearScheduledPreviewWarmSeek();
-    if (targetFrame === null) {
-      return;
-    }
-    lastPreviewWarmSeekAtRef.current = performance.now();
-    seekPlayerToFrame(targetFrame);
-  }, [clearScheduledPreviewWarmSeek, seekPlayerToFrame]);
-
-  const schedulePreviewWarmSeek = useCallback((targetFrame: number) => {
-    pendingPreviewWarmSeekTargetRef.current = targetFrame;
-
-    const nowMs = performance.now();
-    const elapsedMs = nowMs - lastPreviewWarmSeekAtRef.current;
-    const delayMs = Math.max(0, BACKGROUND_PREVIEW_WARM_SEEK_THROTTLE_MS - elapsedMs);
-
-    if (delayMs === 0 && previewWarmSeekTimerRef.current === null) {
-      flushPreviewWarmSeek();
-      return;
-    }
-
-    if (previewWarmSeekTimerRef.current !== null) {
-      return;
-    }
-
-    previewWarmSeekTimerRef.current = setTimeout(() => {
-      previewWarmSeekTimerRef.current = null;
-      flushPreviewWarmSeek();
-    }, delayMs);
-  }, [flushPreviewWarmSeek]);
 
   const executePlayerCommand = useCallback((command: PlayerCommand) => {
     if (!playerRef.current) return;
@@ -188,9 +144,6 @@ export function useCustomPlayer(
     });
 
     try {
-      if (isPlaying && !wasPlaying) {
-        flushPreviewWarmSeek();
-      }
       if (playbackPlan.clearPreviewFrame) {
         setPreviewFrame(null);
       }
@@ -198,18 +151,16 @@ export function useCustomPlayer(
     } catch (error) {
       logger.error('Failed to control playback:', error);
     }
-  }, [isPlaying, playerRef, executePlayerCommand, flushPreviewWarmSeek, getPlayerFrame]);
+  }, [isPlaying, playerRef, executePlayerCommand, getPlayerFrame]);
 
   useEffect(() => {
     if (!playerReady || !playerRef.current || isPlaying || visualPlaybackMode !== 'player') {
       return;
     }
 
-    clearScheduledPreviewWarmSeek();
     const currentFrame = usePlaybackStore.getState().currentFrame;
     seekPlayerToFrame(currentFrame);
   }, [
-    clearScheduledPreviewWarmSeek,
     isPlaying,
     playerReady,
     playerRef,
@@ -255,16 +206,14 @@ export function useCustomPlayer(
       }
       if (plan.command.type === 'seek') {
         if (!state.isPlaying && visualPlaybackMode !== 'player') {
-          clearScheduledPreviewWarmSeek();
           return;
         }
-        clearScheduledPreviewWarmSeek();
         seekPlayerToFrame(plan.command.targetFrame);
       }
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, clearScheduledPreviewWarmSeek, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode]);
+  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {
@@ -272,9 +221,6 @@ export function useCustomPlayer(
 
     return usePlaybackStore.subscribe((state, prev) => {
       if (!playerRef.current) return;
-      if (prev.previewFrame !== null && state.previewFrame === null) {
-        flushPreviewWarmSeek();
-      }
       const transition = resolvePreviewTransitionFromPlaybackStates({
         prev,
         next: state,
@@ -299,26 +245,17 @@ export function useCustomPlayer(
       lastBackwardScrubSeekFrameRef.current = plan.backwardScrubState.lastSeekFrame;
 
       if (plan.command.type === 'seek') {
-        if (plan.useBackgroundWarmSeek) {
-          schedulePreviewWarmSeek(plan.command.targetFrame);
+        if (plan.shouldBypassPlayerSeek) {
           return;
         }
-        clearScheduledPreviewWarmSeek();
+        if (visualPlaybackMode !== 'player') {
+          return;
+        }
         seekPlayerToFrame(plan.command.targetFrame);
         return;
       }
-
-      if (!plan.useBackgroundWarmSeek) {
-        clearScheduledPreviewWarmSeek();
-      }
     });
-  }, [playerReady, playerRef, seekPlayerToFrame, flushPreviewWarmSeek, clearScheduledPreviewWarmSeek, schedulePreviewWarmSeek, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef]);
-
-  useEffect(() => {
-    return () => {
-      clearScheduledPreviewWarmSeek();
-    };
-  }, [clearScheduledPreviewWarmSeek]);
+  }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef, visualPlaybackMode]);
 
   return { ignorePlayerUpdatesRef };
 }

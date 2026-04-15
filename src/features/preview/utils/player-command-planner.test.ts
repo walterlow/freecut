@@ -101,7 +101,7 @@ describe('planCurrentFrameSyncCommand', () => {
 });
 
 describe('planPreviewFrameSyncCommand', () => {
-  it('still computes a background warm seek when fast scrub overlay owns the frame', () => {
+  it('marks exact scrub targets to bypass player seeking when the overlay owns the frame', () => {
     const transition = resolvePreviewTransitionDecision({
       prev: {
         isPlaying: false,
@@ -136,11 +136,11 @@ describe('planPreviewFrameSyncCommand', () => {
         lastSeekAtMs: 0,
         lastSeekFrame: null,
       },
-      useBackgroundWarmSeek: true,
+      shouldBypassPlayerSeek: true,
     });
   });
 
-  it('warms the exact backward scrub target when the overlay owns presentation', () => {
+  it('marks exact backward scrub targets to bypass player seeking when the overlay owns presentation', () => {
     const transition = resolvePreviewTransitionDecision({
       prev: {
         isPlaying: false,
@@ -175,7 +175,7 @@ describe('planPreviewFrameSyncCommand', () => {
         lastSeekAtMs: 0,
         lastSeekFrame: null,
       },
-      useBackgroundWarmSeek: true,
+      shouldBypassPlayerSeek: true,
     });
   });
 
@@ -215,7 +215,7 @@ describe('planPreviewFrameSyncCommand', () => {
       throw new Error('Expected seek plan');
     }
     expect(plan.command.targetFrame).toBeLessThanOrEqual(93);
-    expect(plan.useBackgroundWarmSeek).toBe(false);
+    expect(plan.shouldBypassPlayerSeek).toBe(false);
     expect(plan.backwardScrubState).toEqual({
       lastSeekAtMs: 1000,
       lastSeekFrame: plan.command.targetFrame,
@@ -257,11 +257,11 @@ describe('planPreviewFrameSyncCommand', () => {
         lastSeekAtMs: 1000,
         lastSeekFrame: 90,
       },
-      useBackgroundWarmSeek: false,
+      shouldBypassPlayerSeek: false,
     });
   });
 
-  it('marks bypassed scrub seeks as background warm seeks', () => {
+  it('marks bypassed scrub seeks to bypass player seeking without mutating backward scrub state', () => {
     const transition = resolvePreviewTransitionDecision({
       prev: {
         isPlaying: false,
@@ -296,7 +296,7 @@ describe('planPreviewFrameSyncCommand', () => {
         lastSeekAtMs: 0,
         lastSeekFrame: null,
       },
-      useBackgroundWarmSeek: true,
+      shouldBypassPlayerSeek: true,
     });
   });
 });

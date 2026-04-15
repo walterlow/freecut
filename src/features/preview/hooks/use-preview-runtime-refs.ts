@@ -47,7 +47,6 @@ export function usePreviewRuntimeRefs() {
   const scrubOffscreenRenderedFrameRef = useRef<number | null>(null);
   const scrubDirectionRef = useRef<-1 | 0 | 1>(0);
   const suppressScrubBackgroundPrewarmRef = useRef(false);
-  const fallbackToPlayerScrubRef = useRef(false);
   const lastForwardScrubPreloadAtRef = useRef(0);
   const lastBackwardScrubPreloadAtRef = useRef(0);
   const lastBackwardScrubRenderAtRef = useRef(0);
@@ -160,7 +159,6 @@ export function usePreviewRuntimeRefs() {
     lastBackwardScrubRenderAtRef,
     lastBackwardRequestedFrameRef,
     suppressScrubBackgroundPrewarmRef,
-    fallbackToPlayerScrubRef,
     lastPausedPrearmTargetRef,
     lastPlayingPrearmTargetRef,
     deferredPlaybackTransitionPrepareFrameRef,

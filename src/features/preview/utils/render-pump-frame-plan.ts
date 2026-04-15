@@ -8,7 +8,6 @@ import {
   FAST_SCRUB_BOUNDARY_SOURCE_PREWARM_MAX_ENTRIES_PER_FRAME,
   FAST_SCRUB_BOUNDARY_SOURCE_PREWARM_MAX_SOURCES_PER_FRAME,
   FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD,
-  FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD,
   FAST_SCRUB_SOURCE_PREWARM_WINDOW_SECONDS,
   type FastScrubBoundarySource,
 } from './preview-constants';
@@ -125,26 +124,14 @@ export function resolveScrubDirectionPlan({
   };
 }
 
-export function resolveBackwardScrubFlags({
-  scrubDirection,
-  forceFastScrubOverlay,
-  isAtomicScrubTarget,
-  preserveHighFidelityBackwardPreview,
-}: ResolveBackwardScrubFlagsParams): {
+export function resolveBackwardScrubFlags(params: ResolveBackwardScrubFlagsParams): {
   suppressBackgroundPrewarm: boolean;
-  fallbackToPlayer: boolean;
 } {
+  const { scrubDirection } = params;
   return {
     suppressBackgroundPrewarm: (
       FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD
       && scrubDirection < 0
-    ),
-    fallbackToPlayer: (
-      !forceFastScrubOverlay
-      && FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD
-      && scrubDirection < 0
-      && !isAtomicScrubTarget
-      && !preserveHighFidelityBackwardPreview
     ),
   };
 }

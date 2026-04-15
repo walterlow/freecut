@@ -102,7 +102,6 @@ interface UsePreviewRenderPumpParams {
   lastBackwardScrubRenderAtRef: MutableRefObject<number>;
   lastBackwardRequestedFrameRef: MutableRefObject<number | null>;
   suppressScrubBackgroundPrewarmRef: MutableRefObject<boolean>;
-  fallbackToPlayerScrubRef: MutableRefObject<boolean>;
   lastPausedPrearmTargetRef: MutableRefObject<number | null>;
   lastPlayingPrearmTargetRef: MutableRefObject<number | null>;
   deferredPlaybackTransitionPrepareFrameRef: MutableRefObject<number | null>;
@@ -189,7 +188,6 @@ export function usePreviewRenderPump({
   lastBackwardScrubRenderAtRef,
   lastBackwardRequestedFrameRef,
   suppressScrubBackgroundPrewarmRef,
-  fallbackToPlayerScrubRef,
   lastPausedPrearmTargetRef,
   lastPlayingPrearmTargetRef,
   deferredPlaybackTransitionPrepareFrameRef,
@@ -330,7 +328,6 @@ export function usePreviewRenderPump({
       scrubRequestedFrameRef.current = null;
       scrubDirectionRef.current = 0;
       suppressScrubBackgroundPrewarmRef.current = false;
-      fallbackToPlayerScrubRef.current = false;
       lastBackwardScrubPreloadAtRef.current = 0;
       lastBackwardScrubRenderAtRef.current = 0;
       lastBackwardRequestedFrameRef.current = null;
@@ -514,13 +511,6 @@ export function usePreviewRenderPump({
             scrubRequestedFrameRef.current = null;
             break;
           }
-          if (fallbackToPlayerScrubRef.current) {
-            scrubRequestedFrameRef.current = null;
-            clearPrewarmQueue();
-            hideAllOverlays();
-            break;
-          }
-
           const targetFrame = scrubRequestedFrameRef.current;
           const isPriorityFrame = targetFrame !== null;
           const frameToRender = isPriorityFrame
@@ -670,10 +660,6 @@ export function usePreviewRenderPump({
               && (playbackTransitionState.hasActiveTransition || playbackTransitionState.shouldHoldOverlay)
               && !forceFastScrubOverlay
             );
-            if (fallbackToPlayerScrubRef.current) {
-              hideAllOverlays();
-              continue;
-            }
             // Guard against stale in-flight renders that finish after scrub has ended.
             // Without this, a completed old render can re-show the overlay and hide
             // live Player updates (e.g. ruler click + gizmo interaction).
@@ -1213,18 +1199,6 @@ export function usePreviewRenderPump({
       if (backwardScrubFlags.suppressBackgroundPrewarm !== suppressScrubBackgroundPrewarmRef.current) {
         suppressScrubBackgroundPrewarmRef.current = backwardScrubFlags.suppressBackgroundPrewarm;
         clearPrewarmQueue();
-      }
-      if (backwardScrubFlags.fallbackToPlayer !== fallbackToPlayerScrubRef.current) {
-        fallbackToPlayerScrubRef.current = backwardScrubFlags.fallbackToPlayer;
-        scrubRequestedFrameRef.current = null;
-        clearPrewarmQueue();
-        if (backwardScrubFlags.fallbackToPlayer) {
-          hideAllOverlays();
-        }
-      }
-      if (fallbackToPlayerScrubRef.current && targetFrame !== null) {
-        hideAllOverlays();
-        return;
       }
 
       if (targetFrame === null) {
