@@ -52,7 +52,6 @@ export type StableVideoSequenceItem = VideoItem & {
   trackVisible: boolean;
   _sequenceFrameOffset?: number;
   _poolClipId?: string;
-  _sharedTransitionSync?: boolean;
 };
 
 interface StableVideoSequenceProps {
@@ -318,7 +317,6 @@ const GroupRenderer: React.FC<{
         _sequenceFrameOffset: item.from - group.minFrom,
         // Separate pool ID so shadow gets its own video element (not shared with primary)
         _poolClipId: `shadow-${item.id}`,
-        _sharedTransitionSync: activeTransitionClipIds.has(item.id),
       };
     });
     // overlapKey is a string — React compares by value, so this only re-runs
@@ -344,9 +342,8 @@ const GroupRenderer: React.FC<{
       // Keep a stable pool identity across split boundaries so preview video
       // playback does not release/reacquire the element on item.id changes.
       _poolClipId: `group-${group.originKey}`,
-      _sharedTransitionSync: activeTransitionClipIds.has(activeItem.id),
     };
-  }, [activeItem, activeTransitionClipIds, group.minFrom]);
+  }, [activeItem, group.minFrom]);
 
   // CRITICAL: Also memoize the RENDERED OUTPUT.
   // This prevents calling renderItem (which creates new React elements) every frame.

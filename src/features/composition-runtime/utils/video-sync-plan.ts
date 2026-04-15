@@ -38,11 +38,10 @@ export type VideoFrameCallbackCorrectionPlan =
 export function shouldReactOwnPlaybackRate(input: {
   isPlaying: boolean;
   supportsRequestVideoFrameCallback: boolean;
-  sharedTransitionSync: boolean;
 }): boolean {
   return (
     !input.isPlaying
-    || (!input.supportsRequestVideoFrameCallback && !input.sharedTransitionSync)
+    || !input.supportsRequestVideoFrameCallback
   );
 }
 
@@ -82,19 +81,11 @@ export function getVideoSyncTargetContext(input: {
 }
 
 export function planPremountedVideoSync(input: {
-  isTransitionHeld: boolean;
   canSeek: boolean;
   currentTime: number;
   targetTime: number;
   seekToleranceSeconds: number;
 }): VideoSyncAction {
-  if (input.isTransitionHeld) {
-    return {
-      shouldPause: false,
-      seekTo: null,
-    };
-  }
-
   return {
     shouldPause: true,
     seekTo: input.canSeek && Math.abs(input.currentTime - input.targetTime) > input.seekToleranceSeconds
@@ -105,7 +96,6 @@ export function planPremountedVideoSync(input: {
 
 export function planLayoutVideoSync(input: {
   isPremounted: boolean;
-  isTransitionHeld: boolean;
   canSeek: boolean;
   currentTime: number;
   targetTime: number;
@@ -123,7 +113,6 @@ export function planLayoutVideoSync(input: {
   if (input.isPremounted) {
     return {
       ...planPremountedVideoSync({
-        isTransitionHeld: input.isTransitionHeld,
         canSeek: input.canSeek,
         currentTime: input.currentTime,
         targetTime: input.targetTime,

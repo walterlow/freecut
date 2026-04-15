@@ -15,7 +15,6 @@ describe('shouldReactOwnPlaybackRate', () => {
     expect(shouldReactOwnPlaybackRate({
       isPlaying: true,
       supportsRequestVideoFrameCallback: true,
-      sharedTransitionSync: false,
     })).toBe(false);
   });
 
@@ -23,23 +22,20 @@ describe('shouldReactOwnPlaybackRate', () => {
     expect(shouldReactOwnPlaybackRate({
       isPlaying: false,
       supportsRequestVideoFrameCallback: true,
-      sharedTransitionSync: false,
     })).toBe(true);
   });
 
-  it('lets RVFC own playback rate during shared transition sync with RVFC support', () => {
+  it('lets RVFC own playback rate whenever RVFC is available', () => {
     expect(shouldReactOwnPlaybackRate({
       isPlaying: true,
       supportsRequestVideoFrameCallback: true,
-      sharedTransitionSync: true,
     })).toBe(false);
   });
 
-  it('keeps React in control during shared transition sync without RVFC', () => {
+  it('keeps React in control without RVFC support', () => {
     expect(shouldReactOwnPlaybackRate({
       isPlaying: true,
       supportsRequestVideoFrameCallback: false,
-      sharedTransitionSync: false,
     })).toBe(true);
   });
 });
@@ -66,16 +62,15 @@ describe('getVideoSyncTargetContext', () => {
 });
 
 describe('planPremountedVideoSync', () => {
-  it('keeps transition-held videos untouched during premount', () => {
+  it('pauses and seeks premounted videos toward trim start', () => {
     expect(planPremountedVideoSync({
-      isTransitionHeld: true,
       canSeek: true,
       currentTime: 0,
       targetTime: 2,
       seekToleranceSeconds: 0.016,
     })).toEqual({
-      shouldPause: false,
-      seekTo: null,
+      shouldPause: true,
+      seekTo: 2,
     });
   });
 });
@@ -84,7 +79,6 @@ describe('planLayoutVideoSync', () => {
   it('forces a hard sync on the first ready layout pass', () => {
     expect(planLayoutVideoSync({
       isPremounted: false,
-      isTransitionHeld: false,
       canSeek: true,
       currentTime: 1,
       targetTime: 2,
