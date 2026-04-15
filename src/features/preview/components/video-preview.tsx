@@ -399,6 +399,8 @@ export const VideoPreview = memo(function VideoPreview({
     activeGizmoItemType,
     isGizmoInteracting,
     isPlaying,
+    totalFrames,
+    visualPlaybackMode,
     forceFastScrubOverlay,
     previewPerfRef,
     isGizmoInteractingRef,

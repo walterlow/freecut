@@ -1,9 +1,10 @@
-import { useCallback, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import type { PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
+import { getSharedPreviewAudioContext } from '@/features/preview/deps/composition-runtime';
 import {
   type AdaptivePreviewQualityState,
   getFrameBudgetMs,
@@ -21,6 +22,8 @@ interface UsePreviewPlaybackControllerParams {
   activeGizmoItemType: TimelineItem['type'] | null;
   isGizmoInteracting: boolean;
   isPlaying: boolean;
+  totalFrames: number;
+  visualPlaybackMode: PreviewVisualPlaybackMode;
   forceFastScrubOverlay: boolean;
   previewPerfRef: MutableRefObject<PreviewPerfStats>;
   isGizmoInteractingRef: MutableRefObject<boolean>;
@@ -41,6 +44,8 @@ export function usePreviewPlaybackController({
   activeGizmoItemType,
   isGizmoInteracting,
   isPlaying,
+  totalFrames,
+  visualPlaybackMode,
   forceFastScrubOverlay,
   previewPerfRef,
   isGizmoInteractingRef,
@@ -54,6 +59,11 @@ export function usePreviewPlaybackController({
   visualPlaybackModeRef,
 }: UsePreviewPlaybackControllerParams) {
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
+  const streamingClockRafRef = useRef<number | null>(null);
+  const streamingClockActiveRef = useRef(false);
+  const streamingClockAnchorFrameRef = useRef(0);
+  const streamingClockAnchorTimeRef = useRef(0);
+  const streamingClockWriteDepthRef = useRef(0);
 
   usePreviewRuntimeGuards({
     isGizmoInteracting,
@@ -84,12 +94,115 @@ export function usePreviewPlaybackController({
     );
   }, [preferPlayerForStyledTextScrubRef, preferPlayerForTextGizmoRef]);
 
+  const stopStreamingClock = useCallback(() => {
+    streamingClockActiveRef.current = false;
+    if (streamingClockRafRef.current !== null) {
+      cancelAnimationFrame(streamingClockRafRef.current);
+      streamingClockRafRef.current = null;
+    }
+  }, []);
+
+  const startStreamingClock = useCallback(() => {
+    const ctx = getSharedPreviewAudioContext();
+    if (!ctx || ctx.state !== 'running') {
+      stopStreamingClock();
+      return false;
+    }
+
+    streamingClockActiveRef.current = true;
+    streamingClockAnchorFrameRef.current = usePlaybackStore.getState().currentFrame;
+    streamingClockAnchorTimeRef.current = ctx.currentTime;
+
+    if (streamingClockRafRef.current !== null) {
+      cancelAnimationFrame(streamingClockRafRef.current);
+      streamingClockRafRef.current = null;
+    }
+
+    const tick = () => {
+      const playbackState = usePlaybackStore.getState();
+      if (!playbackState.isPlaying || visualPlaybackModeRef.current !== 'streaming') {
+        stopStreamingClock();
+        return;
+      }
+
+      const activeCtx = getSharedPreviewAudioContext();
+      if (!activeCtx || activeCtx.state !== 'running') {
+        streamingClockRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      const elapsedSeconds = Math.max(0, activeCtx.currentTime - streamingClockAnchorTimeRef.current);
+      const rawFrame = streamingClockAnchorFrameRef.current + elapsedSeconds * fps * playbackState.playbackRate;
+      let nextFrame = Math.max(streamingClockAnchorFrameRef.current, Math.floor(rawFrame + 1e-4));
+      if (totalFrames > 0) {
+        nextFrame = Math.min(totalFrames - 1, nextFrame);
+      }
+
+      if (playbackState.currentFrame !== nextFrame) {
+        streamingClockWriteDepthRef.current += 1;
+        playbackState.setCurrentFrame(nextFrame);
+        streamingClockWriteDepthRef.current -= 1;
+      }
+
+      if (totalFrames > 0 && nextFrame >= totalFrames - 1 && !playbackState.loop) {
+        playbackState.pause();
+        stopStreamingClock();
+        return;
+      }
+
+      streamingClockRafRef.current = requestAnimationFrame(tick);
+    };
+
+    streamingClockRafRef.current = requestAnimationFrame(tick);
+    return true;
+  }, [fps, stopStreamingClock, totalFrames, visualPlaybackModeRef]);
+
+  useEffect(() => {
+    if (isPlaying && visualPlaybackMode === 'streaming') {
+      startStreamingClock();
+      return stopStreamingClock;
+    }
+
+    stopStreamingClock();
+    return stopStreamingClock;
+  }, [isPlaying, startStreamingClock, stopStreamingClock, visualPlaybackMode]);
+
+  useEffect(() => {
+    return usePlaybackStore.subscribe((state, prevState) => {
+      if (visualPlaybackModeRef.current !== 'streaming') {
+        stopStreamingClock();
+        return;
+      }
+      if (state.isPlaying && !prevState.isPlaying) {
+        startStreamingClock();
+        return;
+      }
+      if (!state.isPlaying) {
+        stopStreamingClock();
+        return;
+      }
+      if (state.playbackRate !== prevState.playbackRate) {
+        startStreamingClock();
+        return;
+      }
+      if (
+        state.currentFrame !== prevState.currentFrame
+        && streamingClockWriteDepthRef.current === 0
+      ) {
+        startStreamingClock();
+      }
+    });
+  }, [startStreamingClock, stopStreamingClock, visualPlaybackModeRef]);
+
   const handleFrameChange = useCallback((frame: number) => {
     const nextFrame = Math.round(frame);
     resolvePendingSeekLatency(nextFrame);
     if (ignorePlayerUpdatesRef.current) return;
     const playbackState = usePlaybackStore.getState();
     const visualPlaybackMode = visualPlaybackModeRef.current;
+    if (playbackState.isPlaying && visualPlaybackMode === 'streaming' && streamingClockActiveRef.current) {
+      return;
+    }
     if (!playbackState.isPlaying && visualPlaybackMode !== 'player') {
       return;
     }
@@ -166,6 +279,7 @@ export function usePreviewPlaybackController({
     playerSeekTargetRef,
     previewPerfRef,
     resolvePendingSeekLatency,
+    stopStreamingClock,
     visualPlaybackModeRef,
   ]);
 

@@ -329,6 +329,7 @@ vi.mock('@/features/preview/deps/composition-runtime', () => ({
       .filter((src) => src.length > 0);
     return <div data-testid="mock-player-frame">{String(mockedPlayerFrame)}</div>;
   },
+  getSharedPreviewAudioContext: () => null,
 }));
 
 vi.mock('./gizmo-overlay', () => ({
