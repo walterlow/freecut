@@ -14,6 +14,7 @@ function normalizeFrame(frame: number | null): number | null {
 
 export const usePreviewBridgeStore = create<PreviewBridgeState & PreviewBridgeActions>()((set) => ({
   displayedFrame: null,
+  streamingPlaybackActive: false,
   captureFrame: null,
   captureFrameImageData: null,
   captureCanvasSource: null,
@@ -24,6 +25,10 @@ export const usePreviewBridgeStore = create<PreviewBridgeState & PreviewBridgeAc
       if (state.displayedFrame === nextFrame) return state;
       return { displayedFrame: nextFrame };
     }),
+  setStreamingPlaybackActive: (active) =>
+    set((state) => (
+      state.streamingPlaybackActive === active ? state : { streamingPlaybackActive: active }
+    )),
   setCaptureFrame: (fn) => set({ captureFrame: fn }),
   setCaptureFrameImageData: (fn) => set({ captureFrameImageData: fn }),
   setCaptureCanvasSource: (fn) => set({ captureCanvasSource: fn }),

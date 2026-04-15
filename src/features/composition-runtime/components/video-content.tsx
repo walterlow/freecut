@@ -9,6 +9,7 @@ import type { VideoItem } from '@/types/timeline';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import { isVideoPoolAbortError } from '@/features/composition-runtime/deps/player';
 import { createLogger } from '@/shared/logging/logger';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { getVideoTargetTimeSeconds } from '../utils/video-timing';
 import {
   getVideoSyncTargetContext,
@@ -826,6 +827,8 @@ export const VideoContent: React.FC<{
   // from the crossfade renderer.
   const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume;
   const [hasError, setHasError] = useState(false);
+  const streamingPlaybackActive = usePreviewBridgeStore((s) => s.streamingPlaybackActive);
+  const shouldDetachDomVideoForStreamingPlayback = streamingPlaybackActive;
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -851,6 +854,18 @@ export const VideoContent: React.FC<{
       >
         <p style={{ color: '#666', fontSize: 14 }}>Media unavailable</p>
       </div>
+    );
+  }
+
+  if (shouldDetachDomVideoForStreamingPlayback) {
+    return (
+      <div
+        data-detached-streaming-video={item.id}
+        style={{
+          width: '100%',
+          height: '100%',
+        }}
+      />
     );
   }
 

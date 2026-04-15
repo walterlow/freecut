@@ -1,4 +1,4 @@
-import { useMemo, useCallback, memo } from 'react';
+import { useMemo, useCallback, useEffect, memo } from 'react';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { GizmoOverlay } from './gizmo-overlay';
 import { MaskEditorContainer } from './mask-editor-container';
@@ -133,6 +133,7 @@ export const VideoPreview = memo(function VideoPreview({
   const setCaptureFrame = usePreviewBridgeStore((s) => s.setCaptureFrame);
   const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
   const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
+  const setStreamingPlaybackActive = usePreviewBridgeStore((s) => s.setStreamingPlaybackActive);
 
   const {
     isRenderedOverlayVisible,
@@ -331,6 +332,14 @@ export const VideoPreview = memo(function VideoPreview({
     playbackTransitionWindows,
   });
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive;
+
+  useEffect(() => {
+    setStreamingPlaybackActive(isPlaying && streamingPlaybackActive);
+    return () => {
+      setStreamingPlaybackActive(false);
+    };
+  }, [isPlaying, setStreamingPlaybackActive, streamingPlaybackActive]);
+
   const {
     clearTransitionPlaybackSession,
     pinTransitionPlaybackSession,

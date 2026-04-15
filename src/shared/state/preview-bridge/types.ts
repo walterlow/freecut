@@ -3,6 +3,8 @@ import type { CaptureOptions } from '@/shared/state/playback';
 export interface PreviewBridgeState {
   /** Frame currently presented to the user in preview output (null when Player path is active) */
   displayedFrame: number | null;
+  /** True while the preview canvas owns playback visuals and DOM videos should stay detached. */
+  streamingPlaybackActive: boolean;
   /** Function to capture the current Player frame as a data URL (set by VideoPreview) */
   captureFrame: ((options?: CaptureOptions) => Promise<string | null>) | null;
   /** Optional raw capture path that returns ImageData directly (avoids encode/decode overhead) */
@@ -13,6 +15,7 @@ export interface PreviewBridgeState {
 
 export interface PreviewBridgeActions {
   setDisplayedFrame: (frame: number | null) => void;
+  setStreamingPlaybackActive: (active: boolean) => void;
   /** Register a frame capture function (called by VideoPreview on mount) */
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
   /** Register raw frame capture function for scopes (optional) */

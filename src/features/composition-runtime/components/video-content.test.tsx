@@ -27,6 +27,9 @@ const testState = vi.hoisted(() => ({
   timelineState: {
     keyframes: [] as unknown[],
   },
+  previewBridgeState: {
+    streamingPlaybackActive: false,
+  },
 }));
 
 testState.pool = {
@@ -44,6 +47,7 @@ const {
   playbackState,
   gizmoState,
   timelineState,
+  previewBridgeState,
 } = testState;
 
 function createStoreHook<TState extends object>(state: TState) {
@@ -117,6 +121,10 @@ vi.mock('../hooks/use-player-compat', () => ({
   useIsPlaying: () => testState.playbackState.isPlaying,
 }));
 
+vi.mock('@/shared/state/preview-bridge', () => ({
+  usePreviewBridgeStore: createStoreHook(testState.previewBridgeState),
+}));
+
 vi.mock('../contexts/keyframes-context', () => ({
   useItemKeyframesFromContext: () => null,
 }));
@@ -154,6 +162,7 @@ describe('VideoContent pooled handoff', () => {
     gizmoState.activeGizmo = null;
     gizmoState.preview = null;
     timelineState.keyframes = [];
+    previewBridgeState.streamingPlaybackActive = false;
   });
 
   it('keeps the acquired pool element when only itemId changes on the same pool lane', async () => {
@@ -212,5 +221,32 @@ describe('VideoContent pooled handoff', () => {
 
     expect(acquireForClipMock).toHaveBeenCalledTimes(1);
     expect(releaseClipMock).not.toHaveBeenCalled();
+  });
+
+  it('does not acquire a pooled video element while streaming playback owns visuals', () => {
+    previewBridgeState.streamingPlaybackActive = true;
+
+    render(
+      <VideoContent
+        item={{
+          id: 'clip-streaming',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Streaming',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-1',
+        }}
+        muted={false}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+        audioEqStages={[]}
+      />,
+    );
+
+    expect(acquireForClipMock).not.toHaveBeenCalled();
+    expect(preloadSourceMock).not.toHaveBeenCalled();
   });
 });
