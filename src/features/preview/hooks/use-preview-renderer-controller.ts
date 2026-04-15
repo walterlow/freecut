@@ -80,7 +80,6 @@ interface UsePreviewRendererControllerParams {
   getPreviewPathVerticesOverride: PreviewPathVerticesOverride;
   getLiveItemSnapshot: (itemId: string) => TimelineItem | undefined;
   getLiveKeyframes: (itemId: string) => ItemKeyframes | undefined;
-  clearPendingFastScrubHandoff: () => void;
   clearTransitionPlaybackSession: () => void;
   resetResolveRetryState: () => void;
   setCaptureFrame: (fn: ((options?: CaptureOptions) => Promise<string | null>) | null) => void;
@@ -144,7 +143,6 @@ export function usePreviewRendererController({
   getPreviewPathVerticesOverride,
   getLiveItemSnapshot,
   getLiveKeyframes,
-  clearPendingFastScrubHandoff,
   clearTransitionPlaybackSession,
   resetResolveRetryState,
   setCaptureFrame,
@@ -168,7 +166,6 @@ export function usePreviewRendererController({
   }, [playerRenderSize.height, playerRenderSize.width, scrubCanvasRef]);
 
   const disposeFastScrubRenderer = useCallback(() => {
-    clearPendingFastScrubHandoff();
     scrubInitPromiseRef.current = null;
     scrubPreloadPromiseRef.current = null;
     scrubRequestedFrameRef.current = null;
@@ -224,7 +221,6 @@ export function usePreviewRendererController({
     bgTransitionRendererStructureKeyRef,
     bypassPreviewSeekRef,
     captureCanvasSourceInFlightRef,
-    clearPendingFastScrubHandoff,
     clearTransitionPlaybackSession,
     deferredPlaybackTransitionPrepareFrameRef,
     playbackTransitionPreparePromiseRef,
@@ -370,7 +366,7 @@ export function usePreviewRendererController({
         }
         return renderer;
       } catch (error) {
-        logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
+        logger.warn('Failed to initialize renderer for preview canvas:', error);
         scrubRendererRef.current = null;
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;

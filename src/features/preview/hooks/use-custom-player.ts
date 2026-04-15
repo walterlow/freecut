@@ -2,9 +2,10 @@
  * Hook for integrating custom Player with timeline playback state
  * 
  * Sync strategy:
- * - Timeline seeks trigger Player seeks (both playing and paused)
+ * - Timeline seeks trigger Player seeks while playback is active or when
+ *   the Player still owns visible preview output
  * - Player updates are ignored briefly after seeks to prevent loops
- * - Player fires frameupdate → updates timeline scrubber position
+ * - Player frame updates only write back while the Player owns timing/state
  * - Play/pause state is synced bidirectionally
  * - Store is authoritative - if store says paused, Player follows
  */

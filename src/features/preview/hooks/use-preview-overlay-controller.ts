@@ -25,7 +25,6 @@ interface UsePreviewOverlayControllerResult {
   renderSourceRef: MutableRefObject<PreviewRenderSource>;
   renderSourceSwitchCountRef: MutableRefObject<number>;
   renderSourceHistoryRef: MutableRefObject<RenderSourceSwitchEntry[]>;
-  clearPendingFastScrubHandoff: () => void;
   hideFastScrubOverlay: () => void;
   hidePlaybackTransitionOverlay: () => void;
   showFastScrubOverlayForFrame: () => void;
@@ -43,7 +42,6 @@ export function usePreviewOverlayController({
   const renderSourceRef = useRef<PreviewRenderSource>('player');
   const renderSourceSwitchCountRef = useRef(0);
   const renderSourceHistoryRef = useRef<RenderSourceSwitchEntry[]>([]);
-  const clearPendingFastScrubHandoff = useCallback(() => {}, []);
 
   const hideFastScrubOverlay = useCallback(() => {
     showFastScrubOverlayRef.current = false;
@@ -112,7 +110,6 @@ export function usePreviewOverlayController({
     renderSourceRef,
     renderSourceSwitchCountRef,
     renderSourceHistoryRef,
-    clearPendingFastScrubHandoff,
     hideFastScrubOverlay,
     hidePlaybackTransitionOverlay,
     showFastScrubOverlayForFrame,

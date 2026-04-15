@@ -1,6 +1,7 @@
 import { useCallback, useState, type MutableRefObject } from 'react';
 import type { PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import type { ItemKeyframes } from '@/types/keyframe';
 import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import {
@@ -49,6 +50,7 @@ export function usePreviewPlaybackController({
   resolvePendingSeekLatency,
 }: UsePreviewPlaybackControllerParams) {
   const [adaptiveQualityCap, setAdaptiveQualityCap] = useState<PreviewQuality>(1);
+  const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
 
   usePreviewRuntimeGuards({
     isGizmoInteracting,
@@ -84,6 +86,9 @@ export function usePreviewPlaybackController({
     resolvePendingSeekLatency(nextFrame);
     if (ignorePlayerUpdatesRef.current) return;
     const playbackState = usePlaybackStore.getState();
+    if (!playbackState.isPlaying && visualPlaybackMode !== 'player') {
+      return;
+    }
     const runtimeSnapshot = getPreviewRuntimeSnapshotFromPlaybackState(
       playbackState,
       isGizmoInteractingRef.current,
@@ -143,6 +148,7 @@ export function usePreviewPlaybackController({
     isGizmoInteractingRef,
     previewPerfRef,
     resolvePendingSeekLatency,
+    visualPlaybackMode,
   ]);
 
   const handlePlayStateChange = useCallback((playing: boolean) => {

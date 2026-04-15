@@ -2202,7 +2202,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('pre-renders the first transition frame before handoff and reuses it at transition start', async () => {
+  it('pre-renders the first transition frame and reuses it at transition start', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2480,7 +2480,7 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
-  it('drops the transition overlay after cooldown for same-origin A-A handoffs', async () => {
+  it('drops the transition overlay after cooldown for same-origin A-A clip continuity', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-video',
@@ -2574,7 +2574,7 @@ describe('VideoPreview sync behavior', () => {
   // post-transition frame flashed stale left-clip content because the
   // transition session dropped before the visible presentation advanced to
   // the post-transition frame. The overlay may disappear now, but only
-  // after the Player is already showing the correct frame.
+  // after the rendered preview has already advanced to the correct frame.
   it('hands scrub preview cleanly from the last transition frame to the first post-transition frame', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -2741,7 +2741,7 @@ describe('VideoPreview sync behavior', () => {
     expect(pauseMock).not.toHaveBeenCalled();
   });
 
-  it('renders keyframed transform values correctly after scrub and seek handoff', async () => {
+  it('renders keyframed transform values correctly after scrub release and seek reconciliation', async () => {
     useItemsStore.getState().setTracks([
       {
         id: 'track-1',

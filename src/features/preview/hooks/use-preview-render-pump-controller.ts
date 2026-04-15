@@ -744,7 +744,7 @@ export function usePreviewRenderPump({
     let lastRafRenderedFrame = -1;
     // Playback start can wait on variable-speed decoder prewarm. While that
     // work is pending, subscription updates can retarget state but must not
-    // start a competing async pump ahead of the rAF handoff.
+    // start a competing async pump ahead of the rAF-owned playback loop.
     let playbackPrewarmInFlight = false;
     const pausePrewarmedItemIds = new Set<string>();
 
@@ -1241,7 +1241,7 @@ export function usePreviewRenderPump({
       // overlay here would switch from browser video seek (Ãƒâ€šÃ‚Â±1 frame) to
       // mediabunny (exact), causing a visible frame shift ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â especially at
       // soft-edge crop boundaries where the content difference is amplified.
-      // Without forceFastScrubOverlay, gizmo previews stay on the player-owned
+      // Without forceFastScrubOverlay, gizmo previews stay on the primary
       // visual path through React props. Activating the overlay here would
       // switch from browser video seek to exact decoder output, which can show
       // a visible frame shift at soft-edge crop boundaries.
