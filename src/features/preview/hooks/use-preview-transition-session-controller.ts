@@ -53,7 +53,7 @@ type TransitionRenderer = {
   renderFrame: (frame: number) => Promise<void>;
   prewarmFrame: (frame: number) => Promise<void>;
   setDomVideoElementProvider?: (provider: (itemId: string) => HTMLVideoElement | null) => void;
-  setStreamingFrameProvider?: (provider: ((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | undefined) => void;
+  setStreamingFrameProvider?: (provider: ((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | undefined) => void;
 };
 
 interface UsePreviewTransitionSessionControllerParams {
@@ -76,7 +76,7 @@ interface UsePreviewTransitionSessionControllerParams {
   scrubOffscreenCanvasRef: MutableRefObject<OffscreenCanvas | null>;
   scrubOffscreenRenderedFrameRef: MutableRefObject<number | null>;
   resumeScrubLoopRef: MutableRefObject<() => void>;
-  streamingFrameProviderRef?: React.RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
+  streamingFrameProviderRef?: React.RefObject<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>;
   playbackTransitionPreparePromiseRef: MutableRefObject<Promise<boolean> | null>;
   playbackTransitionPreparingFrameRef: MutableRefObject<number | null>;
   transitionSessionWindowRef: MutableRefObject<ResolvedTransitionWindow<TimelineItem> | null>;

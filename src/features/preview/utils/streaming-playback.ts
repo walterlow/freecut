@@ -11,8 +11,8 @@
  *
  * Usage:
  *   const playback = createStreamingPlayback();
- *   playback.startStream('blob:...', 0.5);
- *   const frame = playback.getFrame('blob:...', 1.2);
+ *   playback.startStream('clip-123', 'blob:...', 0.5);
+ *   const frame = playback.getFrame('clip-123', 'blob:...', 1.2);
  *   playback.stopAll();
  *   playback.dispose();
  */
@@ -22,7 +22,6 @@ import {
   getObjectUrlBlob,
   getObjectUrlDirectFileMetadata,
 } from '@/infrastructure/browser/object-url-registry';
-import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getKeyframeTimestamps } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('StreamingPlayback');
@@ -137,6 +136,7 @@ interface SourceInfo {
 }
 
 interface StreamState {
+  src: string;
   buffer: FrameBuffer;
   info: SourceInfo | null;
   streaming: boolean;
@@ -153,28 +153,28 @@ interface StreamState {
 // ---------------------------------------------------------------------------
 
 export interface StreamingPlayback {
-  /** Start streaming decode for a source from a given timestamp. */
-  startStream(src: string, startTimestamp: number): void;
+  /** Start streaming decode for a playback instance from a given timestamp. */
+  startStream(streamKey: string, src: string, startTimestamp: number): void;
   /** Seek an active stream to a new timestamp. */
-  seekStream(src: string, timestamp: number): void;
+  seekStream(streamKey: string, timestamp: number): void;
   /** Stop streaming for a source. */
-  stopStream(src: string): void;
+  stopStream(streamKey: string): void;
   /** Stop all active streams. */
   stopAll(): void;
   /**
-   * Get the best decoded frame for a source at a target timestamp.
-   * If no stream exists for this source, lazily starts one and returns null.
+   * Get the best decoded frame for a playback instance at a target timestamp.
+   * If no stream exists for this instance, lazily starts one and returns null.
    * Falls through to the next render path (DOM video) until frames arrive.
    */
-  getFrame(src: string, targetTimestamp: number, mediaId?: string): ImageBitmap | null;
+  getFrame(streamKey: string, src: string, targetTimestamp: number): ImageBitmap | null;
   /** Get source info (dimensions, duration) if available. */
-  getSourceInfo(src: string): SourceInfo | null;
+  getSourceInfo(streamKey: string): SourceInfo | null;
   /** Whether a source is actively streaming. */
-  isStreaming(src: string): boolean;
+  isStreaming(streamKey: string): boolean;
   /** Update the worker's playback position for a source without reading a frame.
    *  Keeps the decode-ahead throttle advancing during DOM video playback
    *  so the buffer is warm when the canvas overlay activates. */
-  updatePosition(src: string, position: number): void;
+  updatePosition(streamKey: string, position: number): void;
   /** Enable idle cleanup sweep. Call when playback starts.
    *  Disabled by default so pre-warm streams aren't killed while paused. */
   enableIdleSweep(): void;
@@ -238,7 +238,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
 
     if (msg.type === 'source_ready') {
-      const state = streams.get(msg.src);
+      const state = streams.get(msg.streamKey);
       if (state) {
         state.info = {
           width: msg.width,
@@ -250,7 +250,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
 
     if (msg.type === 'frame') {
-      const state = streams.get(msg.src);
+      const state = streams.get(msg.streamKey);
       if (!state) {
         // No stream for this source — close the frame to avoid leak
         if (msg.videoFrame instanceof VideoFrame) msg.videoFrame.close();
@@ -269,7 +269,7 @@ export function createStreamingPlayback(): StreamingPlayback {
           videoFrame.close();
           // Guard: state may have been removed from `streams` by stopAll()
           // while this createImageBitmap was in-flight.
-          if (streams.has(msg.src)) {
+          if (streams.has(msg.streamKey)) {
             state.buffer.push(msg.timestamp, bitmap);
           } else {
             bitmap.close();
@@ -288,7 +288,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
 
     if (msg.type === 'stream_ended') {
-      const state = streams.get(msg.src);
+      const state = streams.get(msg.streamKey);
       if (state) {
         state.streaming = false;
       }
@@ -300,22 +300,23 @@ export function createStreamingPlayback(): StreamingPlayback {
     }
 
     if (msg.type === 'error') {
-      log.warn('Streaming decode error', { src: msg.src, message: msg.message });
+      log.warn('Streaming decode error', { streamKey: msg.streamKey, src: msg.src, message: msg.message });
       return;
     }
   }
 
-  function getOrCreateState(src: string): StreamState {
-    const existing = streams.get(src);
+  function getOrCreateState(streamKey: string, src: string): StreamState {
+    const existing = streams.get(streamKey);
     if (existing) return existing;
     const state: StreamState = {
+      src,
       buffer: new FrameBuffer(MAX_BUFFER_SIZE),
       info: null,
       streaming: false,
       lastAccessMs: performance.now(),
       generation: 0,
     };
-    streams.set(src, state);
+    streams.set(streamKey, state);
     return state;
   }
 
@@ -332,7 +333,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     return undefined;
   }
 
-  function postStartMessage(src: string, startTimestamp: number): void {
+  function postStartMessage(streamKey: string, src: string, startTimestamp: number): void {
     // The caller is responsible for resolving the correct URL (proxy or original).
     // We no longer override via blobUrlManager here — that would replace proxy URLs
     // with original URLs, defeating the proxy resolution in collectPrewarmTargets.
@@ -346,6 +347,7 @@ export function createStreamingPlayback(): StreamingPlayback {
     const doPost = (blob?: Blob) => {
       const msg = {
         type: 'stream_start' as const,
+        streamKey,
         src: activeSrc,
         startTimestamp,
         blob,
@@ -367,9 +369,9 @@ export function createStreamingPlayback(): StreamingPlayback {
         doPost(knownBlob);
       } else if (activeSrc.startsWith('blob:')) {
         // Capture generation so we can detect stop/restart during the async fetch.
-        const gen = streams.get(activeSrc)?.generation ?? -1;
+        const gen = streams.get(streamKey)?.generation ?? -1;
         fetch(activeSrc).then((res) => res.blob()).then((blob) => {
-          const current = streams.get(activeSrc);
+          const current = streams.get(streamKey);
           if (!current || current.generation !== gen) return;
           blobByUrl.set(activeSrc, blob);
           doPost(blob);
@@ -383,12 +385,12 @@ export function createStreamingPlayback(): StreamingPlayback {
   }
 
   /** Stop and clean up a single source. */
-  function stopSource(src: string): void {
-    const state = streams.get(src);
+  function stopSource(streamKey: string): void {
+    const state = streams.get(streamKey);
     if (!state) return;
     state.generation++;
     if (state.streaming) {
-      worker?.postMessage({ type: 'stream_stop', src });
+      worker?.postMessage({ type: 'stream_stop', streamKey });
     }
     state.streaming = false;
     state.buffer.clear();
@@ -398,16 +400,17 @@ export function createStreamingPlayback(): StreamingPlayback {
   function idleSweep(): void {
     const now = performance.now();
     const toStop: string[] = [];
-    for (const [src, state] of streams) {
+    for (const [streamKey, state] of streams) {
       if (state.streaming && now - state.lastAccessMs > IDLE_TIMEOUT_MS) {
-        toStop.push(src);
+        toStop.push(streamKey);
       }
     }
-    for (const src of toStop) {
-      log.debug('Stopping idle stream', { src: src.slice(0, 30) });
-      stopSource(src);
-      worker?.postMessage({ type: 'dispose_source', src });
-      streams.delete(src);
+    for (const streamKey of toStop) {
+      const src = streams.get(streamKey)?.src;
+      log.debug('Stopping idle stream', { streamKey, src: src?.slice(0, 30) });
+      stopSource(streamKey);
+      worker?.postMessage({ type: 'dispose_source', streamKey });
+      streams.delete(streamKey);
     }
   }
 
@@ -424,27 +427,28 @@ export function createStreamingPlayback(): StreamingPlayback {
   }
 
   return {
-    startStream(src: string, startTimestamp: number): void {
+    startStream(streamKey: string, src: string, startTimestamp: number): void {
       if (disposed) return;
-      const state = getOrCreateState(src);
+      const state = getOrCreateState(streamKey, src);
       state.generation++;
+      state.src = src;
       state.buffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
 
-      postStartMessage(src, startTimestamp);
+      postStartMessage(streamKey, src, startTimestamp);
     },
 
-    seekStream(src: string, timestamp: number): void {
+    seekStream(streamKey: string, timestamp: number): void {
       if (disposed) return;
-      const state = streams.get(src);
+      const state = streams.get(streamKey);
       if (!state) return;
 
       state.buffer.clear();
       state.streaming = true;
       state.lastAccessMs = performance.now();
 
-      const doSeek = () => worker?.postMessage({ type: 'stream_seek', src, timestamp });
+      const doSeek = () => worker?.postMessage({ type: 'stream_seek', streamKey, timestamp });
       if (workerReady) {
         doSeek();
       } else {
@@ -452,55 +456,39 @@ export function createStreamingPlayback(): StreamingPlayback {
       }
     },
 
-    stopStream(src: string): void {
-      stopSource(src);
+    stopStream(streamKey: string): void {
+      stopSource(streamKey);
     },
 
     stopAll(): void {
-      for (const [src] of streams) {
-        stopSource(src);
-        worker?.postMessage({ type: 'dispose_source', src });
+      for (const [streamKey] of streams) {
+        stopSource(streamKey);
+        worker?.postMessage({ type: 'dispose_source', streamKey });
       }
       streams.clear();
       stopIdleSweep();
     },
 
-    getFrame(src: string, targetTimestamp: number, mediaId?: string): ImageBitmap | null {
+    getFrame(streamKey: string, src: string, targetTimestamp: number): ImageBitmap | null {
       if (disposed) return null;
 
-      // Look up stream by the src the renderer provides, then fall back to
-      // the blobUrlManager URL. Track which URL matched so playback_position
-      // is sent with the correct key (the renderer may have a stale proxy URL
-      // after a mid-playback proxy toggle, but the stream uses the original).
-      let streamSrc = src;
-      let state = streams.get(src) ?? null;
-      if (!state && mediaId) {
-        const fallbackUrl = blobUrlManager.get(mediaId);
-        if (fallbackUrl) {
-          state = streams.get(fallbackUrl) ?? null;
-          if (state) streamSrc = fallbackUrl;
-        }
-      }
+      let state = streams.get(streamKey) ?? null;
 
-      // Lazy auto-start: use the renderer's src (proxy or original) — not the
-      // blobUrlManager URL which always returns the original.
       if (!state || !state.streaming) {
-        state = getOrCreateState(src);
+        state = getOrCreateState(streamKey, src);
         state.generation++;
+        state.src = src;
         state.lastAccessMs = performance.now();
         state.streaming = true;
-        postStartMessage(src, targetTimestamp);
+        postStartMessage(streamKey, src, targetTimestamp);
 
         totalFramesMissed++;
         return null;
       }
 
+      state.src = src;
       state.lastAccessMs = performance.now();
-
-      // Tell the worker where playback is so it throttles decode-ahead.
-      // Use streamSrc (the key the stream was found by), not src (which may
-      // be a stale proxy URL from an un-rebuilt renderer composition).
-      worker?.postMessage({ type: 'playback_position', src: streamSrc, position: targetTimestamp });
+      worker?.postMessage({ type: 'playback_position', streamKey, position: targetTimestamp });
 
       const frame = state.buffer.getFrame(targetTimestamp);
       if (!frame) {
@@ -509,26 +497,24 @@ export function createStreamingPlayback(): StreamingPlayback {
       }
 
       totalFramesDrawn++;
-
-      // Prune old frames behind the playback position
       state.buffer.pruneOld(targetTimestamp);
 
       return frame.bitmap;
     },
 
-    getSourceInfo(src: string): SourceInfo | null {
-      return streams.get(src)?.info ?? null;
+    getSourceInfo(streamKey: string): SourceInfo | null {
+      return streams.get(streamKey)?.info ?? null;
     },
 
-    isStreaming(src: string): boolean {
-      return streams.get(src)?.streaming ?? false;
+    isStreaming(streamKey: string): boolean {
+      return streams.get(streamKey)?.streaming ?? false;
     },
 
-    updatePosition(src: string, position: number): void {
-      const state = streams.get(src);
+    updatePosition(streamKey: string, position: number): void {
+      const state = streams.get(streamKey);
       if (!state) return;
       state.lastAccessMs = performance.now();
-      worker?.postMessage({ type: 'playback_position', src, position });
+      worker?.postMessage({ type: 'playback_position', streamKey, position });
     },
 
     enableIdleSweep(): void {
@@ -553,8 +539,8 @@ export function createStreamingPlayback(): StreamingPlayback {
 
     getMetrics(): StreamingPlaybackMetrics {
       const bufferSizes = new Map<string, number>();
-      for (const [src, state] of streams) {
-        bufferSizes.set(src, state.buffer.size);
+      for (const [streamKey, state] of streams) {
+        bufferSizes.set(streamKey, state.buffer.size);
       }
       return {
         activeStreams: [...streams.values()].filter((s) => s.streaming).length,

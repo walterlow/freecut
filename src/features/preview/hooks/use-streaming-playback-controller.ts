@@ -56,9 +56,9 @@ function computeSourceTime(item: VideoItem, timelineFrame: number, timelineFps: 
 }
 
 interface TransitionPrewarmTarget {
+  streamKey: string;
   src: string;
   sourceTime: number;
-  mediaId?: string;
 }
 
 /**
@@ -101,11 +101,12 @@ function collectTransitionPrewarmTargets(
       if (!overlapsTransition) continue;
 
       const src = resolveVideoSrc(videoItem, useProxy);
-      if (!src || seen.has(src)) continue;
-      seen.add(src);
+      const streamKey = videoItem.id;
+      if (!src || seen.has(streamKey)) continue;
+      seen.add(streamKey);
 
       const sourceTime = computeSourceTime(videoItem, timelineFrame, timelineFps);
-      targets.push({ src, sourceTime, mediaId: videoItem.mediaId });
+      targets.push({ streamKey, src, sourceTime });
     }
   }
 
@@ -134,11 +135,12 @@ function collectAllPrewarmTargets(
       if (videoItem.from > timelineFrame + lookaheadFrames) continue;
 
       const src = resolveVideoSrc(videoItem, useProxy);
-      if (!src || seen.has(src)) continue;
-      seen.add(src);
+      const streamKey = videoItem.id;
+      if (!src || seen.has(streamKey)) continue;
+      seen.add(streamKey);
 
       const sourceTime = computeSourceTime(videoItem, timelineFrame, timelineFps);
-      targets.push({ src, sourceTime, mediaId: videoItem.mediaId });
+      targets.push({ streamKey, src, sourceTime });
     }
   }
 
@@ -159,7 +161,7 @@ interface UseStreamingPlaybackControllerResult {
   /** Whether the canvas overlay must be forced (near a transition during playback). */
   forceCanvasOverlay: boolean;
   /** Ref to the streaming frame provider function. */
-  streamingFrameProviderRef: React.RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
+  streamingFrameProviderRef: React.RefObject<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>;
 }
 
 export function useStreamingPlaybackController({
@@ -171,7 +173,7 @@ export function useStreamingPlaybackController({
   /** When true, stream ALL clips (debug toggle). When false, only transition clips. */
   const forceAllRef = useRef(STREAMING_PLAYBACK_ENABLED);
   const [forceCanvasOverlay, setForceCanvasOverlay] = useState(false);
-  const streamingFrameProviderRef = useRef<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>(null);
+  const streamingFrameProviderRef = useRef<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>(null);
 
   const getPlayback = useCallback((): StreamingPlayback => {
     if (!playbackRef.current) {
@@ -180,9 +182,9 @@ export function useStreamingPlaybackController({
     return playbackRef.current;
   }, []);
 
-  const getStreamingFrame = useCallback((src: string, sourceTime: number, mediaId?: string): ImageBitmap | null => {
+  const getStreamingFrame = useCallback((streamKey: string, src: string, sourceTime: number): ImageBitmap | null => {
     if (!playbackRef.current) return null;
-    return playbackRef.current.getFrame(src, sourceTime, mediaId);
+    return playbackRef.current.getFrame(streamKey, src, sourceTime);
   }, []);
 
   // Refs for latest values
@@ -215,11 +217,11 @@ export function useStreamingPlaybackController({
 
     const playback = getPlayback();
     const targets = getTargets(frame);
-    for (const { src, sourceTime } of targets) {
-      if (!playback.isStreaming(src)) {
-        playback.startStream(src, sourceTime);
+    for (const { streamKey, src, sourceTime } of targets) {
+      if (!playback.isStreaming(streamKey)) {
+        playback.startStream(streamKey, src, sourceTime);
       } else if (seekExisting) {
-        playback.seekStream(src, sourceTime);
+        playback.seekStream(streamKey, sourceTime);
       }
     }
   }, [getPlayback, getTargets]);
@@ -233,11 +235,11 @@ export function useStreamingPlaybackController({
     // Start streams for upcoming transition clips, and keep existing
     // streams decoding ahead by sending position updates.
     const targets = getTargets(frame);
-    for (const { src, sourceTime } of targets) {
-      if (!playback.isStreaming(src)) {
-        playback.startStream(src, sourceTime);
+    for (const { streamKey, src, sourceTime } of targets) {
+      if (!playback.isStreaming(streamKey)) {
+        playback.startStream(streamKey, src, sourceTime);
       } else {
-        playback.updatePosition(src, sourceTime);
+        playback.updatePosition(streamKey, sourceTime);
       }
     }
 

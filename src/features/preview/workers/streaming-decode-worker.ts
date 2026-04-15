@@ -33,6 +33,8 @@ const THROTTLE_SLEEP_MS = 50;
 type MBSample = any;
 
 interface SourceState {
+  streamKey: string;
+  src: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   input: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,11 +100,11 @@ interface InitSourceOptions {
   sourceMetadata?: ObjectUrlSourceMetadata;
 }
 
-async function getOrInitSource(src: string, options?: InitSourceOptions): Promise<SourceState | null> {
-  const existing = sources.get(src);
+async function getOrInitSource(streamKey: string, src: string, options?: InitSourceOptions): Promise<SourceState | null> {
+  const existing = sources.get(streamKey);
   if (existing) return existing;
 
-  const inflight = initPromises.get(src);
+  const inflight = initPromises.get(streamKey);
   if (inflight) return inflight;
 
   const promise = (async (): Promise<SourceState | null> => {
@@ -155,12 +157,14 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
       const duration = videoTrack.duration || 0;
 
       // Guard: source may have been disposed while init was in-flight
-      if (disposedSources.has(src)) {
+      if (disposedSources.has(streamKey)) {
         input.dispose?.();
         return null;
       }
 
       const state: SourceState = {
+        streamKey,
+        src,
         input,
         sink,
         width,
@@ -170,9 +174,9 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
         generation: 0,
         playbackPosition: 0,
       };
-      sources.set(src, state);
+      sources.set(streamKey, state);
 
-      self.postMessage({ type: 'source_ready', src, width, height, duration });
+      self.postMessage({ type: 'source_ready', streamKey, src, width, height, duration });
       return state;
     } catch (error) {
       input.dispose?.();
@@ -180,11 +184,11 @@ async function getOrInitSource(src: string, options?: InitSourceOptions): Promis
     }
   })();
 
-  initPromises.set(src, promise);
+  initPromises.set(streamKey, promise);
   try {
     return await promise;
   } finally {
-    initPromises.delete(src);
+    initPromises.delete(streamKey);
   }
 }
 
@@ -243,7 +247,8 @@ function extractVideoFrame(sample: MBSample): { frame: VideoFrame; width: number
 // Streaming decode loop
 // ---------------------------------------------------------------------------
 
-async function runStreamLoop(src: string, state: SourceState, startTimestamp: number): Promise<void> {
+async function runStreamLoop(state: SourceState, startTimestamp: number): Promise<void> {
+  const { streamKey, src } = state;
   const gen = state.generation;
   state.streaming = true;
 
@@ -279,6 +284,7 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
       self.postMessage(
         {
           type: 'frame',
+          streamKey,
           src,
           timestamp,
           videoFrame: extracted.frame,
@@ -303,6 +309,7 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
     if (state.generation === gen) {
       self.postMessage({
         type: 'error',
+        streamKey,
         src,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -311,7 +318,7 @@ async function runStreamLoop(src: string, state: SourceState, startTimestamp: nu
     void iterator.return?.();
     if (state.generation === gen) {
       state.streaming = false;
-      self.postMessage({ type: 'stream_ended', src });
+      self.postMessage({ type: 'stream_ended', streamKey, src });
     }
   }
 }
@@ -338,31 +345,32 @@ self.onmessage = async (event: MessageEvent) => {
   }
 
   if (msg.type === 'playback_position') {
-    const { src, position } = msg;
-    const state = sources.get(src);
+    const { streamKey, position } = msg;
+    const state = sources.get(streamKey);
     if (state) state.playbackPosition = position;
     return;
   }
 
   if (msg.type === 'stream_start') {
-    const { src, startTimestamp, blob, sourceMetadata } = msg;
-    disposedSources.delete(src);
+    const { streamKey, src, startTimestamp, blob, sourceMetadata } = msg;
+    disposedSources.delete(streamKey);
     try {
-      const state = await getOrInitSource(src, { blob, sourceMetadata });
+      const state = await getOrInitSource(streamKey, src, { blob, sourceMetadata });
       if (!state) {
-        self.postMessage({ type: 'error', src, message: 'Failed to init source' });
+        self.postMessage({ type: 'error', streamKey, src, message: 'Failed to init source' });
         return;
       }
       // Apply any seek that arrived while the source was initializing
-      const pendingSeek = pendingSeeks.get(src);
-      pendingSeeks.delete(src);
+      const pendingSeek = pendingSeeks.get(streamKey);
+      pendingSeeks.delete(streamKey);
       const effectiveStart = pendingSeek ?? startTimestamp;
       state.generation++;
       state.playbackPosition = effectiveStart;
-      void runStreamLoop(src, state, effectiveStart);
+      void runStreamLoop(state, effectiveStart);
     } catch (error) {
       self.postMessage({
         type: 'error',
+        streamKey,
         src,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -371,39 +379,38 @@ self.onmessage = async (event: MessageEvent) => {
   }
 
   if (msg.type === 'stream_seek') {
-    const { src, timestamp } = msg;
-    const state = sources.get(src);
+    const { streamKey, timestamp } = msg;
+    const state = sources.get(streamKey);
     if (!state) {
       // Source still initializing — queue the seek for when init completes
-      if (initPromises.has(src)) {
-        pendingSeeks.set(src, timestamp);
+      if (initPromises.has(streamKey)) {
+        pendingSeeks.set(streamKey, timestamp);
       }
       return;
     }
     state.generation++;
     state.playbackPosition = timestamp;
-    void runStreamLoop(src, state, timestamp);
+    void runStreamLoop(state, timestamp);
     return;
   }
 
   if (msg.type === 'stream_stop') {
-    const { src } = msg;
-    const state = sources.get(src);
+    const { streamKey } = msg;
+    const state = sources.get(streamKey);
     if (!state) return;
     state.generation++;
     return;
   }
 
   if (msg.type === 'dispose_source') {
-    const { src } = msg;
-    disposedSources.add(src);
-    keyframeIndexBySrc.delete(src);
-    pendingSeeks.delete(src);
-    const state = sources.get(src);
+    const { streamKey } = msg;
+    disposedSources.add(streamKey);
+    pendingSeeks.delete(streamKey);
+    const state = sources.get(streamKey);
     if (!state) return;
     state.generation++;
     state.input.dispose?.();
-    sources.delete(src);
+    sources.delete(streamKey);
     return;
   }
 };

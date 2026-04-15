@@ -1773,7 +1773,7 @@ export async function createCompositionRenderer(
       itemRenderContext.domVideoElementProvider = provider;
     },
 
-    setStreamingFrameProvider(provider: ((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | undefined) {
+    setStreamingFrameProvider(provider: ((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | undefined) {
       itemRenderContext.streamingFrameProvider = provider;
     },
 

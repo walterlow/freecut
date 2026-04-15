@@ -152,7 +152,7 @@ interface UsePreviewRenderPumpParams {
   ) => void;
   /** Ref to streaming frame provider from useStreamingPlaybackController.
    *  When non-null, the render pump sets it on the renderer before each frame. */
-  streamingFrameProviderRef?: RefObject<((src: string, sourceTime: number, mediaId?: string) => ImageBitmap | null) | null>;
+  streamingFrameProviderRef?: RefObject<((streamKey: string, src: string, sourceTime: number) => ImageBitmap | null) | null>;
 }
 
 export function usePreviewRenderPump({
