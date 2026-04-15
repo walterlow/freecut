@@ -126,61 +126,6 @@ export function ensureAudioContextResumed(): void {
 export { connectedVideoElements, videoAudioContexts };
 
 /**
- * Mute a video element's audio via Web Audio gain node. Called when pinning
- * elements for a transition — the composition's crossfade audio handles mixing,
- * so the DOM element must be silent to prevent doubling.
- * Operates directly on the gain node, bypassing React state for zero latency.
- */
-export function muteTransitionElement(video: HTMLVideoElement): void {
-  const graph = videoAudioGraphs.get(video);
-  const audioContext = videoAudioContexts.get(video);
-  if (graph && audioContext && audioContext.state === 'running') {
-    rampPreviewClipGain(graph, 0);
-  } else if (graph) {
-    setPreviewClipGain(graph, 0);
-  } else {
-    video.volume = 0;
-  }
-}
-
-/**
- * Restore a video element's audio after a transition ends. Ramps gain to the
- * target volume over GAIN_RAMP_SECONDS to prevent a click.
- */
-export function unmuteTransitionElement(video: HTMLVideoElement, targetVolume: number): void {
-  const graph = videoAudioGraphs.get(video);
-  const audioContext = videoAudioContexts.get(video);
-  const safeVolume = Math.max(0, targetVolume);
-  if (graph && audioContext && audioContext.state === 'running') {
-    rampPreviewClipGain(graph, safeVolume);
-  } else if (graph) {
-    setPreviewClipGain(graph, safeVolume);
-  } else {
-    video.volume = Math.min(1, safeVolume);
-  }
-}
-
-/**
- * Set playback rate and play a paused element with gain at 0 (kept muted).
- * The composition's crossfade audio handles transition mixing. The DOM element
- * must play so the render loop can read pixels, but its audio stays silent.
- */
-export function transitionSafePlay(video: HTMLVideoElement, targetRate: number): void {
-  if (Math.abs(video.playbackRate - targetRate) > 0.01) {
-    video.playbackRate = targetRate;
-  }
-
-  if (!video.paused) {
-    muteTransitionElement(video);
-    return;
-  }
-
-  // Mute before play — the element will stay muted for the duration of the transition
-  muteTransitionElement(video);
-  video.play().catch(() => {});
-}
-
-/**
  * Hook to calculate video audio state with fades and preview support.
  * Returns both the final volume and resolved EQ stage chain for the clip.
  */

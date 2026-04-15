@@ -239,74 +239,26 @@ describe('render pump invariants', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Transition participant video hold
+// Premount video sync
 // ---------------------------------------------------------------------------
 
-describe('transition participant video hold', () => {
+describe('premount video sync', () => {
   /**
-   * Simulates the premount logic from video-content.tsx:
-   * if isPremounted and NOT held by transition → pause + seek.
-   * if isPremounted and held by transition → skip pause/seek.
+   * Simulates the simplified premount rule from video-content.tsx:
+   * premounted videos pause and seek toward trim start until they become visible.
    */
-  function simulatePremount(video: HTMLVideoElement): { paused: boolean; seeked: boolean } {
+  function simulatePremount(): { paused: boolean; seeked: boolean } {
     const isPremounted = true;
-    let didPause = false;
-    let didSeek = false;
-
-    if (isPremounted) {
-      const heldByTransition = video.dataset.transitionHold === '1';
-      if (!heldByTransition) {
-        didPause = true;
-        didSeek = true;
-      }
-    }
-
-    return { paused: didPause, seeked: didSeek };
+    return {
+      paused: isPremounted,
+      seeked: isPremounted,
+    };
   }
 
-  it('premount pauses and seeks when NOT held by transition', () => {
-    const video = document.createElement('video');
-    const result = simulatePremount(video);
+  it('premount always pauses and seeks hidden videos', () => {
+    const result = simulatePremount();
     expect(result.paused).toBe(true);
     expect(result.seeked).toBe(true);
-  });
-
-  it('premount skips pause/seek when held by transition', () => {
-    const video = document.createElement('video');
-    video.dataset.transitionHold = '1';
-    const result = simulatePremount(video);
-    expect(result.paused).toBe(false);
-    expect(result.seeked).toBe(false);
-  });
-
-  it('hold flag is cleaned up on session clear', () => {
-    const video = document.createElement('video');
-    video.dataset.transitionHold = '1';
-    expect(video.dataset.transitionHold).toBe('1');
-
-    // Simulate clearTransitionPlaybackSession
-    delete video.dataset.transitionHold;
-    expect(video.dataset.transitionHold).toBeUndefined();
-
-    // After cleanup, premount should pause again
-    const result = simulatePremount(video);
-    expect(result.paused).toBe(true);
-  });
-
-  it('hold flag transfers when pinned element changes', () => {
-    const videoA = document.createElement('video');
-    const videoB = document.createElement('video');
-
-    // Pin A with hold
-    videoA.dataset.transitionHold = '1';
-    expect(videoA.dataset.transitionHold).toBe('1');
-
-    // Replace A with B — clear hold on A, set on B
-    delete videoA.dataset.transitionHold;
-    videoB.dataset.transitionHold = '1';
-
-    expect(videoA.dataset.transitionHold).toBeUndefined();
-    expect(videoB.dataset.transitionHold).toBe('1');
   });
 });
 
