@@ -230,9 +230,8 @@ export function usePreviewTransitionSessionController({
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
     const shouldPreferStreamingTransitionFrames = (
-      isPlaying
-      && forceFastScrubOverlay
-      && !!(streamingFrameProviderRef?.current)
+      !!(streamingFrameProviderRef?.current)
+      && (streamingPlaybackMode === 'all' || (isPlaying && forceFastScrubOverlay))
     );
     const mode = shouldPreferStreamingTransitionFrames
       ? 'render'
@@ -352,9 +351,8 @@ export function usePreviewTransitionSessionController({
 
     const isPlaying = usePlaybackStore.getState().isPlaying;
     const shouldPreferStreamingTransitionFrames = (
-      isPlaying
-      && forceFastScrubOverlay
-      && !!(streamingFrameProviderRef?.current)
+      !!(streamingFrameProviderRef?.current)
+      && (streamingPlaybackMode === 'all' || (isPlaying && forceFastScrubOverlay))
     );
     if (shouldPreferStreamingTransitionFrames) {
       return null;

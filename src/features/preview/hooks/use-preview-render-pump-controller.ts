@@ -236,6 +236,11 @@ export function usePreviewRenderPump({
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
+  const shouldUseRenderDrivenPausedTransitionPrep = (
+    forceFastScrubOverlay
+    || streamingPlaybackMode === 'all'
+  );
+
   useEffect(() => {
     scrubMountedRef.current = true;
 
@@ -1073,7 +1078,7 @@ export function usePreviewRenderPump({
       const pausedPrewarmStartFrame = pausedActiveWindow?.startFrame
         ?? getPausedTransitionPrewarmStartFrame(state.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
-        if (forceFastScrubOverlay) {
+        if (shouldUseRenderDrivenPausedTransitionPrep) {
           const tw = pausedActiveWindow ?? getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
           if (tw) {
             pinTransitionPlaybackSession(tw);
@@ -1434,7 +1439,7 @@ export function usePreviewRenderPump({
         ?? getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
-        if (forceFastScrubOverlay) {
+        if (shouldUseRenderDrivenPausedTransitionPrep) {
           // Pre-render the transition start frame using a DEDICATED background
           // renderer (separate canvas + decoders). This doesn't hold
           // scrubRenderInFlightRef and doesn't conflict with the rAF pump.
