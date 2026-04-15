@@ -46,10 +46,6 @@ const {
   timelineState,
   previewBridgeState,
 } = testState;
-const videoAudioContextMocks = vi.hoisted(() => ({
-  applyVideoElementAudioStateMock: vi.fn(),
-  resetVideoElementAudioStateMock: vi.fn(),
-}));
 
 function createStoreHook<TState extends object>(state: TState) {
   const hook = ((selector?: (value: TState) => unknown) => (
@@ -135,22 +131,11 @@ vi.mock('@/features/composition-runtime/deps/keyframes', () => ({
   interpolatePropertyValue: (_keyframes: unknown, _frame: number, fallback: number) => fallback,
 }));
 
-vi.mock('./video-audio-context', () => ({
-  applyVideoElementAudioState: videoAudioContextMocks.applyVideoElementAudioStateMock,
-  resetVideoElementAudioState: videoAudioContextMocks.resetVideoElementAudioStateMock,
-  useVideoAudioState: vi.fn(() => ({ audioVolume: 1, resolvedAudioEqStages: [] })),
-  connectedVideoElements: new WeakSet<HTMLVideoElement>(),
-  videoAudioContexts: new WeakMap<HTMLVideoElement, AudioContext>(),
-  ensureAudioContextResumed: vi.fn(),
-}));
-
 describe('VideoContent pooled handoff', () => {
   beforeEach(() => {
     preloadSourceMock.mockClear();
     acquireForClipMock.mockClear();
     releaseClipMock.mockClear();
-    videoAudioContextMocks.applyVideoElementAudioStateMock.mockClear();
-    videoAudioContextMocks.resetVideoElementAudioStateMock.mockClear();
     playbackState.currentFrame = 0;
     playbackState.isPlaying = true;
     playbackState.previewFrame = null;
@@ -409,7 +394,7 @@ describe('VideoContent pooled handoff', () => {
     });
   });
 
-  it('skips DOM video audio wiring when external preview audio owns the clip', async () => {
+  it('keeps the pooled preview video element silent', async () => {
     const pooledElement = createMockVideoElement();
     acquireForClipMock.mockReturnValue(pooledElement);
 
@@ -430,15 +415,14 @@ describe('VideoContent pooled handoff', () => {
         playbackRate={1}
         sourceFps={30}
         audioEqStages={[]}
-        manageElementAudio={false}
       />,
     );
 
     await waitFor(() => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-      expect(videoAudioContextMocks.resetVideoElementAudioStateMock).toHaveBeenCalledWith(pooledElement);
     });
 
-    expect(videoAudioContextMocks.applyVideoElementAudioStateMock).not.toHaveBeenCalled();
+    expect(pooledElement.muted).toBe(true);
+    expect(pooledElement.volume).toBe(0);
   });
 });

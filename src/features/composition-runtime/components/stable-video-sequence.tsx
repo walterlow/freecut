@@ -166,11 +166,6 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
     item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId)?.fps : undefined
   ));
 
-  const audioEqStages = useMemo(
-    () => appendResolvedAudioEqSources(undefined, item.trackAudioEq, getAudioEqSettings(item)),
-    [item.trackAudioEq, item],
-  );
-
   if (!item.src) {
     return null;
   }
@@ -191,11 +186,9 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
     <div style={SHADOW_STYLE} data-shadow-bridge={item.id}>
       <VideoContent
         item={item}
-        muted={true}
         safeTrimBefore={safeTrimBefore}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
-        audioEqStages={audioEqStages}
       />
     </div>
   );

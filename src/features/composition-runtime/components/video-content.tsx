@@ -21,14 +21,6 @@ import {
   planVideoFrameCallbackCorrection,
   shouldReactOwnPlaybackRate,
 } from '../utils/video-sync-plan';
-import {
-  applyVideoElementAudioState,
-  resetVideoElementAudioState,
-  useVideoAudioState,
-  connectedVideoElements,
-  videoAudioContexts,
-  ensureAudioContextResumed,
-} from './video-audio-context';
 
 const videoLog = createLogger('NativePreviewVideo');
 const contentLog = createLogger('VideoContent');
@@ -53,9 +45,6 @@ const NativePreviewVideo: React.FC<{
   sequenceFrameOffset?: number;
   sourceFps: number;
   playbackRate: number;
-  audioVolume: number;
-  audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
-  manageElementAudio?: boolean;
   onError: (error: Error) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
   fitMode?: 'contain' | 'fill';
@@ -68,9 +57,6 @@ const NativePreviewVideo: React.FC<{
   sequenceFrameOffset = 0,
   sourceFps,
   playbackRate,
-  audioVolume,
-  audioEqStages,
-  manageElementAudio = true,
   onError,
   containerRef,
   fitMode = 'contain',
@@ -86,14 +72,10 @@ const NativePreviewVideo: React.FC<{
   const forceRenderTimeoutRef = useRef<number | null>(null);
   const preWarmTimerRef = useRef<number | null>(null);
   const preWarmGenRef = useRef(0);
-  const audioVolumeRef = useRef(audioVolume);
-  const audioEqStagesRef = useRef(audioEqStages);
   const onErrorRef = useRef(onError);
   const lastSyncTimeRef = useRef<number>(Date.now());
   const needsInitialSyncRef = useRef<boolean>(true);
   const lastFrameRef = useRef<number>(-1);
-  audioVolumeRef.current = audioVolume;
-  audioEqStagesRef.current = audioEqStages;
   onErrorRef.current = onError;
 
   // Clock instance for imperative access in rVFC callback
@@ -177,20 +159,10 @@ const NativePreviewVideo: React.FC<{
     }
 
     videoLog.debug(`[${shortId}] acquired:`, element.readyState);
-
-    if (manageElementAudio) {
-      // Pool creates elements muted. When the video element owns audio, unmute
-      // and keep any existing Web Audio graph warm across pooled reuse.
-      element.muted = false;
-      if (connectedVideoElements.has(element)) {
-        const audioContext = videoAudioContexts.get(element);
-        if (audioContext?.state === 'suspended') {
-          audioContext.resume();
-        }
-      }
-    } else {
-      resetVideoElementAudioState(element);
-    }
+    // Preview video is now visual-only. Video clip audio is driven by the
+    // dedicated clip-audio components, so the pooled element must stay silent.
+    element.muted = true;
+    element.volume = 0;
 
     // Check if this is a split boundary crossing during playback.
     // The pool may return the same element that was just released by cleanup.
@@ -210,11 +182,6 @@ const NativePreviewVideo: React.FC<{
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
     elementRef.current = element;
-    if (manageElementAudio) {
-      applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
-    } else {
-      resetVideoElementAudioState(element);
-    }
 
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
@@ -392,7 +359,7 @@ const NativePreviewVideo: React.FC<{
     // Ongoing seeking is handled by the separate sync effect, and itemId-only
     // handoffs are handled by the registration + sync refs without tearing down
     // the element across split-boundary transitions.
-  }, [poolClipId, src, pool, containerRef, shortId, fitMode, manageElementAudio]);
+  }, [poolClipId, src, pool, containerRef, shortId, fitMode]);
 
   useEffect(() => {
     const element = elementRef.current;
@@ -621,18 +588,12 @@ const NativePreviewVideo: React.FC<{
             preWarmTimerRef.current = null;
             const v = elementRef.current;
             if (v && v.paused && v.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
-              v.muted = true;
               v.play().then(() => {
                 // Only pause if this pre-warm is still current and playback hasn't started
                 if (gen === preWarmGenRef.current && !usePlaybackStore.getState().isPlaying) {
                   v.pause();
                 }
-                // Always unmute â€” if playback started or another scrub superseded
-                // this pre-warm, leaving muted=true causes silent playback.
-                v.muted = false;
-              }).catch(() => {
-                v.muted = false;
-              });
+              }).catch(() => {});
             }
           }, 50);
         }
@@ -649,10 +610,6 @@ const NativePreviewVideo: React.FC<{
   useEffect(() => {
     const video = elementRef.current;
     if (!video || !isPlaying || !supportsRVFC) return;
-
-    // Pre-resume AudioContext so audio starts immediately with video.
-    // Without this, suspended AudioContext adds 50-100ms audio delay on cold resume.
-    ensureAudioContextResumed();
 
     // Set initial playbackRate when RVFC takes over
     video.playbackRate = playbackRateRef.current;
@@ -719,17 +676,6 @@ const NativePreviewVideo: React.FC<{
     };
   }, [clock, isPlaying, poolClipId]);
 
-  // Keep volume/gain in sync for pooled element.
-  useEffect(() => {
-    const video = elementRef.current;
-    if (!video) return;
-    if (manageElementAudio) {
-      applyVideoElementAudioState(video, audioVolume, audioEqStages);
-    } else {
-      resetVideoElementAudioState(video);
-    }
-  }, [audioEqStages, audioVolume, manageElementAudio]);
-
   // Guard: itemId is required for rendering
   if (!itemId) {
     return <div style={{ width: '100%', height: '100%', backgroundColor: '#1a1a1a' }} />;
@@ -781,10 +727,8 @@ export const VideoContent: React.FC<{
   playbackRate: number;
   sourceFps: number;
   audioEqStages: ReadonlyArray<ResolvedAudioEqSettings>;
-  manageElementAudio?: boolean;
   forceCssComposite?: boolean;
-}> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, audioEqStages, manageElementAudio = true, forceCssComposite = false }) => {
-  const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
+}> = ({ item, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
   const [hasError, setHasError] = useState(false);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
   // The pooled DOM video path now exists only for the remaining Player-owned
@@ -839,9 +783,6 @@ export const VideoContent: React.FC<{
       sequenceFrameOffset={item._sequenceFrameOffset ?? 0}
       sourceFps={sourceFps}
       playbackRate={playbackRate}
-      audioVolume={baseAudioVolume}
-      audioEqStages={resolvedAudioEqStages}
-      manageElementAudio={manageElementAudio}
       onError={handleError}
       containerRef={containerRef}
       fitMode="fill"

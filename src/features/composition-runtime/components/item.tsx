@@ -257,12 +257,9 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
       <>
         <VideoContent
           item={item}
-          muted={muted || shouldRenderExternalVideoAudio}
           safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
           sourceFps={sourceFps}
-          audioEqStages={itemAudioEqStages}
-          manageElementAudio={!shouldRenderExternalVideoAudio}
           forceCssComposite={masks.length > 0}
         />
         {externalVideoAudio}
