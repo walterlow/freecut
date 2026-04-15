@@ -27,7 +27,7 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
 import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
-import { getAudioPitchShiftSemitones, isAudioPitchShiftActive } from '@/shared/utils/audio-pitch';
+import { getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch';
 import { needsCustomAudioDecoder } from '../utils/audio-codec-detection';
 
 function getLogger() { return createLogger('CompositionItem'); }
@@ -193,14 +193,11 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
       ? item.trackVolumeDb
       : 0;
     const videoAudioSrc = item.audioSrc ?? item.src;
-    const requiresPitchShiftedVideoAudio = isAudioPitchShiftActive(
-      audioPitchShiftSemitones + itemLocalPitchShiftSemitones,
-    );
-    const shouldUseCustomDecodedVideoAudio = !muted
+    const shouldRenderExternalVideoAudio = compositionRenderMode !== 'visual-only'
+      && !muted
+      && !!videoAudioSrc;
+    const shouldUseCustomDecodedVideoAudio = shouldRenderExternalVideoAudio
       && needsCustomAudioDecoder(mediaItem?.audioCodec ?? mediaItem?.codec);
-    const shouldRenderExternalVideoAudio = !muted
-      && !!videoAudioSrc
-      && (requiresPitchShiftedVideoAudio || shouldUseCustomDecodedVideoAudio);
     const externalVideoAudio = shouldRenderExternalVideoAudio ? (
       shouldUseCustomDecodedVideoAudio ? (
         <CustomDecoderAudio
