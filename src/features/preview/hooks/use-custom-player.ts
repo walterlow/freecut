@@ -33,6 +33,7 @@ export function useCustomPlayer(
   isGizmoInteractingRef?: React.RefObject<boolean>,
   onPlayerSeek?: (targetFrame: number) => void,
   visualPlaybackModeRef?: React.RefObject<PreviewVisualPlaybackMode>,
+  shouldPrimePlayerOnReady?: (frame: number) => boolean,
 ) {
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
@@ -179,10 +180,6 @@ export function useCustomPlayer(
   // Without this, the Player would seek to frame 0 (the default) before
   // loadTimeline() restores the saved currentFrame from IndexedDB.
   //
-  // This initial seek remains intentional even when the rendered preview
-  // currently owns visible video. A number of paused-preview paths still use
-  // the hidden Player as the ready/seek handshake before later handoff logic
-  // decides who should keep authority.
   const isTimelineLoading = useTimelineSettingsStore((s) => s.isTimelineLoading);
 
   // Timeline → Player: Sync frame position
@@ -193,10 +190,16 @@ export function useCustomPlayer(
     const playerFrame = getPlayerFrame();
     lastSyncedFrameRef.current = initialFrame;
     lastSeekTargetRef.current = initialFrame;
-    if (playerFrame !== initialFrame) {
+
+    const shouldPrimePlayer = isPlaying
+      || (shouldPrimePlayerOnReady
+        ? shouldPrimePlayerOnReady(initialFrame)
+        : getCurrentVisualPlaybackMode() === 'player');
+
+    if (playerFrame !== initialFrame && shouldPrimePlayer) {
       onPlayerSeek?.(initialFrame);
+      playerRef.current.seekTo(initialFrame);
     }
-    playerRef.current.seekTo(initialFrame);
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!playerRef.current) return;
@@ -225,7 +228,7 @@ export function useCustomPlayer(
     });
 
     return unsubscribe;
-  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, onPlayerSeek, visualPlaybackMode, getCurrentVisualPlaybackMode]);
+  }, [playerReady, isTimelineLoading, playerRef, getPlayerFrame, seekPlayerToFrame, isGizmoInteractingRef, isPlaying, onPlayerSeek, visualPlaybackMode, getCurrentVisualPlaybackMode, shouldPrimePlayerOnReady]);
 
   // Preview frame seeking: seek to hovered position on timeline
   useEffect(() => {

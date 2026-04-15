@@ -358,6 +358,12 @@ function getDisplayedFrame() {
   return usePreviewBridgeStore.getState().displayedFrame;
 }
 
+async function waitForPreviewReady() {
+  await waitFor(() => {
+    expect(screen.getByTestId('mock-player')).toBeInTheDocument();
+  });
+}
+
 function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
@@ -474,9 +480,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -577,9 +581,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
 
     act(() => {
       useGizmoStore.setState({
@@ -674,9 +676,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
 
     act(() => {
       usePlaybackStore.getState().setPreviewFrame(24);
@@ -776,9 +776,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -893,9 +891,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(24);
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     const renderer = await waitFor(() => {
@@ -991,9 +987,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalledWith(24);
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     const renderer = await waitFor(() => {
@@ -1170,9 +1164,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
     expect(scrubCanvas.style.visibility).toBe('visible');
 
@@ -1304,9 +1296,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1342,9 +1332,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1383,9 +1371,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1473,9 +1459,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1559,9 +1543,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1648,9 +1630,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1722,9 +1702,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1774,9 +1752,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -1827,9 +1803,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2072,9 +2046,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2137,9 +2109,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2206,9 +2176,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2259,9 +2227,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2339,9 +2305,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2417,9 +2381,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2499,9 +2461,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2599,9 +2559,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2697,9 +2655,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2791,9 +2747,7 @@ describe('VideoPreview sync behavior', () => {
 
     const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     // Scrub to last transition frame (endFrame - 1 = 59)
@@ -2832,9 +2786,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2866,9 +2818,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -2949,9 +2899,7 @@ describe('VideoPreview sync behavior', () => {
       />
     );
 
-    await waitFor(() => {
-      expect(seekToMock).toHaveBeenCalled();
-    });
+    await waitForPreviewReady();
     seekToMock.mockClear();
 
     act(() => {
@@ -3089,3 +3037,4 @@ describe('VideoPreview sync behavior', () => {
     expect(resolveCallsForMedia).toBeGreaterThan(0);
   });
 });
+
