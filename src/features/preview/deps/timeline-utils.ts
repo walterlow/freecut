@@ -10,5 +10,6 @@ export {
   createClassicTrack,
   getDroppedMediaDurationInFrames,
   getTrackKind,
+  timelineToSourceFrames,
   type DroppableMediaType,
 } from './timeline-contract';

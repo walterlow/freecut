@@ -35,6 +35,7 @@ import { usePreviewTransitionSessionController } from '../hooks/use-preview-tran
 import { useStreamingPlaybackController } from '../hooks/use-streaming-playback-controller';
 import { hasVisibleVideoAtFrame } from '../utils/visible-video-ownership';
 import { shouldShowRenderedPreviewCanvas } from '../utils/rendered-preview-canvas-visibility';
+import { useCompositionsStore } from '../deps/timeline-contract';
 import type { PreviewVisualPlaybackMode } from '@/shared/state/preview-bridge';
 
 interface VideoPreviewProps {
@@ -121,6 +122,7 @@ export const VideoPreview = memo(function VideoPreview({
     containerSize,
     suspendOverlay,
   });
+  const compositionById = useCompositionsStore((s) => s.compositionById);
   const showGpuEffectsOverlay = useGpuEffectsOverlay(
     gpuEffectsCanvasRef,
     playerContainerRef,
@@ -343,11 +345,11 @@ export const VideoPreview = memo(function VideoPreview({
   const shouldUseRenderedPausedVideoPreview = useMemo(() => {
     if (isPlaying) return false;
     const pausedTargetFrame = previewFrame ?? currentFrame;
-    return hasVisibleVideoAtFrame(combinedTracks, pausedTargetFrame);
-  }, [combinedTracks, currentFrame, isPlaying, previewFrame]);
+    return hasVisibleVideoAtFrame(combinedTracks, pausedTargetFrame, { compositionById, fps });
+  }, [combinedTracks, compositionById, currentFrame, fps, isPlaying, previewFrame]);
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldUseRenderedPausedVideoPreview;
   const renderedPreviewFrame = previewFrame ?? displayedFrame ?? currentFrame;
-  const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(combinedTracks, renderedPreviewFrame);
+  const renderedPreviewOwnsVisibleVideo = hasVisibleVideoAtFrame(combinedTracks, renderedPreviewFrame, { compositionById, fps });
   const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying
     ? 'streaming'
     : ((forceFastScrubOverlay && renderedPreviewOwnsVisibleVideo)

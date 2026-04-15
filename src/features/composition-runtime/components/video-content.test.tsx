@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VideoContent } from './video-content';
 
@@ -57,45 +57,6 @@ function createStoreHook<TState extends object>(state: TState) {
   return hook;
 }
 
-function createMockVideoElement(): HTMLVideoElement {
-  const element = document.createElement('video');
-  let currentTimeValue = 0;
-  let pausedValue = true;
-
-  Object.defineProperty(element, 'readyState', {
-    configurable: true,
-    get: () => 4,
-  });
-  Object.defineProperty(element, 'videoWidth', {
-    configurable: true,
-    get: () => 1920,
-  });
-  Object.defineProperty(element, 'duration', {
-    configurable: true,
-    get: () => 120,
-  });
-  Object.defineProperty(element, 'currentTime', {
-    configurable: true,
-    get: () => currentTimeValue,
-    set: (value: number) => {
-      currentTimeValue = value;
-    },
-  });
-  Object.defineProperty(element, 'paused', {
-    configurable: true,
-    get: () => pausedValue,
-  });
-
-  element.play = vi.fn(async () => {
-    pausedValue = false;
-  });
-  element.pause = vi.fn(() => {
-    pausedValue = true;
-  });
-
-  return element;
-}
-
 vi.mock('@/features/composition-runtime/deps/player', () => ({
   useSequenceContext: () => ({ localFrame: 0, from: 0, durationInFrames: 120, parentFrom: 0 }),
   useVideoSourcePool: () => testState.pool!,
@@ -148,11 +109,33 @@ describe('VideoContent pooled handoff', () => {
     previewBridgeState.displayedFrame = null;
   });
 
-  it('keeps the acquired pool element when only itemId changes on the same pool lane', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
+  it('stays detached in player mode and never acquires a pooled video element', () => {
+    const { container } = render(
+      <VideoContent
+        item={{
+          id: 'clip-player-detached',
+          type: 'video',
+          trackId: 'track-1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'Clip Player Detached',
+          src: 'blob:test',
+          _poolClipId: 'group-origin-1',
+        }}
+        safeTrimBefore={0}
+        playbackRate={1}
+        sourceFps={30}
+      />,
+    );
 
-    const { rerender } = render(
+    expect(container.querySelector('[data-detached-preview-video="clip-player-detached"]')).toBeInTheDocument();
+    expect(acquireForClipMock).not.toHaveBeenCalled();
+    expect(preloadSourceMock).not.toHaveBeenCalled();
+    expect(releaseClipMock).not.toHaveBeenCalled();
+  });
+
+  it('stays detached across same-lane item handoffs', () => {
+    const { container, rerender } = render(
       <VideoContent
         item={{
           id: 'clip-a',
@@ -170,9 +153,7 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    });
+    expect(container.querySelector('[data-detached-preview-video="clip-a"]')).toBeInTheDocument();
 
     rerender(
       <VideoContent
@@ -192,19 +173,17 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(acquireForClipMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-detached-preview-video="clip-b"]')).toBeInTheDocument();
+    expect(acquireForClipMock).not.toHaveBeenCalled();
+    expect(preloadSourceMock).not.toHaveBeenCalled();
     expect(releaseClipMock).not.toHaveBeenCalled();
   });
 
-  it('does not acquire a pooled video element while streaming playback owns visuals', () => {
+  it('stays detached while streaming playback owns visuals', () => {
     playbackState.isPlaying = true;
     previewBridgeState.visualPlaybackMode = 'streaming';
 
-    render(
+    const { container } = render(
       <VideoContent
         item={{
           id: 'clip-streaming',
@@ -222,15 +201,16 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
+    expect(container.querySelector('[data-detached-preview-video="clip-streaming"]')).toBeInTheDocument();
     expect(acquireForClipMock).not.toHaveBeenCalled();
     expect(preloadSourceMock).not.toHaveBeenCalled();
   });
 
-  it('does not acquire a pooled video element while paused rendered preview owns the frame', () => {
+  it('stays detached while paused rendered preview owns the frame', () => {
     previewBridgeState.visualPlaybackMode = 'rendered_preview';
     previewBridgeState.displayedFrame = 12;
 
-    render(
+    const { container } = render(
       <VideoContent
         item={{
           id: 'clip-overlay-owned',
@@ -248,161 +228,8 @@ describe('VideoContent pooled handoff', () => {
       />,
     );
 
+    expect(container.querySelector('[data-detached-preview-video="clip-overlay-owned"]')).toBeInTheDocument();
     expect(acquireForClipMock).not.toHaveBeenCalled();
     expect(preloadSourceMock).not.toHaveBeenCalled();
-  });
-
-  it('releases the pooled video element when streaming playback takes over visuals', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
-
-    const { rerender } = render(
-      <VideoContent
-        item={{
-          id: 'clip-detach-streaming',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Streaming',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-3',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    });
-
-    previewBridgeState.visualPlaybackMode = 'streaming';
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-detach-streaming',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Streaming',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-3',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(releaseClipMock).toHaveBeenCalledWith('group-origin-3', { delayMs: 400 });
-    });
-
-    previewBridgeState.visualPlaybackMode = 'player';
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-detach-streaming',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Streaming',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-3',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it('releases the pooled video element when paused rendered preview takes over visuals', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
-
-    const { rerender } = render(
-      <VideoContent
-        item={{
-          id: 'clip-detach-overlay',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Overlay',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-overlay-2',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    });
-
-    previewBridgeState.visualPlaybackMode = 'rendered_preview';
-    previewBridgeState.displayedFrame = 24;
-    rerender(
-      <VideoContent
-        item={{
-          id: 'clip-detach-overlay',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip Detach Overlay',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-overlay-2',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(releaseClipMock).toHaveBeenCalledWith('group-origin-overlay-2', { delayMs: 400 });
-    });
-  });
-
-  it('keeps the pooled preview video element silent', async () => {
-    const pooledElement = createMockVideoElement();
-    acquireForClipMock.mockReturnValue(pooledElement);
-
-    render(
-      <VideoContent
-        item={{
-          id: 'clip-external-audio',
-          type: 'video',
-          trackId: 'track-1',
-          from: 0,
-          durationInFrames: 90,
-          label: 'Clip External Audio',
-          src: 'blob:test',
-          _poolClipId: 'group-origin-2',
-        }}
-        safeTrimBefore={0}
-        playbackRate={1}
-        sourceFps={30}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(acquireForClipMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(pooledElement.muted).toBe(true);
-    expect(pooledElement.volume).toBe(0);
   });
 });
