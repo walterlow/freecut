@@ -51,10 +51,10 @@ describe('preview-bridge-store', () => {
   });
 
   it('avoids store churn when visualPlaybackMode is unchanged', () => {
-    usePreviewBridgeStore.getState().setVisualPlaybackMode('streaming');
+    usePreviewBridgeStore.getState().setVisualPlaybackMode('rendered_preview');
     const stateA = usePreviewBridgeStore.getState();
 
-    usePreviewBridgeStore.getState().setVisualPlaybackMode('streaming');
+    usePreviewBridgeStore.getState().setVisualPlaybackMode('rendered_preview');
     const stateB = usePreviewBridgeStore.getState();
 
     expect(stateA).toBe(stateB);

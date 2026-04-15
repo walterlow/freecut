@@ -14,7 +14,7 @@ const playbackStateMocks = vi.hoisted(() => ({
 
 const previewBridgeMocks = vi.hoisted(() => {
   const state = {
-    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    visualPlaybackMode: 'player' as 'player' | 'rendered_preview' | 'streaming',
     streamingAudioProvider: null as null | {
       getAudioChunks: ReturnType<typeof vi.fn>;
       getSourceInfo: ReturnType<typeof vi.fn>;
@@ -86,7 +86,7 @@ describe('StreamingSoundTouchWorkletAudio', () => {
   });
 
   it('renders fallback while paused even if canvas preview owns visuals', () => {
-    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.visualPlaybackMode = 'rendered_preview';
     previewBridgeMocks.state.streamingAudioProvider = {
       getAudioChunks: vi.fn(() => []),
       getSourceInfo: vi.fn(() => ({ hasAudio: true })),

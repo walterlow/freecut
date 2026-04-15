@@ -786,9 +786,8 @@ export const VideoContent: React.FC<{
 }> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, audioEqStages, manageElementAudio = true, forceCssComposite = false }) => {
   const { audioVolume: baseAudioVolume, resolvedAudioEqStages } = useVideoAudioState(item, muted, audioEqStages);
   const [hasError, setHasError] = useState(false);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
-  const shouldDetachVideoForRenderedPreview = isPlaying && visualPlaybackMode === 'streaming';
+  const shouldDetachVideoForRenderedPreview = visualPlaybackMode === 'streaming';
 
   // NativePreviewVideo mounts pooled <video> into this container.
   const containerRef = useRef<HTMLDivElement | null>(null);

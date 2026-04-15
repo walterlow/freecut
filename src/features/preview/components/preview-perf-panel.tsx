@@ -30,7 +30,11 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
   const transitionMode = snapshot.transitionSessionMode === 'none'
     ? null
     : 'Canvas';
-  const visualModeLabel = snapshot.visualPlaybackMode === 'streaming' ? 'Streaming' : 'Player';
+  const visualModeLabel = snapshot.visualPlaybackMode === 'streaming'
+    ? 'Streaming'
+    : snapshot.visualPlaybackMode === 'rendered_preview'
+      ? 'Canvas'
+      : 'Player';
 
   return (
     <div

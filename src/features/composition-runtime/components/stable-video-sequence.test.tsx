@@ -11,7 +11,7 @@ const playbackState = {
   isPlaying: false,
 };
 const previewBridgeState = {
-  visualPlaybackMode: 'player' as 'player' | 'streaming',
+  visualPlaybackMode: 'player' as 'player' | 'rendered_preview' | 'streaming',
   displayedFrame: null as number | null,
 };
 

@@ -1,6 +1,6 @@
 import type { CaptureOptions } from '@/shared/state/playback';
 
-export type PreviewVisualPlaybackMode = 'player' | 'streaming';
+export type PreviewVisualPlaybackMode = 'player' | 'rendered_preview' | 'streaming';
 
 export interface PreviewStreamingAudioChunk {
   timestamp: number;

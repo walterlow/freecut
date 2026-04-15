@@ -26,7 +26,7 @@ const testState = vi.hoisted(() => ({
     keyframes: [] as unknown[],
   },
   previewBridgeState: {
-    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    visualPlaybackMode: 'player' as 'player' | 'rendered_preview' | 'streaming',
     displayedFrame: null as number | null,
   },
 }));
@@ -248,6 +248,7 @@ describe('VideoContent pooled handoff', () => {
   });
 
   it('keeps a pooled video element mounted while paused rendered preview owns the frame', async () => {
+    previewBridgeState.visualPlaybackMode = 'rendered_preview';
     previewBridgeState.displayedFrame = 12;
 
     render(
@@ -382,6 +383,7 @@ describe('VideoContent pooled handoff', () => {
       expect(acquireForClipMock).toHaveBeenCalledTimes(1);
     });
 
+    previewBridgeState.visualPlaybackMode = 'rendered_preview';
     previewBridgeState.displayedFrame = 24;
     rerender(
       <VideoContent

@@ -105,7 +105,6 @@ export const StreamingSoundTouchWorkletAudio: React.FC<StreamingSoundTouchWorkle
   });
   const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
   const streamingAudioProvider = usePreviewBridgeStore((s) => s.streamingAudioProvider);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const graphRef = useRef<PreviewClipAudioGraph | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
   const [nodeReady, setNodeReady] = useState(false);
@@ -121,8 +120,7 @@ export const StreamingSoundTouchWorkletAudio: React.FC<StreamingSoundTouchWorkle
   const resetAnchorTimeRef = useRef<number | null>(null);
 
   const shouldUseStreamingAudio = (
-    isPlaying
-    && visualPlaybackMode === 'streaming'
+    visualPlaybackMode === 'streaming'
     && streamingAudioProvider !== null
     && streamingAudioProvider.isStreaming(streamKey)
     && streamingAudioProvider.getSourceInfo(streamKey)?.hasAudio !== false

@@ -360,7 +360,11 @@ export const VideoPreview = memo(function VideoPreview({
     });
   }, [isPlaying, preferPlayerForTextGizmo, previewFrame, currentFrame, combinedTracks]);
   const forceFastScrubOverlay = showGpuEffectsOverlay || streamingPlaybackActive || shouldRenderPausedPreview;
-  const visualPlaybackMode: PreviewVisualPlaybackMode = (isPlaying || forceFastScrubOverlay) ? 'streaming' : 'player';
+  const visualPlaybackMode: PreviewVisualPlaybackMode = isPlaying
+    ? 'streaming'
+    : forceFastScrubOverlay
+      ? 'rendered_preview'
+      : 'player';
   visualPlaybackModeRef.current = visualPlaybackMode;
 
   useEffect(() => {

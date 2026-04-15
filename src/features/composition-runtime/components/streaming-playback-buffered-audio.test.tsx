@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const previewBridgeMocks = vi.hoisted(() => {
   const state = {
-    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    visualPlaybackMode: 'player' as 'player' | 'rendered_preview' | 'streaming',
     streamingAudioProvider: null as null | {
       getAudioChunks: ReturnType<typeof vi.fn>;
       getSourceInfo: ReturnType<typeof vi.fn>;
@@ -129,7 +129,7 @@ describe('StreamingPlaybackBufferedAudio', () => {
 
   it('renders the fallback while paused even if the canvas owns visuals', () => {
     storeMocks.playbackState.isPlaying = false;
-    previewBridgeMocks.state.visualPlaybackMode = 'streaming';
+    previewBridgeMocks.state.visualPlaybackMode = 'rendered_preview';
     previewBridgeMocks.state.streamingAudioProvider = {
       getAudioChunks: vi.fn(() => []),
       getSourceInfo: vi.fn(() => ({ hasAudio: true })),

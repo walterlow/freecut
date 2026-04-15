@@ -105,7 +105,7 @@ const storeMocks = vi.hoisted(() => {
 
 const previewBridgeMocks = vi.hoisted(() => {
   const state = {
-    visualPlaybackMode: 'player' as 'player' | 'streaming',
+    visualPlaybackMode: 'player' as 'player' | 'rendered_preview' | 'streaming',
     streamingAudioProvider: null as null | {
       getAudioChunks: ReturnType<typeof vi.fn>;
       getSourceInfo: ReturnType<typeof vi.fn>;

@@ -12,7 +12,6 @@
 
 import React, { useEffect, useMemo } from 'react';
 import { Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
-import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useVideoSourcePool } from '@/features/composition-runtime/deps/player';
 import {
   DEFAULT_SPEED,
@@ -36,6 +35,7 @@ import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -251,8 +251,8 @@ const GroupRenderer: React.FC<{
 
   const { fps } = useVideoConfig();
   const pool = useVideoSourcePool();
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const shouldUseDomTransitionSupport = !isPlaying;
+  const visualPlaybackMode = usePreviewBridgeStore((s) => s.visualPlaybackMode);
+  const shouldUseDomTransitionSupport = visualPlaybackMode !== 'streaming';
 
   const transitionWarmupClipIds = useMemo(() => {
     if (!shouldUseDomTransitionSupport || isPremounted || activeItemIndex < 0 || group.items.length <= 1) return '';

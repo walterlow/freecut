@@ -74,7 +74,7 @@ describe('usePlaybackShortcuts', () => {
     });
     usePreviewBridgeStore.setState({
       displayedFrame: 12,
-      visualPlaybackMode: 'streaming',
+      visualPlaybackMode: 'rendered_preview',
       streamingAudioProvider: null,
       captureFrame: null,
       captureFrameImageData: null,
