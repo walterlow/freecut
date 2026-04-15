@@ -353,6 +353,7 @@ export const VideoPreview = memo(function VideoPreview({
     getTransitionWindowByStartFrame,
     getActiveTransitionWindowForFrame,
     pushTransitionTrace,
+    streamingFrameProviderRef,
     ...previewRuntimeRefs.transitionSessionControllerRefs,
   });
   const {
