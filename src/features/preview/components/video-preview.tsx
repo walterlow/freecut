@@ -228,7 +228,7 @@ export const VideoPreview = memo(function VideoPreview({
     getPendingResolveCount,
   });
 
-  const { ignorePlayerUpdatesRef } = useCustomPlayer(
+  const { ignorePlayerUpdatesRef, playerSeekTargetRef } = useCustomPlayer(
     playerRef,
     bypassPreviewSeekRef,
     preferPlayerForStyledTextScrubRef,
@@ -426,6 +426,7 @@ export const VideoPreview = memo(function VideoPreview({
     adaptiveQualityStateRef,
     adaptiveFrameSampleRef: previewRuntimeRefs.adaptiveFrameSampleRef,
     ignorePlayerUpdatesRef,
+    playerSeekTargetRef,
     resolvePendingSeekLatency,
     visualPlaybackModeRef,
   });

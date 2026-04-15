@@ -209,10 +209,6 @@ export function usePreviewRenderPump({
   recordRenderFrameJitter,
   streamingFrameProviderRef,
 }: UsePreviewRenderPumpParams) {
-  // Paused transition prewarm is currently locked to the render-driven path.
-  // The alternate branch remains only as legacy cleanup work.
-  const shouldUseRenderDrivenPausedTransitionPrep = true;
-
   useEffect(() => {
     scrubMountedRef.current = true;
 
@@ -1001,7 +997,6 @@ export function usePreviewRenderPump({
       const pausedPrewarmStartFrame = pausedActiveWindow?.startFrame
         ?? getPausedTransitionPrewarmStartFrame(state.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
-        if (shouldUseRenderDrivenPausedTransitionPrep) {
           const tw = pausedActiveWindow ?? getTransitionWindowByStartFrame(pausedPrewarmStartFrame);
           if (tw) {
             pinTransitionPlaybackSession(tw);
@@ -1045,15 +1040,6 @@ export function usePreviewRenderPump({
               })();
             }
           }
-        } else if (pausedActiveWindow) {
-          const tw = pausedActiveWindow;
-          pinTransitionPlaybackSession(tw);
-          scrubRequestedFrameRef.current = state.currentFrame;
-          void pumpRenderLoop();
-        } else {
-          schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
-        }
-
         if (lastPausedPrearmTargetRef.current !== pausedPrewarmStartFrame) {
           lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
           pushTransitionTrace('paused_prearm', {
@@ -1327,7 +1313,6 @@ export function usePreviewRenderPump({
         ?? getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
-        if (shouldUseRenderDrivenPausedTransitionPrep) {
           // Pre-render the transition start frame using a DEDICATED background
           // renderer (separate canvas + decoders). This doesn't hold
           // scrubRenderInFlightRef and doesn't conflict with the rAF pump.
@@ -1365,13 +1350,6 @@ export function usePreviewRenderPump({
               }
             })();
           }
-        } else if (initialPausedActiveWindow) {
-          // Paused INSIDE a transition on initial mount ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â pin session and
-          // render so the GPU transition is visible without forceFastScrubOverlay.
-          pinTransitionPlaybackSession(initialPausedActiveWindow);
-        } else {
-          schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
-        }
         pushTransitionTrace('paused_prearm', {
           targetFrame: pausedPrewarmStartFrame,
         });

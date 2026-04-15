@@ -29,6 +29,7 @@ interface UsePreviewPlaybackControllerParams {
   adaptiveQualityStateRef: MutableRefObject<AdaptivePreviewQualityState>;
   adaptiveFrameSampleRef: MutableRefObject<{ frame: number; tsMs: number } | null>;
   ignorePlayerUpdatesRef: MutableRefObject<boolean>;
+  playerSeekTargetRef: MutableRefObject<number | null>;
   resolvePendingSeekLatency: (frame: number) => void;
   visualPlaybackModeRef: MutableRefObject<PreviewVisualPlaybackMode>;
 }
@@ -48,6 +49,7 @@ export function usePreviewPlaybackController({
   adaptiveQualityStateRef,
   adaptiveFrameSampleRef,
   ignorePlayerUpdatesRef,
+  playerSeekTargetRef,
   resolvePendingSeekLatency,
   visualPlaybackModeRef,
 }: UsePreviewPlaybackControllerParams) {
@@ -90,6 +92,19 @@ export function usePreviewPlaybackController({
     const visualPlaybackMode = visualPlaybackModeRef.current;
     if (!playbackState.isPlaying && visualPlaybackMode !== 'player') {
       return;
+    }
+    if (!playbackState.isPlaying && playbackState.previewFrame === null) {
+      const expectedPlayerFrame = playerSeekTargetRef.current;
+      if (
+        expectedPlayerFrame !== null
+        && playbackState.currentFrame === expectedPlayerFrame
+        && nextFrame !== expectedPlayerFrame
+      ) {
+        // The hidden Player can finish an older seek after the rendered preview
+        // has already claimed the paused frame. Ignore that stale callback so
+        // the store doesn't jump backward and flash an outdated frame.
+        return;
+      }
     }
     const runtimeSnapshot = getPreviewRuntimeSnapshotFromPlaybackState(
       playbackState,
@@ -148,6 +163,7 @@ export function usePreviewPlaybackController({
     fps,
     ignorePlayerUpdatesRef,
     isGizmoInteractingRef,
+    playerSeekTargetRef,
     previewPerfRef,
     resolvePendingSeekLatency,
     visualPlaybackModeRef,

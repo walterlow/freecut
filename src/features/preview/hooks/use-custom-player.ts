@@ -269,5 +269,8 @@ export function useCustomPlayer(
     });
   }, [playerReady, playerRef, seekPlayerToFrame, bypassPreviewSeekRef, preferPlayerForStyledTextScrubRef, isGizmoInteractingRef, visualPlaybackMode, getCurrentVisualPlaybackMode]);
 
-  return { ignorePlayerUpdatesRef };
+  return {
+    ignorePlayerUpdatesRef,
+    playerSeekTargetRef: lastSeekTargetRef,
+  };
 }
