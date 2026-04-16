@@ -67,7 +67,7 @@ src/
 - **Path alias**: `@/*` → `src/*`
 - **Styling**: Tailwind CSS 4 + shadcn/ui (Radix primitives)
 - **Media processing**: Mediabunny for decode, WebCodecs for export, Web Workers for heavy ops
-- **Storage**: IndexedDB via `idb` (see `lib/storage/`)
+- **Storage**: Workspace folder via File System Access API (see `infrastructure/storage/workspace-fs/`). Source of truth is a user-picked directory on disk — projects, media metadata, thumbnails, waveforms, gif frames, decoded audio, transcripts all live as plain files. `WorkspaceGate` (`src/features/workspace-gate/`) blocks app render until a workspace is granted. IndexedDB is only used for a tiny handle registry (`freecut-handles-db` v1, at `infrastructure/storage/handles-db.ts`) that stores non-serializable `FileSystem*Handle` references. Legacy `video-editor-db` modules remain only for one-time migration via `workspace-fs/migrate-from-idb.ts`; consumers should import from the barrel `@/infrastructure/storage/indexeddb` which routes everything to workspace-fs
 
 ## Code Style
 

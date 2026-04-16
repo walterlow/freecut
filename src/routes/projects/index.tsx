@@ -26,6 +26,7 @@ import type { Project } from '@/types/project';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 import type { ImportProgress } from '@/features/project-bundle/types/bundle';
 import { BUNDLE_EXTENSION } from '@/features/project-bundle/types/bundle';
+import { LegacyMigrationBanner } from '@/features/projects/components/legacy-migration-banner';
 
 export const Route = createFileRoute('/projects/')({
   component: ProjectsIndex,
@@ -295,6 +296,11 @@ function ProjectsIndex() {
             </div>
           </div>
         )}
+
+        {/* Legacy IDB migration banner — appears only when old data is present and unmigrated */}
+        <div className="max-w-[1920px] mx-auto px-6 pt-6">
+          <LegacyMigrationBanner onMigrated={loadProjects} />
+        </div>
 
         {/* Loading state */}
         {isLoading ? (

@@ -4,6 +4,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { GlobalTooltip } from '@/components/ui/global-tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { WorkspaceGate } from '@/features/workspace-gate';
 import { routeTree } from './routeTree.gen';
 
 const router = createRouter({ routeTree });
@@ -52,10 +53,15 @@ export function App() {
   // GlobalTooltip for performant data-tooltip based tooltips
   // Toaster for toast notifications
   // ErrorBoundary for graceful error recovery
+  // WorkspaceGate blocks RouterProvider until a workspace handle is granted.
+  // Mounted HERE (not inside __root.tsx) so route loaders — which run before
+  // children components mount — never see an uninitialized workspace root.
   return (
     <ErrorBoundary level="app">
       <TooltipProvider delayDuration={300}>
-        <RouterProvider router={router} />
+        <WorkspaceGate>
+          <RouterProvider router={router} />
+        </WorkspaceGate>
         <GlobalTooltip />
         <Toaster />
       </TooltipProvider>

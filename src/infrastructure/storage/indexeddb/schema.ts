@@ -105,6 +105,6 @@ export interface VideoEditorDB extends DBSchema {
 }
 
 export const DB_NAME = 'video-editor-db';
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 export type VideoEditorDBInstance = IDBPDatabase<VideoEditorDB>;

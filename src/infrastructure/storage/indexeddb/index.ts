@@ -1,19 +1,18 @@
 /**
- * IndexedDB storage module.
+ * Storage barrel — transitioning from IndexedDB to workspace-fs.
  *
- * Split into domain-specific modules for maintainability:
- * - schema.ts: Database schema types and constants
- * - connection.ts: DB initialization, connection management, quota checks
- * - projects.ts: Project CRUD operations
- * - media.ts: Media CRUD operations
- * - thumbnails.ts: Thumbnail operations
- * - content.ts: Content-addressable storage (reference counting)
- * - project-media.ts: Project-media associations
- * - waveforms.ts: Audio waveform data
- * - gif-frames.ts: GIF frame data
+ * Function signatures are preserved exactly so consumers don't change.
+ * Each line below either re-exports from the new workspace-fs layer
+ * (migrated) or from the legacy IDB module (pending migration).
+ *
+ * Migration status tracked in `plans/dazzling-beaming-diffie.md`.
+ *
+ * Legacy IDB modules (projects.ts, media.ts, etc.) remain in place so the
+ * one-time migration tool can read from them. Call them via their explicit
+ * relative paths (e.g. `./projects`) rather than through this barrel.
  */
 
-// Project exports
+// Project exports — MIGRATED to workspace-fs (Phase 1).
 export {
   getAllProjects,
   getProject,
@@ -21,38 +20,42 @@ export {
   updateProject,
   deleteProject,
   getDBStats,
-} from './projects';
+} from '@/infrastructure/storage/workspace-fs/projects';
 
-// Media exports
+// Media exports — MIGRATED to workspace-fs (Phase 3).
 export {
   getAllMedia,
   getMedia,
   createMedia,
   updateMedia,
   deleteMedia,
-} from './media';
+} from '@/infrastructure/storage/workspace-fs/media';
 
-// Thumbnail exports
+// Thumbnail exports — MIGRATED to workspace-fs (Phase 3).
 export {
   saveThumbnail,
   getThumbnail,
   getThumbnailByMediaId,
   deleteThumbnailsByMediaId,
-} from './thumbnails';
+} from '@/infrastructure/storage/workspace-fs/thumbnails';
 
-// Content exports
-export { incrementContentRef, decrementContentRef, deleteContent } from './content';
+// Content exports — MIGRATED to workspace-fs (Phase 4).
+export {
+  incrementContentRef,
+  decrementContentRef,
+  deleteContent,
+} from '@/infrastructure/storage/workspace-fs/content';
 
-// Project-media association exports
+// Project-media association exports — MIGRATED to workspace-fs (Phase 2).
 export {
   associateMediaWithProject,
   removeMediaFromProject,
   getProjectMediaIds,
   getProjectsUsingMedia,
   getMediaForProject,
-} from './project-media';
+} from '@/infrastructure/storage/workspace-fs/project-media';
 
-// Waveform exports
+// Waveform exports — MIGRATED to workspace-fs (Phase 8).
 export {
   getWaveform,
   getWaveformRecord,
@@ -62,27 +65,27 @@ export {
   saveWaveformMeta,
   saveWaveformBin,
   deleteWaveform,
-} from './waveforms';
+} from '@/infrastructure/storage/workspace-fs/waveforms';
 
-// GIF frames exports
+// GIF frames exports — MIGRATED to workspace-fs (Phase 7).
 export {
   saveGifFrames,
   getGifFrames,
   deleteGifFrames,
   clearAllGifFrames,
-} from './gif-frames';
+} from '@/infrastructure/storage/workspace-fs/gif-frames';
 
-// Decoded preview audio exports
+// Decoded preview audio exports — MIGRATED to workspace-fs (Phase 9).
 export {
   getDecodedPreviewAudio,
   saveDecodedPreviewAudio,
   deleteDecodedPreviewAudio,
-} from './decoded-preview-audio';
+} from '@/infrastructure/storage/workspace-fs/decoded-preview-audio';
 
-// Transcript exports
+// Transcript exports — MIGRATED to workspace-fs (Phase 5).
 export {
   getTranscript,
   getTranscriptMediaIds,
   saveTranscript,
   deleteTranscript,
-} from './transcripts';
+} from '@/infrastructure/storage/workspace-fs/transcripts';

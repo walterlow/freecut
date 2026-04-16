@@ -174,6 +174,13 @@ export async function getDB(): Promise<VideoEditorDBInstance> {
             });
           }
         }
+
+        // v11: Reserved (was briefly used for a workspace-folder handle store
+        // before it was moved into its own dedicated database; the main DB
+        // stays at v11 for all existing users). Intentionally no-op.
+        if (oldVersion < 11) {
+          /* no-op */
+        }
       },
       blocked() {
         logger.warn(

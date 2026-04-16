@@ -2,6 +2,39 @@
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibraryService');
+
+/**
+ * Safe wrapper around workspace-fs readMediaSource that never throws —
+ * used as a last-resort fallback in getMediaFile.
+ */
+async function readMediaSourceSafe(id: string): Promise<Blob | null> {
+  try {
+    return await readMediaSource(id);
+  } catch (error) {
+    logger.warn(`readMediaSource(${id}) failed:`, error);
+    return null;
+  }
+}
+
+/**
+ * Fire-and-forget mirror of a successfully-read source file into the
+ * workspace folder so other origins (and coding agents) can read the
+ * bytes from disk. No-op when already mirrored.
+ */
+function mirrorSourceToWorkspaceInBackground(
+  id: string,
+  blob: Blob,
+  fileName: string | undefined,
+): void {
+  void (async () => {
+    try {
+      if (await hasMediaSource(id)) return;
+      await writeMediaSource(id, blob, fileName);
+    } catch (error) {
+      logger.warn(`mirrorSourceToWorkspace(${id}) failed:`, error);
+    }
+  })();
+}
 import {
   getAllMedia as getAllMediaDB,
   getMedia as getMediaDB,
@@ -28,6 +61,11 @@ import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { ensureFileHandlePermission, FileAccessError } from './file-access';
 import { enqueueBackgroundMediaWork } from './background-media-work';
+import {
+  hasMediaSource,
+  readMediaSource,
+  writeMediaSource,
+} from '@/infrastructure/storage/workspace-fs/media-source';
 import {
   buildGeneratedMediaOpfsPath,
   getGeneratedImageDimensions,
@@ -286,6 +324,12 @@ class MediaLibraryService {
     };
 
     await createMediaDB(mediaMetadata);
+
+    // Mirror source bytes into the workspace folder so every origin (dev,
+    // prod, agents reading from disk) can see the media — not just this one.
+    // Runs in the background to avoid blocking the rest of the import flow;
+    // the lazy fallback in getMediaFile covers the gap if this loses a race.
+    mirrorSourceToWorkspaceInBackground(id, file, file.name);
 
     // Stage 7: Associate with project
     await associateMediaWithProject(projectId, id);
@@ -761,7 +805,7 @@ class MediaLibraryService {
       return null;
     }
 
-    // Handle file handle storage (local-first)
+    // Handle file handle storage (local-first, origin-scoped).
     if (media.storageType === 'handle' && media.fileHandle) {
       try {
         const hasPermission = await ensureFileHandlePermission(media.fileHandle);
@@ -773,13 +817,20 @@ class MediaLibraryService {
         }
 
         const file = await media.fileHandle.getFile();
+        mirrorSourceToWorkspaceInBackground(id, file, media.fileName);
         return file;
       } catch (error) {
         if (error instanceof FileAccessError) {
+          // Cross-origin recovery: if the handle exists but isn't granted here,
+          // fall through to the workspace-fs copy before surfacing the error.
+          const fallback = await readMediaSourceSafe(id);
+          if (fallback) return fallback;
           throw error;
         }
-        // File might have been moved/deleted
-        logger.error('Failed to get file from handle:', error);
+        // File might have been moved/deleted.
+        logger.warn('Failed to get file from handle; trying workspace fallback:', error);
+        const fallback = await readMediaSourceSafe(id);
+        if (fallback) return fallback;
         throw new FileAccessError(
           `File "${media.fileName}" not found. It may have been moved or deleted.`,
           'file_missing'
@@ -787,30 +838,38 @@ class MediaLibraryService {
       }
     }
 
-    // Handle OPFS storage (legacy/fallback)
-    // Also handle old records without storageType (treat as OPFS)
+    // OPFS storage (origin-scoped).
     if (media.opfsPath) {
       try {
         const blob = await opfsService.getFileBlob(media.opfsPath);
-        if (blob.type === media.mimeType || !media.mimeType) {
-          return blob;
-        }
-        return new Blob([blob], {
-          type: media.mimeType,
-        });
+        const normalized =
+          blob.type === media.mimeType || !media.mimeType
+            ? blob
+            : new Blob([blob], { type: media.mimeType });
+        mirrorSourceToWorkspaceInBackground(id, normalized, media.fileName);
+        return normalized;
       } catch (error) {
         logger.warn('Failed to get OPFS media as file blob, falling back to ArrayBuffer read:', error);
         try {
           const arrayBuffer = await opfsService.getFile(media.opfsPath);
-          return new Blob([arrayBuffer], {
-            type: media.mimeType,
-          });
+          const blob = new Blob([arrayBuffer], { type: media.mimeType });
+          mirrorSourceToWorkspaceInBackground(id, blob, media.fileName);
+          return blob;
         } catch (fallbackError) {
+          logger.warn('OPFS read failed; trying workspace fallback:', fallbackError);
+          const fallback = await readMediaSourceSafe(id);
+          if (fallback) return fallback;
           logger.error('Failed to get media file from OPFS:', fallbackError);
           return null;
         }
       }
     }
+
+    // Cross-origin path: the record was authored on a different origin, so
+    // neither the handle nor OPFS is populated here — but the workspace
+    // folder is shared by every origin that picked it. Try that last.
+    const workspaceSource = await readMediaSourceSafe(id);
+    if (workspaceSource) return workspaceSource;
 
     logger.error('Media has no valid storage path:', id);
     return null;

@@ -12,6 +12,17 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { getCacheMigration } from '@/infrastructure/storage/cache-version';
+import {
+  mirrorBlobToWorkspace,
+  mirrorJsonToWorkspace,
+  readWorkspaceBlob,
+  removeWorkspaceCacheEntry,
+} from '@/infrastructure/storage/workspace-fs/cache-mirror';
+import {
+  filmstripFileFramePath,
+  filmstripMetaPath,
+  WORKSPACE_FILMSTRIPS_DIR,
+} from '@/infrastructure/storage/workspace-fs/paths';
 import { safeWrite } from '../utils/opfs-safe-write';
 
 const logger = createLogger('FilmstripOPFS');
@@ -241,6 +252,7 @@ class FilmstripOPFSStorage {
     const fileHandle = await mediaDir.getFileHandle('meta.json', { create: true });
     const writable = await fileHandle.createWritable();
     await safeWrite(writable, JSON.stringify(metadata));
+    void mirrorJsonToWorkspace(filmstripMetaPath(mediaId), metadata);
   }
 
   /**
@@ -251,6 +263,10 @@ class FilmstripOPFSStorage {
     const fileHandle = await mediaDir.getFileHandle(`${index}.${PRIMARY_FRAME_EXT}`, { create: true });
     const writable = await fileHandle.createWritable();
     await safeWrite(writable, blob);
+    void mirrorBlobToWorkspace(
+      filmstripFileFramePath(mediaId, index, PRIMARY_FRAME_EXT),
+      blob,
+    );
   }
 
   /**
@@ -258,8 +274,18 @@ class FilmstripOPFSStorage {
    */
   async load(mediaId: string): Promise<LoadedFilmstrip | null> {
     try {
-      const mediaDir = await this.getMediaDir(mediaId);
-      if (!mediaDir) return null;
+      let mediaDir = await this.getMediaDir(mediaId);
+
+      // If OPFS has nothing for this media, try hydrating from the workspace
+      // folder — another origin may have produced the filmstrip. hydration
+      // writes the meta.json + primary-ext frames back into OPFS so the
+      // normal load path can pick it up.
+      if (!mediaDir) {
+        const hydrated = await this.hydrateFromWorkspace(mediaId);
+        if (!hydrated) return null;
+        mediaDir = await this.getMediaDir(mediaId);
+        if (!mediaDir) return null;
+      }
 
       // Load metadata
       let metadata: FilmstripMetadata;
@@ -268,7 +294,15 @@ class FilmstripOPFSStorage {
         const metaFile = await metaHandle.getFile();
         metadata = JSON.parse(await metaFile.text());
       } catch {
-        return null;
+        const hydrated = await this.hydrateFromWorkspace(mediaId);
+        if (!hydrated) return null;
+        try {
+          const metaHandle = await mediaDir.getFileHandle('meta.json');
+          const metaFile = await metaHandle.getFile();
+          metadata = JSON.parse(await metaFile.text());
+        } catch {
+          return null;
+        }
       }
 
       // Collect frame files (dedupe by frame index, prefer primary extension).
@@ -475,6 +509,55 @@ class FilmstripOPFSStorage {
     } catch {
       // May not exist
     }
+    void removeWorkspaceCacheEntry([WORKSPACE_FILMSTRIPS_DIR, mediaId], {
+      recursive: true,
+    });
+  }
+
+  /**
+   * Pull filmstrip meta + frames from the workspace folder into OPFS.
+   * Used as a cross-origin fallback when OPFS has no cache for this media.
+   * Returns true when at least the metadata was recovered.
+   */
+  private async hydrateFromWorkspace(mediaId: string): Promise<boolean> {
+    try {
+      const metaBlob = await readWorkspaceBlob(filmstripMetaPath(mediaId));
+      if (!metaBlob) return false;
+
+      let metadata: FilmstripMetadata;
+      try {
+        metadata = JSON.parse(await metaBlob.text()) as FilmstripMetadata;
+      } catch {
+        return false;
+      }
+
+      const mediaDir = await this.getOrCreateMediaDir(mediaId);
+
+      const metaHandle = await mediaDir.getFileHandle('meta.json', { create: true });
+      const metaWritable = await metaHandle.createWritable();
+      await safeWrite(metaWritable, JSON.stringify(metadata));
+
+      // Frame count is the declared upper bound; missing frames are skipped.
+      const expected = Math.max(0, metadata.frameCount | 0);
+      for (let index = 0; index < expected; index += 1) {
+        const frameBlob = await readWorkspaceBlob(
+          filmstripFileFramePath(mediaId, index, PRIMARY_FRAME_EXT),
+        );
+        if (!frameBlob || frameBlob.size === 0) continue;
+        const frameHandle = await mediaDir.getFileHandle(
+          `${index}.${PRIMARY_FRAME_EXT}`,
+          { create: true },
+        );
+        const frameWritable = await frameHandle.createWritable();
+        await safeWrite(frameWritable, frameBlob);
+      }
+
+      logger.debug(`Hydrated filmstrip ${mediaId} from workspace`);
+      return true;
+    } catch (error) {
+      logger.warn(`hydrateFromWorkspace(${mediaId}) failed`, error);
+      return false;
+    }
   }
 
   /**
@@ -513,6 +596,7 @@ class FilmstripOPFSStorage {
     } catch (error) {
       logger.error('Failed to clear filmstrips:', error);
     }
+    void removeWorkspaceCacheEntry([WORKSPACE_FILMSTRIPS_DIR], { recursive: true });
   }
 
   /**
