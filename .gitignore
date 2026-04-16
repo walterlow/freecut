@@ -53,3 +53,5 @@ crates/*/Cargo.lock
 .knip-report.json
 
 tmp
+
+.vercel
