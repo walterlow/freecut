@@ -117,6 +117,11 @@ export interface MediaLibraryActions {
    * Existing media are returned too so drop targets can place duplicates without re-importing.
    */
   importHandlesForPlacement: (handles: FileSystemFileHandle[]) => Promise<MediaMetadata[]>;
+  /**
+   * Import media from an HTTP(S) URL.
+   * The file is fetched and persisted to OPFS.
+   */
+  importFromUrl: (url: string) => Promise<(MediaMetadata & { isDuplicate?: boolean }) | null>;
   deleteMedia: (id: string) => Promise<void>;
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 

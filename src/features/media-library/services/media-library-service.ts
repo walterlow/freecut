@@ -359,6 +359,123 @@ class MediaLibraryService {
   }
 
   /**
+   * Import media from a network URL.
+   *
+   * The remote file is fetched, validated, processed for metadata/thumbnail,
+   * and stored as an OPFS-backed media item.
+   */
+  async importMediaFromUrl(
+    url: string,
+    projectId: string
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Invalid URL');
+    }
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Only http(s) URLs are supported');
+    }
+
+    const response = await fetch(parsedUrl.toString());
+    if (!response.ok) {
+      throw new Error(`Failed to download media: HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const fileNameFromPath = parsedUrl.pathname.split('/').pop() || 'remote-media';
+    const fallbackExt = blob.type.startsWith('video/')
+      ? 'mp4'
+      : blob.type.startsWith('audio/')
+        ? 'mp3'
+        : blob.type.startsWith('image/')
+          ? 'png'
+          : 'bin';
+    const normalizedFileName = fileNameFromPath.includes('.')
+      ? fileNameFromPath
+      : `${fileNameFromPath}.${fallbackExt}`;
+    const file = new File([blob], normalizedFileName, {
+      type: blob.type || 'application/octet-stream',
+    });
+
+    const validationResult = validateMediaFile(file);
+    if (!validationResult.valid) {
+      throw new Error(validationResult.error);
+    }
+
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existingMedia = projectMedia.find(
+      (m) => m.fileName === file.name && m.fileSize === file.size
+    );
+    if (existingMedia) {
+      return { ...existingMedia, isDuplicate: true };
+    }
+
+    const resolvedMimeType = getMimeType(file);
+    const { metadata, thumbnail } = await mediaProcessorService.processMedia(file, resolvedMimeType, {
+      generateThumbnail: true,
+      thumbnailMaxSize: 320,
+      thumbnailQuality: 0.6,
+    });
+
+    const id = crypto.randomUUID();
+    const createdAt = Date.now();
+    const opfsPath = buildGeneratedMediaOpfsPath(id);
+    const mediaMetadata: MediaMetadata = {
+      id,
+      storageType: 'opfs',
+      opfsPath,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: resolvedMimeType,
+      duration: 'duration' in metadata ? metadata.duration : 0,
+      width: 'width' in metadata ? metadata.width : 0,
+      height: 'height' in metadata ? metadata.height : 0,
+      fps: metadata.type === 'video' ? metadata.fps : 0,
+      codec: metadata.type === 'video'
+        ? metadata.codec
+        : metadata.type === 'audio'
+          ? (metadata.codec || 'unknown')
+          : resolvedMimeType.split('/')[1] ?? 'unknown',
+      bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
+      audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
+      audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,
+      keyframeTimestamps: metadata.type === 'video' ? metadata.keyframeTimestamps : undefined,
+      gopInterval: metadata.type === 'video' ? metadata.gopInterval : undefined,
+      tags: [],
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    const thumbnailDimensions = mediaMetadata.width > 0 && mediaMetadata.height > 0
+      ? getThumbnailDimensions(mediaMetadata.width, mediaMetadata.height, 320)
+      : thumbnail
+        ? { width: 320, height: Math.max(1, Math.round(320 * (9 / 16))) }
+        : undefined;
+
+    await persistGeneratedMediaAsset({
+      file,
+      projectId,
+      mediaMetadata,
+      thumbnailBlob: thumbnail ?? undefined,
+      thumbnailWidth: thumbnailDimensions?.width,
+      thumbnailHeight: thumbnailDimensions?.height,
+    });
+
+    const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
+    return {
+      ...mediaMetadata,
+      hasUnsupportedCodec: codecCheck.unsupported,
+    };
+  }
+
+  /**
    * Import multiple files using FileSystemFileHandles (instant, no copy)
    */
   async importMediaBatchWithHandles(

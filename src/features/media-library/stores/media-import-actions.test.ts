@@ -5,6 +5,7 @@ import { createImportActions } from './media-import-actions';
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
   importMediaWithHandle: vi.fn(),
+  importMediaFromUrl: vi.fn(),
   getMediaFile: vi.fn(),
 }));
 
@@ -269,5 +270,32 @@ describe('createImportActions', () => {
       vi.stubGlobal('window', originalWindow);
       vi.stubGlobal('navigator', originalNavigator);
     }
+  });
+
+  it('imports media from URL and prepends it to mediaItems', async () => {
+    const imported = makeMedia({
+      id: 'url-1',
+      fileName: 'remote.mp4',
+      storageType: 'opfs',
+      opfsPath: 'content/ab/cd/url-1/data',
+    });
+    mediaLibraryServiceMocks.importMediaFromUrl.mockResolvedValue(imported);
+
+    let currentState = createMockState();
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState & MediaLibraryActions;
+    });
+    const get = vi.fn(() => currentState);
+
+    const actions = createImportActions(set, get);
+    const result = await actions.importFromUrl('https://example.com/remote.mp4');
+
+    expect(result).toEqual(imported);
+    expect(mediaLibraryServiceMocks.importMediaFromUrl).toHaveBeenCalledWith(
+      'https://example.com/remote.mp4',
+      'project-1',
+    );
+    expect(currentState.mediaItems[0]).toEqual(imported);
+    expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('url-1', 'proxy-url-1');
   });
 });

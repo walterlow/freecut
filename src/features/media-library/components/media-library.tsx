@@ -24,6 +24,14 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -138,15 +146,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showImportUrlDialog, setShowImportUrlDialog] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['video', 'audio', 'image', 'gif']));
   const [isDragging, setIsDragging] = useState(false);
+  const [importUrlValue, setImportUrlValue] = useState('');
+  const [isImportingFromUrl, setIsImportingFromUrl] = useState(false);
 
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
+  const importFromUrl = useMediaLibraryStore((s) => s.importFromUrl);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
@@ -407,6 +419,44 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
   };
 
+  const handleImportFromUrl = async () => {
+    const url = importUrlValue.trim();
+    if (!url) {
+      return;
+    }
+
+    setIsImportingFromUrl(true);
+    try {
+      const imported = await importFromUrl(url);
+      if (imported && !imported.isDuplicate) {
+        showNotification({ type: 'success', message: `Imported "${imported.fileName}" from URL` });
+      }
+      setShowImportUrlDialog(false);
+      setImportUrlValue('');
+    } catch (error) {
+      logger.error('URL import failed:', error);
+    } finally {
+      setIsImportingFromUrl(false);
+    }
+  };
+
+  const handleImportUrlDialogChange = useCallback((open: boolean) => {
+    if (isImportingFromUrl) {
+      return;
+    }
+    setShowImportUrlDialog(open);
+    if (!open) {
+      setImportUrlValue('');
+    }
+  }, [isImportingFromUrl]);
+
+  const handleImportUrlKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      void handleImportFromUrl();
+    }
+  }, [handleImportFromUrl]);
+
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
     try {
@@ -623,35 +673,43 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     <div ref={containerRef} className="h-full flex flex-col">
       {/* Header toolbar */}
       <div className="px-3 py-2 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           {/* Import action */}
-          <button
+          <Button
             onClick={handleImport}
             disabled={!currentProjectId}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-              bg-primary text-primary-foreground
-              hover:bg-primary/90
-              disabled:opacity-40 disabled:cursor-not-allowed
-              transition-colors duration-150"
+            size="sm"
+            className="h-7 gap-1.5 px-2.5"
             title="Import media files"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span>Import</span>
-          </button>
+          </Button>
+
+          <Button
+            onClick={() => setShowImportUrlDialog(true)}
+            disabled={!currentProjectId}
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 border-border bg-background px-2.5 text-foreground hover:bg-accent"
+            title="Import media from URL"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>From URL</span>
+          </Button>
 
           {/* Missing media indicator */}
           {currentProjectBrokenMediaIds.length > 0 && (
-            <button
+            <Button
               onClick={openMissingMediaDialog}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-                bg-destructive/10 border border-destructive/25 text-destructive
-                hover:bg-destructive/20 hover:border-destructive/40
-                transition-colors duration-150"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 border-destructive/25 bg-destructive/10 px-2.5 text-destructive hover:border-destructive/40 hover:bg-destructive/20 hover:text-destructive"
               title="View missing media files"
             >
               <Link2Off className="w-3.5 h-3.5" />
               <span>{currentProjectBrokenMediaIds.length} Missing</span>
-            </button>
+            </Button>
           )}
 
 
@@ -675,29 +733,29 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
               {/* Generate proxies for selection */}
               {selectedProxyEligibleCount > 0 && (
-                <button
+                <Button
                   onClick={handleGenerateSelectedProxies}
-                  className="flex items-center gap-1 h-7 px-2 rounded-md
-                    text-muted-foreground hover:text-primary hover:bg-primary/10
-                    transition-colors duration-150"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
                   title="Generate proxies for selected"
                 >
                   <Zap className="w-3 h-3" />
                   <span>Proxy ({selectedProxyEligibleCount})</span>
-                </button>
+                </Button>
               )}
 
               {/* Delete action */}
-              <button
+              <Button
                 onClick={handleDeleteSelected}
-                className="flex items-center gap-1 h-7 px-2 rounded-md
-                  text-destructive/80 hover:text-destructive hover:bg-destructive/10
-                  transition-colors duration-150"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
                 title="Delete selected"
               >
                 <Trash2 className="w-3 h-3" />
                 <span>Delete</span>
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -1090,6 +1148,53 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={showImportUrlDialog} onOpenChange={handleImportUrlDialogChange}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Upload className="h-4 w-4" />
+              Import From URL
+            </DialogTitle>
+            <DialogDescription>
+              Paste a direct `http` or `https` media link. The file will be imported into this project&apos;s media library.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Input
+              autoFocus
+              value={importUrlValue}
+              onChange={(event) => setImportUrlValue(event.target.value)}
+              onKeyDown={handleImportUrlKeyDown}
+              placeholder="https://example.com/video.mp4"
+              disabled={isImportingFromUrl}
+              className="h-9"
+            />
+            <p className="text-xs text-muted-foreground">
+              Supported sources: direct media files over HTTP(S).
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => handleImportUrlDialogChange(false)}
+              disabled={isImportingFromUrl}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleImportFromUrl()}
+              disabled={!importUrlValue.trim() || isImportingFromUrl}
+              className="gap-1.5"
+            >
+              {isImportingFromUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              <span>{isImportingFromUrl ? 'Importing...' : 'Import'}</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Missing Media Dialog */}
       <MissingMediaDialog />

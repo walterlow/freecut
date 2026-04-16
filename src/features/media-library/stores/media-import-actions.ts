@@ -152,7 +152,7 @@ function showImportNotifications(
 export function createImportActions(
   set: Set,
   get: Get
-): Pick<MediaLibraryActions, 'importMedia' | 'importHandles' | 'importHandlesForPlacement'> {
+): Pick<MediaLibraryActions, 'importMedia' | 'importHandles' | 'importHandlesForPlacement' | 'importFromUrl'> {
   const createOptimisticImportTasks = async (handles: FileSystemFileHandle[]): Promise<ImportTask[]> => {
     const importTasks: ImportTask[] = [];
 
@@ -299,5 +299,64 @@ export function createImportActions(
 
     importHandlesForPlacement: async (handles: FileSystemFileHandle[]) =>
       importHandlesInternal(handles, { includeDuplicatesInResults: true }),
+
+    importFromUrl: async (url: string) => {
+      const { currentProjectId } = get();
+
+      if (!currentProjectId) {
+        set({ error: 'No project selected' });
+        return null;
+      }
+
+      const normalizedUrl = url.trim();
+      if (!normalizedUrl) {
+        set({ error: 'URL is required' });
+        return null;
+      }
+
+      const opId = createOperationId();
+      const event = logger.startEvent('import', opId);
+      event.merge({
+        source: 'url',
+        projectId: currentProjectId,
+      });
+
+      try {
+        const metadata = await mediaLibraryService.importMediaFromUrl(normalizedUrl, currentProjectId);
+
+        if (metadata.isDuplicate) {
+          get().showNotification({ type: 'info', message: `"${metadata.fileName}" already exists in library` });
+          event.success({ imported: 0, duplicates: 1, failed: 0, unsupportedCodecs: 0 });
+          return metadata;
+        }
+
+        set((state) => ({
+          mediaItems: [metadata, ...state.mediaItems],
+          error: null,
+        }));
+
+        setupImportedVideoProxy(metadata);
+
+        if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+          get().showNotification({
+            type: 'warning',
+            message: `Imported "${metadata.fileName}" with unsupported audio codec (${metadata.audioCodec}). Waveforms may not be available.`,
+          });
+        }
+
+        event.success({
+          imported: 1,
+          duplicates: 0,
+          failed: 0,
+          unsupportedCodecs: metadata.hasUnsupportedCodec ? 1 : 0,
+        });
+        return metadata;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        set({ error: message });
+        event.failure(error);
+        return null;
+      }
+    },
   };
 }
