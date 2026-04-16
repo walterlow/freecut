@@ -335,4 +335,63 @@ describe('proxyService.loadExistingProxies', () => {
       { startTime: 0, endTime: 12 },
     );
   });
+
+  it('posts OPFS-backed proxy jobs to the worker without loading the source on the main thread', async () => {
+    const worker = {
+      postMessage: vi.fn(),
+    } as unknown as Worker;
+    workerManagerMocks.getWorker.mockReturnValue(worker);
+
+    const { proxyService } = await import('./proxy-service');
+
+    proxyService.generateProxy(
+      'video-opfs',
+      { kind: 'opfs', path: 'content/ab/cd/video/data', mimeType: 'video/mp4' },
+      1920,
+      1080,
+      'proxy-video-opfs',
+    );
+
+    await vi.waitFor(() => {
+      expect(worker.postMessage).toHaveBeenCalledWith({
+        type: 'generate',
+        mediaId: 'proxy-video-opfs',
+        sourceOpfsPath: 'content/ab/cd/video/data',
+        sourceMimeType: 'video/mp4',
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      });
+    });
+  });
+
+  it('still loads handle-backed proxy sources on the main thread before posting to the worker', async () => {
+    const worker = {
+      postMessage: vi.fn(),
+    } as unknown as Worker;
+    workerManagerMocks.getWorker.mockReturnValue(worker);
+
+    const sourceBlob = new Blob(['proxy-source'], { type: 'video/mp4' });
+    const loadSource = vi.fn(async () => sourceBlob);
+
+    const { proxyService } = await import('./proxy-service');
+
+    proxyService.generateProxy(
+      'video-handle',
+      loadSource,
+      1920,
+      1080,
+      'proxy-video-handle',
+    );
+
+    await vi.waitFor(() => {
+      expect(loadSource).toHaveBeenCalledTimes(1);
+      expect(worker.postMessage).toHaveBeenCalledWith({
+        type: 'generate',
+        mediaId: 'proxy-video-handle',
+        source: sourceBlob,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+      });
+    });
+  });
 });

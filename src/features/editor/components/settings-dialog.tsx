@@ -306,7 +306,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         proxyService.setProxyKey(media.id, sharedProxyKey);
         proxyService.generateProxy(
           media.id,
-          () => mediaLibraryService.getMediaFile(media.id),
+          media.storageType === 'opfs' && media.opfsPath
+            ? { kind: 'opfs', path: media.opfsPath, mimeType: media.mimeType }
+            : () => mediaLibraryService.getMediaFile(media.id),
           media.width,
           media.height,
           sharedProxyKey,

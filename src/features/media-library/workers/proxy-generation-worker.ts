@@ -17,12 +17,15 @@ import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 const PROXY_WIDTH = 960;
 const PROXY_HEIGHT = 540;
 const PROXY_STREAM_CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
+const PROXY_KEYFRAME_INTERVAL_SECONDS = 2;
 
 // Message types
 export interface ProxyGenerateRequest {
   type: 'generate';
   mediaId: string; // proxyKey (kept as mediaId for message compatibility)
-  source: Blob;
+  source?: Blob;
+  sourceOpfsPath?: string;
+  sourceMimeType?: string;
   sourceWidth: number;
   sourceHeight: number;
 }
@@ -83,6 +86,37 @@ async function removeProxyDir(mediaId: string): Promise<void> {
   await proxyRoot.removeEntry(mediaId, { recursive: true });
 }
 
+async function getSourceBlobFromOpfs(path: string, mimeType?: string): Promise<Blob> {
+  const root = await navigator.storage.getDirectory();
+  const parts = path.split('/').filter((part) => part);
+
+  if (parts.length === 0) {
+    throw new Error('Invalid OPFS source path');
+  }
+
+  let dir = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const part = parts[index];
+    if (!part) {
+      continue;
+    }
+    dir = await dir.getDirectoryHandle(part);
+  }
+
+  const fileName = parts[parts.length - 1];
+  if (!fileName) {
+    throw new Error('Invalid OPFS source path: missing filename');
+  }
+
+  const fileHandle = await dir.getFileHandle(fileName);
+  const file = await fileHandle.getFile();
+  if (!mimeType || file.type === mimeType || file.type.length > 0) {
+    return file;
+  }
+
+  return new Blob([file], { type: mimeType });
+}
+
 /**
  * Save proxy metadata to OPFS
  */
@@ -132,7 +166,7 @@ function calculateProxyDimensions(sourceWidth: number, sourceHeight: number): { 
  * Generate a 960x540-bounded proxy video via mediabunny Conversion
  */
 async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
-  const { mediaId, source, sourceWidth, sourceHeight } = request;
+  const { mediaId, source, sourceOpfsPath, sourceMimeType, sourceWidth, sourceHeight } = request;
 
   const {
     Input, BlobSource, Output, Mp4OutputFormat, BufferTarget, StreamTarget, Conversion,
@@ -142,6 +176,16 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const dir = await getProxyDir(mediaId);
   const proxyDimensions = calculateProxyDimensions(sourceWidth, sourceHeight);
   const createdAt = Date.now();
+  let input: InstanceType<typeof Input> | null = null;
+  const resolvedSource = source ?? (
+    sourceOpfsPath
+      ? await getSourceBlobFromOpfs(sourceOpfsPath, sourceMimeType)
+      : null
+  );
+
+  if (!resolvedSource) {
+    throw new Error('Proxy source unavailable');
+  }
 
   // Save initial metadata
   await saveMetadata(dir, {
@@ -154,8 +198,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     createdAt,
   });
 
-  const input = new Input({
-    source: new BlobSource(source),
+  input = new Input({
+    source: new BlobSource(resolvedSource),
     formats: [MP4, QTFF, WEBM, MATROSKA],
   });
 
@@ -185,8 +229,8 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
           // Faster proxy generation preset.
           bitrate: QUALITY_LOW,
           hardwareAcceleration: 'prefer-hardware',
-          // Short GOP to speed up random-access decode during scrubbing.
-          keyFrameInterval: 1,
+          // Keep seeks responsive without forcing every frame to be a keyframe.
+          keyFrameInterval: PROXY_KEYFRAME_INTERVAL_SECONDS,
         },
         audio: {
           // Scrub proxy is video-only for faster generation and smaller files.
@@ -319,7 +363,7 @@ async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
     if (writable) {
       try { await writable.abort(); } catch { /* may already be closed/aborted */ }
     }
-    input.dispose();
+    input?.dispose();
   }
 }
 

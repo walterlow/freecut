@@ -521,7 +521,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       proxyService.setProxyKey(item.id, proxyKey);
       proxyService.generateProxy(
         item.id,
-        () => mediaLibraryService.getMediaFile(item.id),
+        item.storageType === 'opfs' && item.opfsPath
+          ? { kind: 'opfs', path: item.opfsPath, mimeType: item.mimeType }
+          : () => mediaLibraryService.getMediaFile(item.id),
         item.width,
         item.height,
         proxyKey

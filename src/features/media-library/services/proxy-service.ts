@@ -55,11 +55,34 @@ type ProxyStatusListener = (
 ) => void;
 
 type ProxySourceLoader = () => Promise<Blob | null>;
-type ProxySourceInput = Blob | ProxySourceLoader;
+interface ProxyOpfsSource {
+  kind: 'opfs';
+  path: string;
+  mimeType?: string;
+}
+type ProxySourceInput = Blob | ProxySourceLoader | ProxyOpfsSource;
 type ProxyJobPriority = 'user' | 'background';
 
 interface ProxyGenerationOptions {
   priority?: ProxyJobPriority;
+}
+
+type QueuedProxySource =
+  | {
+      kind: 'loader';
+      load: ProxySourceLoader;
+    }
+  | {
+      kind: 'opfs';
+      path: string;
+      mimeType?: string;
+    };
+
+function isProxyOpfsSource(source: ProxySourceInput): source is ProxyOpfsSource {
+  return typeof source === 'object'
+    && source !== null
+    && 'kind' in source
+    && source.kind === 'opfs';
 }
 
 interface QueuedProxyJob {
@@ -67,7 +90,7 @@ interface QueuedProxyJob {
   proxyKey: string;
   sourceWidth: number;
   sourceHeight: number;
-  loadSource: ProxySourceLoader;
+  source: QueuedProxySource;
   priority: ProxyJobPriority;
 }
 
@@ -233,7 +256,7 @@ class ProxyService {
       proxyKey: resolvedProxyKey,
       sourceWidth,
       sourceHeight,
-      loadSource: this.normalizeSourceLoader(source),
+      source: this.normalizeSource(source),
       priority: options?.priority ?? 'user',
     });
     this.drainQueue();
@@ -660,11 +683,25 @@ class ProxyService {
     return this.proxyKeyByMediaId.get(mediaId) ?? mediaId;
   }
 
-  private normalizeSourceLoader(source: ProxySourceInput): ProxySourceLoader {
-    if (typeof source === 'function') {
-      return source;
+  private normalizeSource(source: ProxySourceInput): QueuedProxySource {
+    if (isProxyOpfsSource(source)) {
+      return {
+        kind: 'opfs',
+        path: source.path,
+        mimeType: source.mimeType,
+      };
     }
-    return async () => source;
+
+    if (typeof source === 'function') {
+      return {
+        kind: 'loader',
+        load: source,
+      };
+    }
+    return {
+      kind: 'loader',
+      load: async () => source,
+    };
   }
 
   private insertPendingJob(job: QueuedProxyJob): void {
@@ -719,35 +756,49 @@ class ProxyService {
 
   private async runQueuedJob(job: QueuedProxyJob): Promise<void> {
     const { proxyKey } = job;
-    this.activeJobPhaseByKey.set(proxyKey, 'loading');
-
-    let source: Blob | null = null;
     try {
-      source = await job.loadSource();
-    } catch (error) {
+      const worker = this.getWorker();
+
+      if (job.source.kind === 'opfs') {
+        this.activeJobPhaseByKey.set(proxyKey, 'processing');
+        worker.postMessage({
+          type: 'generate',
+          mediaId: proxyKey,
+          sourceOpfsPath: job.source.path,
+          sourceMimeType: job.source.mimeType,
+          sourceWidth: job.sourceWidth,
+          sourceHeight: job.sourceHeight,
+        } as ProxyWorkerRequest);
+        return;
+      }
+
+      this.activeJobPhaseByKey.set(proxyKey, 'loading');
+
+      let source: Blob | null = null;
+      try {
+        source = await job.source.load();
+      } catch (error) {
+        if (!this.generatingProxyKeys.has(proxyKey)) {
+          this.activeJobPhaseByKey.delete(proxyKey);
+          this.drainQueue();
+          return;
+        }
+
+        this.failQueuedJob(proxyKey, `Failed to load source for ${proxyKey}`, error);
+        return;
+      }
+
       if (!this.generatingProxyKeys.has(proxyKey)) {
         this.activeJobPhaseByKey.delete(proxyKey);
         this.drainQueue();
         return;
       }
 
-      this.failQueuedJob(proxyKey, `Failed to load source for ${proxyKey}`, error);
-      return;
-    }
+      if (!source) {
+        this.failQueuedJob(proxyKey, `Source media unavailable for ${proxyKey}`);
+        return;
+      }
 
-    if (!this.generatingProxyKeys.has(proxyKey)) {
-      this.activeJobPhaseByKey.delete(proxyKey);
-      this.drainQueue();
-      return;
-    }
-
-    if (!source) {
-      this.failQueuedJob(proxyKey, `Source media unavailable for ${proxyKey}`);
-      return;
-    }
-
-    try {
-      const worker = this.getWorker();
       this.activeJobPhaseByKey.set(proxyKey, 'processing');
       worker.postMessage({
         type: 'generate',
@@ -831,7 +882,7 @@ class ProxyService {
 
   private clearProgressEmissionState(proxyKey: string): void {
     const state = this.progressEmissionByProxyKey.get(proxyKey);
-    if (state?.timeoutId !== null) {
+    if (state?.timeoutId != null) {
       clearTimeout(state.timeoutId);
     }
     this.progressEmissionByProxyKey.delete(proxyKey);

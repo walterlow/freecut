@@ -222,7 +222,9 @@ export const MediaCard = memo(function MediaCard({
       proxyService.setProxyKey(media.id, proxyKey);
       proxyService.generateProxy(
         media.id,
-        () => mediaLibraryService.getMediaFile(media.id),
+        media.storageType === 'opfs' && media.opfsPath
+          ? { kind: 'opfs', path: media.opfsPath, mimeType: media.mimeType }
+          : () => mediaLibraryService.getMediaFile(media.id),
         media.width,
         media.height,
         proxyKey
