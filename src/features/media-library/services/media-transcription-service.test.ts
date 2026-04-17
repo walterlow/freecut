@@ -2,17 +2,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MediaTranscript } from '@/types/storage';
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
 
+const saveTranscriptMock = vi.fn();
 const getTranscriptMock = vi.fn();
 const useTimelineStoreGetStateMock = vi.fn();
 const useProjectStoreGetStateMock = vi.fn();
 const useSelectionStoreGetStateMock = vi.fn();
 const usePlaybackStoreGetStateMock = vi.fn();
+const transcribeCollectMock = vi.fn();
+const transcribeMock = vi.fn();
+const getMediaMock = vi.fn();
+const getMediaFileMock = vi.fn();
+const startPreviewAudioConformMock = vi.fn();
+const resolvePreviewAudioConformUrlMock = vi.fn();
 
 vi.mock('@/infrastructure/storage', () => ({
   deleteTranscript: vi.fn(),
   getTranscript: getTranscriptMock,
   getTranscriptMediaIds: vi.fn(),
-  saveTranscript: vi.fn(),
+  saveTranscript: saveTranscriptMock,
 }));
 
 vi.mock('@/shared/state/selection', () => ({
@@ -52,10 +59,23 @@ vi.mock('@/features/media-library/deps/settings-contract', () => ({
 vi.mock('../transcription/registry', () => ({
   getDefaultMediaTranscriptionAdapter: () => ({
     createTranscriber: () => ({
-      transcribe: vi.fn(),
+      transcribe: transcribeMock,
     }),
   }),
   getMediaTranscriptionModelLabel: () => 'Tiny',
+}));
+
+vi.mock('./media-library-service', () => ({
+  mediaLibraryService: {
+    getMedia: getMediaMock,
+    getMediaFile: getMediaFileMock,
+  },
+}));
+
+vi.mock('@/features/media-library/deps/composition-runtime-contract', () => ({
+  needsCustomAudioDecoder: vi.fn((codec?: string) => codec === 'pcm-s16be'),
+  startPreviewAudioConform: startPreviewAudioConformMock,
+  resolvePreviewAudioConformUrl: resolvePreviewAudioConformUrlMock,
 }));
 
 const { mediaTranscriptionService } = await import('./media-transcription-service');
@@ -108,6 +128,14 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
         },
       },
     });
+    transcribeMock.mockReturnValue({
+      collect: transcribeCollectMock,
+    });
+    transcribeCollectMock.mockResolvedValue([]);
+    getMediaMock.mockResolvedValue(null);
+    getMediaFileMock.mockResolvedValue(null);
+    startPreviewAudioConformMock.mockResolvedValue(undefined);
+    resolvePreviewAudioConformUrlMock.mockResolvedValue(null);
   });
 
   it('creates a new captions track above the clip track when no compatible track exists', async () => {
@@ -183,5 +211,69 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     expect(insertedItems).toHaveLength(1);
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id);
     expect(removeItems).not.toHaveBeenCalled();
+  });
+});
+
+describe('mediaTranscriptionService.transcribeMedia', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    transcribeMock.mockReturnValue({
+      collect: transcribeCollectMock,
+    });
+    transcribeCollectMock.mockResolvedValue([
+      { text: ' hello ', start: 0, end: 1.2 },
+    ]);
+    startPreviewAudioConformMock.mockResolvedValue(undefined);
+    resolvePreviewAudioConformUrlMock.mockResolvedValue(null);
+  });
+
+  it('transcribes the original file for browser-decodable codecs', async () => {
+    const sourceFile = new File(['audio'], 'clip.mp3', { type: 'audio/mpeg' });
+    getMediaMock.mockResolvedValue({
+      id: 'media-1',
+      fileName: 'clip.mp3',
+      mimeType: 'audio/mpeg',
+      codec: 'mp3',
+      fileLastModified: 123,
+    });
+    getMediaFileMock.mockResolvedValue(sourceFile);
+
+    await mediaTranscriptionService.transcribeMedia('media-1');
+
+    expect(startPreviewAudioConformMock).not.toHaveBeenCalled();
+    expect(transcribeMock).toHaveBeenCalledTimes(1);
+    expect(transcribeMock.mock.calls[0]?.[0]).toBe(sourceFile);
+    expect(saveTranscriptMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('transcribes a conformed wav for custom-decoded codecs like pcm-s16be', async () => {
+    const sourceFile = new File(['pcm'], 'clip.aif', { type: 'audio/aiff' });
+    const conformedBlob = new Blob(['wav'], { type: 'audio/wav' });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => conformedBlob,
+    } as Response);
+
+    getMediaMock.mockResolvedValue({
+      id: 'media-1',
+      fileName: 'clip.aif',
+      mimeType: 'audio/aiff',
+      codec: 'pcm-s16be',
+      fileLastModified: 123,
+    });
+    getMediaFileMock.mockResolvedValue(sourceFile);
+    resolvePreviewAudioConformUrlMock.mockResolvedValue('blob:conformed-audio');
+
+    await mediaTranscriptionService.transcribeMedia('media-1');
+
+    expect(startPreviewAudioConformMock).toHaveBeenCalledWith('media-1', sourceFile);
+    expect(resolvePreviewAudioConformUrlMock).toHaveBeenCalledWith('media-1');
+    expect(transcribeMock).toHaveBeenCalledTimes(1);
+
+    const transcribeFile = transcribeMock.mock.calls[0]?.[0] as File;
+    expect(transcribeFile).toBeInstanceOf(File);
+    expect(transcribeFile.type).toBe('audio/wav');
+
+    fetchMock.mockRestore();
   });
 });

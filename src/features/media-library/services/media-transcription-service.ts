@@ -27,6 +27,11 @@ import { useProjectStore } from '@/features/media-library/deps/projects';
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
 import {
+  needsCustomAudioDecoder,
+  resolvePreviewAudioConformUrl,
+  startPreviewAudioConform,
+} from '@/features/media-library/deps/composition-runtime-contract';
+import {
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
   normalizeWhisperLanguage,
@@ -71,15 +76,17 @@ class MediaTranscriptionService {
       throw new Error('Only audio and video files can be transcribed');
     }
 
-    const blob = await mediaLibraryService.getMediaFile(mediaId);
-    if (!blob) {
+    const sourceBlob = await mediaLibraryService.getMediaFile(mediaId);
+    if (!sourceBlob) {
       throw new Error(`Could not load media file: ${media.fileName}`);
     }
 
-    const file = blob instanceof File
-      ? blob
-      : new File([blob], media.fileName, {
-          type: media.mimeType,
+    const transcriptionBlob = await this.resolveTranscriptionBlob(media, sourceBlob);
+
+    const file = transcriptionBlob instanceof File
+      ? transcriptionBlob
+      : new File([transcriptionBlob], media.fileName, {
+          type: transcriptionBlob.type || media.mimeType,
           lastModified: media.fileLastModified ?? Date.now(),
         });
 
@@ -119,6 +126,29 @@ class MediaTranscriptionService {
       model: getMediaTranscriptionModelLabel(transcript.model),
     });
     return transcript;
+  }
+
+  private async resolveTranscriptionBlob(media: { id: string; fileName: string; mimeType: string; codec: string; audioCodec?: string }, sourceBlob: Blob): Promise<Blob> {
+    const transcriptionCodec = media.mimeType.startsWith('audio/')
+      ? media.codec
+      : (media.audioCodec ?? media.codec);
+
+    if (!needsCustomAudioDecoder(transcriptionCodec)) {
+      return sourceBlob;
+    }
+
+    await startPreviewAudioConform(media.id, sourceBlob);
+    const conformedUrl = await resolvePreviewAudioConformUrl(media.id);
+    if (!conformedUrl) {
+      throw new Error(`Failed to prepare ${transcriptionCodec || 'custom'} audio for transcription`);
+    }
+
+    const response = await fetch(conformedUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to load conformed audio for transcription (${response.status})`);
+    }
+
+    return await response.blob();
   }
 
   async insertTranscriptAsCaptions(
